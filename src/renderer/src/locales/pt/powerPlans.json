@@ -1,0 +1,16 @@
+{
+  "pageTitle": "Planos de Energia",
+  "pageDescription": "Gerencie os planos de energia do Windows para equilibrar desempenho e economia",
+  "activePlan": "Plano ativo",
+  "active": "ATIVO",
+  "activate": "Ativar",
+  "delete": "Remover",
+  "confirmDelete": "Confirmar",
+  "cancel": "Cancelar",
+  "refresh": "Atualizar",
+  "createPlan": "Criar plano",
+  "create": "Criar",
+  "createPlaceholder": "Nome do novo plano de energia...",
+  "loading": "A carregar...",
+  "noPlans": "Nenhum plano de energia encontrado"
+}

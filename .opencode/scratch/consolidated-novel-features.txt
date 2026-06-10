@@ -1,0 +1,269 @@
+# DiNho Optimizer — Funcionalidades AUSENTES (Consolidadas de 20 Repositórios)
+
+## 🏆 PRIORIDADE MÁXIMA (Alto Valor, Diferenciador)
+
+### 1. Remoção de Bloatware / Apps UWP
+- Desinstalar apps pré-instaladas da Windows Store (Candy Crush, Xbox, Copilot, OneDrive, etc.)
+- Impedir reinstalação via Appx deprovisionamento + políticas ContentDeliveryManager
+- Lista de permissão/bloqueio por app com UI de seleção categorizada
+- Bloquear apps Microsoft específicas: Novo Outlook, Phone Link, Edge, anexos OneNote
+- Remover Microsoft Copilot completamente + desabilitar Windows Recall
+- Desabilitar recursos de IA no Windows, Paint, Bloco de Notas, Edge, WSAIFabricSvc
+- Repos: Win11Debloat, BloatyNosy, Sophia-Script, Win-Debloat-Tools, Winscript, UnattendedWinstall, Windows10Debloater, privacy.sexy
+
+### 2. Integração com Gerenciadores de Pacotes (Winget/Chocolatey/Scoop)
+- Navegar, instalar, atualizar e remover apps via Winget, Chocolatey e Scoop
+- Coleções de apps curadas (Dev, Navegadores, Utilitários, Gaming, etc.)
+- Operações em lote/fila com acompanhamento de progresso
+- Atualização automatizada diária de pacotes via tarefa agendada
+- Instalação com um clique de VC++ Redistributáveis, DirectX, .NET SDKs, WSL
+- Repos: Win-Debloat-Tools, BloatyNosy, Winrift, WinKit, TidyWindow, winscript
+
+### 3. Suite de Endurecimento de Segurança
+- Regras ASR (Attack Surface Reduction) — gerenciamento de 14+ regras (processos Office, LSASS, ransomware, USB, WMI, etc.)
+- Device Guard / Credential Guard (VBS, isolamento em nível de hypervisor)
+- Windows Defender Application Control (WDAC) com mecanismo de simulação
+- Políticas de lista de permissão AppLocker
+- Proteção LSA (RunAsPPL) contra roubo de credenciais
+- Configuração de mitigação de exploração (CFG, DEP, ASLR, SEHOP, integridade heap)
+- Endurecimento TLS/SSL (desabilitar 1.0/1.1, cifras fracas, habilitar 1.3)
+- Endurecimento SMB (desabilitar SMB1, forçar assinatura/criptografia, versão mínima)
+- Gerenciamento BitLocker (ativar/configurar, algoritmos de criptografia, protetores de chave, TPM)
+- Repos: Harden-Windows-Security, HardeningKitty, Windows-Optimize-Harden-Debloat, hardentools, privacy.sexy
+
+### 4. Auditoria de Conformidade & Pontuação
+- Auditar sistema contra CIS Benchmarks, DoD STIG, BSI SiSyPHuS, MS Security Baselines
+- Pontuação de postura de segurança (1-6) com resultados categorizados de aprovado/reprovado
+- Aplicar Microsoft Security Compliance Toolkit (700+ configurações de Política de Grupo)
+- Configuração avançada de política de auditoria (logon/logoff, acesso a objetos, uso de privilégios)
+- Gerar relatórios de auditoria de desbloat (antes/depois)
+- Detecção de desvio (Drift) — comparar estado atual do registro contra JSON de estado desejado
+- Repos: HardeningKitty, Windows-Optimize-Harden-Debloat, Win-Debloat-Tools, Winrift
+
+### 5. Gerenciador de Recursos/Capacidades do Windows
+- Ativar/desativar componentes opcionais do Windows (Hyper-V, WSL, .NET Framework, Recursos de Mídia, SMB, Windows Sandbox)
+- Instalar/desinstalar Features on Demand (Servidor OpenSSH, RSAT, etc.)
+- Ativar .NET Framework 3.5 da mídia de instalação sem internet
+- Repos: RyTuneX, Sophia-Script, Win11Debloat, UnattendedWinstall
+
+---
+
+## 📦 ALTA PRIORIDADE
+
+### 6. Ferramentas de Upgrade e ISO do Sistema
+- Upgrade in-place Windows 10 → 11
+- Bypass de requisitos TPM 2.0, Secure Boot, geração de CPU
+- Download automático de ISO do Windows 11 (script Fido) e montagem
+- Verificação de requisitos de hardware (instrução POPCNT para 24H2)
+- Construtor de ISO com autounattend.xml embutido
+- Bypass de Conta Microsoft → Conta Local durante OOBE
+- Personalização OOBE (escolhas de privacidade, instalação de apps, criação de conta)
+- Repos: Flyby11, UnattendedWinstall, Winrift
+
+### 7. Gerenciamento de Política de Grupo
+- Backup, restauração e reset de configurações de Política de Grupo Local (.pol)
+- Editor de registro de Política de Grupo (.POL) embutido
+- Scanner de políticas — detectar políticas sobrescritas ou mal configuradas
+- Repos: RyTuneX, WinKit, Harden-Windows-Security
+
+### 8. DNS e Segurança de Rede
+- Troca de servidor DNS (Cloudflare, Google, OpenDNS, Quad9, AdGuard)
+- Configuração DNS-over-HTTPS/TLS com interceptação
+- Benchmark DNS — testar 8 provedores de latência, aplicar o mais rápido
+- Bloqueio de IP por país via Firewall do Windows (listas IANA)
+- Defesa contra ataque DNS rebinding, DNS split-horizon
+- Banco de dados histórico de atividade de rede (pesquisável, persistente)
+- Rede de privacidade onion-routed multi-hop SPN
+- Repos: RyTuneX, Win-Debloat-Tools, Sophia-Script, Winrift, Portmaster, winscript
+
+### 9. Benchmarking e Análise de Performance
+- Suite de benchmarks pré/pós-otimização (13 métricas, relatórios Markdown)
+- Pontuações WinSAT / Windows Experience Index
+- Medição e comparação de tempo de inicialização
+- Rastreamento de impacto na bateria
+- Análise de gargalos de performance (CPU, RAM, disco, boot) com sugestões
+- Repos: Winrift, WinKit, twiez-optimizer
+
+### 10. Gerenciamento do OneDrive e Edge
+- Desinstalação completa do OneDrive (registro + extensões shell + todos usuários)
+- Remover/bloquear Microsoft Edge, suas tarefas agendadas e serviços
+- Impedir Edge de criar atalhos na área de trabalho ao atualizar
+- Remover recursos de IA do Edge, carteira crypto, feed de notícias
+- Repos: Sophia-Script, Win-Debloat-Tools, Windows10Debloater, Win11Debloat
+
+### 11. Personalização Profunda do Menu Iniciar e Explorer
+- Remover todos os apps fixados do Menu Iniciar
+- Ocultar seções Recomendados / Todos os Apps
+- Desabilitar pesquisa web Bing no Menu Iniciar
+- Alterar destino padrão do File Explorer (Acesso Rápido → Este Computador)
+- Ocultar entradas duplicadas de unidades removíveis
+- Adicionar pastas comuns de volta à visão "Este Computador"
+- Remover anúncios do OneDrive do painel de navegação do Explorer
+- Desabilitar Snap Assist e controles de ajuste de janela
+- Controlar comportamento de abas no Alt+Tab (incluir/excluir abas do navegador)
+- Ativar "Finalizar Tarefa" no clique direito da barra de tarefas
+- Desabilitar "Drag Tray" do Windows 11
+- Repos: Win11Debloat, Sophia-Script, UnattendedWinstall, Windows10Debloater, BloatyNosy
+
+### 12. Controles de Conta e Permissões
+- Gerenciamento granular de permissão por app (câmera, microfone, localização, contatos, calendário, documentos, fotos, vídeos, telefone, histórico de chamadas, SMS, email, tarefas, rádios, Bluetooth, movimento, rastreamento ocular, captura de tela, atividade em segundo plano)
+- Configuração de nível UAC (nunca notificar → sempre notificar)
+- Desativação de biometria (impressão digital, reconhecimento facial)
+- Desabilitar hash LAN Manager / autenticação legada
+- Repos: privacy.sexy, Sophia-Script, WinKit, hardentools
+
+### 13. Controles Avançados do Windows Update
+- Forçar Windows Update para versão específica (ex.: 24H2)
+- Desabilitar Otimização de Entrega (compartilhamento P2P)
+- Bloquear upgrade para Windows 11 no Windows 10
+- Alternar Otimização de Entrega
+- Repos: BloatyNosy, Win11Debloat, Sophia-Script
+
+### 14. Arquitetura de Plugins / Extensões
+- Sistema de plugins para extensões da comunidade (JSON + PowerShell)
+- Loja de plugins no aplicativo para navegar/baixar plugins
+- Mecanismo de extensão programável para mini-apps de terceiros
+- Repos: BloatyNosy, Flyby11
+
+### 15. Endurecimento de Segurança por Aplicativo
+- Microsoft Office: desabilitar macros, DDE, ActiveX, objetos OLE, telemetria
+- Adobe Reader: desabilitar JavaScript, objetos embutidos, forçar Modo Protegido/Visualização
+- LibreOffice: segurança de macro, Ctrl+Clique, bloquer referer
+- OneNote: bloquear anexos de arquivo embutidos
+- Brave: desabilitar IA, crypto, notícias
+- Repos: hardentools, HardeningKitty, Win11Debloat
+
+---
+
+## 🔧 PRIORIDADE MÉDIA
+
+### 16. Monitoramento do Sistema em Tempo Real
+- Gráficos ao vivo de CPU/RAM/GPU (rolagem 60s)
+- Monitoramento de alterações em regras de firewall (Sentinel em tempo real)
+- Catálogo de inteligência de ameaças de processos conhecidos com classificação de risco
+- Parada automática forçada para processos indesejados/suspeitos
+- Repos: twiez-optimizer, TidyWindow, Harden-Windows-Security
+
+### 17. Gerenciamento de Inicialização e Boot
+- Desabilitar Fast Startup (inicialização híbrida)
+- Ferramenta de benchmark de tempo de boot
+- Serviço de resolução de timer (0.5ms para gaming/áudio)
+- Alternar Modo MSI (interrupção GPU)
+- Mensagens detalhadas de status de inicialização
+- Repos: Win11Debloat, WinKit, winscript
+
+### 18. Ajustes de Interface e Experiência do Usuário
+- Restaurar Controle de Volume clássico
+- Restaurar Visualizador de Fotos legado
+- Instalador de cursores personalizados (Windows 11 Cursors Concept v2)
+- Alterar pasta de capturas de tela (Área de Trabalho vs Imagens)
+- Configuração de qualidade de wallpaper JPEG
+- Remover sufixo "- Atalho" de atalhos criados
+- Remapear Tecla Print Screen → Ferramenta de Captura
+- Alternar Aero Shaking (sacudir janela para minimizar)
+- Alternar método de entrada/idioma por app
+- Resetar agrupamento de pastas em Downloads
+- Alternar animação de primeiro logon
+- Gerenciamento de notificações (toasts, sons, tela de bloqueio, dicas)
+- Configuração de ducking de áudio durante comunicações
+- Gerenciador de layout do Menu Iniciar (Recomendados, adicionados recentemente, mais usados, dicas)
+- Repos: Win-Debloat-Tools, Sophia-Script, UnattendedWinstall, Win11Debloat
+
+### 19. Controles Avançados de Privacidade
+- Controle granular do SmartScreen (apps/arquivos, Store, Edge, IE, Phishing Aprimorado — 9 subcomponentes)
+- Desativação profunda de subsistemas do Defender (AMSI, monitoramento de comportamento, inspeção de rede, proteção na nuvem, PUA, heurística, arquivo, email, script, unidade removível, proteção contra violação, VBS, driver minifilter)
+- Proteção contra ataque de downgrade do PowerShell 2.0
+- Desabilitar Windows Connect Now / Assistência Remota
+- Remover apps pré-instaladas (Candy Crush, Xbox, Skype, Netflix, etc.)
+- Repos: privacy.sexy, Windows10Debloater
+
+### 20. Ajustes de Dispositivos de Entrada
+- Alternar aceleração do mouse (Aumentar Precisão do Ponteiro)
+- Direção de rolagem natural do mouse (estilo macOS)
+- Repos: Win11Debloat, Win-Debloat-Tools
+
+### 21. Gerenciamento de Energia e Bateria
+- Desabilitar rede no Modern Standby
+- Desabilitar Power Throttling para jogos
+- Alternar economia de energia do adaptador de rede
+- Rastreamento/relatório de vida útil da bateria
+- Desabilitar/excluir Armazenamento Reservado
+- Repos: Win11Debloat, BloatyNosy, Sophia-Script, WinKit
+
+### 22. Ferramentas e Utilitários Especializados
+- Windows Sandbox Maker (arquivos .wsb com mapeamento de pasta, compartilhamento GPU)
+- Criador de USB inicializável a partir de ISO/WIM
+- Visualizador/editor/removedor de metadados EXIF para imagens
+- Inventário de Ativos Criptográficos (CBOM)
+- Verificação de reputação de arquivo via Microsoft Cloud
+- Verificação de cadeia de certificados
+- Alternar pasta God Mode na área de trabalho
+- Desfragmentação de disco / TRIM SSD
+- Gerenciamento de Log de Eventos do Windows (limpar, atualizar, pesquisar)
+- Correção de vulnerabilidade de caminho de serviço sem aspas
+- Controle de compressão NTFS e indexação por unidade
+- Integração com O&O ShutUp10++
+- Integração com MalwareBytes AdwCleaner
+- Integração com Chris Titus Tech Windows Utility
+- Instalação e configuração do driver Sysmon
+- Scripts de Ativação Microsoft (Windows/Office)
+- Integração com Discord Rich Presence
+- Instalação de gerenciador de janelas lado a lado (GlazeWM)
+- Personalização de terminal (Oh My Posh, Nerd Fonts, configuração Windows Terminal)
+- Instaladores de temas para apps específicos (SpotX/Spicetify/Steam Millennium)
+- Gerenciador de configuração de editores (importação de config VSCode + instalação de extensão)
+- Central de reparos (50+ reparos curados de subsistemas Windows)
+- Backup para reset/migração do sistema com formato de arquivo personalizado
+- Repos: Harden-Windows-Security, TidyWindow, Win-Debloat-Tools, WinKit, winscript, Winrift, twiez-optimizer, Sophia-Script
+
+### 23. Ferramentas para Desenvolvedores e TI
+- Modo Sysprep / Perfil de Usuário Padrão (aplicar alterações a todos os novos usuários)
+- Aplicação de alterações por usuário (aplicar tweaks a conta de usuário diferente)
+- Exportação de políticas Intune/MDM (formato CSP/MDM)
+- Integração com Microsoft Graph API (gerenciamento de tenant Entra ID)
+- Instalador de distribuições WSL com nomes amigáveis
+- Gerenciador de variável de ambiente PATH (PathPilot)
+- Configuração de segurança do PowerShell (Log de Módulos, Bloco de Script, Modo de Linguagem Restrita)
+- Mecanismo de script multiplataforma (scripts shell macOS + Linux)
+- Modo de execução silenciosa/sem supervisão com registro
+- Verificação de conformidade Windows 365/Intune
+- Repos: Win11Debloat, Harden-Windows-Security, Sophia-Script, TidyWindow, privacy.sexy, Windows10Debloater, HardeningKitty
+
+### 24. Funcionalidades de Qualidade de Vida
+- Auto-atualização (verificação de lançamentos GitHub + instalação com um clique)
+- Sistema de plugins/extensões com loja da comunidade
+- Modo de fluxo de trabalho guiado gráfico (Autopilot)
+- Ativar informações detalhadas de erro BSoD
+- Configuração de solução de problemas recomendada
+- Suporte a caminhos longos (>260 caracteres)
+- Seletor de terminal padrão (Windows Terminal vs Console Host)
+- Alterador de localização de pastas de usuário (mover Área de Trabalho/Documentos/Downloads para outra unidade)
+- Controle de política de cache de miniaturas
+- Gerenciamento de Armazenamento Reservado (desabilitar para liberar espaço)
+- Repos: WinKit, BloatyNosy, Flyby11, twiez-optimizer, Sophia-Script, winscript
+
+---
+
+## Repositórios Analisados (20 total)
+1. rayenghanmi/RyTuneX — 5 funcionalidades
+2. Raphire/Win11Debloat — 30 funcionalidades
+3. farag2/Sophia-Script-for-Windows — 34 funcionalidades
+4. LeDragoX/Win-Debloat-Tools — 17 funcionalidades
+5. builtbybel/BloatyNosy — 12 funcionalidades
+6. Flick9000/winscript — 8 funcionalidades
+7. HotCakeX/Harden-Windows-Security — 21 funcionalidades
+8. securitywithoutborders/hardentools — 11 funcionalidades
+9. simeononsecurity/Windows-Optimize-Harden-Debloat — 13 funcionalidades
+10. 0x6d69636b/windows_hardening (HardeningKitty) — 15 funcionalidades
+11. memstechtips/UnattendedWinstall — 8 funcionalidades
+12. emylfy/Winrift — 10 funcionalidades
+13. DuckyOnQuack-999/WinKit — 13 funcionalidades
+14. Sycnex/Windows10Debloater — 8 funcionalidades
+15. Cosmos-0118/TidyWindow — 5 funcionalidades
+16. twiez/twiez-optimizer — 4 funcionalidades
+17. undergroundwires/privacy.sexy — 12 funcionalidades
+18. safing/portmaster — 4 funcionalidades
+19. builtbybel/Flyby11 — 8 funcionalidades
+20. AdamOfficialDev/app-uninstaller-cleaner — 0 funcionalidades (todas cobertas)
+
+Total geral: ~220+ funcionalidades únicas consolidadas em 24 categorias

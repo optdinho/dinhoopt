@@ -1,0 +1,16 @@
+{
+  "pageTitle": "Power Plans",
+  "pageDescription": "Manage Windows power plans to balance performance and energy savings",
+  "activePlan": "Active plan",
+  "active": "ACTIVE",
+  "activate": "Activate",
+  "delete": "Delete",
+  "confirmDelete": "Confirm",
+  "cancel": "Cancel",
+  "refresh": "Refresh",
+  "createPlan": "Create plan",
+  "create": "Create",
+  "createPlaceholder": "New power plan name...",
+  "loading": "Loading...",
+  "noPlans": "No power plans found"
+}

@@ -1,0 +1,42 @@
+{
+  "pageTitle": "Auditor de Conformidade",
+  "pageDescription": "Auditoria de segurança contra boas práticas e benchmarks do Windows",
+  "scanButton": "Auditar",
+  "fixSelected": "Corrigir ({{count}})",
+  "revertSelected": "Reverter ({{count}})",
+  "complianceScore": "Pontuação de conformidade",
+  "compliant": "Conforme",
+  "noncompliant": "Não conforme",
+  "total": "Total",
+  "severity": {
+    "critical": "Crítico",
+    "warning": "Aviso",
+    "info": "Informativo"
+  },
+  "category": {
+    "password": "Política de Senhas",
+    "audit": "Auditoria e Logging",
+    "network": "Segurança de Rede",
+    "update": "Windows Update",
+    "bitlocker": "BitLocker",
+    "firewall": "Firewall",
+    "uac": "Controle de Contas (UAC)"
+  },
+  "criticalBadge": "Crítico",
+  "warningBadge": "Aviso",
+  "infoBadge": "Informativo",
+  "noncompliantBadge": "Não conforme",
+  "compliantBadge": "Conforme",
+  "reversibleBadge": "Revertível",
+  "adminBadge": "Admin",
+  "checksApplied": "{{count}} correção(ões) aplicada(s)",
+  "checksReverted": "{{count}} correção(ões) revertida(s)",
+  "scanFailed": "A auditoria falhou",
+  "applyFailed": "Falha ao aplicar correções",
+  "emptyStateTitle": "Auditor de Conformidade",
+  "emptyStateDescription": "Analise o sistema contra boas práticas de segurança do Windows.",
+  "scoreExcellent": "Excelente",
+  "scoreGood": "Boa",
+  "scoreNeedsImprovement": "Precisa de melhorias",
+  "scoreCritical": "Crítica"
+}

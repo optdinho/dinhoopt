@@ -1,0 +1,19 @@
+import { ipcMain } from 'electron'
+import { IPC } from '@shared/channels'
+import { activateLicense, checkLicense, getHwid } from '../services/remote-license'
+
+export function registerLicenseIpc(): void {
+  ipcMain.handle(IPC.LICENSE_ACTIVATE, async (_event, key: unknown) => {
+    if (typeof key !== 'string' || !key.trim()) return { valid: false, reason: 'Chave inválida' }
+    if (key.length > 49) return { valid: false, reason: 'Chave muito longa' }
+    return activateLicense(key)
+  })
+
+  ipcMain.handle(IPC.LICENSE_STATUS, async () => {
+    return checkLicense()
+  })
+
+  ipcMain.handle(IPC.LICENSE_GET_HWID, async () => {
+    return getHwid()
+  })
+}

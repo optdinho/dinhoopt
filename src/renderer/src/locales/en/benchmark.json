@@ -1,0 +1,21 @@
+{
+  "pageTitle": "Competitive Benchmark",
+  "pageDescription": "Evaluate your system performance for gaming",
+  "startButton": "START BENCHMARK",
+  "running": "Running benchmark...",
+  "cancel": "Cancel",
+  "runAgain": "Run again",
+  "score": "Score",
+  "cpu": "CPU",
+  "ram": "RAM",
+  "network": "Network",
+  "dpc": "DPC Latency",
+  "temperature": "Temperature",
+  "tweakBonus": "Tweak Bonus",
+  "powerBonus": "Power Plan",
+  "classS": "≥ 90",
+  "classA": "≥ 80",
+  "classB": "≥ 70",
+  "classC": "≥ 50",
+  "classD": "< 50"
+}

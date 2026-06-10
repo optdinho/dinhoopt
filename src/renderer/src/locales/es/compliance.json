@@ -1,0 +1,42 @@
+{
+  "pageTitle": "Auditor de Cumplimiento",
+  "pageDescription": "Auditoría de seguridad contra mejores prácticas y benchmarks de Windows",
+  "scanButton": "Auditar",
+  "fixSelected": "Corregir ({{count}})",
+  "revertSelected": "Revertir ({{count}})",
+  "complianceScore": "Puntuación de cumplimiento",
+  "compliant": "Cumple",
+  "noncompliant": "No cumple",
+  "total": "Total",
+  "severity": {
+    "critical": "Crítico",
+    "warning": "Advertencia",
+    "info": "Informativo"
+  },
+  "category": {
+    "password": "Política de Contraseñas",
+    "audit": "Auditoría y Registro",
+    "network": "Seguridad de Red",
+    "update": "Windows Update",
+    "bitlocker": "BitLocker",
+    "firewall": "Firewall",
+    "uac": "Control de Cuentas (UAC)"
+  },
+  "criticalBadge": "Crítico",
+  "warningBadge": "Advertencia",
+  "infoBadge": "Informativo",
+  "noncompliantBadge": "No cumple",
+  "compliantBadge": "Cumple",
+  "reversibleBadge": "Revertible",
+  "adminBadge": "Admin",
+  "checksApplied": "{{count}} corrección(es) aplicada(s)",
+  "checksReverted": "{{count}} corrección(es) revertida(s)",
+  "scanFailed": "La auditoría falló",
+  "applyFailed": "Error al aplicar correcciones",
+  "emptyStateTitle": "Auditor de Cumplimiento",
+  "emptyStateDescription": "Audite el sistema contra las mejores prácticas de seguridad de Windows.",
+  "scoreExcellent": "Excelente",
+  "scoreGood": "Buena",
+  "scoreNeedsImprovement": "Necesita mejoras",
+  "scoreCritical": "Crítica"
+}

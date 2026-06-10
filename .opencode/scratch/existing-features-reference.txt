@@ -1,0 +1,93 @@
+# EXISTING FEATURES IN DiNho Optimizer
+# DO NOT list any of these as "missing" - they already exist!
+# Use this list to FILTER OUT features we already have.
+
+## SYSTEM CLEANING & MAINTENANCE
+- Disk space analysis (per-drive scan, top large folders)
+- Temporary file cleanup (Windows temp, user temp, prefetch, cache)
+- Browser cache/history cleanup (Chrome, Edge, Firefox, Brave, Opera)
+- Duplicate file finder
+- Empty folder finder
+- Large file analyzer
+- System Restore management (create, delete, list, enable protection)
+- SFC / DISM repair integration
+
+## REGISTRY & SYSTEM OPTIMIZATION
+- Registry cleaner (invalid/unused entries)
+- Registry defrag
+- Startup manager (enable/disable startup programs)
+- Service manager (start/stop/change startup type)
+- Context menu customization
+
+## SECURITY & PRIVACY
+- Malware scanner (YARA-based, signature updates, quarantine, full/quick/custom scan)
+- Privacy cleaner (activity logs, recent docs, clipboard history, run history)
+- Telemetry blocker (hosts file entries, firewall rules, registry)
+- Windows Defender integration (check status, scan)
+- Firewall configuration (block/allow rules, port management)
+- USB security (autorun disable, device control, write protection)
+- File shredder / secure delete
+
+## DRIVER & HARDWARE
+- Driver manager (update, backup, restore, rollback)
+- Hardware info viewer (CPU, GPU, RAM, motherboard, storage, network)
+
+## SYSTEM INFORMATION
+- System summary (OS, edition, version, build, architecture)
+- CPU details (model, cores, threads, speed)
+- RAM details (total, used, available, slots)
+- Storage details (model, type, health, partitions)
+- GPU details (model, VRAM, driver)
+- Network info (adapters, IP, DNS)
+- Motherboard info (manufacturer, model, BIOS)
+
+## TWEAKS & CUSTOMIZATION
+- System performance tweaks (visual effects, animations, responsiveness)
+- Privacy tweaks (telemetry, location, advertising ID, Cortana)
+- Network tweaks (TCP/IP optimization, QoS, MTU)
+- Context menu items (add/remove entries)
+- File Explorer tweaks (show extensions, hidden files, navigation pane)
+- Taskbar customization (alignment, search, widgets, task view)
+- User interface personalization (theme, colors, fonts, transparency)
+- Windows Update controls (pause, block updates, defer upgrades)
+- Power scheme management (create, edit, switch plans)
+- Accessibility tweaks (Sticky Keys, Filter Keys, narrator shortcuts)
+- Gaming tweaks (Game Mode, GPU scheduling, focus assist)
+
+## NETWORK TOOLS
+- Network diagnostics (ping, traceroute, DNS lookup)
+- Connection monitor (active connections, bandwidth usage)
+- DNS cache flush
+- Hosts file editor
+- Network reset
+
+## PROCESS & SERVICE MANAGEMENT
+- Process manager (list, terminate, priority, affinity)
+- Service manager with dependency view
+- Auto-start manager
+- Scheduled tasks viewer
+
+## FILE MANAGEMENT
+- File search by type/size/date
+- Batch file operations (copy, move, delete)
+- File type association manager
+
+## GENERAL FEATURES
+- Multi-language support (Brazilian Portuguese, English)
+- Dark/Light theme
+- Portable mode
+- Configuration import/export
+- Activity log / audit trail
+- Restore point creation before modifications
+- Admin elevation detection
+- Search/filter throughout the app
+- Responsive layout
+- Real-time progress feedback for long operations
+
+## WHAT WE SPECIFICALLY DON'T NEED TO SEARCH FOR (too basic)
+- Simple registry cleaner
+- Temp file cleaner
+- Startup manager
+- Basic system info viewer
+- File search
+- Network diagnostics (ping, traceroute)

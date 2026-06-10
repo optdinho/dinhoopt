@@ -1,0 +1,20 @@
+{
+  "pageTitle": "Windows Tweaks",
+  "pageDescription": "Registry optimization catalog for Windows",
+  "applied": "Applied",
+  "notApplied": "Not applied",
+  "apply": "Apply",
+  "revert": "Revert",
+  "selectAll": "Select all unapplied",
+  "deselectAll": "Deselect all",
+  "categoryMouse": "Mouse",
+  "categoryKeyboard": "Keyboard",
+  "categoryAccessibility": "Accessibility",
+  "categoryNetwork": "Network",
+  "categoryGpu": "GPU",
+  "categorySystem": "System",
+  "categoryGaming": "Gaming",
+  "categoryPrivacy": "Privacy",
+  "categoryMmcss": "MMCSS",
+  "categoryEnergy": "Energy"
+}

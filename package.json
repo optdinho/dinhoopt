@@ -1,0 +1,71 @@
+{
+  "name": "dinho-optimizer",
+  "version": "1.0.1",
+  "description": "DiNho Optimizer — Otimizador de sistema Windows",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-vite build && electron-builder --win",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "validate:rules": "npx tsx src/main/rules/validate.ts",
+    "new-rule": "node scripts/new-rule.js",
+    "find-cache": "node scripts/find-cache.js",
+    "preview-rule": "node scripts/preview-rule.js",
+    "postinstall": "patch-package"
+  },
+  "keywords": [
+    "system-cleaner",
+    "electron",
+    "windows",
+    "optimization"
+  ],
+  "author": {
+    "name": "DiNho",
+    "email": "contato@dinhooptimizer.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@axe-core/react": "^4.11.2",
+    "@playwright/test": "^1.60.0",
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^4.1.8",
+    "electron": "^42.3.3",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
+    "patch-package": "^8.0.1",
+    "playwright": "^1.60.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.2",
+    "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "@litko/yara-x": "^0.5.2",
+    "clsx": "^2.1.1",
+    "electron-updater": "^6.8.3",
+    "framer-motion": "^12.40.0",
+    "i18next": "^26.0.10",
+    "lucide-react": "^0.577.0",
+    "node-machine-id": "^1.1.12",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-i18next": "^17.0.8",
+    "react-router-dom": "^7.15.1",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "systeminformation": "^5.31.6",
+    "tailwind-merge": "^3.6.0",
+    "zustand": "^5.0.13"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.10.0"
+  }
+}

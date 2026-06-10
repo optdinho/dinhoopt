@@ -1,0 +1,44 @@
+appId: com.dinhooptimizer.win32
+productName: DiNho Optimizer
+copyright: Copyright © 2026 DiNho
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+
+extraResources:
+  - from: resources/icon.ico
+    to: icon.ico
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/icons
+    to: icons
+  - from: resources/licenses
+    to: licenses
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+  requestedExecutionLevel: requireAdministrator
+
+npmRebuild: false
+
+electronDownload:
+  mirror: https://github.com/electron/electron/releases/download/
+
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
+  artifactName: DiNho-Optimizer-Setup-${version}.${ext}
+  runAfterFinish: false
+  createStartMenuShortcut: true
+  createDesktopShortcut: true
+
+

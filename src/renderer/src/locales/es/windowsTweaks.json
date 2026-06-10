@@ -1,0 +1,20 @@
+{
+  "pageTitle": "Windows Tweaks",
+  "pageDescription": "Catálogo de optimizaciones de registro para Windows",
+  "applied": "Aplicado",
+  "notApplied": "No aplicado",
+  "apply": "Aplicar",
+  "revert": "Revertir",
+  "selectAll": "Seleccionar todos no aplicados",
+  "deselectAll": "Deseleccionar todos",
+  "categoryMouse": "Ratón",
+  "categoryKeyboard": "Teclado",
+  "categoryAccessibility": "Accesibilidad",
+  "categoryNetwork": "Red",
+  "categoryGpu": "GPU",
+  "categorySystem": "Sistema",
+  "categoryGaming": "Gaming",
+  "categoryPrivacy": "Privacidad",
+  "categoryMmcss": "MMCSS",
+  "categoryEnergy": "Energía"
+}

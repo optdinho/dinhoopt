@@ -1,0 +1,10 @@
+{
+  "trayTooltip": "DiNho Optimizer",
+  "openDiNho": "Abrir DiNho Optimizer",
+  "quit": "Sair",
+  "scheduledTaskNotificationTitle": "DiNho Optimizer - Tarefa Agendada",
+  "scheduledTaskNotificationBody": "A executar \"{{name}}\"...",
+  "scanCompleteNotificationTitle": "DiNho Optimizer - Verificação Concluída",
+  "scanCompleteNotificationBody": "Foram encontrados {{itemCount}} itens ({{sizeMB}} MB) que podem ser limpos.",
+  "scheduledScanName": "Verificação Agendada"
+}

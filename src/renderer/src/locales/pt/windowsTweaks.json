@@ -1,0 +1,20 @@
+{
+    "pageTitle": "Otimizações do Windows",
+  "pageDescription": "Catálogo de otimizações de registro para Windows",
+  "applied": "Aplicado",
+  "notApplied": "Não aplicado",
+  "apply": "Aplicar",
+  "revert": "Reverter",
+  "selectAll": "Selecionar todos não aplicados",
+  "deselectAll": "Desmarcar todos",
+    "categoryMouse": "Mouse",
+  "categoryKeyboard": "Teclado",
+  "categoryAccessibility": "Acessibilidade",
+  "categoryNetwork": "Rede",
+  "categoryGpu": "GPU",
+  "categorySystem": "Sistema",
+    "categoryGaming": "Jogos",
+  "categoryPrivacy": "Privacidade",
+  "categoryMmcss": "MMCSS",
+  "categoryEnergy": "Energia"
+}

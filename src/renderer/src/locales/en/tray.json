@@ -1,0 +1,10 @@
+{
+  "trayTooltip": "DiNho Optimizer",
+  "openDiNho": "Open DiNho Optimizer",
+  "quit": "Quit",
+  "scheduledTaskNotificationTitle": "DiNho Optimizer - Scheduled Task",
+  "scheduledTaskNotificationBody": "Running \"{{name}}\"...",
+  "scanCompleteNotificationTitle": "DiNho Optimizer - Scan Complete",
+  "scanCompleteNotificationBody": "Found {{itemCount}} items ({{sizeMB}} MB) that can be cleaned.",
+  "scheduledScanName": "Scheduled Scan"
+}

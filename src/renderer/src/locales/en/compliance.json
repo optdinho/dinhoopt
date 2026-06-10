@@ -1,0 +1,42 @@
+{
+  "pageTitle": "Compliance Auditor",
+  "pageDescription": "Security compliance audit against Windows best practices and benchmarks",
+  "scanButton": "Audit",
+  "fixSelected": "Fix ({{count}})",
+  "revertSelected": "Revert ({{count}})",
+  "complianceScore": "Compliance Score",
+  "compliant": "Compliant",
+  "noncompliant": "Non-Compliant",
+  "total": "Total",
+  "severity": {
+    "critical": "Critical",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "category": {
+    "password": "Password Policy",
+    "audit": "Audit & Logging",
+    "network": "Network Security",
+    "update": "Windows Update",
+    "bitlocker": "BitLocker",
+    "firewall": "Firewall",
+    "uac": "User Account Control"
+  },
+  "criticalBadge": "Critical",
+  "warningBadge": "Warning",
+  "infoBadge": "Info",
+  "noncompliantBadge": "Non-Compliant",
+  "compliantBadge": "Compliant",
+  "reversibleBadge": "Reversible",
+  "adminBadge": "Admin",
+  "checksApplied": "{{count}} fix(es) applied",
+  "checksReverted": "{{count}} fix(es) reverted",
+  "scanFailed": "Compliance audit failed",
+  "applyFailed": "Failed to apply fixes",
+  "emptyStateTitle": "Compliance Auditor",
+  "emptyStateDescription": "Audit the system against Windows security best practices.",
+  "scoreExcellent": "Excellent",
+  "scoreGood": "Good",
+  "scoreNeedsImprovement": "Needs improvement",
+  "scoreCritical": "Critical"
+}

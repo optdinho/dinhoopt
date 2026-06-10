@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+.skip-nav {
+  position: absolute;
+  top: 8px;
+  left: -9999px;
+  z-index: 9999;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: #27272a;
+  color: #fafafa;
+  font-size: 14px;
+  text-decoration: none;
+  border: 1px solid #3f3f46;
+}
+.skip-nav:focus {
+  left: 8px;
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+}
+
+@theme {
+  --color-brand-purple: #8b5cf6;
+  --color-brand-purple-dark: #7c3aed;
+  --color-brand-purple-light: #a78bfa;
+  --color-brand-orange: #f59e0b;
+  --color-brand-orange-dark: #d97706;
+  --color-brand-orange-light: #fbbf24;
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
+
+  --animate-fade-in: fade-in 0.4s ease-out;
+  --animate-scale-in: scale-in 0.2s ease-out;
+  --animate-shimmer: shimmer 2s linear infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@layer base {
+  :root {
+    --page-bg: #09090b;
+    --sidebar-bg: #0c0c0e;
+    --flyout-bg: #1a1a1e;
+    --toast-bg: #1a1a1e;
+    --bg-subtle: #18181b;
+    --bg-subtle-2: #1f1f23;
+    --bg-surface: #27272a;
+    --bg-active: #2a2a2e;
+    --bg-hover: #1f1f23;
+
+    --accent: #8b5cf6;
+    --accent-hover: #7c3aed;
+    --accent-muted-bg: rgba(139, 92, 246, 0.08);
+    --accent-muted-border: rgba(139, 92, 246, 0.15);
+
+    --border-default: #27272a;
+    --border-subtle: #1f1f23;
+    --border-medium: #3f3f46;
+    --border-strong: #52525b;
+
+    --text-primary: #fafafa;
+    --text-secondary: #e4e4e7;
+    --text-muted: #a1a1aa;
+    --text-dim: #71717a;
+    --text-faint: #52525b;
+    --text-on-accent: #ffffff;
+    --toast-text: #e4e4e7;
+
+    --glow-amber: rgba(245, 158, 11, 0.12);
+    --glow-blue: rgba(59, 130, 246, 0.08);
+    --glass-inset: rgba(255, 255, 255, 0.05);
+    --grid-line: rgba(255, 255, 255, 0.04);
+
+    --gauge-track: rgba(255, 255, 255, 0.06);
+    --card-bg: #1a1a1e;
+  }
+
+  .light {
+    --page-bg: #f4f4f5;
+    --sidebar-bg: #ffffff;
+    --flyout-bg: #ffffff;
+    --toast-bg: #ffffff;
+    --bg-subtle: #fafafa;
+    --bg-subtle-2: #f4f4f5;
+    --bg-surface: #e4e4e7;
+    --bg-active: #d4d4d8;
+    --bg-hover: #f4f4f5;
+
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-muted-bg: rgba(124, 58, 237, 0.08);
+    --accent-muted-border: rgba(124, 58, 237, 0.15);
+
+    --border-default: #e4e4e7;
+    --border-subtle: #f4f4f5;
+    --border-medium: #d4d4d8;
+    --border-strong: #a1a1aa;
+
+    --text-primary: #09090b;
+    --text-secondary: #18181b;
+    --text-muted: #52525b;
+    --text-dim: #71717a;
+    --text-faint: #a1a1aa;
+    --text-on-accent: #ffffff;
+    --toast-text: #18181b;
+
+    --glow-amber: rgba(245, 158, 11, 0.08);
+    --glow-blue: rgba(59, 130, 246, 0.05);
+    --glass-inset: rgba(255, 255, 255, 0.8);
+    --grid-line: rgba(0, 0, 0, 0.03);
+
+    --gauge-track: rgba(0, 0, 0, 0.08);
+    --card-bg: #ffffff;
+  }
+
+  html {
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+  ::selection {
+    background: rgba(139, 92, 246, 0.3);
+    color: #ffffff;
+  }
+
+  .light ::selection {
+    background: rgba(124, 58, 237, 0.2);
+    color: #09090b;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-default);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), inset 0 1px 0 var(--glass-inset);
+    transition: all 0.2s ease;
+  }
+
+  .glass-card-hover:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-medium);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 var(--glass-inset);
+  }
+
+  .glow-amber {
+    transition: box-shadow 0.3s ease;
+  }
+
+  .glow-amber:hover {
+    box-shadow: 0 0 24px rgba(245, 158, 11, 0.08), inset 0 1px 0 var(--glass-inset);
+  }
+
+  .glow-blue {
+    transition: box-shadow 0.3s ease;
+  }
+
+  .glow-blue:hover {
+    box-shadow: 0 0 24px rgba(59, 130, 246, 0.08), inset 0 1px 0 var(--glass-inset);
+  }
+
+  .glow-green {
+    transition: box-shadow 0.3s ease;
+  }
+
+  .glow-green:hover {
+    box-shadow: 0 0 24px rgba(34, 197, 94, 0.08), inset 0 1px 0 var(--glass-inset);
+  }
+}
