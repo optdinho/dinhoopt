@@ -26,16 +26,13 @@ import {
 import { getSettings } from './services/settings-store'
 
 // ─── GPU workaround for broken drivers ──────────────────────
-// On this Windows build (10.0.26200) and similar preview/dev builds,
-// the GPU process crashes at launch with error_code=18.
-//
-// in-process-gpu avoids launching a separate GPU process (which would
-// crash).  disable-gpu then forces ALL compositing to use Skia software
-// rendering (CPU-based), bypassing the broken GPU driver entirely.
-//
-// NOTE: disableHardwareAcceleration() must NOT be used here because it
-// internally sets use-gl=none, which conflicts with other GL flags.
-app.commandLine.appendSwitch('in-process-gpu')
+// On some Windows builds the GPU process crashes at launch.
+// disable-gpu forces Skia software rendering (CPU-based),
+// bypassing the broken GPU driver entirely.
+// NOTE: in-process-gpu is intentionally OMITTED — it causes a
+// black screen on 25H2 and similar builds.  When the separate
+// GPU process is disabled, Chromium falls back to the in-process
+// path automatically, so the flag is redundant anyway.
 app.commandLine.appendSwitch('disable-gpu')
 
 process.on('uncaughtException', (err) => {
