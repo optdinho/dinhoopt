@@ -154,13 +154,12 @@
 </details>
 
 <details open>
-<summary><strong>☁️ Cloud & Backup</strong> — 3 módulos</summary>
+<summary><strong>☁️ Cloud & Backup</strong> — 2 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
 | **Cloud Backup** | Backup em nuvem de configurações e regras |
 | **Licenciamento** | Ativação e validação via API remota |
-| **Monitor de Vazamentos** | Alerta de vazamentos via Have I Been Pwned |
 
 </details>
 
