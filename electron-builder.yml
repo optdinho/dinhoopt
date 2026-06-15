@@ -29,6 +29,7 @@ publish:
   provider: github
   owner: optdinho
   repo: dinhoopt
+  private: true
 
 npmRebuild: false
 
