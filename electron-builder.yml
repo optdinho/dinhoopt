@@ -16,8 +16,7 @@ extraResources:
     to: icon.png
   - from: resources/icons
     to: icons
-  - from: resources/licenses
-    to: licenses
+  # Licenses are validated via remote API — local DB is server-side only
 
 win:
   target:
@@ -26,6 +25,11 @@ win:
         - x64
   icon: resources/icon.ico
   requestedExecutionLevel: requireAdministrator
+
+publish:
+  provider: github
+  owner: optdinho
+  repo: optdinho
 
 npmRebuild: false
 

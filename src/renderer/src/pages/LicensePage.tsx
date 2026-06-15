@@ -1,5 +1,5 @@
+import { AlertTriangle, CheckCircle, Copy, Info, KeyRound, ShieldCheck, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { ShieldCheck, Copy, CheckCircle, XCircle, AlertTriangle, KeyRound, Info } from 'lucide-react'
 import { useLicenseStore } from '../stores/license-store'
 
 export function LicensePage() {
@@ -88,9 +88,12 @@ export function LicensePage() {
       )}
 
       <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 mb-6">
-        <label className="block text-sm text-gray-400 mb-2">Chave de Licença</label>
+        <label htmlFor="license-key" className="block text-sm text-gray-400 mb-2">
+          Chave de Licença
+        </label>
         <div className="flex gap-2">
           <input
+            id="license-key"
             type="text"
             value={key}
             onChange={handleKeyChange}
@@ -99,6 +102,7 @@ export function LicensePage() {
             disabled={isActivating || activationSuccess}
           />
           <button
+            type="button"
             onClick={handleActivate}
             disabled={isActivating || activationSuccess || key.length < 10}
             className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-gray-500 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
@@ -118,6 +122,7 @@ export function LicensePage() {
           </div>
           {hwid && (
             <button
+              type="button"
               onClick={handleCopyHwid}
               className="flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-white"
               title="Copiar HWID"
@@ -130,7 +135,9 @@ export function LicensePage() {
         <code className="block break-all rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 font-mono text-sm text-gray-300 select-all">
           {hwid || 'Gerando...'}
         </code>
-        <p className="mt-2 text-xs text-gray-500">Este HWID identifica seu equipamento. Envie-o ao suporte para vincular sua licença.</p>
+        <p className="mt-2 text-xs text-gray-500">
+          Este HWID identifica seu equipamento. Envie-o ao suporte para vincular sua licença.
+        </p>
       </div>
     </div>
   )

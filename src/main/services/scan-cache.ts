@@ -7,14 +7,25 @@ import type { ScanItem } from '@shared/types'
 const itemCache = new Map<string, ScanItem>()
 const MAX_CACHE_SIZE = 50000
 
-export function cacheItems(items: ScanItem[]): void {
+export function cacheItems(originalItems: ScanItem[]): void {
+  const items = originalItems.length > MAX_CACHE_SIZE ? originalItems.slice(0, MAX_CACHE_SIZE) : originalItems
   // Evict oldest entries if cache is getting too large
   if (itemCache.size + items.length > MAX_CACHE_SIZE) {
     const toRemove = itemCache.size + items.length - MAX_CACHE_SIZE
-    const keys = itemCache.keys()
-    for (let i = 0; i < toRemove; i++) {
-      const key = keys.next().value
-      if (key !== undefined) itemCache.delete(key)
+    if (toRemove > MAX_CACHE_SIZE * 0.5) {
+      // Bulk clear: keep only the newest entries
+      const entries = [...itemCache.entries()]
+      const keep = entries.slice(toRemove)
+      itemCache.clear()
+      for (const [k, v] of keep) {
+        itemCache.set(k, v)
+      }
+    } else {
+      const keys = itemCache.keys()
+      for (let i = 0; i < toRemove; i++) {
+        const key = keys.next().value
+        if (key !== undefined) itemCache.delete(key)
+      }
     }
   }
   for (const item of items) {

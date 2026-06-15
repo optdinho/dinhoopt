@@ -1,5 +1,5 @@
-import { create } from 'zustand'
 import type { BloatwareApp } from '@shared/types'
+import { create } from 'zustand'
 
 type FilterType = 'all' | BloatwareApp['category']
 
@@ -48,22 +48,22 @@ export const useDebloaterStore = create<DebloaterState>((set) => ({
   setHasScanned: (hasScanned) => set({ hasScanned }),
   toggleApp: (id) =>
     set((s) => ({
-      apps: s.apps.map((a) => (a.id === id ? { ...a, selected: !a.selected } : a))
+      apps: s.apps.map((a) => (a.id === id ? { ...a, selected: !a.selected } : a)),
     })),
   selectAll: () =>
     set((s) => ({
-      apps: s.apps.map((a) => ({ ...a, selected: true }))
+      apps: s.apps.map((a) => ({ ...a, selected: true })),
     })),
   deselectAll: () =>
     set((s) => ({
-      apps: s.apps.map((a) => ({ ...a, selected: false }))
+      apps: s.apps.map((a) => ({ ...a, selected: false })),
     })),
   selectFiltered: (filter, select) =>
     set((s) => ({
       apps: s.apps.map((a) => {
         const inFilter = filter === 'all' || a.category === filter
         return inFilter ? { ...a, selected: select } : a
-      })
+      }),
     })),
   reset: () =>
     set({
@@ -74,6 +74,6 @@ export const useDebloaterStore = create<DebloaterState>((set) => ({
       removeProgress: null,
       removeResult: null,
       error: null,
-      hasScanned: false
-    })
+      hasScanned: false,
+    }),
 }))

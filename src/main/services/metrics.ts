@@ -1,5 +1,5 @@
+import * as os from 'node:os'
 import { app } from 'electron'
-import * as os from 'os'
 import * as si from 'systeminformation'
 import { getHistory } from './history-store'
 
@@ -96,7 +96,7 @@ export async function collectMetrics(): Promise<MetricLine[]> {
   })
 
   if (history.length > 0) {
-    const latest = history[0]
+    const latest = history[0]!
     metrics.push({
       name: 'dinho_last_scan_timestamp_seconds',
       type: 'gauge',
@@ -108,7 +108,7 @@ export async function collectMetrics(): Promise<MetricLine[]> {
       name: 'dinho_last_scan_duration_seconds',
       type: 'gauge',
       help: 'Duration of the most recent scan in seconds',
-      value: Math.round(latest.duration / 1000 * 100) / 100,
+      value: Math.round((latest.duration / 1000) * 100) / 100,
     })
 
     metrics.push({

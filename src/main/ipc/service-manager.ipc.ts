@@ -1,17 +1,18 @@
-import { ipcMain } from 'electron'
 import { IPC } from '@shared/channels'
-import type { WindowGetter } from './index'
+import { lookupServiceSafety } from '@shared/service-safety-kb'
 import type {
-  WindowsService,
-  ServiceScanResult,
   ServiceApplyResult,
   ServiceScanProgress,
+  ServiceScanResult,
+  ServiceStartType,
   ServiceStatus,
-  ServiceStartType
+  WindowsService,
 } from '@shared/types'
-import { lookupServiceSafety } from '@shared/service-safety-kb'
+import { ipcMain } from 'electron'
 import { getPlatform } from '../platform'
-import { psArgs, psUtf8, execFileAsync } from '../services/exec-utf8'
+import { execFileAsync, psArgs } from '../services/exec-utf8'
+import { getLogger } from '../services/logger.service'
+import type { WindowGetter } from './index'
 
 const PS_OPTS = { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true }
 
@@ -40,18 +41,18 @@ function normalizeStatus(raw: string): ServiceStatus {
 
 // ── Exported core logic ─────────────────────────────────────
 
-export async function scanServices(
-  onProgress?: (data: ServiceScanProgress) => void
-): Promise<ServiceScanResult> {
-    // On non-Windows, delegate to platform abstraction
-    if (process.platform !== 'win32') {
-      return getPlatform().services.scan(onProgress)
-    }
+export async function scanServices(onProgress?: (data: ServiceScanProgress) => void): Promise<ServiceScanResult> {
+  getLogger().info('service-manager', 'Starting service scan')
 
-    onProgress?.({ phase: 'enumerating', current: 0, total: 0, currentService: 'Enumerating services...' })
+  // On non-Windows, delegate to platform abstraction
+  if (process.platform !== 'win32') {
+    return getPlatform().services.scan(onProgress)
+  }
 
-    // Single PowerShell call to enumerate all services with details
-    const script = `
+  onProgress?.({ phase: 'enumerating', current: 0, total: 0, currentService: 'Enumerating services...' })
+
+  // Single PowerShell call to enumerate all services with details
+  const script = `
       $services = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue |
         Select-Object Name, DisplayName, State, StartMode, Description, PathName
       $total = $services.Count
@@ -75,38 +76,43 @@ export async function scanServices(
       }
     `
 
-    const { stdout } = await execFileAsync('powershell', psArgs(script), PS_OPTS)
+  const { stdout } = await execFileAsync('powershell', psArgs(script), PS_OPTS)
 
-    const lines = stdout.split('\n').filter((l) => l.startsWith('SVC|'))
-    const serviceNames: string[] = []
-    const rawServices: {
-      name: string
-      displayName: string
-      status: ServiceStatus
-      startType: ServiceStartType
-      description: string
-      isMicrosoft: boolean
-    }[] = []
+  const lines = stdout.split('\n').filter((l) => l.startsWith('SVC|'))
+  const serviceNames: string[] = []
+  const rawServices: {
+    name: string
+    displayName: string
+    status: ServiceStatus
+    startType: ServiceStartType
+    description: string
+    isMicrosoft: boolean
+  }[] = []
 
-    for (const line of lines) {
-      const parts = line.trim().split('|')
-      if (parts.length < 7) continue
-      const name = parts[1]
-      serviceNames.push(name)
-      rawServices.push({
-        name,
-        displayName: parts[2],
-        status: normalizeStatus(parts[3]),
-        startType: normalizeStartType(parts[4]),
-        description: parts[5],
-        isMicrosoft: parts[6].trim().toLowerCase() === 'true'
-      })
-    }
+  for (const line of lines) {
+    const parts = line.trim().split('|')
+    if (parts.length < 7) continue
+    const name = parts[1]!
+    serviceNames.push(name)
+    rawServices.push({
+      name,
+      displayName: parts[2]!,
+      status: normalizeStatus(parts[3]!),
+      startType: normalizeStartType(parts[4]!),
+      description: parts[5]!,
+      isMicrosoft: parts[6]!.trim().toLowerCase() === 'true',
+    })
+  }
 
-    onProgress?.({ phase: 'classifying', current: 0, total: rawServices.length, currentService: 'Resolving dependencies...' })
+  onProgress?.({
+    phase: 'classifying',
+    current: 0,
+    total: rawServices.length,
+    currentService: 'Resolving dependencies...',
+  })
 
-    // Resolve dependencies in a second PowerShell call
-    const depScript = `
+  // Resolve dependencies in a second PowerShell call
+  const depScript = `
       foreach ($name in @(${serviceNames.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')})) {
         try {
           $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
@@ -119,103 +125,112 @@ export async function scanServices(
       }
     `
 
-    let depMap: Record<string, { dependsOn: string[]; dependents: string[] }> = {}
-    try {
-      const { stdout: depOut } = await execFileAsync('powershell', psArgs(depScript), PS_OPTS)
-      for (const line of depOut.split('\n').filter((l) => l.startsWith('DEP|'))) {
-        const parts = line.trim().split('|')
-        if (parts.length >= 4) {
-          depMap[parts[1]] = {
-            dependsOn: parts[2] ? parts[2].split(',').filter(Boolean) : [],
-            dependents: parts[3] ? parts[3].split(',').filter(Boolean) : []
-          }
+  const depMap: Record<string, { dependsOn: string[]; dependents: string[] }> = {}
+  try {
+    const { stdout: depOut } = await execFileAsync('powershell', psArgs(depScript), PS_OPTS)
+    for (const line of depOut.split('\n').filter((l) => l.startsWith('DEP|'))) {
+      const parts = line.trim().split('|')
+      if (parts.length >= 4) {
+        depMap[parts[1]!] = {
+          dependsOn: parts[2] ? parts[2]!.split(',').filter(Boolean) : [],
+          dependents: parts[3] ? parts[3]!.split(',').filter(Boolean) : [],
         }
       }
-    } catch {
-      // Dependencies are non-critical — continue without them
+    }
+  } catch {
+    // Dependencies are non-critical — continue without them
+  }
+
+  // Classify and build final service list
+  const services: WindowsService[] = rawServices.map((raw, i) => {
+    if (i % 20 === 0) {
+      onProgress?.({ phase: 'classifying', current: i, total: rawServices.length, currentService: raw.displayName })
     }
 
-    // Classify and build final service list
-    const services: WindowsService[] = rawServices.map((raw, i) => {
-      if (i % 20 === 0) {
-        onProgress?.({ phase: 'classifying', current: i, total: rawServices.length, currentService: raw.displayName })
-      }
-
-      const kb = lookupServiceSafety(raw.name)
-      const deps = depMap[raw.name] ?? { dependsOn: [], dependents: [] }
-
-      return {
-        name: raw.name,
-        displayName: raw.displayName,
-        description: raw.description,
-        status: raw.status,
-        startType: raw.startType,
-        safety: kb.safety,
-        category: kb.category,
-        isMicrosoft: raw.isMicrosoft,
-        dependsOn: deps.dependsOn,
-        dependents: deps.dependents,
-        selected: false,
-        originalStartType: raw.startType,
-        incompatibleGames: kb.incompatibleGames
-      }
-    })
-
-    const runningCount = services.filter((s) => s.status === 'Running').length
-    const disabledCount = services.filter((s) => s.startType === 'Disabled').length
-    const safeToDisableCount = services.filter(
-      (s) => s.safety === 'safe' && s.startType !== 'Disabled'
-    ).length
+    const kb = lookupServiceSafety(raw.name)
+    const deps = depMap[raw.name] ?? { dependsOn: [], dependents: [] }
 
     return {
-      services,
-      totalCount: services.length,
-      runningCount,
-      disabledCount,
-      safeToDisableCount
+      name: raw.name,
+      displayName: raw.displayName,
+      description: raw.description,
+      status: raw.status,
+      startType: raw.startType,
+      safety: kb.safety,
+      category: kb.category,
+      isMicrosoft: raw.isMicrosoft,
+      dependsOn: deps.dependsOn,
+      dependents: deps.dependents,
+      selected: false,
+      originalStartType: raw.startType,
+      incompatibleGames: kb.incompatibleGames ?? [],
     }
+  })
+
+  const runningCount = services.filter((s) => s.status === 'Running').length
+  const disabledCount = services.filter((s) => s.startType === 'Disabled').length
+  const safeToDisableCount = services.filter((s) => s.safety === 'safe' && s.startType !== 'Disabled').length
+
+  getLogger().success(
+    'service-manager',
+    `Scan complete: ${services.length} services (${runningCount} running, ${disabledCount} disabled)`,
+  )
+  return {
+    services,
+    totalCount: services.length,
+    runningCount,
+    disabledCount,
+    safeToDisableCount,
+  }
 }
 
 export async function applyServiceChanges(
   changes: { name: string; targetStartType: string }[],
-  force?: boolean
+  force?: boolean,
 ): Promise<ServiceApplyResult> {
-      if (!Array.isArray(changes) || changes.length === 0) {
-        return { succeeded: 0, failed: 0, errors: [] }
+  if (!Array.isArray(changes) || changes.length === 0) {
+    getLogger().warning('service-manager', 'Apply skipped — no changes provided')
+    return { succeeded: 0, failed: 0, errors: [] }
+  }
+
+  getLogger().info('service-manager', `Applying ${changes.length} service changes`)
+
+  // On non-Windows, delegate to platform abstraction
+  if (process.platform !== 'win32') {
+    return getPlatform().services.applyChanges(changes)
+  }
+
+  // Validate service names — only allow safe characters
+  for (const c of changes) {
+    if (typeof c.name !== 'string' || typeof c.targetStartType !== 'string') {
+      return { succeeded: 0, failed: 0, errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }] }
+    }
+    if (!/^[A-Za-z0-9_.\-]{1,256}$/.test(c.name)) {
+      return {
+        succeeded: 0,
+        failed: 0,
+        errors: [{ name: c.name, displayName: c.name, reason: 'Invalid service name' }],
       }
+    }
+  }
 
-      // On non-Windows, delegate to platform abstraction
-      if (process.platform !== 'win32') {
-        return getPlatform().services.applyChanges(changes)
-      }
+  // Validate — reject unsafe services unless forced
+  const validChanges = changes.filter((c) => {
+    const kb = lookupServiceSafety(c.name)
+    return kb.safety !== 'unsafe' || force === true
+  })
 
-      // Validate service names — only allow safe characters
-      for (const c of changes) {
-        if (typeof c.name !== 'string' || typeof c.targetStartType !== 'string') {
-          return { succeeded: 0, failed: 0, errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }] }
-        }
-        if (!/^[A-Za-z0-9_.\-]{1,256}$/.test(c.name)) {
-          return { succeeded: 0, failed: 0, errors: [{ name: c.name, displayName: c.name, reason: 'Invalid service name' }] }
-        }
-      }
-
-      // Validate — reject unsafe services unless forced
-      const validChanges = changes.filter((c) => {
-        const kb = lookupServiceSafety(c.name)
-        return kb.safety !== 'unsafe' || force === true
-      })
-
-      // Build a single PowerShell script for all changes
-      const lines = validChanges.map((c) => {
-        const safeName = c.name.replace(/'/g, "''")
-        const ALLOWED_TYPES: Record<string, string> = {
-          Manual: 'Manual',
-          Disabled: 'Disabled',
-          Automatic: 'Automatic',
-          AutomaticDelayed: 'AutomaticDelayedStart',
-        }
-        const safeType = ALLOWED_TYPES[c.targetStartType] ?? 'Disabled'
-        return `
+  // Build a single PowerShell script for all changes
+  const lines = validChanges.map((c) => {
+    const safeName = c.name.replace(/'/g, "''")
+    const ALLOWED_TYPES: Record<string, string> = {
+      Manual: 'Manual',
+      Disabled: 'Disabled',
+      Automatic: 'Automatic',
+      AutomaticDelayed: 'AutomaticDelayedStart',
+    }
+    const safeType = ALLOWED_TYPES[c.targetStartType] ?? 'Disabled'
+    return `
 try {
   $svc = Get-Service -Name '${safeName}' -ErrorAction Stop
   $dn = $svc.DisplayName
@@ -227,56 +242,67 @@ try {
 } catch {
   Write-Output "FAIL|${safeName}|${safeName}|$($_.Exception.Message)"
 }`
-      })
+  })
 
-      const script = lines.join('\n')
+  const script = lines.join('\n')
 
-      let succeeded = 0
-      let failed = 0
-      const errors: { name: string; displayName: string; reason: string }[] = []
+  let succeeded = 0
+  let failed = 0
+  const errors: { name: string; displayName: string; reason: string }[] = []
 
-      try {
-        const { stdout } = await execFileAsync('powershell', psArgs(script), {
-          ...PS_OPTS,
-          timeout: validChanges.length * 10_000 + 30_000 // generous timeout
-        })
+  try {
+    const { stdout } = await execFileAsync('powershell', psArgs(script), {
+      ...PS_OPTS,
+      timeout: validChanges.length * 10_000 + 30_000, // generous timeout
+    })
 
-        for (const line of stdout.split('\n')) {
-          const trimmed = line.trim()
-          if (trimmed.startsWith('OK|')) {
-            succeeded++
-          } else if (trimmed.startsWith('FAIL|')) {
-            failed++
-            const parts = trimmed.split('|')
-            errors.push({
-              name: parts[1] || '',
-              displayName: parts[2] || '',
-              reason: parts[3] || 'Unknown error'
-            })
-          }
-        }
-      } catch (err) {
-        failed = validChanges.length
+    for (const line of stdout.split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('OK|')) {
+        succeeded++
+      } else if (trimmed.startsWith('FAIL|')) {
+        failed++
+        const parts = trimmed.split('|')
         errors.push({
-          name: '',
-          displayName: '',
-          reason: err instanceof Error ? err.message : 'PowerShell execution failed'
+          name: parts[1] || '',
+          displayName: parts[2] || '',
+          reason: parts[3] || 'Unknown error',
         })
       }
+    }
+  } catch (err) {
+    failed = validChanges.length
+    errors.push({
+      name: '',
+      displayName: '',
+      reason: err instanceof Error ? err.message : 'PowerShell execution failed',
+    })
+  }
 
-      return { succeeded, failed, errors }
+  getLogger().success('service-manager', `Applied: ${succeeded} succeeded, ${failed} failed`)
+  return { succeeded, failed, errors }
 }
 
 // ── Registration ─────────────────────────────────────────────
 
 export function registerServiceManagerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.SERVICE_SCAN, () => scanServices((data) => {
-    const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.SERVICE_PROGRESS, data)
-  }))
-
-  ipcMain.handle(IPC.SERVICE_APPLY, async (_event, changes: { name: string; targetStartType: string }[], force?: boolean) => {
-    if (!Array.isArray(changes)) return { succeeded: 0, failed: 0, errors: [] }
-    return applyServiceChanges(changes, force === true)
+  ipcMain.handle(IPC.SERVICE_SCAN, () => {
+    getLogger().info('service-manager', 'IPC: scan requested')
+    return scanServices((data) => {
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.SERVICE_PROGRESS, data)
+    })
   })
+
+  ipcMain.handle(
+    IPC.SERVICE_APPLY,
+    async (_event, changes: { name: string; targetStartType: string }[], force?: boolean) => {
+      getLogger().info('service-manager', 'IPC: apply requested')
+      if (!Array.isArray(changes)) {
+        getLogger().warning('service-manager', 'Apply skipped — invalid changes payload')
+        return { succeeded: 0, failed: 0, errors: [] }
+      }
+      return applyServiceChanges(changes, force === true)
+    },
+  )
 }

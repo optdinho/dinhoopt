@@ -1,6 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { app } from 'electron'
-import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 
 export interface JsonStoreOptions<T> {
   name: string
@@ -24,9 +24,7 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
 
   function getDataDir(): string {
     if (!_dataDir) {
-      _dataDir = app.isPackaged
-        ? app.getPath('userData')
-        : join(app.getPath('userData'), devSuffix)
+      _dataDir = app.isPackaged ? app.getPath('userData') : join(app.getPath('userData'), devSuffix)
     }
     return _dataDir
   }
@@ -41,7 +39,9 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
   }
 
   return {
-    get path() { return storePath() },
+    get path() {
+      return storePath()
+    },
 
     load(): T {
       try {

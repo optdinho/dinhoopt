@@ -1,28 +1,28 @@
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Mouse,
-  Keyboard,
-  Accessibility,
-  Wifi,
-  Monitor,
-  MonitorCog,
-  Gamepad2,
-  Shield,
-  Cpu,
-  Zap,
-  ChevronDown,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Globe,
-} from 'lucide-react'
-import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { TweakRow } from '@/components/TweakRow'
 import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 import type { WindowsTweakCategory } from '@shared/types'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  Accessibility,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Cpu,
+  Gamepad2,
+  Globe,
+  Keyboard,
+  Monitor,
+  MonitorCog,
+  Mouse,
+  Shield,
+  Wifi,
+  XCircle,
+  Zap,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 interface CategoryDef {
   id: WindowsTweakCategory
@@ -45,6 +45,14 @@ const CATEGORIES: CategoryDef[] = [
   { id: 'energy', label: 'Energia', icon: Zap, color: '#eab308', glow: 'rgba(234,179,8,0.12)' },
 ]
 
+const CAT_COLORS = CATEGORIES.reduce(
+  (acc, c) => {
+    acc[c.id] = { color: c.color, glow: c.glow }
+    return acc
+  },
+  {} as Record<string, { color: string; glow: string }>,
+)
+
 export function WindowsTweaksPage() {
   const store = useWindowsTweaksStore
   const tweaks = useWindowsTweaksStore((s) => s.tweaks)
@@ -61,7 +69,7 @@ export function WindowsTweaksPage() {
   useEffect(() => {
     store.getState().load()
     store.getState().loadDnsPresets()
-  }, [])
+  }, [store])
 
   const appliedCount = tweaks.filter((t) => t.applied).length
 
@@ -114,10 +122,15 @@ export function WindowsTweaksPage() {
       <PageHeader title="Windows Tweaks" description="Catálogo de otimizações para Windows" />
 
       {/* Stats bar */}
-      <div className="mb-6 flex items-center gap-4 rounded-xl border px-5 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+      <div
+        className="mb-6 flex items-center gap-4 rounded-xl border px-5 py-3"
+        style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+      >
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-green-400" />
-          <span className="text-sm text-zinc-300">{appliedCount}/{tweaks.length} tweaks ativos</span>
+          <span className="text-sm text-zinc-300">
+            {appliedCount}/{tweaks.length} tweaks ativos
+          </span>
         </div>
         <div className="h-4 w-px bg-zinc-700" />
         <span className="text-sm text-zinc-500">{selectedIds.size} selecionados</span>
@@ -126,6 +139,7 @@ export function WindowsTweaksPage() {
       {/* Action buttons */}
       <div className="mb-6 flex flex-wrap gap-3">
         <button
+          type="button"
           onClick={handleSelectAll}
           disabled={applying}
           className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:text-white disabled:opacity-40"
@@ -133,6 +147,7 @@ export function WindowsTweaksPage() {
           Selecionar não aplicados
         </button>
         <button
+          type="button"
           onClick={handleDeselectAll}
           disabled={applying}
           className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:text-white disabled:opacity-40"
@@ -140,6 +155,7 @@ export function WindowsTweaksPage() {
           Desmarcar todos
         </button>
         <button
+          type="button"
           onClick={handleApply}
           disabled={selectedIds.size === 0 || applying}
           className="rounded-lg px-5 py-2 text-sm font-bold text-white transition-all disabled:opacity-40"
@@ -148,9 +164,12 @@ export function WindowsTweaksPage() {
             boxShadow: '0 0 20px rgba(6,182,212,0.2)',
           }}
         >
-          {applying ? `Aplicando... ${progress ? `${progress.current}/${progress.total}` : ''}` : `Aplicar (${selectedIds.size})`}
+          {applying
+            ? `Aplicando... ${progress ? `${progress.current}/${progress.total}` : ''}`
+            : `Aplicar (${selectedIds.size})`}
         </button>
         <button
+          type="button"
           onClick={handleRevert}
           disabled={selectedIds.size === 0 || applying}
           className="rounded-lg border border-red-800 px-5 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-900/20 disabled:opacity-40"
@@ -171,7 +190,9 @@ export function WindowsTweaksPage() {
           >
             <div className="flex items-center justify-between px-4 py-2 text-sm text-zinc-400">
               <span>{progress.currentTweak}</span>
-              <span>{progress.current}/{progress.total}</span>
+              <span>
+                {progress.current}/{progress.total}
+              </span>
             </div>
             <div className="h-1.5 bg-zinc-800">
               <motion.div
@@ -267,6 +288,7 @@ export function WindowsTweaksPage() {
           <div className="flex flex-wrap gap-2">
             {dnsPresets.map((preset) => (
               <button
+                type="button"
                 key={preset.name}
                 onClick={() => handleSetDns(preset.primary, preset.secondary)}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-all hover:border-cyan-700 hover:text-cyan-400"
@@ -296,13 +318,11 @@ export function WindowsTweaksPage() {
             >
               {/* Category header */}
               <button
+                type="button"
                 onClick={() => store.getState().toggleCategory(cat.id)}
                 className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all hover:bg-white/[0.02]"
               >
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-lg"
-                  style={{ background: cat.glow }}
-                >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: cat.glow }}>
                   <cat.icon className="h-4 w-4" style={{ color: cat.color }} />
                 </div>
                 <div className="flex-1">
@@ -326,49 +346,19 @@ export function WindowsTweaksPage() {
                     className="overflow-hidden"
                   >
                     <div className="space-y-0.5 border-t px-5 py-2" style={{ borderColor: 'var(--border-subtle)' }}>
-                      {catTweaks.map(({ tweak, applied }) => {
-                        const isSelected = selectedIds.has(tweak.id)
+                      {catTweaks.map(({ tweak, applied }, idx) => {
+                        const catColor = CAT_COLORS[tweak.category]
                         return (
-                          <div
+                          <TweakRow
                             key={tweak.id}
-                            className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-all hover:bg-white/[0.03]"
-                            onClick={() => handleToggle(tweak.id)}
-                          >
-                            <div
-                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all ${
-                                isSelected
-                                  ? 'border-cyan-500 bg-cyan-500'
-                                  : applied
-                                    ? 'border-green-700 bg-green-900/30'
-                                    : 'border-zinc-700'
-                              }`}
-                            >
-                              {isSelected ? (
-                                <span className="text-[10px] font-bold text-white">✓</span>
-                              ) : applied ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-                              ) : null}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-zinc-200">{tweak.name}</span>
-                                {tweak.experimental && (
-                                  <span className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-[10px] font-medium text-yellow-500">
-                                    EXP
-                                  </span>
-                                )}
-                              </div>
-                              <div className="truncate text-[11px] text-zinc-600">
-                                {tweak.hive}\\{tweak.path} • {tweak.key}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs text-zinc-400">
-                                {tweak.kind === 'DWord' ? String(tweak.optimizedValue) : tweak.optimizedValue as string}
-                              </div>
-                              <div className="text-[10px] text-zinc-600">{tweak.level}</div>
-                            </div>
-                          </div>
+                            tweak={tweak}
+                            applied={applied}
+                            selected={selectedIds.has(tweak.id)}
+                            accentColor={catColor?.color ?? '#8b5cf6'}
+                            accentGlow={catColor?.glow ?? 'rgba(139,92,246,0.12)'}
+                            index={idx}
+                            onToggle={handleToggle}
+                          />
                         )
                       })}
                     </div>

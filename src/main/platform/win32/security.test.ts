@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileMock = vi.fn()
 
@@ -28,15 +28,13 @@ describe('win32 security', () => {
   describe('collectAntivirusStatus', () => {
     it('parses antivirus products from WMI output', async () => {
       execFileMock.mockResolvedValue({
-        stdout: JSON.stringify([
-          { displayName: 'Windows Defender', productState: 397568 },
-        ]),
+        stdout: JSON.stringify([{ displayName: 'Windows Defender', productState: 397568 }]),
         stderr: '',
       })
 
       const result = await security.collectAntivirusStatus()
       expect(result.products).toHaveLength(1)
-      expect(result.products[0].name).toBe('Windows Defender')
+      expect(result.products[0]!.name).toBe('Windows Defender')
     })
 
     it('handles single-object output', async () => {
@@ -47,7 +45,7 @@ describe('win32 security', () => {
 
       const result = await security.collectAntivirusStatus()
       expect(result.products).toHaveLength(1)
-      expect(result.products[0].name).toBe('Norton')
+      expect(result.products[0]!.name).toBe('Norton')
     })
 
     it('identifies third-party AV as primary over Windows Defender', async () => {
@@ -69,9 +67,7 @@ describe('win32 security', () => {
     it('falls back to Windows Defender as primary when no third-party AV', async () => {
       const enabledState = (6 << 12) | (0 << 8) | (0 << 4)
       execFileMock.mockResolvedValue({
-        stdout: JSON.stringify([
-          { displayName: 'Windows Defender', productState: enabledState },
-        ]),
+        stdout: JSON.stringify([{ displayName: 'Windows Defender', productState: enabledState }]),
         stderr: '',
       })
 
@@ -86,7 +82,7 @@ describe('win32 security', () => {
       })
 
       const result = await security.collectAntivirusStatus()
-      expect(result.products[0].name).toBe('Unknown')
+      expect(result.products[0]!.name).toBe('Unknown')
     })
   })
 
@@ -95,7 +91,7 @@ describe('win32 security', () => {
       // collectFirewallStatus uses Promise.allSettled with two execFile calls
       execFileMock
         .mockResolvedValueOnce({
-          stdout: JSON.stringify([{ displayName: 'Windows Firewall', productState: (6 << 12) }]),
+          stdout: JSON.stringify([{ displayName: 'Windows Firewall', productState: 6 << 12 }]),
           stderr: '',
         })
         .mockResolvedValueOnce({
@@ -122,32 +118,28 @@ describe('win32 security', () => {
     })
 
     it('detects enabled when only Windows profiles are all on', async () => {
-      execFileMock
-        .mockRejectedValueOnce(new Error('no SecurityCenter2'))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify([
-            { Name: 'Domain', Enabled: 1 },
-            { Name: 'Private', Enabled: 1 },
-            { Name: 'Public', Enabled: 1 },
-          ]),
-          stderr: '',
-        })
+      execFileMock.mockRejectedValueOnce(new Error('no SecurityCenter2')).mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          { Name: 'Domain', Enabled: 1 },
+          { Name: 'Private', Enabled: 1 },
+          { Name: 'Public', Enabled: 1 },
+        ]),
+        stderr: '',
+      })
 
       const result = await security.collectFirewallStatus()
       expect(result.enabled).toBe(true)
     })
 
     it('reports disabled when only some Windows profiles are on', async () => {
-      execFileMock
-        .mockRejectedValueOnce(new Error('no SecurityCenter2'))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify([
-            { Name: 'Domain', Enabled: true },
-            { Name: 'Private', Enabled: false },
-            { Name: 'Public', Enabled: true },
-          ]),
-          stderr: '',
-        })
+      execFileMock.mockRejectedValueOnce(new Error('no SecurityCenter2')).mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          { Name: 'Domain', Enabled: true },
+          { Name: 'Private', Enabled: false },
+          { Name: 'Public', Enabled: true },
+        ]),
+        stderr: '',
+      })
 
       const result = await security.collectFirewallStatus()
       expect(result.windowsProfiles.private).toBe(false)
@@ -179,7 +171,7 @@ describe('win32 security', () => {
       })
 
       const result = await security.collectDiskEncryptionStatus()
-      expect(result.volumes[0].status).toBe('Unknown')
+      expect(result.volumes[0]!.status).toBe('Unknown')
     })
 
     it('returns empty volumes array on error', async () => {
@@ -193,15 +185,13 @@ describe('win32 security', () => {
     it('parses hotfix data and calculates days since last patch', async () => {
       const recentDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
       execFileMock.mockResolvedValue({
-        stdout: JSON.stringify([
-          { HotFixID: 'KB5001234', InstalledOn: recentDate, Description: 'Security Update' },
-        ]),
+        stdout: JSON.stringify([{ HotFixID: 'KB5001234', InstalledOn: recentDate, Description: 'Security Update' }]),
         stderr: '',
       })
 
       const result = await security.collectUpdateStatus()
       expect(result.recentPatches).toHaveLength(1)
-      expect(result.recentPatches[0].id).toBe('KB5001234')
+      expect(result.recentPatches[0]!.id).toBe('KB5001234')
       expect(result.daysSinceLastPatch).toBeGreaterThanOrEqual(4)
       expect(result.daysSinceLastPatch).toBeLessThanOrEqual(6)
     })
@@ -231,7 +221,7 @@ describe('win32 security', () => {
       })
 
       const result = await security.collectUpdateStatus()
-      expect(result.recentPatches[0].installedOn).toBe('2024-06-15')
+      expect(result.recentPatches[0]!.installedOn).toBe('2024-06-15')
     })
 
     it('returns null values when no patches exist', async () => {

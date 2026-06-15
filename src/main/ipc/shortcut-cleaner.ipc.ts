@@ -1,17 +1,18 @@
-import { ipcMain } from 'electron'
-import { readdir, readFile, stat, readlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join, resolve } from 'path'
-import { randomUUID } from 'crypto'
-import { homedir } from 'os'
+import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readFile, readdir, readlink, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
-import { cacheItems } from '../services/scan-cache'
+import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
+import { execFileAsync, psUtf8 } from '../services/exec-utf8'
 import { cleanItems } from '../services/file-utils'
 import { validateStringArray } from '../services/ipc-validation'
-import type { ScanItem, ScanResult, CleanResult } from '@shared/types'
+import { getLogger } from '../services/logger.service'
+import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
-import { psUtf8, execFileAsync } from '../services/exec-utf8'
 
 // ── Shortcut target resolution ──
 
@@ -36,9 +37,10 @@ Get-ChildItem -Path '${dir.replace(/'/g, "''")}' -Filter '*.lnk' -Recurse -Error
     "$($_.FullName)|$($sc.TargetPath)"
   } catch { "$($_.FullName)|" }
 }`
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-Command', psUtf8(psScript),
-    ], { timeout: 30000, windowsHide: true })
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(psScript)], {
+      timeout: 30000,
+      windowsHide: true,
+    })
 
     const results: ShortcutInfo[] = []
     for (const line of stdout.trim().split('\n')) {
@@ -80,12 +82,12 @@ async function resolveLinuxDesktopFiles(dir: string): Promise<ShortcutInfo[]> {
         const execMatch = content.match(/^Exec\s*=\s*(.+)$/m)
         if (execMatch) {
           // Extract the binary path (first token, strip field codes like %u %f)
-          const execLine = execMatch[1].trim()
-          const binary = execLine.split(/\s+/)[0].replace(/^["']|["']$/g, '')
+          const execLine = execMatch[1]!.trim()
+          const binary = execLine.split(/\s+/)[0]!.replace(/^["']|["']$/g, '')
           // Resolve to full path: if it's already absolute, use as-is;
           // otherwise check PATH directories
           let resolvedPath: string | null = null
-          if (binary && binary.startsWith('/')) {
+          if (binary?.startsWith('/')) {
             resolvedPath = binary
           } else if (binary) {
             // Check if the binary exists anywhere in PATH
@@ -140,8 +142,14 @@ function getShortcutDirs(): { path: string; subcategory: string }[] {
     return [
       { path: join(home, 'Desktop'), subcategory: 'Desktop Shortcuts' },
       { path: join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'), subcategory: 'Start Menu Shortcuts' },
-      { path: join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar'), subcategory: 'Taskbar Shortcuts' },
-      { path: join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'), subcategory: 'All Users Start Menu' },
+      {
+        path: join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar'),
+        subcategory: 'Taskbar Shortcuts',
+      },
+      {
+        path: join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+        subcategory: 'All Users Start Menu',
+      },
       { path: join(process.env.PUBLIC || 'C:\\Users\\Public', 'Desktop'), subcategory: 'Public Desktop Shortcuts' },
     ]
   }
@@ -164,7 +172,8 @@ function getShortcutDirs(): { path: string; subcategory: string }[] {
 // ── Check if a shortcut target is broken ──
 
 /** Windows Start Menu subdirectories that contain built-in OS shortcuts */
-const WIN_SYSTEM_SUBDIRS = /\\(System Tools|Administrative Tools|Accessibility|Windows PowerShell|Windows System|Windows Accessories)\\/i
+const WIN_SYSTEM_SUBDIRS =
+  /\\(System Tools|Administrative Tools|Accessibility|Windows PowerShell|Windows System|Windows Accessories)\\/i
 
 function isTargetBroken(info: ShortcutInfo): boolean {
   if (process.platform === 'win32') {
@@ -200,6 +209,7 @@ function isTargetBroken(info: ShortcutInfo): boolean {
 
 export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.SHORTCUT_SCAN, async (): Promise<ScanResult[]> => {
+    getLogger().info('shortcut-cleaner', 'Scanning for broken shortcuts...')
     const results: ScanResult[] = []
     const category = CleanerType.Shortcut
     const dirs = getShortcutDirs()
@@ -251,7 +261,7 @@ export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
           })
         }
       } catch {
-        // Skip inaccessible directories
+        getLogger().warning('shortcut-cleaner', `Skipped inaccessible directory: ${dir.path}`)
       }
     }
 
@@ -267,22 +277,38 @@ export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
       })
     }
 
+    const totalBroken = results.reduce((s, r) => s + r.itemCount, 0)
+    if (totalBroken > 0) {
+      getLogger().success(
+        'shortcut-cleaner',
+        `Found ${totalBroken} broken shortcut(s) across ${results.length} location(s)`,
+      )
+    } else {
+      getLogger().success('shortcut-cleaner', 'No broken shortcuts found')
+    }
     return results
   })
 
   ipcMain.handle(IPC.SHORTCUT_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+    getLogger().info('shortcut-cleaner', `Cleaning ${Array.isArray(itemIds) ? itemIds.length : 0} shortcut(s)...`)
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
-    return cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
+    if (!valid) {
+      getLogger().warning('shortcut-cleaner', 'Clean called with invalid item IDs')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
+    const result = await cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
       const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-        phase: 'cleaning',
-        category: CleanerType.Shortcut,
-        currentPath,
-        progress: (processed / total) * 100,
-        itemsFound: total,
-        sizeFound: cleanedSize,
-      })
+      if (win && !win.isDestroyed())
+        win.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'cleaning',
+          category: CleanerType.Shortcut,
+          currentPath,
+          progress: (processed / total) * 100,
+          itemsFound: total,
+          sizeFound: cleanedSize,
+        })
     })
+    getLogger().success('shortcut-cleaner', `Cleaned ${result.totalCleaned} shortcut(s)`)
+    return result
   })
 }

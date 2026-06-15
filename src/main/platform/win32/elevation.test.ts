@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileSyncMock = vi.fn()
 
@@ -21,13 +21,13 @@ describe('win32 elevation', () => {
     const result = elevation.isAdmin()
 
     expect(result).toBe(true)
-    expect(execFileSyncMock).toHaveBeenCalledWith(
-      'net', ['session'], { stdio: 'ignore', timeout: 5000 }
-    )
+    expect(execFileSyncMock).toHaveBeenCalledWith('net', ['session'], { stdio: 'ignore', timeout: 5000 })
   })
 
   it('returns false when net session throws (not admin)', async () => {
-    execFileSyncMock.mockImplementation(() => { throw new Error('Access denied') })
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error('Access denied')
+    })
 
     const { createWin32Elevation } = await import('./elevation')
     const elevation = createWin32Elevation()

@@ -1,22 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useDriverStore } from './driver-store'
 import type { DriverPackage, DriverUpdate } from '@shared/types'
-
-function mockKudu() {
-  const mock = {
-    driverScan: vi.fn(),
-    driverClean: vi.fn(),
-    driverUpdateScan: vi.fn(),
-    driverUpdateInstall: vi.fn(),
-    onDriverProgress: vi.fn(() => vi.fn()),
-    onDriverUpdateProgress: vi.fn(() => vi.fn()),
-  }
-  if (typeof window === 'undefined') {
-    ;(globalThis as any).window = {}
-  }
-  ;(window as any).dinho = mock
-  return mock
-}
+import { beforeEach, describe, expect, it } from 'vitest'
+import { mockKudu } from '../../../test-utils'
+import { useDriverStore } from './driver-store'
 
 function makePackage(id: string, isCurrent: boolean, selected = false): DriverPackage {
   return {
@@ -60,10 +45,7 @@ describe('driver-store', () => {
 
   describe('cleanup', () => {
     it('togglePackage only toggles stale drivers (not current)', () => {
-      useDriverStore.getState().setPackages([
-        makePackage('stale', false),
-        makePackage('current', true),
-      ])
+      useDriverStore.getState().setPackages([makePackage('stale', false), makePackage('current', true)])
       useDriverStore.getState().togglePackage('stale')
       useDriverStore.getState().togglePackage('current')
       const pkgs = useDriverStore.getState().packages
@@ -72,11 +54,9 @@ describe('driver-store', () => {
     })
 
     it('selectAllStale selects only non-current packages', () => {
-      useDriverStore.getState().setPackages([
-        makePackage('stale1', false),
-        makePackage('stale2', false),
-        makePackage('current', true),
-      ])
+      useDriverStore
+        .getState()
+        .setPackages([makePackage('stale1', false), makePackage('stale2', false), makePackage('current', true)])
       useDriverStore.getState().selectAllStale()
       const pkgs = useDriverStore.getState().packages
       expect(pkgs.filter((p) => p.selected)).toHaveLength(2)
@@ -84,10 +64,7 @@ describe('driver-store', () => {
     })
 
     it('deselectAllStale deselects stale packages', () => {
-      useDriverStore.getState().setPackages([
-        makePackage('stale', false, true),
-        makePackage('current', true, true),
-      ])
+      useDriverStore.getState().setPackages([makePackage('stale', false, true), makePackage('current', true, true)])
       useDriverStore.getState().deselectAllStale()
       const pkgs = useDriverStore.getState().packages
       expect(pkgs.find((p) => p.id === 'stale')!.selected).toBe(false)
@@ -104,6 +81,7 @@ describe('driver-store', () => {
     })
 
     it('setScanProgress stores progress', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const progress = { current: 5, total: 10, currentDriver: 'test.inf' } as any
       useDriverStore.getState().setScanProgress(progress)
       expect(useDriverStore.getState().scanProgress).toEqual(progress)
@@ -117,6 +95,7 @@ describe('driver-store', () => {
     })
 
     it('setCleanResult stores clean result', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = { cleaned: 3, failed: 0, errors: [] } as any
       useDriverStore.getState().setCleanResult(result)
       expect(useDriverStore.getState().cleanResult).toEqual(result)
@@ -140,6 +119,7 @@ describe('driver-store', () => {
     })
 
     it('setUpdateProgress stores update progress', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const progress = { current: 1, total: 3, currentUpdate: 'Driver X' } as any
       useDriverStore.getState().setUpdateProgress(progress)
       expect(useDriverStore.getState().updateProgress).toEqual(progress)
@@ -151,6 +131,7 @@ describe('driver-store', () => {
     })
 
     it('setInstallResult stores install result', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = { installed: 2, failed: 0, errors: [] } as any
       useDriverStore.getState().setInstallResult(result)
       expect(useDriverStore.getState().installResult).toEqual(result)
@@ -208,9 +189,9 @@ describe('driver-store', () => {
   describe('async actions', () => {
     it('scan calls kudu.driverScan and stores packages', async () => {
       const kudu = mockKudu()
-      kudu.driverScan.mockResolvedValue({
+      kudu.driverScan!.mockResolvedValue({
         packages: [{ id: 'a', publishedName: 'a.inf', isCurrent: false, size: 1024 }],
-        totalSize: 1024,
+        totalStaleSize: 1024,
       })
       const store = useDriverStore.getState()
 
@@ -225,7 +206,7 @@ describe('driver-store', () => {
 
     it('scan sets scanning false on error', async () => {
       const kudu = mockKudu()
-      kudu.driverScan.mockRejectedValue(new Error('fail'))
+      kudu.driverScan!.mockRejectedValue(new Error('fail'))
       const store = useDriverStore.getState()
 
       await store.scan()
@@ -240,29 +221,25 @@ describe('driver-store', () => {
 
       await store.clean()
 
-      expect(kudu.driverClean).not.toHaveBeenCalled()
+      expect(kudu.driverClean!).not.toHaveBeenCalled()
     })
 
     it('clean calls kudu.driverClean with selected names', async () => {
       const kudu = mockKudu()
-      kudu.driverClean.mockResolvedValue({ cleaned: 2, failed: 0 })
-      kudu.driverScan.mockResolvedValue({ packages: [], totalSize: 0 })
+      kudu.driverClean!.mockResolvedValue({ cleaned: 2, failed: 0 })
+      kudu.driverScan!.mockResolvedValue({ packages: [], totalSize: 0 })
       const store = useDriverStore.getState()
-      store.setPackages([
-        makePackage('a', false, true),
-        makePackage('b', false, false),
-        makePackage('c', false, true),
-      ])
+      store.setPackages([makePackage('a', false, true), makePackage('b', false, false), makePackage('c', false, true)])
 
       await store.clean()
 
-      expect(kudu.driverClean).toHaveBeenCalledWith(['a.inf', 'c.inf'])
+      expect(kudu.driverClean!).toHaveBeenCalledWith(['a.inf', 'c.inf'])
       expect(useDriverStore.getState().cleaning).toBe(false)
     })
 
     it('clean sets cleaning false on error', async () => {
       const kudu = mockKudu()
-      kudu.driverClean.mockRejectedValue(new Error('fail'))
+      kudu.driverClean!.mockRejectedValue(new Error('fail'))
       const store = useDriverStore.getState()
       store.setPackages([makePackage('a', false, true)])
 
@@ -273,21 +250,21 @@ describe('driver-store', () => {
 
     it('updateScan calls kudu.driverUpdateScan', async () => {
       const kudu = mockKudu()
-      kudu.driverUpdateScan.mockResolvedValue({
+      kudu.driverUpdateScan!.mockResolvedValue({
         updates: [{ id: 'u1', updateId: 'u1', currentVersion: '1.0', availableVersion: '2.0' }],
       })
       const store = useDriverStore.getState()
 
       await store.updateScan()
 
-      expect(kudu.onDriverUpdateProgress).toHaveBeenCalled()
-      expect(kudu.driverUpdateScan).toHaveBeenCalled()
+      expect(kudu.onDriverUpdateProgress!).toHaveBeenCalled()
+      expect(kudu.driverUpdateScan!).toHaveBeenCalled()
       expect(useDriverStore.getState().updateScanning).toBe(false)
     })
 
     it('updateScan sets updateScanning false on error', async () => {
       const kudu = mockKudu()
-      kudu.driverUpdateScan.mockRejectedValue(new Error('fail'))
+      kudu.driverUpdateScan!.mockRejectedValue(new Error('fail'))
       const store = useDriverStore.getState()
 
       await store.updateScan()
@@ -302,25 +279,25 @@ describe('driver-store', () => {
 
       await store.updateInstall()
 
-      expect(kudu.driverUpdateInstall).not.toHaveBeenCalled()
+      expect(kudu.driverUpdateInstall!).not.toHaveBeenCalled()
     })
 
     it('updateInstall calls kudu.driverUpdateInstall', async () => {
       const kudu = mockKudu()
-      kudu.driverUpdateInstall.mockResolvedValue({ installed: 1, failed: 0 })
-      kudu.driverUpdateScan.mockResolvedValue({ updates: [] })
+      kudu.driverUpdateInstall!.mockResolvedValue({ installed: 1, failed: 0 })
+      kudu.driverUpdateScan!.mockResolvedValue({ updates: [] })
       const store = useDriverStore.getState()
       store.setUpdates([makeUpdate('a', true), makeUpdate('b', false)])
 
       await store.updateInstall()
 
-      expect(kudu.driverUpdateInstall).toHaveBeenCalledWith(['a'])
+      expect(kudu.driverUpdateInstall!).toHaveBeenCalledWith(['a'])
       expect(useDriverStore.getState().installing).toBe(false)
     })
 
     it('updateInstall sets installing false on error', async () => {
       const kudu = mockKudu()
-      kudu.driverUpdateInstall.mockRejectedValue(new Error('fail'))
+      kudu.driverUpdateInstall!.mockRejectedValue(new Error('fail'))
       const store = useDriverStore.getState()
       store.setUpdates([makeUpdate('a', true)])
 

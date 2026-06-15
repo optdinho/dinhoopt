@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">78.37% </span>
+                <span class="strong">77.77% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>29/37</span>
+                <span class='fraction'>28/36</span>
             </div>
         
             
@@ -322,27 +322,7 @@
 <a name='L257'></a><a href='#L257'>257</a>
 <a name='L258'></a><a href='#L258'>258</a>
 <a name='L259'></a><a href='#L259'>259</a>
-<a name='L260'></a><a href='#L260'>260</a>
-<a name='L261'></a><a href='#L261'>261</a>
-<a name='L262'></a><a href='#L262'>262</a>
-<a name='L263'></a><a href='#L263'>263</a>
-<a name='L264'></a><a href='#L264'>264</a>
-<a name='L265'></a><a href='#L265'>265</a>
-<a name='L266'></a><a href='#L266'>266</a>
-<a name='L267'></a><a href='#L267'>267</a>
-<a name='L268'></a><a href='#L268'>268</a>
-<a name='L269'></a><a href='#L269'>269</a>
-<a name='L270'></a><a href='#L270'>270</a>
-<a name='L271'></a><a href='#L271'>271</a>
-<a name='L272'></a><a href='#L272'>272</a>
-<a name='L273'></a><a href='#L273'>273</a>
-<a name='L274'></a><a href='#L274'>274</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L260'></a><a href='#L260'>260</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -467,15 +447,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
@@ -512,8 +483,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
@@ -609,15 +581,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import path from 'path'
-import { homedir } from 'os'
-import type {
-  CleanTarget,
-  BrowserPathConfig,
-  BrowserPaths,
-  AppCacheDef,
-  DatabaseTarget,
-} from '../platform/types'
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { homedir } from 'node:os'
+import path from 'node:path'
+import type { AppCacheDef, BrowserPathConfig, BrowserPaths, CleanTarget, DatabaseTarget } from '../platform/types'
 &nbsp;
 // ─── JSON Rule Types ─────────────────────────────────────
 &nbsp;
@@ -738,22 +704,13 @@ function resolveVars(template: string, vars: Record&lt;string, string&gt;): stri
 &nbsp;
 // ─── buildCleanerPaths ──────────────────────────────────
 &nbsp;
-export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
+export function buildCleanerPaths(rulesJson: RulesJsonSet, _platform: string) {
   const vars = getWinVars()
-  const {
-    system,
-    browsers,
-    apps,
-    gaming,
-    gpuCache,
-    steam,
-    databases,
-    misc,
-  } = rulesJson
+  const { system, browsers, apps, gaming, gpuCache, steam, databases, misc } = rulesJson
 &nbsp;
   return {
     systemCleanTargets(): CleanTarget[] {
-      return system.cleanTargets.map(t =&gt; ({
+      return system.cleanTargets.map((t) =&gt; ({
         path: resolveVars(t.path, vars),
         subcategory: t.subcategory,
         ...(t.needsAdmin ? { needsAdmin: true } : {}),
@@ -761,7 +718,7 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
     },
 &nbsp;
     singleFileCleanTargets(): { path: string; subcategory: string }[] {
-      return system.singleFileTargets.map(t =&gt; ({
+      return system.singleFileTargets.map((t) =&gt; ({
         path: resolveVars(t.path, vars),
         subcategory: t.subcategory,
       }))
@@ -785,9 +742,10 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
         }
       }
 &nbsp;
-      const br = Object.fromEntries(
-        chromium.map(e =&gt; [e.key, makeChromiumPaths(e.base)])
-      ) as Record&lt;string, BrowserPaths&gt;
+      const br = Object.fromEntries(chromium.map((e) =&gt; [e.key, makeChromiumPaths(e.base)])) as Record&lt;
+        string,
+        BrowserPaths
+      &gt;
 &nbsp;
       const foxForkMap: Record&lt;string, { base: string; cache: string }&gt; = {}
       for (const entry of firefoxForks) {
@@ -798,58 +756,58 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
       }
 &nbsp;
       return {
-        chrome: br.chrome,
-        edge: br.edge,
-        brave: br.brave,
-        opera: br.opera,
-        operaGX: br.operaGX,
-        vivaldi: br.vivaldi,
-        arc: br.arc,
-        chromium: br.chromium,
-        thorium: br.thorium,
-        supermium: br.supermium,
-        helium: br.helium,
-        cromite: br.cromite,
-        catsxp: br.catsxp,
+        chrome: br.chrome!,
+        edge: br.edge!,
+        brave: br.brave!,
+        opera: br.opera!,
+        operaGX: br.operaGX!,
+        vivaldi: br.vivaldi!,
+        arc: br.arc!,
+        chromium: br.chromium!,
+        thorium: br.thorium!,
+        supermium: br.supermium!,
+        helium: br.helium!,
+        cromite: br.cromite!,
+        catsxp: br.catsxp!,
         firefox: {
           base: resolveVars(firefox.base, vars),
           cache: resolveVars(firefox.cache, vars),
         },
-        librewolf: foxForkMap.librewolf,
-        waterfox: foxForkMap.waterfox,
-        floorp: foxForkMap.floorp,
-        zen: foxForkMap.zen,
+        librewolf: foxForkMap.librewolf!,
+        waterfox: foxForkMap.waterfox!,
+        floorp: foxForkMap.floorp!,
+        zen: foxForkMap.zen!,
         safari: null,
       }
     },
 &nbsp;
     appPaths(): AppCacheDef[] {
-      return apps.apps.map(a =&gt; ({
+      return apps.apps.map((a) =&gt; ({
         id: a.id,
         name: a.name,
-        paths: a.paths.map(p =&gt; resolveVars(p, vars)),
+        paths: a.paths.map((p) =&gt; resolveVars(p, vars)),
         ...(a.childSubdir ? { childSubdir: a.childSubdir } : {}),
       }))
     },
 &nbsp;
     gamingPaths(): AppCacheDef[] {
-      return gaming.apps.map(a =&gt; ({
+      return gaming.apps.map((a) =&gt; ({
         id: a.id,
         name: a.name,
-        paths: a.paths.map(p =&gt; resolveVars(p, vars)),
+        paths: a.paths.map((p) =&gt; resolveVars(p, vars)),
       }))
     },
 &nbsp;
     gpuCachePaths(): AppCacheDef[] {
-      return gpuCache.apps.map(a =&gt; ({
+      return gpuCache.apps.map((a) =&gt; ({
         id: a.id,
         name: a.name,
-        paths: a.paths.map(p =&gt; resolveVars(p, vars)),
+        paths: a.paths.map((p) =&gt; resolveVars(p, vars)),
       }))
     },
 &nbsp;
     steamLibraries(): string[] {
-      return steam.libraries.map(p =&gt; resolveVars(p, vars))
+      return steam.libraries.map((p) =&gt; resolveVars(p, vars))
     },
 &nbsp;
     steamRedistPatterns(): string[] {
@@ -872,7 +830,7 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
 <span class="cstat-no" title="statement not covered" >        return [...dbFiles]</span>
       }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      return targets.map(<span class="fstat-no" title="function not covered" >t =&gt; (<span class="cstat-no" title="statement not covered" >{</span></span></span>
+<span class="cstat-no" title="statement not covered" >      return targets.map(<span class="fstat-no" title="function not covered" >(t</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{</span></span>
         label: t.label,
         basePath: resolveVars(t.basePath, vars),
         dbFiles: getDbFiles(t.dbFiles),
@@ -889,7 +847,7 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-10T18:42:25.756Z
+                at 2026-06-15T03:05:41.530Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

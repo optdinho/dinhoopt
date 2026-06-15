@@ -1,56 +1,73 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { execFile } from 'child_process'
-import { mkdirSync } from 'fs'
-import { isAbsolute } from 'path'
+import { execFile } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import { IPC } from '@shared/channels'
+import { type BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { psUtf8 } from '../services/exec-utf8'
-import { registerSystemCleanerIpc } from './system-cleaner.ipc'
-import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
 import { registerAppCleanerIpc } from './app-cleaner.ipc'
-import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
-import { registerRecycleBinIpc } from './recycle-bin.ipc'
-import { registerRegistryCleanerIpc } from './registry-cleaner.ipc'
+import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
+import { registerComplianceAuditorIpc } from './compliance-auditor.ipc'
 import { registerContextMenuCleanerIpc } from './context-menu-cleaner.ipc'
-import { registerStartupManagerIpc } from './startup-manager.ipc'
+import { registerDatabaseOptimizerIpc } from './database-optimizer.ipc'
 import { registerDebloaterIpc } from './debloater.ipc'
 import { registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
 import { registerDiskTrimIpc } from './disk-trim.ipc'
-import { registerDuplicateFinderIpc } from './duplicate-finder.ipc'
-import { registerNetworkCleanupIpc } from './network-cleanup.ipc'
-import { registerMalwareScannerIpc } from './malware-scanner.ipc'
-import { registerComplianceAuditorIpc } from './compliance-auditor.ipc'
-import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
-import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
+import { registerDriverAgentIpc } from './driver-agent.ipc'
 import { registerDriverManagerIpc } from './driver-manager.ipc'
-import { registerPerfMonitorIpc } from './perf-monitor.ipc'
-import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
-import { registerServiceManagerIpc } from './service-manager.ipc'
-import { registerFirewallAuditIpc } from './firewall-audit.ipc'
-import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
-import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
-import { registerPowerPlansIpc } from './power-plans.ipc'
+import { registerDuplicateFinderIpc } from './duplicate-finder.ipc'
 import { registerEnvironmentCleanerIpc } from './environment-cleaner.ipc'
-import { registerDatabaseOptimizerIpc } from './database-optimizer.ipc'
+import { registerFirewallAuditIpc } from './firewall-audit.ipc'
+import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
+import { registerMalwareScannerIpc } from './malware-scanner.ipc'
+import { registerNetworkCleanupIpc } from './network-cleanup.ipc'
+import { registerPerfMonitorIpc } from './perf-monitor.ipc'
+import { registerPowerPlansIpc } from './power-plans.ipc'
+import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
+import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
+import { registerRecycleBinIpc } from './recycle-bin.ipc'
+import { registerRegistryCleanerIpc } from './registry-cleaner.ipc'
+import { registerServiceManagerIpc } from './service-manager.ipc'
+import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
+import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
+import { registerStartupManagerIpc } from './startup-manager.ipc'
+import { registerSystemCleanerIpc } from './system-cleaner.ipc'
+import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
+import { registerVulnerabilityScannerIpc } from './vulnerability-scanner.ipc'
+import { registerWinSxSCleanerIpc } from './winsxs-cleaner.ipc'
 
-import { registerLargeFileFinderIpc } from './large-file-finder.ipc'
-import { registerEmptyFolderCleanerIpc } from './empty-folder-cleaner.ipc'
-import { registerFileShredderIpc } from './file-shredder.ipc'
-import { registerGameModeIpc, refreshGameDetector } from './game-mode.ipc'
-import { registerWindowsTweaksIpc } from './windows-tweaks.ipc'
-import { registerBenchmarkIpc } from './benchmark.ipc'
-import { registerLicenseIpc } from './license.ipc'
-import { registerStartupSafetyIpc } from './startup-safety.ipc'
-import { registerProgramSafetyIpc } from './program-safety.ipc'
-
-import { getSettings, setSettings, flushSettings, getOnboardingComplete, setOnboardingComplete } from '../services/settings-store'
+import {
+  checkForUpdates,
+  downloadUpdate,
+  getUpdateStatus,
+  installUpdate,
+  setAutoDownload,
+  updateCheckInterval,
+} from '../services/auto-updater'
 import { getBackupDir } from '../services/backup-dir'
 import { isAdmin } from '../services/elevation'
-import { getHistory, addHistoryEntry, clearHistory } from '../services/history-store'
-import { validateSettingsPartial, validateHistoryEntry } from '../services/ipc-validation'
-import { createRestorePoint, listRestorePoints, deleteRestorePoint, restoreToPoint, enableSystemProtection } from '../services/restore-point'
+import { addHistoryEntry, clearHistory, getHistory } from '../services/history-store'
+import { validateHistoryEntry, validateSettingsPartial } from '../services/ipc-validation'
 import { getMemoryInfo, getMemoryProcesses, optimizeMemory } from '../services/memory-optimizer'
 import type { MemoryOptimizeProgress } from '../services/memory-optimizer'
-import { checkForUpdates, downloadUpdate, installUpdate, getUpdateStatus, setAutoDownload, updateCheckInterval } from '../services/auto-updater'
+import {
+  flushSettings,
+  getOnboardingComplete,
+  getSettings,
+  setOnboardingComplete,
+  setSettings,
+} from '../services/settings-store'
+import { registerBenchmarkIpc } from './benchmark.ipc'
+import { registerEmptyFolderCleanerIpc } from './empty-folder-cleaner.ipc'
+import { registerFileShredderIpc } from './file-shredder.ipc'
+import { refreshGameDetector, registerGameModeIpc } from './game-mode.ipc'
+import { registerHostsEditorIpc } from './hosts-editor.ipc'
+import { registerLargeFileFinderIpc } from './large-file-finder.ipc'
+import { registerLicenseIpc } from './license.ipc'
+import { registerLoggerIpc } from './logger.ipc'
+import { registerProgramSafetyIpc } from './program-safety.ipc'
+import { registerRestorePointIpc } from './restore-point.ipc'
+import { registerStartupSafetyIpc } from './startup-safety.ipc'
+import { registerWindowsTweaksIpc } from './windows-tweaks.ipc'
 
 export type WindowGetter = () => BrowserWindow | null
 
@@ -76,8 +93,10 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerMalwareScannerIpc(getWindow)
   registerUninstallLeftoversIpc(getWindow)
   registerComplianceAuditorIpc(getWindow)
+  registerVulnerabilityScannerIpc(getWindow)
   registerPrivacyShieldIpc(getWindow)
   registerDriverManagerIpc(getWindow)
+  registerDriverAgentIpc(getWindow)
   registerPerfMonitorIpc(getWindow)
   registerProgramUninstallerIpc(getWindow)
   registerServiceManagerIpc(getWindow)
@@ -91,6 +110,10 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerLicenseIpc()
   registerBenchmarkIpc(getWindow)
   registerPowerPlansIpc()
+  registerLoggerIpc()
+  registerRestorePointIpc()
+  registerHostsEditorIpc(getWindow)
+  registerWinSxSCleanerIpc(getWindow)
 
   ipcMain.handle(IPC.CLEANER_OPEN_LOCATION, (_event, filePath: unknown) => {
     if (typeof filePath !== 'string') return
@@ -110,6 +133,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       bootTrace: isWin,
       gameMode: isWin,
       compliance: isWin,
+      vulnerability: isWin,
       firewallAudit: isWin,
       contextMenu: isWin,
       windowsTweaks: isWin,
@@ -149,9 +173,8 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       properties: ['openDirectory', 'createDirectory'],
       defaultPath: getBackupDir(),
     }
-    const result = process.platform === 'darwin' || !win
-      ? await dialog.showOpenDialog(opts)
-      : await dialog.showOpenDialog(win, opts)
+    const result =
+      process.platform === 'darwin' || !win ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
     if (result.canceled || !result.filePaths.length) return null
     return result.filePaths[0]
   })
@@ -159,7 +182,11 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   // Settings — reveal the active backup folder in the OS file manager
   ipcMain.handle(IPC.SETTINGS_OPEN_BACKUP_DIR, async () => {
     const dir = getBackupDir()
-    try { mkdirSync(dir, { recursive: true }) } catch { /* skip */ }
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch {
+      /* skip */
+    }
     await shell.openPath(dir)
     return dir
   })
@@ -183,9 +210,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       // declines UAC, then returns.  If the user declines, PowerShell exits
       // with an error and we don't quit.
       const psScript = `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -Verb RunAs`
-      execFile('powershell.exe', [
-        '-NoProfile', '-Command', psUtf8(psScript),
-      ], { windowsHide: true }, (err) => {
+      execFile('powershell.exe', ['-NoProfile', '-Command', psUtf8(psScript)], { windowsHide: true }, (err) => {
         if (!err) {
           app.releaseSingleInstanceLock()
           app.exit(0)
@@ -201,7 +226,14 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       // (same pattern as the macOS osascript path).
       const sq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`
       const parts: string[] = []
-      for (const key of ['DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY', 'XDG_RUNTIME_DIR', 'HOME', 'DBUS_SESSION_BUS_ADDRESS']) {
+      for (const key of [
+        'DISPLAY',
+        'XAUTHORITY',
+        'WAYLAND_DISPLAY',
+        'XDG_RUNTIME_DIR',
+        'HOME',
+        'DBUS_SESSION_BUS_ADDRESS',
+      ]) {
         if (process.env[key]) parts.push(`${key}=${sq(process.env[key])}`)
       }
       parts.push(sq(exePath), '--no-sandbox', `--dinho-data-dir=${sq(userDataDir)}`)
@@ -216,28 +248,6 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
     // macOS: relaunch-as-admin is not supported — the osascript elevation
     // flow doesn't work reliably.  The renderer hides the relaunch UI on
     // darwin so this path should never be reached.
-  })
-
-  // System Restore Point
-  ipcMain.handle(IPC.RESTORE_POINT_CREATE, (_event, description: string) => {
-    if (typeof description !== 'string') description = ''
-    const sanitized = (description || 'Ponto de restauração DiNho Optimizer')
-      .replace(/[^\w\s.\-(),À-ÿœŒæÆ]/g, '')
-      .slice(0, 200)
-    return createRestorePoint(sanitized)
-  })
-
-  ipcMain.handle(IPC.RESTORE_POINT_ENABLE_PROTECTION, async () => {
-    return enableSystemProtection()
-  })
-
-  ipcMain.handle(IPC.RESTORE_POINT_LIST, () => listRestorePoints())
-
-  ipcMain.handle(IPC.RESTORE_POINT_DELETE, (_event, sequenceNumber: number) => {
-    if (typeof sequenceNumber !== 'number' || !Number.isInteger(sequenceNumber) || sequenceNumber < 0) {
-      return { success: false, error: 'Invalid sequence number.' }
-    }
-    return deleteRestorePoint(sequenceNumber)
   })
 
   // Memory Optimizer
@@ -256,13 +266,6 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
     return result
   })
 
-  ipcMain.handle(IPC.RESTORE_POINT_RESTORE, (_event, sequenceNumber: number) => {
-    if (typeof sequenceNumber !== 'number' || !Number.isInteger(sequenceNumber) || sequenceNumber < 0) {
-      return { success: false, error: 'Invalid sequence number.' }
-    }
-    return restoreToPoint(sequenceNumber)
-  })
-
   // Scan history — validate entry shape before persisting
   ipcMain.handle(IPC.HISTORY_GET, () => getHistory())
   ipcMain.handle(IPC.HISTORY_ADD, (_event, entry) => {
@@ -274,6 +277,8 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   // Auto-updater
   ipcMain.handle(IPC.UPDATER_CHECK, () => checkForUpdates())
   ipcMain.handle(IPC.UPDATER_DOWNLOAD, () => downloadUpdate())
-  ipcMain.handle(IPC.UPDATER_INSTALL, () => { installUpdate() })
+  ipcMain.handle(IPC.UPDATER_INSTALL, () => {
+    installUpdate()
+  })
   ipcMain.handle(IPC.UPDATER_GET_STATUS, () => getUpdateStatus())
 }

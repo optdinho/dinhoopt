@@ -3,14 +3,12 @@
 // Consumers call getPlatform() to get the active provider.
 
 import type {
-  StartupItem,
-  StartupBootTrace,
   PrivacySetting,
-  PrivacyShieldState,
-  PrivacyApplyResult,
-  ServiceScanResult,
   ServiceApplyResult,
   ServiceScanProgress,
+  ServiceScanResult,
+  StartupBootTrace,
+  StartupItem,
 } from '@shared/types'
 
 // ─── Paths ─────────────────────────────────────────────────
@@ -303,7 +301,7 @@ export interface PlatformStartup {
     location: string,
     command: string,
     source: StartupItem['source'],
-    enabled: boolean
+    enabled: boolean,
   ): Promise<boolean>
   deleteItem?(name: string, location: string, source: StartupItem['source']): Promise<boolean>
   getBootTrace?(): Promise<StartupBootTrace>
@@ -317,7 +315,7 @@ export interface PrivacySettingDef {
   label: string
   description: string
   requiresAdmin: boolean
-  dependsOn?: string        // ID of a setting that must be enabled first
+  dependsOn?: string // ID of a setting that must be enabled first
   check: () => Promise<boolean>
   apply: () => Promise<void>
   revert?: () => Promise<void>

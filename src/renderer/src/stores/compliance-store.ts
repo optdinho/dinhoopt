@@ -1,5 +1,5 @@
+import type { ComplianceApplyResult, ComplianceScanProgress, ComplianceState } from '@shared/types'
 import { create } from 'zustand'
-import type { ComplianceState, ComplianceApplyResult, ComplianceScanProgress } from '@shared/types'
 
 interface ComplianceStoreState {
   state: ComplianceState | null

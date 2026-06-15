@@ -81,5 +81,18 @@
   "startupSettingFailedAction": "Saber mais",
   "themeDark": "Escuro",
   "themeLight": "Claro",
-  "themeSystem": "Sistema"
+  "themeSystem": "Sistema",
+  "sectionLogs": "Registos",
+  "logsRefresh": "Atualizar",
+  "logsExport": "Exportar",
+  "logsClear": "Limpar todos os registos",
+  "logsSearchPlaceholder": "Pesquisar registos...",
+  "logsLevelAll": "Todos os níveis",
+  "logsLevelInfo": "Informação",
+  "logsLevelSuccess": "Sucesso",
+  "logsLevelWarning": "Aviso",
+  "logsLevelError": "Erro",
+  "logsNoEntries": "Nenhum registo encontrado",
+  "logsRetentionLabel": "Retenção (dias)",
+  "logsRetentionDesc": "Quantos dias manter os ficheiros de registo antes da limpeza automática"
 }

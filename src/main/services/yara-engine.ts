@@ -1,5 +1,50 @@
-import { readFileSync } from 'fs'
-import { basename } from 'path'
+import { readFileSync } from 'node:fs'
+import { basename } from 'node:path'
+import { getLogger } from './logger.service'
+
+// ─── ReadWriteLock ────────────────────────────────────────────
+
+export class ReadWriteLock {
+  private readers = 0
+  private writers = 0
+  private writeQueue: (() => void)[] = []
+
+  async acquireRead(): Promise<void> {
+    while (this.writers > 0 || this.writeQueue.length > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 5))
+    }
+    this.readers++
+  }
+
+  releaseRead(): void {
+    this.readers--
+    this._tryAcquireWrite()
+  }
+
+  async acquireWrite(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.writeQueue.push(() => {
+        this.writers++
+        resolve()
+      })
+      this._tryAcquireWrite()
+    })
+  }
+
+  private _tryAcquireWrite(): void {
+    if (this.readers === 0 && this.writers === 0 && this.writeQueue.length > 0) {
+      const next = this.writeQueue.shift()
+      next?.()
+    }
+  }
+
+  releaseWrite(): void {
+    this.writers--
+    this._tryAcquireWrite()
+  }
+}
+
+export const yaraLock = new ReadWriteLock()
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -36,6 +81,7 @@ interface YaraXScanner {
 
 interface YaraXModule {
   create(): YaraXScanner
+  compile(content: string): YaraXScanner
 }
 
 // ─── Engine ──────────────────────────────────────────────────
@@ -97,7 +143,7 @@ export class YaraEngine {
 
     function shouldSkipForPlatform(name: string): boolean {
       const lower = name.toLowerCase()
-      return platformSkip.some(tag => lower.includes(tag))
+      return platformSkip.some((tag) => lower.includes(tag))
     }
 
     // Read all sources (skipping irrelevant platforms)
@@ -106,18 +152,21 @@ export class YaraEngine {
     let skippedPlatform = 0
     for (const filePath of ruleFilePaths) {
       const name = basename(filePath)
-      if (shouldSkipForPlatform(name)) { skippedPlatform++; continue }
+      if (shouldSkipForPlatform(name)) {
+        skippedPlatform++
+        continue
+      }
       try {
         sources.push({ name, content: readFileSync(filePath, 'utf-8') })
       } catch (err) {
-        errors.push(`${name}: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
+        errors.push(`${name}: ${err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err)}`)
       }
     }
     for (let i = 0; i < extraSources.length; i++) {
-      sources.push({ name: `source-${i}`, content: extraSources[i] })
+      sources.push({ name: `source-${i}`, content: extraSources[i] ?? '' })
     }
     if (skippedPlatform > 0) {
-      console.log(`[yara] Skipped ${skippedPlatform} rule files for other platforms`)
+      getLogger().info('yara', `Skipped ${skippedPlatform} rule files for other platforms`)
     }
 
     if (sources.length === 0) {
@@ -126,10 +175,10 @@ export class YaraEngine {
     }
 
     // Try fast path: compile everything in one call (~2s for 1400 files)
-    const combined = sources.map(s => s.content).join('\n')
+    const combined = sources.map((s) => s.content).join('\n')
     try {
       onProgress?.(Math.floor(total * 0.5), total)
-      await new Promise(resolve => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
       this._scanner = yarax.compile(combined)
       this._rulesLoaded = sources.length
       onProgress?.(total, total)
@@ -143,15 +192,16 @@ export class YaraEngine {
     // Slow path: validate each file individually, exclude broken ones
     const validSources: string[] = []
     for (let i = 0; i < sources.length; i++) {
+      const source = sources[i]!
       try {
-        yarax.compile(sources[i].content)
-        validSources.push(sources[i].content)
+        yarax.compile(source.content)
+        validSources.push(source.content)
       } catch (err) {
-        errors.push(`${sources[i].name}: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
+        errors.push(`${source.name}: ${err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err)}`)
       }
       if ((i + 1) % 20 === 0) {
         onProgress?.(i + 1, total)
-        await new Promise(resolve => setImmediate(resolve))
+        await new Promise((resolve) => setImmediate(resolve))
       }
     }
 
@@ -165,7 +215,7 @@ export class YaraEngine {
       onProgress?.(total, total)
       this._scanner = yarax.compile(validSources.join('\n'))
     } catch (err) {
-      errors.push(`Final compile: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
+      errors.push(`Final compile: ${err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err)}`)
       this._rulesLoaded = 0
       return { loaded: 0, errors }
     }
@@ -187,7 +237,7 @@ export class YaraEngine {
 
     try {
       const results = this._scanner.scan(buffer)
-      return results.map(r => this._convertMatch(r))
+      return results.map((r) => this._convertMatch(r))
     } catch (err) {
       console.warn('[yara] Scan error:', err)
       return []
@@ -202,7 +252,7 @@ export class YaraEngine {
 
     try {
       const results = this._scanner.scanFile(filePath)
-      return results.map(r => this._convertMatch(r))
+      return results.map((r) => this._convertMatch(r))
     } catch (err) {
       console.warn('[yara] File scan error:', err)
       return []
@@ -213,8 +263,8 @@ export class YaraEngine {
     const metadata: YaraMatch['metadata'] = {}
     if (r.meta.detectionName) metadata.detectionName = String(r.meta.detectionName)
     if (r.meta.severity) {
-      const sev = String(r.meta.severity).toLowerCase()
-      if (VALID_SEVERITIES.has(sev as any)) metadata.severity = sev as YaraMatch['metadata']['severity']
+      const sev = String(r.meta.severity).toLowerCase() as 'critical' | 'high' | 'medium' | 'low'
+      if (VALID_SEVERITIES.has(sev)) metadata.severity = sev
     }
     if (r.meta.details) metadata.details = String(r.meta.details)
     if (r.meta.filenameOnly) metadata.filenameOnly = String(r.meta.filenameOnly)
@@ -222,7 +272,7 @@ export class YaraEngine {
     return {
       ruleName: r.ruleIdentifier,
       metadata,
-      matchedStrings: r.matches.map(m => m.data),
+      matchedStrings: r.matches.map((m) => m.data),
     }
   }
 
@@ -237,6 +287,70 @@ export class YaraEngine {
 
 export function createYaraEngine(): YaraEngine {
   return new YaraEngine()
+}
+
+export async function scanFileWithLock(filePath: string, signal?: AbortSignal): Promise<YaraMatch[]> {
+  await yaraLock.acquireRead()
+  try {
+    checkCancelled(signal)
+    const engine = _activeEngine
+    if (!engine) return []
+    return engine.scanFile(filePath)
+  } finally {
+    yaraLock.releaseRead()
+  }
+}
+
+export async function scanBufferWithLock(buffer: Buffer, signal?: AbortSignal): Promise<YaraMatch[]> {
+  await yaraLock.acquireRead()
+  try {
+    checkCancelled(signal)
+    const engine = _activeEngine
+    if (!engine) return []
+    return engine.scanBuffer(buffer)
+  } finally {
+    yaraLock.releaseRead()
+  }
+}
+
+export async function compileRulesWithLock(
+  ruleFilePaths: string[],
+  extraSources: string[] = [],
+  onProgress?: (loaded: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<{ loaded: number; errors: string[] }> {
+  await yaraLock.acquireWrite()
+  try {
+    checkCancelled(signal)
+    const engine = createYaraEngine()
+    await engine.initialize()
+    return await engine.loadRules(ruleFilePaths, extraSources, onProgress)
+  } finally {
+    yaraLock.releaseWrite()
+  }
+}
+
+let _activeEngine: YaraEngine | null = null
+
+export function setActiveEngine(engine: YaraEngine | null): void {
+  _activeEngine = engine
+}
+
+export function getActiveEngine(): YaraEngine | null {
+  return _activeEngine
+}
+
+export function checkCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new ScanCancelledError()
+  }
+}
+
+export class ScanCancelledError extends Error {
+  constructor() {
+    super('Scan cancelled by user')
+    this.name = 'ScanCancelledError'
+  }
 }
 
 /**

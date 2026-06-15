@@ -1,8 +1,8 @@
+import type { PerfSnapshot } from '@shared/types'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlertTriangle, X } from 'lucide-react'
 import { memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, X } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
-import type { PerfSnapshot } from '@shared/types'
 
 interface AlertBannerProps {
   snapshot: PerfSnapshot | null
@@ -48,6 +48,7 @@ export const AlertBanner = memo(function AlertBanner({ snapshot, history }: Aler
               {alert.message}
             </span>
             <button
+              type="button"
               onClick={() => setDismissed((d) => [...d, alert.id])}
               className="shrink-0 rounded-lg p-1 transition-colors hover:bg-white/5"
             >

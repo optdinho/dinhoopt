@@ -1,8 +1,16 @@
-import * as si from 'systeminformation'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import type { PlatformCommands, EventLogEntry, InstalledApp, OsUpdateInfo, OsUpdateInstallResult, SfcResult, DismResult, DnsEntry } from '../types'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { psUtf8 } from '../../services/exec-utf8'
+import type {
+  DismResult,
+  DnsEntry,
+  EventLogEntry,
+  InstalledApp,
+  OsUpdateInfo,
+  OsUpdateInstallResult,
+  PlatformCommands,
+  SfcResult,
+} from '../types'
 
 const execFileAsync = promisify(execFile)
 
@@ -18,14 +26,21 @@ export function createWin32Commands(): PlatformCommands {
 
     async getDnsServers(): Promise<DnsEntry[]> {
       try {
-        const { stdout } = await execFileAsync('powershell.exe', [
-          '-NoProfile', '-NonInteractive', '-Command',
-          psUtf8('Get-DnsClientServerAddress -AddressFamily IPv4 | Select-Object InterfaceAlias,ServerAddresses | ConvertTo-Json -Compress'),
-        ], { timeout: 15_000, windowsHide: true })
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            psUtf8(
+              'Get-DnsClientServerAddress -AddressFamily IPv4 | Select-Object InterfaceAlias,ServerAddresses | ConvertTo-Json -Compress',
+            ),
+          ],
+          { timeout: 15_000, windowsHide: true },
+        )
 
         const raw = JSON.parse(stdout.trim())
-        const items: Array<{ InterfaceAlias: string; ServerAddresses: string[] }> =
-          Array.isArray(raw) ? raw : [raw]
+        const items: Array<{ InterfaceAlias: string; ServerAddresses: string[] }> = Array.isArray(raw) ? raw : [raw]
         return items
           .filter((d) => d.ServerAddresses?.length > 0)
           .map((d) => ({ iface: d.InterfaceAlias, servers: d.ServerAddresses }))
@@ -40,17 +55,18 @@ export function createWin32Commands(): PlatformCommands {
       const safeName = allowedLogs.has(logName) ? logName : 'System'
       const safeMax = Math.max(1, Math.min(Math.floor(Number(maxEntries)) || 50, 200))
 
-      const { stdout } = await execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        psUtf8(
-          `Get-WinEvent -LogName '${safeName}' -MaxEvents ${safeMax} | ` +
-          `Select-Object TimeCreated,Id,LevelDisplayName,ProviderName,Message | ` +
-          `ForEach-Object { [PSCustomObject]@{ ` +
-          `time=$_.TimeCreated.ToString('o'); id=$_.Id; level=$_.LevelDisplayName; ` +
-          `provider=$_.ProviderName; message=($_.Message -replace '\\r?\\n',' ').Substring(0, [Math]::Min(200, $_.Message.Length)) } } | ` +
-          `ConvertTo-Json -Compress`
-        ),
-      ], { timeout: 30_000, windowsHide: true })
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          psUtf8(
+            `Get-WinEvent -LogName '${safeName}' -MaxEvents ${safeMax} | Select-Object TimeCreated,Id,LevelDisplayName,ProviderName,Message | ForEach-Object { [PSCustomObject]@{ time=$_.TimeCreated.ToString('o'); id=$_.Id; level=$_.LevelDisplayName; provider=$_.ProviderName; message=($_.Message -replace '\\r?\\n',' ').Substring(0, [Math]::Min(200, $_.Message.Length)) } } | ConvertTo-Json -Compress`,
+          ),
+        ],
+        { timeout: 30_000, windowsHide: true },
+      )
 
       const raw = JSON.parse(stdout.trim())
       const entries: Array<{ time: string; id: number; level: string; provider: string; message: string }> =
@@ -66,25 +82,36 @@ export function createWin32Commands(): PlatformCommands {
     },
 
     async getInstalledApps(): Promise<InstalledApp[]> {
-      const { stdout } = await execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        psUtf8(
-          `$apps = @(); ` +
-          `$paths = @('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', ` +
-          `'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); ` +
-          `foreach ($p in $paths) { ` +
-          `  $apps += Get-ItemProperty $p -ErrorAction SilentlyContinue | ` +
-          `  Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne '' } | ` +
-          `  Select-Object DisplayName,DisplayVersion,Publisher,InstallDate,EstimatedSize } ` +
-          `$apps | Sort-Object DisplayName -Unique | ConvertTo-Json -Compress`
-        ),
-      ], { timeout: 30_000, windowsHide: true })
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          psUtf8(
+            '$apps = @(); ' +
+              `$paths = @('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', ` +
+              `'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); ` +
+              'foreach ($p in $paths) { ' +
+              '  $apps += Get-ItemProperty $p -ErrorAction SilentlyContinue | ' +
+              `  Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne '' } | ` +
+              '  Select-Object DisplayName,DisplayVersion,Publisher,InstallDate,EstimatedSize } ' +
+              '$apps | Sort-Object DisplayName -Unique | ConvertTo-Json -Compress',
+          ),
+        ],
+        { timeout: 30_000, windowsHide: true },
+      )
 
       const trimmed = stdout.trim()
       if (!trimmed) return []
       const raw = JSON.parse(trimmed)
-      const apps: Array<{ DisplayName: string; DisplayVersion: string; Publisher: string; InstallDate: string; EstimatedSize: number }> =
-        Array.isArray(raw) ? raw : [raw]
+      const apps: Array<{
+        DisplayName: string
+        DisplayVersion: string
+        Publisher: string
+        InstallDate: string
+        EstimatedSize: number
+      }> = Array.isArray(raw) ? raw : [raw]
 
       return apps.map((a) => ({
         name: a.DisplayName ?? '',
@@ -97,24 +124,35 @@ export function createWin32Commands(): PlatformCommands {
 
     async checkOsUpdates(): Promise<OsUpdateInfo[]> {
       try {
-        const { stdout } = await execFileAsync('powershell.exe', [
-          '-NoProfile', '-NonInteractive', '-Command',
-          psUtf8(
-            `$session = New-Object -ComObject Microsoft.Update.Session; ` +
-            `$searcher = $session.CreateUpdateSearcher(); ` +
-            `$result = $searcher.Search('IsInstalled=0'); ` +
-            `$result.Updates | ForEach-Object { ` +
-            `  [PSCustomObject]@{ Title=$_.Title; KBArticleIDs=($_.KBArticleIDs -join ','); ` +
-            `  Severity=$_.MsrcSeverity; Size=$_.MaxDownloadSize; IsDownloaded=$_.IsDownloaded } ` +
-            `} | ConvertTo-Json -Compress`
-          ),
-        ], { timeout: 120_000, windowsHide: true })
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            psUtf8(
+              '$session = New-Object -ComObject Microsoft.Update.Session; ' +
+                '$searcher = $session.CreateUpdateSearcher(); ' +
+                `$result = $searcher.Search('IsInstalled=0'); ` +
+                '$result.Updates | ForEach-Object { ' +
+                `  [PSCustomObject]@{ Title=$_.Title; KBArticleIDs=($_.KBArticleIDs -join ','); ` +
+                '  Severity=$_.MsrcSeverity; Size=$_.MaxDownloadSize; IsDownloaded=$_.IsDownloaded } ' +
+                '} | ConvertTo-Json -Compress',
+            ),
+          ],
+          { timeout: 120_000, windowsHide: true },
+        )
 
         const trimmed = stdout.trim()
         if (!trimmed) return []
         const raw = JSON.parse(trimmed)
-        const updates: Array<{ Title: string; KBArticleIDs: string; Severity: string; Size: number; IsDownloaded: boolean }> =
-          Array.isArray(raw) ? raw : [raw]
+        const updates: Array<{
+          Title: string
+          KBArticleIDs: string
+          Severity: string
+          Size: number
+          IsDownloaded: boolean
+        }> = Array.isArray(raw) ? raw : [raw]
 
         return updates.map((u) => ({
           title: u.Title ?? '',
@@ -130,24 +168,30 @@ export function createWin32Commands(): PlatformCommands {
 
     async installOsUpdates(): Promise<OsUpdateInstallResult> {
       try {
-        const { stdout } = await execFileAsync('powershell.exe', [
-          '-NoProfile', '-NonInteractive', '-Command',
-          psUtf8(
-            `$session = New-Object -ComObject Microsoft.Update.Session; ` +
-            `$searcher = $session.CreateUpdateSearcher(); ` +
-            `$result = $searcher.Search('IsInstalled=0'); ` +
-            `if ($result.Updates.Count -eq 0) { Write-Output '{"installed":0,"needsReboot":false}'; exit } ` +
-            `$downloader = $session.CreateUpdateDownloader(); ` +
-            `$downloader.Updates = $result.Updates; ` +
-            `$downloader.Download() | Out-Null; ` +
-            `$installer = $session.CreateUpdateInstaller(); ` +
-            `$installer.Updates = $result.Updates; ` +
-            `$installResult = $installer.Install(); ` +
-            `[PSCustomObject]@{ installed=$result.Updates.Count; ` +
-            `resultCode=$installResult.ResultCode; ` +
-            `needsReboot=$installResult.RebootRequired } | ConvertTo-Json -Compress`
-          ),
-        ], { timeout: 300_000, windowsHide: true })
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            psUtf8(
+              '$session = New-Object -ComObject Microsoft.Update.Session; ' +
+                '$searcher = $session.CreateUpdateSearcher(); ' +
+                `$result = $searcher.Search('IsInstalled=0'); ` +
+                `if ($result.Updates.Count -eq 0) { Write-Output '{"installed":0,"needsReboot":false}'; exit } ` +
+                '$downloader = $session.CreateUpdateDownloader(); ' +
+                '$downloader.Updates = $result.Updates; ' +
+                '$downloader.Download() | Out-Null; ' +
+                '$installer = $session.CreateUpdateInstaller(); ' +
+                '$installer.Updates = $result.Updates; ' +
+                '$installResult = $installer.Install(); ' +
+                '[PSCustomObject]@{ installed=$result.Updates.Count; ' +
+                'resultCode=$installResult.ResultCode; ' +
+                'needsReboot=$installResult.RebootRequired } | ConvertTo-Json -Compress',
+            ),
+          ],
+          { timeout: 300_000, windowsHide: true },
+        )
 
         const data = JSON.parse(stdout.trim())
         return {
@@ -162,15 +206,21 @@ export function createWin32Commands(): PlatformCommands {
 
     async runSystemFileCheck(): Promise<SfcResult> {
       try {
-        const { stdout } = await execFileAsync('powershell.exe', [
-          '-NoProfile', '-NonInteractive', '-Command',
-          psUtf8(
-            `$p = Start-Process -FilePath 'sfc.exe' -ArgumentList '/scannow' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$env:TEMP\\sfc_out.txt"; ` +
-            `$output = Get-Content "$env:TEMP\\sfc_out.txt" -Raw -Encoding UTF8 -ErrorAction SilentlyContinue; ` +
-            `Remove-Item "$env:TEMP\\sfc_out.txt" -ErrorAction SilentlyContinue; ` +
-            `[PSCustomObject]@{ exitCode=$p.ExitCode; output=$output } | ConvertTo-Json -Compress`
-          ),
-        ], { timeout: 300_000, windowsHide: true })
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            psUtf8(
+              `$p = Start-Process -FilePath 'sfc.exe' -ArgumentList '/scannow' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$env:TEMP\\sfc_out.txt"; ` +
+                `$output = Get-Content "$env:TEMP\\sfc_out.txt" -Raw -Encoding UTF8 -ErrorAction SilentlyContinue; ` +
+                `Remove-Item "$env:TEMP\\sfc_out.txt" -ErrorAction SilentlyContinue; ` +
+                '[PSCustomObject]@{ exitCode=$p.ExitCode; output=$output } | ConvertTo-Json -Compress',
+            ),
+          ],
+          { timeout: 300_000, windowsHide: true },
+        )
 
         const data = JSON.parse(stdout.trim())
         const output = (data.output ?? '') as string
@@ -188,15 +238,21 @@ export function createWin32Commands(): PlatformCommands {
 
     async runSystemImageRepair(): Promise<DismResult> {
       try {
-        const { stdout } = await execFileAsync('powershell.exe', [
-          '-NoProfile', '-NonInteractive', '-Command',
-          psUtf8(
-            `$p = Start-Process -FilePath 'dism.exe' -ArgumentList '/Online','/Cleanup-Image','/RestoreHealth' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$env:TEMP\\dism_out.txt"; ` +
-            `$output = Get-Content "$env:TEMP\\dism_out.txt" -Raw -Encoding UTF8 -ErrorAction SilentlyContinue; ` +
-            `Remove-Item "$env:TEMP\\dism_out.txt" -ErrorAction SilentlyContinue; ` +
-            `[PSCustomObject]@{ exitCode=$p.ExitCode; output=$output } | ConvertTo-Json -Compress`
-          ),
-        ], { timeout: 300_000, windowsHide: true })
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            psUtf8(
+              `$p = Start-Process -FilePath 'dism.exe' -ArgumentList '/Online','/Cleanup-Image','/RestoreHealth' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$env:TEMP\\dism_out.txt"; ` +
+                `$output = Get-Content "$env:TEMP\\dism_out.txt" -Raw -Encoding UTF8 -ErrorAction SilentlyContinue; ` +
+                `Remove-Item "$env:TEMP\\dism_out.txt" -ErrorAction SilentlyContinue; ` +
+                '[PSCustomObject]@{ exitCode=$p.ExitCode; output=$output } | ConvertTo-Json -Compress',
+            ),
+          ],
+          { timeout: 300_000, windowsHide: true },
+        )
 
         const data = JSON.parse(stdout.trim())
         const output = (data.output ?? '') as string

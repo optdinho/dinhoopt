@@ -1,0 +1,21 @@
+{
+  "loading": "Verificando licença...",
+  "subtitle": "Ative sua licença para continuar",
+  "noActiveLicense": "Nenhuma Licença Ativa",
+  "enterKeyPrompt": "Insira sua chave de licença abaixo para desbloquear o aplicativo.",
+  "activationFailed": "Falha na Ativação",
+  "activationSuccess": "Licença Ativada com Sucesso!",
+  "redirecting": "Redirecionando para o aplicativo...",
+  "licenseKey": "Chave de Licença",
+  "activating": "Ativando...",
+  "activated": "Ativado",
+  "activate": "Ativar",
+  "hardwareId": "ID do Hardware (HWID)",
+  "copied": "Copiado!",
+  "copy": "Copiar",
+  "generating": "Gerando...",
+  "hwidDescription": "Este HWID identifica seu equipamento. Envie-o ao suporte para vincular sua licença.",
+  "licensedBy": "Licenciado por DiNho © 2026",
+  "invalidKeyDefault": "Chave inválida ou expirada.",
+  "keyPlaceholder": "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+}

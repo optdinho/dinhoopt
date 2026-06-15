@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 // Mock electron app
 vi.mock('electron', () => ({
-  app: { getVersion: () => '1.17.0', getPath: () => '/tmp/dinho' }
+  app: { getVersion: () => '1.17.0', getPath: () => '/tmp/dinho' },
 }))
 
 // Mock systeminformation
@@ -41,7 +41,7 @@ vi.mock('./history-store', () => ({
   ]),
 }))
 
-import { collectMetrics, formatPrometheus, type MetricLine } from './metrics'
+import { collectMetrics, formatPrometheus } from './metrics'
 
 describe('collectMetrics', () => {
   it('returns an array of metric lines', async () => {
@@ -52,7 +52,7 @@ describe('collectMetrics', () => {
 
   it('includes dinho_info metric', async () => {
     const metrics = await collectMetrics()
-    const info = metrics.find(m => m.name === 'dinho_info')
+    const info = metrics.find((m) => m.name === 'dinho_info')
     expect(info).toBeDefined()
     expect(info!.type).toBe('gauge')
     expect(info!.value).toBe(1)
@@ -63,7 +63,7 @@ describe('collectMetrics', () => {
 
   it('includes system uptime metric', async () => {
     const metrics = await collectMetrics()
-    const uptime = metrics.find(m => m.name === 'dinho_system_uptime_seconds')
+    const uptime = metrics.find((m) => m.name === 'dinho_system_uptime_seconds')
     expect(uptime).toBeDefined()
     expect(uptime!.type).toBe('gauge')
     expect(uptime!.value).toBeGreaterThan(0)
@@ -71,15 +71,15 @@ describe('collectMetrics', () => {
 
   it('includes CPU usage metric', async () => {
     const metrics = await collectMetrics()
-    const cpu = metrics.find(m => m.name === 'dinho_system_cpu_usage_percent')
+    const cpu = metrics.find((m) => m.name === 'dinho_system_cpu_usage_percent')
     expect(cpu).toBeDefined()
     expect(cpu!.value).toBe(23.5)
   })
 
   it('includes memory metrics', async () => {
     const metrics = await collectMetrics()
-    const total = metrics.find(m => m.name === 'dinho_system_memory_total_bytes')
-    const used = metrics.find(m => m.name === 'dinho_system_memory_used_bytes')
+    const total = metrics.find((m) => m.name === 'dinho_system_memory_total_bytes')
+    const used = metrics.find((m) => m.name === 'dinho_system_memory_used_bytes')
     expect(total).toBeDefined()
     expect(total!.value).toBe(17179869184)
     expect(used).toBeDefined()
@@ -88,10 +88,10 @@ describe('collectMetrics', () => {
 
   it('includes history-based counters', async () => {
     const metrics = await collectMetrics()
-    const scans = metrics.find(m => m.name === 'dinho_scans_total')
-    const cleaned = metrics.find(m => m.name === 'dinho_items_cleaned_total')
-    const space = metrics.find(m => m.name === 'dinho_space_saved_bytes_total')
-    const errors = metrics.find(m => m.name === 'dinho_scan_errors_total')
+    const scans = metrics.find((m) => m.name === 'dinho_scans_total')
+    const cleaned = metrics.find((m) => m.name === 'dinho_items_cleaned_total')
+    const space = metrics.find((m) => m.name === 'dinho_space_saved_bytes_total')
+    const errors = metrics.find((m) => m.name === 'dinho_scan_errors_total')
     expect(scans?.value).toBe(2)
     expect(cleaned?.value).toBe(105)
     expect(space?.value).toBe(1073741824)
@@ -100,9 +100,9 @@ describe('collectMetrics', () => {
 
   it('includes last scan metrics', async () => {
     const metrics = await collectMetrics()
-    const ts = metrics.find(m => m.name === 'dinho_last_scan_timestamp_seconds')
-    const dur = metrics.find(m => m.name === 'dinho_last_scan_duration_seconds')
-    const items = metrics.find(m => m.name === 'dinho_last_scan_items_found')
+    const ts = metrics.find((m) => m.name === 'dinho_last_scan_timestamp_seconds')
+    const dur = metrics.find((m) => m.name === 'dinho_last_scan_duration_seconds')
+    const items = metrics.find((m) => m.name === 'dinho_last_scan_items_found')
     expect(ts).toBeDefined()
     expect(ts!.value).toBe(Math.floor(new Date('2026-03-20T10:00:00.000Z').getTime() / 1000))
     expect(dur?.value).toBe(5)
@@ -112,18 +112,14 @@ describe('collectMetrics', () => {
 
 describe('formatPrometheus', () => {
   it('formats a simple gauge metric', () => {
-    const output = formatPrometheus([
-      { name: 'dinho_test', type: 'gauge', help: 'A test metric', value: 42 },
-    ])
+    const output = formatPrometheus([{ name: 'dinho_test', type: 'gauge', help: 'A test metric', value: 42 }])
     expect(output).toContain('# HELP dinho_test A test metric')
     expect(output).toContain('# TYPE dinho_test gauge')
     expect(output).toContain('dinho_test 42')
   })
 
   it('formats a gauge metric with large value', () => {
-    const output = formatPrometheus([
-      { name: 'dinho_count', type: 'gauge', help: 'A gauge', value: 100 },
-    ])
+    const output = formatPrometheus([{ name: 'dinho_count', type: 'gauge', help: 'A gauge', value: 100 }])
     expect(output).toContain('# TYPE dinho_count gauge')
     expect(output).toContain('dinho_count 100')
   })
@@ -143,9 +139,7 @@ describe('formatPrometheus', () => {
   })
 
   it('handles metrics without labels', () => {
-    const output = formatPrometheus([
-      { name: 'dinho_uptime', type: 'gauge', help: 'Uptime', value: 3600 },
-    ])
+    const output = formatPrometheus([{ name: 'dinho_uptime', type: 'gauge', help: 'Uptime', value: 3600 }])
     expect(output).toContain('dinho_uptime 3600')
     expect(output).not.toContain('{')
   })
@@ -157,6 +151,6 @@ describe('formatPrometheus', () => {
     ])
     const lines = output.split('\n')
     // Each metric block is: HELP, TYPE, value, blank line
-    expect(lines.filter(l => l === '').length).toBeGreaterThanOrEqual(2)
+    expect(lines.filter((l) => l === '').length).toBeGreaterThanOrEqual(2)
   })
 })

@@ -3,3 +3,34 @@ dist/
 out/
 .DS_Store
 *.log
+skills/extracted/
+.opencode/node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# License database (server-side only, should not be in repo)
+resources/licenses/*.db
+resources/licenses/*.db-wal
+resources/licenses/*.db-shm
+
+# Backup directories
+.backup-security-audit/
+.backup-rapidas/
+.dashboard-backup/
+
+# Build/test artifacts
+coverage/
+tmp/
+logs/
+test-results/
+*.zip
+fix_buttons.js
+parse_failures.py
+remaining_errors.txt
+test_output.txt
+tmp_lint.json
+
+# Generated docs
+docs/

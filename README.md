@@ -1,7 +1,6 @@
 # DiNho Optimizer
 
-Fork do [Kudu](https://github.com/adventdevinc/kudu) focado exclusivamente em **Windows**.
-Todo o código de macOS e Linux foi removido. Licença MIT — use, modifique e distribua livremente.
+
 
 ## O que está incluído
 
@@ -137,4 +136,4 @@ Altere `electron-builder.yml`:
 
 ## Licença
 
-MIT — baseado no [Kudu](https://github.com/adventdevinc/kudu) por Kudu Contributors.
+

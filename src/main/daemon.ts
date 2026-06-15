@@ -1,6 +1,6 @@
 import { app } from 'electron'
-import { setDaemonMode } from './services/logger'
 import { initAutoUpdater } from './services/auto-updater'
+import { setDaemonMode } from './services/logger'
 
 function log(msg: string): void {
   const ts = new Date().toISOString()
@@ -25,9 +25,12 @@ export async function runDaemon(): Promise<void> {
   process.on('SIGTERM', shutdown)
   process.on('SIGINT', shutdown)
 
-  setInterval(() => {
-    log(`Heartbeat — daemon running`)
-  }, 5 * 60 * 1000)
+  setInterval(
+    () => {
+      log('Heartbeat — daemon running')
+    },
+    5 * 60 * 1000,
+  )
 
   log('Daemon running. Press Ctrl+C to stop.')
 }

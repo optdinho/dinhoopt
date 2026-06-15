@@ -24,7 +24,8 @@
     "services": "Administrador de servicios",
     "softwareUpdate": "Actualización de software",
     "cveScan": "Análisis de CVE",
-    "compliance": "Auditoría de Cumplimiento"
+    "compliance": "Auditoría de Cumplimiento",
+    "vulnerability": "Escáner de Vulnerabilidades"
   },
   "overview": {
     "totalScans": "Análisis totales",

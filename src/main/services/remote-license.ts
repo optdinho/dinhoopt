@@ -1,13 +1,30 @@
-import { app, net } from 'electron'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { net, app } from 'electron'
 import { generateHwid } from './hwid'
-import { initStore, readSavedKey, writeSavedKey, deleteSavedKey } from './license-store'
+import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'
 
-const API_URL = 'https://crimson-wildflower-4de0.mirandaotabol.workers.dev'
-const API_TOKEN = 'DiNhoTOKEN0001'
 const NETWORK_TIMEOUT = 20_000
 const MAX_RETRIES = 2
+
+const FALLBACK_URL = 'https://crimson-wildflower-4de0.mirandaotabol.workers.dev'
+const FALLBACK_TOKEN = 'DiNhoTOKEN0001'
+
+function getLicenseConfig(): { url: string; token: string } {
+  const configPath = join(app.getPath('userData'), 'license-config.json')
+  try {
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+      if (config.url && config.token) {
+        return { url: config.url, token: config.token }
+      }
+    }
+  } catch {}
+  return {
+    url: process.env.LICENSE_API_URL || FALLBACK_URL,
+    token: process.env.LICENSE_API_TOKEN || FALLBACK_TOKEN,
+  }
+}
 
 let initialized = false
 
@@ -21,34 +38,44 @@ function ensureInit(): void {
   initialized = true
 }
 
-async function callApi(body: Record<string, unknown>): Promise<any> {
-  const payload = JSON.stringify({
-    ...body,
-    token: API_TOKEN,
-  })
-  let lastErr: Error | null = null
-  let lastStatus: number | null = null
+async function callApi(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { url: apiUrl, token: apiToken } = getLicenseConfig()
+  const payload = JSON.stringify({ ...body, token: apiToken })
   let lastBodySnippet = ''
 
   async function fetchOnce(url: string): Promise<{ status: number; body: Buffer }> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = []
-      const req = net.request({ method: 'POST', url, useSessionCookies: false } as any)
+      const req = net.request({ method: 'POST', url, useSessionCookies: false } as {
+        method: string
+        url: string
+        useSessionCookies: boolean
+      })
       const timer = setTimeout(() => req.abort(), NETWORK_TIMEOUT)
 
-      req.on('error', (err: any) => { clearTimeout(timer); reject(new Error(err?.message || 'network error')) })
-      req.on('aborted', () => { clearTimeout(timer); reject(new Error('aborted/connection closed')) })
-      req.on('response', (resp: any) => {
+      req.on('error', (err: Error) => {
+        clearTimeout(timer)
+        reject(new Error(err.message || 'network error'))
+      })
+      req.on('aborted' as unknown as 'aborted', () => {
+        clearTimeout(timer)
+        reject(new Error('aborted/connection closed'))
+      })
+      req.on('response', (resp: Electron.IncomingMessage) => {
         clearTimeout(timer)
         const code = resp.statusCode ?? 0
         const stream = resp.response ?? resp
-        if (!stream || typeof stream.on !== 'function') { reject(new Error('invalid response stream')); return }
-        stream.on('data', (d: any) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)))
+        if (!stream || typeof stream.on !== 'function') {
+          reject(new Error('invalid response stream'))
+          return
+        }
+        stream.on('data', (d: unknown) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d as string)))
         stream.on('end', () => {
           resolve({ status: code, body: Buffer.concat(chunks) })
         })
       })
       req.setHeader('Content-Type', 'application/json')
+      req.setHeader('Authorization', `Bearer ${apiToken}`)
       req.setHeader('Accept', 'application/json')
       req.write(payload)
       req.end()
@@ -57,13 +84,13 @@ async function callApi(body: Record<string, unknown>): Promise<any> {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      let url = API_URL
+      let url = apiUrl
       for (let hop = 0; hop < 5; hop++) {
         const { status, body } = await fetchOnce(url)
-        lastStatus = status
         lastBodySnippet = body.toString('utf8').slice(0, 500)
         if (status >= 300 && status < 400) {
-          const loc = lastBodySnippet.match(/Location:\s*(\S+)/i)?.[1] ?? lastBodySnippet.match(/<A HREF="([^"]+)">/)?.[1]
+          const loc =
+            lastBodySnippet.match(/Location:\s*(\S+)/i)?.[1] ?? lastBodySnippet.match(/<A HREF="([^"]+)">/)?.[1]
           if (!loc) throw new Error(`redirect ${status} sem Location`)
           url = loc
           continue
@@ -73,13 +100,11 @@ async function callApi(body: Record<string, unknown>): Promise<any> {
         throw new Error(`invalid response (not a JSON object): ${lastBodySnippet}`)
       }
       throw new Error('muitos redirects')
-    } catch (err: any) {
-      lastErr = new Error(err?.message || String(err))
+    } catch {
       if (attempt < MAX_RETRIES) await new Promise((r) => setTimeout(r, 1500))
     }
   }
-  const detail = lastStatus !== null ? `HTTP ${lastStatus}` : 'no response'
-  throw new Error(`Sem conexao com o servidor. [${detail}]`)
+  throw new Error('Falha ao conectar com o servidor de licença')
 }
 
 export interface RemoteLicenseResult {
@@ -89,13 +114,65 @@ export interface RemoteLicenseResult {
   expires_at?: string | null
 }
 
+const CACHE_VALIDITY_MS = 24 * 60 * 60 * 1000
+
+interface CacheEntry {
+  valid: boolean
+  reason?: string
+  type?: string
+  expires_at?: string | null
+  timestamp: number
+}
+
+function getCachePath(): string {
+  return join(app.getPath('userData'), '.license-cache.json')
+}
+
+function readCache(): CacheEntry | null {
+  try {
+    const cachePath = getCachePath()
+    if (existsSync(cachePath)) {
+      const data = JSON.parse(readFileSync(cachePath, 'utf-8'))
+      if (data && typeof data.timestamp === 'number') return data as CacheEntry
+    }
+  } catch {}
+  return null
+}
+
+function writeCache(entry: CacheEntry): void {
+  try {
+    writeFileSync(getCachePath(), JSON.stringify(entry), 'utf-8')
+  } catch {}
+}
+
+export function validateLicenseOffline(): RemoteLicenseResult {
+  const cached = readCache()
+  if (cached && Date.now() - cached.timestamp < CACHE_VALIDITY_MS && cached.valid) {
+    return {
+      valid: true,
+      ...(cached.type ? { type: cached.type } : {}),
+      ...(cached.expires_at !== undefined ? { expires_at: cached.expires_at } : {}),
+    }
+  }
+  return { valid: false, reason: 'Sem validação offline disponível' }
+}
+
 export async function validateLicense(key: string, hwid: string): Promise<RemoteLicenseResult> {
   try {
     const data = await callApi({ action: 'validate', key, hwid })
-    if (data?.valid) return { valid: true, type: data.type, expires_at: data.expires_at || null }
-    return { valid: false, reason: data?.reason || 'Licença inválida', type: data?.type, expires_at: data?.expires_at || null }
-  } catch (err: any) {
-    return { valid: false, reason: err?.message || 'Sem conexao com o servidor' }
+    if (data?.valid) {
+      const result: RemoteLicenseResult = { valid: true, type: data.type, expires_at: data.expires_at || null }
+      writeCache({ ...result, timestamp: Date.now() } as CacheEntry)
+      return result
+    }
+    return {
+      valid: false,
+      reason: data?.reason || 'Licença inválida',
+      type: data?.type,
+      expires_at: data?.expires_at || null,
+    }
+  } catch {
+    return { valid: false, reason: 'Sem conexao com o servidor' }
   }
 }
 
@@ -115,7 +192,11 @@ export async function checkLicense(): Promise<RemoteLicenseResult> {
   const key = readSavedKey(join(userData, 'remote-license.key'))
   if (!key) return { valid: false, reason: 'Nenhuma licença encontrada' }
   const hwid = await generateHwid()
-  return validateLicense(key, hwid)
+  const result = await validateLicense(key, hwid)
+  if (!result.valid && result.reason === 'Sem conexao com o servidor') {
+    return validateLicenseOffline()
+  }
+  return result
 }
 
 export async function getHwid(): Promise<string> {

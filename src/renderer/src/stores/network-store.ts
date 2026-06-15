@@ -1,5 +1,5 @@
+import type { NetworkCleanResult, NetworkItem } from '@shared/types'
 import { create } from 'zustand'
-import type { NetworkItem, NetworkCleanResult } from '@shared/types'
 
 type NetworkCategory = NetworkItem['type']
 
@@ -55,6 +55,6 @@ export const useNetworkStore = create<NetworkState>((set) => ({
       items: [],
       selectedIds: new Set<string>(),
       status: 'idle',
-      cleanResult: null
-    })
+      cleanResult: null,
+    }),
 }))

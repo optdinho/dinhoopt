@@ -1,8 +1,8 @@
-import { ipcMain } from 'electron'
-import fs from 'fs'
-import path from 'path'
-import crypto from 'crypto'
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import { IPC } from '@shared/channels'
+import { ipcMain } from 'electron'
 
 type DatabaseConstructor = typeof import('better-sqlite3')
 
@@ -23,13 +23,14 @@ async function getDatabase(): Promise<DatabaseConstructor | null> {
   })()
   return databasePromise
 }
-import { getPlatform } from '../platform'
-import { cacheItems, getCachedItem } from '../services/scan-cache'
 import { CleanerType } from '@shared/enums'
-import type { ScanResult, ScanItem, CleanResult, CleanError } from '@shared/types'
+import type { CleanError, CleanResult, ScanItem, ScanResult } from '@shared/types'
+import { getPlatform } from '../platform'
 import type { DatabaseTarget } from '../platform/types'
-import type { WindowGetter } from './index'
 import { validateStringArray } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
+import { cacheItems, getCachedItem } from '../services/scan-cache'
+import type { WindowGetter } from './index'
 
 /** Check if a file is a valid SQLite database by reading the magic header */
 function isSqliteFile(filePath: string): boolean {
@@ -57,7 +58,7 @@ function resolveProfileDirs(basePath: string, target: DatabaseTarget): string[] 
         if (!entry.isDirectory()) continue
         for (const pattern of target.profilePattern) {
           const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
-          if (new RegExp('^' + escaped + '$').test(entry.name)) {
+          if (new RegExp(`^${escaped}$`).test(entry.name)) {
             dirs.push(path.join(basePath, entry.name))
             break
           }
@@ -79,12 +80,13 @@ function resolveProfileDirs(basePath: string, target: DatabaseTarget): string[] 
 
 export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.DATABASE_SCAN, async (): Promise<ScanResult[]> => {
+    getLogger().info('database-optimizer', 'Starting database scan...')
     const results: ScanResult[] = []
     const category = CleanerType.Database
     const targets = getPlatform().paths.databaseOptimizeTargets()
 
     for (let i = 0; i < targets.length; i++) {
-      const target = targets[i]
+      const target = targets[i]!
 
       try {
         if (!fs.existsSync(target.basePath)) continue
@@ -106,7 +108,11 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
               if (!isSqliteFile(dbPath)) continue
 
               let walSize = 0
-              try { walSize = fs.statSync(dbPath + '-wal').size } catch { /* no WAL */ }
+              try {
+                walSize = fs.statSync(`${dbPath}-wal`).size
+              } catch {
+                /* no WAL */
+              }
 
               // Estimate: WAL is fully reclaimable, plus ~10% of the main DB
               // for internal fragmentation / freelist pages
@@ -122,7 +128,9 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
                 lastModified: stat.mtimeMs,
                 selected: true,
               })
-            } catch { /* inaccessible */ }
+            } catch {
+              getLogger().warning('database-optimizer', `Skipped inaccessible db: ${dbPath}`)
+            }
           }
         }
 
@@ -137,7 +145,7 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
           })
         }
       } catch {
-        // Skip inaccessible targets
+        getLogger().warning('database-optimizer', `Skipped inaccessible target: ${target.basePath}`)
       }
 
       const win = getWindow()
@@ -153,15 +161,21 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
       }
     }
 
+    getLogger().success('database-optimizer', `Database scan completed: ${results.length} categories found`)
     return results
   })
 
   ipcMain.handle(IPC.DATABASE_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+    getLogger().info('database-optimizer', 'Starting database clean...')
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    if (!valid) {
+      getLogger().warning('database-optimizer', 'Invalid item IDs provided for database clean')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
 
     const Database = await getDatabase()
     if (!Database) {
+      getLogger().error('database-optimizer', 'better-sqlite3 module not available for database clean')
       return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     }
 
@@ -172,7 +186,7 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
     let lastReport = 0
 
     for (let i = 0; i < valid.length; i++) {
-      const id = valid[i]
+      const id = valid[i]!
       const item = getCachedItem(id)
 
       if (item) {
@@ -182,7 +196,11 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
         try {
           const sizeBefore = fs.statSync(item.path).size
           let walSizeBefore = 0
-          try { walSizeBefore = fs.statSync(item.path + '-wal').size } catch { /* no WAL */ }
+          try {
+            walSizeBefore = fs.statSync(`${item.path}-wal`).size
+          } catch {
+            /* no WAL */
+          }
 
           const db = new Database(item.path, { fileMustExist: true })
           try {
@@ -197,8 +215,12 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
 
           const sizeAfter = fs.statSync(item.path).size
           let walSizeAfter = 0
-          try { walSizeAfter = fs.statSync(item.path + '-wal').size } catch { /* no WAL */ }
-          const reclaimed = (sizeBefore + walSizeBefore) - (sizeAfter + walSizeAfter)
+          try {
+            walSizeAfter = fs.statSync(`${item.path}-wal`).size
+          } catch {
+            /* no WAL */
+          }
+          const reclaimed = sizeBefore + walSizeBefore - (sizeAfter + walSizeAfter)
           if (reclaimed > 0) totalCleaned += reclaimed
           filesDeleted++
         } catch (err: unknown) {
@@ -206,10 +228,14 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
           const code = (err as { code?: string }).code
           if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED' || code === 'EBUSY') {
             errors.push({ path: item.path, reason: 'in-use' })
+            getLogger().error('database-optimizer', `Database in use, skipped: ${item.path}`)
           } else if (code === 'EPERM' || code === 'EACCES') {
             errors.push({ path: item.path, reason: 'permission-denied' })
+            getLogger().error('database-optimizer', `Permission denied for database: ${item.path}`)
           } else {
-            errors.push({ path: item.path, reason: (err as Error).message || 'unknown error' })
+            const msg = (err as Error).message || 'unknown error'
+            errors.push({ path: item.path, reason: msg })
+            getLogger().error('database-optimizer', `Database clean error for ${item.path}`, msg)
           }
         }
       }
@@ -218,17 +244,22 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
       if (now - lastReport > 120 || i === valid.length - 1) {
         lastReport = now
         const win = getWindow()
-        if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-          phase: 'cleaning',
-          category: CleanerType.Database,
-          currentPath: item?.path ?? '',
-          progress: ((i + 1) / valid.length) * 100,
-          itemsFound: valid.length,
-          sizeFound: totalCleaned,
-        })
+        if (win && !win.isDestroyed())
+          win.webContents.send(IPC.SCAN_PROGRESS, {
+            phase: 'cleaning',
+            category: CleanerType.Database,
+            currentPath: item?.path ?? '',
+            progress: ((i + 1) / valid.length) * 100,
+            itemsFound: valid.length,
+            sizeFound: totalCleaned,
+          })
       }
     }
 
+    getLogger().success(
+      'database-optimizer',
+      `Database clean completed: ${filesDeleted} files cleaned, ${totalCleaned} bytes reclaimed`,
+    )
     return {
       totalCleaned,
       filesDeleted,

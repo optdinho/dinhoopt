@@ -1,10 +1,9 @@
-import { join } from 'path'
-import { appendFileSync, mkdirSync, statSync, renameSync, unlinkSync } from 'fs'
+import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 import { app } from 'electron'
 
-let _daemonMode = false
-
 /** When enabled, all log lines are also written to stdout (for daemon/journald) */
+export let _daemonMode = false
 export function setDaemonMode(enabled: boolean): void {
   _daemonMode = enabled
 }
@@ -18,12 +17,20 @@ let _logDir: string | null = null
 function logDir(): string {
   if (!_logDir) {
     _logDir = join(app.getPath('userData'), 'logs')
-    try { mkdirSync(_logDir, { recursive: true }) } catch { /* ignore */ }
+    try {
+      mkdirSync(_logDir, { recursive: true })
+    } catch {
+      /* ignore */
+    }
   }
   return _logDir
 }
-function logFile(): string { return join(logDir(), 'dinho.log') }
-function logFileOld(): string { return join(logDir(), 'dinho.old.log') }
+function logFile(): string {
+  return join(logDir(), 'dinho.log')
+}
+function logFileOld(): string {
+  return join(logDir(), 'dinho.old.log')
+}
 
 const lastRotationCheck = new Map<string, number>()
 
@@ -36,7 +43,11 @@ function rotateIfNeeded(file: string, oldFile: string): void {
   try {
     const stats = statSync(file)
     if (stats.size > MAX_LOG_SIZE) {
-      try { unlinkSync(oldFile) } catch { /* ignore */ }
+      try {
+        unlinkSync(oldFile)
+      } catch {
+        /* ignore */
+      }
       renameSync(file, oldFile)
     }
   } catch {

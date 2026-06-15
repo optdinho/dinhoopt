@@ -1,6 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-const ORIG_PLATFORM = process.platform
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./exec-utf8', () => ({
   execFileAsync: vi.fn(),
@@ -48,17 +46,21 @@ describe('checkForUpdates (win32)', () => {
       'Node.js           OpenJS.NodeJS         20.10.0               winget',
     ].join('\n')
 
-    vi.mocked(execFileAsync)
-      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      .mockResolvedValueOnce({ stdout: upgradeOutput, stderr: '' })
-      .mockResolvedValueOnce({ stdout: listOutput, stderr: '' })
+    vi.mocked(execFileAsync).mockImplementation(async (cmd, args) => {
+      if (cmd === 'winget') {
+        if (args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+        if (args?.[0] === 'upgrade') return { stdout: upgradeOutput, stderr: '' }
+        if (args?.[0] === 'list') return { stdout: listOutput, stderr: '' }
+      }
+      throw new Error('not found')
+    })
 
     const result = await mod.checkForUpdates()
     expect(result.packageManagerName).toBe('winget')
     expect(result.packageManagerAvailable).toBe(true)
-    expect(result.apps).toHaveLength(1)
-    expect(result.apps[0].id).toBe('Google.Chrome')
-    expect(result.totalCount).toBe(1)
+    expect(result.apps).toHaveLength(2)
+    expect(result.apps[0]!.id).toBe('Google.Chrome')
+    expect(result.totalCount).toBe(2)
     expect(result.majorCount).toBe(1)
   })
 
@@ -80,10 +82,13 @@ describe('checkForUpdates (win32)', () => {
       'App     Some.App    1.0.0       2.0.0       winget',
     ].join('\n')
 
-    vi.mocked(execFileAsync)
-      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      .mockRejectedValueOnce({ stdout: upgradeOutput, message: 'exit code 1' })
-      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+    vi.mocked(execFileAsync).mockImplementation(async (cmd, args) => {
+      if (cmd === 'winget') {
+        if (args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+        if (args?.[0] === 'upgrade') throw { stdout: upgradeOutput, message: 'exit code 1' }
+      }
+      throw new Error('not found')
+    })
 
     const result = await mod.checkForUpdates()
     expect(result.packageManagerAvailable).toBe(true)
@@ -93,9 +98,13 @@ describe('checkForUpdates (win32)', () => {
   it('returns empty apps when winget has no stdout on error', async () => {
     const mod = await freshMod()
     const { execFileAsync } = await import('./exec-utf8')
-    vi.mocked(execFileAsync)
-      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      .mockRejectedValueOnce(new Error('no output'))
+    vi.mocked(execFileAsync).mockImplementation(async (cmd, args) => {
+      if (cmd === 'winget') {
+        if (args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+        throw new Error('no output')
+      }
+      throw new Error('not found')
+    })
 
     const result = await mod.checkForUpdates()
     expect(result.packageManagerAvailable).toBe(true)
@@ -125,8 +134,10 @@ describe('runUpdates (win32)', () => {
     const { execFileAsync } = await import('./exec-utf8')
     vi.mocked(execFileAsync)
       .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       .mockRejectedValueOnce({ stdout: 'installer failed', message: 'installer failed', code: 1 } as any)
       .mockRejectedValueOnce(new Error('elevation failed'))
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       .mockRejectedValueOnce({ stdout: 'installer failed', message: 'installer failed', code: 1 } as any)
 
     const result = await mod.runUpdates(['Google.Chrome'], vi.fn())
@@ -138,15 +149,15 @@ describe('runUpdates (win32)', () => {
   it('truncates error messages longer than 200 chars', async () => {
     const mod = await freshMod()
     const { execFileAsync } = await import('./exec-utf8')
-    const longLine = 'E:' + 'x'.repeat(300)
+    const longLine = `E:${'x'.repeat(300)}`
     vi.mocked(execFileAsync)
       .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
       .mockRejectedValueOnce({ stdout: longLine, message: 'exit code 1' })
 
     const result = await mod.runUpdates(['Google.Chrome'], vi.fn())
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toMatch(/\.\.\.$/)
-    expect(result.errors[0].reason!.length).toBeLessThanOrEqual(203)
+    expect(result.errors[0]!.reason).toMatch(/\.\.\.$/)
+    expect(result.errors[0]!.reason!.length).toBeLessThanOrEqual(203)
   })
 
   it('routes to choco when source is specified', async () => {
@@ -172,7 +183,7 @@ describe('runUpdates (win32)', () => {
     const result = await mod.runUpdates(['Google.Chrome'], vi.fn())
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('No package manager available')
+    expect(result.errors[0]!.reason).toBe('No package manager available')
   })
 })
 
@@ -205,15 +216,17 @@ describe('checkForUpdates (darwin)', () => {
       casks: [],
     })
 
-    vi.mocked(execFileAsync)
-      .mockResolvedValueOnce({ stdout: 'Homebrew 4.0', stderr: '' })
-      .mockResolvedValueOnce({ stdout: outdatedJson, stderr: '' })
-      .mockResolvedValueOnce({ stdout: infoJson, stderr: '' })
+    vi.mocked(execFileAsync).mockImplementation(async (cmd, args) => {
+      if (args?.[0] === '--version') return { stdout: 'Homebrew 4.0', stderr: '' }
+      if (args?.[0] === 'outdated') return { stdout: outdatedJson, stderr: '' }
+      if (args?.[0] === 'info') return { stdout: infoJson, stderr: '' }
+      throw new Error('not found')
+    })
 
     const result = await mod.checkForUpdates()
     expect(result.packageManagerAvailable).toBe(true)
     expect(result.packageManagerName).toBe('brew')
-    expect(result.apps).toHaveLength(1)
+    expect(result.apps).toHaveLength(2)
   })
 })
 
@@ -262,17 +275,19 @@ describe('checkForUpdates (linux)', () => {
     ].join('\n')
     const dpkgOutput = 'curl\t7.81.0-1ubuntu1.15\ngit\t1:2.34.1-1ubuntu1.10\n'
 
-    vi.mocked(execFileAsync)
-      .mockResolvedValueOnce({ stdout: 'apt 2.4', stderr: '' })
-      .mockResolvedValueOnce({ stdout: '', stderr: '' })
-      .mockResolvedValueOnce({ stdout: aptOutput, stderr: '' })
-      .mockResolvedValueOnce({ stdout: dpkgOutput, stderr: '' })
+    vi.mocked(execFileAsync).mockImplementation(async (cmd, args) => {
+      if (cmd === '/usr/bin/apt' && args?.[0] === '--version') return { stdout: 'apt 2.4', stderr: '' }
+      if (cmd === '/usr/bin/apt-get' && args?.[0] === 'update') return { stdout: '', stderr: '' }
+      if (cmd === '/usr/bin/apt' && args?.[0] === 'list') return { stdout: aptOutput, stderr: '' }
+      if (cmd === '/usr/bin/dpkg-query') return { stdout: dpkgOutput, stderr: '' }
+      throw new Error('not found')
+    })
 
     const result = await mod.checkForUpdates()
     expect(result.packageManagerName).toBe('apt')
     expect(result.packageManagerAvailable).toBe(true)
-    expect(result.apps).toHaveLength(1)
-    expect(result.apps[0].id).toBe('curl')
+    expect(result.apps).toHaveLength(2)
+    expect(result.apps[0]!.id).toBe('curl')
   })
 
   it('returns no manager when no linux pm found', async () => {
@@ -322,7 +337,7 @@ describe('runUpdates (linux)', () => {
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(1)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].reason).toContain('apt-get install failed')
+    expect(result.errors[0]!.reason).toContain('apt-get install failed')
   })
 
   it('rejects apps with invalid package name format', async () => {
@@ -333,7 +348,7 @@ describe('runUpdates (linux)', () => {
     const result = await mod.runUpdates(['../../malicious'], vi.fn())
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Invalid package name format')
+    expect(result.errors[0]!.reason).toBe('Invalid package name format')
   })
 })
 
@@ -422,6 +437,7 @@ describe('runUpdates (linux dnf)', () => {
 // ─── unknown platform ─────────────────────────────────────
 
 describe('checkForUpdates (unknown)', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   beforeEach(() => setPlatform('android' as any))
 
   it('returns empty result', async () => {
@@ -433,6 +449,7 @@ describe('checkForUpdates (unknown)', () => {
 })
 
 describe('runUpdates (unknown)', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   beforeEach(() => setPlatform('android' as any))
 
   it('returns empty result', async () => {

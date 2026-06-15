@@ -1,4 +1,4 @@
-import type { ComplianceCheck, ComplianceState, ComplianceApplyResult, ComplianceScanProgress } from '@shared/types'
+import type { ComplianceApplyResult, ComplianceCheck, ComplianceScanProgress, ComplianceState } from '@shared/types'
 import { execNativeUtf8 } from './exec-utf8'
 
 interface CheckDef {
@@ -23,7 +23,7 @@ async function regQuery(path: string, value: string): Promise<string | null> {
     const lines = stdout.split('\n').filter((l) => l.trim().length > 0)
     for (const line of lines) {
       const match = line.match(new RegExp(`\\s+${value}\\s+REG_\\w+\\s+(.+)$`, 'i'))
-      if (match) return match[1].trim()
+      if (match) return match[1]!.trim()
     }
     return null
   } catch {
@@ -44,20 +44,31 @@ async function seceditQuery(): Promise<Record<string, string>> {
     const tmpDir = await execNativeUtf8('cmd.exe', ['/c', 'echo', '%TEMP%'], { timeout: 3000, windowsHide: true })
     const tmpPath = `${tmpDir.stdout.trim()}\\dinho-secedit-${Date.now()}.inf`
     await execNativeUtf8('secedit.exe', ['/export', '/cfg', tmpPath, '/quiet'], { timeout: 15000, windowsHide: true })
-    const { stdout } = await execNativeUtf8('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      `Get-Content '${tmpPath}' -Encoding Unicode | Where-Object { $_ -notmatch '^[\\s;]' }`,
-    ], { timeout: 10000, windowsHide: true })
+    const { stdout } = await execNativeUtf8(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Get-Content '${tmpPath}' -Encoding Unicode | Where-Object { $_ -notmatch '^[\\s;]' }`,
+      ],
+      { timeout: 10000, windowsHide: true },
+    )
     const vals: Record<string, string> = {}
     for (const line of stdout.split('\n')) {
       const eqIdx = line.indexOf('=')
       if (eqIdx > 0) {
         const k = line.slice(0, eqIdx).trim()
-        const v = line.slice(eqIdx + 1).trim().replace(/^"|"$/g, '')
+        const v = line
+          .slice(eqIdx + 1)
+          .trim()
+          .replace(/^"|"$/g, '')
         vals[k] = v
       }
     }
-    await execNativeUtf8('cmd.exe', ['/c', 'del', '/f', '/q', tmpPath], { timeout: 3000, windowsHide: true }).catch(() => {})
+    await execNativeUtf8('cmd.exe', ['/c', 'del', '/f', '/q', tmpPath], { timeout: 3000, windowsHide: true }).catch(
+      () => {},
+    )
     return vals
   } catch {
     return {}
@@ -76,14 +87,22 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: false,
     check: async () => {
       const sec = await seceditQuery()
-      const val = sec['PasswordComplexity']
+      const val = sec.PasswordComplexity!
       return { compliant: val === '1', value: val === '1' ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /minpwlen:8; net accounts /passwordchg:Yes'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'net accounts /minpwlen:8; net accounts /passwordchg:Yes'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /minpwlen:0; net accounts /passwordchg:No'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'net accounts /minpwlen:0; net accounts /passwordchg:No'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
   },
   {
@@ -96,14 +115,20 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: false,
     check: async () => {
       const sec = await seceditQuery()
-      const val = parseInt(sec['MinimumPasswordLength'], 10)
+      const val = Number.parseInt(sec.MinimumPasswordLength!, 10)
       return { compliant: val >= 8, value: String(val) }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /minpwlen:8'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /minpwlen:8'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /minpwlen:0'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /minpwlen:0'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
   },
   {
@@ -116,14 +141,20 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: false,
     check: async () => {
       const sec = await seceditQuery()
-      const val = parseInt(sec['MaximumPasswordAge'], 10)
+      const val = Number.parseInt(sec.MaximumPasswordAge!, 10)
       return { compliant: val <= 90, value: `${val} dias` }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /maxpwage:90'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /maxpwage:90'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /maxpwage:0'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /maxpwage:0'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
   },
   {
@@ -136,14 +167,20 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: false,
     check: async () => {
       const sec = await seceditQuery()
-      const val = parseInt(sec['LockoutBadCount'], 10)
+      const val = Number.parseInt(sec.LockoutBadCount!, 10)
       return { compliant: val > 0 && val <= 5, value: String(val) }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutthreshold:5'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutthreshold:5'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutthreshold:0'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutthreshold:0'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
   },
   {
@@ -156,14 +193,20 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: false,
     check: async () => {
       const sec = await seceditQuery()
-      const val = parseInt(sec['LockoutDuration'], 10)
+      const val = Number.parseInt(sec.LockoutDuration!, 10)
       return { compliant: val >= 15, value: `${val} min` }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutduration:15'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutduration:15'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutduration:30'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'net accounts /lockoutduration:30'], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     },
   },
   {
@@ -176,7 +219,8 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: true,
     check: async () => {
       const val = await regQuery('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', 'ClearTextPassword')
-      return { compliant: val === '0' || val === null, value: val === '1' ? 'Ativado' : 'Desativado' }
+      const intVal = val != null ? Number.parseInt(val, 16) : 0
+      return { compliant: intVal === 0, value: intVal === 1 ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
       await regSetDword('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', 'ClearTextPassword', 0)
@@ -195,7 +239,8 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: true,
     check: async () => {
       const val = await regQuery('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', 'NoLMHash')
-      return { compliant: val === '1', value: val === '1' ? 'Desativado' : 'Ativado' }
+      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+      return { compliant: intVal === 1, value: intVal === 1 ? 'Desativado' : 'Ativado' }
     },
     apply: async () => {
       await regSetDword('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', 'NoLMHash', 1)
@@ -213,18 +258,41 @@ const CHECKS: CheckDef[] = [
     expected: 'Desativada',
     requiresAdmin: false,
     check: async () => {
-      const { stdout } = await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', '(Get-LocalUser -Name "Convidado" -ErrorAction SilentlyContinue).Enabled'], { timeout: 5000, windowsHide: true }).catch(() => ({ stdout: '' }))
+      const { stdout } = await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', '(Get-LocalUser -Name "Convidado" -ErrorAction SilentlyContinue).Enabled'],
+        { timeout: 5000, windowsHide: true },
+      ).catch(() => ({ stdout: '' }))
       if (!stdout.trim()) {
-        const { stdout: en } = await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', '(Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue).Enabled'], { timeout: 5000, windowsHide: true })
+        const { stdout: en } = await execNativeUtf8(
+          'powershell.exe',
+          ['-NoProfile', '-Command', '(Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue).Enabled'],
+          { timeout: 5000, windowsHide: true },
+        )
         return { compliant: en.trim().toLowerCase() !== 'true', value: en.trim() === 'true' ? 'Ativada' : 'Desativada' }
       }
-      return { compliant: stdout.trim().toLowerCase() !== 'true', value: stdout.trim() === 'true' ? 'Ativada' : 'Desativada' }
+      return {
+        compliant: stdout.trim().toLowerCase() !== 'true',
+        value: stdout.trim() === 'true' ? 'Ativada' : 'Desativada',
+      }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'Disable-LocalUser -Name "Convidado" -ErrorAction SilentlyContinue; Disable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          'Disable-LocalUser -Name "Convidado" -ErrorAction SilentlyContinue; Disable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue',
+        ],
+        { timeout: 10000, windowsHide: true },
+      )
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'Enable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'Enable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
   },
   // ── Audit & Logging ──
@@ -237,14 +305,29 @@ const CHECKS: CheckDef[] = [
     expected: 'Ativada',
     requiresAdmin: true,
     check: async () => {
-      const { stdout } = await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'auditpol /get /category:"Logon/Logoff" /r'], { timeout: 5000, windowsHide: true }).catch(() => ({ stdout: '' }))
-      return { compliant: stdout.toLowerCase().includes('success'), value: stdout.toLowerCase().includes('success') ? 'Ativada' : 'Desativada' }
+      const { stdout } = await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'auditpol /get /category:"Logon/Logoff" /r'],
+        { timeout: 5000, windowsHide: true },
+      ).catch(() => ({ stdout: '' }))
+      return {
+        compliant: stdout.toLowerCase().includes('success'),
+        value: stdout.toLowerCase().includes('success') ? 'Ativada' : 'Desativada',
+      }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'auditpol /set /subcategory:"Logon" /success:enable'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'auditpol /set /subcategory:"Logon" /success:enable'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'auditpol /set /subcategory:"Logon" /success:disable'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'auditpol /set /subcategory:"Logon" /success:disable'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
   },
   // ── Network Security ──
@@ -258,7 +341,8 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: true,
     check: async () => {
       const val = await regQuery('HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters', 'SMB1')
-      return { compliant: val === '0', value: val === '1' ? 'Ativado' : 'Desativado' }
+      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+      return { compliant: intVal === 0, value: intVal === 1 ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
       await regSetDword('HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters', 'SMB1', 0)
@@ -277,14 +361,26 @@ const CHECKS: CheckDef[] = [
     expected: 'Ativo',
     requiresAdmin: true,
     check: async () => {
-      const { stdout } = await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', '(Get-Service -Name wuauserv -ErrorAction SilentlyContinue).StartType'], { timeout: 5000, windowsHide: true }).catch(() => ({ stdout: '' }))
+      const { stdout } = await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', '(Get-Service -Name wuauserv -ErrorAction SilentlyContinue).StartType'],
+        { timeout: 5000, windowsHide: true },
+      ).catch(() => ({ stdout: '' }))
       return { compliant: stdout.trim().toLowerCase() !== 'disabled', value: stdout.trim() || 'Desconhecido' }
     },
     apply: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'Set-Service -Name wuauserv -StartupType Manual -ErrorAction Stop'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'Set-Service -Name wuauserv -StartupType Manual -ErrorAction Stop'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
     revert: async () => {
-      await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', 'Set-Service -Name wuauserv -StartupType Disabled -ErrorAction Stop'], { timeout: 10000, windowsHide: true })
+      await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'Set-Service -Name wuauserv -StartupType Disabled -ErrorAction Stop'],
+        { timeout: 10000, windowsHide: true },
+      )
     },
   },
   // ── BitLocker ──
@@ -297,7 +393,15 @@ const CHECKS: CheckDef[] = [
     expected: 'Ativado',
     requiresAdmin: false,
     check: async () => {
-      const { stdout } = await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', '(Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).ProtectionStatus'], { timeout: 5000, windowsHide: true }).catch(() => ({ stdout: '' }))
+      const { stdout } = await execNativeUtf8(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          '(Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).ProtectionStatus',
+        ],
+        { timeout: 5000, windowsHide: true },
+      ).catch(() => ({ stdout: '' }))
       return { compliant: stdout.trim() === '1', value: stdout.trim() === '1' ? 'Ativado' : 'Desativado' }
     },
   },
@@ -311,7 +415,11 @@ const CHECKS: CheckDef[] = [
     expected: 'Ativo',
     requiresAdmin: false,
     check: async () => {
-      const { stdout } = await execNativeUtf8('powershell.exe', ['-NoProfile', '-Command', '@(Get-NetFirewallProfile | Where-Object { $_.Enabled -eq $true }).Count'], { timeout: 5000, windowsHide: true }).catch(() => ({ stdout: '0' }))
+      const { stdout } = await execNativeUtf8(
+        'powershell.exe',
+        ['-NoProfile', '-Command', '@(Get-NetFirewallProfile | Where-Object { $_.Enabled -eq $true }).Count'],
+        { timeout: 5000, windowsHide: true },
+      ).catch(() => ({ stdout: '0' }))
       return { compliant: stdout.trim() === '3', value: `${stdout.trim()}/3 perfis` }
     },
   },
@@ -326,7 +434,8 @@ const CHECKS: CheckDef[] = [
     requiresAdmin: false,
     check: async () => {
       const val = await regQuery('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'EnableLUA')
-      return { compliant: val === '1', value: val === '1' ? 'Ativado' : 'Desativado' }
+      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+      return { compliant: intVal === 1, value: intVal === 1 ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
       await regSetDword('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'EnableLUA', 1)
@@ -344,26 +453,36 @@ const CHECKS: CheckDef[] = [
     expected: 'Nível 2',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQuery('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'ConsentPromptBehaviorAdmin')
-      return { compliant: val === '2', value: val ? `Nível ${val}` : 'Desconhecido' }
+      const val = await regQuery(
+        'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System',
+        'ConsentPromptBehaviorAdmin',
+      )
+      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+      return { compliant: intVal === 2, value: intVal != null ? `Nível ${intVal}` : 'Desconhecido' }
     },
     apply: async () => {
-      await regSetDword('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'ConsentPromptBehaviorAdmin', 2)
+      await regSetDword(
+        'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System',
+        'ConsentPromptBehaviorAdmin',
+        2,
+      )
     },
     revert: async () => {
-      await regSetDword('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'ConsentPromptBehaviorAdmin', 0)
+      await regSetDword(
+        'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System',
+        'ConsentPromptBehaviorAdmin',
+        0,
+      )
     },
   },
 ]
 
-export async function scanCompliance(
-  onProgress?: (data: ComplianceScanProgress) => void,
-): Promise<ComplianceState> {
+export async function scanCompliance(onProgress?: (data: ComplianceScanProgress) => void): Promise<ComplianceState> {
   const checks: ComplianceCheck[] = []
   let compliantCount = 0
 
   for (let i = 0; i < CHECKS.length; i++) {
-    const def = CHECKS[i]
+    const def = CHECKS[i]!
     onProgress?.({ current: i + 1, total: CHECKS.length, currentLabel: def.label, category: def.category })
 
     let compliant = false
@@ -402,13 +521,17 @@ export async function applyComplianceSettings(ids: string[]): Promise<Compliance
 
   for (const id of ids) {
     const def = CHECKS.find((c) => c.id === id)
-    if (!def || !def.apply) { failed++; continue }
+    if (!def || !def.apply) {
+      failed++
+      continue
+    }
     try {
       await def.apply()
       succeeded++
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'Erro desconhecido'
       failed++
-      errors.push({ id: def.id, label: def.label, reason: err?.message ?? 'Erro desconhecido' })
+      errors.push({ id: def.id, label: def.label, reason })
     }
   }
 
@@ -422,13 +545,17 @@ export async function revertComplianceSettings(ids: string[]): Promise<Complianc
 
   for (const id of ids) {
     const def = CHECKS.find((c) => c.id === id)
-    if (!def || !def.revert) { failed++; continue }
+    if (!def || !def.revert) {
+      failed++
+      continue
+    }
     try {
       await def.revert()
       succeeded++
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'Erro desconhecido'
       failed++
-      errors.push({ id: def.id, label: def.label, reason: err?.message ?? 'Erro desconhecido' })
+      errors.push({ id: def.id, label: def.label, reason })
     }
   }
 

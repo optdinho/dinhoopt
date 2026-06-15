@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileMock = vi.fn()
 
@@ -26,19 +26,28 @@ describe('win32 browser', () => {
       await browser.closeBrowsers()
 
       const expectedProcesses = [
-        'chrome.exe', 'msedge.exe', 'brave.exe', 'vivaldi.exe',
-        'opera.exe', 'firefox.exe', 'arc.exe', 'chromium.exe',
-        'thorium.exe', 'supermium.exe', 'helium.exe', 'cromite.exe',
-        'CatsXP.exe', 'librewolf.exe', 'waterfox.exe', 'floorp.exe', 'zen.exe',
+        'chrome.exe',
+        'msedge.exe',
+        'brave.exe',
+        'vivaldi.exe',
+        'opera.exe',
+        'firefox.exe',
+        'arc.exe',
+        'chromium.exe',
+        'thorium.exe',
+        'supermium.exe',
+        'helium.exe',
+        'cromite.exe',
+        'CatsXP.exe',
+        'librewolf.exe',
+        'waterfox.exe',
+        'floorp.exe',
+        'zen.exe',
       ]
 
       expect(execFileMock).toHaveBeenCalledTimes(expectedProcesses.length)
       for (const proc of expectedProcesses) {
-        expect(execFileMock).toHaveBeenCalledWith(
-          'taskkill',
-          ['/IM', proc, '/F'],
-          { timeout: 5000 }
-        )
+        expect(execFileMock).toHaveBeenCalledWith('taskkill', ['/IM', proc, '/F'], { timeout: 5000 })
       }
     })
 

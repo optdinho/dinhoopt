@@ -1,9 +1,9 @@
+import { PageHeader } from '@/components/layout/PageHeader'
+import { usePowerPlansStore } from '@/stores/power-plans-store'
+import type { PowerPlanInfo } from '@shared/types'
+import { AlertCircle, Check, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Zap, Plus, Trash2, Check, RefreshCw, AlertCircle } from 'lucide-react'
-import { usePowerPlansStore } from '@/stores/power-plans-store'
-import { PageHeader } from '@/components/layout/PageHeader'
-import type { PowerPlanInfo } from '@shared/types'
 
 const PLAN_ICONS: Record<string, string> = {
   '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c': '⚡',
@@ -26,7 +26,8 @@ function getPlanType(plan: PowerPlanInfo): string {
 
 export function PowerPlansPage() {
   const { t } = useTranslation('powerPlans')
-  const { plans, loading, activating, error, activeGuid, loadPlans, activatePlan, deletePlan, createPlan, clearError } = usePowerPlansStore()
+  const { plans, loading, activating, error, activeGuid, loadPlans, activatePlan, deletePlan, createPlan, clearError } =
+    usePowerPlansStore()
   const [showCreate, setShowCreate] = useState(false)
   const [newPlanName, setNewPlanName] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -51,10 +52,7 @@ export function PowerPlansPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <PageHeader
-        title={t('pageTitle')}
-        description={t('pageDescription')}
-      />
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       {/* Active plan badge */}
       {activePlan && (
@@ -74,13 +72,16 @@ export function PowerPlansPage() {
         <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="flex-1">{error}</span>
-          <button onClick={clearError} className="text-zinc-500 hover:text-zinc-300">&times;</button>
+          <button type="button" onClick={clearError} className="text-zinc-500 transition-colors hover:text-zinc-300">
+            &times;
+          </button>
         </div>
       )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-2">
         <button
+          type="button"
           onClick={() => loadPlans()}
           disabled={loading}
           className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-700/50 disabled:opacity-50"
@@ -89,6 +90,7 @@ export function PowerPlansPage() {
           {t('refresh')}
         </button>
         <button
+          type="button"
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
         >
@@ -108,9 +110,9 @@ export function PowerPlansPage() {
               placeholder={t('createPlaceholder')}
               className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              autoFocus
             />
             <button
+              type="button"
               onClick={handleCreate}
               disabled={!newPlanName.trim()}
               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
@@ -118,7 +120,11 @@ export function PowerPlansPage() {
               {t('create')}
             </button>
             <button
-              onClick={() => { setShowCreate(false); setNewPlanName('') }}
+              type="button"
+              onClick={() => {
+                setShowCreate(false)
+                setNewPlanName('')
+              }}
               className="text-sm text-zinc-500 hover:text-zinc-300"
             >
               {t('cancel')}
@@ -134,9 +140,7 @@ export function PowerPlansPage() {
           {t('loading')}
         </div>
       ) : plans.length === 0 ? (
-        <div className="flex items-center justify-center py-12 text-zinc-500">
-          {t('noPlans')}
-        </div>
+        <div className="flex items-center justify-center py-12 text-zinc-500">{t('noPlans')}</div>
       ) : (
         <div className="grid gap-3">
           {plans.map((plan) => {
@@ -177,6 +181,7 @@ export function PowerPlansPage() {
                   <div className="flex items-center gap-2">
                     {!isActive && !isDeleting && (
                       <button
+                        type="button"
                         onClick={() => activatePlan(plan.guid)}
                         disabled={activating}
                         className="rounded-lg bg-zinc-700/50 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-emerald-600 hover:text-white disabled:opacity-50"
@@ -186,6 +191,7 @@ export function PowerPlansPage() {
                     )}
                     {!isActive && !isDeleting && (
                       <button
+                        type="button"
                         onClick={() => setDeleteConfirm(plan.guid)}
                         className="rounded-lg p-1.5 text-zinc-600 transition-colors hover:bg-red-500/10 hover:text-red-400"
                         title={t('delete')}
@@ -196,12 +202,14 @@ export function PowerPlansPage() {
                     {isDeleting && (
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => handleDelete(plan.guid)}
                           className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500"
                         >
                           {t('confirmDelete')}
                         </button>
                         <button
+                          type="button"
                           onClick={() => setDeleteConfirm(null)}
                           className="text-xs text-zinc-500 hover:text-zinc-300"
                         >

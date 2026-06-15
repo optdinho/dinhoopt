@@ -11,6 +11,8 @@
   "categoryApplicationsDescription": "App caches and dev tools",
   "categoryGaming": "Gaming",
   "categoryGamingDescription": "Launcher caches, redistributables",
+  "categoryWinSxS": "WinSxS",
+  "categoryWinSxSDescription": "Component store superseded files",
   "categoryRecycleBin": "Recycle Bin",
   "categoryRecycleBinDescription": "Deleted files",
   "categoryShortcuts": "Shortcuts",

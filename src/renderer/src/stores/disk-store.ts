@@ -1,5 +1,5 @@
+import type { DiskNode, DiskRepairProgress, DiskRepairResult, DriveInfo, FileTypeInfo } from '@shared/types'
 import { create } from 'zustand'
-import type { DiskNode, DriveInfo, FileTypeInfo, DiskRepairProgress, DiskRepairResult } from '@shared/types'
 
 interface DiskState {
   drives: DriveInfo[]
@@ -56,10 +56,8 @@ export const useDiskStore = create<DiskState>((set) => ({
   setData: (data) => set({ data }),
   setAnalyzing: (analyzing) => set({ analyzing }),
   setBreadcrumb: (breadcrumb) => set({ breadcrumb }),
-  pushBreadcrumb: (node) =>
-    set((s) => ({ breadcrumb: [...s.breadcrumb, node] })),
-  sliceBreadcrumb: (toIndex) =>
-    set((s) => ({ breadcrumb: s.breadcrumb.slice(0, toIndex + 1) })),
+  pushBreadcrumb: (node) => set((s) => ({ breadcrumb: [...s.breadcrumb, node] })),
+  sliceBreadcrumb: (toIndex) => set((s) => ({ breadcrumb: s.breadcrumb.slice(0, toIndex + 1) })),
   setError: (error) => set({ error }),
   setFileTypes: (fileTypes) => set({ fileTypes }),
   setFileTypesLoading: (fileTypesLoading) => set({ fileTypesLoading }),
@@ -81,5 +79,5 @@ export const useDiskStore = create<DiskState>((set) => ({
       sfcResult: null,
       dismResult: null,
       chkdskResult: null,
-    })
+    }),
 }))

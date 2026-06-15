@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { IPC } from './channels'
 import { CleanerType, ScanStatus } from './enums'
 
@@ -46,11 +46,12 @@ describe('CleanerType enum', () => {
     expect(CleanerType.Shortcut).toBe('shortcut')
     expect(CleanerType.Database).toBe('database')
     expect(CleanerType.Environment).toBe('environment')
+    expect(CleanerType.WinSxS).toBe('winSxS')
   })
 
-  it('has exactly 9 members', () => {
-    const keys = Object.keys(CleanerType).filter((k) => isNaN(Number(k)))
-    expect(keys).toHaveLength(9)
+  it('has exactly 10 members', () => {
+    const keys = Object.keys(CleanerType).filter((k) => Number.isNaN(Number(k)))
+    expect(keys).toHaveLength(10)
   })
 })
 
@@ -64,7 +65,7 @@ describe('ScanStatus enum', () => {
   })
 
   it('has exactly 5 members', () => {
-    const keys = Object.keys(ScanStatus).filter((k) => isNaN(Number(k)))
+    const keys = Object.keys(ScanStatus).filter((k) => Number.isNaN(Number(k)))
     expect(keys).toHaveLength(5)
   })
 })

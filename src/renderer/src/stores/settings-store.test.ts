@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub window.dinho to prevent eager hydration side-effect
 vi.stubGlobal('window', { dinho: undefined })
 
-import { useSettingsStore, refreshSettings } from './settings-store'
+import { refreshSettings, useSettingsStore } from './settings-store'
 
 describe('settings-store', () => {
   beforeEach(() => {
@@ -80,6 +80,7 @@ describe('settings-store', () => {
   it('updateSettings deep-merges cleaner settings', () => {
     useSettingsStore.getState().updateSettings({
       cleaner: { secureDelete: true },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
 
     const { cleaner } = useSettingsStore.getState().settings
@@ -92,6 +93,7 @@ describe('settings-store', () => {
   it('updateSettings deep-merges schedule settings', () => {
     useSettingsStore.getState().updateSettings({
       schedule: { enabled: true, hour: 22 },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
 
     const { schedule } = useSettingsStore.getState().settings

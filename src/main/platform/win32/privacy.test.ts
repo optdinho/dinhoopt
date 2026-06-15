@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 // privacy.ts uses a runtime require('../../ipc/privacy-shield.ipc') that goes
 // through Node's CJS loader. Since Node can't resolve .ts files, we hook
@@ -6,16 +6,17 @@ import { describe, it, expect } from 'vitest'
 // the require cache BEFORE importing the module under test.
 
 const mockPrivacySettings = [
-  { id: 'telemetry', name: 'Telemetry', category: 'Privacy' },
-  { id: 'advertising', name: 'Advertising ID', category: 'Privacy' },
+  { id: 'telemetry', name: 'Telemetry', label: 'Telemetry', category: 'Privacy' },
+  { id: 'advertising', name: 'Advertising ID', label: 'Advertising ID', category: 'Privacy' },
 ]
 
 const MOCK_KEY = '/mock/privacy-shield.ipc'
 
 // Hook Node's module resolution to intercept the require call
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const NativeModule = require('module')
+const NativeModule = require('node:module')
 const origResolve = NativeModule._resolveFilename
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 NativeModule._resolveFilename = function (request: string, parent: any, ...args: any[]) {
   if (request === '../../ipc/privacy-shield.ipc') {
     return MOCK_KEY
@@ -32,6 +33,7 @@ require.cache[MOCK_KEY] = {
   paths: [],
   exports: { PRIVACY_SETTINGS: mockPrivacySettings },
   path: '/mock',
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
 } as any
 
 const { createWin32Privacy } = await import('./privacy')
@@ -48,15 +50,15 @@ describe('win32 privacy', () => {
     it('returns the expected settings entries', () => {
       const settings = privacy.getSettings()
       expect(settings).toHaveLength(2)
-      expect(settings[0].id).toBe('telemetry')
-      expect(settings[1].id).toBe('advertising')
+      expect(settings[0]!.id).toBe('telemetry')
+      expect(settings[1]!.id).toBe('advertising')
     })
 
-    it('each setting has id and name properties', () => {
+    it('each setting has id and label properties', () => {
       const settings = privacy.getSettings()
       for (const s of settings) {
         expect(s.id).toBeTruthy()
-        expect(s.name).toBeTruthy()
+        expect(s.label).toBeTruthy()
       }
     })
   })

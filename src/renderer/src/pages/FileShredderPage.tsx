@@ -1,19 +1,10 @@
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { formatBytes } from '@/lib/utils'
+import { useFileShredderStore } from '@/stores/file-shredder-store'
+import { ExternalLink, File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import {
-  FilePlus2,
-  FolderPlus,
-  X,
-  ExternalLink,
-  ShieldAlert,
-  File,
-  Folder,
-  RotateCcw
-} from 'lucide-react'
-import { formatBytes } from '@/lib/utils'
-import { useFileShredderStore } from '@/stores/file-shredder-store'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -28,6 +19,7 @@ export function FileShredderPage() {
   const { t } = useTranslation('fileShredder')
   const store = useFileShredderStore()
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
 
   useEffect(() => {
     if (!window.dinho?.onShredderProgress) return
@@ -36,10 +28,7 @@ export function FileShredderPage() {
     })
   }, [])
 
-  const totalSize = useMemo(
-    () => store.entries.reduce((sum, e) => sum + e.size, 0),
-    [store.entries]
-  )
+  const totalSize = useMemo(() => store.entries.reduce((sum, e) => sum + e.size, 0), [store.entries])
 
   const handleAddFiles = async () => {
     const entries = await window.dinho?.shredderSelectFiles?.()
@@ -89,27 +78,39 @@ export function FileShredderPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-[24px] font-bold tracking-tight text-white">{t('pageTitle')}</h1>
-        <p className="mt-1.5 text-[13px] animate-fade-in" style={{ color: 'var(--text-muted)' }}>{t('pageDescription')}</p>
+        <p className="mt-1.5 text-[13px] animate-fade-in" style={{ color: 'var(--text-muted)' }}>
+          {t('pageDescription')}
+        </p>
       </div>
 
       {/* Action buttons */}
       {store.status !== 'complete' && (
         <div className="mb-4 flex items-center gap-3">
           <button
+            type="button"
             onClick={handleAddFiles}
             disabled={store.status === 'shredding'}
             className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-colors disabled:opacity-50"
-            style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-medium)' }}
+            style={{
+              background: 'var(--bg-hover)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-medium)',
+            }}
           >
             <FilePlus2 className="h-4 w-4" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
             {t('addFiles')}
           </button>
 
           <button
+            type="button"
             onClick={handleAddFolders}
             disabled={store.status === 'shredding'}
             className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-colors disabled:opacity-50"
-            style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-medium)' }}
+            style={{
+              background: 'var(--bg-hover)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-medium)',
+            }}
           >
             <FolderPlus className="h-4 w-4" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
             {t('addFolders')}
@@ -118,7 +119,8 @@ export function FileShredderPage() {
           {store.entries.length > 0 && store.status === 'idle' && (
             <>
               <button
-                onClick={() => store.clearEntries()}
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
                 className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium text-zinc-500 transition-colors hover:text-zinc-300"
               >
                 <X className="h-3.5 w-3.5" />
@@ -128,12 +130,15 @@ export function FileShredderPage() {
               <div className="flex-1" />
 
               <button
+                type="button"
                 onClick={() => setShowConfirm(true)}
                 className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-colors"
                 style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}
               >
                 <ShieldAlert className="h-4 w-4" strokeWidth={2} />
-                {store.entries.length === 1 ? t('shredButtonSingle') : t('shredButton', { count: store.entries.length })}
+                {store.entries.length === 1
+                  ? t('shredButtonSingle')
+                  : t('shredButton', { count: store.entries.length })}
               </button>
             </>
           )}
@@ -142,6 +147,7 @@ export function FileShredderPage() {
             <>
               <div className="flex-1" />
               <button
+                type="button"
                 onClick={handleCancel}
                 className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium transition-colors"
                 style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
@@ -173,12 +179,19 @@ export function FileShredderPage() {
           </div>
           <p className="text-[13px] font-medium text-white">{t('shredding')}</p>
           {store.progress.currentPath && (
-            <p className="mt-1 truncate text-[12px]" style={{ color: 'var(--text-muted)' }} title={store.progress.currentPath}>
+            <p
+              className="mt-1 truncate text-[12px]"
+              style={{ color: 'var(--text-muted)' }}
+              title={store.progress.currentPath}
+            >
               {store.progress.currentPath}
             </p>
           )}
           <div className="mt-3 flex gap-6">
-            <StatMini label={t('filesShredded')} value={`${store.progress.filesShredded} / ${store.progress.totalFiles}`} />
+            <StatMini
+              label={t('filesShredded')}
+              value={`${store.progress.filesShredded} / ${store.progress.totalFiles}`}
+            />
             <StatMini label={t('bytesShredded')} value={formatBytes(store.progress.bytesShredded)} />
           </div>
         </div>
@@ -187,7 +200,7 @@ export function FileShredderPage() {
       {/* Complete state */}
       {store.status === 'complete' && store.result && (
         <>
-          <div className="mb-5 grid grid-cols-4 gap-3">
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard label={t('filesShredded')} value={store.result.shredded.toLocaleString()} />
             <StatCard label={t('bytesShredded')} value={formatBytes(store.result.bytesShredded)} accent />
             <StatCard label={t('duration')} value={formatDuration(store.result.duration)} />
@@ -196,6 +209,7 @@ export function FileShredderPage() {
 
           <div className="flex items-center justify-center py-10">
             <button
+              type="button"
               onClick={() => store.reset()}
               className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-colors"
               style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
@@ -247,6 +261,7 @@ export function FileShredderPage() {
                   {formatBytes(entry.size)}
                 </span>
                 <button
+                  type="button"
                   onClick={() => window.dinho?.shredderOpenLocation?.(entry.path)}
                   className="shrink-0 text-zinc-600 hover:text-zinc-400"
                   title={t('openLocation')}
@@ -254,6 +269,7 @@ export function FileShredderPage() {
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => store.removeEntry(entry.path)}
                   className="shrink-0 text-zinc-600 hover:text-red-400"
                   title={t('remove')}
@@ -271,7 +287,21 @@ export function FileShredderPage() {
         <EmptyState title={t('emptyTitle')} description={t('emptyDescription')} />
       )}
 
-      {/* Confirm dialog */}
+      {/* Clear confirm dialog */}
+      <ConfirmDialog
+        open={showClearConfirm}
+        onConfirm={() => {
+          setShowClearConfirm(false)
+          store.clearEntries()
+        }}
+        onCancel={() => setShowClearConfirm(false)}
+        title={t('clearConfirmTitle')}
+        description={t('clearConfirmDesc', { count: store.entries.length })}
+        variant="warning"
+        confirmLabel={t('clearAll')}
+      />
+
+      {/* Shred confirm dialog */}
       <ConfirmDialog
         open={showConfirm}
         onConfirm={handleShred}
@@ -279,7 +309,9 @@ export function FileShredderPage() {
         title={t('confirmTitle')}
         description={t('confirmDesc', { count: store.entries.length, size: formatBytes(totalSize) })}
         variant="danger"
-        confirmLabel={store.entries.length === 1 ? t('shredButtonSingle') : t('shredButton', { count: store.entries.length })}
+        confirmLabel={
+          store.entries.length === 1 ? t('shredButtonSingle') : t('shredButton', { count: store.entries.length })
+        }
       />
     </div>
   )
@@ -291,8 +323,12 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
       className="rounded-xl px-4 py-3"
       style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
     >
-      <div className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="mt-1 text-[18px] font-bold" style={{ color: accent ? '#ef4444' : 'var(--text-primary)' }}>{value}</div>
+      <div className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </div>
+      <div className="mt-1 text-[18px] font-bold" style={{ color: accent ? '#ef4444' : 'var(--text-primary)' }}>
+        {value}
+      </div>
     </div>
   )
 }
@@ -300,7 +336,9 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
 function StatMini({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{label}: </span>
+      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        {label}:{' '}
+      </span>
       <span className="text-[12px] font-medium text-white">{value}</span>
     </div>
   )
@@ -311,7 +349,9 @@ function EmptyState({ title, description }: { title: string; description: string
     <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
       <ShieldAlert className="mb-4 h-12 w-12" style={{ color: 'var(--text-faint)' }} strokeWidth={1.2} />
       <h3 className="text-[15px] font-semibold text-white">{title}</h3>
-      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>{description}</p>
+      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        {description}
+      </p>
     </div>
   )
 }

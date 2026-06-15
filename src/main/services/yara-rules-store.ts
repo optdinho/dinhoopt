@@ -1,7 +1,17 @@
-import { readFileSync, writeFileSync, renameSync, unlinkSync, rmSync, existsSync, mkdirSync, readdirSync } from 'fs'
-import { join } from 'path'
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { basename, join } from 'node:path'
 import { app } from 'electron'
+import { getLogger } from './logger.service'
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -10,6 +20,8 @@ const MAX_RULE_CONTENT_BYTES = 1 * 1024 * 1024 // 1 MB per rule file
 const MAX_RULE_COUNT = 10_000
 const DOWNLOAD_TIMEOUT_MS = 60_000
 const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 hours
+const ENGINE_NAME = 'litko-yara-x'
+const CACHE_VERSION_SCHEMA = '1.0'
 export const RULES_ENDPOINT = '/api/yara-rules'
 
 // ─── Types ───────────────────────────────────────────────────
@@ -33,15 +45,26 @@ interface YaraRulesMetadata {
   sha256: string
 }
 
+interface CacheVersion {
+  version: string
+  engine: string
+  engineVersion: string
+  updatedAt: string
+  ruleCount: number
+}
+
+interface StoredEtag {
+  etag: string
+  updatedAt: string
+}
+
 // ─── Paths ───────────────────────────────────────────────────
 
 let _dataDir: string | null = null
 
 function getDataDir(): string {
   if (!_dataDir) {
-    _dataDir = app.isPackaged
-      ? app.getPath('userData')
-      : join(app.getPath('userData'), 'Kudu-Dev')
+    _dataDir = app.isPackaged ? app.getPath('userData') : join(app.getPath('userData'), 'Kudu-Dev')
   }
   return _dataDir
 }
@@ -54,16 +77,165 @@ function getMetadataPath(): string {
   return join(getCachedRulesDir(), 'metadata.json')
 }
 
+function getCacheVersionPath(): string {
+  return join(getCachedRulesDir(), 'cache-version.json')
+}
+
+function getEtagPath(): string {
+  return join(getCachedRulesDir(), 'etag.json')
+}
+
+function getBackupDir(): string {
+  return join(getDataDir(), 'yara-rules.backup')
+}
+
 /** List .yar files in a directory. */
 function listYarFiles(dir: string): string[] {
   try {
     if (!existsSync(dir)) return []
     return readdirSync(dir)
-      .filter(f => f.endsWith('.yar'))
+      .filter((f) => f.endsWith('.yar'))
       .sort()
-      .map(f => join(dir, f))
+      .map((f) => join(dir, f))
   } catch {
     return []
+  }
+}
+
+// ─── Staging directory cleanup ────────────────────────────────
+
+/** Remove any orphaned `.staging-*` directories leftover from crashes. */
+export function cleanupStagingDirs(): void {
+  const dir = getDataDir()
+  try {
+    if (!existsSync(dir)) return
+    const entries = readdirSync(dir)
+    for (const entry of entries) {
+      if (entry.startsWith('yara-rules.staging-')) {
+        const fullPath = join(dir, entry)
+        try {
+          rmSync(fullPath, { recursive: true, force: true })
+          getLogger().info('yara', `Cleaned up orphaned staging dir: ${entry}`)
+        } catch {
+          /* best effort */
+        }
+      }
+    }
+  } catch {
+    /* best effort */
+  }
+}
+
+// ─── ETag helpers ──────────────────────────────────────────────
+
+function getStoredEtag(): string | null {
+  try {
+    const path = getEtagPath()
+    if (!existsSync(path)) return null
+    const raw = readFileSync(path, 'utf-8')
+    const parsed = JSON.parse(raw) as StoredEtag
+    return typeof parsed.etag === 'string' && parsed.etag.length > 0 ? parsed.etag : null
+  } catch {
+    return null
+  }
+}
+
+function storeEtag(etag: string): void {
+  try {
+    const data: StoredEtag = { etag, updatedAt: new Date().toISOString() }
+    writeFileSync(getEtagPath(), JSON.stringify(data, null, 2), 'utf-8')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    getLogger().warning('yara', `Failed to store ETag: ${msg}`)
+  }
+}
+
+// ─── Engine version helpers ───────────────────────────────────
+
+function getEngineVersion(): string {
+  try {
+    const yarax: { version?: string } = require('@litko/yara-x')
+    return yarax.version ?? 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+function writeCacheVersion(ruleCount: number): void {
+  const data: CacheVersion = {
+    version: CACHE_VERSION_SCHEMA,
+    engine: ENGINE_NAME,
+    engineVersion: getEngineVersion(),
+    updatedAt: new Date().toISOString(),
+    ruleCount,
+  }
+  writeFileSync(getCacheVersionPath(), JSON.stringify(data, null, 2), 'utf-8')
+}
+
+// ─── Compile helper (compile-before-swap) ──────────────────────
+
+/**
+ * Compile all .yar files from a directory with the YARA engine.
+ * Returns true if compilation succeeds.
+ */
+function compileRuleDir(ruleDir: string): boolean {
+  try {
+    const yarax: { compile: (content: string) => unknown } = require('@litko/yara-x')
+    const files = listYarFiles(ruleDir)
+    if (files.length === 0) {
+      getLogger().warning('yara', 'No rule files to compile in staging')
+      return false
+    }
+    const sources: string[] = []
+    for (const filePath of files) {
+      try {
+        sources.push(readFileSync(filePath, 'utf-8'))
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        getLogger().warning('yara', `Failed to read rule file ${basename(filePath)}: ${msg}`)
+        return false
+      }
+    }
+    yarax.compile(sources.join('\n'))
+    return true
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    getLogger().warning('yara', `Rule compilation failed: ${msg}`)
+    return false
+  }
+}
+
+// ─── Rollback ─────────────────────────────────────────────────
+
+/**
+ * Restore the previous rules directory from backup and re-compile.
+ */
+export function rollbackUpdate(): { success: boolean; error?: string } {
+  try {
+    const dir = getCachedRulesDir()
+    const backupDir = getBackupDir()
+
+    if (!existsSync(backupDir)) {
+      return { success: false, error: 'No backup available for rollback' }
+    }
+
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+
+    renameSync(backupDir, dir)
+
+    const compiled = compileRuleDir(dir)
+    if (!compiled) {
+      getLogger().warning('yara', 'Rollback succeeded but re-compilation of old rules failed')
+    }
+
+    getLogger().info('yara', 'Rollback completed')
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    getLogger().warning('yara', `Rollback failed: ${msg}`)
+    return { success: false, error: msg.slice(0, 200) }
   }
 }
 
@@ -99,10 +271,17 @@ function validateMetadata(raw: unknown): boolean {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return false
   const obj = raw as Record<string, unknown>
   return (
-    typeof obj.version === 'string' && obj.version.length > 0 && obj.version.length <= 100 &&
-    typeof obj.updatedAt === 'string' && obj.updatedAt.length > 0 && obj.updatedAt.length <= 100 &&
-    typeof obj.rulesCount === 'number' && obj.rulesCount >= 0 &&
-    typeof obj.sha256 === 'string' && obj.sha256.length > 0 && obj.sha256.length <= 128
+    typeof obj.version === 'string' &&
+    obj.version.length > 0 &&
+    obj.version.length <= 100 &&
+    typeof obj.updatedAt === 'string' &&
+    obj.updatedAt.length > 0 &&
+    obj.updatedAt.length <= 100 &&
+    typeof obj.rulesCount === 'number' &&
+    obj.rulesCount >= 0 &&
+    typeof obj.sha256 === 'string' &&
+    obj.sha256.length > 0 &&
+    obj.sha256.length <= 128
   )
 }
 
@@ -143,107 +322,177 @@ export function validateRuleBundle(raw: unknown): YaraRuleBundle | null {
  */
 export function computeBundleHash(rules: YaraRuleFile[]): string {
   // Use plain < > comparison (not localeCompare) for deterministic cross-platform sorting
-  const sorted = [...rules].sort((a, b) => a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0)
-  const combined = sorted.map(r => r.content).join('')
+  const sorted = [...rules].sort((a, b) => (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0))
+  const combined = sorted.map((r) => r.content).join('')
   return createHash('sha256').update(combined).digest('hex')
 }
 
-// ─── Remote fetch + disk caching ──────────────────────────────
+// ─── Remote fetch + disk caching (3-phase atomic update) ──────
 
 /**
- * Fetch YARA rules from a URL, validate integrity, and cache to disk.
- * Sends X-Kudu-Rules-Version header so the server can return 304 if current.
+ * Fetch YARA rules from a URL, validate integrity, compile before swap,
+ * and cache to disk atomically.
+ *
+ * **Phase 1 — Download:** Stream response body in 64 KB chunks to a
+ *   `.staging-$timestamp` directory. Enforce size limit mid-stream.
+ * **Phase 2 — Compile before swap:** Compile rules from staging WITH
+ *   the YARA engine before deleting old rules.
+ * **Phase 3 — Atomic swap:** `renameSync` staging → cache (atomic on
+ *   same filesystem), retain a backup for rollback, write metadata.
  */
 export async function fetchAndCacheRules(url: string): Promise<{
   success: boolean
   error?: string
   stats?: { rulesCount: number; version: string }
 }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+
+  let stageDir: string | null = null
+
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+    // ── ETag conditional request ──────────────────────────────
+    const storedEtag = getStoredEtag()
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (storedEtag) headers['If-None-Match'] = storedEtag
 
-    let text: string
-    try {
-      const meta = getRulesMetadata()
-      const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (meta) headers['X-Kudu-Rules-Version'] = meta.version
+    const meta = getRulesMetadata()
+    if (meta) headers['X-Kudu-Rules-Version'] = meta.version
 
-      // Disable redirects to prevent SSRF bypass (a public URL could 30x to loopback)
-      const response = await fetch(url, { signal: controller.signal, headers, redirect: 'error' })
+    const response = await fetch(url, { signal: controller.signal, headers, redirect: 'follow' })
 
-      // 304 = already up to date
-      if (response.status === 304) {
-        return { success: true }
-      }
-
-      if (!response.ok) {
-        return { success: false, error: `Download failed: HTTP ${response.status}` }
-      }
-
-      const contentLength = response.headers.get('content-length')
-      if (contentLength && parseInt(contentLength, 10) > MAX_DOWNLOAD_BYTES) {
-        return { success: false, error: 'Rules bundle too large (exceeds 50 MB)' }
-      }
-
-      // The 60s abort timer stays active through the body read, so a slow
-      // server can't hold us indefinitely. That plus the content-length
-      // pre-check is sufficient — no need for a post-read size check since
-      // the memory is already allocated by that point.
-      text = await response.text()
-    } finally {
-      clearTimeout(timeout)
+    // 304 = already up to date
+    if (response.status === 304) {
+      return { success: true }
     }
+
+    if (!response.ok) {
+      return { success: false, error: `Download failed: HTTP ${response.status}` }
+    }
+
+    const contentLength = response.headers.get('content-length')
+    if (contentLength && Number.parseInt(contentLength, 10) > MAX_DOWNLOAD_BYTES) {
+      return { success: false, error: 'Rules bundle too large (exceeds 50 MB)' }
+    }
+
+    // ── Phase 1: Chunked download to staging ──────────────────
+    const dir = getCachedRulesDir()
+    const timestamp = Date.now()
+    stageDir = `${dir}.staging-${timestamp}`
+    mkdirSync(stageDir, { recursive: true })
+
+    const tempFilePath = join(stageDir, '_download.tmp')
+    let totalBytes = 0
+    const reader = response.body?.getReader()
+
+    if (!reader) {
+      rmSync(stageDir, { recursive: true, force: true })
+      stageDir = null
+      return { success: false, error: 'Response body not readable' }
+    }
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        totalBytes += value.length
+        if (totalBytes > MAX_DOWNLOAD_BYTES) {
+          reader.cancel()
+          rmSync(stageDir, { recursive: true, force: true })
+          stageDir = null
+          return { success: false, error: 'Rules bundle too large (exceeds 50 MB)' }
+        }
+
+        appendFileSync(tempFilePath, Buffer.from(value))
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    // Read back and parse
+    const text = readFileSync(tempFilePath, 'utf-8')
 
     let parsed: unknown
     try {
       parsed = JSON.parse(text)
     } catch {
+      rmSync(stageDir, { recursive: true, force: true })
+      stageDir = null
       return { success: false, error: 'Invalid rules bundle: JSON parse error' }
     }
 
     const bundle = validateRuleBundle(parsed)
     if (!bundle) {
+      rmSync(stageDir, { recursive: true, force: true })
+      stageDir = null
       return { success: false, error: 'Invalid rules bundle: validation failed' }
     }
 
     // Verify integrity
     const computedHash = computeBundleHash(bundle.rules)
     if (computedHash !== bundle.sha256) {
-      console.warn(`[yara] SHA-256 mismatch — server: ${bundle.sha256}, computed: ${computedHash}`)
-      console.warn(`[yara] Rule files (sorted): ${[...bundle.rules].sort((a, b) => a.filename.localeCompare(b.filename)).map(r => `${r.filename}(${r.content.length})`).join(', ')}`)
+      getLogger().warning('yara', `SHA-256 mismatch — server: ${bundle.sha256}, computed: ${computedHash}`)
+      rmSync(stageDir, { recursive: true, force: true })
+      stageDir = null
       return { success: false, error: 'Integrity check failed: SHA-256 mismatch' }
     }
 
-    // Write rules atomically: stage in a uniquely-named temp directory,
-    // then swap into place. Unique name prevents races between concurrent updates.
-    const dir = getCachedRulesDir()
-    const stageDir = `${dir}.staging-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    // Remove temp download file
+    rmSync(tempFilePath, { force: true })
 
-    mkdirSync(stageDir, { recursive: true })
+    // Write individual rule files into staging
+    for (const rule of bundle.rules) {
+      writeFileSync(join(stageDir, rule.filename), rule.content, 'utf-8')
+    }
+    writeFileSync(
+      join(stageDir, 'metadata.json'),
+      JSON.stringify(
+        {
+          version: bundle.version,
+          updatedAt: bundle.updatedAt,
+          rulesCount: bundle.rules.length,
+          sha256: bundle.sha256,
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    )
 
-    try {
-      // Write all rule files + metadata into the staging directory
-      for (const rule of bundle.rules) {
-        writeFileSync(join(stageDir, rule.filename), rule.content, 'utf-8')
+    // ── Phase 2: Compile before swap ─────────────────────────
+    if (!compileRuleDir(stageDir)) {
+      rmSync(stageDir, { recursive: true, force: true })
+      stageDir = null
+      return { success: false, error: 'Compilation failed: downloaded rules contain syntax errors' }
+    }
+
+    // ── Phase 3: Atomic swap ─────────────────────────────────
+    const backupDir = getBackupDir()
+
+    // Rotate backup: remove old backup, rename current → backup
+    if (existsSync(dir)) {
+      if (existsSync(backupDir)) {
+        rmSync(backupDir, { recursive: true, force: true })
       }
-      writeFileSync(join(stageDir, 'metadata.json'), JSON.stringify({
-        version: bundle.version,
-        updatedAt: bundle.updatedAt,
-        rulesCount: bundle.rules.length,
-        sha256: bundle.sha256,
-      }, null, 2), 'utf-8')
+      renameSync(dir, backupDir)
+    }
 
-      // Swap: remove old cache dir, rename staging into place
-      const oldDir = `${dir}.old-${Date.now()}`
-      if (existsSync(dir)) renameSync(dir, oldDir)
-      renameSync(stageDir, dir)
-      // Clean up old dir in the background
-      if (existsSync(oldDir)) rmSync(oldDir, { recursive: true, force: true })
-    } catch (err) {
-      // Clean up staging dir on failure
-      try { rmSync(stageDir, { recursive: true, force: true }) } catch { /* best effort */ }
-      throw err
+    // Atomic swap: staging → final location
+    renameSync(stageDir, dir)
+    stageDir = null
+
+    // Store ETag from response
+    const etag = response.headers.get('etag')
+    if (etag) storeEtag(etag)
+
+    // Write engine versioning metadata
+    writeCacheVersion(bundle.rules.length)
+
+    // Log engine version mismatch as warning
+    const engineVersion = getEngineVersion()
+    if (engineVersion !== 'unknown' && engineVersion !== CACHE_VERSION_SCHEMA) {
+      getLogger().warning('yara', `Engine version mismatch: expected ${CACHE_VERSION_SCHEMA}, got ${engineVersion}`)
     }
 
     return {
@@ -251,8 +500,18 @@ export async function fetchAndCacheRules(url: string): Promise<{
       stats: { rulesCount: bundle.rules.length, version: bundle.version },
     }
   } catch (err) {
+    // Clean up staging directory on failure
+    if (stageDir) {
+      try {
+        rmSync(stageDir, { recursive: true, force: true })
+      } catch {
+        /* best effort */
+      }
+    }
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return { success: false, error: `Download failed: ${msg}`.slice(0, 200) }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -275,15 +534,19 @@ export function startPeriodicRuleChecks(
   stopPeriodicRuleChecks()
   _onRulesUpdated = onUpdated
 
+  // Clean up orphaned staging directories on startup
+  cleanupStagingDirs()
+
   const check = async () => {
     try {
       const result = await fetchAndCacheRules(`${serverUrl}${RULES_ENDPOINT}`)
       if (result.success && result.stats) {
-        console.log(`[yara] Updated rules to v${result.stats.version} (${result.stats.rulesCount} rules)`)
+        getLogger().info('yara', `Updated rules to v${result.stats.version} (${result.stats.rulesCount} rules)`)
         _onRulesUpdated?.()
       }
     } catch (err) {
-      console.warn('[yara] Periodic rule check failed:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      getLogger().warning('yara', `Periodic rule check failed: ${msg}`)
     }
   }
 

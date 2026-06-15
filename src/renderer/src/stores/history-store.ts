@@ -1,5 +1,5 @@
-import { create } from 'zustand'
 import type { ScanHistoryEntry } from '@shared/types'
+import { create } from 'zustand'
 
 interface HistoryState {
   entries: ScanHistoryEntry[]
@@ -9,7 +9,7 @@ interface HistoryState {
   clear: () => Promise<void>
 }
 
-export const useHistoryStore = create<HistoryState>((set, get) => ({
+export const useHistoryStore = create<HistoryState>((set, _get) => ({
   entries: [],
   loaded: false,
 
@@ -38,13 +38,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     } catch {
       // Silent fail
     }
-  }
+  },
 }))
 
-// Auto-refresh when main process signals a new entry was added.
-// Guard against duplicate listeners on HMR reload.
 let _historyListenerRegistered = false
-if (!_historyListenerRegistered) {
+if (typeof window !== 'undefined' && window.dinho && !_historyListenerRegistered) {
   _historyListenerRegistered = true
   window.dinho.onHistoryChanged(() => {
     useHistoryStore.getState().load()

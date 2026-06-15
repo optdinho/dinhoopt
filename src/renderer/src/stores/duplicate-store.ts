@@ -1,10 +1,10 @@
-import { create } from 'zustand'
 import type {
-  DuplicateScanResult,
-  DuplicateScanProgress,
   DuplicateDeleteMode,
-  DuplicateDeleteResult
+  DuplicateDeleteResult,
+  DuplicateScanProgress,
+  DuplicateScanResult,
 } from '@shared/types'
+import { create } from 'zustand'
 
 interface DuplicateState {
   // Config
@@ -86,7 +86,7 @@ export const useDuplicateStore = create<DuplicateState>((set, get) => ({
       // Keep the file with the shortest path, select the rest
       const sorted = [...group.files].sort((a, b) => a.path.length - b.path.length)
       for (let i = 1; i < sorted.length; i++) {
-        selected.add(sorted[i].path)
+        selected.add(sorted[i]!.path)
       }
     }
     set({ selectedPaths: selected })
@@ -102,7 +102,7 @@ export const useDuplicateStore = create<DuplicateState>((set, get) => ({
         return {
           ...g,
           files: remaining,
-          reclaimableSpace: remaining.length >= 2 ? g.fileSize * (remaining.length - 1) : 0
+          reclaimableSpace: remaining.length >= 2 ? g.fileSize * (remaining.length - 1) : 0,
         }
       })
       .filter((g) => g.files.length >= 2)
@@ -115,7 +115,7 @@ export const useDuplicateStore = create<DuplicateState>((set, get) => ({
     }
     set({
       result: { ...result, groups, totalDuplicates, totalReclaimable },
-      selectedPaths: nextSelected
+      selectedPaths: nextSelected,
     })
   },
   reset: () =>
@@ -124,6 +124,6 @@ export const useDuplicateStore = create<DuplicateState>((set, get) => ({
       progress: null,
       result: null,
       selectedPaths: new Set(),
-      deleteResult: null
-    })
+      deleteResult: null,
+    }),
 }))

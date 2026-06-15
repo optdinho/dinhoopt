@@ -1,19 +1,20 @@
-import path from 'path'
+import path from 'node:path'
 const { join } = path.win32
-import { homedir } from 'os'
-import type { PlatformPaths, UninstallLeftoverDir } from '../types'
+import fs from 'node:fs'
+import { homedir } from 'node:os'
 import { buildCleanerPaths } from '../../rules/loader'
 import type { RulesJsonSet } from '../../rules/loader'
+import type { PlatformPaths, UninstallLeftoverDir } from '../types'
 
-// JSON rule files — statically imported, bundled by Vite
-import systemJson from '../../../../rules/win32/system.json'
-import browsersJson from '../../../../rules/win32/browsers.json'
 import appsJson from '../../../../rules/win32/apps.json'
+import browsersJson from '../../../../rules/win32/browsers.json'
+import databasesJson from '../../../../rules/win32/databases.json'
 import gamingJson from '../../../../rules/win32/gaming.json'
 import gpuCacheJson from '../../../../rules/win32/gpu-cache.json'
-import steamJson from '../../../../rules/win32/steam.json'
-import databasesJson from '../../../../rules/win32/databases.json'
 import miscJson from '../../../../rules/win32/misc.json'
+import steamJson from '../../../../rules/win32/steam.json'
+// JSON rule files — statically imported, bundled by Vite
+import systemJson from '../../../../rules/win32/system.json'
 
 const HOME = homedir()
 const LOCALAPPDATA = process.env.LOCALAPPDATA || join(HOME, 'AppData', 'Local')
@@ -35,6 +36,35 @@ const rulesJson: RulesJsonSet = {
 
 const cleanerPaths = buildCleanerPaths(rulesJson, 'win32')
 
+export function getAllUserProfiles(): string[] {
+  const usersDir = 'C:\\Users'
+  try {
+    return fs
+      .readdirSync(usersDir)
+      .filter((name) => {
+        const skip = ['Public', 'Default', 'Default User', 'All Users', 'desktop.ini']
+        if (skip.includes(name)) return false
+        const fullPath = join(usersDir, name)
+        return fs.statSync(fullPath).isDirectory()
+      })
+      .map((name) => join(usersDir, name))
+  } catch {
+    return [process.env.USERPROFILE || HOME]
+  }
+}
+
+export function getMalwareScanDirs(userProfile?: string): string[] {
+  const baseDir = userProfile || process.env.USERPROFILE || HOME
+  return [
+    join(baseDir, 'AppData', 'Local', 'Temp'),
+    join(baseDir, 'AppData', 'Local', 'Microsoft', 'Windows', 'Temporary Internet Files'),
+    join(baseDir, 'AppData', 'LocalLow'),
+    join(baseDir, 'AppData', 'Roaming'),
+    join(baseDir, 'Downloads'),
+    join(baseDir, 'Desktop'),
+  ]
+}
+
 export function createWin32Paths(): PlatformPaths {
   return {
     ...cleanerPaths,
@@ -43,22 +73,23 @@ export function createWin32Paths(): PlatformPaths {
       const userProfile = process.env.USERPROFILE || HOME
       return [
         // High-risk: common malware drop locations — deep scan, high file limits
-        { path: join(userProfile, 'Downloads'),  maxDepth: 6, maxFiles: 10000 },
-        { path: join(userProfile, 'Desktop'),    maxDepth: 4, maxFiles: 5000 },
-        { path: join(userProfile, 'Documents'),  maxDepth: 4, maxFiles: 5000 },
-        { path: userProfile,                     maxDepth: 1, maxFiles: 500 },
-        { path: join(LOCALAPPDATA, 'Temp'),      maxDepth: 4, maxFiles: 10000 },
-        { path: 'C:\\Windows\\Temp',             maxDepth: 3, maxFiles: 5000 },
-        { path: 'C:\\Users\\Public',             maxDepth: 4, maxFiles: 3000 },
+        { path: join(userProfile, 'Downloads'), maxDepth: 6, maxFiles: 10000 },
+        { path: join(userProfile, 'Desktop'), maxDepth: 4, maxFiles: 5000 },
+        { path: join(userProfile, 'Documents'), maxDepth: 4, maxFiles: 5000 },
+        { path: userProfile, maxDepth: 1, maxFiles: 500 },
+        { path: join(LOCALAPPDATA, 'Temp'), maxDepth: 4, maxFiles: 10000 },
+        { path: join(HOME, 'AppData', 'LocalLow'), maxDepth: 4, maxFiles: 5000 },
+        { path: 'C:\\Windows\\Temp', maxDepth: 3, maxFiles: 5000 },
+        { path: 'C:\\Users\\Public', maxDepth: 4, maxFiles: 3000 },
 
         // Medium-risk: persistence & dropper locations — moderate scan
-        { path: APPDATA,                         maxDepth: 5, maxFiles: 8000 },
-        { path: LOCALAPPDATA,                    maxDepth: 4, maxFiles: 8000 },
-        { path: PROGRAMDATA,                     maxDepth: 3, maxFiles: 5000 },
+        { path: APPDATA, maxDepth: 5, maxFiles: 8000 },
+        { path: LOCALAPPDATA, maxDepth: 4, maxFiles: 8000 },
+        { path: PROGRAMDATA, maxDepth: 3, maxFiles: 5000 },
 
         // Lower-risk: installed programs — shallow scan for trojaned executables
-        { path: PROGRAMFILES,                    maxDepth: 2, maxFiles: 3000 },
-        { path: PROGRAMFILES_X86,                maxDepth: 2, maxFiles: 3000 },
+        { path: PROGRAMFILES, maxDepth: 2, maxFiles: 3000 },
+        { path: PROGRAMFILES_X86, maxDepth: 2, maxFiles: 3000 },
       ]
     },
 

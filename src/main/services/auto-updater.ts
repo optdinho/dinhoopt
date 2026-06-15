@@ -1,8 +1,9 @@
-import { app, BrowserWindow } from 'electron'
-import { autoUpdater } from 'electron-updater'
 import { IPC } from '@shared/channels'
-import { getSettings } from './settings-store'
 import type { UpdateStatus } from '@shared/types'
+import { BrowserWindow, app } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import { getLogger } from './logger.service'
+import { getSettings } from './settings-store'
 
 let status: UpdateStatus = { state: 'idle' }
 let daemonMode = false
@@ -27,7 +28,9 @@ function broadcast(s: UpdateStatus): void {
     // the actual renderer crash.
     try {
       win.webContents.send(IPC.UPDATER_STATUS, s)
-    } catch { /* renderer gone — nothing to deliver to */ }
+    } catch {
+      /* renderer gone — nothing to deliver to */
+    }
   }
 }
 
@@ -41,7 +44,7 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
   // On Linux, electron-updater only supports AppImage.
   // Skip if not running as an AppImage to avoid silent failures.
   if (process.platform === 'linux' && !process.env.APPIMAGE) {
-    console.log('Auto-updater: skipping on Linux (not running as AppImage)')
+    getLogger().info('auto-updater', 'Skipping on Linux (not running as AppImage)')
     return
   }
 
@@ -77,7 +80,7 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
     // GUI mode: auto-restart if the user opted in
     const current = getSettings()
     if (current.autoRestart) {
-      console.log(`Auto-updater: auto-restart enabled, installing v${info.version} and restarting...`)
+      getLogger().info('auto-updater', `Auto-restart enabled, installing v${info.version} and restarting...`)
       autoUpdater.quitAndInstall(true, true)
     }
   })
@@ -88,7 +91,7 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
 
   // Check on startup
   autoUpdater.checkForUpdates().catch((err) => {
-    console.error('Auto-updater check failed:', err?.message || err)
+    getLogger().error('auto-updater', `Check failed: ${err?.message || err}`)
   })
 
   // Periodic background checks
@@ -103,7 +106,7 @@ function startPeriodicChecks(intervalHours: number): void {
     const settings = getSettings()
     autoUpdater.autoDownload = daemonMode || settings.autoUpdate
     autoUpdater.checkForUpdates().catch((err) => {
-      console.error('Auto-updater periodic check failed:', err?.message || err)
+      getLogger().error('auto-updater', `Periodic check failed: ${err?.message || err}`)
     })
   }, ms)
 }

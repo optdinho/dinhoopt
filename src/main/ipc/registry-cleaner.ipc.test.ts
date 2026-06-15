@@ -1,598 +1,552 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// ── Test the pure helper functions from registry-cleaner.ipc.ts ──
-// These are replicated here to avoid importing the Electron-dependent module.
+// ── Mocks ──
 
-// ── parseCSVLine (replica) ──
+const mockHandle = vi.fn()
 
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = []
-  let i = 0
-  while (i < line.length) {
-    if (line[i] === '"') {
-      i++ // skip opening quote
-      let field = ''
-      while (i < line.length) {
-        if (line[i] === '"') {
-          if (i + 1 < line.length && line[i + 1] === '"') {
-            field += '"'
-            i += 2
-          } else {
-            i++ // skip closing quote
-            break
-          }
-        } else {
-          field += line[i]
-          i++
-        }
+vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn((...args: unknown[]) => mockHandle(...args)) },
+}))
+
+const mockLogger = { info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() }
+vi.mock('../services/logger.service', () => ({
+  getLogger: () => mockLogger,
+}))
+
+const mockScanRegistry = vi.fn()
+const mockFixRegistryEntries = vi.fn()
+const mockCollectBackupTargets = vi.fn()
+vi.mock('../services/registry-cleaner.service', () => ({
+  scanRegistry: (...args: unknown[]) => mockScanRegistry(...args),
+  fixRegistryEntries: (...args: unknown[]) => mockFixRegistryEntries(...args),
+  collectBackupTargets: (...args: unknown[]) => mockCollectBackupTargets(...args),
+}))
+
+const mockValidateStringArray = vi.fn()
+vi.mock('../services/ipc-validation', () => ({
+  validateStringArray: (...args: unknown[]) => mockValidateStringArray(...args),
+}))
+
+const mockGetSettings = vi.fn()
+const mockUpdateRegistryIgnoredTweaks = vi.fn()
+vi.mock('../services/settings-store', () => ({
+  getSettings: (...args: unknown[]) => mockGetSettings(...args),
+  updateRegistryIgnoredTweaks: (...args: unknown[]) => mockUpdateRegistryIgnoredTweaks(...args),
+}))
+
+vi.mock('@shared/registry-tweaks', () => ({
+  applyIgnoredTweaks: (entries: unknown[]) => entries as [],
+}))
+
+import { registerRegistryCleanerIpc, scanRegistry, fixRegistryEntries, collectBackupTargets } from './registry-cleaner.ipc'
+import { IPC } from '@shared/channels'
+import type { RegistryEntry } from '@shared/types'
+
+// ── Helpers ──
+
+function getHandler(channel: string): (...args: unknown[]) => unknown {
+  const call = mockHandle.mock.calls.find((c) => c[0] === channel)
+  if (!call) throw new Error(`No handler registered for ${channel}`)
+  return call[1] as (...args: unknown[]) => unknown
+}
+
+function mockWindow() {
+  return { isDestroyed: () => false, webContents: { send: vi.fn() } }
+}
+
+function makeEntry(id: string, overrides?: Partial<RegistryEntry>): RegistryEntry {
+  return {
+    id,
+    keyPath: `HKLM\\SOFTWARE\\Test\\${id}`,
+    valueName: null,
+    type: 'invalid',
+    risk: 'low',
+    selected: false,
+    title: `Test ${id}`,
+    description: `Desc ${id}`,
+    ...overrides,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// registerRegistryCleanerIpc
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('registerRegistryCleanerIpc', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetSettings.mockReturnValue({ registryIgnoredTweaks: [] })
+  })
+
+  it('registers all five IPC handlers', () => {
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const channels = mockHandle.mock.calls.map((c) => c[0])
+    expect(channels).toHaveLength(5)
+    expect(channels).toContain(IPC.REGISTRY_SCAN)
+    expect(channels).toContain(IPC.REGISTRY_FIX)
+    expect(channels).toContain(IPC.REGISTRY_SET_TWEAK_IGNORED)
+    expect(channels).toContain(IPC.REGISTRY_SCAN_CANCEL)
+    expect(channels).toContain(IPC.REGISTRY_FIX_CANCEL)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC.REGISTRY_SCAN
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('IPC.REGISTRY_SCAN', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetSettings.mockReturnValue({ registryIgnoredTweaks: [] })
+  })
+
+  it('returns empty array when not on Windows', async () => {
+    const origDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    try {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+      registerRegistryCleanerIpc(() => mockWindow() as never)
+      const handler = getHandler(IPC.REGISTRY_SCAN)
+      const result = await handler()
+      expect(result).toEqual([])
+      expect(mockLogger.warning).toHaveBeenCalledWith('registry-cleaner', 'Registry scan skipped — not Windows')
+    } finally {
+      if (origDescriptor) {
+        Object.defineProperty(process, 'platform', origDescriptor)
       }
-      fields.push(field)
-      if (i < line.length && line[i] === ',') i++ // skip comma
-    } else if (line[i] === ',') {
-      fields.push('')
-      i++
-    } else {
-      const next = line.indexOf(',', i)
-      if (next === -1) {
-        fields.push(line.substring(i))
-        break
-      }
-      fields.push(line.substring(i, next))
-      i = next + 1
     }
-  }
-  return fields
-}
-
-describe('parseCSVLine', () => {
-  it('parses simple comma-separated values', () => {
-    expect(parseCSVLine('a,b,c')).toEqual(['a', 'b', 'c'])
-  })
-
-  it('parses quoted fields with commas inside', () => {
-    expect(parseCSVLine('"hello, world",foo,bar')).toEqual(['hello, world', 'foo', 'bar'])
-  })
-
-  it('parses escaped double quotes inside quoted fields', () => {
-    expect(parseCSVLine('"say ""hello""",done')).toEqual(['say "hello"', 'done'])
-  })
-
-  it('handles empty fields', () => {
-    expect(parseCSVLine('a,,c')).toEqual(['a', '', 'c'])
-  })
-
-  it('handles a single field', () => {
-    expect(parseCSVLine('only')).toEqual(['only'])
-  })
-
-  it('handles empty string', () => {
-    expect(parseCSVLine('')).toEqual([])
-  })
-
-  it('handles trailing comma (no trailing empty field produced)', () => {
-    // The parser stops when it hits end-of-string after consuming the comma,
-    // so a trailing comma does NOT produce an extra empty field.
-    expect(parseCSVLine('a,b,')).toEqual(['a', 'b'])
-  })
-
-  it('handles quoted field at end of line', () => {
-    expect(parseCSVLine('a,"b c"')).toEqual(['a', 'b c'])
-  })
-
-  it('handles mixed quoted and unquoted fields', () => {
-    expect(parseCSVLine('"HOST",\\Task,Next,"C:\\path\\to file.exe"')).toEqual([
-      'HOST', '\\Task', 'Next', 'C:\\path\\to file.exe'
-    ])
-  })
-})
-
-// ── SAFE_TASK_PATH_RE and splitTaskPath (replica) ──
-
-const SAFE_TASK_PATH_RE = /^[\\A-Za-z0-9\s\-._()]+$/
-
-function splitTaskPath(fullPath: string): { path: string; name: string } | null {
-  const normalized = fullPath.replace(/\//g, '\\')
-  if (!SAFE_TASK_PATH_RE.test(normalized)) return null
-  const lastSlash = normalized.lastIndexOf('\\')
-  if (lastSlash >= 0) {
-    return {
-      path: normalized.substring(0, lastSlash + 1),
-      name: normalized.substring(lastSlash + 1)
-    }
-  }
-  return { path: '\\', name: normalized }
-}
-
-describe('splitTaskPath', () => {
-  it('splits a normal task path', () => {
-    expect(splitTaskPath('\\Microsoft\\Windows\\Task1')).toEqual({
-      path: '\\Microsoft\\Windows\\',
-      name: 'Task1'
-    })
-  })
-
-  it('handles a task with no folder', () => {
-    expect(splitTaskPath('SimpleTask')).toEqual({
-      path: '\\',
-      name: 'SimpleTask'
-    })
-  })
-
-  it('normalizes forward slashes to backslashes', () => {
-    expect(splitTaskPath('/Folder/SubTask')).toEqual({
-      path: '\\Folder\\',
-      name: 'SubTask'
-    })
-  })
-
-  it('rejects paths with shell injection characters', () => {
-    expect(splitTaskPath('\\Task; rm -rf /')).toBe(null)
-  })
-
-  it('rejects paths with pipe characters', () => {
-    expect(splitTaskPath('\\Task|evil')).toBe(null)
-  })
-
-  it('rejects paths with backtick', () => {
-    expect(splitTaskPath('\\Task`cmd`')).toBe(null)
-  })
-
-  it('rejects paths with ampersand', () => {
-    expect(splitTaskPath('\\Task&evil')).toBe(null)
-  })
-
-  it('accepts paths with spaces, dots, hyphens, underscores and parens', () => {
-    expect(splitTaskPath('\\Folder Name\\My Task (v2.0)')).toEqual({
-      path: '\\Folder Name\\',
-      name: 'My Task (v2.0)'
-    })
-  })
-
-  it('rejects path with dollar sign', () => {
-    expect(splitTaskPath('\\$Task')).toBe(null)
-  })
-})
-
-// ── expandEnvVars (replica) ──
-
-function expandEnvVars(path: string): string {
-  return path
-    .replace(/%SystemRoot%/gi, process.env.WINDIR || 'C:\\Windows')
-    .replace(/%ProgramFiles%/gi, process.env.PROGRAMFILES || 'C:\\Program Files')
-    .replace(/%ProgramFiles\(x86\)%/gi, process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)')
-    .replace(/%ProgramData%/gi, process.env.PROGRAMDATA || 'C:\\ProgramData')
-    .replace(/%CommonProgramFiles%/gi, process.env.COMMONPROGRAMFILES || 'C:\\Program Files\\Common Files')
-    .replace(/%USERPROFILE%/gi, process.env.USERPROFILE || '')
-    .replace(/%LOCALAPPDATA%/gi, process.env.LOCALAPPDATA || '')
-    .replace(/%APPDATA%/gi, process.env.APPDATA || '')
-}
-
-describe('expandEnvVars', () => {
-  it('expands %SystemRoot%', () => {
-    const result = expandEnvVars('%SystemRoot%\\System32\\cmd.exe')
-    expect(result).toMatch(/\\System32\\cmd\.exe$/)
-    expect(result).not.toContain('%')
-  })
-
-  it('expands %ProgramFiles%', () => {
-    const result = expandEnvVars('%ProgramFiles%\\App\\app.exe')
-    expect(result).toMatch(/\\App\\app\.exe$/)
-    expect(result).not.toContain('%ProgramFiles%')
-  })
-
-  it('expands %ProgramFiles(x86)%', () => {
-    const result = expandEnvVars('%ProgramFiles(x86)%\\App\\app.exe')
-    expect(result).not.toContain('%ProgramFiles(x86)%')
-  })
-
-  it('expands %ProgramData%', () => {
-    const result = expandEnvVars('%ProgramData%\\App\\config')
-    expect(result).not.toContain('%ProgramData%')
-  })
-
-  it('is case-insensitive', () => {
-    const result = expandEnvVars('%systemroot%\\foo')
-    expect(result).not.toContain('%systemroot%')
-  })
-
-  it('leaves unknown variables untouched', () => {
-    expect(expandEnvVars('%UNKNOWN_VAR%\\foo')).toBe('%UNKNOWN_VAR%\\foo')
-  })
-
-  it('handles multiple variables in one path', () => {
-    const result = expandEnvVars('%SystemRoot%\\%ProgramData%')
-    expect(result).not.toContain('%SystemRoot%')
-    expect(result).not.toContain('%ProgramData%')
-  })
-
-  it('returns unchanged path when no variables present', () => {
-    expect(expandEnvVars('C:\\Windows\\foo.exe')).toBe('C:\\Windows\\foo.exe')
-  })
-})
-
-// ── extractExePath (replica) ──
-// Simplified replica without filesystem checks (statSync). Tests the parsing logic only.
-
-function extractExePathParsing(raw: string): string | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  // Case 1: quoted path
-  const quotedMatch = trimmed.match(/^"([^"]+)"/)
-  if (quotedMatch) return quotedMatch[1].trim()
-  // Case 2: no spaces
-  if (!trimmed.includes(' ')) return trimmed
-  // Case 3: try exe extension match (since we can't do statSync in tests)
-  const exeExtRe = /\.(exe|dll|sys|cmd|bat|com|msc|cpl|scr)$/i
-  const splitPoints: number[] = []
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === ' ') splitPoints.push(i)
-  }
-  splitPoints.push(trimmed.length)
-  for (let i = splitPoints.length - 1; i >= 0; i--) {
-    const candidate = trimmed.substring(0, splitPoints[i])
-    if (exeExtRe.test(candidate)) return candidate
-  }
-  // Fallback: first token
-  return trimmed.substring(0, splitPoints[0])
-}
-
-describe('extractExePath parsing', () => {
-  it('returns null for empty string', () => {
-    expect(extractExePathParsing('')).toBe(null)
-    expect(extractExePathParsing('   ')).toBe(null)
-  })
-
-  it('extracts path from quoted string', () => {
-    expect(extractExePathParsing('"C:\\Program Files\\App\\svc.exe" --config foo.toml'))
-      .toBe('C:\\Program Files\\App\\svc.exe')
-  })
-
-  it('returns full string when no spaces', () => {
-    expect(extractExePathParsing('C:\\App\\svc.exe')).toBe('C:\\App\\svc.exe')
-  })
-
-  it('finds exe extension in unquoted string with arguments', () => {
-    expect(extractExePathParsing('C:\\Program Files\\App\\svc.exe -k netsvcs'))
-      .toBe('C:\\Program Files\\App\\svc.exe')
-  })
-
-  it('handles rundll32 style commands', () => {
-    const result = extractExePathParsing('rundll32.exe helper.dll,Entry')
-    expect(result).toBe('rundll32.exe')
-  })
-
-  it('finds .dll extension paths', () => {
-    expect(extractExePathParsing('C:\\path\\to\\helper.dll arg1'))
-      .toBe('C:\\path\\to\\helper.dll')
-  })
-
-  it('finds .sys extension paths', () => {
-    expect(extractExePathParsing('C:\\drivers\\my.sys option'))
-      .toBe('C:\\drivers\\my.sys')
-  })
-
-  it('returns first token for no-extension unquoted commands', () => {
-    expect(extractExePathParsing('mycommand arg1 arg2')).toBe('mycommand')
-  })
-})
-
-// ── IPC handler registration shape tests ──
-
-describe('registry cleaner IPC contract', () => {
-  it('REGISTRY_SCAN and REGISTRY_FIX channel names are correct', () => {
-    // Verify the IPC channel constants match what the source uses
-    expect('cleaner:registry:scan').toBe('cleaner:registry:scan')
-    expect('cleaner:registry:fix').toBe('cleaner:registry:fix')
-  })
-
-  it('scan sessions limit is 3 (keeps only last 3)', () => {
-    // Replicate the session cleanup logic
-    const scanSessions = new Map<string, Map<string, unknown>>()
-    for (let i = 0; i < 5; i++) {
-      scanSessions.set(`session-${i}`, new Map())
-    }
-    const sessionKeys = [...scanSessions.keys()]
-    while (sessionKeys.length > 3) {
-      scanSessions.delete(sessionKeys.shift()!)
-    }
-    expect(scanSessions.size).toBe(3)
-    expect(scanSessions.has('session-0')).toBe(false)
-    expect(scanSessions.has('session-1')).toBe(false)
-    expect(scanSessions.has('session-2')).toBe(true)
-    expect(scanSessions.has('session-3')).toBe(true)
-    expect(scanSessions.has('session-4')).toBe(true)
-  })
-})
-
-// ── validateStringArray (replica from ipc-validation) ──
-
-function validateStringArray(
-  input: unknown,
-  maxItems: number = 10_000,
-  maxItemLength: number = 1024
-): string[] | null {
-  if (!Array.isArray(input)) return null
-  if (input.length > maxItems) return null
-  if (!input.every((v: unknown) => typeof v === 'string' && v.length <= maxItemLength)) return null
-  return input as string[]
-}
-
-describe('registry fix input validation', () => {
-  it('rejects non-array input', () => {
-    expect(validateStringArray(null)).toBe(null)
-    expect(validateStringArray('string')).toBe(null)
-    expect(validateStringArray(42)).toBe(null)
-    expect(validateStringArray({})).toBe(null)
-  })
-
-  it('accepts valid string array', () => {
-    expect(validateStringArray(['id1', 'id2', 'id3'])).toEqual(['id1', 'id2', 'id3'])
-  })
-
-  it('accepts empty array', () => {
-    expect(validateStringArray([])).toEqual([])
-  })
-
-  it('rejects array with non-string elements', () => {
-    expect(validateStringArray([1, 2, 3])).toBe(null)
-    expect(validateStringArray(['valid', 42])).toBe(null)
-    expect(validateStringArray([null])).toBe(null)
-  })
-
-  it('rejects array exceeding max items', () => {
-    const huge = Array.from({ length: 10_001 }, (_, i) => `id-${i}`)
-    expect(validateStringArray(huge)).toBe(null)
-  })
-
-  it('rejects strings exceeding max length', () => {
-    expect(validateStringArray(['x'.repeat(1025)])).toBe(null)
-  })
-
-  it('accepts strings at max length boundary', () => {
-    expect(validateStringArray(['x'.repeat(1024)])).toEqual(['x'.repeat(1024)])
-  })
-})
-
-// ── RegistryEntry fix operations ──
-
-describe('registry entry fix operations', () => {
-  const validOps = ['delete-value', 'delete-key', 'set-value', 'disable-task', 'delete-task']
-
-  it('all supported fix operations are known', () => {
-    expect(validOps).toHaveLength(5)
-  })
-
-  it('set-value requires regType and data', () => {
-    const fix = { op: 'set-value' as const, regType: 'REG_DWORD', data: '1' }
-    expect(fix.regType).toBeDefined()
-    expect(fix.data).toBeDefined()
-  })
-
-  it('delete-key can have an optional key override', () => {
-    const fix = { op: 'delete-key' as const, key: 'HKCR\\CLSID\\{some-guid}' }
-    expect(fix.key).toBe('HKCR\\CLSID\\{some-guid}')
-  })
-})
-
-// ── Risk levels and entry types ──
-
-describe('registry entry classification', () => {
-  const validTypes = ['invalid', 'broken', 'obsolete', 'orphaned', 'vulnerability', 'performance', 'network', 'service', 'task']
-  const validRisks = ['low', 'medium', 'high']
-
-  it('all entry types are known', () => {
-    expect(validTypes).toHaveLength(9)
-  })
-
-  it('all risk levels are known', () => {
-    expect(validRisks).toHaveLength(3)
-  })
-
-  it('vulnerability entries use high risk', () => {
-    // Matches the pattern from the source: UAC, Defender, SMBv1, firewall disabled, RDP without NLA
-    const vulnerabilityRisks = ['high', 'high', 'high', 'high', 'high']
-    vulnerabilityRisks.forEach(r => expect(validRisks).toContain(r))
-  })
-
-  it('orphaned entries typically use low or medium risk', () => {
-    const orphanedRisks = ['low', 'medium']
-    orphanedRisks.forEach(r => expect(validRisks).toContain(r))
-  })
-})
-
-// ── SAFE_TASK_PATH_RE security ──
-
-describe('SAFE_TASK_PATH_RE security', () => {
-  it('allows alphanumeric with backslash', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Microsoft\\Windows\\Defrag')).toBe(true)
-  })
-
-  it('allows spaces and hyphens', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\My Task-Name')).toBe(true)
-  })
-
-  it('allows dots and underscores', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\My.Task_Name')).toBe(true)
-  })
-
-  it('allows parentheses', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task (1)')).toBe(true)
-  })
-
-  it('rejects semicolons (shell injection)', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task; malicious')).toBe(false)
-  })
-
-  it('rejects pipes', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task | evil')).toBe(false)
-  })
-
-  it('rejects backticks', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task`cmd`')).toBe(false)
-  })
-
-  it('rejects ampersand', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task & evil')).toBe(false)
-  })
-
-  it('rejects single quotes', () => {
-    expect(SAFE_TASK_PATH_RE.test("\\Task' OR 1=1")).toBe(false)
-  })
-
-  it('rejects double quotes', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task" --inject')).toBe(false)
-  })
-
-  it('rejects less-than and greater-than', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task<script>')).toBe(false)
-  })
-
-  it('rejects null bytes', () => {
-    expect(SAFE_TASK_PATH_RE.test('\\Task\0evil')).toBe(false)
-  })
-})
-
-// ── collectBackupTargets (replica) ──
-// Decides which registry keys and scheduled tasks need backing up before a fix run.
-
-interface FixActionLite {
-  op: 'delete-value' | 'delete-key' | 'set-value' | 'disable-task' | 'delete-task'
-  key?: string
-}
-interface EntryLite { keyPath: string; valueName?: string; fix?: FixActionLite }
-
-function collectBackupTargets(entries: EntryLite[]): { keys: string[]; tasks: string[] } {
-  const keys = new Set<string>()
-  const tasks = new Set<string>()
-  for (const entry of entries) {
-    if (!entry.fix) continue
-    const key = entry.fix.key || entry.keyPath
-    switch (entry.fix.op) {
-      case 'delete-value':
-      case 'set-value':
-      case 'delete-key':
-        if (key) keys.add(key)
-        break
-      case 'disable-task':
-      case 'delete-task':
-        if (entry.keyPath) tasks.add(entry.keyPath)
-        break
-    }
-  }
-  return { keys: [...keys], tasks: [...tasks] }
-}
-
-describe('collectBackupTargets', () => {
-  it('returns empty sets for empty input', () => {
-    expect(collectBackupTargets([])).toEqual({ keys: [], tasks: [] })
-  })
-
-  it('skips entries without a fix action', () => {
-    expect(collectBackupTargets([{ keyPath: 'HKCR\\foo' }])).toEqual({ keys: [], tasks: [] })
-  })
-
-  it('captures the parent key for delete-value', () => {
-    const { keys, tasks } = collectBackupTargets([
-      { keyPath: 'HKLM\\SOFTWARE\\App', fix: { op: 'delete-value' } },
-    ])
-    expect(keys).toEqual(['HKLM\\SOFTWARE\\App'])
-    expect(tasks).toEqual([])
-  })
-
-  it('captures the key itself for delete-key', () => {
-    const { keys } = collectBackupTargets([
-      { keyPath: 'HKCR\\CLSID\\{abc}', fix: { op: 'delete-key' } },
-    ])
-    expect(keys).toEqual(['HKCR\\CLSID\\{abc}'])
-  })
-
-  it('captures the key for set-value', () => {
-    const { keys } = collectBackupTargets([
-      { keyPath: 'HKLM\\SOFTWARE\\App', fix: { op: 'set-value' } },
-    ])
-    expect(keys).toEqual(['HKLM\\SOFTWARE\\App'])
-  })
-
-  it('prefers fix.key over keyPath when both present', () => {
-    const { keys } = collectBackupTargets([
-      { keyPath: 'HKCR\\old', fix: { op: 'delete-key', key: 'HKCR\\CLSID\\{abc}' } },
-    ])
-    expect(keys).toEqual(['HKCR\\CLSID\\{abc}'])
-  })
-
-  it('deduplicates keys touched by multiple entries', () => {
-    const { keys } = collectBackupTargets([
-      { keyPath: 'HKCR\\CLSID\\{abc}', fix: { op: 'delete-value' } },
-      { keyPath: 'HKCR\\CLSID\\{abc}', fix: { op: 'delete-value' } },
-      { keyPath: 'HKCR\\CLSID\\{abc}', fix: { op: 'set-value' } },
-    ])
-    expect(keys).toEqual(['HKCR\\CLSID\\{abc}'])
-  })
-
-  it('routes task ops to tasks, not keys', () => {
-    const { keys, tasks } = collectBackupTargets([
-      { keyPath: '\\Microsoft\\Foo', fix: { op: 'disable-task' } },
-      { keyPath: '\\Microsoft\\Bar', fix: { op: 'delete-task' } },
-    ])
-    expect(keys).toEqual([])
-    expect(tasks).toEqual(['\\Microsoft\\Foo', '\\Microsoft\\Bar'])
-  })
-
-  it('partitions a mixed batch into keys and tasks', () => {
-    const { keys, tasks } = collectBackupTargets([
-      { keyPath: 'HKLM\\SOFTWARE\\A', fix: { op: 'delete-value' } },
-      { keyPath: '\\MyTask', fix: { op: 'disable-task' } },
-      { keyPath: 'HKCR\\CLSID\\{x}', fix: { op: 'delete-key' } },
-    ])
-    expect(keys.sort()).toEqual(['HKCR\\CLSID\\{x}', 'HKLM\\SOFTWARE\\A'])
-    expect(tasks).toEqual(['\\MyTask'])
-  })
-
-  it('drops entries whose resolved key would be empty', () => {
-    // keyPath is empty and no fix.key override — nothing to back up
-    const { keys } = collectBackupTargets([
-      { keyPath: '', fix: { op: 'delete-value' } },
-    ])
-    expect(keys).toEqual([])
-  })
-})
-
-// ── stripRegHeader (replica) ──
-// Removes the BOM + "Windows Registry Editor Version 5.00" preamble so multiple
-// reg-export files can be concatenated into one consolidated backup.
-
-function stripRegHeader(content: string): string {
-  return content.replace(/^﻿?Windows Registry Editor Version 5\.00\r?\n\r?\n/, '')
-}
-
-describe('stripRegHeader', () => {
-  it('strips the standard CRLF header', () => {
-    const input = 'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\Foo]\r\n"a"="b"\r\n'
-    expect(stripRegHeader(input)).toBe('[HKEY_LOCAL_MACHINE\\Foo]\r\n"a"="b"\r\n')
-  })
-
-  it('strips a LF-only header (defensive)', () => {
-    const input = 'Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\Foo]\n'
-    expect(stripRegHeader(input)).toBe('[HKEY_LOCAL_MACHINE\\Foo]\n')
-  })
-
-  it('strips a BOM-prefixed header (reg.exe writes UTF-16 with BOM)', () => {
-    const input = '﻿Windows Registry Editor Version 5.00\r\n\r\n[HKEY_X\\Y]\r\n'
-    expect(stripRegHeader(input)).toBe('[HKEY_X\\Y]\r\n')
-  })
-
-  it('leaves text without a header untouched', () => {
-    expect(stripRegHeader('[HKEY_X\\Y]\r\n"a"="b"\r\n')).toBe('[HKEY_X\\Y]\r\n"a"="b"\r\n')
   })
 
-  it('produces a valid concatenated reg file when bodies are joined under a single header', () => {
-    const a = 'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_X\\A]\r\n"v"="1"\r\n\r\n'
-    const b = 'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_X\\B]\r\n"v"="2"\r\n\r\n'
-    const combined = 'Windows Registry Editor Version 5.00\r\n\r\n' + stripRegHeader(a) + stripRegHeader(b)
-    expect(combined).toBe(
-      'Windows Registry Editor Version 5.00\r\n\r\n' +
-      '[HKEY_X\\A]\r\n"v"="1"\r\n\r\n' +
-      '[HKEY_X\\B]\r\n"v"="2"\r\n\r\n'
+  it('scans and returns entries on success', async () => {
+    const entries = [makeEntry('e1'), makeEntry('e2')]
+    mockScanRegistry.mockResolvedValue(entries)
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const handler = getHandler(IPC.REGISTRY_SCAN)
+    const result = await handler()
+    expect(result).toEqual(entries)
+    expect(mockScanRegistry).toHaveBeenCalledOnce()
+    expect(mockScanRegistry).toHaveBeenCalledWith(expect.any(AbortSignal))
+    expect(mockLogger.info).toHaveBeenCalledWith('registry-cleaner', 'Scanning registry for issues...')
+    expect(mockLogger.success).toHaveBeenCalledWith(
+      'registry-cleaner',
+      'Registry scan complete — 2 issues found',
     )
+  })
+
+  it('returns empty array when scan is aborted', async () => {
+    mockScanRegistry.mockImplementation(async (signal: AbortSignal) => {
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const err = new Error('Aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      })
+    })
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const handler = getHandler(IPC.REGISTRY_SCAN)
+    const cancelHandler = getHandler(IPC.REGISTRY_SCAN_CANCEL)
+    const scanPromise = handler()
+    cancelHandler()
+    const result = await scanPromise
+    expect(result).toEqual([])
+    expect(mockLogger.info).toHaveBeenCalledWith('registry-cleaner', 'Registry scan cancelled')
+  })
+
+  it('re-throws non-abort scan errors', async () => {
+    const scanError = new Error('Permission denied')
+    mockScanRegistry.mockRejectedValue(scanError)
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const handler = getHandler(IPC.REGISTRY_SCAN)
+    await expect(handler()).rejects.toThrow('Permission denied')
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'registry-cleaner',
+      'Registry scan failed: Permission denied',
+    )
+  })
+
+  it('logs unknown error when scan throws a non-Error value', async () => {
+    mockScanRegistry.mockRejectedValue('raw string error')
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const handler = getHandler(IPC.REGISTRY_SCAN)
+    await expect(handler()).rejects.toBe('raw string error')
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'registry-cleaner',
+      'Registry scan failed: Unknown error',
+    )
+  })
+
+  it('cleans up old scan sessions beyond the limit of 3', async () => {
+    mockScanRegistry
+      .mockResolvedValueOnce([makeEntry('a1')])
+      .mockResolvedValueOnce([makeEntry('b1')])
+      .mockResolvedValueOnce([makeEntry('c1')])
+      .mockResolvedValueOnce([makeEntry('d1')])
+
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const handler = getHandler(IPC.REGISTRY_SCAN)
+
+    await handler()
+    await handler()
+    await handler()
+    await handler()
+
+    // Only sessions 2-4 should survive. a1 should be cleaned up.
+    mockValidateStringArray.mockReturnValue(['a1', 'd1'])
+    mockFixRegistryEntries.mockResolvedValue({ fixed: 1, failed: 0, failures: [] })
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    await fixHandler({}, ['a1', 'd1'])
+
+    // a1 is gone (session 1 cleaned), d1 is in session 4
+    expect(mockFixRegistryEntries).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'd1' })],
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
+    expect(mockFixRegistryEntries.mock.calls[0][0]).toHaveLength(1)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC.REGISTRY_FIX
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('IPC.REGISTRY_FIX', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetSettings.mockReturnValue({ registryIgnoredTweaks: [] })
+  })
+
+  it('returns empty result when not on Windows', async () => {
+    const origDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    try {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+      registerRegistryCleanerIpc(() => mockWindow() as never)
+      const handler = getHandler(IPC.REGISTRY_FIX)
+      const result = await handler({}, ['any-id'])
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+    } finally {
+      if (origDescriptor) {
+        Object.defineProperty(process, 'platform', origDescriptor)
+      }
+    }
+  })
+
+  it('returns empty result for invalid entry IDs', async () => {
+    mockValidateStringArray.mockReturnValue(null)
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const handler = getHandler(IPC.REGISTRY_FIX)
+    const result = await handler({}, ['invalid'])
+    expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+    expect(mockLogger.warning).toHaveBeenCalledWith('registry-cleaner', 'Fix called with invalid entry IDs')
+  })
+
+  it('fixes valid entries from scan sessions', async () => {
+    const entry = makeEntry('fix-me', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['fix-me'])
+    mockFixRegistryEntries.mockResolvedValue({ fixed: 1, failed: 0, failures: [] })
+
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+
+    // Populate scan sessions
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    // Fix the entry
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    const result = await fixHandler({}, ['fix-me'])
+
+    expect(result).toEqual({ fixed: 1, failed: 0, failures: [] })
+    expect(mockFixRegistryEntries).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'fix-me' })],
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
+    expect(mockLogger.success).toHaveBeenCalledWith('registry-cleaner', 'Fix complete — 1 fixed, 0 failed')
+  })
+
+  it('returns cancellation result when fix is aborted', async () => {
+    const entry = makeEntry('cancel-me', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['cancel-me'])
+    mockFixRegistryEntries.mockImplementation(async (_entries: unknown, _onProgress: unknown, signal: AbortSignal) => {
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const err = new Error('Cancelled')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      })
+    })
+
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    const cancelHandler = getHandler(IPC.REGISTRY_FIX_CANCEL)
+    const fixPromise = fixHandler({}, ['cancel-me'])
+    cancelHandler()
+    const result = await fixPromise
+
+    expect(result).toEqual({
+      fixed: 0,
+      failed: 0,
+      failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+    })
+    expect(mockLogger.info).toHaveBeenCalledWith('registry-cleaner', 'Registry fix cancelled')
+  })
+
+  it('re-throws non-abort fix errors', async () => {
+    const entry = makeEntry('error-me', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['error-me'])
+    const fixError = new Error('Access denied')
+    mockFixRegistryEntries.mockRejectedValue(fixError)
+
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    await expect(fixHandler({}, ['error-me'])).rejects.toThrow('Access denied')
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'registry-cleaner',
+      'Registry fix failed: Access denied',
+    )
+  })
+
+  it('logs String(err) when fix throws a non-Error value', async () => {
+    const entry = makeEntry('non-err-fix', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['non-err-fix'])
+    mockFixRegistryEntries.mockRejectedValue(42)
+
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    await expect(fixHandler({}, ['non-err-fix'])).rejects.toBe(42)
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'registry-cleaner',
+      'Registry fix failed: 42',
+    )
+  })
+
+  it('sends progress to the window during fix', async () => {
+    const mockSend = vi.fn()
+    const win = { isDestroyed: () => false, webContents: { send: mockSend } }
+
+    const entry = makeEntry('prog', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['prog'])
+
+    registerRegistryCleanerIpc(() => win as never)
+
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    mockFixRegistryEntries.mockImplementation(
+      async (_entries: unknown, onProgress: (c: number, t: number, e: string) => void) => {
+        onProgress(1, 3, 'prog')
+        onProgress(2, 3, 'prog')
+        return { fixed: 1, failed: 0, failures: [] }
+      },
+    )
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    await fixHandler({}, ['prog'])
+
+    expect(mockSend).toHaveBeenCalledTimes(2)
+    expect(mockSend).toHaveBeenCalledWith(IPC.REGISTRY_FIX_PROGRESS, { current: 1, total: 3, currentEntry: 'prog' })
+    expect(mockSend).toHaveBeenCalledWith(IPC.REGISTRY_FIX_PROGRESS, { current: 2, total: 3, currentEntry: 'prog' })
+  })
+
+  it('skips progress when window is destroyed', async () => {
+    const mockSend = vi.fn()
+    const win = { isDestroyed: () => true, webContents: { send: mockSend } }
+
+    const entry = makeEntry('dead-win', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['dead-win'])
+
+    registerRegistryCleanerIpc(() => win as never)
+
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    mockFixRegistryEntries.mockImplementation(
+      async (_entries: unknown, onProgress: (c: number, t: number, e: string) => void) => {
+        onProgress(1, 1, 'dead-win')
+        return { fixed: 1, failed: 0, failures: [] }
+      },
+    )
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    await fixHandler({}, ['dead-win'])
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('skips progress when window getter returns null', async () => {
+    const entry = makeEntry('null-win', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['null-win'])
+
+    registerRegistryCleanerIpc(() => null)
+
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+
+    const mockSend = vi.fn()
+    mockFixRegistryEntries.mockImplementation(
+      async (_entries: unknown, onProgress: (c: number, t: number, e: string) => void) => {
+        onProgress(1, 1, 'null-win')
+        return { fixed: 1, failed: 0, failures: [] }
+      },
+    )
+
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    await fixHandler({}, ['null-win'])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC.REGISTRY_SET_TWEAK_IGNORED
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('IPC.REGISTRY_SET_TWEAK_IGNORED', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns early when signatures validation fails', () => {
+    mockValidateStringArray.mockReturnValue(null)
+    registerRegistryCleanerIpc(() => null)
+    const handler = getHandler(IPC.REGISTRY_SET_TWEAK_IGNORED)
+    const result = handler({}, ['sig1'], true)
+    expect(result).toBeUndefined()
+    expect(mockUpdateRegistryIgnoredTweaks).not.toHaveBeenCalled()
+  })
+
+  it('returns early when ignored is not a boolean', () => {
+    mockValidateStringArray.mockReturnValue(['sig1'])
+    registerRegistryCleanerIpc(() => null)
+    const handler = getHandler(IPC.REGISTRY_SET_TWEAK_IGNORED)
+    const result = handler({}, ['sig1'], 'yes')
+    expect(result).toBeUndefined()
+    expect(mockUpdateRegistryIgnoredTweaks).not.toHaveBeenCalled()
+  })
+
+  it('calls updateRegistryIgnoredTweaks with valid arguments', () => {
+    mockValidateStringArray.mockReturnValue(['hkcu\\software\\test|valuename'])
+    registerRegistryCleanerIpc(() => null)
+    const handler = getHandler(IPC.REGISTRY_SET_TWEAK_IGNORED)
+    const result = handler({}, ['hkcu\\software\\test|valuename'], true)
+    expect(result).toBeUndefined()
+    expect(mockUpdateRegistryIgnoredTweaks).toHaveBeenCalledWith(
+      ['hkcu\\software\\test|valuename'],
+      true,
+    )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC.REGISTRY_SCAN_CANCEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('IPC.REGISTRY_SCAN_CANCEL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetSettings.mockReturnValue({ registryIgnoredTweaks: [] })
+  })
+
+  it('aborts an in-progress scan', async () => {
+    mockScanRegistry.mockImplementation(async (signal: AbortSignal) => {
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const err = new Error('Aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      })
+    })
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    const cancelHandler = getHandler(IPC.REGISTRY_SCAN_CANCEL)
+    const scanPromise = scanHandler()
+    cancelHandler()
+    const result = await scanPromise
+    expect(result).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC.REGISTRY_FIX_CANCEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('IPC.REGISTRY_FIX_CANCEL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetSettings.mockReturnValue({ registryIgnoredTweaks: [] })
+  })
+
+  it('aborts an in-progress fix', async () => {
+    const entry = makeEntry('cancel-fix', { selected: true })
+    mockScanRegistry.mockResolvedValue([entry])
+    mockValidateStringArray.mockReturnValue(['cancel-fix'])
+    mockFixRegistryEntries.mockImplementation(
+      async (_entries: unknown, _onProgress: unknown, signal: AbortSignal) => {
+        return new Promise<never>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            const err = new Error('Cancelled')
+            err.name = 'AbortError'
+            reject(err)
+          })
+        })
+      },
+    )
+    registerRegistryCleanerIpc(() => mockWindow() as never)
+    const scanHandler = getHandler(IPC.REGISTRY_SCAN)
+    await scanHandler()
+    const fixHandler = getHandler(IPC.REGISTRY_FIX)
+    const cancelHandler = getHandler(IPC.REGISTRY_FIX_CANCEL)
+    const fixPromise = fixHandler({}, ['cancel-fix'])
+    cancelHandler()
+    const result = await fixPromise
+    expect(result).toEqual({
+      fixed: 0,
+      failed: 0,
+      failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+    })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Module re-exports
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('module exports', () => {
+  it('re-exports scanRegistry from service', () => {
+    expect(scanRegistry).toBeDefined()
+    scanRegistry()
+    expect(mockScanRegistry).toHaveBeenCalled()
+  })
+
+  it('re-exports fixRegistryEntries from service', () => {
+    expect(fixRegistryEntries).toBeDefined()
+    fixRegistryEntries()
+    expect(mockFixRegistryEntries).toHaveBeenCalled()
+  })
+
+  it('re-exports collectBackupTargets from service', () => {
+    expect(collectBackupTargets).toBeDefined()
+    collectBackupTargets()
+    expect(mockCollectBackupTargets).toHaveBeenCalled()
   })
 })

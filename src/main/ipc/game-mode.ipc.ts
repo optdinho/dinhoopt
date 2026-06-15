@@ -1,34 +1,32 @@
-import { app, ipcMain, powerSaveBlocker } from 'electron'
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs'
-import { join } from 'path'
-import { spawn } from 'child_process'
-import type { ChildProcess } from 'child_process'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
-import { isAdmin } from '../services/elevation'
-import { getPlatform } from '../platform'
-import type { WindowGetter } from './index'
-import { psUtf8, execFileAsync } from '../services/exec-utf8'
+import { isGameCompatible } from '@shared/service-safety-kb'
 import type {
-  GameModeConfig,
-  GameModeSnapshot,
   GameModeActivateResult,
+  GameModeAuditReport,
+  GameModeConfig,
   GameModeDeactivateResult,
   GameModeProgress,
+  GameModeSnapshot,
   GameModeStatus,
-  GameModeOptimizationId,
-  GameModeAuditReport,
 } from '@shared/types'
+import { app, ipcMain, powerSaveBlocker } from 'electron'
+import { getPlatform } from '../platform'
+import { isAdmin } from '../services/elevation'
+import { execFileAsync, psUtf8 } from '../services/exec-utf8'
 import type { GameAutoEvent } from '../services/game-detector'
 import {
+  getDetectedGame,
+  isDetectorRunning,
   startGameDetector,
   stopGameDetector,
   suppressCurrentGame,
-  isDetectorRunning,
-  getDetectedGame,
 } from '../services/game-detector'
-import { getSettings } from '../services/settings-store'
 import { runGameModeAudit } from '../services/game-mode-audit'
-import { isGameCompatible } from '@shared/service-safety-kb'
+import { getLogger } from '../services/logger.service'
+import { getSettings } from '../services/settings-store'
+import type { WindowGetter } from './index'
 
 // ── Service name allowlist ───────────────────────────────────
 
@@ -43,9 +41,7 @@ const SERVICE_MAP: Record<string, string> = {
 // ── Snapshot persistence ─────────────────────────────────────
 
 function getSnapshotPath(): string {
-  const dir = app.isPackaged
-    ? app.getPath('userData')
-    : join(app.getPath('userData'), 'Kudu-Dev')
+  const dir = app.isPackaged ? app.getPath('userData') : join(app.getPath('userData'), 'Kudu-Dev')
   return join(dir, 'game-mode-snapshot.json')
 }
 
@@ -108,7 +104,12 @@ function validateSnapshot(raw: unknown): GameModeSnapshot | null {
   // Validate Focus Assist state — must be a safe integer (0 or 1)
   if (s.originalFocusAssistState !== null) {
     if (typeof s.originalFocusAssistState !== 'number') return null
-    if (!Number.isInteger(s.originalFocusAssistState) || s.originalFocusAssistState < 0 || s.originalFocusAssistState > 1) return null
+    if (
+      !Number.isInteger(s.originalFocusAssistState) ||
+      s.originalFocusAssistState < 0 ||
+      s.originalFocusAssistState > 1
+    )
+      return null
   }
 
   // Validate powerSaveBlocker ID — integer or null
@@ -118,19 +119,39 @@ function validateSnapshot(raw: unknown): GameModeSnapshot | null {
 
   // Validate timer resolution — integer or null, must be positive if set
   if (s.originalTimerResolution !== null) {
-    if (typeof s.originalTimerResolution !== 'number' || !Number.isInteger(s.originalTimerResolution) || s.originalTimerResolution < 0) return null
+    if (
+      typeof s.originalTimerResolution !== 'number' ||
+      !Number.isInteger(s.originalTimerResolution) ||
+      s.originalTimerResolution < 0
+    )
+      return null
   }
 
   // Validate nagle interfaces — registry paths must be safe
   if (!Array.isArray(s.nagleInterfaces)) return null
-  const REGISTRY_PATH_RE = /^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{[0-9A-Fa-f\-]+}$/
+  const REGISTRY_PATH_RE =
+    /^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{[0-9A-Fa-f\-]+}$/
   for (const iface of s.nagleInterfaces) {
     if (typeof iface !== 'object' || iface === null) return null
     const iv = iface as Record<string, unknown>
     if (typeof iv.path !== 'string' || !REGISTRY_PATH_RE.test(iv.path)) return null
-    if (iv.originalTcpNoDelay !== null && (typeof iv.originalTcpNoDelay !== 'number' || !Number.isInteger(iv.originalTcpNoDelay) || iv.originalTcpNoDelay < 0 || iv.originalTcpNoDelay > 1)) return null
+    if (
+      iv.originalTcpNoDelay !== null &&
+      (typeof iv.originalTcpNoDelay !== 'number' ||
+        !Number.isInteger(iv.originalTcpNoDelay) ||
+        iv.originalTcpNoDelay < 0 ||
+        iv.originalTcpNoDelay > 1)
+    )
+      return null
     // TcpAckFrequency is a DWORD with valid range 0-255 (default 2 per Microsoft docs)
-    if (iv.originalTcpAckFrequency !== null && (typeof iv.originalTcpAckFrequency !== 'number' || !Number.isInteger(iv.originalTcpAckFrequency) || iv.originalTcpAckFrequency < 0 || iv.originalTcpAckFrequency > 255)) return null
+    if (
+      iv.originalTcpAckFrequency !== null &&
+      (typeof iv.originalTcpAckFrequency !== 'number' ||
+        !Number.isInteger(iv.originalTcpAckFrequency) ||
+        iv.originalTcpAckFrequency < 0 ||
+        iv.originalTcpAckFrequency > 255)
+    )
+      return null
   }
 
   // Validate gameProcessPriorities — informational but sanitize
@@ -150,7 +171,8 @@ function validateSnapshot(raw: unknown): GameModeSnapshot | null {
     const tv = tweak as Record<string, unknown>
     if (typeof tv.path !== 'string' || !ALLOWED_REGISTRY_TWEAK_PATHS.has(tv.path)) return null
     if (typeof tv.name !== 'string' || !ALLOWED_REGISTRY_TWEAK_NAMES.has(tv.name)) return null
-    if (tv.originalValue !== null && (typeof tv.originalValue !== 'number' || !Number.isInteger(tv.originalValue))) return null
+    if (tv.originalValue !== null && (typeof tv.originalValue !== 'number' || !Number.isInteger(tv.originalValue)))
+      return null
   }
 
   return s as unknown as GameModeSnapshot
@@ -174,7 +196,9 @@ function writeSnapshot(snapshot: GameModeSnapshot): void {
 function deleteSnapshot(): void {
   try {
     unlinkSync(getSnapshotPath())
-  } catch { /* already gone */ }
+  } catch {
+    /* already gone */
+  }
 }
 
 // ── Process name lists ───────────────────────────────────────
@@ -206,39 +230,52 @@ const UPDATER_PROCESSES = [
 ]
 
 const PROTECTED_PROCESSES = new Set([
-  'csrss.exe', 'smss.exe', 'wininit.exe', 'services.exe',
-  'lsass.exe', 'lsaiso.exe', 'svchost.exe', 'winlogon.exe',
-  'dwm.exe', 'explorer.exe', 'ntoskrnl.exe', 'system',
-  'registry', 'memory compression',
-  'launchd', 'kernel_task', 'windowserver',
-  'systemd', 'init', 'kthreadd',
+  'csrss.exe',
+  'smss.exe',
+  'wininit.exe',
+  'services.exe',
+  'lsass.exe',
+  'lsaiso.exe',
+  'svchost.exe',
+  'winlogon.exe',
+  'dwm.exe',
+  'explorer.exe',
+  'ntoskrnl.exe',
+  'system',
+  'registry',
+  'memory compression',
+  'launchd',
+  'kernel_task',
+  'windowserver',
+  'systemd',
+  'init',
+  'kthreadd',
 ])
 
 // Applies NtSetTimerResolution(5000) via PowerShell for 0.5ms resolution
-let timerProcess: ChildProcess | null = null
 
 // ── Helper: run PowerShell ───────────────────────────────────
 
 async function ps(script: string, timeout = 15000): Promise<string> {
-  const { stdout } = await execFileAsync('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-Command', psUtf8(script),
-  ], { timeout, windowsHide: true })
+  const { stdout } = await execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)],
+    { timeout, windowsHide: true },
+  )
   return stdout.trim()
 }
 
 // ── Individual optimizations ─────────────────────────────────
 
-async function captureAndDisableService(
-  serviceName: string,
-  snapshot: GameModeSnapshot,
-): Promise<void> {
+async function captureAndDisableService(serviceName: string, snapshot: GameModeSnapshot): Promise<void> {
   const info = await ps(
-    `Get-Service -Name '${serviceName}' -ErrorAction Stop | ` +
-    `Select-Object -Property StartType,Status | ConvertTo-Json -Compress`
+    `Get-Service -Name '${serviceName}' -ErrorAction Stop | Select-Object -Property StartType,Status | ConvertTo-Json -Compress`,
   )
   const parsed = JSON.parse(info)
   const originalStartType = String(parsed.StartType ?? parsed.startType ?? 'Manual')
-  const wasRunning = String(parsed.Status ?? parsed.status ?? '').toLowerCase().includes('running')
+  const wasRunning = String(parsed.Status ?? parsed.status ?? '')
+    .toLowerCase()
+    .includes('running')
 
   snapshot.services.push({ name: serviceName, originalStartType, wasRunning })
 
@@ -248,16 +285,14 @@ async function captureAndDisableService(
   await ps(`Set-Service -Name '${serviceName}' -StartupType Disabled -ErrorAction Stop`)
 }
 
-async function restoreService(
-  entry: { name: string; originalStartType: string; wasRunning: boolean },
-): Promise<void> {
+async function restoreService(entry: { name: string; originalStartType: string; wasRunning: boolean }): Promise<void> {
   // Map .NET StartType enum values to Set-Service accepted strings
   const typeMap: Record<string, string> = {
-    'Automatic': 'Automatic',
-    'Manual': 'Manual',
-    'Disabled': 'Disabled',
-    'Boot': 'Automatic',
-    'System': 'Automatic',
+    Automatic: 'Automatic',
+    Manual: 'Manual',
+    Disabled: 'Disabled',
+    Boot: 'Automatic',
+    System: 'Automatic',
     // Numeric values from some PowerShell versions
     '2': 'Automatic',
     '3': 'Manual',
@@ -288,10 +323,11 @@ async function killProcessesByName(
     for (const line of lines) {
       const match = line.match(/^"([^"]+)","(\d+)"/)
       if (!match) continue
-      const [, procName, pidStr] = match
-      const pid = parseInt(pidStr, 10)
-      if (isNaN(pid) || pid <= 4) continue
-      if (PROTECTED_PROCESSES.has(procName.toLowerCase())) continue
+      const procName = match[1] ?? ''
+      const pidStr = match[2] ?? ''
+      const pid = Number.parseInt(pidStr, 10)
+      if (Number.isNaN(pid) || pid <= 4) continue
+      if (!procName || PROTECTED_PROCESSES.has(procName.toLowerCase())) continue
       if (!lowerNames.has(procName.toLowerCase())) continue
 
       try {
@@ -306,13 +342,15 @@ async function killProcessesByName(
           })
           snapshot.killedProcesses.push({ pid, name: procName })
           killed++
-        } catch (err: any) {
-          errors.push(`Failed to kill ${procName} (${pid}): ${err?.message ?? 'unknown'}`)
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? err.message : 'unknown'
+          errors.push(`Failed to kill ${procName} (${pid}): ${reason}`)
         }
       }
     }
-  } catch (err: any) {
-    errors.push(`Process enumeration failed: ${err?.message ?? 'unknown'}`)
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : 'unknown'
+    errors.push(`Process enumeration failed: ${reason}`)
   }
 
   return { killed, errors }
@@ -320,7 +358,8 @@ async function killProcessesByName(
 
 async function clearStandbyMemory(): Promise<void> {
   // Trim working sets of all accessible processes via SetProcessWorkingSetSize
-  await ps(`
+  await ps(
+    `
     Add-Type -TypeDefinition @'
       using System;
       using System.Runtime.InteropServices;
@@ -332,12 +371,14 @@ async function clearStandbyMemory(): Promise<void> {
     Get-Process | ForEach-Object {
       try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
     }
-  `, 30000)
+  `,
+    30000,
+  )
 }
 
 async function capturePowerPlan(snapshot: GameModeSnapshot): Promise<void> {
   try {
-    const out = await ps(`powercfg /GETACTIVESCHEME`)
+    const out = await ps('powercfg /GETACTIVESCHEME')
     const match = out.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
     snapshot.originalPowerPlanGuid = match?.[1] ?? null
   } catch {
@@ -365,27 +406,26 @@ async function enableFocusAssist(snapshot: GameModeSnapshot): Promise<void> {
   try {
     const out = await ps(
       `$p = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings'; ` +
-      `if (Test-Path $p) { (Get-ItemProperty -Path $p -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -ErrorAction SilentlyContinue).NOC_GLOBAL_SETTING_TOASTS_ENABLED } else { 1 }`
+        'if (Test-Path $p) { (Get-ItemProperty -Path $p -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -ErrorAction SilentlyContinue).NOC_GLOBAL_SETTING_TOASTS_ENABLED } else { 1 }',
     )
-    const parsed = parseInt(out, 10)
+    const parsed = Number.parseInt(out, 10)
     // Clamp to 0 or 1 — the only safe restore values for this DWORD
-    snapshot.originalFocusAssistState = (isNaN(parsed) || parsed !== 0) ? 1 : 0
+    snapshot.originalFocusAssistState = Number.isNaN(parsed) || parsed !== 0 ? 1 : 0
   } catch {
     snapshot.originalFocusAssistState = 1
   }
 
   await ps(
     `$p = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings'; ` +
-    `if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }; ` +
-    `Set-ItemProperty -Path $p -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -Value 0 -Type DWord -Force`
+      'if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }; ' +
+      'Set-ItemProperty -Path $p -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -Value 0 -Type DWord -Force',
   )
 }
 
 async function restoreFocusAssist(originalState: number | null): Promise<void> {
   if (originalState === null) return
   await ps(
-    `$p = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings'; ` +
-    `Set-ItemProperty -Path $p -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -Value ${originalState} -Type DWord -Force`
+    `$p = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings'; Set-ItemProperty -Path $p -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -Value ${originalState} -Type DWord -Force`,
   )
 }
 
@@ -414,8 +454,8 @@ $caps.wPeriodMin
 `,
       15000,
     )
-    const parsed = parseInt(out, 10)
-    snapshot.originalTimerResolution = isNaN(parsed) ? null : parsed
+    const parsed = Number.parseInt(out, 10)
+    snapshot.originalTimerResolution = Number.isNaN(parsed) ? null : parsed
   } catch {
     snapshot.originalTimerResolution = null
   }
@@ -460,8 +500,7 @@ async function captureAndSetGamePriority(snapshot: GameModeSnapshot): Promise<vo
 
   try {
     const out = await ps(
-      `$procs = Get-Process -Name '${gameName.replace('.exe', '')}' -ErrorAction SilentlyContinue; ` +
-      `foreach ($p in $procs) { $p.PriorityClass; }`,
+      `$procs = Get-Process -Name '${gameName.replace('.exe', '')}' -ErrorAction SilentlyContinue; foreach ($p in $procs) { $p.PriorityClass; }`,
       10000,
     )
     const lines = out.trim().split(/\r?\n/).filter(Boolean)
@@ -472,34 +511,36 @@ async function captureAndSetGamePriority(snapshot: GameModeSnapshot): Promise<vo
       if (!originalPriority) continue
       // Find process by name — re-query for PID
       const procsOut = await ps(
-        `(Get-Process -Name '${gameName.replace('.exe', '')}' -ErrorAction SilentlyContinue) | ` +
-        `Select-Object Id, PriorityClass | ConvertTo-Json`,
+        `(Get-Process -Name '${gameName.replace('.exe', '')}' -ErrorAction SilentlyContinue) | Select-Object Id, PriorityClass | ConvertTo-Json`,
         10000,
       )
-      let procs: any[] = []
+      let procs: Array<{ Id?: number }> = []
       try {
         const parsed = JSON.parse(procsOut)
         procs = Array.isArray(parsed) ? parsed : [parsed]
-      } catch { return }
+      } catch {
+        return
+      }
 
       for (const proc of procs) {
         if (!proc || typeof proc.Id !== 'number') continue
         const pid = proc.Id
         // Set to High priority
         try {
-          await ps(
-            `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).PriorityClass = 'High'`,
-            5000,
-          )
+          await ps(`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).PriorityClass = 'High'`, 5000)
           snapshot.gameProcessPriorities.push({
             name: gameName,
             pid,
             originalPriority,
           })
-        } catch { /* process may have exited */ }
+        } catch {
+          /* process may have exited */
+        }
       }
     }
-  } catch { /* no matching process */ }
+  } catch {
+    /* no matching process */
+  }
 }
 
 async function restoreGamePriority(
@@ -509,10 +550,12 @@ async function restoreGamePriority(
     try {
       await ps(
         `$p = Get-Process -Id ${entry.pid} -ErrorAction SilentlyContinue; ` +
-        `if ($p) { $p.PriorityClass = '${entry.originalPriority}' }`,
+          `if ($p) { $p.PriorityClass = '${entry.originalPriority}' }`,
         5000,
       )
-    } catch { /* process may have exited — that's fine */ }
+    } catch {
+      /* process may have exited — that's fine */
+    }
   }
 }
 
@@ -529,21 +572,21 @@ async function applyRegistryTweak(
   let originalValue: number | null = null
   try {
     const out = await ps(
-      `$v = (Get-ItemProperty -Path '${regPath}' -Name '${name}' -ErrorAction SilentlyContinue).'${name}'; if ($v -ne $null) { $v } else { 'NULL' }`
+      `$v = (Get-ItemProperty -Path '${regPath}' -Name '${name}' -ErrorAction SilentlyContinue).'${name}'; if ($v -ne $null) { $v } else { 'NULL' }`,
     )
     if (out !== 'NULL' && out !== '') {
-      const parsed = parseInt(out, 10)
-      if (!isNaN(parsed)) originalValue = parsed
+      const parsed = Number.parseInt(out, 10)
+      if (!Number.isNaN(parsed)) originalValue = parsed
     }
-  } catch { /* key doesn't exist yet — original is null */ }
+  } catch {
+    /* key doesn't exist yet — original is null */
+  }
 
   snapshot.registryTweaks.push({ path: regPath, name, originalValue })
 
   // Set new value
   await ps(
-    `$p = '${regPath}'; ` +
-    `if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }; ` +
-    `Set-ItemProperty -Path $p -Name '${name}' -Value ${newValue} -Type DWord -Force`
+    `$p = '${regPath}'; if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }; Set-ItemProperty -Path $p -Name '${name}' -Value ${newValue} -Type DWord -Force`,
   )
 }
 
@@ -556,13 +599,16 @@ async function restoreRegistryTweaks(
   for (const tweak of tweaks) {
     try {
       if (tweak.originalValue !== null) {
-        await ps(`Set-ItemProperty -Path '${tweak.path}' -Name '${tweak.name}' -Value ${tweak.originalValue} -Type DWord -Force`)
+        await ps(
+          `Set-ItemProperty -Path '${tweak.path}' -Name '${tweak.name}' -Value ${tweak.originalValue} -Type DWord -Force`,
+        )
       } else {
         await ps(`Remove-ItemProperty -Path '${tweak.path}' -Name '${tweak.name}' -ErrorAction SilentlyContinue`)
       }
       restored++
-    } catch (err: any) {
-      errors.push({ path: tweak.path, name: tweak.name, reason: err?.message ?? 'unknown' })
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'unknown'
+      errors.push({ path: tweak.path, name: tweak.name, reason })
     }
   }
   return { restored, errors }
@@ -571,7 +617,12 @@ async function restoreRegistryTweaks(
 // ── Game Bar / DVR ──────────────────────────────────────────
 
 async function disableGameBar(snapshot: GameModeSnapshot): Promise<void> {
-  await applyRegistryTweak(snapshot, 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR', 'AppCaptureEnabled', 0)
+  await applyRegistryTweak(
+    snapshot,
+    'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR',
+    'AppCaptureEnabled',
+    0,
+  )
   await applyRegistryTweak(snapshot, 'HKCU:\\System\\GameConfigStore', 'GameDVR_Enabled', 0)
 }
 
@@ -587,24 +638,31 @@ async function disableFullscreenOptimizations(snapshot: GameModeSnapshot): Promi
 // ── Transparency ────────────────────────────────────────────
 
 async function disableTransparency(snapshot: GameModeSnapshot): Promise<void> {
-  await applyRegistryTweak(snapshot, 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', 'EnableTransparency', 0)
+  await applyRegistryTweak(
+    snapshot,
+    'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize',
+    'EnableTransparency',
+    0,
+  )
 }
 
 async function disableNagle(snapshot: GameModeSnapshot): Promise<void> {
   const out = await ps(
     `Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' | ForEach-Object { ` +
-    `  $path = $_.PSPath; ` +
-    `  $noDelay = (Get-ItemProperty -Path $path -Name TcpNoDelay -ErrorAction SilentlyContinue).TcpNoDelay; ` +
-    `  $ackFreq = (Get-ItemProperty -Path $path -Name TcpAckFrequency -ErrorAction SilentlyContinue).TcpAckFrequency; ` +
-    `  [PSCustomObject]@{ Path=$path; TcpNoDelay=$noDelay; TcpAckFrequency=$ackFreq } ` +
-    `} | ConvertTo-Json -Compress`
+      '  $path = $_.PSPath; ' +
+      '  $noDelay = (Get-ItemProperty -Path $path -Name TcpNoDelay -ErrorAction SilentlyContinue).TcpNoDelay; ' +
+      '  $ackFreq = (Get-ItemProperty -Path $path -Name TcpAckFrequency -ErrorAction SilentlyContinue).TcpAckFrequency; ' +
+      '  [PSCustomObject]@{ Path=$path; TcpNoDelay=$noDelay; TcpAckFrequency=$ackFreq } ' +
+      '} | ConvertTo-Json -Compress',
   )
 
-  let interfaces: any[] = []
+  let interfaces: Array<{ Path?: string; TcpNoDelay?: number; TcpAckFrequency?: number }> = []
   try {
     const parsed = JSON.parse(out)
     interfaces = Array.isArray(parsed) ? parsed : [parsed]
-  } catch { return }
+  } catch {
+    return
+  }
 
   for (const iface of interfaces) {
     if (!iface?.Path) continue
@@ -617,34 +675,37 @@ async function disableNagle(snapshot: GameModeSnapshot): Promise<void> {
 
   await ps(
     `Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' | ForEach-Object { ` +
-    `  Set-ItemProperty -Path $_.PSPath -Name TcpNoDelay -Value 1 -Type DWord -Force; ` +
-    `  Set-ItemProperty -Path $_.PSPath -Name TcpAckFrequency -Value 1 -Type DWord -Force ` +
-    `}`
+      '  Set-ItemProperty -Path $_.PSPath -Name TcpNoDelay -Value 1 -Type DWord -Force; ' +
+      '  Set-ItemProperty -Path $_.PSPath -Name TcpAckFrequency -Value 1 -Type DWord -Force ' +
+      '}',
   )
 }
 
-async function restoreNagle(
-  interfaces: GameModeSnapshot['nagleInterfaces'],
-): Promise<void> {
+async function restoreNagle(interfaces: GameModeSnapshot['nagleInterfaces']): Promise<void> {
   if (!interfaces.length) return
   const failed: string[] = []
   for (const iface of interfaces) {
     try {
       if (iface.originalTcpNoDelay !== null) {
-        await ps(`Set-ItemProperty -Path '${iface.path}' -Name TcpNoDelay -Value ${iface.originalTcpNoDelay} -Type DWord -Force`)
+        await ps(
+          `Set-ItemProperty -Path '${iface.path}' -Name TcpNoDelay -Value ${iface.originalTcpNoDelay} -Type DWord -Force`,
+        )
       } else {
         await ps(`Remove-ItemProperty -Path '${iface.path}' -Name TcpNoDelay -ErrorAction SilentlyContinue`)
       }
       if (iface.originalTcpAckFrequency !== null) {
-        await ps(`Set-ItemProperty -Path '${iface.path}' -Name TcpAckFrequency -Value ${iface.originalTcpAckFrequency} -Type DWord -Force`)
+        await ps(
+          `Set-ItemProperty -Path '${iface.path}' -Name TcpAckFrequency -Value ${iface.originalTcpAckFrequency} -Type DWord -Force`,
+        )
       } else {
         await ps(`Remove-ItemProperty -Path '${iface.path}' -Name TcpAckFrequency -ErrorAction SilentlyContinue`)
       }
-    } catch (err: any) {
-      failed.push(err?.message ?? 'unknown')
+    } catch (err: unknown) {
+      failed.push(err instanceof Error ? err.message : 'unknown')
     }
   }
   if (failed.length > 0) {
+    getLogger().error('game-mode', `Failed to restore ${failed.length} Nagle network interface(s)`)
     throw new Error(`Failed to restore ${failed.length} network interface(s)`)
   }
 }
@@ -658,6 +719,7 @@ export async function activateGameMode(
   config: GameModeConfig,
   onProgress: (p: GameModeProgress) => void,
 ): Promise<GameModeActivateResult> {
+  getLogger().info('game-mode', 'Activating Game Mode')
   const enabled = config.enabledOptimizations
   const total = enabled.length
   let succeeded = 0
@@ -681,16 +743,21 @@ export async function activateGameMode(
 
   for (let i = 0; i < enabled.length; i++) {
     const id = enabled[i]
+    if (!id) continue
     onProgress({ phase: 'activating', current: i + 1, total, currentLabel: id })
 
     try {
       // Services
       if (id in SERVICE_MAP) {
         if (!admin) throw new Error('Administrator privileges required')
-        const serviceName = SERVICE_MAP[id]
+        const serviceName = SERVICE_MAP[id] ?? ''
+        if (!serviceName) continue
         const detectedGame = getDetectedGame()
         if (detectedGame && !isGameCompatible(serviceName, detectedGame)) {
-          errors.push({ optimizationId: id, reason: `Service ${serviceName} is incompatible with ${detectedGame} — skipped` })
+          errors.push({
+            optimizationId: id,
+            reason: `Service ${serviceName} is incompatible with ${detectedGame} — skipped`,
+          })
           continue
         }
         await captureAndDisableService(serviceName, snapshot)
@@ -801,10 +868,11 @@ export async function activateGameMode(
         await disableNagle(snapshot)
         succeeded++
         writeSnapshot(snapshot)
-        continue
       }
-    } catch (err: any) {
-      errors.push({ optimizationId: id, reason: err?.message ?? 'Unknown error' })
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'Unknown error'
+      getLogger().error('game-mode', `Optimization "${id}" failed: ${reason}`)
+      errors.push({ optimizationId: id, reason })
     }
   }
 
@@ -814,14 +882,15 @@ export async function activateGameMode(
     writeSnapshot(snapshot)
   }
 
+  getLogger().success('game-mode', `Game Mode activated: ${succeeded}/${total} optimizations succeeded`)
   return { succeeded, failed: errors.length, errors, snapshot }
 }
 
-export async function deactivateGameMode(
-  onProgress: (p: GameModeProgress) => void,
-): Promise<GameModeDeactivateResult> {
+export async function deactivateGameMode(onProgress: (p: GameModeProgress) => void): Promise<GameModeDeactivateResult> {
+  getLogger().info('game-mode', 'Deactivating Game Mode')
   const snapshot = readSnapshot()
   if (!snapshot) {
+    getLogger().warning('game-mode', 'No snapshot found — nothing to deactivate')
     return { restored: 0, failed: 0, errors: [] }
   }
 
@@ -849,7 +918,9 @@ export async function deactivateGameMode(
     steps.push({
       id: `svc-restore-${svc.name}`,
       fn: () => restoreService(svc),
-      clear: () => { residual.services = residual.services.filter((s) => s.name !== svc.name) },
+      clear: () => {
+        residual.services = residual.services.filter((s) => s.name !== svc.name)
+      },
     })
   }
 
@@ -858,7 +929,9 @@ export async function deactivateGameMode(
     steps.push({
       id: 'sys-power-plan',
       fn: () => restorePowerPlan(snapshot.originalPowerPlanGuid!),
-      clear: () => { residual.originalPowerPlanGuid = null },
+      clear: () => {
+        residual.originalPowerPlanGuid = null
+      },
     })
   }
 
@@ -867,7 +940,9 @@ export async function deactivateGameMode(
     steps.push({
       id: 'sys-focus-assist',
       fn: () => restoreFocusAssist(snapshot.originalFocusAssistState),
-      clear: () => { residual.originalFocusAssistState = null },
+      clear: () => {
+        residual.originalFocusAssistState = null
+      },
     })
   }
 
@@ -876,7 +951,9 @@ export async function deactivateGameMode(
     steps.push({
       id: 'sys-timer-resolution',
       fn: () => restoreTimerResolution(snapshot.originalTimerResolution!),
-      clear: () => { residual.originalTimerResolution = null },
+      clear: () => {
+        residual.originalTimerResolution = null
+      },
     })
   }
 
@@ -891,7 +968,9 @@ export async function deactivateGameMode(
         }
         activePowerBlockerId = null
       },
-      clear: () => { residual.powerSaveBlockerId = null },
+      clear: () => {
+        residual.powerSaveBlockerId = null
+      },
     })
   }
 
@@ -900,7 +979,9 @@ export async function deactivateGameMode(
     steps.push({
       id: 'net-disable-nagle',
       fn: () => restoreNagle(snapshot.nagleInterfaces),
-      clear: () => { residual.nagleInterfaces = [] },
+      clear: () => {
+        residual.nagleInterfaces = []
+      },
     })
   }
 
@@ -909,7 +990,9 @@ export async function deactivateGameMode(
     steps.push({
       id: 'cpu-game-priority',
       fn: () => restoreGamePriority(snapshot.gameProcessPriorities),
-      clear: () => { residual.gameProcessPriorities = [] },
+      clear: () => {
+        residual.gameProcessPriorities = []
+      },
     })
   }
 
@@ -921,20 +1004,25 @@ export async function deactivateGameMode(
         const r = await restoreRegistryTweaks(snapshot.registryTweaks)
         if (r.errors.length > 0) throw new Error(`${r.errors.length} registry value(s) failed to restore`)
       },
-      clear: () => { residual.registryTweaks = [] },
+      clear: () => {
+        residual.registryTweaks = []
+      },
     })
   }
 
   const total = steps.length
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i]
+    if (!step) continue
     onProgress({ phase: 'deactivating', current: i + 1, total, currentLabel: step.id })
     try {
       await step.fn()
       step.clear()
       restored++
-    } catch (err: any) {
-      errors.push({ optimizationId: step.id, reason: err?.message ?? 'Unknown error' })
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'Unknown error'
+      getLogger().error('game-mode', `Restoration "${step.id}" failed: ${reason}`)
+      errors.push({ optimizationId: step.id, reason })
     }
   }
 
@@ -947,6 +1035,7 @@ export async function deactivateGameMode(
     residual.active = false
     writeSnapshot(residual)
   }
+  getLogger().success('game-mode', `Game Mode deactivated: ${restored} restored, ${errors.length} failed`)
   return { restored, failed: errors.length, errors }
 }
 
@@ -962,12 +1051,26 @@ export function getGameModeStatus(): GameModeStatus {
 // ── IPC Registration ─────────────────────────────────────────
 
 const VALID_OPTIMIZATION_IDS = new Set<string>([
-  'svc-wsearch', 'svc-sysmain', 'svc-wuauserv', 'svc-spooler', 'svc-diagtrack',
-  'proc-kill-browsers', 'proc-kill-chat', 'proc-kill-updaters', 'proc-kill-custom',
+  'svc-wsearch',
+  'svc-sysmain',
+  'svc-wuauserv',
+  'svc-spooler',
+  'svc-diagtrack',
+  'proc-kill-browsers',
+  'proc-kill-chat',
+  'proc-kill-updaters',
+  'proc-kill-custom',
   'mem-clear-standby',
-  'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep', 'sys-timer-resolution',
-  'sys-disable-game-bar', 'sys-disable-fse-opt', 'sys-disable-transparency', 'cpu-game-priority',
-  'net-flush-dns', 'net-disable-nagle',
+  'sys-focus-assist',
+  'sys-power-plan',
+  'sys-prevent-sleep',
+  'sys-timer-resolution',
+  'sys-disable-game-bar',
+  'sys-disable-fse-opt',
+  'sys-disable-transparency',
+  'cpu-game-priority',
+  'net-flush-dns',
+  'net-disable-nagle',
 ])
 
 const PROCESS_NAME_RE = /^[A-Za-z0-9._\- ]+$/
@@ -978,13 +1081,17 @@ function validateGameModeConfig(input: unknown): GameModeConfig | null {
 
   if (!Array.isArray(obj.enabledOptimizations)) return null
   if (obj.enabledOptimizations.length > 30) return null
-  if (!obj.enabledOptimizations.every((v: unknown) => typeof v === 'string' && VALID_OPTIMIZATION_IDS.has(v as string))) return null
+  if (!obj.enabledOptimizations.every((v: unknown) => typeof v === 'string' && VALID_OPTIMIZATION_IDS.has(v as string)))
+    return null
 
   if (!Array.isArray(obj.customProcessKillList)) return null
   if (obj.customProcessKillList.length > 50) return null
-  if (!obj.customProcessKillList.every((v: unknown) =>
-    typeof v === 'string' && v.length > 0 && v.length <= 100 && PROCESS_NAME_RE.test(v as string)
-  )) return null
+  if (
+    !obj.customProcessKillList.every(
+      (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && PROCESS_NAME_RE.test(v as string),
+    )
+  )
+    return null
 
   // Auto-detect fields are optional in the activate payload (not used by activate itself)
   if ('autoDetect' in obj && typeof obj.autoDetect !== 'boolean') return null
@@ -992,13 +1099,17 @@ function validateGameModeConfig(input: unknown): GameModeConfig | null {
   if ('customGameProcesses' in obj) {
     if (!Array.isArray(obj.customGameProcesses)) return null
     if (obj.customGameProcesses.length > 50) return null
-    if (!obj.customGameProcesses.every((v: unknown) =>
-      typeof v === 'string' && v.length > 0 && v.length <= 100 && PROCESS_NAME_RE.test(v as string)
-    )) return null
+    if (
+      !obj.customGameProcesses.every(
+        (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && PROCESS_NAME_RE.test(v as string),
+      )
+    )
+      return null
   }
 
   if ('gameProfiles' in obj) {
-    if (typeof obj.gameProfiles !== 'object' || obj.gameProfiles === null || Array.isArray(obj.gameProfiles)) return null
+    if (typeof obj.gameProfiles !== 'object' || obj.gameProfiles === null || Array.isArray(obj.gameProfiles))
+      return null
     const profileKeys = Object.keys(obj.gameProfiles as Record<string, unknown>)
     if (profileKeys.length > 30) return null
     for (const key of profileKeys) {
@@ -1008,9 +1119,12 @@ function validateGameModeConfig(input: unknown): GameModeConfig | null {
       if (typeof profile.gameName !== 'string' || profile.gameName.length > 100) return null
       if (!Array.isArray(profile.enabledOptimizations)) return null
       if (profile.enabledOptimizations.length > 30) return null
-      if (!profile.enabledOptimizations.every((v: unknown) =>
-        typeof v === 'string' && VALID_OPTIMIZATION_IDS.has(v as string)
-      )) return null
+      if (
+        !profile.enabledOptimizations.every(
+          (v: unknown) => typeof v === 'string' && VALID_OPTIMIZATION_IDS.has(v as string),
+        )
+      )
+        return null
     }
   }
 
@@ -1036,20 +1150,38 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.GAME_MODE_ACTIVATE, async (_event, rawConfig: unknown) => {
     const config = validateGameModeConfig(rawConfig)
     if (!config) {
-      return { succeeded: 0, failed: 1, errors: [{ optimizationId: 'config', reason: 'Invalid config' }], snapshot: null }
+      getLogger().warning('game-mode', 'Invalid Game Mode config received')
+      return {
+        succeeded: 0,
+        failed: 1,
+        errors: [{ optimizationId: 'config', reason: 'Invalid config' }],
+        snapshot: null,
+      }
     }
     // Prevent double-activation. A snapshot with active:false means a previous
     // deactivation left unrestored items — re-activating now would capture the
     // already-mutated state as the new baseline and lose the original values.
     const existing = readSnapshot()
     if (existing?.active) {
-      return { succeeded: 0, failed: 1, errors: [{ optimizationId: 'config', reason: 'Game Mode is already active' }], snapshot: null }
-    }
-    if (existing) {
+      getLogger().warning('game-mode', 'Game Mode is already active — re-activation rejected')
       return {
         succeeded: 0,
         failed: 1,
-        errors: [{ optimizationId: 'config', reason: 'Previous deactivation left unrestored items — please retry deactivation first' }],
+        errors: [{ optimizationId: 'config', reason: 'Game Mode is already active' }],
+        snapshot: null,
+      }
+    }
+    if (existing) {
+      getLogger().warning('game-mode', 'Previous deactivation left unrestored items — re-activation rejected')
+      return {
+        succeeded: 0,
+        failed: 1,
+        errors: [
+          {
+            optimizationId: 'config',
+            reason: 'Previous deactivation left unrestored items — please retry deactivation first',
+          },
+        ],
         snapshot: null,
       }
     }
@@ -1058,6 +1190,7 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
   })
 
   ipcMain.handle(IPC.GAME_MODE_DEACTIVATE, async () => {
+    getLogger().info('game-mode', 'Deactivation requested via IPC')
     // If auto-detect is on and a game is still running, suppress re-activation
     if (autoActivated || isDetectorRunning()) {
       suppressCurrentGame()
@@ -1067,11 +1200,16 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
   })
 
   ipcMain.handle(IPC.GAME_MODE_STATUS, () => {
+    getLogger().info('game-mode', 'Status requested via IPC')
     return getGameModeStatus()
   })
 
   ipcMain.handle(IPC.GAME_MODE_RUN_AUDIT, async (_event, phase: unknown) => {
-    if (typeof phase !== 'string' || !['pre-activation', 'post-activation', 'pre-deactivation', 'post-restore'].includes(phase)) {
+    if (
+      typeof phase !== 'string' ||
+      !['pre-activation', 'post-activation', 'pre-deactivation', 'post-restore'].includes(phase)
+    ) {
+      getLogger().warning('game-mode', `Invalid audit phase: ${phase}`)
       throw new Error(`Invalid audit phase: ${phase}`)
     }
     const snapshot = readSnapshot()
@@ -1088,7 +1226,7 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
 
 /** Start or restart the game detector based on current settings */
 export function initGameDetector(
-  getWindow: WindowGetter,
+  _getWindow: WindowGetter,
   sendProgress: (data: GameModeProgress) => void,
   sendAutoEvent: (event: GameAutoEvent) => void,
 ): void {
@@ -1101,7 +1239,7 @@ export function initGameDetector(
     return
   }
 
-    startGameDetector(
+  startGameDetector(
     {
       onGameDetected: async (processName) => {
         // Don't activate if already active
@@ -1112,9 +1250,7 @@ export function initGameDetector(
 
         // Check for a game-specific profile
         const profile = cfg.gameProfiles?.[processName]
-        const activeCfg: GameModeConfig = profile
-          ? { ...cfg, enabledOptimizations: profile.enabledOptimizations }
-          : cfg
+        const activeCfg: GameModeConfig = profile ? { ...cfg, enabledOptimizations: profile.enabledOptimizations } : cfg
 
         autoActivated = true
         await activateGameMode(activeCfg, sendProgress)

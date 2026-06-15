@@ -8,6 +8,7 @@ export enum CleanerType {
   Shortcut = 'shortcut',
   Database = 'database',
   Environment = 'environment',
+  WinSxS = 'winSxS',
 }
 
 export enum ScanStatus {

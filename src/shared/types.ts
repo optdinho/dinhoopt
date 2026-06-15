@@ -14,6 +14,7 @@ export interface PlatformInfo {
     windowsTweaks: boolean
     benchmark: boolean
     compliance: boolean
+    vulnerability: boolean
   }
 }
 
@@ -36,6 +37,9 @@ export type HistoryEntryType =
   | 'services'
   | 'software-update'
   | 'compliance'
+  | 'vulnerability'
+  | 'delivery-optimization'
+  | 'cookie'
 
 export interface ScanHistoryEntry {
   id: string
@@ -86,6 +90,17 @@ export interface CleanError {
   reason: string
 }
 
+export interface CleanSummaryData {
+  totalCleaned: number
+  filesDeleted: number
+  filesSkipped: number
+  errors: CleanError[]
+  needsElevation: boolean
+  categories: Array<{ name: string; type: string; found: number; cleaned: number; space: number }>
+  duration: number
+  totalSizeBefore: number
+}
+
 export interface ProgressData {
   phase: 'scanning' | 'cleaning'
   category: string
@@ -97,15 +112,25 @@ export interface ProgressData {
 
 export interface RegistryFixAction {
   op: 'delete-value' | 'delete-key' | 'set-value' | 'disable-task' | 'delete-task'
-  key?: string        // full registry key (overrides keyPath if abbreviated)
-  value?: string      // value name (overrides valueName if different)
-  regType?: string    // REG_DWORD, REG_SZ
-  data?: string       // value data to set
+  key?: string // full registry key (overrides keyPath if abbreviated)
+  value?: string // value name (overrides valueName if different)
+  regType?: string // REG_DWORD, REG_SZ
+  data?: string // value data to set
 }
 
 export interface RegistryEntry {
   id: string
-  type: 'obsolete' | 'invalid' | 'orphaned' | 'broken' | 'vulnerability' | 'privacy' | 'performance' | 'network' | 'service' | 'task'
+  type:
+    | 'obsolete'
+    | 'invalid'
+    | 'orphaned'
+    | 'broken'
+    | 'vulnerability'
+    | 'privacy'
+    | 'performance'
+    | 'network'
+    | 'service'
+    | 'task'
   keyPath: string
   valueName: string
   issue: string
@@ -120,9 +145,17 @@ export interface StartupItem {
   displayName: string
   command: string
   location: string
-  source: 'registry-hkcu' | 'registry-hklm' | 'startup-folder' | 'task-scheduler'
-    | 'launch-agent-user' | 'launch-agent-global' | 'login-item'
-    | 'systemd-user' | 'autostart-desktop' | 'cron'
+  source:
+    | 'registry-hkcu'
+    | 'registry-hklm'
+    | 'startup-folder'
+    | 'task-scheduler'
+    | 'launch-agent-user'
+    | 'launch-agent-global'
+    | 'login-item'
+    | 'systemd-user'
+    | 'autostart-desktop'
+    | 'cron'
   enabled: boolean
   publisher: string
   impact: 'high' | 'medium' | 'low' | 'none'
@@ -190,7 +223,7 @@ export interface AppStats {
 
 export interface ActivityEntry {
   id: string
-  type: 'clean' | 'registry' | 'startup' | 'scan' | 'drivers' | 'network'
+  type: 'clean' | 'registry' | 'startup' | 'scan' | 'drivers' | 'network' | 'delivery-optimization' | 'cookie'
   message: string
   timestamp: string
   spaceSaved?: number
@@ -275,6 +308,8 @@ export interface MalwareScanResult {
   filesScanned: number
   duration: number
   engines: string[]
+  cancelled?: boolean
+  scanId: string
 }
 
 export interface MalwareActionResult {
@@ -307,6 +342,18 @@ export interface MalwareAllowlistEntry {
   addedAt: number
 }
 
+export interface ScanProfile {
+  id: string
+  name: string
+  description: string
+  icon: string
+  scanDirs: string[]
+  scanTypes: ('yara' | 'heuristic' | 'script' | 'persistence' | 'ads' | 'hosts')[]
+  maxFileSize: number
+  maxDepth: number
+  duration: 'quick' | 'normal' | 'full'
+}
+
 /** Detection metadata passed alongside a path when quarantining, so the
  *  quarantine list can show why each file was flagged. */
 export interface QuarantineMeta {
@@ -331,14 +378,7 @@ export interface YaraRulesInfo {
 // ─── Compliance Auditor ──────────────────────────────────────
 export type ComplianceSeverity = 'critical' | 'warning' | 'info'
 
-export type ComplianceCategory =
-  | 'password'
-  | 'audit'
-  | 'network'
-  | 'update'
-  | 'bitlocker'
-  | 'firewall'
-  | 'uac'
+export type ComplianceCategory = 'password' | 'audit' | 'network' | 'update' | 'bitlocker' | 'firewall' | 'uac'
 
 export interface ComplianceCheck {
   id: string
@@ -373,23 +413,75 @@ export interface ComplianceApplyResult {
   errors: { id: string; label: string; reason: string }[]
 }
 
+// ─── Vulnerability Scanner ──────────────────────────────────
+export type VulnerabilitySeverity = 'critical' | 'high' | 'medium' | 'low'
+
+export type VulnerabilityCategory = 'os' | 'framework' | 'network' | 'security' | 'update' | 'config'
+
+export interface VulnerabilityFinding {
+  id: string
+  category: VulnerabilityCategory
+  severity: VulnerabilitySeverity
+  label: string
+  description: string
+  cve?: string
+  vulnerable: boolean
+  reversible: boolean
+  requiresAdmin: boolean
+  value?: string
+  expected: string
+  fixDescription?: string
+}
+
+export interface VulnerabilityScanResult {
+  findings: VulnerabilityFinding[]
+  score: number
+  total: number
+  vulnerable: number
+  duration: number
+}
+
+export interface VulnerabilityScanProgress {
+  current: number
+  total: number
+  currentLabel: string
+  category: string
+}
+
+export interface VulnerabilityActionResult {
+  succeeded: number
+  failed: number
+  errors: { id: string; label: string; reason: string }[]
+}
+
 // ─── Privacy Shield ──────────────────────────────────────────
 export interface PrivacySetting {
   id: string
-  category: 'telemetry' | 'ads' | 'search' | 'services' | 'tasks' | 'sync' | 'kernel' | 'network' | 'access' | 'ai' | 'browser'
+  category:
+    | 'telemetry'
+    | 'ads'
+    | 'search'
+    | 'services'
+    | 'tasks'
+    | 'sync'
+    | 'kernel'
+    | 'network'
+    | 'access'
+    | 'ai'
+    | 'browser'
   label: string
   description: string
-  enabled: boolean          // true = privacy-friendly (tracking disabled)
-  reversible: boolean       // true = can be reverted to Windows default
+  enabled: boolean // true = privacy-friendly (tracking disabled)
+  reversible: boolean // true = can be reverted to Windows default
   requiresAdmin: boolean
-  dependsOn?: string        // ID of a setting that must be enabled first
+  dependsOn?: string // ID of a setting that must be enabled first
 }
 
 export interface PrivacyShieldState {
   settings: PrivacySetting[]
-  score: number             // 0-100 privacy score
-  total: number             // total settings count
-  protected: number         // settings already privacy-friendly
+  score: number // 0-100 privacy score
+  total: number // total settings count
+  protected: number // settings already privacy-friendly
 }
 
 export interface PrivacyScanProgress {
@@ -408,16 +500,16 @@ export interface PrivacyApplyResult {
 // ─── Driver Manager ─────────────────────────────────────────
 export interface DriverPackage {
   id: string
-  publishedName: string       // e.g. "oem42.inf"
-  originalName: string        // e.g. "nvlddmkm.inf"
+  publishedName: string // e.g. "oem42.inf"
+  originalName: string // e.g. "nvlddmkm.inf"
   provider: string
-  className: string           // e.g. "Display adapters"
+  className: string // e.g. "Display adapters"
   version: string
   date: string
   signer: string
-  folderPath: string          // full path in FileRepository
-  size: number                // bytes
-  isCurrent: boolean          // true = actively bound to hardware
+  folderPath: string // full path in FileRepository
+  size: number // bytes
+  isCurrent: boolean // true = actively bound to hardware
   selected: boolean
 }
 
@@ -444,7 +536,7 @@ export interface DriverScanProgress {
 
 export interface DriverUpdate {
   id: string
-  updateId: string            // Windows Update Identity.UpdateID (used for install matching)
+  updateId: string // Windows Update Identity.UpdateID (used for install matching)
   deviceName: string
   deviceId: string
   className: string
@@ -453,8 +545,8 @@ export interface DriverUpdate {
   availableVersion: string
   availableDate: string
   provider: string
-  updateTitle: string       // Windows Update title string
-  downloadSize: string      // human-readable size from WU
+  updateTitle: string // Windows Update title string
+  downloadSize: string // human-readable size from WU
   selected: boolean
 }
 
@@ -606,7 +698,7 @@ export interface InstalledProgram {
   registryKey: string
   isSystemComponent: boolean
   isWindowsInstaller: boolean
-  lastUsed: number              // timestamp ms, 0 = unknown/never seen in Prefetch
+  lastUsed: number // timestamp ms, 0 = unknown/never seen in Prefetch
 }
 
 export interface UninstallerListResult {
@@ -829,21 +921,9 @@ export interface GameModeStatus {
 }
 
 // ─── Service Manager ────────────────────────────────────────
-export type ServiceStatus =
-  | 'Running'
-  | 'Stopped'
-  | 'StartPending'
-  | 'StopPending'
-  | 'Paused'
-  | 'Unknown'
+export type ServiceStatus = 'Running' | 'Stopped' | 'StartPending' | 'StopPending' | 'Paused' | 'Unknown'
 
-export type ServiceStartType =
-  | 'Automatic'
-  | 'AutomaticDelayed'
-  | 'Manual'
-  | 'Disabled'
-  | 'Boot'
-  | 'System'
+export type ServiceStartType = 'Automatic' | 'AutomaticDelayed' | 'Manual' | 'Disabled' | 'Boot' | 'System' | 'Unknown'
 
 export type ServiceSafety = 'safe' | 'caution' | 'unsafe'
 
@@ -967,18 +1047,11 @@ export interface UpdatableApp {
   source: string
   severity: UpdateSeverity
   selected: boolean
-}
-
-export interface UpToDateApp {
-  id: string
-  name: string
-  version: string
-  source: string
+  isUpToDate?: boolean
 }
 
 export interface UpdateCheckResult {
   apps: UpdatableApp[]
-  upToDate: UpToDateApp[]
   totalCount: number
   majorCount: number
   minorCount: number
@@ -1023,13 +1096,7 @@ export interface DiskRepairResult {
 // ─── Disk Maintenance (SSD TRIM) ───────────────────────────
 export type TrimMediaType = 'SSD' | 'NVMe' | 'HDD' | 'Unknown'
 export type TrimSupport = 'supported' | 'disabled' | 'unsupported' | 'macos-managed'
-export type TrimStatus =
-  | 'recently-trimmed'
-  | 'ok'
-  | 'recommended'
-  | 'not-applicable'
-  | 'disabled'
-  | 'unknown'
+export type TrimStatus = 'recently-trimmed' | 'ok' | 'recommended' | 'not-applicable' | 'disabled' | 'unknown'
 
 /**
  * One row in the Disk Maintenance UI.
@@ -1329,6 +1396,7 @@ export type WindowsTweakLevel = 'basico' | 'medio' | 'full'
 export interface WindowsTweakDef {
   id: string
   name: string
+  description: string
   category: WindowsTweakCategory
   level: WindowsTweakLevel
   hive: 'HKEY_CURRENT_USER' | 'HKEY_LOCAL_MACHINE'
@@ -1466,4 +1534,153 @@ export interface PowerPlanDeleteResult {
   error?: string
 }
 
+export type LogLevel = 'info' | 'success' | 'warning' | 'error'
 
+export interface LogEntry {
+  timestamp: string
+  level: LogLevel
+  module: string
+  message: string
+  details?: string
+}
+
+export interface LogFilter {
+  level?: LogLevel
+  search?: string
+  module?: string
+}
+
+export interface LogsListResult {
+  entries: LogEntry[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+// ─── HOSTS Editor ────────────────────────────────────────
+
+export interface HostsEntry {
+  id: string
+  ip: string
+  hostname: string
+  comment: string
+  enabled: boolean
+}
+
+export interface HostsFileData {
+  headerComment: string
+  entries: HostsEntry[]
+}
+
+export interface HostsWriteRequest {
+  headerComment: string
+  entries: HostsEntry[]
+}
+
+// ─── Winapp2 Import ──────────────────────────────────────
+
+export interface Winapp2Section {
+  sectionName: string
+  originalName: string
+  suffix: '' | '*' | '%' | '!' | '?'
+  langSecRef?: number
+  default: boolean
+  detect: string[]
+  detectFile: string[]
+  detectHklm: string[]
+  detectHkcu: string[]
+  detectHkcuSoftware: string[]
+  fileKeys: Winapp2FileKey[]
+  regKeys: string[]
+  warning: boolean
+}
+
+export interface Winapp2FileKey {
+  path: string
+  fileMask: string
+  recurse: boolean
+  removeSelf: boolean
+}
+
+export interface Winapp2ParseResult {
+  sections: Winapp2Section[]
+  totalSections: number
+}
+
+// ─── Memory Scanner (Feature A) ──────────────────────────
+
+export interface ProcessInfo {
+  pid: number
+  name: string
+  path: string
+  cpu: number
+  memory: number
+  suspicious: boolean
+  reason?: string
+}
+
+export interface MemoryScanResult {
+  processes: ProcessInfo[]
+  suspiciousCount: number
+  timestamp: string
+}
+
+// ─── Threat Timeline (Feature B) ────────────────────────
+
+export interface TimelineEntry {
+  id: string
+  threatName: string
+  severity: string
+  filePath: string
+  detectedAt: string
+  action: 'quarantined' | 'skipped' | 'restored' | 'deleted'
+  scanId: string
+}
+
+// ─── Threat Intel (Feature C) ────────────
+
+export interface ThreatIntelEntry {
+  type: 'hash' | 'domain' | 'ip' | 'url' | 'registry'
+  value: string
+  source: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  description: string
+  addedAt: string
+  expiresAt?: string
+}
+
+export interface ThreatIntelFeed {
+  name: string
+  url: string
+  enabled: boolean
+  updateInterval: number
+  lastUpdated?: number
+  parser: 'csv' | 'json' | 'stix' | 'text'
+}
+
+// ─── Exploit Detection (Feature D) ───────
+
+export interface ExploitPattern {
+  name: string
+  description: string
+  severity: 'medium' | 'high' | 'critical'
+}
+
+export interface ExploitMatch {
+  pattern: ExploitPattern
+  offset: number
+  context: string
+}
+
+export interface ExploitScanResult {
+  filePath: string
+  matches: ExploitMatch[]
+  riskScore: number
+  isExploit: boolean
+}
+
+// ─── Logs ────────────────────────────────────────────────
+
+export interface LogConfig {
+  retentionDays: number
+}

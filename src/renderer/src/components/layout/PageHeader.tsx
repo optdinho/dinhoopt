@@ -9,11 +9,11 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, action, className }: PageHeaderProps) {
   return (
-    <div className={cn('mb-8 flex items-end justify-between', className)}>
+    <div className={cn('mb-5 flex items-end justify-between', className)}>
       <div>
-        <h1 className="text-[24px] font-bold tracking-tight text-white">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white">{title}</h1>
         {description && (
-          <p className="mt-1.5 text-[13px] animate-fade-in" style={{ color: 'var(--text-muted)' }}>
+          <p className="mt-1.5 text-sm animate-fade-in" style={{ color: 'var(--text-muted)' }}>
             {description}
           </p>
         )}

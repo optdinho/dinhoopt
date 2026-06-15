@@ -1,7 +1,6 @@
+import { execFile } from 'node:child_process'
 import * as si from 'systeminformation'
-import { execFile } from 'child_process'
 import { psUtf8 } from './exec-utf8'
-import { isAdmin } from './elevation'
 
 export interface MemoryInfo {
   totalBytes: number
@@ -39,22 +38,12 @@ function runPs(script: string, timeout = 30_000): Promise<string> {
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)],
       { timeout, windowsHide: true },
-      (err, stdout, stderr) => {
-        if (err) reject(new Error(stderr || err.message || 'Unknown error'))
+      (err, stdout) => {
+        if (err) reject(err)
         else resolve(stdout)
-      }
+      },
     )
   })
-}
-
-async function getBytesBefore(): Promise<number> {
-  const mem = await si.mem()
-  return mem.used
-}
-
-async function getBytesAfter(): Promise<number> {
-  const mem = await si.mem()
-  return mem.used
 }
 
 function calcFreed(before: number, after: number): number {
@@ -75,17 +64,19 @@ export async function getMemoryInfo(): Promise<MemoryInfo> {
 export async function getMemoryProcesses(top = 20): Promise<MemoryProcess[]> {
   const processes = await si.processes()
   return processes.list
-    .filter((p) => p.mem_rss > 0)
-    .sort((a, b) => b.mem_rss - a.mem_rss)
+    .filter((p) => p.memRss > 0)
+    .sort((a, b) => b.memRss - a.memRss)
     .slice(0, top)
     .map((p) => ({
       pid: p.pid,
       name: p.name,
-      workingSetBytes: p.mem_rss,
+      workingSetBytes: p.memRss,
     }))
 }
 
-export async function optimizeMemory(onProgress?: ProgressCallback): Promise<{ success: boolean; freedBytes: number; steps: MemoryOptimizeStep[]; error?: string }> {
+export async function optimizeMemory(
+  onProgress?: ProgressCallback,
+): Promise<{ success: boolean; freedBytes: number; steps: MemoryOptimizeStep[]; error?: string }> {
   const steps: MemoryOptimizeStep[] = []
   let totalFreed = 0
 
@@ -98,9 +89,9 @@ export async function optimizeMemory(onProgress?: ProgressCallback): Promise<{ s
   // Step 1: Force .NET garbage collection
   notify(1, TOTAL_STEPS, 'gc', 'Collecting .NET garbage...')
   try {
-    const before = await getBytesBefore()
+    const before = (await si.mem()).used
     await runPs('[System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers(); [System.GC]::Collect()', 15_000)
-    const after = await getBytesAfter()
+    const after = (await si.mem()).used
     const freed = calcFreed(before, after)
     totalFreed += freed
     steps.push({ name: 'gc', success: true, freedBytes: freed })
@@ -111,9 +102,10 @@ export async function optimizeMemory(onProgress?: ProgressCallback): Promise<{ s
   // Step 2: Empty working sets of all processes via P/Invoke SetProcessWorkingSetSize
   notify(2, TOTAL_STEPS, 'workingset', 'Emptying working sets...')
   try {
-    const before = await getBytesBefore()
-    await runPs(`
-Add-Type -TypeDefinition @'
+    const before = (await si.mem()).used
+    await runPs(
+      `
+Add-Type -TypeDefinition '@
   using System;
   using System.Runtime.InteropServices;
   public class MemoryUtils {
@@ -124,8 +116,10 @@ Add-Type -TypeDefinition @'
 Get-Process | Where-Object { $_.Id -ne $pid } | ForEach-Object {
   try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
 }
-`, 30_000)
-    const after = await getBytesAfter()
+`,
+      30_000,
+    )
+    const after = (await si.mem()).used
     const freed = calcFreed(before, after)
     totalFreed += freed
     steps.push({ name: 'workingset', success: true, freedBytes: freed })

@@ -1,12 +1,11 @@
+import type { UpdatableApp, UpdateProgress, UpdateResult } from '@shared/types'
 import { create } from 'zustand'
-import type { UpdatableApp, UpToDateApp, UpdateProgress, UpdateResult } from '@shared/types'
 
 type SortField = 'name' | 'severity' | 'source'
-type SeverityFilter = 'all' | 'major' | 'minor' | 'patch'
+type SeverityFilter = 'all' | 'major' | 'minor' | 'patch' | 'uptodate'
 
 interface SoftwareUpdaterState {
   apps: UpdatableApp[]
-  upToDate: UpToDateApp[]
   ignoredApps: UpdatableApp[]
   ignoredIds: Set<string>
   loading: boolean
@@ -23,7 +22,6 @@ interface SoftwareUpdaterState {
   severityFilter: SeverityFilter
 
   setApps: (apps: UpdatableApp[]) => void
-  setUpToDate: (apps: UpToDateApp[]) => void
   setLoading: (loading: boolean) => void
   setUpdating: (updating: boolean) => void
   setProgress: (progress: UpdateProgress | null) => void
@@ -57,7 +55,6 @@ function persistIgnoredIds(ids: Set<string>): void {
 
 export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
   apps: [],
-  upToDate: [],
   ignoredApps: [],
   ignoredIds: new Set<string>(),
   loading: false,
@@ -80,7 +77,6 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
       ignoredApps: allApps.filter((a) => ignoredIds.has(a.id)),
     })
   },
-  setUpToDate: (upToDate) => set({ upToDate }),
   setLoading: (loading) => set({ loading }),
   setUpdating: (updating) => set({ updating }),
   setProgress: (progress) => set({ progress }),
@@ -152,7 +148,6 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
   reset: () =>
     set({
       apps: [],
-      upToDate: [],
       ignoredApps: [],
       loading: false,
       updating: false,

@@ -1,6 +1,6 @@
-import { BrowserWindow } from 'electron'
 import { IPC } from '@shared/channels'
 import type { ScanHistoryEntry } from '@shared/types'
+import { BrowserWindow } from 'electron'
 import { createJsonStore } from './store-base'
 
 const MAX_HISTORY = 100
@@ -25,7 +25,9 @@ let writeLock: Promise<void> = Promise.resolve()
 export function addHistoryEntry(entry: ScanHistoryEntry): void {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   prev.then(() => {
     try {
       const history = store.load()

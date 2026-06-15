@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ─── Mock external dependencies before importing the module ──────────
 
@@ -9,15 +9,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const execFileAsyncMock = vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>()
 
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 const execFileMockFn: any = vi.fn()
 // Node's promisify checks for this custom symbol first
 execFileMockFn[Symbol.for('nodejs.util.promisify.custom')] = execFileAsyncMock
 
 vi.mock('child_process', () => ({
-  execFile: execFileMockFn
+  execFile: execFileMockFn,
 }))
 
 vi.mock('../services/exec-utf8', () => ({
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execNativeUtf8: (tool: string, args: string[], opts?: any) => execFileAsyncMock(tool, args, opts),
   psUtf8: (cmd: string) => cmd,
 }))
@@ -26,7 +28,7 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn(() => '{}'),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
-  existsSync: vi.fn(() => true)
+  existsSync: vi.fn(() => true),
 }))
 
 vi.mock('path', async () => {
@@ -39,24 +41,24 @@ vi.mock('electron', () => {
   return {
     app: {
       isPackaged: false,
-      getPath: () => '/mock/userData'
+      getPath: () => '/mock/userData',
     },
     ipcMain: {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
         handlers.set(channel, handler)
       }),
-      _handlers: handlers
+      _handlers: handlers,
     },
-    BrowserWindow: vi.fn()
+    BrowserWindow: vi.fn(),
   }
 })
 
 vi.mock('../platform', () => ({
   getPlatform: () => ({
     privacy: {
-      getSettings: () => []
-    }
-  })
+      getSettings: () => [],
+    },
+  }),
 }))
 
 vi.mock('../services/ipc-validation', () => ({
@@ -64,7 +66,7 @@ vi.mock('../services/ipc-validation', () => ({
     if (!Array.isArray(input)) return null
     if (!input.every((v: unknown) => typeof v === 'string')) return null
     return input as string[]
-  })
+  }),
 }))
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -95,8 +97,8 @@ afterEach(() => {
 
 // ─── Import after mocks ──────────────────────────────────────────
 
-import { ipcMain } from 'electron'
 import { IPC } from '@shared/channels'
+import { ipcMain } from 'electron'
 import { validateStringArray } from '../services/ipc-validation'
 
 let scanPrivacy: typeof import('./privacy-shield.ipc').scanPrivacy
@@ -145,14 +147,23 @@ describe('PRIVACY_SETTINGS definitions', () => {
   })
 
   it('has no duplicate setting IDs', () => {
-    const ids = PRIVACY_SETTINGS.map(s => s.id)
+    const ids = PRIVACY_SETTINGS.map((s) => s.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('all categories are valid PrivacySetting categories', () => {
     const validCategories = new Set([
-      'telemetry', 'ads', 'search', 'services', 'tasks', 'sync',
-      'kernel', 'network', 'access', 'ai', 'browser'
+      'telemetry',
+      'ads',
+      'search',
+      'services',
+      'tasks',
+      'sync',
+      'kernel',
+      'network',
+      'access',
+      'ai',
+      'browser',
     ])
     for (const s of PRIVACY_SETTINGS) {
       expect(validCategories.has(s.category)).toBe(true)
@@ -160,7 +171,7 @@ describe('PRIVACY_SETTINGS definitions', () => {
   })
 
   it('dependsOn references exist if specified', () => {
-    const allIds = new Set(PRIVACY_SETTINGS.map(s => s.id))
+    const allIds = new Set(PRIVACY_SETTINGS.map((s) => s.id))
     for (const s of PRIVACY_SETTINGS) {
       if (s.dependsOn) {
         expect(allIds.has(s.dependsOn)).toBe(true)
@@ -172,8 +183,8 @@ describe('PRIVACY_SETTINGS definitions', () => {
     // Settings like service-diagtrack, service-dmwappush, service-mapsbroker use
     // disableService/enableService and must have applicable() to check serviceExists.
     // But service-delivery-optimization uses regSetDword directly and does not need applicable.
-    const directServiceSettings = PRIVACY_SETTINGS.filter(s =>
-      s.category === 'services' && s.id.startsWith('service-') && s.id !== 'service-delivery-optimization'
+    const directServiceSettings = PRIVACY_SETTINGS.filter(
+      (s) => s.category === 'services' && s.id.startsWith('service-') && s.id !== 'service-delivery-optimization',
     )
     for (const s of directServiceSettings) {
       if (typeof s.revert === 'function') {
@@ -183,7 +194,7 @@ describe('PRIVACY_SETTINGS definitions', () => {
   })
 
   it('task-category settings all have applicable()', () => {
-    const taskSettings = PRIVACY_SETTINGS.filter(s => s.category === 'tasks')
+    const taskSettings = PRIVACY_SETTINGS.filter((s) => s.category === 'tasks')
     for (const s of taskSettings) {
       expect(typeof s.applicable).toBe('function')
     }
@@ -204,7 +215,7 @@ describe('registry operations via settings', () => {
         return { stdout: '' }
       })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       expect(await setting.check()).toBe(true)
     })
 
@@ -216,14 +227,14 @@ describe('registry operations via settings', () => {
         return { stdout: '' }
       })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       expect(await setting.check()).toBe(false)
     })
 
     it('returns false (null) when registry query fails', async () => {
       setupExecFileReject()
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       expect(await setting.check()).toBe(false)
     })
 
@@ -235,7 +246,7 @@ describe('registry operations via settings', () => {
         return { stdout: '' }
       })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'settings-sync')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'settings-sync')!
       expect(await setting.check()).toBe(true) // expects val === 2
     })
 
@@ -247,7 +258,7 @@ describe('registry operations via settings', () => {
         return { stdout: '' }
       })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'bing-start-menu')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'bing-start-menu')!
       expect(await setting.check()).toBe(true)
     })
   })
@@ -260,10 +271,10 @@ describe('registry operations via settings', () => {
         return { stdout: '' }
       })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       await setting.apply()
 
-      const addCall = calls.find(c => c.args[0] === 'add')
+      const addCall = calls.find((c) => c.args[0] === 'add')
       expect(addCall).toBeDefined()
       expect(addCall!.cmd).toBe('reg')
       expect(addCall!.args).toContain('/t')
@@ -275,7 +286,7 @@ describe('registry operations via settings', () => {
     it('propagates errors from reg add', async () => {
       setupExecFileReject(new Error('Access denied'))
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       await expect(setting.apply()).rejects.toThrow('Access denied')
     })
   })
@@ -288,20 +299,21 @@ describe('registry operations via settings', () => {
         return { stdout: '' }
       })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       await setting.revert!()
 
-      const deleteCall = calls.find(c => c.args[0] === 'delete')
+      const deleteCall = calls.find((c) => c.args[0] === 'delete')
       expect(deleteCall).toBeDefined()
       expect(deleteCall!.args).toContain('/f')
     })
 
     it('swallows "unable to find" errors (idempotent delete)', async () => {
       const err = new Error('unable to find the specified registry')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(err as any).stderr = 'ERROR: unable to find the specified registry key or value'
       execFileAsyncMock.mockRejectedValue(err)
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       // Should not throw
       await setting.revert!()
     })
@@ -311,7 +323,7 @@ describe('registry operations via settings', () => {
         .mockRejectedValueOnce(new Error('Access is denied'))
         .mockResolvedValueOnce({ stdout: '', stderr: '' })
 
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
       await expect(setting.revert!()).rejects.toThrow('Access is denied')
     })
 
@@ -323,10 +335,10 @@ describe('registry operations via settings', () => {
       })
 
       // handwriting-telemetry reverts by setting Enabled=1
-      const setting = PRIVACY_SETTINGS.find(s => s.id === 'handwriting-telemetry')!
+      const setting = PRIVACY_SETTINGS.find((s) => s.id === 'handwriting-telemetry')!
       await setting.revert!()
 
-      const addCall = calls.find(c => c.args[0] === 'add')
+      const addCall = calls.find((c) => c.args[0] === 'add')
       expect(addCall).toBeDefined()
       expect(addCall!.args).toContain('1') // reverts to Enabled=1
     })
@@ -346,7 +358,7 @@ describe('task scheduler operations', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     expect(await setting.check()).toBe(false) // !(isTaskActive=true) = false
   })
 
@@ -358,7 +370,7 @@ describe('task scheduler operations', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     expect(await setting.check()).toBe(true)
   })
 
@@ -366,23 +378,24 @@ describe('task scheduler operations', () => {
     setupExecFile((cmd, args) => {
       if (cmd === 'schtasks' && args[0] === '/query') {
         return {
-          stdout: '<?xml version="1.0"?><Task>'
-            + '<Triggers><TimeTrigger><Enabled>false</Enabled></TimeTrigger></Triggers>'
-            + '<Settings><Enabled>true</Enabled></Settings>'
-            + '</Task>'
+          stdout:
+            '<?xml version="1.0"?><Task>' +
+            '<Triggers><TimeTrigger><Enabled>false</Enabled></TimeTrigger></Triggers>' +
+            '<Settings><Enabled>true</Enabled></Settings>' +
+            '</Task>',
         }
       }
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     expect(await setting.check()).toBe(false) // task itself is enabled -> active -> not privacy-friendly
   })
 
   it('check returns true when task does not exist (query throws)', async () => {
     setupExecFileReject()
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     expect(await setting.check()).toBe(true) // task not found -> not active -> privacy-friendly
   })
 
@@ -393,10 +406,10 @@ describe('task scheduler operations', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     await setting.apply()
 
-    const changeCall = calls.find(c => c.cmd === 'schtasks' && c.args[0] === '/change')
+    const changeCall = calls.find((c) => c.cmd === 'schtasks' && c.args[0] === '/change')
     expect(changeCall).toBeDefined()
     expect(changeCall!.args).toContain('/disable')
   })
@@ -408,10 +421,10 @@ describe('task scheduler operations', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     await setting.revert!()
 
-    const changeCall = calls.find(c => c.cmd === 'schtasks' && c.args[0] === '/change')
+    const changeCall = calls.find((c) => c.cmd === 'schtasks' && c.args[0] === '/change')
     expect(changeCall).toBeDefined()
     expect(changeCall!.args).toContain('/enable')
   })
@@ -422,14 +435,14 @@ describe('task scheduler operations', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     expect(await setting.applicable!()).toBe(true)
   })
 
   it('applicable returns false when schtasks query throws', async () => {
     setupExecFileReject()
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'task-compatibility-appraiser')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'task-compatibility-appraiser')!
     expect(await setting.applicable!()).toBe(false)
   })
 })
@@ -447,7 +460,7 @@ describe('service state management', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'service-diagtrack')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'service-diagtrack')!
     expect(await setting.check()).toBe(false) // !(isServiceEnabled=true) = false
   })
 
@@ -459,7 +472,7 @@ describe('service state management', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'service-diagtrack')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'service-diagtrack')!
     expect(await setting.check()).toBe(true)
   })
 
@@ -473,10 +486,10 @@ describe('service state management', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'service-diagtrack')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'service-diagtrack')!
     await setting.apply()
 
-    const addCall = calls.find(c => c.args[0] === 'add' && (c.args[1] as string).includes('DiagTrack'))
+    const addCall = calls.find((c) => c.args[0] === 'add' && (c.args[1] as string).includes('DiagTrack'))
     expect(addCall).toBeDefined()
     expect(addCall!.args).toContain('4') // disabled = 4
   })
@@ -488,11 +501,11 @@ describe('service state management', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'service-diagtrack')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'service-diagtrack')!
     await setting.revert!()
 
     // Restores original Start value (cached from prior disableService, or defaults to 3)
-    const addCall = calls.find(c => c.args[0] === 'add' && (c.args[1] as string).includes('DiagTrack'))
+    const addCall = calls.find((c) => c.args[0] === 'add' && (c.args[1] as string).includes('DiagTrack'))
     expect(addCall).toBeDefined()
     // Value should be a numeric string (either cached original or default '3')
     const dataIdx = addCall!.args.indexOf('/d')
@@ -509,14 +522,14 @@ describe('service state management', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'service-diagtrack')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'service-diagtrack')!
     expect(await setting.applicable!()).toBe(true)
   })
 
   it('serviceExists returns false when Start value is absent', async () => {
     setupExecFileReject()
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'service-diagtrack')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'service-diagtrack')!
     expect(await setting.applicable!()).toBe(false)
   })
 })
@@ -534,14 +547,14 @@ describe('browser-conditional settings', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'chrome-metrics')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'chrome-metrics')!
     expect(await setting.check()).toBe(true)
   })
 
   it('chrome applicable returns false when Chrome is not installed', async () => {
     setupExecFileReject()
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'chrome-metrics')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'chrome-metrics')!
     expect(await setting.applicable!()).toBe(false)
   })
 
@@ -553,7 +566,7 @@ describe('browser-conditional settings', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'firefox-telemetry')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'firefox-telemetry')!
     expect(await setting.check()).toBe(true)
   })
 
@@ -567,7 +580,7 @@ describe('browser-conditional settings', () => {
       throw new Error('not found')
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'chrome-metrics')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'chrome-metrics')!
     expect(await setting.check()).toBe(false)
   })
 })
@@ -618,7 +631,7 @@ describe('scanPrivacy', () => {
 
     const result = await scanPrivacy()
     // protected count should equal the number of settings that report enabled=true
-    expect(result.protected).toBe(result.settings.filter(s => s.enabled).length)
+    expect(result.protected).toBe(result.settings.filter((s) => s.enabled).length)
     expect(result.score).toBe(Math.round((result.protected / result.total) * 100))
   })
 
@@ -629,9 +642,9 @@ describe('scanPrivacy', () => {
     await scanPrivacy((data) => progressCalls.push(data))
 
     expect(progressCalls.length).toBe(PRIVACY_SETTINGS.length)
-    expect(progressCalls[0].current).toBe(1)
-    expect(progressCalls[progressCalls.length - 1].current).toBe(PRIVACY_SETTINGS.length)
-    expect(progressCalls[0].total).toBe(PRIVACY_SETTINGS.length)
+    expect(progressCalls[0]!.current).toBe(1)
+    expect(progressCalls[progressCalls.length - 1]!.current).toBe(PRIVACY_SETTINGS.length)
+    expect(progressCalls[0]!.total).toBe(PRIVACY_SETTINGS.length)
   })
 
   it('progress includes label and category', async () => {
@@ -640,8 +653,8 @@ describe('scanPrivacy', () => {
     const progressCalls: { currentLabel: string; category: string }[] = []
     await scanPrivacy((data) => progressCalls.push(data))
 
-    expect(progressCalls[0].currentLabel).toBe(PRIVACY_SETTINGS[0].label)
-    expect(progressCalls[0].category).toBe(PRIVACY_SETTINGS[0].category)
+    expect(progressCalls[0]!.currentLabel).toBe(PRIVACY_SETTINGS[0]!.label)
+    expect(progressCalls[0]!.category).toBe(PRIVACY_SETTINGS[0]!.category)
   })
 
   it('works when onProgress is not provided', async () => {
@@ -659,7 +672,7 @@ describe('scanPrivacy', () => {
       expect(typeof s.enabled).toBe('boolean')
     }
     // Registry-based checks that compare val === 0 will get null (error) and return false
-    const telemetry = result.settings.find(s => s.id === 'telemetry-level')!
+    const telemetry = result.settings.find((s) => s.id === 'telemetry-level')!
     expect(telemetry.enabled).toBe(false)
   })
 
@@ -667,7 +680,7 @@ describe('scanPrivacy', () => {
     setupExecFileReject()
     const result = await scanPrivacy()
     for (const s of result.settings) {
-      const def = PRIVACY_SETTINGS.find(d => d.id === s.id)!
+      const def = PRIVACY_SETTINGS.find((d) => d.id === s.id)!
       if (!def.revert) {
         expect(s.reversible).toBe(false)
       }
@@ -678,8 +691,8 @@ describe('scanPrivacy', () => {
     setupExecFileReject() // all queries fail -> serviceExists/taskExists return false
 
     const result = await scanPrivacy()
-    const settingsWithApplicable = result.settings.filter(s =>
-      PRIVACY_SETTINGS.find(d => d.id === s.id)?.applicable !== undefined
+    const settingsWithApplicable = result.settings.filter(
+      (s) => PRIVACY_SETTINGS.find((d) => d.id === s.id)?.applicable !== undefined,
     )
     for (const s of settingsWithApplicable) {
       expect(s.reversible).toBe(false)
@@ -691,8 +704,9 @@ describe('scanPrivacy', () => {
     const result = await scanPrivacy()
 
     for (const s of result.settings) {
-      const def = PRIVACY_SETTINGS.find(d => d.id === s.id)!
+      const def = PRIVACY_SETTINGS.find((d) => d.id === s.id)!
       if (def.dependsOn) {
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
         expect((s as any).dependsOn).toBe(def.dependsOn)
       }
     }
@@ -716,7 +730,7 @@ describe('timeout behavior (withTimeout)', () => {
     const neverResolves = new Promise<boolean>(() => {})
     const result = await Promise.race([
       neverResolves,
-      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 50))
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
     ])
     expect(result).toBe(false)
   })
@@ -725,7 +739,7 @@ describe('timeout behavior (withTimeout)', () => {
     const quickResolve = Promise.resolve(true)
     const result = await Promise.race([
       quickResolve,
-      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 50))
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
     ])
     expect(result).toBe(true)
   })
@@ -760,9 +774,9 @@ describe('applyPrivacySettings', () => {
     expect(result.failed).toBe(1)
     expect(result.succeeded).toBe(0)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].id).toBe('telemetry-level')
-    expect(result.errors[0].label).toBe('Windows Telemetry')
-    expect(result.errors[0].reason).toBe('Access denied')
+    expect(result.errors[0]!.id).toBe('telemetry-level')
+    expect(result.errors[0]!.label).toBe('Windows Telemetry')
+    expect(result.errors[0]!.reason).toBe('Access denied')
   })
 
   it('handles mixed success and failure', async () => {
@@ -789,7 +803,7 @@ describe('applyPrivacySettings', () => {
 
     const result = await applyPrivacySettings(['telemetry-level'])
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Unknown error')
+    expect(result.errors[0]!.reason).toBe('Unknown error')
   })
 
   it('processes all IDs even if some fail', async () => {
@@ -828,9 +842,9 @@ describe('revertPrivacySettings', () => {
   it('reports failure for unknown setting IDs', async () => {
     const result = await revertPrivacySettings(['nonexistent-setting'])
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Revert not supported for this setting')
-    expect(result.errors[0].id).toBe('nonexistent-setting')
-    expect(result.errors[0].label).toBe('nonexistent-setting') // uses id as label fallback
+    expect(result.errors[0]!.reason).toBe('Revert not supported for this setting')
+    expect(result.errors[0]!.id).toBe('nonexistent-setting')
+    expect(result.errors[0]!.label).toBe('nonexistent-setting') // uses id as label fallback
   })
 
   it('reports failure when revert throws', async () => {
@@ -841,7 +855,7 @@ describe('revertPrivacySettings', () => {
 
     const result = await revertPrivacySettings(['telemetry-level'])
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Cannot revert: access denied')
+    expect(result.errors[0]!.reason).toBe('Cannot revert: access denied')
   })
 
   it('returns empty result for empty array', async () => {
@@ -853,13 +867,11 @@ describe('revertPrivacySettings', () => {
 
   it('handles non-Error thrown objects in revert', async () => {
     execFileAsyncMock.mockReset()
-    execFileAsyncMock
-      .mockRejectedValueOnce(42)
-      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+    execFileAsyncMock.mockRejectedValueOnce(42).mockResolvedValueOnce({ stdout: '', stderr: '' })
 
     const result = await revertPrivacySettings(['telemetry-level'])
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Unknown error')
+    expect(result.errors[0]!.reason).toBe('Unknown error')
   })
 
   it('processes all IDs even if some fail', async () => {
@@ -886,6 +898,7 @@ describe('input validation via IPC handlers', () => {
 
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     const applyHandler = handlers.get(IPC.PRIVACY_APPLY)!
 
@@ -899,6 +912,7 @@ describe('input validation via IPC handlers', () => {
 
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     const revertHandler = handlers.get(IPC.PRIVACY_REVERT)!
 
@@ -914,6 +928,7 @@ describe('input validation via IPC handlers', () => {
     setupExecFile(() => ({ stdout: '' }))
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_APPLY)!({}, ['telemetry-level'])
 
@@ -928,6 +943,7 @@ describe('input validation via IPC handlers', () => {
     setupExecFile(() => ({ stdout: '' }))
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_REVERT)!({}, ['advertising-id'])
 
@@ -946,7 +962,7 @@ describe('registerPrivacyShieldIpc', () => {
 
     registerPrivacyShieldIpc(() => null)
 
-    const channels = handleSpy.mock.calls.map(c => c[0])
+    const channels = handleSpy.mock.calls.map((c) => c[0])
     expect(channels).toContain(IPC.PRIVACY_SCAN)
     expect(channels).toContain(IPC.PRIVACY_APPLY)
     expect(channels).toContain(IPC.PRIVACY_REVERT)
@@ -957,8 +973,10 @@ describe('registerPrivacyShieldIpc', () => {
 
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
-    const result = await handlers.get(IPC.PRIVACY_SCAN)!() as any
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    const result = (await handlers.get(IPC.PRIVACY_SCAN)!()) as any
 
     expect(result).toHaveProperty('settings')
     expect(result).toHaveProperty('score')
@@ -975,8 +993,10 @@ describe('registerPrivacyShieldIpc', () => {
 
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
-    const result = await handlers.get(IPC.PRIVACY_APPLY)!({}, ['telemetry-level']) as any
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    const result = (await handlers.get(IPC.PRIVACY_APPLY)!({}, ['telemetry-level'])) as any
 
     expect(result.succeeded).toBe(1)
   })
@@ -991,18 +1011,20 @@ describe('sendProgress', () => {
     const sendMock = vi.fn()
     const mockWindow = {
       isDestroyed: () => false,
-      webContents: { send: sendMock }
+      webContents: { send: sendMock },
     }
 
     setupExecFileReject()
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerPrivacyShieldIpc(() => mockWindow as any)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_SCAN)!()
 
     expect(sendMock).toHaveBeenCalled()
-    const [channel, data] = sendMock.mock.calls[0]
+    const [channel, data] = sendMock.mock.calls[0]!
     expect(channel).toBe(IPC.PRIVACY_PROGRESS)
     expect(data).toHaveProperty('current')
     expect(data).toHaveProperty('total')
@@ -1015,6 +1037,7 @@ describe('sendProgress', () => {
 
     registerPrivacyShieldIpc(() => null)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_SCAN)!()
     // no throw = pass
@@ -1024,13 +1047,15 @@ describe('sendProgress', () => {
     const sendMock = vi.fn()
     const mockWindow = {
       isDestroyed: () => true,
-      webContents: { send: sendMock }
+      webContents: { send: sendMock },
     }
 
     setupExecFileReject()
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerPrivacyShieldIpc(() => mockWindow as any)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_SCAN)!()
 
@@ -1046,7 +1071,7 @@ describe('edge cases and error handling', () => {
   it('regQueryDword handles malformed stdout gracefully', async () => {
     setupExecFile(() => ({ stdout: 'garbage output without REG_DWORD' }))
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
     expect(await setting.check()).toBe(false) // regex won't match -> null -> false
   })
 
@@ -1058,7 +1083,7 @@ describe('edge cases and error handling', () => {
       return { stdout: '' }
     })
 
-    const setting = PRIVACY_SETTINGS.find(s => s.id === 'telemetry-level')!
+    const setting = PRIVACY_SETTINGS.find((s) => s.id === 'telemetry-level')!
     expect(await setting.check()).toBe(false) // 0xA = 10, not 0
   })
 

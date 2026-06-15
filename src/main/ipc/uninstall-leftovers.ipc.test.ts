@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { CleanerType } from '@shared/enums'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -43,9 +44,9 @@ vi.mock('../services/ipc-validation', () => ({
   validateStringArray: (...args: unknown[]) => mockValidateStringArray(...args),
 }))
 
-import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
+import type { ScanItem, ScanResult } from '@shared/types'
 import type { BrowserWindow } from 'electron'
-import type { ScanResult, ScanItem } from '@shared/types'
+import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -67,14 +68,14 @@ function makeScanResult(items: Partial<ScanItem>[] = []): ScanResult {
     id: `item-${i}`,
     path: `C:\\leftover${i}`,
     size: 100,
-    category: 'uninstall-leftovers',
+    category: CleanerType.UninstallLeftovers,
     subcategory: 'files',
     lastModified: Date.now(),
     selected: true,
     ...partial,
   }))
   return {
-    category: 'uninstall-leftovers',
+    category: CleanerType.UninstallLeftovers,
     subcategory: 'files',
     items: fullItems,
     totalSize: fullItems.reduce((s, it) => s + it.size, 0),
@@ -143,11 +144,14 @@ describe('uninstall-leftovers IPC', () => {
       expect(mockCacheItems).toHaveBeenCalledWith([])
     })
 
-    it('propagates errors from scanForLeftovers', async () => {
+    it('returns empty array when scanForLeftovers throws', async () => {
       mockScanForLeftovers.mockRejectedValue(new Error('scan failed'))
 
       registerUninstallLeftoversIpc(() => makeWindow())
-      await expect(invoke('cleaner:uninstall-leftovers:scan')).rejects.toThrow('scan failed')
+      const result = await invoke('cleaner:uninstall-leftovers:scan')
+
+      expect(result).toEqual([])
+      expect(mockCacheItems).not.toHaveBeenCalled()
     })
   })
 

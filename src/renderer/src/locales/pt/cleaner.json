@@ -11,6 +11,8 @@
   "categoryApplicationsDescription": "Caches de aplicações e ferramentas de desenvolvimento",
   "categoryGaming": "Jogos",
   "categoryGamingDescription": "Caches de launchers, redistribuíveis",
+  "categoryWinSxS": "WinSxS",
+  "categoryWinSxSDescription": "Ficheiros obsoletos do repositório de componentes",
   "categoryRecycleBin": "Reciclagem",
   "categoryRecycleBinDescription": "Ficheiros eliminados",
   "categoryShortcuts": "Atalhos",

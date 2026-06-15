@@ -1,14 +1,21 @@
+import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { app } from 'electron'
-import { existsSync } from 'fs'
-import { readdir } from 'fs/promises'
-import { join } from 'path'
-import { scanDirectory, scanFile, scanMultipleDirectories, scanDirectoriesAsItems, resolveChildSubdirs, cleanItems, getDirectorySize } from './services/file-utils'
-import { cacheItems } from './services/scan-cache'
 import { CleanerType } from '../shared/enums'
-import type { ScanResult, CleanResult } from '../shared/types'
+import type { CleanResult, ScanResult } from '../shared/types'
 import { getPlatform } from './platform'
-import { randomUUID } from 'crypto'
 import { psUtf8 } from './services/exec-utf8'
+import {
+  cleanItems,
+  resolveChildSubdirs,
+  scanDirectoriesAsItems,
+  scanDirectory,
+  scanFile,
+  scanMultipleDirectories,
+} from './services/file-utils'
+import { cacheItems } from './services/scan-cache'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -43,19 +50,19 @@ export interface ParsedCliArgs {
 // ─── Output helpers ──────────────────────────────────────────
 
 function log(msg: string): void {
-  process.stdout.write(msg + '\n')
+  process.stdout.write(`${msg}\n`)
 }
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`
+  return `${(bytes / 1024 ** i).toFixed(2)} ${units[i]}`
 }
 
 function cliLog(ctx: CliContext, msg: string): void {
   if (ctx.verbosity === 'quiet') return
-  process.stdout.write(msg + '\n')
+  process.stdout.write(`${msg}\n`)
 }
 
 function cliVerbose(ctx: CliContext, msg: string): void {
@@ -122,11 +129,11 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
   const verbosity: Verbosity = verbose ? 'verbose' : quiet ? 'quiet' : 'normal'
   const ctx: CliContext = { json, verbosity }
 
-  const command = cliArgs.find(a => !a.startsWith('--') && !a.startsWith('-'))
-  const commandArgs = cliArgs.filter(a => a !== command && !GLOBAL_FLAGS.has(a))
+  const command = cliArgs.find((a) => !a.startsWith('--') && !a.startsWith('-'))
+  const commandArgs = cliArgs.filter((a) => a !== command && !GLOBAL_FLAGS.has(a))
 
   const legacyCats = ['system', 'browser', 'app', 'gaming', 'recycle-bin']
-  const hasLegacyFlags = legacyCats.some(c => cliArgs.includes(`--${c}`)) || cliArgs.includes('--all')
+  const hasLegacyFlags = legacyCats.some((c) => cliArgs.includes(`--${c}`)) || cliArgs.includes('--all')
   const hasCleanFlag = cliArgs.includes('--clean')
 
   return { command, commandArgs, ctx, help, version, hasLegacyFlags, hasCleanFlag }
@@ -144,7 +151,7 @@ async function scanSystem(): Promise<ScanResult[]> {
 
   for (const target of targets) {
     try {
-      let result
+      let result: ScanResult
       if (target.childSubdir) {
         const childPaths = await resolveChildSubdirs([target.path], target.childSubdir)
         result = await scanMultipleDirectories(childPaths, category, target.subcategory)
@@ -159,14 +166,24 @@ async function scanSystem(): Promise<ScanResult[]> {
         result.totalSize = result.items.reduce((s, item) => s + item.size, 0)
         result.itemCount = result.items.length
       }
-      if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
-    } catch { /* skip */ }
+      if (result.items.length > 0) {
+        cacheItems(result.items)
+        results.push(result)
+      }
+    } catch {
+      /* skip */
+    }
   }
   for (const target of platform.paths.singleFileCleanTargets()) {
     try {
       const dumpResult = await scanFile(target.path, category, target.subcategory)
-      if (dumpResult.items.length > 0) { cacheItems(dumpResult.items); results.push(dumpResult) }
-    } catch { /* skip */ }
+      if (dumpResult.items.length > 0) {
+        cacheItems(dumpResult.items)
+        results.push(dumpResult)
+      }
+    } catch {
+      /* skip */
+    }
   }
   return results
 }
@@ -196,25 +213,35 @@ async function scanBrowserCli(): Promise<ScanResult[]> {
       const profiles = await getChromiumProfiles(browser.base)
       for (const profile of profiles) {
         for (const { dir, label } of [
-          { dir: browser.cache, label: 'Cache' }, { dir: browser.codeCache, label: 'Code Cache' },
-          { dir: browser.gpuCache, label: 'GPU Cache' }, { dir: browser.serviceWorker, label: 'Service Worker Cache' },
+          { dir: browser.cache, label: 'Cache' },
+          { dir: browser.codeCache, label: 'Code Cache' },
+          { dir: browser.gpuCache, label: 'GPU Cache' },
+          { dir: browser.serviceWorker, label: 'Service Worker Cache' },
         ]) {
           const cachePath = join(browser.base, profile, dir)
           if (existsSync(cachePath)) {
             const result = await scanDirectory(cachePath, category, `${browser.label} - ${profile} ${label}`)
-            if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+            if (result.items.length > 0) {
+              cacheItems(result.items)
+              results.push(result)
+            }
           }
         }
       }
     } else {
       for (const { dir, label } of [
-        { dir: browser.cache, label: 'Cache' }, { dir: browser.codeCache, label: 'Code Cache' },
-        { dir: browser.gpuCache, label: 'GPU Cache' }, { dir: browser.serviceWorker, label: 'Service Worker Cache' },
+        { dir: browser.cache, label: 'Cache' },
+        { dir: browser.codeCache, label: 'Code Cache' },
+        { dir: browser.gpuCache, label: 'GPU Cache' },
+        { dir: browser.serviceWorker, label: 'Service Worker Cache' },
       ]) {
         const cachePath = join(browser.base, dir)
         if (existsSync(cachePath)) {
           const result = await scanDirectory(cachePath, category, `${browser.label} - ${label}`)
-          if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+          if (result.items.length > 0) {
+            cacheItems(result.items)
+            results.push(result)
+          }
         }
       }
     }
@@ -227,11 +254,16 @@ async function scanBrowserCli(): Promise<ScanResult[]> {
           const cachePath = join(browserPaths.firefox.cache, dir.name, 'cache2', 'entries')
           if (existsSync(cachePath)) {
             const result = await scanDirectory(cachePath, category, `Firefox - ${dir.name} Cache`)
-            if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+            if (result.items.length > 0) {
+              cacheItems(result.items)
+              results.push(result)
+            }
           }
         }
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   // Firefox forks (LibreWolf, Waterfox, Floorp)
   const firefoxForks = [
@@ -248,16 +280,24 @@ async function scanBrowserCli(): Promise<ScanResult[]> {
           const cachePath = join(fork.cache, dir.name, 'cache2')
           if (existsSync(cachePath)) {
             const result = await scanDirectory(cachePath, category, `${fork.label} - ${dir.name} Cache`)
-            if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+            if (result.items.length > 0) {
+              cacheItems(result.items)
+              results.push(result)
+            }
           }
         }
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   // Safari (macOS only) — cache directory only, never cookies/history/bookmarks
   if (browserPaths.safari && existsSync(browserPaths.safari.cache)) {
     const result = await scanDirectory(browserPaths.safari.cache, category, 'Safari - Cache')
-    if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+    if (result.items.length > 0) {
+      cacheItems(result.items)
+      results.push(result)
+    }
   }
   return results
 }
@@ -269,8 +309,13 @@ async function scanApp(): Promise<ScanResult[]> {
     try {
       const paths = await resolveChildSubdirs(appDef.paths, appDef.childSubdir)
       const result = await scanMultipleDirectories(paths, category, appDef.name)
-      if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
-    } catch { /* skip */ }
+      if (result.items.length > 0) {
+        cacheItems(result.items)
+        results.push(result)
+      }
+    } catch {
+      /* skip */
+    }
   }
   return results
 }
@@ -281,14 +326,24 @@ async function scanGaming(): Promise<ScanResult[]> {
   for (const launcher of getPlatform().paths.gamingPaths()) {
     try {
       const result = await scanDirectoriesAsItems(launcher.paths, category, launcher.name, 'Launcher Caches')
-      if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
-    } catch { /* skip */ }
+      if (result.items.length > 0) {
+        cacheItems(result.items)
+        results.push(result)
+      }
+    } catch {
+      /* skip */
+    }
   }
   for (const gpu of getPlatform().paths.gpuCachePaths()) {
     try {
       const result = await scanDirectoriesAsItems(gpu.paths, category, gpu.name, 'GPU Shader Caches')
-      if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
-    } catch { /* skip */ }
+      if (result.items.length > 0) {
+        cacheItems(result.items)
+        results.push(result)
+      }
+    } catch {
+      /* skip */
+    }
   }
   return results
 }
@@ -299,34 +354,55 @@ async function scanRecycleBin(): Promise<ScanResult[]> {
     // macOS / Linux: scan trash directory
     if (!existsSync(trashPath)) return []
     const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash', 0)
-    if (result.items.length > 0) { cacheItems(result.items); return [result] }
+    if (result.items.length > 0) {
+      cacheItems(result.items)
+      return [result]
+    }
     return []
   }
   // Windows: COM-based recycle bin
-  const { execFile } = await import('child_process')
-  const { promisify } = await import('util')
+  const { execFile } = await import('node:child_process')
+  const { promisify } = await import('node:util')
   const execFileAsync = promisify(execFile)
   try {
     const rbScript = `$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = $items.Count; $size = ($items | Measure-Object -Property Size -Sum).Sum; Write-Output "$count|$size"`
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-Command', psUtf8(rbScript)
-    ], { windowsHide: true })
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(rbScript)], {
+      windowsHide: true,
+    })
     const [countStr, sizeStr] = stdout.trim().split('|')
-    const count = parseInt(countStr) || 0
-    const size = parseInt(sizeStr) || 0
+    const count = Number.parseInt(countStr!) || 0
+    const size = Number.parseInt(sizeStr!) || 0
     if (count === 0) return []
-    const item = { id: randomUUID(), path: 'Recycle Bin', size, category: CleanerType.RecycleBin, subcategory: 'Recycle Bin', lastModified: Date.now(), selected: true }
+    const item = {
+      id: randomUUID(),
+      path: 'Recycle Bin',
+      size,
+      category: CleanerType.RecycleBin,
+      subcategory: 'Recycle Bin',
+      lastModified: Date.now(),
+      selected: true,
+    }
     cacheItems([item])
-    return [{ category: CleanerType.RecycleBin, subcategory: 'Recycle Bin', items: [item], totalSize: size, itemCount: count }]
-  } catch { return [] }
+    return [
+      {
+        category: CleanerType.RecycleBin,
+        subcategory: 'Recycle Bin',
+        items: [item],
+        totalSize: size,
+        itemCount: count,
+      },
+    ]
+  } catch {
+    return []
+  }
 }
 
 async function scanDatabaseCli(): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const category = CleanerType.Database
   const targets = getPlatform().paths.databaseOptimizeTargets()
-  const { statSync, existsSync: fileExists, readdirSync, openSync, readSync, closeSync } = await import('fs')
-  const path = await import('path')
+  const { statSync, existsSync: fileExists, readdirSync, openSync, readSync, closeSync } = await import('node:fs')
+  const path = await import('node:path')
 
   function isSqliteFile(filePath: string): boolean {
     let fd: number | undefined
@@ -335,8 +411,11 @@ async function scanDatabaseCli(): Promise<ScanResult[]> {
       const buf = Buffer.alloc(16)
       readSync(fd, buf, 0, 16, 0)
       return buf.toString('utf8', 0, 16) === 'SQLite format 3\0'
-    } catch { return false }
-    finally { if (fd !== undefined) closeSync(fd) }
+    } catch {
+      return false
+    } finally {
+      if (fd !== undefined) closeSync(fd)
+    }
   }
 
   for (const target of targets) {
@@ -354,7 +433,10 @@ async function scanDatabaseCli(): Promise<ScanResult[]> {
               if (!entry.isDirectory()) continue
               for (const pattern of target.profilePattern) {
                 const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
-                if (new RegExp('^' + escaped + '$').test(entry.name)) { dirs.push(path.join(target.basePath, entry.name)); break }
+                if (new RegExp(`^${escaped}$`).test(entry.name)) {
+                  dirs.push(path.join(target.basePath, entry.name))
+                  break
+                }
               }
             }
           } else {
@@ -366,7 +448,9 @@ async function scanDatabaseCli(): Promise<ScanResult[]> {
             }
           }
           if (dirs.length > 0) profileDirs = dirs
-        } catch { /* use basePath */ }
+        } catch {
+          /* use basePath */
+        }
       }
 
       for (const profileDir of profileDirs) {
@@ -377,54 +461,84 @@ async function scanDatabaseCli(): Promise<ScanResult[]> {
           if (fileStat.size === 0) continue
 
           let walSize = 0
-          try { walSize = statSync(dbPath + '-wal').size } catch { /* no WAL */ }
+          try {
+            walSize = statSync(`${dbPath}-wal`).size
+          } catch {
+            /* no WAL */
+          }
           const wastedBytes = walSize + Math.floor(fileStat.size * 0.1)
           if (wastedBytes < 4096) continue
 
           items.push({
-              id: randomUUID(), path: dbPath, size: wastedBytes,
-              category, subcategory: target.label,
-              lastModified: fileStat.mtimeMs, selected: true,
-            })
+            id: randomUUID(),
+            path: dbPath,
+            size: wastedBytes,
+            category,
+            subcategory: target.label,
+            lastModified: fileStat.mtimeMs,
+            selected: true,
+          })
         }
       }
 
       if (items.length > 0) {
         cacheItems(items)
-        results.push({ category, subcategory: target.label, items, totalSize: items.reduce((s, i) => s + i.size, 0), itemCount: items.length })
+        results.push({
+          category,
+          subcategory: target.label,
+          items,
+          totalSize: items.reduce((s, i) => s + i.size, 0),
+          itemCount: items.length,
+        })
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   return results
 }
 
-async function cleanRecycleBin(sizeBytes: number = 0): Promise<CleanResult> {
+async function cleanRecycleBin(sizeBytes = 0): Promise<CleanResult> {
   // On macOS/Linux, trash items are real files cleaned via cleanItems() in the main flow.
   // This function is only called for Windows COM-based recycle bin.
-  const { execFile } = await import('child_process')
-  const { promisify } = await import('util')
+  const { execFile } = await import('node:child_process')
+  const { promisify } = await import('node:util')
   const execFileAsync = promisify(execFile)
   try {
-    const cleanScript = `$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | ForEach-Object { Remove-Item $_.Path -Recurse -Force -ErrorAction SilentlyContinue }; Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue`
-    await execFileAsync('powershell.exe', [
-      '-NoProfile', '-Command', psUtf8(cleanScript)
-    ], { windowsHide: true })
+    const cleanScript =
+      '$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | ForEach-Object { Remove-Item $_.Path -Recurse -Force -ErrorAction SilentlyContinue }; Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue'
+    await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(cleanScript)], { windowsHide: true })
     return { totalCleaned: sizeBytes, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
-  } catch (err: any) {
-    return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }], needsElevation: false }
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err)
+    return {
+      totalCleaned: 0,
+      filesDeleted: 0,
+      filesSkipped: 0,
+      errors: [{ path: 'Recycle Bin', reason }],
+      needsElevation: false,
+    }
   }
 }
 
 async function cleanDatabasesCli(itemIds: string[]): Promise<CleanResult> {
   const { getCachedItem } = await import('./services/scan-cache')
-  const { statSync } = await import('fs')
-  let Database: any
+  const { statSync } = await import('node:fs')
+  let Database: new (
+    path: string,
+    options?: { fileMustExist?: boolean },
+  ) => {
+    pragma: (key: string, options?: { simple?: boolean }) => unknown
+    close: () => void
+  }
   try {
     Database = (await import('better-sqlite3')).default
   } catch {
     return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
   }
-  let totalCleaned = 0, filesDeleted = 0, filesSkipped = 0
+  let totalCleaned = 0
+  let filesDeleted = 0
+  let filesSkipped = 0
   const errors: CleanResult['errors'] = []
 
   for (const id of itemIds) {
@@ -433,17 +547,27 @@ async function cleanDatabasesCli(itemIds: string[]): Promise<CleanResult> {
     try {
       const sizeBefore = statSync(item.path).size
       let walSizeBefore = 0
-      try { walSizeBefore = statSync(item.path + '-wal').size } catch { /* no WAL */ }
+      try {
+        walSizeBefore = statSync(`${item.path}-wal`).size
+      } catch {
+        /* no WAL */
+      }
       const db = new Database(item.path, { fileMustExist: true })
       try {
         const journalMode = (db.pragma('journal_mode', { simple: true }) as string).toLowerCase()
         db.exec('VACUUM')
         if (journalMode === 'wal') db.pragma('journal_mode = WAL')
-      } finally { db.close() }
+      } finally {
+        db.close()
+      }
       const sizeAfter = statSync(item.path).size
       let walSizeAfter = 0
-      try { walSizeAfter = statSync(item.path + '-wal').size } catch { /* no WAL */ }
-      const reclaimed = (sizeBefore + walSizeBefore) - (sizeAfter + walSizeAfter)
+      try {
+        walSizeAfter = statSync(`${item.path}-wal`).size
+      } catch {
+        /* no WAL */
+      }
+      const reclaimed = sizeBefore + walSizeBefore - (sizeAfter + walSizeAfter)
       if (reclaimed > 0) totalCleaned += reclaimed
       filesDeleted++
     } catch (err: unknown) {
@@ -458,7 +582,13 @@ async function cleanDatabasesCli(itemIds: string[]): Promise<CleanResult> {
       }
     }
   }
-  return { totalCleaned, filesDeleted, filesSkipped, errors, needsElevation: errors.some((e) => e.reason === 'permission-denied') }
+  return {
+    totalCleaned,
+    filesDeleted,
+    filesSkipped,
+    errors,
+    needsElevation: errors.some((e) => e.reason === 'permission-denied'),
+  }
 }
 
 async function getChromiumProfiles(basePath: string): Promise<string[]> {
@@ -468,14 +598,17 @@ async function getChromiumProfiles(basePath: string): Promise<string[]> {
     for (const entry of entries) {
       if (entry.isDirectory() && entry.name.startsWith('Profile ')) profiles.push(entry.name)
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
   return profiles
 }
 
 // ─── Help text ───────────────────────────────────────────────
 
 function printHelp(): void {
-  log(`
+  log(
+    `
 DiNho CLI — Full-featured command line interface
 
 Usage:
@@ -603,12 +736,13 @@ Examples:
   dinho --cli metrics-server --port 9200  Start metrics endpoint
   dinho --daemon                        Run headless daemon
   sudo dinho --cli service install      Install as Linux service
-`.trim())
+`.trim(),
+  )
 }
 
 // ─── Subcommand handlers ─────────────────────────────────────
 
-async function handleRegistry(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleRegistry(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanRegistry, fixRegistryEntries } = await import('./ipc/registry-cleaner.ipc')
 
@@ -630,7 +764,7 @@ async function handleRegistry(args: string[], ctx: CliContext): Promise<number |
       cliOut(ctx, ctx.json ? { message: 'No issues found' } : 'No registry issues found.')
       return
     }
-    const toFix = args.includes('--all') ? entries : entries.filter(e => e.risk === 'high')
+    const toFix = args.includes('--all') ? entries : entries.filter((e) => e.risk === 'high')
     cliLog(ctx, `Fixing ${toFix.length} of ${entries.length} issues...`)
     const result = await fixRegistryEntries(toFix, (current, total) => {
       if (showProgress(ctx)) process.stdout.write(`\r  Progress: ${current}/${total}`)
@@ -643,9 +777,11 @@ async function handleRegistry(args: string[], ctx: CliContext): Promise<number |
   }
 }
 
-async function handleStartup(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleStartup(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { listStartupItems, toggleStartupItem, deleteStartupItem, getBootTrace } = await import('./ipc/startup-manager.ipc')
+  const { listStartupItems, toggleStartupItem, deleteStartupItem, getBootTrace } = await import(
+    './ipc/startup-manager.ipc'
+  )
 
   if (sub === 'list') {
     const items = await listStartupItems()
@@ -663,19 +799,31 @@ async function handleStartup(args: string[], ctx: CliContext): Promise<number | 
     cliOut(ctx, trace)
   } else if (sub === 'disable' || sub === 'enable') {
     const name = args.slice(1).join(' ')
-    if (!name) { cliUsage(ctx, `dinho --cli startup ${sub} <name>`); return ExitCode.INVALID_ARGS }
+    if (!name) {
+      cliUsage(ctx, `dinho --cli startup ${sub} <name>`)
+      return ExitCode.INVALID_ARGS
+    }
     const items = await listStartupItems()
-    const item = items.find(i => i.name === name || i.displayName === name)
-    if (!item) { cliNotFound(ctx, 'Startup item', name); return ExitCode.NOTHING_FOUND }
+    const item = items.find((i) => i.name === name || i.displayName === name)
+    if (!item) {
+      cliNotFound(ctx, 'Startup item', name)
+      return ExitCode.NOTHING_FOUND
+    }
     const enabled = sub === 'enable'
     const result = await toggleStartupItem(item.name, item.location, item.command, item.source, enabled)
     cliOut(ctx, result)
   } else if (sub === 'delete') {
     const name = args.slice(1).join(' ')
-    if (!name) { cliUsage(ctx, 'dinho --cli startup delete <name>'); return ExitCode.INVALID_ARGS }
+    if (!name) {
+      cliUsage(ctx, 'dinho --cli startup delete <name>')
+      return ExitCode.INVALID_ARGS
+    }
     const items = await listStartupItems()
-    const item = items.find(i => i.name === name || i.displayName === name)
-    if (!item) { cliNotFound(ctx, 'Startup item', name); return ExitCode.NOTHING_FOUND }
+    const item = items.find((i) => i.name === name || i.displayName === name)
+    if (!item) {
+      cliNotFound(ctx, 'Startup item', name)
+      return ExitCode.NOTHING_FOUND
+    }
     const result = await deleteStartupItem(item.name, item.location, item.source)
     cliOut(ctx, result)
   } else {
@@ -684,7 +832,7 @@ async function handleStartup(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleDebloat(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleDebloat(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanBloatware, removeBloatware } = await import('./ipc/debloater.ipc')
 
@@ -702,17 +850,26 @@ async function handleDebloat(args: string[], ctx: CliContext): Promise<number | 
     if (allFlag) {
       cliLog(ctx, 'Scanning for bloatware...')
       const apps = await scanBloatware()
-      if (apps.length === 0) { cliOut(ctx, ctx.json ? { message: 'No bloatware found' } : 'No bloatware found.'); return }
-      const packageNames = apps.map(a => a.packageName)
+      if (apps.length === 0) {
+        cliOut(ctx, ctx.json ? { message: 'No bloatware found' } : 'No bloatware found.')
+        return
+      }
+      const packageNames = apps.map((a) => a.packageName)
       cliLog(ctx, `Removing ${packageNames.length} apps...`)
       const result = await removeBloatware(packageNames, (current, total, currentApp, status) => {
         cliLog(ctx, `  [${current}/${total}] ${currentApp}: ${status}`)
       })
       cliOut(ctx, result)
     } else {
-      const pkgArg = args.find(a => a !== 'remove' && !a.startsWith('--'))
-      if (!pkgArg) { cliUsage(ctx, 'dinho --cli debloat remove <pkg1,pkg2,...> or --all'); return ExitCode.INVALID_ARGS }
-      const packageNames = pkgArg.split(',').map(s => s.trim()).filter(Boolean)
+      const pkgArg = args.find((a) => a !== 'remove' && !a.startsWith('--'))
+      if (!pkgArg) {
+        cliUsage(ctx, 'dinho --cli debloat remove <pkg1,pkg2,...> or --all')
+        return ExitCode.INVALID_ARGS
+      }
+      const packageNames = pkgArg
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
       cliLog(ctx, `Removing ${packageNames.length} apps...`)
       const result = await removeBloatware(packageNames, (current, total, currentApp, status) => {
         cliLog(ctx, `  [${current}/${total}] ${currentApp}: ${status}`)
@@ -725,7 +882,7 @@ async function handleDebloat(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleDisk(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleDisk(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { getDrives, analyzeDisk, getFileTypes } = await import('./ipc/disk-analyzer.ipc')
 
@@ -734,26 +891,38 @@ async function handleDisk(args: string[], ctx: CliContext): Promise<number | voi
     if (ctx.json) {
       cliOut(ctx, drives)
     } else {
-      for (const d of drives) cliLog(ctx, `  ${d.letter}: ${d.label || 'Local Disk'} — ${formatBytes(d.usedSpace)} / ${formatBytes(d.totalSize)} (${(d.usedSpace / d.totalSize * 100).toFixed(1)}% used)`)
+      for (const d of drives)
+        cliLog(
+          ctx,
+          `  ${d.letter}: ${d.label || 'Local Disk'} — ${formatBytes(d.usedSpace)} / ${formatBytes(d.totalSize)} (${((d.usedSpace / d.totalSize) * 100).toFixed(1)}% used)`,
+        )
     }
   } else if (sub === 'analyze') {
     const drive = args[1]?.replace(':', '')
-    if (!drive) { cliUsage(ctx, 'dinho --cli disk analyze <drive-letter>'); return ExitCode.INVALID_ARGS }
+    if (!drive) {
+      cliUsage(ctx, 'dinho --cli disk analyze <drive-letter>')
+      return ExitCode.INVALID_ARGS
+    }
     cliLog(ctx, `Analyzing drive ${drive}:...`)
     const tree = await analyzeDisk(drive)
     if (ctx.json) {
       cliOut(ctx, tree)
     } else {
-      const printNode = (node: any, depth: number): void => {
+      const printNode = (node: Record<string, unknown>, depth: number): void => {
         if (depth > 2) return
-        cliLog(ctx, `${'  '.repeat(depth + 1)}${node.name} — ${formatBytes(node.size)}`)
-        if (node.children) for (const child of node.children.slice(0, 10)) printNode(child, depth + 1)
+        cliLog(ctx, `${'  '.repeat(depth + 1)}${node.name as string} — ${formatBytes(node.size as number)}`)
+        if (node.children)
+          for (const child of (node.children as Array<Record<string, unknown>>).slice(0, 10))
+            printNode(child, depth + 1)
       }
       printNode(tree, 0)
     }
   } else if (sub === 'file-types') {
     const drive = args[1]?.replace(':', '')
-    if (!drive) { cliUsage(ctx, 'dinho --cli disk file-types <drive-letter>'); return ExitCode.INVALID_ARGS }
+    if (!drive) {
+      cliUsage(ctx, 'dinho --cli disk file-types <drive-letter>')
+      return ExitCode.INVALID_ARGS
+    }
     cliLog(ctx, `Analyzing file types on ${drive}:...`)
     const types = await getFileTypes(drive)
     if (ctx.json) {
@@ -767,7 +936,7 @@ async function handleDisk(args: string[], ctx: CliContext): Promise<number | voi
   }
 }
 
-async function handleNetwork(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleNetwork(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanNetwork, cleanNetworkItems } = await import('./ipc/network-cleanup.ipc')
 
@@ -783,8 +952,11 @@ async function handleNetwork(args: string[], ctx: CliContext): Promise<number | 
   } else if (sub === 'clean') {
     cliLog(ctx, 'Scanning network...')
     const items = await scanNetwork()
-    if (items.length === 0) { cliOut(ctx, ctx.json ? { message: 'Nothing to clean' } : 'No network items found.'); return }
-    const toClean = args.includes('--all') ? items : items.filter(i => i.selected)
+    if (items.length === 0) {
+      cliOut(ctx, ctx.json ? { message: 'Nothing to clean' } : 'No network items found.')
+      return
+    }
+    const toClean = args.includes('--all') ? items : items.filter((i) => i.selected)
     cliLog(ctx, `Cleaning ${toClean.length} items...`)
     const result = await cleanNetworkItems(toClean)
     cliOut(ctx, result)
@@ -794,7 +966,7 @@ async function handleNetwork(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleMalware(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleMalware(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanMalware, quarantineMalware, deleteMalware } = await import('./ipc/malware-scanner.ipc')
 
@@ -814,13 +986,25 @@ async function handleMalware(args: string[], ctx: CliContext): Promise<number | 
     }
     if (result.threats.length > 0) return ExitCode.SCAN_THREATS
   } else if (sub === 'quarantine') {
-    const path = args.slice(1).filter(a => !a.startsWith('--')).join(' ')
-    if (!path) { cliUsage(ctx, 'dinho --cli malware quarantine <path>'); return ExitCode.INVALID_ARGS }
+    const path = args
+      .slice(1)
+      .filter((a) => !a.startsWith('--'))
+      .join(' ')
+    if (!path) {
+      cliUsage(ctx, 'dinho --cli malware quarantine <path>')
+      return ExitCode.INVALID_ARGS
+    }
     const result = await quarantineMalware([path])
     cliOut(ctx, result)
   } else if (sub === 'delete') {
-    const path = args.slice(1).filter(a => !a.startsWith('--')).join(' ')
-    if (!path) { cliUsage(ctx, 'dinho --cli malware delete <path>'); return ExitCode.INVALID_ARGS }
+    const path = args
+      .slice(1)
+      .filter((a) => !a.startsWith('--'))
+      .join(' ')
+    if (!path) {
+      cliUsage(ctx, 'dinho --cli malware delete <path>')
+      return ExitCode.INVALID_ARGS
+    }
     const result = await deleteMalware([path])
     cliOut(ctx, result)
   } else {
@@ -829,7 +1013,7 @@ async function handleMalware(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handlePrivacy(args: string[], ctx: CliContext): Promise<number | void> {
+async function handlePrivacy(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanPrivacy, applyPrivacySettings } = await import('./ipc/privacy-shield.ipc')
 
@@ -849,9 +1033,12 @@ async function handlePrivacy(args: string[], ctx: CliContext): Promise<number | 
     cliLog(ctx, 'Scanning privacy settings...')
     const scanResult = await scanPrivacy()
     const toApply = args.includes('--all')
-      ? scanResult.settings.map(s => s.id)
-      : scanResult.settings.filter(s => !s.enabled).map(s => s.id)
-    if (toApply.length === 0) { cliOut(ctx, ctx.json ? { message: 'Nothing to apply' } : 'All recommended settings already applied.'); return }
+      ? scanResult.settings.map((s) => s.id)
+      : scanResult.settings.filter((s) => !s.enabled).map((s) => s.id)
+    if (toApply.length === 0) {
+      cliOut(ctx, ctx.json ? { message: 'Nothing to apply' } : 'All recommended settings already applied.')
+      return
+    }
     cliLog(ctx, `Applying ${toApply.length} privacy settings...`)
     const applyResult = await applyPrivacySettings(toApply)
     cliOut(ctx, applyResult)
@@ -861,9 +1048,11 @@ async function handlePrivacy(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleDrivers(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleDrivers(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { scanDrivers, cleanDrivers, scanDriverUpdates, installDriverUpdates } = await import('./ipc/driver-manager.ipc')
+  const { scanDrivers, cleanDrivers, scanDriverUpdates, installDriverUpdates } = await import(
+    './ipc/driver-manager.ipc'
+  )
 
   if (sub === 'scan') {
     cliLog(ctx, 'Scanning driver packages...')
@@ -878,9 +1067,15 @@ async function handleDrivers(args: string[], ctx: CliContext): Promise<number | 
       for (const p of result.packages) cliLog(ctx, `  ${p.publishedName} — ${p.className} — ${p.version}`)
     }
   } else if (sub === 'clean') {
-    const nameArg = args.find(a => a !== 'clean' && !a.startsWith('--'))
-    if (!nameArg) { cliUsage(ctx, 'dinho --cli drivers clean <name1,name2,...>'); return ExitCode.INVALID_ARGS }
-    const names = nameArg.split(',').map(s => s.trim()).filter(Boolean)
+    const nameArg = args.find((a) => a !== 'clean' && !a.startsWith('--'))
+    if (!nameArg) {
+      cliUsage(ctx, 'dinho --cli drivers clean <name1,name2,...>')
+      return ExitCode.INVALID_ARGS
+    }
+    const names = nameArg
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
     cliLog(ctx, `Removing ${names.length} driver packages...`)
     const result = await cleanDrivers(names)
     cliOut(ctx, result)
@@ -899,14 +1094,25 @@ async function handleDrivers(args: string[], ctx: CliContext): Promise<number | 
   } else if (sub === 'update') {
     cliLog(ctx, 'Checking for driver updates...')
     const updateResult = await scanDriverUpdates()
-    if (updateResult.updates.length === 0) { cliOut(ctx, ctx.json ? { message: 'No updates available' } : 'Drivers are up to date.'); return }
+    if (updateResult.updates.length === 0) {
+      cliOut(ctx, ctx.json ? { message: 'No updates available' } : 'Drivers are up to date.')
+      return
+    }
     const toInstall = args.includes('--all')
-      ? updateResult.updates.map(u => u.updateId)
+      ? updateResult.updates.map((u) => u.updateId)
       : (() => {
-          const idArg = args.find(a => a !== 'update' && !a.startsWith('--'))
-          return idArg ? idArg.split(',').map(s => s.trim()).filter(Boolean) : []
+          const idArg = args.find((a) => a !== 'update' && !a.startsWith('--'))
+          return idArg
+            ? idArg
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : []
         })()
-    if (toInstall.length === 0) { cliUsage(ctx, 'dinho --cli drivers update <id,...> or --all'); return ExitCode.INVALID_ARGS }
+    if (toInstall.length === 0) {
+      cliUsage(ctx, 'dinho --cli drivers update <id,...> or --all')
+      return ExitCode.INVALID_ARGS
+    }
     cliLog(ctx, `Installing ${toInstall.length} driver updates...`)
     const result = await installDriverUpdates(toInstall, (progress) => {
       if (showProgress(ctx)) process.stdout.write(`\r  ${progress}`)
@@ -919,7 +1125,7 @@ async function handleDrivers(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleServices(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleServices(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanServices, applyServiceChanges } = await import('./ipc/service-manager.ipc')
 
@@ -930,11 +1136,18 @@ async function handleServices(args: string[], ctx: CliContext): Promise<number |
       cliOut(ctx, { services: result.services, count: result.services.length })
     } else {
       cliLog(ctx, `Found ${result.services.length} optimizable services`)
-      for (const s of result.services) cliLog(ctx, `  [${s.startType}] ${s.displayName} (${s.name}) — ${s.description || ''}`)
+      for (const s of result.services)
+        cliLog(ctx, `  [${s.startType}] ${s.displayName} (${s.name}) — ${s.description || ''}`)
     }
   } else if (sub === 'disable' || sub === 'manual') {
-    const name = args.slice(1).filter(a => !a.startsWith('--')).join(' ')
-    if (!name) { cliUsage(ctx, `dinho --cli services ${sub} <service-name>`); return ExitCode.INVALID_ARGS }
+    const name = args
+      .slice(1)
+      .filter((a) => !a.startsWith('--'))
+      .join(' ')
+    if (!name) {
+      cliUsage(ctx, `dinho --cli services ${sub} <service-name>`)
+      return ExitCode.INVALID_ARGS
+    }
     const targetType = sub === 'disable' ? 'Disabled' : 'Manual'
     cliLog(ctx, `Setting ${name} to ${targetType}...`)
     const result = await applyServiceChanges([{ name, targetStartType: targetType }])
@@ -945,7 +1158,7 @@ async function handleServices(args: string[], ctx: CliContext): Promise<number |
   }
 }
 
-async function handlePrograms(args: string[], ctx: CliContext): Promise<number | void> {
+async function handlePrograms(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { getInstalledProgramsFull } = await import('./services/program-uninstaller')
 
@@ -956,7 +1169,11 @@ async function handlePrograms(args: string[], ctx: CliContext): Promise<number |
       cliOut(ctx, { programs, count: programs.length })
     } else {
       cliLog(ctx, `Found ${programs.length} installed programs`)
-      for (const p of programs) cliLog(ctx, `  ${p.displayName} ${p.displayVersion || ''} — ${p.publisher || 'Unknown publisher'} — ${p.estimatedSize ? formatBytes(p.estimatedSize * 1024) : ''}`)
+      for (const p of programs)
+        cliLog(
+          ctx,
+          `  ${p.displayName} ${p.displayVersion || ''} — ${p.publisher || 'Unknown publisher'} — ${p.estimatedSize ? formatBytes(p.estimatedSize * 1024) : ''}`,
+        )
     }
   } else {
     cliUsage(ctx, 'dinho --cli programs list')
@@ -964,7 +1181,7 @@ async function handlePrograms(args: string[], ctx: CliContext): Promise<number |
   }
 }
 
-async function handleUpdates(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleUpdates(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { checkForUpdates, runUpdates } = await import('./services/software-updater')
 
@@ -974,22 +1191,37 @@ async function handleUpdates(args: string[], ctx: CliContext): Promise<number | 
     if (ctx.json) {
       cliOut(ctx, result)
     } else {
-      if (!result.packageManagerAvailable) { cliLog(ctx, `  ${result.packageManagerName ?? 'package manager'} is not available on this system`); return }
-      cliLog(ctx, `Found ${result.apps.length} available updates, ${result.upToDate.length} up to date`)
-      for (const a of result.apps) cliLog(ctx, `  ${a.name}: ${a.currentVersion} → ${a.availableVersion} (${a.severity})`)
+      if (!result.packageManagerAvailable) {
+        cliLog(ctx, `  ${result.packageManagerName ?? 'package manager'} is not available on this system`)
+        return
+      }
+      cliLog(ctx, `Found ${result.apps.length} apps, ${result.apps.filter(a => a.isUpToDate).length} up to date`)
+      for (const a of result.apps)
+        cliLog(ctx, `  ${a.name}: ${a.currentVersion} → ${a.availableVersion} (${a.severity})`)
     }
   } else if (sub === 'run') {
     cliLog(ctx, 'Checking for software updates...')
     const check = await checkForUpdates()
-    if (check.apps.length === 0) { cliOut(ctx, ctx.json ? { message: 'Everything up to date' } : 'All software is up to date.'); return }
+    if (check.apps.length === 0) {
+      cliOut(ctx, ctx.json ? { message: 'Everything up to date' } : 'All software is up to date.')
+      return
+    }
     const allFlag = args.includes('--all')
     const toUpdate = allFlag
-      ? check.apps.map(a => a.id)
+      ? check.apps.map((a) => a.id)
       : (() => {
-          const idArg = args.find(a => a !== 'run' && !a.startsWith('--'))
-          return idArg ? idArg.split(',').map(s => s.trim()).filter(Boolean) : []
+          const idArg = args.find((a) => a !== 'run' && !a.startsWith('--'))
+          return idArg
+            ? idArg
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : []
         })()
-    if (toUpdate.length === 0) { cliUsage(ctx, 'dinho --cli updates run <id,...> or --all'); return ExitCode.INVALID_ARGS }
+    if (toUpdate.length === 0) {
+      cliUsage(ctx, 'dinho --cli updates run <id,...> or --all')
+      return ExitCode.INVALID_ARGS
+    }
     cliLog(ctx, `Updating ${toUpdate.length} apps...`)
     const result = await runUpdates(toUpdate, (progress) => {
       cliLog(ctx, `  [${progress.current}/${progress.total}] ${progress.currentApp}: ${progress.status}`)
@@ -1001,7 +1233,7 @@ async function handleUpdates(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handlePerf(args: string[], ctx: CliContext): Promise<number | void> {
+async function handlePerf(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { PerfMonitorService } = await import('./services/perf-monitor')
   const perf = new PerfMonitorService()
@@ -1030,8 +1262,11 @@ async function handlePerf(args: string[], ctx: CliContext): Promise<number | voi
       }
     }
   } else if (sub === 'kill') {
-    const pid = parseInt(args[1])
-    if (isNaN(pid)) { cliUsage(ctx, 'dinho --cli perf kill <pid>'); return ExitCode.INVALID_ARGS }
+    const pid = Number.parseInt(args[1]!)
+    if (Number.isNaN(pid)) {
+      cliUsage(ctx, 'dinho --cli perf kill <pid>')
+      return ExitCode.INVALID_ARGS
+    }
     const result = await perf.killProcess(pid)
     cliOut(ctx, result)
   } else {
@@ -1040,7 +1275,7 @@ async function handlePerf(args: string[], ctx: CliContext): Promise<number | voi
   }
 }
 
-async function handleLeftovers(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleLeftovers(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { scanForLeftovers } = await import('./services/uninstall-leftovers')
 
@@ -1056,9 +1291,12 @@ async function handleLeftovers(args: string[], ctx: CliContext): Promise<number 
       for (const r of results) cliLog(ctx, `  ${r.subcategory}: ${r.itemCount} items, ${formatBytes(r.totalSize)}`)
     }
     if (sub === 'clean') {
-      if (totalItems === 0) { cliOut(ctx, ctx.json ? { message: 'No leftovers found' } : 'No leftovers found.'); return ExitCode.NOTHING_FOUND }
+      if (totalItems === 0) {
+        cliOut(ctx, ctx.json ? { message: 'No leftovers found' } : 'No leftovers found.')
+        return ExitCode.NOTHING_FOUND
+      }
       cliLog(ctx, `Cleaning ${totalItems} items (${formatBytes(totalSize)})...`)
-      const itemIds = results.flatMap(r => r.items.map(i => i.id))
+      const itemIds = results.flatMap((r) => r.items.map((i) => i.id))
       const cleanResult = await cleanItems(itemIds)
       cliOut(ctx, cleanResult)
     }
@@ -1068,24 +1306,28 @@ async function handleLeftovers(args: string[], ctx: CliContext): Promise<number 
   }
 }
 
-async function handleCve(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleCve(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
 
   if (sub === 'list') {
-    const emptyResult = { vulnerabilities: [], summary: { critical: 0, high: 0, medium: 0, low: 0 }, total: 0, librarySize: 0 }
+    const emptyResult = {
+      vulnerabilities: [],
+      summary: { critical: 0, high: 0, medium: 0, low: 0 },
+      total: 0,
+      librarySize: 0,
+    }
     if (ctx.json) {
       cliOut(ctx, emptyResult)
     } else {
       cliLog(ctx, '  No vulnerabilities found (cloud system no longer available).')
     }
     return ExitCode.SUCCESS
-  } else {
-    cliUsage(ctx, 'dinho --cli cve <list>')
-    return ExitCode.INVALID_ARGS
   }
+  cliUsage(ctx, 'dinho --cli cve <list>')
+  return ExitCode.INVALID_ARGS
 }
 
-async function handleHistory(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleHistory(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { getHistory, clearHistory } = await import('./services/history-store')
 
@@ -1094,9 +1336,15 @@ async function handleHistory(args: string[], ctx: CliContext): Promise<number | 
     if (ctx.json) {
       cliOut(ctx, history)
     } else {
-      if (history.length === 0) { cliLog(ctx, '  No scan history.'); return }
+      if (history.length === 0) {
+        cliLog(ctx, '  No scan history.')
+        return
+      }
       for (const entry of history) {
-        cliLog(ctx, `  [${entry.timestamp}] ${entry.type} — ${entry.totalItemsCleaned} items cleaned, ${formatBytes(entry.totalSpaceSaved)} saved`)
+        cliLog(
+          ctx,
+          `  [${entry.timestamp}] ${entry.type} — ${entry.totalItemsCleaned} items cleaned, ${formatBytes(entry.totalSpaceSaved)} saved`,
+        )
       }
     }
   } else if (sub === 'clear') {
@@ -1108,9 +1356,13 @@ async function handleHistory(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleRestorePoint(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleRestorePoint(args: string[], ctx: CliContext): Promise<number | undefined> {
   const { createRestorePoint } = await import('./services/restore-point')
-  const description = args.slice(1).filter(a => !a.startsWith('--')).join(' ') || 'DiNho CLI restore point'
+  const description =
+    args
+      .slice(1)
+      .filter((a) => !a.startsWith('--'))
+      .join(' ') || 'DiNho CLI restore point'
 
   if (args[0] === 'create') {
     cliLog(ctx, `Creating restore point: ${description}...`)
@@ -1124,19 +1376,19 @@ async function handleRestorePoint(args: string[], ctx: CliContext): Promise<numb
 
 // ─── Config management ───────────────────────────────────────
 
-async function handleConfig(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleConfig(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
   const { getSettings, setSettings, flushSettings } = await import('./services/settings-store')
 
   if (sub === 'get') {
     const key = args[1]
-    const settings = getSettings() as Record<string, any>
+    const settings = getSettings() as Record<string, unknown>
     if (!key) {
       cliOut(ctx, settings)
       return
     }
     // Support dotted paths
-    const value = key.split('.').reduce((obj: any, k: string) => obj?.[k], settings as any) as unknown
+    const value = key.split('.').reduce((obj: unknown, k: string) => (obj as Record<string, unknown>)?.[k], settings)
     if (value === undefined) {
       if (ctx.json) cliOut(ctx, { error: 'unknown_setting', key })
       else log(`Unknown setting: ${key}`)
@@ -1155,25 +1407,25 @@ async function handleConfig(args: string[], ctx: CliContext): Promise<number | v
       return ExitCode.INVALID_ARGS
     }
     // Parse the value — try JSON first, then treat as string
-    let value: any = rawValue
+    let value: unknown = rawValue
     try {
       value = JSON.parse(rawValue)
     } catch {
       // Keep as string — handle common types
       if (rawValue === 'true') value = true
       else if (rawValue === 'false') value = false
-      else if (/^\d+$/.test(rawValue)) value = parseInt(rawValue, 10)
+      else if (/^\d+$/.test(rawValue)) value = Number.parseInt(rawValue, 10)
     }
     // Build nested object from dotted path
     const parts = key.split('.')
-    const obj: Record<string, any> = {}
+    const obj: Record<string, unknown> = {}
     let cursor = obj
     for (let i = 0; i < parts.length - 1; i++) {
-      cursor[parts[i]] = {}
-      cursor = cursor[parts[i]]
+      cursor[parts[i]!] = {}
+      cursor = cursor[parts[i]!]
     }
-    cursor[parts[parts.length - 1]] = value
-    setSettings(obj as any)
+    cursor[parts[parts.length - 1]!] = value
+    setSettings(obj as Record<string, unknown>)
     await flushSettings()
     if (!ctx.json) cliLog(ctx, `  Set ${key} = ${typeof value === 'string' && key.includes('apiKey') ? '****' : value}`)
     else cliOut(ctx, { success: true, key, value: key.includes('apiKey') ? '****' : value })
@@ -1192,12 +1444,16 @@ async function handleConfig(args: string[], ctx: CliContext): Promise<number | v
 
 // ─── Service management (systemd) ────────────────────────────
 
-async function handleService(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleService(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
 
   if (process.platform !== 'linux') {
     if (ctx.json) {
-      cliOut(ctx, { error: 'unsupported_platform', message: 'Service management is only supported on Linux (systemd)', platform: process.platform })
+      cliOut(ctx, {
+        error: 'unsupported_platform',
+        message: 'Service management is only supported on Linux (systemd)',
+        platform: process.platform,
+      })
     } else {
       log('Error: Service management is only supported on Linux (systemd).')
       if (process.platform === 'win32') {
@@ -1209,15 +1465,15 @@ async function handleService(args: string[], ctx: CliContext): Promise<number | 
     return ExitCode.INVALID_ARGS
   }
 
-  const { writeFileSync, existsSync: fsExistsSync, unlinkSync } = await import('fs')
-  const { execFileSync } = await import('child_process')
+  const { writeFileSync, existsSync: fsExistsSync, unlinkSync } = await import('node:fs')
+  const { execFileSync } = await import('node:child_process')
 
   const serviceName = 'dinho'
   const servicePath = `/etc/systemd/system/${serviceName}.service`
   const exePath = app.getPath('exe')
 
   // Determine the user to run as (prefer the user who invoked sudo)
-  const runUser = process.env['SUDO_USER'] || process.env['USER'] || 'root'
+  const runUser = process.env.SUDO_USER || process.env.USER || 'root'
 
   const unitContent = `[Unit]
 Description=DiNho System Cleaner Daemon
@@ -1254,68 +1510,95 @@ WantedBy=multi-user.target
         cliLog(ctx, 'To do both:            sudo systemctl enable --now dinho')
         cliLog(ctx, 'To view logs:          journalctl -u dinho -f')
       }
-    } catch (err: any) {
-      if (err.message?.includes('EACCES') || err.message?.includes('Permission denied')) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('EACCES') || msg.includes('Permission denied')) {
         if (ctx.json) cliOut(ctx, { error: 'permission_denied', message: 'Run with sudo' })
         else {
           log('Error: Permission denied. Run with sudo:')
           log('  sudo dinho --cli service install')
         }
         return ExitCode.PERMISSION_DENIED
-      } else {
-        if (ctx.json) cliOut(ctx, { error: 'install_failed', message: err.message })
-        else log(`Error installing service: ${err.message}`)
-        return ExitCode.GENERAL_ERROR
       }
+      if (ctx.json) cliOut(ctx, { error: 'install_failed', message: msg })
+      else log(`Error installing service: ${msg}`)
+      return ExitCode.GENERAL_ERROR
     }
   } else if (sub === 'uninstall') {
     try {
       // Stop and disable first, ignore errors if not running
-      try { execFileSync('systemctl', ['stop', serviceName]) } catch { /* ok */ }
-      try { execFileSync('systemctl', ['disable', serviceName]) } catch { /* ok */ }
+      try {
+        execFileSync('systemctl', ['stop', serviceName])
+      } catch {
+        /* ok */
+      }
+      try {
+        execFileSync('systemctl', ['disable', serviceName])
+      } catch {
+        /* ok */
+      }
       if (fsExistsSync(servicePath)) {
         unlinkSync(servicePath)
         execFileSync('systemctl', ['daemon-reload'])
       }
       if (ctx.json) cliOut(ctx, { success: true })
       else cliLog(ctx, 'Service uninstalled.')
-    } catch (err: any) {
-      if (err.message?.includes('EACCES') || err.message?.includes('Permission denied')) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('EACCES') || msg.includes('Permission denied')) {
         if (ctx.json) cliOut(ctx, { error: 'permission_denied', message: 'Run with sudo' })
         else {
           log('Error: Permission denied. Run with sudo:')
           log('  sudo dinho --cli service uninstall')
         }
         return ExitCode.PERMISSION_DENIED
-      } else {
-        if (ctx.json) cliOut(ctx, { error: 'uninstall_failed', message: err.message })
-        else log(`Error uninstalling service: ${err.message}`)
-        return ExitCode.GENERAL_ERROR
       }
+      if (ctx.json) cliOut(ctx, { error: 'uninstall_failed', message: msg })
+      else log(`Error uninstalling service: ${msg}`)
+      return ExitCode.GENERAL_ERROR
     }
   } else if (sub === 'status') {
     try {
       if (ctx.json) {
-        const output = execFileSync('systemctl', ['show', serviceName, '--property=ActiveState,SubState,LoadState,MainPID'], { encoding: 'utf-8' })
-        const parsed = Object.fromEntries(output.trim().split('\n').map(l => l.split('=')))
+        const output = execFileSync(
+          'systemctl',
+          ['show', serviceName, '--property=ActiveState,SubState,LoadState,MainPID'],
+          { encoding: 'utf-8' },
+        )
+        const parsed = Object.fromEntries(
+          output
+            .trim()
+            .split('\n')
+            .map((l) => l.split('=')),
+        )
         cliOut(ctx, parsed)
       } else {
         const output = execFileSync('systemctl', ['status', serviceName], { encoding: 'utf-8' })
         log(output)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // systemctl status returns exit code 3 if service is not running
       if (ctx.json) {
         try {
-          const output = execFileSync('systemctl', ['show', serviceName, '--property=ActiveState,SubState,LoadState,MainPID'], { encoding: 'utf-8' })
-          const parsed = Object.fromEntries(output.trim().split('\n').map(l => l.split('=')))
+          const output = execFileSync(
+            'systemctl',
+            ['show', serviceName, '--property=ActiveState,SubState,LoadState,MainPID'],
+            { encoding: 'utf-8' },
+          )
+          const parsed = Object.fromEntries(
+            output
+              .trim()
+              .split('\n')
+              .map((l) => l.split('=')),
+          )
           cliOut(ctx, parsed)
         } catch {
           cliOut(ctx, { error: 'not_installed', message: 'Service is not installed or not running' })
         }
       } else {
-        if (err.stdout) log(err.stdout)
-        else if (err.stderr) log(err.stderr)
+        const execErr = err as { stdout?: string; stderr?: string }
+        if (execErr.stdout) log(execErr.stdout)
+        else if (execErr.stderr) log(execErr.stderr)
         else cliLog(ctx, 'Service is not installed or not running.')
       }
     }
@@ -1335,7 +1618,7 @@ WantedBy=multi-user.target
 
 // ─── Prometheus metrics ─────────────────────────────────────
 
-async function handleMetrics(args: string[], ctx: CliContext): Promise<number | void> {
+async function handleMetrics(_args: string[], ctx: CliContext): Promise<number | undefined> {
   const { collectMetrics, formatPrometheus } = await import('./services/metrics')
   const metrics = await collectMetrics()
 
@@ -1344,14 +1627,15 @@ async function handleMetrics(args: string[], ctx: CliContext): Promise<number | 
   } else {
     log(formatPrometheus(metrics))
   }
+  return undefined
 }
 
 async function handleMetricsServer(args: string[], ctx: CliContext): Promise<void> {
-  const http = await import('http')
+  const http = await import('node:http')
   const { collectMetrics, formatPrometheus } = await import('./services/metrics')
 
   const portIdx = args.indexOf('--port')
-  const port = portIdx !== -1 ? (parseInt(args[portIdx + 1]) || 9100) : 9100
+  const port = portIdx !== -1 ? Number.parseInt(args[portIdx + 1]!) || 9100 : 9100
 
   const server = http.createServer(async (req, res) => {
     if (req.url === '/metrics') {
@@ -1359,9 +1643,9 @@ async function handleMetricsServer(args: string[], ctx: CliContext): Promise<voi
         const metrics = await collectMetrics()
         res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' })
         res.end(formatPrometheus(metrics))
-      } catch (err: any) {
+      } catch (err: unknown) {
         res.writeHead(500, { 'Content-Type': 'text/plain' })
-        res.end(`Error collecting metrics: ${err.message}\n`)
+        res.end(`Error collecting metrics: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
       }
     } else if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1434,9 +1718,10 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, ctx: C
         else for (const r of results) log(`  ${r.subcategory}: ${r.itemCount} items, ${formatBytes(r.totalSize)}`)
         log('')
       }
-    } catch (err: any) {
-      scanErrors.push({ category: cat, error: err.message })
-      cliLog(ctx, `  Error scanning ${cat}: ${err.message}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      scanErrors.push({ category: cat, error: msg })
+      cliLog(ctx, `  Error scanning ${cat}: ${msg}`)
       cliLog(ctx, '')
     }
   }
@@ -1451,19 +1736,37 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, ctx: C
     // On macOS/Linux, trash items are real files scanned via scanDirectory — clean them with cleanItems
     // On Windows, recycle bin items are virtual (COM-based) and need special handling
     const fileItemIds = allResults
-      .filter(r => r.category !== CleanerType.RecycleBin || hasTrashPath)
-      .filter(r => r.category !== CleanerType.Database)
-      .flatMap(r => r.items.map(i => i.id))
+      .filter((r) => r.category !== CleanerType.RecycleBin || hasTrashPath)
+      .filter((r) => r.category !== CleanerType.Database)
+      .flatMap((r) => r.items.map((i) => i.id))
     const dbItemIds = allResults
-      .filter(r => r.category === CleanerType.Database)
-      .flatMap(r => r.items.map(i => i.id))
-    const hasRecycleBin = !hasTrashPath && allResults.some(r => r.category === CleanerType.RecycleBin)
-    let fileCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
-    let recycleCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
-    let dbCleaned: CleanResult = { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+      .filter((r) => r.category === CleanerType.Database)
+      .flatMap((r) => r.items.map((i) => i.id))
+    const hasRecycleBin = !hasTrashPath && allResults.some((r) => r.category === CleanerType.RecycleBin)
+    let fileCleaned: CleanResult = {
+      totalCleaned: 0,
+      filesDeleted: 0,
+      filesSkipped: 0,
+      errors: [],
+      needsElevation: false,
+    }
+    let recycleCleaned: CleanResult = {
+      totalCleaned: 0,
+      filesDeleted: 0,
+      filesSkipped: 0,
+      errors: [],
+      needsElevation: false,
+    }
+    let dbCleaned: CleanResult = {
+      totalCleaned: 0,
+      filesDeleted: 0,
+      filesSkipped: 0,
+      errors: [],
+      needsElevation: false,
+    }
     if (fileItemIds.length > 0) fileCleaned = await cleanItems(fileItemIds)
     if (hasRecycleBin) {
-      const rbSize = allResults.find(r => r.category === CleanerType.RecycleBin)?.totalSize || 0
+      const rbSize = allResults.find((r) => r.category === CleanerType.RecycleBin)?.totalSize || 0
       recycleCleaned = await cleanRecycleBin(rbSize)
     }
     if (dbItemIds.length > 0) dbCleaned = await cleanDatabasesCli(dbItemIds)
@@ -1490,12 +1793,16 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, ctx: C
     const output: Record<string, unknown> = {
       scan: {
         categories,
-        results: allResults.map(r => ({
-          category: r.category, subcategory: r.subcategory, group: r.group || null,
-          itemCount: r.itemCount, totalSize: r.totalSize,
-          items: r.items.map(i => ({ path: i.path, size: i.size, lastModified: i.lastModified })),
+        results: allResults.map((r) => ({
+          category: r.category,
+          subcategory: r.subcategory,
+          group: r.group || null,
+          itemCount: r.itemCount,
+          totalSize: r.totalSize,
+          items: r.items.map((i) => ({ path: i.path, size: i.size, lastModified: i.lastModified })),
         })),
-        totalItems, totalSize,
+        totalItems,
+        totalSize,
         errors: scanErrors.length > 0 ? scanErrors : undefined,
       },
     }
@@ -1523,15 +1830,24 @@ async function runLegacyScanClean(categories: string[], doClean: boolean, ctx: C
 export async function runCli(): Promise<void> {
   const parsed = parseCliArgs(process.argv)
 
-  if (parsed.help) { printHelp(); app.exit(ExitCode.SUCCESS); return }
-  if (parsed.version) { log(`DiNho v${app.getVersion()}`); app.exit(ExitCode.SUCCESS); return }
+  if (parsed.help) {
+    printHelp()
+    app.exit(ExitCode.SUCCESS)
+    return
+  }
+  if (parsed.version) {
+    log(`DiNho v${app.getVersion()}`)
+    app.exit(ExitCode.SUCCESS)
+    return
+  }
 
   const { ctx } = parsed
 
   // Validate mutually exclusive flags
   const cliArgs = process.argv.slice(process.argv.indexOf('--cli') + 1)
   if (cliArgs.includes('--verbose') && (cliArgs.includes('--quiet') || cliArgs.includes('-q'))) {
-    if (ctx.json) log(JSON.stringify({ error: 'invalid_args', message: '--verbose and --quiet are mutually exclusive' }))
+    if (ctx.json)
+      log(JSON.stringify({ error: 'invalid_args', message: '--verbose and --quiet are mutually exclusive' }))
     else process.stderr.write('Error: --verbose and --quiet are mutually exclusive.\n')
     app.exit(ExitCode.INVALID_ARGS)
     return
@@ -1544,7 +1860,7 @@ export async function runCli(): Promise<void> {
     if (cliArgs.includes('--all')) {
       categories = [...legacyCats]
     } else {
-      categories = legacyCats.filter(c => cliArgs.includes(`--${c}`))
+      categories = legacyCats.filter((c) => cliArgs.includes(`--${c}`))
       if (categories.length === 0) categories = [...legacyCats]
     }
     const doClean = parsed.hasCleanFlag || parsed.command === 'clean'
@@ -1555,28 +1871,68 @@ export async function runCli(): Promise<void> {
 
   // Route to subcommand handlers
   try {
-    let exitCode: number | void
+    let exitCode: number | undefined
     switch (parsed.command) {
-      case 'registry': exitCode = await handleRegistry(parsed.commandArgs, ctx); break
-      case 'startup': exitCode = await handleStartup(parsed.commandArgs, ctx); break
-      case 'debloat': exitCode = await handleDebloat(parsed.commandArgs, ctx); break
-      case 'disk': exitCode = await handleDisk(parsed.commandArgs, ctx); break
-      case 'network': exitCode = await handleNetwork(parsed.commandArgs, ctx); break
-      case 'malware': exitCode = await handleMalware(parsed.commandArgs, ctx); break
-      case 'privacy': exitCode = await handlePrivacy(parsed.commandArgs, ctx); break
-      case 'drivers': exitCode = await handleDrivers(parsed.commandArgs, ctx); break
-      case 'services': exitCode = await handleServices(parsed.commandArgs, ctx); break
-      case 'programs': exitCode = await handlePrograms(parsed.commandArgs, ctx); break
-      case 'updates': exitCode = await handleUpdates(parsed.commandArgs, ctx); break
-      case 'perf': exitCode = await handlePerf(parsed.commandArgs, ctx); break
-      case 'leftovers': exitCode = await handleLeftovers(parsed.commandArgs, ctx); break
-      case 'history': exitCode = await handleHistory(parsed.commandArgs, ctx); break
-      case 'restore-point': exitCode = await handleRestorePoint(parsed.commandArgs, ctx); break
-      case 'config': exitCode = await handleConfig(parsed.commandArgs, ctx); break
-      case 'service': exitCode = await handleService(parsed.commandArgs, ctx); break
-      case 'cve': exitCode = await handleCve(parsed.commandArgs, ctx); break
-      case 'metrics': exitCode = await handleMetrics(parsed.commandArgs, ctx); break
-      case 'metrics-server': await handleMetricsServer(parsed.commandArgs, ctx); return
+      case 'registry':
+        exitCode = await handleRegistry(parsed.commandArgs, ctx)
+        break
+      case 'startup':
+        exitCode = await handleStartup(parsed.commandArgs, ctx)
+        break
+      case 'debloat':
+        exitCode = await handleDebloat(parsed.commandArgs, ctx)
+        break
+      case 'disk':
+        exitCode = await handleDisk(parsed.commandArgs, ctx)
+        break
+      case 'network':
+        exitCode = await handleNetwork(parsed.commandArgs, ctx)
+        break
+      case 'malware':
+        exitCode = await handleMalware(parsed.commandArgs, ctx)
+        break
+      case 'privacy':
+        exitCode = await handlePrivacy(parsed.commandArgs, ctx)
+        break
+      case 'drivers':
+        exitCode = await handleDrivers(parsed.commandArgs, ctx)
+        break
+      case 'services':
+        exitCode = await handleServices(parsed.commandArgs, ctx)
+        break
+      case 'programs':
+        exitCode = await handlePrograms(parsed.commandArgs, ctx)
+        break
+      case 'updates':
+        exitCode = await handleUpdates(parsed.commandArgs, ctx)
+        break
+      case 'perf':
+        exitCode = await handlePerf(parsed.commandArgs, ctx)
+        break
+      case 'leftovers':
+        exitCode = await handleLeftovers(parsed.commandArgs, ctx)
+        break
+      case 'history':
+        exitCode = await handleHistory(parsed.commandArgs, ctx)
+        break
+      case 'restore-point':
+        exitCode = await handleRestorePoint(parsed.commandArgs, ctx)
+        break
+      case 'config':
+        exitCode = await handleConfig(parsed.commandArgs, ctx)
+        break
+      case 'service':
+        exitCode = await handleService(parsed.commandArgs, ctx)
+        break
+      case 'cve':
+        exitCode = await handleCve(parsed.commandArgs, ctx)
+        break
+      case 'metrics':
+        exitCode = await handleMetrics(parsed.commandArgs, ctx)
+        break
+      case 'metrics-server':
+        await handleMetricsServer(parsed.commandArgs, ctx)
+        return
       default:
         if (ctx.json) log(JSON.stringify({ error: 'unknown_command', command: parsed.command }))
         else {
@@ -1587,11 +1943,12 @@ export async function runCli(): Promise<void> {
         return
     }
     app.exit(exitCode ?? ExitCode.SUCCESS)
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
     if (ctx.json) {
-      log(JSON.stringify({ error: err.message }))
+      log(JSON.stringify({ error: message }))
     } else {
-      process.stderr.write(`Error: ${err.message}\n`)
+      process.stderr.write(`Error: ${message}\n`)
     }
     app.exit(ExitCode.GENERAL_ERROR)
   }

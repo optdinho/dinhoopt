@@ -1,12 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Hoisted mocks (available inside vi.mock factories) ──
 
 const {
-  mockHandle, mockSend,
-  mockExistsSync, mockStatSync, mockOpenSync, mockReadSync, mockCloseSync, mockReaddirSync,
-  mockCacheItems, mockGetCachedItem,
-  mockDbExec, mockDbPragma, mockDbClose, mockDatabaseConstructor,
+  mockHandle,
+  mockSend,
+  mockExistsSync,
+  mockStatSync,
+  mockOpenSync,
+  mockReadSync,
+  mockCloseSync,
+  mockReaddirSync,
+  mockCacheItems,
+  mockGetCachedItem,
+  mockDbExec,
+  mockDbPragma,
+  mockDbClose,
+  mockDatabaseConstructor,
   mockDatabaseTargets,
 } = vi.hoisted(() => ({
   mockHandle: vi.fn(),
@@ -49,6 +59,7 @@ vi.mock('../services/scan-cache', () => ({
 
 vi.mock('better-sqlite3', () => {
   // Use a real function (not arrow) so it works with `new`
+  // biome-ignore lint/suspicious/noExplicitAny: mock constructor
   const DatabaseMock = function (this: any, ...args: unknown[]) {
     const result = mockDatabaseConstructor(...args)
     if (result instanceof Error) throw result
@@ -57,6 +68,7 @@ vi.mock('better-sqlite3', () => {
       pragma: (...a: unknown[]) => mockDbPragma(...a),
       close: () => mockDbClose(),
     }
+    // biome-ignore lint/suspicious/noExplicitAny: mock constructor
   } as any
   return { default: DatabaseMock }
 })
@@ -123,6 +135,7 @@ describe('DATABASE_SCAN handler', () => {
     ])
     mockExistsSync.mockReturnValue(false)
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -146,14 +159,15 @@ describe('DATABASE_SCAN handler', () => {
       return 16
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
-    const results = await handler() as Array<{ category: string; subcategory: string; items: Array<unknown> }>
+    const results = (await handler()) as Array<{ category: string; subcategory: string; items: Array<unknown> }>
 
     expect(results).toHaveLength(1)
-    expect(results[0].category).toBe('database')
-    expect(results[0].subcategory).toBe('TestApp')
-    expect(results[0].items.length).toBe(1)
+    expect(results[0]!.category).toBe('database')
+    expect(results[0]!.subcategory).toBe('TestApp')
+    expect(results[0]!.items.length).toBe(1)
     expect(mockCacheItems).toHaveBeenCalled()
   })
 
@@ -164,6 +178,7 @@ describe('DATABASE_SCAN handler', () => {
     mockExistsSync.mockReturnValue(true)
     mockStatSync.mockReturnValue({ size: 0 })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -185,6 +200,7 @@ describe('DATABASE_SCAN handler', () => {
       return 16
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -206,6 +222,7 @@ describe('DATABASE_SCAN handler', () => {
       return 16
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -238,12 +255,13 @@ describe('DATABASE_SCAN handler', () => {
       return 16
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
-    const results = await handler() as Array<{ items: Array<unknown> }>
+    const results = (await handler()) as Array<{ items: Array<unknown> }>
 
     expect(results).toHaveLength(1)
-    expect(results[0].items.length).toBe(2)
+    expect(results[0]!.items.length).toBe(2)
   })
 
   it('sends progress to window during scan', async () => {
@@ -253,26 +271,35 @@ describe('DATABASE_SCAN handler', () => {
     ])
     // basePath exists but the db file stat will throw (inaccessible)
     mockExistsSync.mockReturnValue(true)
-    mockStatSync.mockImplementation(() => { throw new Error('ENOENT') })
+    mockStatSync.mockImplementation(() => {
+      throw new Error('ENOENT')
+    })
 
     const win = mockWindow()
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => win as any)
     const handler = getHandler('cleaner:database:scan')
     await handler()
 
-    expect(mockSend).toHaveBeenCalledWith('scan:progress', expect.objectContaining({
-      phase: 'scanning',
-      category: 'database',
-      progress: 100,
-    }))
+    expect(mockSend).toHaveBeenCalledWith(
+      'scan:progress',
+      expect.objectContaining({
+        phase: 'scanning',
+        category: 'database',
+        progress: 100,
+      }),
+    )
   })
 
   it('handles inaccessible targets gracefully', async () => {
     mockDatabaseTargets.mockReturnValue([
       { basePath: '/locked', label: 'Locked', dbFiles: ['locked.db'], multiProfile: false },
     ])
-    mockExistsSync.mockImplementation(() => { throw new Error('EACCES') })
+    mockExistsSync.mockImplementation(() => {
+      throw new Error('EACCES')
+    })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -307,11 +334,13 @@ describe('DATABASE_CLEAN handler', () => {
     const handler = getHandler('cleaner:database:clean')
     const result = await handler({}, ['nonexistent-id'])
 
-    expect(result).toEqual(expect.objectContaining({
-      totalCleaned: 0,
-      filesDeleted: 0,
-      filesSkipped: 0,
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        totalCleaned: 0,
+        filesDeleted: 0,
+        filesSkipped: 0,
+      }),
+    )
   })
 
   it('performs VACUUM on cached database items', async () => {
@@ -333,7 +362,7 @@ describe('DATABASE_CLEAN handler', () => {
 
     registerDatabaseOptimizerIpc(() => null)
     const handler = getHandler('cleaner:database:clean')
-    const result = await handler({}, ['test-id']) as { filesDeleted: number; totalCleaned: number }
+    const result = (await handler({}, ['test-id'])) as { filesDeleted: number; totalCleaned: number }
 
     expect(mockDbExec).toHaveBeenCalledWith('VACUUM')
     expect(result.filesDeleted).toBe(1)
@@ -375,11 +404,11 @@ describe('DATABASE_CLEAN handler', () => {
 
     registerDatabaseOptimizerIpc(() => null)
     const handler = getHandler('cleaner:database:clean')
-    const result = await handler({}, ['test-id']) as { filesSkipped: number; errors: Array<{ reason: string }> }
+    const result = (await handler({}, ['test-id'])) as { filesSkipped: number; errors: Array<{ reason: string }> }
 
     expect(result.filesSkipped).toBe(1)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].reason).toBe('in-use')
+    expect(result.errors[0]!.reason).toBe('in-use')
   })
 
   it('handles EPERM error as permission-denied and sets needsElevation', async () => {
@@ -392,10 +421,14 @@ describe('DATABASE_CLEAN handler', () => {
 
     registerDatabaseOptimizerIpc(() => null)
     const handler = getHandler('cleaner:database:clean')
-    const result = await handler({}, ['test-id']) as { filesSkipped: number; errors: Array<{ reason: string }>; needsElevation: boolean }
+    const result = (await handler({}, ['test-id'])) as {
+      filesSkipped: number
+      errors: Array<{ reason: string }>
+      needsElevation: boolean
+    }
 
     expect(result.filesSkipped).toBe(1)
-    expect(result.errors[0].reason).toBe('permission-denied')
+    expect(result.errors[0]!.reason).toBe('permission-denied')
     expect(result.needsElevation).toBe(true)
   })
 
@@ -409,9 +442,9 @@ describe('DATABASE_CLEAN handler', () => {
 
     registerDatabaseOptimizerIpc(() => null)
     const handler = getHandler('cleaner:database:clean')
-    const result = await handler({}, ['test-id']) as { errors: Array<{ reason: string }>; needsElevation: boolean }
+    const result = (await handler({}, ['test-id'])) as { errors: Array<{ reason: string }>; needsElevation: boolean }
 
-    expect(result.errors[0].reason).toBe('permission-denied')
+    expect(result.errors[0]!.reason).toBe('permission-denied')
     expect(result.needsElevation).toBe(true)
   })
 
@@ -425,9 +458,9 @@ describe('DATABASE_CLEAN handler', () => {
 
     registerDatabaseOptimizerIpc(() => null)
     const handler = getHandler('cleaner:database:clean')
-    const result = await handler({}, ['test-id']) as { errors: Array<{ reason: string }>; needsElevation: boolean }
+    const result = (await handler({}, ['test-id'])) as { errors: Array<{ reason: string }>; needsElevation: boolean }
 
-    expect(result.errors[0].reason).toBe('database disk image is malformed')
+    expect(result.errors[0]!.reason).toBe('database disk image is malformed')
     expect(result.needsElevation).toBe(false)
   })
 
@@ -444,7 +477,7 @@ describe('DATABASE_CLEAN handler', () => {
 
     registerDatabaseOptimizerIpc(() => null)
     const handler = getHandler('cleaner:database:clean')
-    const result = await handler({}, ['test-id']) as { totalCleaned: number; filesDeleted: number }
+    const result = (await handler({}, ['test-id'])) as { totalCleaned: number; filesDeleted: number }
 
     expect(result.totalCleaned).toBe(0)
     expect(result.filesDeleted).toBe(1)

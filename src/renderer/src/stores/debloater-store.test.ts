@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useDebloaterStore } from './debloater-store'
 import type { BloatwareApp } from '@shared/types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { useDebloaterStore } from './debloater-store'
 
 function makeApp(overrides: Partial<BloatwareApp> = {}): BloatwareApp {
   return {
@@ -37,55 +37,45 @@ describe('debloater-store', () => {
   })
 
   it('toggleApp flips selection on specific app', () => {
-    useDebloaterStore.getState().setApps([
-      makeApp({ id: '1', selected: false }),
-      makeApp({ id: '2', selected: false }),
-    ])
+    useDebloaterStore.getState().setApps([makeApp({ id: '1', selected: false }), makeApp({ id: '2', selected: false })])
 
     useDebloaterStore.getState().toggleApp('1')
-    expect(useDebloaterStore.getState().apps[0].selected).toBe(true)
-    expect(useDebloaterStore.getState().apps[1].selected).toBe(false)
+    expect(useDebloaterStore.getState().apps[0]!.selected).toBe(true)
+    expect(useDebloaterStore.getState().apps[1]!.selected).toBe(false)
   })
 
   it('selectAll selects every app', () => {
-    useDebloaterStore.getState().setApps([
-      makeApp({ id: '1', selected: false }),
-      makeApp({ id: '2', selected: false }),
-    ])
+    useDebloaterStore.getState().setApps([makeApp({ id: '1', selected: false }), makeApp({ id: '2', selected: false })])
 
     useDebloaterStore.getState().selectAll()
     expect(useDebloaterStore.getState().apps.every((a) => a.selected)).toBe(true)
   })
 
   it('deselectAll deselects every app', () => {
-    useDebloaterStore.getState().setApps([
-      makeApp({ id: '1', selected: true }),
-      makeApp({ id: '2', selected: true }),
-    ])
+    useDebloaterStore.getState().setApps([makeApp({ id: '1', selected: true }), makeApp({ id: '2', selected: true })])
 
     useDebloaterStore.getState().deselectAll()
     expect(useDebloaterStore.getState().apps.every((a) => !a.selected)).toBe(true)
   })
 
   it('selectFiltered selects only apps matching the filter', () => {
-    useDebloaterStore.getState().setApps([
-      makeApp({ id: '1', category: 'gaming', selected: false }),
-      makeApp({ id: '2', category: 'communication', selected: false }),
-      makeApp({ id: '3', category: 'gaming', selected: false }),
-    ])
+    useDebloaterStore
+      .getState()
+      .setApps([
+        makeApp({ id: '1', category: 'gaming', selected: false }),
+        makeApp({ id: '2', category: 'communication', selected: false }),
+        makeApp({ id: '3', category: 'gaming', selected: false }),
+      ])
 
     useDebloaterStore.getState().selectFiltered('gaming', true)
     const apps = useDebloaterStore.getState().apps
-    expect(apps[0].selected).toBe(true)
-    expect(apps[1].selected).toBe(false) // communication
-    expect(apps[2].selected).toBe(true)
+    expect(apps[0]!.selected).toBe(true)
+    expect(apps[1]!.selected).toBe(false) // communication
+    expect(apps[2]!.selected).toBe(true)
   })
 
   it('selectFiltered with "all" selects/deselects everything', () => {
-    useDebloaterStore.getState().setApps([
-      makeApp({ id: '1', selected: false }),
-      makeApp({ id: '2', selected: false }),
-    ])
+    useDebloaterStore.getState().setApps([makeApp({ id: '1', selected: false }), makeApp({ id: '2', selected: false })])
 
     useDebloaterStore.getState().selectFiltered('all', true)
     expect(useDebloaterStore.getState().apps.every((a) => a.selected)).toBe(true)

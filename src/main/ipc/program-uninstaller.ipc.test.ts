@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ vi.mock('@shared/channels', () => ({
   IPC: {
     UNINSTALLER_LIST: 'uninstaller:list',
     UNINSTALLER_UNINSTALL: 'uninstaller:uninstall',
+    UNINSTALLER_FORCE_REMOVE: 'uninstaller:force-remove',
     UNINSTALLER_PROGRESS: 'uninstaller:progress',
   },
 }))
@@ -24,12 +25,14 @@ const mockGetInstalledProgramsFull = vi.fn()
 const mockRunUninstaller = vi.fn()
 const mockVerifyUninstall = vi.fn()
 const mockScanLeftoversForProgram = vi.fn()
+const mockDeleteRegistryKey = vi.fn()
 
 vi.mock('../services/program-uninstaller', () => ({
   getInstalledProgramsFull: (...args: unknown[]) => mockGetInstalledProgramsFull(...args),
   runUninstaller: (...args: unknown[]) => mockRunUninstaller(...args),
   verifyUninstall: (...args: unknown[]) => mockVerifyUninstall(...args),
   scanLeftoversForProgram: (...args: unknown[]) => mockScanLeftoversForProgram(...args),
+  deleteRegistryKey: (...args: unknown[]) => mockDeleteRegistryKey(...args),
 }))
 
 const mockSafeDelete = vi.fn()
@@ -38,9 +41,9 @@ vi.mock('../services/file-utils', () => ({
   safeDelete: (...args: unknown[]) => mockSafeDelete(...args),
 }))
 
-import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
-import type { BrowserWindow } from 'electron'
 import type { InstalledProgram } from '@shared/types'
+import type { BrowserWindow } from 'electron'
+import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -86,10 +89,11 @@ describe('program-uninstaller IPC', () => {
     // Re-register to get a fresh module-level cachedPrograms
   })
 
-  it('registers both IPC handlers', () => {
+  it('registers all IPC handlers', () => {
     registerProgramUninstallerIpc(() => makeWindow())
     expect(handleMap.has('uninstaller:list')).toBe(true)
     expect(handleMap.has('uninstaller:uninstall')).toBe(true)
+    expect(handleMap.has('uninstaller:force-remove')).toBe(true)
   })
 
   // ── UNINSTALLER_LIST ───────────────────────────────────────
@@ -188,7 +192,7 @@ describe('program-uninstaller IPC', () => {
       // Should have sent 'uninstalling' and 'scanning-leftovers' progress events
       const phases = calls
         .filter(([ch]: string[]) => ch === 'uninstaller:progress')
-        .map(([, data]: [string, { phase: string }]) => data.phase)
+        .map((entry: unknown[]) => (entry[1] as { phase: string }).phase)
 
       expect(phases).toContain('uninstalling')
       expect(phases).toContain('scanning-leftovers')
@@ -210,7 +214,7 @@ describe('program-uninstaller IPC', () => {
       const calls = (win.webContents.send as ReturnType<typeof vi.fn>).mock.calls
       const phases = calls
         .filter(([ch]: string[]) => ch === 'uninstaller:progress')
-        .map(([, data]: [string, { phase: string }]) => data.phase)
+        .map((entry: unknown[]) => (entry[1] as { phase: string }).phase)
 
       expect(phases).toContain('cleaning-leftovers')
     })
@@ -318,6 +322,179 @@ describe('program-uninstaller IPC', () => {
       registerProgramUninstallerIpc(() => win)
       await invoke('uninstaller:list')
       await invoke('uninstaller:uninstall', 'prog-1')
+
+      expect(win.webContents.send).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── UNINSTALLER_FORCE_REMOVE ─────────────────────────────
+
+  describe('UNINSTALLER_FORCE_REMOVE', () => {
+    it('returns error when programId is not in cache', async () => {
+      mockGetInstalledProgramsFull.mockResolvedValue([])
+
+      registerProgramUninstallerIpc(() => makeWindow())
+      await invoke('uninstaller:list')
+
+      const result = await invoke('uninstaller:force-remove', 'nonexistent')
+      expect(result).toMatchObject({
+        success: false,
+        programName: 'Unknown',
+        error: expect.stringContaining('not found in cache'),
+      })
+      expect(mockDeleteRegistryKey).not.toHaveBeenCalled()
+    })
+
+    it('performs full force-remove flow: deleteKey -> scan -> clean', async () => {
+      const program = makeProgram({ id: 'prog-1' })
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([
+        { path: 'C:\\leftover1', size: 100 },
+        { path: 'C:\\leftover2', size: 200 },
+      ])
+      mockSafeDelete.mockResolvedValue({ success: true })
+
+      const win = makeWindow()
+      registerProgramUninstallerIpc(() => win)
+      await invoke('uninstaller:list')
+
+      const result = await invoke('uninstaller:force-remove', 'prog-1')
+
+      expect(result).toEqual({
+        success: true,
+        programName: 'Test App',
+        exitCode: null,
+        leftoversFound: 2,
+        leftoversCleaned: 2,
+        leftoversSize: 300,
+      })
+      expect(mockDeleteRegistryKey).toHaveBeenCalledWith(program.registryKey)
+      expect(mockScanLeftoversForProgram).toHaveBeenCalledWith(program)
+      expect(mockSafeDelete).toHaveBeenCalledTimes(2)
+    })
+
+    it('returns failure when deleteRegistryKey fails', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(false)
+
+      registerProgramUninstallerIpc(() => makeWindow())
+      await invoke('uninstaller:list')
+      const result = await invoke('uninstaller:force-remove', 'prog-1')
+
+      expect(result).toMatchObject({
+        success: false,
+        error: expect.stringContaining('Failed to delete the registry entry'),
+      })
+      expect(mockScanLeftoversForProgram).not.toHaveBeenCalled()
+    })
+
+    it('returns success with zero leftovers when scan finds none', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([])
+
+      registerProgramUninstallerIpc(() => makeWindow())
+      await invoke('uninstaller:list')
+      const result = await invoke('uninstaller:force-remove', 'prog-1')
+
+      expect(result).toMatchObject({
+        success: true,
+        leftoversFound: 0,
+        leftoversCleaned: 0,
+        leftoversSize: 0,
+      })
+    })
+
+    it('counts only successfully deleted leftovers', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([
+        { path: 'C:\\ok', size: 100 },
+        { path: 'C:\\fail', size: 200 },
+        { path: 'C:\\ok2', size: 300 },
+      ])
+      mockSafeDelete
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: false })
+        .mockResolvedValueOnce({ success: true })
+
+      registerProgramUninstallerIpc(() => makeWindow())
+      await invoke('uninstaller:list')
+      const result = await invoke('uninstaller:force-remove', 'prog-1')
+
+      expect(result).toMatchObject({
+        success: true,
+        leftoversFound: 3,
+        leftoversCleaned: 2,
+        leftoversSize: 400,
+      })
+    })
+
+    it('sends progress events during force-remove phases', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([])
+
+      const win = makeWindow()
+      registerProgramUninstallerIpc(() => win)
+      await invoke('uninstaller:list')
+      await invoke('uninstaller:force-remove', 'prog-1')
+
+      const calls = (win.webContents.send as ReturnType<typeof vi.fn>).mock.calls
+      const phases = calls
+        .filter(([ch]: string[]) => ch === 'uninstaller:progress')
+        .map((entry: unknown[]) => (entry[1] as { phase: string }).phase)
+
+      expect(phases).toContain('force-removing')
+      expect(phases).toContain('scanning-leftovers')
+    })
+
+    it('sends cleaning-leftovers progress when leftovers exist', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([{ path: 'C:\\f', size: 50 }])
+      mockSafeDelete.mockResolvedValue({ success: true })
+
+      const win = makeWindow()
+      registerProgramUninstallerIpc(() => win)
+      await invoke('uninstaller:list')
+      await invoke('uninstaller:force-remove', 'prog-1')
+
+      const calls = (win.webContents.send as ReturnType<typeof vi.fn>).mock.calls
+      const phases = calls
+        .filter(([ch]: string[]) => ch === 'uninstaller:progress')
+        .map((entry: unknown[]) => (entry[1] as { phase: string }).phase)
+
+      expect(phases).toContain('cleaning-leftovers')
+    })
+
+    it('does not send progress when window is null', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([])
+
+      registerProgramUninstallerIpc(() => null)
+      await invoke('uninstaller:list')
+      await expect(invoke('uninstaller:force-remove', 'prog-1')).resolves.toBeDefined()
+    })
+
+    it('does not send progress when window is destroyed', async () => {
+      const program = makeProgram()
+      mockGetInstalledProgramsFull.mockResolvedValue([program])
+      mockDeleteRegistryKey.mockResolvedValue(true)
+      mockScanLeftoversForProgram.mockResolvedValue([])
+
+      const win = makeWindow(true)
+      registerProgramUninstallerIpc(() => win)
+      await invoke('uninstaller:list')
+      await invoke('uninstaller:force-remove', 'prog-1')
 
       expect(win.webContents.send).not.toHaveBeenCalled()
     })

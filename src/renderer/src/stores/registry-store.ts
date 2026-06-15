@@ -1,6 +1,6 @@
-import { create } from 'zustand'
-import type { RegistryEntry } from '@shared/types'
 import { isPersistentTweak, tweakSignature } from '@shared/registry-tweaks'
+import type { RegistryEntry } from '@shared/types'
+import { create } from 'zustand'
 
 interface FixResult {
   fixed: number
@@ -47,7 +47,7 @@ interface RegistryState {
  */
 function persistTweakChoice(
   entries: Pick<RegistryEntry, 'type' | 'keyPath' | 'valueName'>[],
-  selectedNow: boolean
+  selectedNow: boolean,
 ): void {
   const signatures = entries.filter((e) => isPersistentTweak(e.type)).map(tweakSignature)
   if (signatures.length === 0) return
@@ -84,7 +84,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     if (!entry) return
     const selectedNow = !entry.selected
     set((s) => ({
-      entries: s.entries.map((e) => (e.id === id ? { ...e, selected: selectedNow } : e))
+      entries: s.entries.map((e) => (e.id === id ? { ...e, selected: selectedNow } : e)),
     }))
     persistTweakChoice([entry], selectedNow)
   },
@@ -93,9 +93,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     const allSelected = cardEntries.length > 0 && cardEntries.every((e) => e.selected)
     const selectedNow = !allSelected
     set((s) => ({
-      entries: s.entries.map((e) =>
-        types.includes(e.type) ? { ...e, selected: selectedNow } : e
-      )
+      entries: s.entries.map((e) => (types.includes(e.type) ? { ...e, selected: selectedNow } : e)),
     }))
     persistTweakChoice(cardEntries, selectedNow)
   },
@@ -108,7 +106,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
       fixProgress: null,
       fixResult: null,
       showFailures: false,
-      error: null
+      error: null,
     }),
 
   scan: async () => {
@@ -142,14 +140,18 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
   cancelScan: async () => {
     try {
       await window.dinho.registryScanCancel()
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     set({ scanning: false })
   },
 
   cancelFix: async () => {
     try {
       await window.dinho.registryFixCancel()
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     set({ fixing: false, fixProgress: null })
-  }
+  },
 }))

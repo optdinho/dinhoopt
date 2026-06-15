@@ -1,38 +1,36 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { useIpcScan } from '@/hooks/useIpcScan'
+import { useProgressListener } from '@/hooks/useProgressListener'
+import { type DriveFilter, applyFilter, isSelectable, useDiskMaintenanceStore } from '@/stores/disk-maintenance-store'
+import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
 import {
-  RefreshCw,
-  ShieldCheck,
-  ShieldAlert,
   CheckCircle2,
-  XCircle,
-  HardDrive,
   Cpu,
   Database,
   Eraser,
+  HardDrive,
   Lock,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  XCircle,
 } from 'lucide-react'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { ErrorAlert } from '@/components/shared/ErrorAlert'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import {
-  useDiskMaintenanceStore,
-  isSelectable,
-  applyFilter,
-  type DriveFilter,
-} from '@/stores/disk-maintenance-store'
-import { useProgressListener } from '@/hooks/useProgressListener'
-import { useIpcScan } from '@/hooks/useIpcScan'
-import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 function formatBytes(bytes: number, fractionDigits = 1): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let i = 0
   let v = bytes
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
   return `${v.toFixed(i === 0 ? 0 : fractionDigits)} ${units[i]}`
 }
 
@@ -60,11 +58,11 @@ function MediaIcon({ type }: { type: TrimMediaType }) {
 function StatusPill({ status, reason }: { status: TrimStatus; reason: string }) {
   const styles: Record<TrimStatus, { bg: string; color: string; label: string }> = {
     'recently-trimmed': { bg: 'rgba(34,197,94,0.12)', color: '#22c55e', label: 'Recently trimmed' },
-    'ok': { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'OK' },
-    'recommended': { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', label: 'Recommended' },
+    ok: { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'OK' },
+    recommended: { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', label: 'Recommended' },
     'not-applicable': { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'Not applicable' },
-    'disabled': { bg: 'rgba(239,68,68,0.12)', color: '#ef4444', label: 'Disabled' },
-    'unknown': { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'Unknown' },
+    disabled: { bg: 'rgba(239,68,68,0.12)', color: '#ef4444', label: 'Disabled' },
+    unknown: { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'Unknown' },
   }
   const s = styles[status]
   return (
@@ -94,10 +92,7 @@ export function DiskMaintenancePage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [showLog, setShowLog] = useState<string | null>(null)
 
-  useProgressListener(
-    window.dinho.onDiskTrimProgress,
-    (data) => store.setProgress(data)
-  )
+  useProgressListener(window.dinho.onDiskTrimProgress, (data) => store.setProgress(data))
 
   const { scan: handleRefresh } = useIpcScan({
     scanFn: () => window.dinho.diskTrimList(),
@@ -106,22 +101,23 @@ export function DiskMaintenancePage() {
     onResult: (list) => store.setDrives(list),
     onError: (err) => {
       store.setError(err instanceof Error ? err.message : t('trimListFailed'))
-    }
+    },
   })
 
   // Initial load
   useEffect(() => {
     handleRefresh()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [handleRefresh])
 
   const filtered = useMemo(() => applyFilter(drives, filter), [drives, filter])
 
   const selectableSelected = useMemo(
-    () => Array.from(selected).filter((id) => {
-      const d = drives.find((x) => x.id === id)
-      return d ? isSelectable(d) : false
-    }),
-    [selected, drives]
+    () =>
+      Array.from(selected).filter((id) => {
+        const d = drives.find((x) => x.id === id)
+        return d ? isSelectable(d) : false
+      }),
+    [selected, drives],
   )
 
   async function handleRun(): Promise<void> {
@@ -182,10 +178,15 @@ export function DiskMaintenancePage() {
         description={t('maintenanceDescription')}
         action={
           <button
+            type="button"
             onClick={handleRefresh}
             disabled={loading || batchRunning}
             className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-[13px] font-medium transition-colors disabled:opacity-40"
-            style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}
+            style={{
+              background: 'var(--bg-subtle)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-default)',
+            }}
           >
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} strokeWidth={2} />
             {t('refresh')}
@@ -194,7 +195,10 @@ export function DiskMaintenancePage() {
       />
 
       {/* Info banner */}
-      <div className="mb-5 rounded-2xl px-5 py-4" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}>
+      <div
+        className="mb-5 rounded-2xl px-5 py-4"
+        style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}
+      >
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" strokeWidth={1.8} />
           <div>
@@ -210,9 +214,13 @@ export function DiskMaintenancePage() {
 
       {/* Filter pills + run button */}
       <div className="mb-4 flex items-center gap-2">
-        <div className="flex gap-1 rounded-xl p-1" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}>
+        <div
+          className="flex gap-1 rounded-xl p-1"
+          style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}
+        >
           {filterPills.map((p) => (
             <button
+              type="button"
               key={p.key}
               onClick={() => store.setFilter(p.key)}
               className="rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors"
@@ -230,20 +238,31 @@ export function DiskMaintenancePage() {
             {t('trimSelectedCount', { count: selectableSelected.length })}
           </span>
           <button
+            type="button"
             onClick={() => setConfirmOpen(true)}
             disabled={selectableSelected.length === 0 || batchRunning}
             className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
             style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'var(--text-on-accent)' }}
           >
-            {batchRunning
-              ? <><RefreshCw className="h-4 w-4 animate-spin" /> {t('trimRunning')}</>
-              : <><Eraser className="h-4 w-4" strokeWidth={2} /> {t('trimRunSelected', { count: selectableSelected.length })}</>}
+            {batchRunning ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" /> {t('trimRunning')}
+              </>
+            ) : (
+              <>
+                <Eraser className="h-4 w-4" strokeWidth={2} />{' '}
+                {t('trimRunSelected', { count: selectableSelected.length })}
+              </>
+            )}
           </button>
         </div>
       </div>
 
       {loading && drives.length === 0 ? (
-        <div className="rounded-2xl px-5 py-8 text-center text-[13px]" style={{ background: 'var(--card-bg)', color: 'var(--text-muted)' }}>
+        <div
+          className="rounded-2xl px-5 py-8 text-center text-[13px]"
+          style={{ background: 'var(--card-bg)', color: 'var(--text-muted)' }}
+        >
           {t('trimLoading')}
         </div>
       ) : filtered.length === 0 ? (
@@ -260,11 +279,11 @@ export function DiskMaintenancePage() {
               drive={drive}
               selected={selected.has(drive.id)}
               runState={runStates[drive.id] ?? 'idle'}
-              progressMessage={progress[drive.id]?.message}
+              {...(progress[drive.id]?.message !== undefined ? { progressMessage: progress[drive.id]!.message } : {})}
               onToggle={() => store.toggleSelect(drive.id)}
               showLog={showLog === drive.id}
               onToggleLog={() => setShowLog(showLog === drive.id ? null : drive.id)}
-              result={results[drive.id]}
+              {...(results[drive.id] !== undefined ? { result: results[drive.id] } : {})}
             />
           ))}
         </div>
@@ -295,11 +314,23 @@ interface DriveRowProps {
   result?: import('@shared/types').TrimRunResult
 }
 
-function DriveRow({ drive, selected, runState, progressMessage, onToggle, showLog, onToggleLog, result }: DriveRowProps) {
+function DriveRow({
+  drive,
+  selected,
+  runState,
+  progressMessage,
+  onToggle,
+  showLog,
+  onToggleLog,
+  result,
+}: DriveRowProps) {
   const { t } = useTranslation('disk')
   const selectable = isSelectable(drive)
   return (
-    <div className="rounded-2xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}>
+    <div
+      className="rounded-2xl p-4"
+      style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
+    >
       <div className="flex items-center gap-4">
         <input
           type="checkbox"
@@ -309,18 +340,25 @@ function DriveRow({ drive, selected, runState, progressMessage, onToggle, showLo
           aria-label={`Select ${drive.label}`}
           className="h-4 w-4 shrink-0 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-30"
         />
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: 'rgba(245,158,11,0.1)' }}>
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: 'rgba(245,158,11,0.1)' }}
+        >
           <MediaIcon type={drive.mediaType} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-[13px] font-medium text-zinc-200">{drive.label}</p>
-            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-              style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-muted)' }}>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-muted)' }}
+            >
               {drive.mediaType}
             </span>
             {drive.busType && drive.busType !== drive.mediaType && (
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{drive.busType}</span>
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {drive.busType}
+              </span>
             )}
             {drive.isEncrypted && (
               <Lock className="h-3 w-3" strokeWidth={2} style={{ color: 'var(--text-muted)' }} aria-label="Encrypted" />
@@ -331,7 +369,9 @@ function DriveRow({ drive, selected, runState, progressMessage, onToggle, showLo
             <span>·</span>
             <span>{formatBytes(drive.totalSize, 0)} total</span>
             <span>·</span>
-            <span>{t('trimLastTrimmed')}: {formatRelativeTime(drive.lastTrimAt, t('trimNeverRecorded'))}</span>
+            <span>
+              {t('trimLastTrimmed')}: {formatRelativeTime(drive.lastTrimAt, t('trimNeverRecorded'))}
+            </span>
           </div>
         </div>
         <StatusPill status={drive.status} reason={drive.statusReason} />
@@ -347,27 +387,37 @@ function DriveRow({ drive, selected, runState, progressMessage, onToggle, showLo
       )}
 
       {result && runState !== 'running' && (
-        <div className="mt-3 rounded-xl px-3 py-2" style={{
-          background: result.success ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
-          border: `1px solid ${result.success ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)'}`,
-        }}>
+        <div
+          className="mt-3 rounded-xl px-3 py-2"
+          style={{
+            background: result.success ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
+            border: `1px solid ${result.success ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)'}`,
+          }}
+        >
           <div className="flex items-center gap-2">
-            {result.success
-              ? <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" strokeWidth={1.8} />
-              : result.needsAdmin
-                ? <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
-                : <XCircle className="h-4 w-4 shrink-0 text-red-400" strokeWidth={1.8} />}
+            {result.success ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" strokeWidth={1.8} />
+            ) : result.needsAdmin ? (
+              <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
+            ) : (
+              <XCircle className="h-4 w-4 shrink-0 text-red-400" strokeWidth={1.8} />
+            )}
             <p className="text-[12px] text-zinc-300">{result.summary}</p>
           </div>
           {result.log && (
-            <button onClick={onToggleLog}
-              className="mt-2 text-[11px] font-medium text-amber-500 hover:text-amber-400">
+            <button
+              type="button"
+              onClick={onToggleLog}
+              className="mt-2 text-[11px] font-medium text-amber-500 hover:text-amber-400"
+            >
               {showLog ? t('hideLog') : t('showLog')}
             </button>
           )}
           {showLog && result.log && (
-            <pre className="mt-2 max-h-40 overflow-auto rounded-lg p-3 font-mono text-[11px]"
-              style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-muted)' }}>
+            <pre
+              className="mt-2 max-h-40 overflow-auto rounded-lg p-3 font-mono text-[11px]"
+              style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-muted)' }}
+            >
               {result.log}
             </pre>
           )}

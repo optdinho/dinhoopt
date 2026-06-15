@@ -1,34 +1,27 @@
-import { ipcMain } from 'electron'
-import type { WindowGetter } from './index'
-import { createHash } from 'crypto'
-import { join } from 'path'
-import { readdirSync, statSync } from 'fs'
+import { createHash } from 'node:crypto'
+import { readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
-import { validateStringArray } from '../services/ipc-validation'
-import { psArgs, execNativeUtf8, psUtf8, execFileAsync } from '../services/exec-utf8'
 import type {
-  DriverPackage,
-  DriverScanResult,
   DriverCleanResult,
+  DriverPackage,
   DriverScanProgress,
+  DriverScanResult,
   DriverUpdate,
-  DriverUpdateScanResult,
   DriverUpdateInstallResult,
-  DriverUpdateProgress
+  DriverUpdateProgress,
+  DriverUpdateScanResult,
 } from '@shared/types'
+import { ipcMain } from 'electron'
+import { execFileAsync, execNativeUtf8, psArgs } from '../services/exec-utf8'
+import { validateStringArray } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
+import type { WindowGetter } from './index'
 
-const DRIVER_STORE = join(
-  process.env.SystemRoot || 'C:\\Windows',
-  'System32',
-  'DriverStore',
-  'FileRepository'
-)
+const DRIVER_STORE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'DriverStore', 'FileRepository')
 
 function makeId(publishedName: string, version: string): string {
-  return createHash('sha256')
-    .update(`${publishedName}::${version}`)
-    .digest('hex')
-    .slice(0, 16)
+  return createHash('sha256').update(`${publishedName}::${version}`).digest('hex').slice(0, 16)
 }
 
 /**
@@ -45,9 +38,13 @@ function dirSize(dirPath: string): number {
         } else if (entry.isDirectory()) {
           total += dirSize(join(dirPath, entry.name))
         }
-      } catch { /* skip inaccessible files */ }
+      } catch {
+        /* skip inaccessible files */
+      }
     }
-  } catch { /* skip inaccessible dirs */ }
+  } catch {
+    /* skip inaccessible dirs */
+  }
   return total
 }
 
@@ -56,8 +53,8 @@ function dirSize(dirPath: string): number {
  * Returns positive if a > b, negative if a < b, 0 if equal.
  */
 function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
-  const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+  const pa = a.split('.').map((n) => Number.parseInt(n, 10) || 0)
+  const pb = b.split('.').map((n) => Number.parseInt(n, 10) || 0)
   const len = Math.max(pa.length, pb.length)
   for (let i = 0; i < len; i++) {
     const na = pa[i] || 0
@@ -100,7 +97,7 @@ async function parseEnumDrivers(): Promise<RawDriver[]> {
     `
     const { stdout } = await execFileAsync('powershell', psArgs(script), { timeout: 30000, windowsHide: true })
     const parsed = JSON.parse(stdout.trim())
-    const items = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : [])
+    const items = Array.isArray(parsed) ? parsed : parsed ? [parsed] : []
     const drivers: RawDriver[] = []
 
     for (const item of items) {
@@ -117,7 +114,9 @@ async function parseEnumDrivers(): Promise<RawDriver[]> {
     }
 
     if (drivers.length > 0) return drivers
-  } catch { /* fall through to pnputil fallback */ }
+  } catch {
+    /* fall through to pnputil fallback */
+  }
 
   // Fallback: parse pnputil -e output with multi-lingual label patterns
   return parseEnumDriversPnpUtil()
@@ -143,20 +142,6 @@ async function parseEnumDriversPnpUtil(): Promise<RawDriver[]> {
   }
 
   const blocks = stdout.split(/\n\s*\n/)
-  const labelMap: Record<string, string> = {
-    'published name': 'publishedName',
-    'oem inf': 'publishedName',
-    'driver package provider': 'provider',
-    'provider name': 'provider',
-    'class name': 'className',
-    'device class': 'className',
-    'driver version': 'version',
-    'driver date': 'date',
-    'driver date and version': 'dateAndVersion',
-    'original name': 'originalName',
-    'original inf': 'originalName',
-    'signer name': 'signer',
-  }
 
   for (const block of blocks) {
     const lines = block.trim().split('\n')
@@ -172,8 +157,8 @@ async function parseEnumDriversPnpUtil(): Promise<RawDriver[]> {
     const publishedName = fields['published name'] || fields['oem inf'] || ''
     if (!publishedName.toLowerCase().startsWith('oem')) continue
 
-    let version = fields['driver version'] || fields['version'] || ''
-    let date = fields['driver date'] || fields['date'] || ''
+    let version = fields['driver version'] || fields.version || ''
+    let date = fields['driver date'] || fields.date || ''
     const dateAndVersion = fields['driver date and version'] || ''
     if (dateAndVersion && (!version || !date)) {
       const dvMatch = dateAndVersion.match(/^(\S+)\s+(\S+)$/)
@@ -185,12 +170,13 @@ async function parseEnumDriversPnpUtil(): Promise<RawDriver[]> {
 
     drivers.push({
       publishedName,
-      originalName: fields['original name'] || fields['original inf'] || fields['driver package provider'] || publishedName,
-      provider: fields['driver package provider'] || fields['provider name'] || fields['provider'] || 'Unknown',
-      className: fields['class name'] || fields['class'] || fields['device class'] || 'Unknown',
+      originalName:
+        fields['original name'] || fields['original inf'] || fields['driver package provider'] || publishedName,
+      provider: fields['driver package provider'] || fields['provider name'] || fields.provider || 'Unknown',
+      className: fields['class name'] || fields.class || fields['device class'] || 'Unknown',
       version,
       date,
-      signer: fields['signer name'] || fields['signer'] || '',
+      signer: fields['signer name'] || fields.signer || '',
     })
   }
 
@@ -222,10 +208,18 @@ async function getOemFolderMap(): Promise<Map<string, string[]>> {
       if (!trimmed) continue
       const [oemName, foldersStr] = trimmed.split('|', 2)
       if (oemName && foldersStr) {
-        map.set(oemName.toLowerCase(), foldersStr.split(',').map((f) => f.trim()).filter(Boolean))
+        map.set(
+          oemName.toLowerCase(),
+          foldersStr
+            .split(',')
+            .map((f) => f.trim())
+            .filter(Boolean),
+        )
       }
     }
-  } catch { /* registry read failed, folder sizes will be 0 */ }
+  } catch {
+    /* registry read failed, folder sizes will be 0 */
+  }
   return map
 }
 
@@ -252,200 +246,222 @@ async function getActiveDriverNames(): Promise<Set<string>> {
     // Fallback: if WMI fails, try pnputil /enum-devices
     try {
       const { stdout } = await execNativeUtf8('pnputil', ['/enum-devices', '/connected'], {
-        timeout: 30000
+        timeout: 30000,
       })
       const matches = stdout.matchAll(/Driver Name:\s*(oem\d+\.inf)/gi)
       for (const m of matches) {
         active.add(m[1].toLowerCase())
       }
-    } catch { /* can't determine active drivers */ }
+    } catch {
+      /* can't determine active drivers */
+    }
   }
   return active
 }
 
 // ── Exported core logic ──
 
-export async function scanDrivers(
-  onProgress?: (data: DriverScanProgress) => void
-): Promise<DriverScanResult> {
-    if (process.platform !== 'win32') {
-      return { packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 }
-    }
+export async function scanDrivers(onProgress?: (data: DriverScanProgress) => void): Promise<DriverScanResult> {
+  getLogger().info('driver-manager', 'Starting driver scan...')
+  if (process.platform !== 'win32') {
+    getLogger().warning('driver-manager', 'Driver scan skipped — not on Windows')
+    return { packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 }
+  }
 
-    onProgress?.({
-      phase: 'enumerating',
-      current: 0,
-      total: 0,
-      currentDriver: 'Enumerating installed driver packages...'
-    })
+  onProgress?.({
+    phase: 'enumerating',
+    current: 0,
+    total: 0,
+    currentDriver: 'Enumerating installed driver packages...',
+  })
 
-    // Step 1: Enumerate all OEM driver packages (locale-independent)
-    let rawDrivers: RawDriver[] = []
-    try {
-      rawDrivers = await parseEnumDrivers()
-    } catch {
-      return { packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 }
-    }
+  // Step 1: Enumerate all OEM driver packages (locale-independent)
+  let rawDrivers: RawDriver[] = []
+  try {
+    rawDrivers = await parseEnumDrivers()
+  } catch {
+    return { packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 }
+  }
 
-    onProgress?.({
-      phase: 'analyzing',
-      current: 0,
-      total: rawDrivers.length,
-      currentDriver: 'Identifying active drivers...'
-    })
+  onProgress?.({
+    phase: 'analyzing',
+    current: 0,
+    total: rawDrivers.length,
+    currentDriver: 'Identifying active drivers...',
+  })
 
-    // Step 2: Determine which drivers are currently active + get folder mapping
-    // Run both queries in parallel for speed
-    const [activeNames, oemFolderMap] = await Promise.all([
-      getActiveDriverNames(),
-      getOemFolderMap()
-    ])
+  // Step 2: Determine which drivers are currently active + get folder mapping
+  // Run both queries in parallel for speed
+  const [activeNames, oemFolderMap] = await Promise.all([getActiveDriverNames(), getOemFolderMap()])
 
-    // Step 3: Group by provider + class to find duplicates (since legacy pnputil
-    // doesn't expose the original inf name, we use provider+class as the grouping key)
-    const groups = new Map<string, RawDriver[]>()
-    for (const d of rawDrivers) {
-      const key = `${d.provider.toLowerCase()}::${d.className.toLowerCase()}`
-      const group = groups.get(key) || []
-      group.push(d)
-      groups.set(key, group)
-    }
+  // Step 3: Group by provider + class to find duplicates (since legacy pnputil
+  // doesn't expose the original inf name, we use provider+class as the grouping key)
+  const groups = new Map<string, RawDriver[]>()
+  for (const d of rawDrivers) {
+    const key = `${d.provider.toLowerCase()}::${d.className.toLowerCase()}`
+    const group = groups.get(key) || []
+    group.push(d)
+    groups.set(key, group)
+  }
 
-    // Within each group, mark the newest as current; the rest are stale
-    // Also mark any driver actively bound to hardware as current
-    const packages: DriverPackage[] = []
-    let idx = 0
+  // Within each group, mark the newest as current; the rest are stale
+  // Also mark any driver actively bound to hardware as current
+  const packages: DriverPackage[] = []
+  let idx = 0
 
-    for (const [, group] of groups) {
-      // Sort by version descending using numeric comparison
-      group.sort((a, b) => compareVersions(b.version, a.version))
+  for (const [, group] of groups) {
+    // Sort by version descending using numeric comparison
+    group.sort((a, b) => compareVersions(b.version, a.version))
 
-      for (let i = 0; i < group.length; i++) {
-        const d = group[i]
-        const isActive = activeNames.has(d.publishedName.toLowerCase())
-        const isNewest = i === 0
+    for (let i = 0; i < group.length; i++) {
+      const d = group[i]
+      const isActive = activeNames.has(d.publishedName.toLowerCase())
+      const isNewest = i === 0
 
-        onProgress?.({
-          phase: 'measuring',
-          current: ++idx,
-          total: rawDrivers.length,
-          currentDriver: `${d.provider} - ${d.className} (${d.version})`
-        })
+      onProgress?.({
+        phase: 'measuring',
+        current: ++idx,
+        total: rawDrivers.length,
+        currentDriver: `${d.provider} - ${d.className} (${d.version})`,
+      })
 
-        // Find folder in FileRepository using registry-based OEM→folder mapping
-        let folderPath = ''
-        let size = 0
-        try {
-          const folders = oemFolderMap.get(d.publishedName.toLowerCase()) || []
-          if (folders.length > 0) {
-            // Use the first (and usually only) matching folder
-            folderPath = join(DRIVER_STORE, folders[0])
-            size = dirSize(folderPath)
-          }
-        } catch { /* skip */ }
-
-        packages.push({
-          id: makeId(d.publishedName, d.version),
-          publishedName: d.publishedName,
-          originalName: d.originalName,
-          provider: d.provider,
-          className: d.className,
-          version: d.version,
-          date: d.date,
-          signer: d.signer,
-          folderPath,
-          size,
-          isCurrent: isActive || isNewest,
-          selected: false
-        })
+      // Find folder in FileRepository using registry-based OEM→folder mapping
+      let folderPath = ''
+      let size = 0
+      try {
+        const folders = oemFolderMap.get(d.publishedName.toLowerCase()) || []
+        if (folders.length > 0) {
+          // Use the first (and usually only) matching folder
+          folderPath = join(DRIVER_STORE, folders[0])
+          size = dirSize(folderPath)
+        }
+      } catch {
+        /* skip */
       }
-    }
 
-    // Pre-select stale (non-current) drivers
-    for (const pkg of packages) {
-      if (!pkg.isCurrent) pkg.selected = true
+      packages.push({
+        id: makeId(d.publishedName, d.version),
+        publishedName: d.publishedName,
+        originalName: d.originalName,
+        provider: d.provider,
+        className: d.className,
+        version: d.version,
+        date: d.date,
+        signer: d.signer,
+        folderPath,
+        size,
+        isCurrent: isActive || isNewest,
+        selected: false,
+      })
     }
+  }
 
-    const stale = packages.filter((p) => !p.isCurrent)
-    return {
-      packages,
-      totalStaleSize: stale.reduce((sum, p) => sum + p.size, 0),
-      totalStaleCount: stale.length,
-      totalCurrentCount: packages.length - stale.length
-    }
+  // Pre-select stale (non-current) drivers
+  for (const pkg of packages) {
+    if (!pkg.isCurrent) pkg.selected = true
+  }
+  const stale = packages.filter((p) => !p.isCurrent)
+  const result = {
+    packages,
+    totalStaleSize: stale.reduce((sum, p) => sum + p.size, 0),
+    totalStaleCount: stale.length,
+    totalCurrentCount: packages.length - stale.length,
+  }
+  getLogger().success(
+    'driver-manager',
+    `Driver scan completed — ${result.totalStaleCount} stale drivers (${result.totalStaleSize} bytes), ${result.totalCurrentCount} current`,
+  )
+  return result
 }
 
 export async function cleanDrivers(publishedNames: string[]): Promise<DriverCleanResult> {
-      if (process.platform !== 'win32') {
-        return { removed: 0, failed: 0, spaceRecovered: 0, errors: [] }
+  getLogger().info('driver-manager', `Starting driver clean for ${publishedNames.length} driver(s)...`)
+  if (process.platform !== 'win32') {
+    getLogger().warning('driver-manager', 'Driver clean skipped — not on Windows')
+    return { removed: 0, failed: 0, spaceRecovered: 0, errors: [] }
+  }
+
+  let removed = 0
+  let failed = 0
+  let spaceRecovered = 0
+  const errors: { publishedName: string; reason: string }[] = []
+
+  // Get OEM→folder mapping for size calculation before removal
+  const oemFolderMap = await getOemFolderMap()
+
+  for (const name of publishedNames) {
+    // Validate: only allow oem*.inf names
+    if (!/^oem\d+\.inf$/i.test(name)) {
+      errors.push({ publishedName: name, reason: 'Invalid driver package name' })
+      failed++
+      continue
+    }
+
+    try {
+      // Get size before removal using registry-based folder mapping
+      let preSize = 0
+      const folders = oemFolderMap.get(name.toLowerCase()) || []
+      if (folders.length > 0) {
+        preSize = dirSize(join(DRIVER_STORE, folders[0]))
       }
 
-      let removed = 0
-      let failed = 0
-      let spaceRecovered = 0
-      const errors: { publishedName: string; reason: string }[] = []
-
-      // Get OEM→folder mapping for size calculation before removal
-      const oemFolderMap = await getOemFolderMap()
-
-      for (const name of publishedNames) {
-        // Validate: only allow oem*.inf names
-        if (!/^oem\d+\.inf$/i.test(name)) {
-          errors.push({ publishedName: name, reason: 'Invalid driver package name' })
-          failed++
-          continue
-        }
-
-        try {
-          // Get size before removal using registry-based folder mapping
-          let preSize = 0
-          const folders = oemFolderMap.get(name.toLowerCase()) || []
-          if (folders.length > 0) {
-            preSize = dirSize(join(DRIVER_STORE, folders[0]))
-          }
-
-          await execNativeUtf8('pnputil', ['/delete-driver', name], {
-            timeout: 15000
-          })
-          removed++
-          spaceRecovered += preSize
-        } catch (err: any) {
-          const msg = err?.stderr || err?.message || 'Unknown error'
-          if (msg.includes('currently in use') || msg.includes('in use')) {
-            errors.push({ publishedName: name, reason: 'Driver is currently in use by a device' })
-          } else {
-            errors.push({ publishedName: name, reason: msg.slice(0, 200) })
-          }
-          failed++
-        }
+      await execNativeUtf8('pnputil', ['/delete-driver', name], {
+        timeout: 15000,
+      })
+      removed++
+      spaceRecovered += preSize
+    } catch (err: unknown) {
+      const e = err as { stderr?: string; message?: string }
+      const msg = e?.stderr || e?.message || 'Unknown error'
+      if (msg.includes('currently in use') || msg.includes('in use')) {
+        errors.push({ publishedName: name, reason: 'Driver is currently in use by a device' })
+      } else {
+        errors.push({ publishedName: name, reason: msg.slice(0, 200) })
       }
+      failed++
+    }
+  }
 
-      return { removed, failed, spaceRecovered, errors }
+  const result = { removed, failed, spaceRecovered, errors }
+  if (result.failed > 0) {
+    getLogger().error(
+      'driver-manager',
+      `Driver clean completed with ${result.failed} failure(s) — ${result.removed} removed, ${result.spaceRecovered} bytes recovered`,
+    )
+  } else {
+    getLogger().success(
+      'driver-manager',
+      `Driver clean completed — ${result.removed} removed, ${result.spaceRecovered} bytes recovered`,
+    )
+  }
+  return result
 }
 
 export async function scanDriverUpdates(
-  onProgress?: (data: DriverUpdateProgress) => void
+  onProgress?: (data: DriverUpdateProgress) => void,
 ): Promise<DriverUpdateScanResult> {
-    const startTime = Date.now()
+  const startTime = Date.now()
 
-    if (process.platform !== 'win32') {
-      return { updates: [], totalAvailable: 0, scanDuration: Date.now() - startTime }
-    }
+  getLogger().info('driver-manager', 'Starting driver update scan...')
+  if (process.platform !== 'win32') {
+    getLogger().warning('driver-manager', 'Driver update scan skipped — not on Windows')
+    return { updates: [], totalAvailable: 0, scanDuration: Date.now() - startTime }
+  }
 
-    onProgress?.({
-      phase: 'checking',
-      current: 0,
-      total: 0,
-      currentDevice: 'Querying Windows Update for driver updates...',
-      percent: 0
-    })
+  onProgress?.({
+    phase: 'checking',
+    current: 0,
+    total: 0,
+    currentDevice: 'Querying Windows Update for driver updates...',
+    percent: 0,
+  })
 
-    const updates: DriverUpdate[] = []
+  const updates: DriverUpdate[] = []
 
-    try {
-      // Use the Windows Update COM API via PowerShell to find driver updates.
-      // WMI driver table is cached once before the loop for performance.
-      const script = `
+  try {
+    // Use the Windows Update COM API via PowerShell to find driver updates.
+    // WMI driver table is cached once before the loop for performance.
+    const script = `
         $ErrorActionPreference = 'Stop'
         $session = New-Object -ComObject Microsoft.Update.Session
         $searcher = $session.CreateUpdateSearcher()
@@ -509,106 +525,120 @@ export async function scanDriverUpdates(
         }
       `
 
-      const { stdout } = await execFileAsync('powershell', psArgs(script), { timeout: 120000, maxBuffer: 10 * 1024 * 1024, windowsHide: true })
+    const { stdout } = await execFileAsync('powershell', psArgs(script), {
+      timeout: 120000,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+    })
 
-      const lines = stdout.trim().split('\n').map((l: string) => l.trim()).filter(Boolean)
+    const lines = stdout
+      .trim()
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter(Boolean)
 
-      // Pre-compute total count for progress
-      const totalCount = lines.filter((l) => l.startsWith('DRVUPD|')).length
+    // Pre-compute total count for progress
+    const totalCount = lines.filter((l) => l.startsWith('DRVUPD|')).length
 
-      let idx = 0
-      for (const line of lines) {
-        if (line === 'DRVUPD_NONE') break
-        if (!line.startsWith('DRVUPD|')) continue
+    let idx = 0
+    for (const line of lines) {
+      if (line === 'DRVUPD_NONE') break
+      if (!line.startsWith('DRVUPD|')) continue
 
-        const parts = line.split('|')
-        if (parts.length < 11) continue
+      const parts = line.split('|')
+      if (parts.length < 11) continue
 
-        const deviceName = parts[1] || 'Unknown Device'
-        const deviceId = parts[2] || ''
-        const className = parts[3] || 'Unknown'
-        const currentVersion = parts[4] || ''
-        const currentDate = parts[5] || ''
-        const updateId = parts[6] || ''
-        const availableDate = parts[7] || ''
-        const provider = parts[8] || 'Unknown'
-        const updateTitle = parts[9] || deviceName
-        const downloadSize = parts[10] || ''
+      const deviceName = parts[1] || 'Unknown Device'
+      const deviceId = parts[2] || ''
+      const className = parts[3] || 'Unknown'
+      const currentVersion = parts[4] || ''
+      const currentDate = parts[5] || ''
+      const updateId = parts[6] || ''
+      const availableDate = parts[7] || ''
+      const provider = parts[8] || 'Unknown'
+      const updateTitle = parts[9] || deviceName
+      const downloadSize = parts[10] || ''
 
-        // Extract version from the update title if available (common pattern: "vX.X.X.X")
-        const versionMatch = updateTitle.match(/(\d+\.\d+\.\d+[\.\d]*)/)
-        const availableVersion = versionMatch?.[1] || availableDate
+      // Extract version from the update title if available (common pattern: "vX.X.X.X")
+      const versionMatch = updateTitle.match(/(\d+\.\d+\.\d+[\.\d]*)/)
+      const availableVersion = versionMatch?.[1] || availableDate
 
-        idx++
-        onProgress?.({
-          phase: 'checking',
-          current: idx,
-          total: totalCount,
-          currentDevice: deviceName,
-          percent: Math.round((idx / totalCount) * 100)
-        })
+      idx++
+      onProgress?.({
+        phase: 'checking',
+        current: idx,
+        total: totalCount,
+        currentDevice: deviceName,
+        percent: Math.round((idx / totalCount) * 100),
+      })
 
-        updates.push({
-          id: makeId(updateId || deviceName, availableVersion),
-          updateId,
-          deviceName,
-          deviceId,
-          className,
-          currentVersion,
-          currentDate,
-          availableVersion,
-          availableDate,
-          provider,
-          updateTitle,
-          downloadSize,
-          selected: true
-        })
-      }
-    } catch (err: any) {
-      console.error('Driver update scan failed:', err?.message || err)
-      if (err?.stderr) console.error('PowerShell stderr:', err.stderr)
-      throw new Error(err?.stderr || err?.message || 'Driver update scan failed')
+      updates.push({
+        id: makeId(updateId || deviceName, availableVersion),
+        updateId,
+        deviceName,
+        deviceId,
+        className,
+        currentVersion,
+        currentDate,
+        availableVersion,
+        availableDate,
+        provider,
+        updateTitle,
+        downloadSize,
+        selected: true,
+      })
     }
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; message?: string }
+    getLogger().error('driver-manager', `Driver update scan failed: ${e?.message || 'Unknown error'}`)
+    if (e?.stderr) getLogger().error('driver-manager', `PowerShell stderr: ${e.stderr}`)
+    throw new Error(e?.stderr || e?.message || 'Driver update scan failed')
+  }
 
-    return {
-      updates,
-      totalAvailable: updates.length,
-      scanDuration: Date.now() - startTime
-    }
+  getLogger().success(
+    'driver-manager',
+    `Driver update scan completed — ${updates.length} update(s) available in ${Date.now() - startTime}ms`,
+  )
+  return {
+    updates,
+    totalAvailable: updates.length,
+    scanDuration: Date.now() - startTime,
+  }
 }
 
 export async function installDriverUpdates(
   wuUpdateIds: string[],
-  onProgress?: (data: DriverUpdateProgress) => void
+  onProgress?: (data: DriverUpdateProgress) => void,
 ): Promise<DriverUpdateInstallResult> {
-      if (process.platform !== 'win32') {
-        return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
-      }
+  getLogger().info('driver-manager', `Starting driver update install for ${wuUpdateIds.length} update(s)...`)
+  if (process.platform !== 'win32') {
+    getLogger().warning('driver-manager', 'Driver update install skipped — not on Windows')
+    return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
+  }
 
-      let installed = 0
-      let failed = 0
-      let rebootRequired = false
-      const errors: { deviceName: string; reason: string }[] = []
+  let installed = 0
+  let failed = 0
+  let rebootRequired = false
+  const errors: { deviceName: string; reason: string }[] = []
 
-      if (wuUpdateIds.length === 0) {
-        return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
-      }
+  if (wuUpdateIds.length === 0) {
+    getLogger().warning('driver-manager', 'No driver update IDs provided for install')
+    return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
+  }
 
-      onProgress?.({
-        phase: 'downloading',
-        current: 0,
-        total: wuUpdateIds.length,
-        currentDevice: 'Preparing driver updates...',
-        percent: 0
-      })
+  onProgress?.({
+    phase: 'downloading',
+    current: 0,
+    total: wuUpdateIds.length,
+    currentDevice: 'Preparing driver updates...',
+    percent: 0,
+  })
 
-      try {
-        // Build a PS array literal of the WU UpdateIDs for exact matching
-        const idsArray = wuUpdateIds
-          .map((id) => `'${id.replace(/'/g, "''")}'`)
-          .join(',')
+  try {
+    // Build a PS array literal of the WU UpdateIDs for exact matching
+    const idsArray = wuUpdateIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(',')
 
-        const script = `
+    const script = `
           $ErrorActionPreference = 'Stop'
           $selectedIds = @(${idsArray})
 
@@ -661,50 +691,71 @@ export async function installDriverUpdates(
           Write-Output "RESULT|$ok|$fail|$reboot"
         `
 
-        const { stdout } = await execFileAsync('powershell', psArgs(script), { timeout: 600000, maxBuffer: 10 * 1024 * 1024, windowsHide: true })
+    const { stdout } = await execFileAsync('powershell', psArgs(script), {
+      timeout: 600000,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+    })
 
-        const lines = stdout.trim().split('\n').map((l: string) => l.trim()).filter(Boolean)
+    const lines = stdout
+      .trim()
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter(Boolean)
 
-        for (const line of lines) {
-          if (line.startsWith('STATUS|')) {
-            const parts = line.split('|')
-            const phase = parts[1] === 'installing' ? 'installing' as const : 'downloading' as const
-            const total = parseInt(parts[2], 10) || wuUpdateIds.length
-            onProgress?.({
-              phase,
-              current: 0,
-              total,
-              currentDevice: phase === 'installing' ? 'Installing drivers...' : 'Downloading drivers...',
-              percent: phase === 'installing' ? 50 : 25
-            })
-          } else if (line.startsWith('INSTALLED|')) {
-            installed++
-            const name = line.substring('INSTALLED|'.length)
-            onProgress?.({
-              phase: 'installing',
-              current: installed + failed,
-              total: wuUpdateIds.length,
-              currentDevice: name,
-              percent: Math.round(((installed + failed) / wuUpdateIds.length) * 100)
-            })
-          } else if (line.startsWith('FAILED|')) {
-            failed++
-            const parts = line.split('|')
-            errors.push({ deviceName: parts[1] || 'Unknown', reason: parts[2] || 'Install failed' })
-          } else if (line.startsWith('RESULT|')) {
-            const parts = line.split('|')
-            installed = parseInt(parts[1], 10) || installed
-            failed = parseInt(parts[2], 10) || failed
-            rebootRequired = parts[3] === 'True' || parts[3] === 'true'
-          }
-        }
-      } catch (err: any) {
-        const msg = err?.stderr || err?.message || 'Unknown error'
-        errors.push({ deviceName: 'Windows Update', reason: msg.slice(0, 300) })
-        if (installed === 0) failed = wuUpdateIds.length
+    for (const line of lines) {
+      if (line.startsWith('STATUS|')) {
+        const parts = line.split('|')
+        const phase = parts[1] === 'installing' ? ('installing' as const) : ('downloading' as const)
+        const total = Number.parseInt(parts[2], 10) || wuUpdateIds.length
+        onProgress?.({
+          phase,
+          current: 0,
+          total,
+          currentDevice: phase === 'installing' ? 'Installing drivers...' : 'Downloading drivers...',
+          percent: phase === 'installing' ? 50 : 25,
+        })
+      } else if (line.startsWith('INSTALLED|')) {
+        installed++
+        const name = line.substring('INSTALLED|'.length)
+        onProgress?.({
+          phase: 'installing',
+          current: installed + failed,
+          total: wuUpdateIds.length,
+          currentDevice: name,
+          percent: Math.round(((installed + failed) / wuUpdateIds.length) * 100),
+        })
+      } else if (line.startsWith('FAILED|')) {
+        failed++
+        const parts = line.split('|')
+        errors.push({ deviceName: parts[1] || 'Unknown', reason: parts[2] || 'Install failed' })
+      } else if (line.startsWith('RESULT|')) {
+        const parts = line.split('|')
+        installed = Number.parseInt(parts[1], 10) || installed
+        failed = Number.parseInt(parts[2], 10) || failed
+        rebootRequired = parts[3] === 'True' || parts[3] === 'true'
       }
+    }
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; message?: string }
+    const msg = e?.stderr || e?.message || 'Unknown error'
+    errors.push({ deviceName: 'Windows Update', reason: msg.slice(0, 300) })
+    if (installed === 0) failed = wuUpdateIds.length
+  }
 
-      return { installed, failed, rebootRequired, errors }
+  const result = { installed, failed, rebootRequired, errors }
+  if (result.failed > 0) {
+    getLogger().error(
+      'driver-manager',
+      `Driver update install completed with ${result.failed} failure(s) — ${result.installed} installed, reboot: ${result.rebootRequired}`,
+    )
+  } else {
+    getLogger().success(
+      'driver-manager',
+      `Driver update install completed — ${result.installed} installed, reboot: ${result.rebootRequired}`,
+    )
+  }
+  return result
 }
 
 export function registerDriverManagerIpc(getWindow: WindowGetter): void {
@@ -722,7 +773,10 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(IPC.DRIVER_CLEAN, async (_event, publishedNames: string[]) => {
     const valid = validateStringArray(publishedNames, 500)
-    if (!valid) return { removed: 0, failed: 0, spaceRecovered: 0, errors: [] }
+    if (!valid) {
+      getLogger().warning('driver-manager', 'Invalid published names received for driver clean')
+      return { removed: 0, failed: 0, spaceRecovered: 0, errors: [] }
+    }
     return cleanDrivers(valid)
   })
 
@@ -730,7 +784,10 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(IPC.DRIVER_UPDATE_INSTALL, async (_event, wuUpdateIds: string[]) => {
     const valid = validateStringArray(wuUpdateIds, 500)
-    if (!valid) return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
+    if (!valid) {
+      getLogger().warning('driver-manager', 'Invalid update IDs received for driver update install')
+      return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
+    }
     return installDriverUpdates(valid, sendUpdateProgress)
   })
 }

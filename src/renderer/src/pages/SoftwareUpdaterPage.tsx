@@ -27,7 +27,7 @@ import { useUpdaterStore, severityOrder } from '@/stores/updater-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { usePlatform } from '@/hooks/usePlatform'
-import type { UpdateProgress, UpdatableApp, UpToDateApp } from '@shared/types'
+import type { UpdateProgress, UpdatableApp } from '@shared/types'
 
 const SEVERITY_STYLES_BASE = {
   major: {
@@ -67,6 +67,7 @@ const FILTER_LABEL_KEYS: Record<string, string> = {
   major: 'softwareUpdater.filterMajor',
   minor: 'softwareUpdater.filterMinor',
   patch: 'softwareUpdater.filterPatch',
+  uptodate: 'softwareUpdater.filterUpToDate',
 }
 
 export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
@@ -84,8 +85,6 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
   const sortField = useUpdaterStore((s) => s.sortField)
   const sortDirection = useUpdaterStore((s) => s.sortDirection)
   const severityFilter = useUpdaterStore((s) => s.severityFilter)
-
-  const upToDate = useUpdaterStore((s) => s.upToDate)
 
   const ignoredApps = useUpdaterStore((s) => s.ignoredApps)
 
@@ -149,7 +148,6 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       const result = await window.dinho.softwareUpdateCheck()
       const s = useUpdaterStore.getState()
       s.setApps(result.apps)
-      s.setUpToDate(result.upToDate)
       s.setPackageManagerAvailable(result.packageManagerAvailable)
       s.setPackageManagerName(result.packageManagerName)
       s.setHasChecked(true)
@@ -268,6 +266,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       }
     })
   }, [apps, searchQuery, sortField, sortDirection, severityFilter])
+
+  const upToDate = useMemo(() => apps.filter((a) => a.isUpToDate), [apps])
 
   const selectedCount = apps.filter((a) => a.selected).length
   const allSelected = apps.length > 0 && selectedCount === apps.length
@@ -947,7 +947,7 @@ function IgnoredRow({ app, onUnignore }: { app: UpdatableApp; onUnignore: () => 
   )
 }
 
-function UpToDateRow({ app }: { app: UpToDateApp }) {
+function UpToDateRow({ app }: { app: UpdatableApp }) {
   const { t } = useTranslation('updates')
   return (
     <div
@@ -969,7 +969,7 @@ function UpToDateRow({ app }: { app: UpToDateApp }) {
           {app.id}
         </span>
       </div>
-      <span className="text-[11px] font-mono text-zinc-600 shrink-0">{app.version}</span>
+      <span className="text-[11px] font-mono text-zinc-600 shrink-0">{app.currentVersion}</span>
       <span
         className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
         style={{ background: 'rgba(34,197,94,0.06)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.1)' }}

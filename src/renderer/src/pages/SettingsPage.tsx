@@ -1,23 +1,27 @@
-import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { Plus, X, FolderOpen, Sun, Moon, Monitor, ChevronRight, RotateCcw } from 'lucide-react'
-import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { cn } from '@/lib/utils'
-import { useSettingsStore } from '@/stores/settings-store'
+import { LogViewer } from '@/components/shared/LogViewer'
 import { usePlatform } from '@/hooks/usePlatform'
 import { LANGUAGES } from '@/lib/languages'
+import { cn } from '@/lib/utils'
+import { useSettingsStore } from '@/stores/settings-store'
 import i18next from 'i18next'
+import { FolderOpen, Monitor, Moon, Plus, RotateCcw, Sun, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 export function SettingsPage() {
   const { t } = useTranslation('settings')
   const { features, platform } = usePlatform()
   const { settings, updateSettings, setSettings } = useSettingsStore()
   const [newExclusion, setNewExclusion] = useState('')
-  const navigate = useNavigate()
 
-  useEffect(() => { window.dinho?.settingsGet?.().then(setSettings).catch(() => {}) }, [])
+  useEffect(() => {
+    window.dinho
+      ?.settingsGet?.()
+      .then(setSettings)
+      .catch(() => {})
+  }, [setSettings])
 
   const save = (partial: Partial<typeof settings>) => {
     updateSettings(partial)
@@ -63,7 +67,7 @@ export function SettingsPage() {
     setNewExclusion('')
   }
 
-  const selectStyle = "rounded-lg px-3 py-1.5 text-[13px] text-zinc-400 outline-none"
+  const selectStyle = 'rounded-lg px-3 py-1.5 text-[13px] text-zinc-400 outline-none'
   const selectBorder = { background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }
 
   return (
@@ -98,7 +102,10 @@ export function SettingsPage() {
           <Toggle checked={settings.minimizeToTray} onChange={saveTray} />
         </Row>
         <Row label={t('showNotificationsLabel')} desc={t('showNotificationsDesc')}>
-          <Toggle checked={settings.showNotificationOnComplete} onChange={(v) => save({ showNotificationOnComplete: v })} />
+          <Toggle
+            checked={settings.showNotificationOnComplete}
+            onChange={(v) => save({ showNotificationOnComplete: v })}
+          />
         </Row>
         <Row label={t('threatDetectionAlertsLabel')} desc={t('threatDetectionAlertsDesc')}>
           <Toggle checked={settings.showThreatNotifications} onChange={(v) => save({ showThreatNotifications: v })} />
@@ -110,9 +117,12 @@ export function SettingsPage() {
           <Toggle checked={settings.autoRestart} onChange={(v) => save({ autoRestart: v })} />
         </Row>
         <Row label={t('updateCheckIntervalLabel')} desc={t('updateCheckIntervalDesc')} last={platform !== 'win32'}>
-          <select value={settings.updateCheckIntervalHours}
+          <select
+            value={settings.updateCheckIntervalHours}
             onChange={(e) => save({ updateCheckIntervalHours: Number(e.target.value) })}
-            className={selectStyle} style={selectBorder}>
+            className={selectStyle}
+            style={selectBorder}
+          >
             <option value={1}>{t('updateCheckEveryHour')}</option>
             <option value={4}>{t('updateCheckEvery4Hours')}</option>
             <option value={12}>{t('updateCheckEvery12Hours')}</option>
@@ -123,11 +133,13 @@ export function SettingsPage() {
           <Row label={t('windowsPackageManagerLabel')} desc={t('windowsPackageManagerDesc')} last>
             <select
               value={settings.windowsPackageManager ?? 'winget'}
-              onChange={(e) => save({ windowsPackageManager: e.target.value as 'winget' | 'choco' })}
-              className={selectStyle} style={selectBorder}
+              onChange={(e) => save({ windowsPackageManager: e.target.value as 'winget' | 'choco' | 'scoop' })}
+              className={selectStyle}
+              style={selectBorder}
             >
               <option value="winget">winget</option>
               <option value="choco">Chocolatey</option>
+              <option value="scoop">Scoop</option>
             </select>
           </Row>
         )}
@@ -145,13 +157,18 @@ export function SettingsPage() {
               })
             }
           }}
-          onOpen={() => { window.dinho?.settingsOpenBackupDir?.().catch(() => {}) }}
+          onOpen={() => {
+            window.dinho?.settingsOpenBackupDir?.().catch(() => {})
+          }}
           onReset={() => save({ backupPath: '' })}
         />
         <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--border-subtle)' }}>
           <Row
             label={t('backupModeLabel', 'Registry backup mode')}
-            desc={t('backupModeDesc', 'Targeted only saves the keys being changed (small). Full hive snapshots entire branches before each run (hundreds of MB).')}
+            desc={t(
+              'backupModeDesc',
+              'Targeted only saves the keys being changed (small). Full hive snapshots entire branches before each run (hundreds of MB).',
+            )}
             last
           >
             <select
@@ -169,23 +186,38 @@ export function SettingsPage() {
 
       <Section title={t('sectionCleaningPreferences')}>
         <Row label={t('protectRecycleBinLabel')} desc={t('protectRecycleBinDesc')}>
-          <Toggle checked={settings.cleaner.protectRecycleBin} onChange={(v) => save({ cleaner: { ...settings.cleaner, protectRecycleBin: v } })} />
+          <Toggle
+            checked={settings.cleaner.protectRecycleBin}
+            onChange={(v) => save({ cleaner: { ...settings.cleaner, protectRecycleBin: v } })}
+          />
         </Row>
         <Row label={t('secureDeleteLabel')} desc={t('secureDeleteDesc')}>
-          <Toggle checked={settings.cleaner.secureDelete} onChange={(v) => save({ cleaner: { ...settings.cleaner, secureDelete: v } })} />
+          <Toggle
+            checked={settings.cleaner.secureDelete}
+            onChange={(v) => save({ cleaner: { ...settings.cleaner, secureDelete: v } })}
+          />
         </Row>
         <Row label={t('closeBrowsersLabel')} desc={t('closeBrowsersDesc')}>
-          <Toggle checked={settings.cleaner.closeBrowsersBeforeClean} onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })} />
+          <Toggle
+            checked={settings.cleaner.closeBrowsersBeforeClean}
+            onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })}
+          />
         </Row>
         {features.restorePoint && (
           <Row label={t('createRestorePointLabel')} desc={t('createRestorePointDesc')}>
-            <Toggle checked={settings.cleaner.createRestorePoint} onChange={(v) => save({ cleaner: { ...settings.cleaner, createRestorePoint: v } })} />
+            <Toggle
+              checked={settings.cleaner.createRestorePoint}
+              onChange={(v) => save({ cleaner: { ...settings.cleaner, createRestorePoint: v } })}
+            />
           </Row>
         )}
         <Row label={t('skipRecentFilesLabel')} desc={t('skipRecentFilesDesc')} last>
-          <select value={settings.cleaner.skipRecentMinutes}
+          <select
+            value={settings.cleaner.skipRecentMinutes}
             onChange={(e) => save({ cleaner: { ...settings.cleaner, skipRecentMinutes: Number(e.target.value) } })}
-            className={selectStyle} style={selectBorder}>
+            className={selectStyle}
+            style={selectBorder}
+          >
             <option value={30}>{t('skipRecent30Min')}</option>
             <option value={60}>{t('skipRecent1Hour')}</option>
             <option value={120}>{t('skipRecent2Hours')}</option>
@@ -197,38 +229,55 @@ export function SettingsPage() {
       <Section title={t('sectionExclusions')}>
         <div className="space-y-2 pb-3">
           {settings.exclusions.length === 0 && (
-            <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>{t('noExclusionsConfigured')}</p>
+            <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+              {t('noExclusionsConfigured')}
+            </p>
           )}
-          {settings.exclusions.map((exc, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl px-4 py-2.5"
-              style={{ background: 'var(--bg-subtle)' }}>
+          {settings.exclusions.map((exc, idx) => (
+            <div
+              key={exc}
+              className="flex items-center justify-between rounded-xl px-4 py-2.5"
+              style={{ background: 'var(--bg-subtle)' }}
+            >
               <div className="flex items-center gap-2.5">
                 <FolderOpen className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} strokeWidth={1.8} />
                 <span className="font-mono text-[12px] text-zinc-400">{exc}</span>
               </div>
-              <button onClick={() => save({ exclusions: settings.exclusions.filter((_, j) => j !== i) })}
-                className="rounded-lg p-1.5 transition-colors" style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+              <button
+                type="button"
+                onClick={() => save({ exclusions: settings.exclusions.filter((_, j) => j !== idx) })}
+                className="rounded-lg p-1.5 transition-colors hover:bg-white/[0.04]"
+                style={{ color: 'var(--text-muted)' }}
+              >
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
           ))}
           <div className="flex items-center gap-2.5">
-            <input type="text" value={newExclusion} onChange={(e) => setNewExclusion(e.target.value)}
+            <input
+              type="text"
+              value={newExclusion}
+              onChange={(e) => setNewExclusion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
               placeholder={platform === 'win32' ? t('exclusionPlaceholderWindows') : t('exclusionPlaceholderOther')}
               className="flex-1 rounded-xl px-4 py-2.5 text-[13px] text-zinc-300 outline-none placeholder:text-zinc-700"
-              style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-medium)' }} />
-            <button onClick={addExclusion}
+              style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-medium)' }}
+            />
+            <button
+              type="button"
+              onClick={addExclusion}
               className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-colors"
-              style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}>
+              style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
+            >
               <Plus className="h-3.5 w-3.5" /> {t('addButton')}
             </button>
           </div>
         </div>
       </Section>
 
+      <Section title={t('sectionLogs')}>
+        <LogViewer />
+      </Section>
     </div>
   )
 }
@@ -236,19 +285,37 @@ export function SettingsPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-7">
-      <h3 className="mb-3 text-[11px] font-medium uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{title}</h3>
-      <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}>{children}</div>
+      <h3 className="mb-3 text-[11px] font-medium uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+        {title}
+      </h3>
+      <div
+        className="rounded-2xl p-5"
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
+      >
+        {children}
+      </div>
     </div>
   )
 }
 
-function Row({ label, desc, children, last }: { label: string; desc?: string; children: React.ReactNode; last?: boolean }) {
+function Row({
+  label,
+  desc,
+  children,
+  last,
+}: { label: string; desc?: string; children: React.ReactNode; last?: boolean }) {
   return (
-    <div className={cn('flex items-center justify-between py-3.5', !last && 'border-b')}
-      style={!last ? { borderColor: 'var(--border-subtle)' } : undefined}>
+    <div
+      className={cn('flex items-center justify-between py-3.5', !last && 'border-b')}
+      style={!last ? { borderColor: 'var(--border-subtle)' } : undefined}
+    >
       <div>
         <p className="text-[13px] font-medium text-zinc-300">{label}</p>
-        {desc && <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{desc}</p>}
+        {desc && (
+          <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+            {desc}
+          </p>
+        )}
       </div>
       {children}
     </div>
@@ -257,13 +324,18 @@ function Row({ label, desc, children, last }: { label: string; desc?: string; ch
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button onClick={() => onChange(!checked)}
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
       className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors"
-      style={{ background: checked ? 'var(--accent)' : 'var(--bg-active)' }}>
-      <div className={cn(
-        'absolute top-[3px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
-        checked ? 'translate-x-[22px]' : 'translate-x-[3px]'
-      )} />
+      style={{ background: checked ? 'var(--accent)' : 'var(--bg-active)' }}
+    >
+      <div
+        className={cn(
+          'absolute top-[3px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
+          checked ? 'translate-x-[22px]' : 'translate-x-[3px]',
+        )}
+      />
     </button>
   )
 }
@@ -287,7 +359,10 @@ function BackupFolderRow({
       <div>
         <p className="text-[13px] font-medium text-zinc-300">{t('backupFolderLabel', 'Backup folder')}</p>
         <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-          {t('backupFolderDesc', 'Onde o DiNho Optimizer guarda backups de registo e extensões de shell antes de fazer alterações. Os backups existentes permanecem na localização anterior quando muda de pasta.')}
+          {t(
+            'backupFolderDesc',
+            'Onde o DiNho Optimizer guarda backups de registo e extensões de shell antes de fazer alterações. Os backups existentes permanecem na localização anterior quando muda de pasta.',
+          )}
         </p>
       </div>
       <div className="flex items-center gap-2.5">
@@ -296,36 +371,35 @@ function BackupFolderRow({
           style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-medium)' }}
         >
           <FolderOpen className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--text-muted)' }} strokeWidth={1.8} />
-          <span className="truncate font-mono text-[12px] text-zinc-400" title={displayPath}>{displayPath}</span>
+          <span className="truncate font-mono text-[12px] text-zinc-400" title={displayPath}>
+            {displayPath}
+          </span>
         </div>
         <button
+          type="button"
           onClick={onOpen}
           title={t('backupFolderOpenTooltip', 'Open in file manager')}
-          className="rounded-xl p-2.5 text-zinc-400 transition-colors"
+          className="rounded-xl p-2.5 text-zinc-400 transition-colors hover:bg-white/[0.04]"
           style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-subtle-2)' }}
         >
           <FolderOpen className="h-3.5 w-3.5" strokeWidth={1.8} />
         </button>
         {isCustom && (
           <button
+            type="button"
             onClick={onReset}
             title={t('backupFolderResetTooltip', 'Reset to default')}
-            className="rounded-xl p-2.5 text-zinc-400 transition-colors"
+            className="rounded-xl p-2.5 text-zinc-400 transition-colors hover:bg-white/[0.04]"
             style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-subtle-2)' }}
           >
             <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
           </button>
         )}
         <button
+          type="button"
           onClick={onPick}
-          className="rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-colors"
+          className="rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-colors hover:bg-white/[0.04]"
           style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-subtle-2)' }}
         >
           {t('backupFolderChooseButton', 'Choose…')}
         </button>
@@ -334,7 +408,10 @@ function BackupFolderRow({
   )
 }
 
-function ThemeSelector({ value, onChange }: { value: 'dark' | 'light' | 'system'; onChange: (v: 'dark' | 'light' | 'system') => void }) {
+function ThemeSelector({
+  value,
+  onChange,
+}: { value: 'dark' | 'light' | 'system'; onChange: (v: 'dark' | 'light' | 'system') => void }) {
   const { t } = useTranslation('settings')
   const options: { id: 'dark' | 'light' | 'system'; icon: typeof Sun; label: string }[] = [
     { id: 'dark', icon: Moon, label: t('themeDark') },
@@ -342,11 +419,15 @@ function ThemeSelector({ value, onChange }: { value: 'dark' | 'light' | 'system'
     { id: 'system', icon: Monitor, label: t('themeSystem') },
   ]
   return (
-    <div className="flex gap-1 rounded-lg p-0.5" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-medium)' }}>
+    <div
+      className="flex gap-1 rounded-lg p-0.5"
+      style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-medium)' }}
+    >
       {options.map((opt) => {
         const active = value === opt.id
         return (
           <button
+            type="button"
             key={opt.id}
             onClick={() => onChange(opt.id)}
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all"
@@ -363,4 +444,3 @@ function ThemeSelector({ value, onChange }: { value: 'dark' | 'light' | 'system'
     </div>
   )
 }
-

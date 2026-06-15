@@ -1,25 +1,25 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./elevation', () => ({ isAdmin: () => false }))
 
 import {
+  BREW_PATH_CANDIDATES,
   cleanOutput,
   computeSeverity,
-  stripTrailingVersion,
-  parseWingetUpgradeOutput,
-  parseWingetListOutput,
-  parseBrewOutdatedJson,
-  parseBrewInstalledJson,
-  parseAptUpgradable,
-  parseDpkgInstalled,
-  parseDnfCheckUpdate,
-  parsePacmanQu,
-  parseChocoOutdatedOutput,
-  parseChocoListOutput,
-  parseScoopStatusOutput,
-  parseScoopListOutput,
   isValidAppId,
-  BREW_PATH_CANDIDATES,
+  parseAptUpgradable,
+  parseBrewInstalledJson,
+  parseBrewOutdatedJson,
+  parseChocoListOutput,
+  parseChocoOutdatedOutput,
+  parseDnfCheckUpdate,
+  parseDpkgInstalled,
+  parsePacmanQu,
+  parseScoopListOutput,
+  parseScoopStatusOutput,
+  parseWingetListOutput,
+  parseWingetUpgradeOutput,
+  stripTrailingVersion,
 } from './software-updater'
 
 // ─── cleanOutput ────────────────────────────────────────────
@@ -118,11 +118,11 @@ describe('parseWingetUpgradeOutput', () => {
 
     const apps = parseWingetUpgradeOutput(output)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('Google.Chrome')
-    expect(apps[0].currentVersion).toBe('120.0.1')
-    expect(apps[0].availableVersion).toBe('121.0.0')
-    expect(apps[0].severity).toBe('major')
-    expect(apps[1].id).toBe('Microsoft.VisualStudioCode')
+    expect(apps[0]!.id).toBe('Google.Chrome')
+    expect(apps[0]!.currentVersion).toBe('120.0.1')
+    expect(apps[0]!.availableVersion).toBe('121.0.0')
+    expect(apps[0]!.severity).toBe('major')
+    expect(apps[1]!.id).toBe('Microsoft.VisualStudioCode')
   })
 
   it('returns empty for no header', () => {
@@ -142,8 +142,8 @@ describe('parseWingetUpgradeOutput', () => {
 
     const apps = parseWingetUpgradeOutput(output)
     expect(apps).toHaveLength(1)
-    expect(apps[0].currentVersion).toBe('1.0.0')
-    expect(apps[0].availableVersion).toBe('2.0.0')
+    expect(apps[0]!.currentVersion).toBe('1.0.0')
+    expect(apps[0]!.availableVersion).toBe('2.0.0')
   })
 
   it('handles < prefix in versions', () => {
@@ -155,8 +155,8 @@ describe('parseWingetUpgradeOutput', () => {
 
     const apps = parseWingetUpgradeOutput(output)
     expect(apps).toHaveLength(1)
-    expect(apps[0].currentVersion).toBe('2.0.0')
-    expect(apps[0].availableVersion).toBe('3.0.0')
+    expect(apps[0]!.currentVersion).toBe('2.0.0')
+    expect(apps[0]!.availableVersion).toBe('3.0.0')
   })
 
   it('skips entries where < version equals available (already up to date)', () => {
@@ -179,9 +179,9 @@ describe('parseWingetUpgradeOutput', () => {
 
     const apps = parseWingetUpgradeOutput(output)
     expect(apps).toHaveLength(1)
-    expect(apps[0].name).toBe('HandBrake')
-    expect(apps[0].currentVersion).toBe('1.11.0')
-    expect(apps[0].availableVersion).toBe('1.11.1')
+    expect(apps[0]!.name).toBe('HandBrake')
+    expect(apps[0]!.currentVersion).toBe('1.11.0')
+    expect(apps[0]!.availableVersion).toBe('1.11.1')
   })
 })
 
@@ -198,8 +198,8 @@ describe('parseWingetListOutput', () => {
 
     const apps = parseWingetListOutput(output)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('Google.Chrome')
-    expect(apps[0].version).toBe('121.0.0')
+    expect(apps[0]!.id).toBe('Google.Chrome')
+    expect(apps[0]!.currentVersion).toBe('121.0.0')
   })
 
   it('skips ARP entries', () => {
@@ -228,19 +228,15 @@ describe('parseWingetListOutput', () => {
 describe('parseBrewOutdatedJson', () => {
   it('parses formulae and casks', () => {
     const json = JSON.stringify({
-      formulae: [
-        { name: 'curl', installed_versions: ['7.87.0'], current_version: '7.88.0' },
-      ],
-      casks: [
-        { name: 'firefox', token: 'firefox', installed_versions: '120.0', current_version: '121.0' },
-      ],
+      formulae: [{ name: 'curl', installed_versions: ['7.87.0'], current_version: '7.88.0' }],
+      casks: [{ name: 'firefox', token: 'firefox', installed_versions: '120.0', current_version: '121.0' }],
     })
 
     const apps = parseBrewOutdatedJson(json)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('curl')
-    expect(apps[0].source).toBe('brew')
-    expect(apps[1].id).toBe('firefox')
+    expect(apps[0]!.id).toBe('curl')
+    expect(apps[0]!.source).toBe('brew')
+    expect(apps[1]!.id).toBe('firefox')
   })
 
   it('returns empty for invalid JSON', () => {
@@ -262,19 +258,15 @@ describe('parseBrewOutdatedJson', () => {
 describe('parseBrewInstalledJson', () => {
   it('parses formulae and casks', () => {
     const json = JSON.stringify({
-      formulae: [
-        { name: 'curl', installed: [{ version: '7.88.0' }], versions: { stable: '7.88.0' } },
-      ],
-      casks: [
-        { token: 'firefox', installed: '121.0', version: '121.0' },
-      ],
+      formulae: [{ name: 'curl', installed: [{ version: '7.88.0' }], versions: { stable: '7.88.0' } }],
+      casks: [{ token: 'firefox', installed: '121.0', version: '121.0' }],
     })
 
     const apps = parseBrewInstalledJson(json)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('curl')
-    expect(apps[0].version).toBe('7.88.0')
-    expect(apps[1].id).toBe('firefox')
+    expect(apps[0]!.id).toBe('curl')
+    expect(apps[0]!.currentVersion).toBe('7.88.0')
+    expect(apps[1]!.id).toBe('firefox')
   })
 
   it('skips entries with empty version', () => {
@@ -320,10 +312,10 @@ describe('parseAptUpgradable', () => {
 
     const apps = parseAptUpgradable(output)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('curl')
-    expect(apps[0].availableVersion).toBe('7.81.0-1ubuntu1.16')
-    expect(apps[0].currentVersion).toBe('7.81.0-1ubuntu1.15')
-    expect(apps[0].source).toBe('apt')
+    expect(apps[0]!.id).toBe('curl')
+    expect(apps[0]!.availableVersion).toBe('7.81.0-1ubuntu1.16')
+    expect(apps[0]!.currentVersion).toBe('7.81.0-1ubuntu1.15')
+    expect(apps[0]!.source).toBe('apt')
   })
 
   it('skips Listing header', () => {
@@ -342,7 +334,7 @@ describe('parseDpkgInstalled', () => {
     const output = 'curl\t7.81.0-1ubuntu1.15\ngit\t1:2.34.1-1ubuntu1.10\n'
     const apps = parseDpkgInstalled(output)
     expect(apps).toHaveLength(2)
-    expect(apps[0]).toEqual({ id: 'curl', name: 'curl', version: '7.81.0-1ubuntu1.15', source: 'apt' })
+    expect(apps[0]).toMatchObject({ id: 'curl', name: 'curl', currentVersion: '7.81.0-1ubuntu1.15', source: 'apt' })
   })
 
   it('returns empty for empty input', () => {
@@ -362,9 +354,9 @@ describe('parseDnfCheckUpdate', () => {
 
     const apps = parseDnfCheckUpdate(output)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('curl')
-    expect(apps[0].availableVersion).toBe('7.76.1-23.el9')
-    expect(apps[0].source).toBe('baseos')
+    expect(apps[0]!.id).toBe('curl')
+    expect(apps[0]!.availableVersion).toBe('7.76.1-23.el9')
+    expect(apps[0]!.source).toBe('baseos')
   })
 
   it('skips metadata and obsoleting lines', () => {
@@ -384,10 +376,10 @@ describe('parsePacmanQu', () => {
     const output = 'curl 7.87.0-1 -> 7.88.0-1\ngit 2.43.0-1 -> 2.44.0-1\n'
     const apps = parsePacmanQu(output)
     expect(apps).toHaveLength(2)
-    expect(apps[0].id).toBe('curl')
-    expect(apps[0].currentVersion).toBe('7.87.0-1')
-    expect(apps[0].availableVersion).toBe('7.88.0-1')
-    expect(apps[0].source).toBe('pacman')
+    expect(apps[0]!.id).toBe('curl')
+    expect(apps[0]!.currentVersion).toBe('7.87.0-1')
+    expect(apps[0]!.availableVersion).toBe('7.88.0-1')
+    expect(apps[0]!.source).toBe('pacman')
   })
 
   it('returns empty for empty input', () => {
@@ -441,10 +433,7 @@ describe('isValidAppId', () => {
 
 describe('parseChocoOutdatedOutput', () => {
   it('parses standard pipe-delimited output', () => {
-    const stdout = [
-      'googlechrome|125.0.6422.76|126.0.6478.57|false',
-      '7zip|24.06|24.07|false',
-    ].join('\n')
+    const stdout = ['googlechrome|125.0.6422.76|126.0.6478.57|false', '7zip|24.06|24.07|false'].join('\n')
     const apps = parseChocoOutdatedOutput(stdout)
     expect(apps).toHaveLength(2)
     expect(apps[0]).toMatchObject({
@@ -470,7 +459,7 @@ describe('parseChocoOutdatedOutput', () => {
     const stdout = 'firefox|130.0|131.0|true\ngooglechrome|125.0|126.0|false'
     const apps = parseChocoOutdatedOutput(stdout)
     expect(apps).toHaveLength(1)
-    expect(apps[0].id).toBe('googlechrome')
+    expect(apps[0]!.id).toBe('googlechrome')
   })
 
   it('skips lines where versions match', () => {
@@ -488,7 +477,7 @@ describe('parseChocoOutdatedOutput', () => {
   it('computes severity correctly', () => {
     const stdout = 'pkg|1.0.0|2.0.0|false'
     const apps = parseChocoOutdatedOutput(stdout)
-    expect(apps[0].severity).toBe('major')
+    expect(apps[0]!.severity).toBe('major')
   })
 })
 
@@ -496,17 +485,13 @@ describe('parseChocoOutdatedOutput', () => {
 
 describe('parseChocoListOutput', () => {
   it('parses standard pipe-delimited output', () => {
-    const stdout = [
-      'googlechrome|126.0.6478.57',
-      '7zip|24.07',
-      'firefox|131.0',
-    ].join('\n')
+    const stdout = ['googlechrome|126.0.6478.57', '7zip|24.07', 'firefox|131.0'].join('\n')
     const apps = parseChocoListOutput(stdout)
     expect(apps).toHaveLength(3)
     expect(apps[0]).toMatchObject({
       id: 'googlechrome',
       name: 'googlechrome',
-      version: '126.0.6478.57',
+      currentVersion: '126.0.6478.57',
       source: 'choco',
     })
   })
@@ -519,7 +504,7 @@ describe('parseChocoListOutput', () => {
     const stdout = 'some random text\ngooglechrome|126.0'
     const apps = parseChocoListOutput(stdout)
     expect(apps).toHaveLength(1)
-    expect(apps[0].id).toBe('googlechrome')
+    expect(apps[0]!.id).toBe('googlechrome')
   })
 })
 
@@ -548,16 +533,12 @@ describe('parseScoopStatusOutput', () => {
       source: 'scoop',
       selected: true,
     })
-    expect(apps[1].id).toBe('7zip')
-    expect(apps[2].id).toBe('vscode')
+    expect(apps[1]!.id).toBe('7zip')
+    expect(apps[2]!.id).toBe('vscode')
   })
 
   it('returns empty for no updates available', () => {
-    const output = [
-      'Scoop is up to date.',
-      '',
-      'Everything is up to date.',
-    ].join('\n')
+    const output = ['Scoop is up to date.', '', 'Everything is up to date.'].join('\n')
     expect(parseScoopStatusOutput(output)).toEqual([])
   })
 
@@ -581,7 +562,7 @@ describe('parseScoopStatusOutput', () => {
       '    myapp      1.0.0      2.0.0      Latest',
     ].join('\n')
     const apps = parseScoopStatusOutput(output)
-    expect(apps[0].severity).toBe('major')
+    expect(apps[0]!.severity).toBe('major')
   })
 })
 
@@ -603,11 +584,11 @@ describe('parseScoopListOutput', () => {
     expect(apps[0]).toMatchObject({
       id: 'curl',
       name: 'curl',
-      version: '8.4.0',
+      currentVersion: '8.4.0',
       source: 'scoop',
     })
-    expect(apps[3].id).toBe('vscode')
-    expect(apps[3].version).toBe('1.85.0')
+    expect(apps[3]!.id).toBe('vscode')
+    expect(apps[3]!.currentVersion).toBe('1.85.0')
   })
 
   it('returns empty for empty input', () => {
@@ -629,9 +610,9 @@ describe('parseScoopStatusOutput edge cases', () => {
       '    vscode     1.85.0     1.86.0     Latest',
     ].join('\n')
     const apps = parseScoopStatusOutput(output)
-    expect(apps).toHaveLength(2)       // Each bucket is parsed independently
-    expect(apps[0].id).toBe('curl')
-    expect(apps[1].id).toBe('vscode')
+    expect(apps).toHaveLength(2) // Each bucket is parsed independently
+    expect(apps[0]!.id).toBe('curl')
+    expect(apps[1]!.id).toBe('vscode')
   })
 
   it('skips entries where available version is -', () => {
@@ -644,11 +625,7 @@ describe('parseScoopStatusOutput edge cases', () => {
   })
 
   it('handles fewer than 3 columns after split (malformed)', () => {
-    const output = [
-      'Main:',
-      '    Name       Installed  Available  Requested',
-      '    broken-app  only-two',
-    ].join('\n')
+    const output = ['Main:', '    Name       Installed  Available  Requested', '    broken-app  only-two'].join('\n')
     expect(parseScoopStatusOutput(output)).toEqual([])
   })
 })

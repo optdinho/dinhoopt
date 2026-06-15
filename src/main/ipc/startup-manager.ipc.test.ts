@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mock child_process ──────────────────────────────────────────────
 // The real execFile has a util.promisify.custom symbol so that
 // promisify(execFile) returns { stdout, stderr }. We must replicate this
 // because without it, promisify resolves with only the first callback arg.
-import { promisify } from 'util'
+import { promisify } from 'node:util'
 
 const mockExecFile = vi.fn()
 
@@ -15,6 +15,7 @@ function createExecFileMock() {
   const fn = (...args: unknown[]) => mockExecFile(...args)
   // Custom promisify: returns a function that calls the mock and wraps
   // the callback result into { stdout, stderr }
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(fn as any)[promisify.custom] = (cmd: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(cmd, args, opts, (err: Error | null, stdout: string, stderr: string) => {
@@ -31,6 +32,7 @@ vi.mock('child_process', () => ({
 }))
 
 vi.mock('../services/exec-utf8', () => ({
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execNativeUtf8: (tool: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(tool, args, opts, (err: Error | null, stdout: string, stderr: string) => {
@@ -39,6 +41,7 @@ vi.mock('../services/exec-utf8', () => ({
       })
     })
   },
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execFileAsync: (cmd: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(cmd, args, opts, (err: Error | null, stdout: string, stderr: string) => {
@@ -68,7 +71,7 @@ vi.mock('fs', () => ({
 }))
 
 // ── Mock electron ───────────────────────────────────────────────────
-const mockHandlers = new Map<string, Function>()
+const mockHandlers = new Map<string, (...args: unknown[]) => unknown>()
 vi.mock('electron', () => ({
   app: {
     isPackaged: false,
@@ -79,7 +82,7 @@ vi.mock('electron', () => ({
     },
   },
   ipcMain: {
-    handle: (channel: string, handler: Function) => {
+    handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
       mockHandlers.set(channel, handler)
     },
   },
@@ -99,11 +102,11 @@ vi.mock('../platform', () => ({
 
 // ── Import under test (after mocks) ────────────────────────────────
 import {
-  listStartupItems,
-  toggleStartupItem,
   deleteStartupItem,
   getBootTrace,
+  listStartupItems,
   registerStartupManagerIpc,
+  toggleStartupItem,
 } from './startup-manager.ipc'
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -122,8 +125,10 @@ function setPlatform(p: string) {
  * Helper: sets up mockExecFile so that promisify(execFile) works.
  * `handler` receives (cmd, args, opts) and should return { stdout } or throw.
  */
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 function setupExecFileHandler(handler: (cmd: string, args: string[], opts: any) => { stdout: string }) {
-  mockExecFile.mockImplementation((cmd: string, args: string[], opts: any, cb: Function) => {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  mockExecFile.mockImplementation((cmd: string, args: string[], opts: any, cb: (...args: unknown[]) => unknown) => {
     try {
       const result = handler(cmd, args, opts)
       cb(null, result.stdout, '')
@@ -135,7 +140,7 @@ function setupExecFileHandler(handler: (cmd: string, args: string[], opts: any) 
 
 /** Build a reg query output that parseRegOutput can parse */
 function regOutput(entries: Array<{ name: string; command: string }>): string {
-  const lines = ['', `HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run`, '']
+  const lines = ['', 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', '']
   for (const e of entries) {
     lines.push(`    ${e.name}    REG_SZ    ${e.command}`)
   }
@@ -145,7 +150,7 @@ function regOutput(entries: Array<{ name: string; command: string }>): string {
 
 /** Build a StartupApproved reg query output with REG_BINARY */
 function approvedOutput(entries: Array<{ name: string; hex: string }>): string {
-  const lines = ['', `HKCU\\...\\StartupApproved\\Run`, '']
+  const lines = ['', 'HKCU\\...\\StartupApproved\\Run', '']
   for (const e of entries) {
     lines.push(`    ${e.name}    REG_BINARY    ${e.hex}`)
   }
@@ -160,7 +165,8 @@ function makeStableId(name: string, source: string): string {
 /** Collect all reg calls made during a test */
 function collectRegCalls(): Array<{ cmd: string; args: string[] }> {
   const calls: Array<{ cmd: string; args: string[] }> = []
-  mockExecFile.mockImplementation((cmd: string, args: string[], _opts: any, cb: Function) => {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  mockExecFile.mockImplementation((cmd: string, args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
     calls.push({ cmd, args })
     cb(null, '', '')
   })
@@ -180,7 +186,8 @@ beforeEach(() => {
   mockReadFileSync.mockReturnValue('[]')
   mockReaddirSync.mockReturnValue([])
   // Default: all execFile calls fail (registry keys don't exist)
-  mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
     cb(new Error('not found'), '', '')
   })
 })
@@ -196,39 +203,49 @@ afterAll(() => {
 describe('deriveDisplayName (logic replica)', () => {
   function friendlyExeName(name: string): string {
     const knownExes: Record<string, string> = {
-      'msedge': 'Microsoft Edge',
-      'chrome': 'Google Chrome',
-      'firefox': 'Mozilla Firefox',
-      'steam': 'Steam',
-      'discord': 'Discord',
-      'spotify': 'Spotify',
-      'teams': 'Microsoft Teams',
+      msedge: 'Microsoft Edge',
+      chrome: 'Google Chrome',
+      firefox: 'Mozilla Firefox',
+      steam: 'Steam',
+      discord: 'Discord',
+      spotify: 'Spotify',
+      teams: 'Microsoft Teams',
       'ms-teams': 'Microsoft Teams',
-      'slack': 'Slack',
-      'notion': 'Notion',
-      'onedrive': 'OneDrive',
-      'googledrivefs': 'Google Drive',
-      'protondrive': 'Proton Drive',
-      'lghub_system_tray': 'Logitech G HUB',
+      slack: 'Slack',
+      notion: 'Notion',
+      onedrive: 'OneDrive',
+      googledrivefs: 'Google Drive',
+      protondrive: 'Proton Drive',
+      lghub_system_tray: 'Logitech G HUB',
       'docker desktop': 'Docker Desktop',
     }
     const lc = name.toLowerCase()
     if (knownExes[lc]) return knownExes[lc]
-    return name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim()
+    return name
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
   }
 
   function deriveDisplayName(registryName: string, command: string): string {
     const quotedMatch = command.match(/^"([^"]+)"/)
-    const exePathMatch = quotedMatch ? quotedMatch[1] : command.match(/^(.+?\.exe)\b/i)?.[1] || command.match(/^(\S+)/)?.[1] || ''
-    const exePath = exePathMatch.replace(/\\/g, '/')
-    const exeName = exePath.split('/').pop()?.replace(/\.[^.]+$/, '') || ''
+    const exePathMatch = quotedMatch
+      ? quotedMatch[1]
+      : command.match(/^(.+?\.exe)\b/i)?.[1] || command.match(/^(\S+)/)?.[1] || ''
+    const exePath = exePathMatch!.replace(/\\/g, '/')
+    const exeName =
+      exePath
+        .split('/')
+        .pop()
+        ?.replace(/\.[^.]+$/, '') || ''
 
     const electronMatch = registryName.match(/^electron\.app\.(.+)$/i)
-    if (electronMatch) return electronMatch[1]
+    if (electronMatch) return electronMatch[1]!
 
     const hexSuffixMatch = registryName.match(/^(.+?)[_-][A-F0-9]{8,}$/i)
     if (hexSuffixMatch) {
-      const prefix = hexSuffixMatch[1].replace(/[-_]/g, ' ')
+      const prefix = hexSuffixMatch[1]!.replace(/[-_]/g, ' ')
       if (prefix.length > 20 && exeName) return friendlyExeName(exeName)
       return prefix
     }
@@ -280,7 +297,13 @@ describe('extractPublisher (logic replica)', () => {
     if (!command) return 'Unknown'
     const lc = command.toLowerCase()
     if (lc.includes('google')) return 'Google LLC'
-    if (lc.includes('\\microsoft\\') || lc.includes('microsoft edge') || lc.includes('\\msteams') || lc.includes('onedrive')) return 'Microsoft Corporation'
+    if (
+      lc.includes('\\microsoft\\') ||
+      lc.includes('microsoft edge') ||
+      lc.includes('\\msteams') ||
+      lc.includes('onedrive')
+    )
+      return 'Microsoft Corporation'
     if (lc.includes('discord')) return 'Discord Inc.'
     if (lc.includes('spotify')) return 'Spotify AB'
     if (lc.includes('steam')) return 'Valve Corporation'
@@ -351,7 +374,7 @@ describe('extractPublisher (logic replica)', () => {
 
 describe('estimateImpact (logic replica)', () => {
   function estimateImpact(name: string, command?: string): 'high' | 'medium' | 'low' | 'none' {
-    const lc = (name + ' ' + (command || '')).toLowerCase()
+    const lc = `${name} ${command || ''}`.toLowerCase()
     const highImpact = ['chrome', 'discord', 'teams', 'ms-teams', 'slack', 'steam', 'edge', 'msedge', 'docker']
     const medImpact = ['spotify', 'onedrive', 'dropbox', 'adobe', 'notion', 'zoom', 'firefox']
     const noImpact = ['securityhealth', 'windowsdefender', 'securitycenter', 'windows defender']
@@ -451,9 +474,12 @@ describe('listStartupItems', () => {
       if (cmd === 'reg' && args[0] === 'query' && args[1] === HKCU_RUN) {
         return {
           stdout: regOutput([
-            { name: 'Discord', command: '"C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe" --processStart Discord.exe' },
+            {
+              name: 'Discord',
+              command: '"C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe" --processStart Discord.exe',
+            },
             { name: 'Spotify', command: '"C:\\Users\\User\\AppData\\Roaming\\Spotify\\Spotify.exe" /minimized' },
-          ])
+          ]),
         }
       }
       throw new Error('not found')
@@ -461,18 +487,22 @@ describe('listStartupItems', () => {
 
     const items = await listStartupItems()
     expect(items.length).toBe(2)
-    expect(items[0].name).toBe('Discord')
-    expect(items[0].source).toBe('registry-hkcu')
-    expect(items[0].enabled).toBe(true)
-    expect(items[0].publisher).toBe('Discord Inc.')
-    expect(items[0].id).toBe(makeStableId('Discord', 'registry-hkcu'))
-    expect(items[1].name).toBe('Spotify')
+    expect(items[0]!.name).toBe('Discord')
+    expect(items[0]!.source).toBe('registry-hkcu')
+    expect(items[0]!.enabled).toBe(true)
+    expect(items[0]!.publisher).toBe('Discord Inc.')
+    expect(items[0]!.id).toBe(makeStableId('Discord', 'registry-hkcu'))
+    expect(items[1]!.name).toBe('Spotify')
   })
 
   it('returns items from HKLM and WOW6432Node registries', async () => {
     setupExecFileHandler((cmd, args) => {
       if (cmd === 'reg' && args[1] === HKLM_RUN) {
-        return { stdout: regOutput([{ name: 'SecurityHealth', command: '"C:\\Windows\\System32\\SecurityHealthSystray.exe"' }]) }
+        return {
+          stdout: regOutput([
+            { name: 'SecurityHealth', command: '"C:\\Windows\\System32\\SecurityHealthSystray.exe"' },
+          ]),
+        }
       }
       if (cmd === 'reg' && args[1] === HKLM_WOW64_RUN) {
         return { stdout: regOutput([{ name: 'Steam', command: '"C:\\Steam\\Steam.exe" -silent' }]) }
@@ -653,8 +683,9 @@ describe('toggleStartupItem', () => {
 
       await toggleStartupItem('Discord', HKCU_RUN, '"C:\\Discord.exe"', 'registry-hkcu', false)
 
-      const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]
+      const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]!
       const writtenData = JSON.parse(lastWriteCall[1] as string)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const discordEntries = writtenData.filter((e: any) => e.name === 'Discord')
       expect(discordEntries.length).toBe(1)
     })
@@ -680,9 +711,16 @@ describe('toggleStartupItem', () => {
       expect(addCall!.args).not.toContain(rendererCommand)
     })
 
-    it('rejects enable if no stored entry exists (prevents arbitrary autorun)', async () => {
+    it('enables via StartupApproved when no stored entry exists (Task Manager disabled items)', async () => {
+      const regCalls = collectRegCalls()
       const result = await toggleStartupItem('EvilApp', HKCU_RUN, '"C:\\evil.exe"', 'registry-hkcu', true)
-      expect(result).toBe(false)
+      expect(result).toBe(true)
+      // Should write 02 marker to StartupApproved, NOT REG_SZ to Run key
+      const approvedCall = regCalls.find((c) => c.args[0] === 'add' && c.args.includes('REG_BINARY'))
+      expect(approvedCall).toBeDefined()
+      expect(approvedCall!.args).toContain('020000000000000000000000')
+      const runAddCall = regCalls.find((c) => c.args[0] === 'add' && c.args.includes('REG_SZ'))
+      expect(runAddCall).toBeUndefined()
     })
 
     it('writes enabled marker (02) to StartupApproved', async () => {
@@ -710,10 +748,10 @@ describe('toggleStartupItem', () => {
 
       await toggleStartupItem('Discord', HKCU_RUN, '', 'registry-hkcu', true)
 
-      const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]
+      const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]!
       const writtenData = JSON.parse(lastWriteCall[1] as string)
       expect(writtenData.length).toBe(1)
-      expect(writtenData[0].name).toBe('Steam')
+      expect(writtenData[0]!.name).toBe('Steam')
     })
   })
 
@@ -745,9 +783,12 @@ describe('toggleStartupItem', () => {
     })
 
     it('returns false when PowerShell command fails', async () => {
-      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
-        cb(new Error('Access denied'), '', '')
-      })
+      mockExecFile.mockImplementation(
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+        (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
+          cb(new Error('Access denied'), '', '')
+        },
+      )
 
       const result = await toggleStartupItem('SpotifyStartup', 'Task Scheduler', '', 'task-scheduler', true)
       expect(result).toBe(false)
@@ -791,9 +832,7 @@ describe('toggleStartupItem', () => {
 
     await toggleStartupItem('App', HKLM_RUN, '"C:\\app.exe"', 'registry-hklm', false)
 
-    const approvedCall = regCalls.find((c) =>
-      c.args[0] === 'add' && c.args.some((a) => a.includes('StartupApproved'))
-    )
+    const approvedCall = regCalls.find((c) => c.args[0] === 'add' && c.args.some((a) => a.includes('StartupApproved')))
     expect(approvedCall).toBeDefined()
     expect(approvedCall!.args[1]).toContain('HKLM')
   })
@@ -821,11 +860,13 @@ describe('deleteStartupItem', () => {
       expect(runDelete).toBeDefined()
 
       // Should delete from StartupApproved
-      const approvedDelete = regCalls.find((c) => c.args[0] === 'delete' && c.args.some((a) => a.includes('StartupApproved')))
+      const approvedDelete = regCalls.find(
+        (c) => c.args[0] === 'delete' && c.args.some((a) => a.includes('StartupApproved')),
+      )
       expect(approvedDelete).toBeDefined()
 
       // Should clean up disabled file
-      const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]
+      const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]!
       const writtenData = JSON.parse(lastWriteCall[1] as string)
       expect(writtenData.length).toBe(0)
     })
@@ -836,9 +877,12 @@ describe('deleteStartupItem', () => {
     })
 
     it('succeeds even if reg delete fails (entry already gone)', async () => {
-      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
-        cb(new Error('entry not found'), '', '')
-      })
+      mockExecFile.mockImplementation(
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+        (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
+          cb(new Error('Access denied'), '', '')
+        },
+      )
 
       const result = await deleteStartupItem('App', HKCU_RUN, 'registry-hkcu')
       expect(result).toBe(true)
@@ -849,7 +893,9 @@ describe('deleteStartupItem', () => {
 
       await deleteStartupItem('App', HKLM_RUN, 'registry-hklm')
 
-      const approvedDelete = regCalls.find((c) => c.args[0] === 'delete' && c.args.some((a) => a.includes('StartupApproved')))
+      const approvedDelete = regCalls.find(
+        (c) => c.args[0] === 'delete' && c.args.some((a) => a.includes('StartupApproved')),
+      )
       expect(approvedDelete).toBeDefined()
       expect(approvedDelete!.args[1]).toContain('HKLM')
     })
@@ -859,7 +905,9 @@ describe('deleteStartupItem', () => {
 
       await deleteStartupItem('App', HKCU_RUN, 'registry-hkcu')
 
-      const approvedDelete = regCalls.find((c) => c.args[0] === 'delete' && c.args.some((a) => a.includes('StartupApproved')))
+      const approvedDelete = regCalls.find(
+        (c) => c.args[0] === 'delete' && c.args.some((a) => a.includes('StartupApproved')),
+      )
       expect(approvedDelete).toBeDefined()
       expect(approvedDelete!.args[1]).toContain('HKCU')
     })
@@ -883,9 +931,12 @@ describe('deleteStartupItem', () => {
     })
 
     it('returns false when PowerShell unregister fails', async () => {
-      mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: Function) => {
-        cb(new Error('Access denied'), '', '')
-      })
+      mockExecFile.mockImplementation(
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+        (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
+          cb(new Error('Access denied'), '', '')
+        },
+      )
 
       const result = await deleteStartupItem('SpotifyStartup', 'Task Scheduler', 'task-scheduler')
       expect(result).toBe(false)
@@ -959,15 +1010,15 @@ describe('getBootTrace', () => {
     expect(trace.lastBootDate).toBe('2025-06-15T10:30:00.000Z')
     expect(trace.entries.length).toBe(3)
     // Should be sorted by delayMs descending
-    expect(trace.entries[0].name).toBe('Discord')
-    expect(trace.entries[0].delayMs).toBe(5000)
-    expect(trace.entries[0].impact).toBe('high')
-    expect(trace.entries[1].name).toBe('Spotify')
-    expect(trace.entries[1].delayMs).toBe(2000)
-    expect(trace.entries[1].impact).toBe('medium')
-    expect(trace.entries[2].name).toBe('LowImpactApp')
-    expect(trace.entries[2].delayMs).toBe(500)
-    expect(trace.entries[2].impact).toBe('low')
+    expect(trace.entries[0]!.name).toBe('Discord')
+    expect(trace.entries[0]!.delayMs).toBe(5000)
+    expect(trace.entries[0]!.impact).toBe('high')
+    expect(trace.entries[1]!.name).toBe('Spotify')
+    expect(trace.entries[1]!.delayMs).toBe(2000)
+    expect(trace.entries[1]!.impact).toBe('medium')
+    expect(trace.entries[2]!.name).toBe('LowImpactApp')
+    expect(trace.entries[2]!.delayMs).toBe(500)
+    expect(trace.entries[2]!.impact).toBe('low')
   })
 
   it('calculates startupAppsMs as sum of all entry delays', async () => {
@@ -996,7 +1047,7 @@ describe('getBootTrace', () => {
     const trace = await getBootTrace()
     const discordEntries = trace.entries.filter((e) => e.name === 'Discord')
     expect(discordEntries.length).toBe(1)
-    expect(discordEntries[0].delayMs).toBe(5000) // first occurrence kept
+    expect(discordEntries[0]!.delayMs).toBe(5000) // first occurrence kept
   })
 
   it('filters out entries with 0 delay', async () => {
@@ -1010,7 +1061,7 @@ describe('getBootTrace', () => {
 
     const trace = await getBootTrace()
     expect(trace.entries.length).toBe(1)
-    expect(trace.entries[0].name).toBe('RealApp')
+    expect(trace.entries[0]!.name).toBe('RealApp')
   })
 
   it('classifies boot entry impact by delay thresholds', async () => {
@@ -1024,9 +1075,9 @@ describe('getBootTrace', () => {
     setupExecFileHandler(() => ({ stdout: output }))
 
     const trace = await getBootTrace()
-    expect(trace.entries.find((e) => e.name === 'HighApp')!.impact).toBe('high')   // >3000
-    expect(trace.entries.find((e) => e.name === 'MedApp')!.impact).toBe('medium')   // >1000
-    expect(trace.entries.find((e) => e.name === 'LowApp')!.impact).toBe('low')      // <=1000
+    expect(trace.entries.find((e) => e.name === 'HighApp')!.impact).toBe('high') // >3000
+    expect(trace.entries.find((e) => e.name === 'MedApp')!.impact).toBe('medium') // >1000
+    expect(trace.entries.find((e) => e.name === 'LowApp')!.impact).toBe('low') // <=1000
   })
 
   it('handles BOOT line with zero values', async () => {
@@ -1039,17 +1090,13 @@ describe('getBootTrace', () => {
   })
 
   it('ignores malformed lines in powershell output', async () => {
-    const output = [
-      'BOOT|10000|5000|2025-01-01T00:00:00Z',
-      'INVALID|line',
-      'APP|ValidApp|1000|C:\\app.exe',
-    ].join('\n')
+    const output = ['BOOT|10000|5000|2025-01-01T00:00:00Z', 'INVALID|line', 'APP|ValidApp|1000|C:\\app.exe'].join('\n')
 
     setupExecFileHandler(() => ({ stdout: output }))
 
     const trace = await getBootTrace()
     expect(trace.entries.length).toBe(1)
-    expect(trace.entries[0].name).toBe('ValidApp')
+    expect(trace.entries[0]!.name).toBe('ValidApp')
   })
 
   it('delegates to platform abstraction on non-Windows', async () => {
@@ -1189,7 +1236,9 @@ describe('parseRegOutput (integration via listStartupItems)', () => {
 
 describe('error resilience', () => {
   it('listStartupItems handles startup folder read error gracefully', async () => {
-    mockReaddirSync.mockImplementation(() => { throw new Error('permission denied') })
+    mockReaddirSync.mockImplementation(() => {
+      throw new Error('permission denied')
+    })
     mockExistsSync.mockReturnValue(true)
 
     const items = await listStartupItems()
@@ -1198,7 +1247,8 @@ describe('error resilience', () => {
 
   it('toggleStartupItem continues when StartupApproved write fails', async () => {
     let callCount = 0
-    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: any, cb: Function) => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
       callCount++
       if (args[0] === 'add' && JSON.stringify(args).includes('StartupApproved')) {
         cb(new Error('access denied'), '', '')

@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react'
-import { toast } from 'sonner'
-import { useScanStore } from '@/stores/scan-store'
+import { formatBytes, formatNumber } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
-import { useSettingsStore, refreshSettings } from '@/stores/settings-store'
+import { useScanStore } from '@/stores/scan-store'
+import { refreshSettings, useSettingsStore } from '@/stores/settings-store'
 import { ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
-import { formatBytes, formatNumber } from '@/lib/utils'
+import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 
 interface ScheduleRunPayload {
   scheduleId: string
@@ -15,51 +15,54 @@ interface ScheduleRunPayload {
 }
 
 // Map task types to scan/clean functions
-const CLEANER_TASKS: Record<string, {
-  label: string
-  scan: () => Promise<ScanResult[]>
-  clean: (ids: string[]) => Promise<any>
-}> = {
+const CLEANER_TASKS: Record<
+  string,
+  {
+    label: string
+    scan: () => Promise<ScanResult[]>
+    clean: (ids: string[]) => Promise<unknown>
+  }
+> = {
   'cleaner:system': {
     label: 'System',
     scan: () => window.dinho.systemScan(),
-    clean: (ids) => window.dinho.systemClean(ids)
+    clean: (ids) => window.dinho.systemClean(ids),
   },
   'cleaner:browsers': {
     label: 'Browsers',
     scan: () => window.dinho.browserScan(),
-    clean: (ids) => window.dinho.browserClean(ids)
+    clean: (ids) => window.dinho.browserClean(ids),
   },
   'cleaner:apps': {
     label: 'Applications',
     scan: () => window.dinho.appScan(),
-    clean: (ids) => window.dinho.appClean(ids)
+    clean: (ids) => window.dinho.appClean(ids),
   },
   'cleaner:gaming': {
     label: 'Gaming',
     scan: () => window.dinho.gamingScan(),
-    clean: (ids) => window.dinho.gamingClean(ids)
+    clean: (ids) => window.dinho.gamingClean(ids),
   },
   'cleaner:recycleBin': {
     label: 'Recycle Bin',
     scan: () => window.dinho.recycleBinScan(),
-    clean: () => window.dinho.recycleBinClean()
+    clean: () => window.dinho.recycleBinClean(),
   },
   'cleaner:databases': {
     label: 'Databases',
     scan: () => window.dinho.databaseScan(),
-    clean: (ids) => window.dinho.databaseClean(ids)
+    clean: (ids) => window.dinho.databaseClean(ids),
   },
   'cleaner:shortcuts': {
     label: 'Shortcuts',
     scan: () => window.dinho.shortcutScan(),
-    clean: (ids) => window.dinho.shortcutClean(ids)
+    clean: (ids) => window.dinho.shortcutClean(ids),
   },
   'cleaner:uninstallLeftovers': {
     label: 'Uninstall Leftovers',
     scan: () => window.dinho.uninstallLeftoversScan(),
-    clean: (ids) => window.dinho.uninstallLeftoversClean(ids)
-  }
+    clean: (ids) => window.dinho.uninstallLeftoversClean(ids),
+  },
 }
 
 /**
@@ -139,13 +142,13 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
           try {
             const result = await window.dinho.registryFix(ids)
             totalCleaned += result.fixed
-            categoryResults['Registry'] = { found, cleaned: result.fixed, size: 0 }
+            categoryResults.Registry = { found, cleaned: result.fixed, size: 0 }
           } catch {
             status = 'partial'
-            categoryResults['Registry'] = { found, cleaned: 0, size: 0 }
+            categoryResults.Registry = { found, cleaned: 0, size: 0 }
           }
         } else if (found > 0) {
-          categoryResults['Registry'] = { found, cleaned: 0, size: 0 }
+          categoryResults.Registry = { found, cleaned: 0, size: 0 }
         }
       } catch {
         status = 'partial'
@@ -163,13 +166,13 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
           try {
             const installResult = await window.dinho.driverUpdateInstall(ids)
             totalCleaned += installResult.installed
-            categoryResults['Drivers'] = { found, cleaned: installResult.installed, size: 0 }
+            categoryResults.Drivers = { found, cleaned: installResult.installed, size: 0 }
           } catch {
             status = 'partial'
-            categoryResults['Drivers'] = { found, cleaned: 0, size: 0 }
+            categoryResults.Drivers = { found, cleaned: 0, size: 0 }
           }
         } else if (found > 0) {
-          categoryResults['Drivers'] = { found, cleaned: 0, size: 0 }
+          categoryResults.Drivers = { found, cleaned: 0, size: 0 }
         }
       } catch {
         status = 'partial'
@@ -187,13 +190,13 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
           try {
             const updateResult = await window.dinho.softwareUpdateRun(ids, result.packageManagerName ?? undefined)
             totalCleaned += updateResult.succeeded
-            categoryResults['Software'] = { found, cleaned: updateResult.succeeded, size: 0 }
+            categoryResults.Software = { found, cleaned: updateResult.succeeded, size: 0 }
           } catch {
             status = 'partial'
-            categoryResults['Software'] = { found, cleaned: 0, size: 0 }
+            categoryResults.Software = { found, cleaned: 0, size: 0 }
           }
         } else if (found > 0) {
-          categoryResults['Software'] = { found, cleaned: 0, size: 0 }
+          categoryResults.Software = { found, cleaned: 0, size: 0 }
         }
       } catch {
         status = 'partial'
@@ -205,11 +208,15 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
 
     // Pick the most representative history type based on tasks that actually ran
     const hasCleanerTasks = payload.tasks.some((t) => t.startsWith('cleaner:'))
-    const historyType = hasCleanerTasks ? 'cleaner'
-      : payload.tasks.includes('registry') ? 'registry'
-      : payload.tasks.includes('drivers') ? 'drivers'
-      : payload.tasks.includes('software-update') ? 'software-update'
-      : 'cleaner'
+    const historyType = hasCleanerTasks
+      ? 'cleaner'
+      : payload.tasks.includes('registry')
+        ? 'registry'
+        : payload.tasks.includes('drivers')
+          ? 'drivers'
+          : payload.tasks.includes('software-update')
+            ? 'software-update'
+            : 'cleaner'
 
     // Log to history
     await useHistoryStore.getState().addEntry({
@@ -225,11 +232,11 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
         name,
         itemsFound: d.found,
         itemsCleaned: d.cleaned,
-        spaceSaved: d.size
+        spaceSaved: d.size,
       })),
       errorCount: 0,
       scheduled: true,
-      scheduleName: payload.scheduleName
+      scheduleName: payload.scheduleName,
     })
 
     // Notify main process and refresh renderer state so the UI shows updated status
@@ -280,7 +287,9 @@ export function useScheduledScan(): void {
           const idle = await waitForIdle()
           if (!idle) {
             window.dinho.scheduleRunComplete?.(next.scheduleId, 'failed')
-            toast.warning(`"${next.scheduleName}" skipped`, { description: 'Timed out waiting for manual scan to finish.' })
+            toast.warning(`"${next.scheduleName}" skipped`, {
+              description: 'Timed out waiting for manual scan to finish.',
+            })
             continue
           }
           await runSchedule(next)
@@ -300,6 +309,8 @@ export function useScheduledScan(): void {
       }
     })
 
-    return () => { unsubscribe() }
+    return () => {
+      unsubscribe()
+    }
   }, [])
 }

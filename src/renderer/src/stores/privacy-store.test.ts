@@ -1,19 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { mockKudu } from '../../../test-utils'
 import { usePrivacyStore } from './privacy-store'
-
-function mockKudu() {
-  const mock = {
-    privacyScan: vi.fn(),
-    privacyApply: vi.fn(),
-    privacyRevert: vi.fn(),
-    onPrivacyProgress: vi.fn(() => vi.fn()),
-  }
-  if (typeof window === 'undefined') {
-    ;(globalThis as any).window = {}
-  }
-  ;(window as any).dinho = mock
-  return mock
-}
 
 describe('privacy-store', () => {
   beforeEach(() => {
@@ -41,6 +28,7 @@ describe('privacy-store', () => {
   })
 
   it('setState stores privacy shield state', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const mockState = { categories: [], score: 75 } as any
     usePrivacyStore.getState().setState(mockState)
     expect(usePrivacyStore.getState().state).toEqual(mockState)
@@ -70,12 +58,14 @@ describe('privacy-store', () => {
   })
 
   it('setApplyResult stores the apply result', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = { applied: 5, failed: 0, failures: [] } as any
     usePrivacyStore.getState().setApplyResult(result)
     expect(usePrivacyStore.getState().applyResult).toEqual(result)
   })
 
   it('setProgress tracks scan progress', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const progress = { current: 3, total: 10, currentSetting: 'Telemetry' } as any
     usePrivacyStore.getState().setProgress(progress)
     expect(usePrivacyStore.getState().progress).toEqual(progress)
@@ -93,8 +83,10 @@ describe('privacy-store', () => {
 
   it('reset clears all state back to defaults', () => {
     usePrivacyStore.getState().setStatus('done')
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     usePrivacyStore.getState().setState({ categories: [] } as any)
     usePrivacyStore.getState().toggleCategory('telemetry')
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     usePrivacyStore.getState().setApplyResult({ applied: 1 } as any)
 
     usePrivacyStore.getState().reset()
@@ -110,20 +102,20 @@ describe('privacy-store', () => {
   describe('async actions', () => {
     it('scan sets scanning status and calls kudu.privacyScan', async () => {
       const kudu = mockKudu()
-      kudu.privacyScan.mockResolvedValue({ categories: [], score: 80 })
+      kudu.privacyScan!.mockResolvedValue({ categories: [], score: 80 })
       const store = usePrivacyStore.getState()
 
       await store.scan()
 
-      expect(kudu.onPrivacyProgress).toHaveBeenCalled()
-      expect(kudu.privacyScan).toHaveBeenCalled()
+      expect(kudu.onPrivacyProgress!).toHaveBeenCalled()
+      expect(kudu.privacyScan!).toHaveBeenCalled()
       expect(usePrivacyStore.getState().status).toBe('done')
       expect(usePrivacyStore.getState().state).toEqual({ categories: [], score: 80 })
     })
 
     it('scan resets to idle on error', async () => {
       const kudu = mockKudu()
-      kudu.privacyScan.mockRejectedValue(new Error('fail'))
+      kudu.privacyScan!.mockRejectedValue(new Error('fail'))
       const store = usePrivacyStore.getState()
 
       await store.scan()
@@ -133,20 +125,20 @@ describe('privacy-store', () => {
 
     it('apply calls kudu.privacyApply and re-scans', async () => {
       const kudu = mockKudu()
-      kudu.privacyApply.mockResolvedValue({ applied: 3, failed: 0 })
-      kudu.privacyScan.mockResolvedValue({ categories: [], score: 100 })
+      kudu.privacyApply!.mockResolvedValue({ applied: 3, failed: 0 })
+      kudu.privacyScan!.mockResolvedValue({ categories: [], score: 100 })
       const store = usePrivacyStore.getState()
 
       await store.apply(['setting-1', 'setting-2'])
 
-      expect(kudu.privacyApply).toHaveBeenCalledWith(['setting-1', 'setting-2'])
+      expect(kudu.privacyApply!).toHaveBeenCalledWith(['setting-1', 'setting-2'])
       expect(usePrivacyStore.getState().status).toBe('done')
       expect(usePrivacyStore.getState().applyResult).toEqual({ applied: 3, failed: 0 })
     })
 
     it('apply sets status done on error', async () => {
       const kudu = mockKudu()
-      kudu.privacyApply.mockRejectedValue(new Error('fail'))
+      kudu.privacyApply!.mockRejectedValue(new Error('fail'))
       const store = usePrivacyStore.getState()
 
       await store.apply(['test'])
@@ -156,20 +148,20 @@ describe('privacy-store', () => {
 
     it('revert calls kudu.privacyRevert and re-scans', async () => {
       const kudu = mockKudu()
-      kudu.privacyRevert.mockResolvedValue({ applied: 2, failed: 1, failures: [] })
-      kudu.privacyScan.mockResolvedValue({ categories: [], score: 50 })
+      kudu.privacyRevert!.mockResolvedValue({ applied: 2, failed: 1, failures: [] })
+      kudu.privacyScan!.mockResolvedValue({ categories: [], score: 50 })
       const store = usePrivacyStore.getState()
 
       await store.revert(['setting-1'])
 
-      expect(kudu.privacyRevert).toHaveBeenCalledWith(['setting-1'])
+      expect(kudu.privacyRevert!).toHaveBeenCalledWith(['setting-1'])
       expect(usePrivacyStore.getState().status).toBe('done')
       expect(usePrivacyStore.getState().applyResult).toEqual({ applied: 2, failed: 1, failures: [] })
     })
 
     it('revert sets status done on error', async () => {
       const kudu = mockKudu()
-      kudu.privacyRevert.mockRejectedValue(new Error('fail'))
+      kudu.privacyRevert!.mockRejectedValue(new Error('fail'))
       const store = usePrivacyStore.getState()
 
       await store.revert(['test'])

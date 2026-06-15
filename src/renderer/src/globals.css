@@ -27,27 +27,80 @@
   --color-brand-orange-dark: #d97706;
   --color-brand-orange-light: #fbbf24;
 
-  --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
+  --font-sans: "Geist Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Geist Mono", "Cascadia Code", "JetBrains Mono", "Consolas", ui-monospace, monospace;
 
   --animate-fade-in: fade-in 0.4s ease-out;
   --animate-scale-in: scale-in 0.2s ease-out;
   --animate-shimmer: shimmer 2s linear infinite;
+  --animate-glow-pulse: glow-pulse 3s ease-in-out infinite;
+  --animate-stagger-fade: stagger-fade 0.35s ease-out both;
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes stagger-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes game-mode-pulse {
+  0%,
+  100% {
+    border-color: rgba(6, 182, 212, 0.2);
+    box-shadow: 0 0 8px rgba(6, 182, 212, 0.06);
+  }
+  50% {
+    border-color: rgba(6, 182, 212, 0.35);
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.12);
+  }
 }
 
 @layer base {
@@ -128,7 +181,7 @@
   }
 
   html {
-    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: "Geist Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -139,10 +192,20 @@
     line-height: 1.6;
   }
 
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-medium);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-strong);
+  }
 
   ::selection {
     background: rgba(139, 92, 246, 0.3);
@@ -178,6 +241,7 @@
     background: var(--bg-surface);
     border-color: var(--border-medium);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 var(--glass-inset);
+    transform: translateY(-2px);
   }
 
   .glow-amber {
@@ -202,5 +266,13 @@
 
   .glow-green:hover {
     box-shadow: 0 0 24px rgba(34, 197, 94, 0.08), inset 0 1px 0 var(--glass-inset);
+  }
+
+  .depth-mid {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--glass-inset);
+  }
+
+  .depth-emphasis {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--glass-inset);
   }
 }

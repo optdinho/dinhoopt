@@ -14,5 +14,12 @@
   "hoursAgo": "hace {{hours}} h",
   "daysAgo": "hace {{days}} d",
   "zeroBytes": "0 B",
-  "zeroSpeed": "0 B/s"
+  "zeroSpeed": "0 B/s",
+  "dismiss": "Descartar",
+  "skipToContent": "Ir al contenido principal",
+  "minimizeWindow": "Minimizar ventana",
+  "maximizeWindow": "Maximizar ventana",
+  "closeWindow": "Cerrar ventana",
+  "errorTitle": "Algo salió mal",
+  "errorTryAgain": "Intentar de nuevo"
 }

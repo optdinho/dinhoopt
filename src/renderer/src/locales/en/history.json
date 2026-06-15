@@ -24,7 +24,8 @@
     "services": "Service Manager",
     "softwareUpdate": "Software Update",
     "cveScan": "CVE Scan",
-    "compliance": "Compliance Audit"
+    "compliance": "Compliance Audit",
+    "vulnerability": "Vulnerability Scan"
   },
   "overview": {
     "totalScans": "Total Scans",

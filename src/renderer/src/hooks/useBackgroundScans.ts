@@ -1,10 +1,13 @@
-import { useEffect, useRef } from 'react'
-import { useUpdaterStore } from '@/stores/updater-store'
 import { useDriverStore } from '@/stores/driver-store'
+import { useUpdaterStore } from '@/stores/updater-store'
+import { useEffect, useRef } from 'react'
 
 /**
  * Runs software-update and driver-update scans silently in the background
  * on first app launch. Populates stores so badge counts appear in the sidebar.
+ *
+ * Both scans are deferred by 8 seconds so the UI can render and settle before
+ * heavy PowerShell/WMI operations start.
  */
 export function useBackgroundScans(): void {
   const ran = useRef(false)
@@ -21,7 +24,9 @@ export function useBackgroundScans(): void {
         if (settings.ignoredSoftwareUpdates?.length) {
           useUpdaterStore.getState().loadIgnoredIds(settings.ignoredSoftwareUpdates)
         }
-      } catch { /* best-effort */ }
+      } catch {
+        /* best-effort */
+      }
 
       const store = useUpdaterStore.getState()
       if (store.hasChecked || store.loading) return
@@ -30,7 +35,6 @@ export function useBackgroundScans(): void {
         const result = await window.dinho.softwareUpdateCheck()
         const s = useUpdaterStore.getState()
         s.setApps(result.apps)
-        s.setUpToDate(result.upToDate)
         s.setPackageManagerAvailable(result.packageManagerAvailable)
         s.setPackageManagerName(result.packageManagerName)
         s.setHasChecked(true)
@@ -59,8 +63,12 @@ export function useBackgroundScans(): void {
       }
     }
 
-    // Run both in parallel
-    runSoftwareCheck()
-    runDriverUpdateScan()
+    // Defer both by 8 s so the UI can render first
+    const timer = setTimeout(() => {
+      runSoftwareCheck()
+      runDriverUpdateScan()
+    }, 8000)
+
+    return () => clearTimeout(timer)
   }, [])
 }

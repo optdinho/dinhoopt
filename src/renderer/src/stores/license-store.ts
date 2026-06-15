@@ -1,5 +1,5 @@
-import { create } from 'zustand'
 import type { LicenseResult } from '@shared/types'
+import { create } from 'zustand'
 
 interface LicenseState {
   hwid: string
@@ -21,7 +21,7 @@ export const useLicenseStore = create<LicenseState>((set) => ({
 
   getHwid: async () => {
     try {
-      const hwid = await window.dinho?.licenseGetHwid?.() ?? ''
+      const hwid = (await window.dinho?.licenseGetHwid?.()) ?? ''
       set({ hwid })
       return hwid
     } catch {
@@ -32,23 +32,24 @@ export const useLicenseStore = create<LicenseState>((set) => ({
   activate: async (key: string) => {
     set({ isActivating: true, error: null })
     try {
-      const result = await window.dinho?.licenseActivate?.(key) ?? { valid: false, reason: 'Erro na ativação' }
+      const result = (await window.dinho?.licenseActivate?.(key)) ?? { valid: false, reason: 'Erro na ativação' }
       set({ isActivating: false, status: result })
-      if (!result.valid) set({ error: result.reason })
+      if (!result.valid) set({ error: result.reason ?? null })
       return result
-    } catch (e: any) {
-      set({ isActivating: false, error: e?.message || 'Erro ao ativar' })
-      return { valid: false, reason: e?.message || 'Erro ao ativar' }
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      set({ isActivating: false, error: err?.message || 'Erro ao ativar' })
+      return { valid: false, reason: err?.message || 'Erro ao ativar' }
     }
   },
 
   checkStatus: async () => {
     set({ loading: true })
     try {
-      const result = await window.dinho?.licenseStatus?.() ?? { valid: false, reason: 'Sem conexão' }
+      const result = (await window.dinho?.licenseStatus?.()) ?? { valid: false, reason: 'Sem conexão' }
       set({ status: result, loading: false })
       return result
-    } catch (e: any) {
+    } catch (e: unknown) {
       set({ status: { valid: false, reason: 'Erro ao verificar licença' }, loading: false })
       return { valid: false, reason: 'Erro ao verificar licença' }
     }

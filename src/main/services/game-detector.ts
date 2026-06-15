@@ -6,45 +6,87 @@ import { execFileAsync } from './exec-utf8'
 
 const KNOWN_GAME_PROCESSES = new Set([
   // Valve / Steam
-  'cs2.exe', 'csgo.exe', 'dota2.exe', 'tf_win64.exe', 'left4dead2.exe',
-  'portal2.exe', 'hl2.exe', 'rust.exe', 'deadlock.exe',
+  'cs2.exe',
+  'csgo.exe',
+  'dota2.exe',
+  'tf_win64.exe',
+  'left4dead2.exe',
+  'portal2.exe',
+  'hl2.exe',
+  'rust.exe',
+  'deadlock.exe',
   // Riot
-  'valorant-win64-shipping.exe', 'league of legends.exe',
+  'valorant-win64-shipping.exe',
+  'league of legends.exe',
   // Blizzard / Activision
-  'overwatch.exe', 'wow.exe', 'wowclassic.exe', 'diablo iv.exe',
-  'hearthstone.exe', 'starcraft ii.exe',
+  'overwatch.exe',
+  'wow.exe',
+  'wowclassic.exe',
+  'diablo iv.exe',
+  'hearthstone.exe',
+  'starcraft ii.exe',
   // Epic / Fortnite
-  'fortniteclient-win64-shipping.exe', 'rocketleague.exe',
+  'fortniteclient-win64-shipping.exe',
+  'rocketleague.exe',
   // EA
-  'apex_legends.exe', 'bf2042.exe',
+  'apex_legends.exe',
+  'bf2042.exe',
   // Ubisoft
-  'rainbow six.exe', 'acodyssey.exe', 'acvalhalla.exe', 'acmirage.exe',
+  'rainbow six.exe',
+  'acodyssey.exe',
+  'acvalhalla.exe',
+  'acmirage.exe',
   // Rockstar
-  'gta5.exe', 'gtav.exe', 'rdr2.exe',
+  'gta5.exe',
+  'gtav.exe',
+  'rdr2.exe',
   // FromSoftware
-  'eldenring.exe', 'darksoulsiii.exe', 'sekiro.exe', 'armoredcore6.exe',
+  'eldenring.exe',
+  'darksoulsiii.exe',
+  'sekiro.exe',
+  'armoredcore6.exe',
   // CD Projekt Red
-  'cyberpunk2077.exe', 'witcher3.exe',
+  'cyberpunk2077.exe',
+  'witcher3.exe',
   // Larian
-  'bg3.exe', 'bg3_dx11.exe',
+  'bg3.exe',
+  'bg3_dx11.exe',
   // Bungie
   'destiny2.exe',
   // Digital Extremes
-  'warframe.x64.exe', 'warframe.exe',
+  'warframe.x64.exe',
+  'warframe.exe',
   // GGG
-  'pathofexile_x64.exe', 'pathofexile.exe', 'pathofexile_x64steam.exe',
+  'pathofexile_x64.exe',
+  'pathofexile.exe',
+  'pathofexile_x64steam.exe',
   // Battle royale / shooters
-  'escapefromtarkov.exe', 'pubg-win64-shipping.exe', 'tslgame.exe',
-  'callofduty.exe', 'cod.exe', 'modernwarfare.exe',
+  'escapefromtarkov.exe',
+  'pubg-win64-shipping.exe',
+  'tslgame.exe',
+  'callofduty.exe',
+  'cod.exe',
+  'modernwarfare.exe',
   // Recent / popular
-  'palworld-win64-shipping.exe', 'helldivers2.exe', 'hogwartslegacy.exe',
-  'starfield.exe', 'satisfactory.exe', 'lethalcompany.exe',
-  'hades2.exe', 'hades.exe', 'hollowknight.exe',
-  'fallguys_client.exe', 'amongus.exe', 'terraria.exe',
-  'stardewvalley.exe', 'factorio.exe', 'noita.exe',
+  'palworld-win64-shipping.exe',
+  'helldivers2.exe',
+  'hogwartslegacy.exe',
+  'starfield.exe',
+  'satisfactory.exe',
+  'lethalcompany.exe',
+  'hades2.exe',
+  'hades.exe',
+  'hollowknight.exe',
+  'fallguys_client.exe',
+  'amongus.exe',
+  'terraria.exe',
+  'stardewvalley.exe',
+  'factorio.exe',
+  'noita.exe',
   'deeprockgalactic-win64-shipping.exe',
   'minecraft.windows.exe',
-  'theforest.exe', 'sonsoftheforest.exe',
+  'theforest.exe',
+  'sonsoftheforest.exe',
 ])
 
 // ── Types ──────────────────────────────────────────────────────
@@ -80,7 +122,7 @@ async function getRunningProcessNames(): Promise<Set<string>> {
     const names = new Set<string>()
     for (const line of stdout.split('\n')) {
       const match = line.match(/^"([^"]+)"/)
-      if (match) names.add(match[1].toLowerCase())
+      if (match) names.add(match[1]!.toLowerCase())
     }
     return names
   } catch {
@@ -111,12 +153,20 @@ async function poll(customGameProcesses: string[]): Promise<void> {
       if (game === suppressedGame) return // user manually deactivated this session
       detectedGame = game
       suppressedGame = null
-      try { await callbacks.onGameDetected(game) } catch { /* logged by caller */ }
+      try {
+        await callbacks.onGameDetected(game)
+      } catch {
+        /* logged by caller */
+      }
     } else if (!game && detectedGame) {
       // Game just exited
       detectedGame = null
       suppressedGame = null
-      try { await callbacks.onGameExited() } catch { /* logged by caller */ }
+      try {
+        await callbacks.onGameExited()
+      } catch {
+        /* logged by caller */
+      }
     } else if (!game && !detectedGame && suppressedGame) {
       // Suppressed game has exited — clear so a future launch can trigger again
       suppressedGame = null
@@ -128,10 +178,7 @@ async function poll(customGameProcesses: string[]): Promise<void> {
 
 // ── Public API ─────────────────────────────────────────────────
 
-export function startGameDetector(
-  cbs: GameDetectorCallbacks,
-  customGameProcesses: string[],
-): void {
+export function startGameDetector(cbs: GameDetectorCallbacks, customGameProcesses: string[]): void {
   // Preserve suppression across restarts so a settings change during a
   // suppressed session doesn't re-activate the still-running game.
   const prevSuppressed = suppressedGame

@@ -1,12 +1,13 @@
-import { ipcMain } from 'electron'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/channels'
-import type { RegistryEntry } from '@shared/types'
-import type { WindowGetter } from './index'
-import { getSettings, updateRegistryIgnoredTweaks } from '../services/settings-store'
 import { applyIgnoredTweaks } from '@shared/registry-tweaks'
+import type { RegistryEntry } from '@shared/types'
+import { ipcMain } from 'electron'
 import { validateStringArray } from '../services/ipc-validation'
-import { scanRegistry, collectBackupTargets, fixRegistryEntries } from '../services/registry-cleaner.service'
+import { getLogger } from '../services/logger.service'
+import { collectBackupTargets, fixRegistryEntries, scanRegistry } from '../services/registry-cleaner.service'
+import { getSettings, updateRegistryIgnoredTweaks } from '../services/settings-store'
+import type { WindowGetter } from './index'
 
 export { scanRegistry, collectBackupTargets, fixRegistryEntries }
 
@@ -17,8 +18,12 @@ const scanSessions = new Map<string, Map<string, RegistryEntry>>()
 
 export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
-    if (process.platform !== 'win32') return []
+    if (process.platform !== 'win32') {
+      getLogger().warning('registry-cleaner', 'Registry scan skipped — not Windows')
+      return []
+    }
 
+    getLogger().info('registry-cleaner', 'Scanning registry for issues...')
     scanAbort?.abort()
     scanAbort = new AbortController()
     const { signal } = scanAbort
@@ -26,8 +31,13 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
     let entries: RegistryEntry[]
     try {
       entries = await scanRegistry(signal)
-    } catch (err: any) {
-      if (signal.aborted) return []
+    } catch (err: unknown) {
+      if (signal.aborted) {
+        getLogger().info('registry-cleaner', 'Registry scan cancelled')
+        return []
+      }
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      getLogger().error('registry-cleaner', `Registry scan failed: ${message}`)
       throw err
     } finally {
       if (scanAbort?.signal === signal) scanAbort = null
@@ -47,38 +57,63 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       scanSessions.delete(sessionKeys.shift()!)
     }
 
+    getLogger().success('registry-cleaner', `Registry scan complete — ${entries.length} issues found`)
     return entries
   })
 
-  ipcMain.handle(IPC.REGISTRY_FIX, async (_event, entryIds: string[]): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
-    if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [] }
-    const valid = validateStringArray(entryIds)
-    if (!valid) return { fixed: 0, failed: 0, failures: [] }
-
-    fixAbort?.abort()
-    fixAbort = new AbortController()
-    const { signal } = fixAbort
-
-    const entriesToFix: RegistryEntry[] = []
-    for (const id of valid) {
-      for (const session of scanSessions.values()) {
-        const entry = session.get(id)
-        if (entry) { entriesToFix.push(entry); break }
+  ipcMain.handle(
+    IPC.REGISTRY_FIX,
+    async (
+      _event,
+      entryIds: string[],
+    ): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
+      if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [] }
+      const valid = validateStringArray(entryIds)
+      if (!valid) {
+        getLogger().warning('registry-cleaner', 'Fix called with invalid entry IDs')
+        return { fixed: 0, failed: 0, failures: [] }
       }
-    }
 
-    try {
-      return await fixRegistryEntries(entriesToFix, (current, total, currentEntry) => {
-        const win = getWindow()
-        if (win && !win.isDestroyed()) win.webContents.send(IPC.REGISTRY_FIX_PROGRESS, { current, total, currentEntry })
-      }, signal)
-    } catch (err: any) {
-      if (signal.aborted) return { fixed: 0, failed: 0, failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }] }
-      throw err
-    } finally {
-      if (fixAbort?.signal === signal) fixAbort = null
-    }
-  })
+      getLogger().info('registry-cleaner', `Fixing ${valid.length} registry issue(s)...`)
+      fixAbort?.abort()
+      fixAbort = new AbortController()
+      const { signal } = fixAbort
+
+      const entriesToFix: RegistryEntry[] = []
+      for (const id of valid) {
+        for (const session of scanSessions.values()) {
+          const entry = session.get(id)
+          if (entry) {
+            entriesToFix.push(entry)
+            break
+          }
+        }
+      }
+
+      try {
+        const result = await fixRegistryEntries(
+          entriesToFix,
+          (current, total, currentEntry) => {
+            const win = getWindow()
+            if (win && !win.isDestroyed())
+              win.webContents.send(IPC.REGISTRY_FIX_PROGRESS, { current, total, currentEntry })
+          },
+          signal,
+        )
+        getLogger().success('registry-cleaner', `Fix complete — ${result.fixed} fixed, ${result.failed} failed`)
+        return result
+      } catch (err: unknown) {
+        if (signal.aborted) {
+          getLogger().info('registry-cleaner', 'Registry fix cancelled')
+          return { fixed: 0, failed: 0, failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }] }
+        }
+        getLogger().error('registry-cleaner', `Registry fix failed: ${err instanceof Error ? err.message : String(err)}`)
+        throw err
+      } finally {
+        if (fixAbort?.signal === signal) fixAbort = null
+      }
+    },
+  )
 
   ipcMain.handle(IPC.REGISTRY_SET_TWEAK_IGNORED, (_event, signatures: string[], ignored: boolean) => {
     const valid = validateStringArray(signatures, 200, 1024)

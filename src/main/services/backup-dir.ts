@@ -1,5 +1,5 @@
-import { homedir } from 'os'
-import { join, isAbsolute } from 'path'
+import { homedir } from 'node:os'
+import { isAbsolute, join } from 'node:path'
 import { getSettings } from './settings-store'
 
 /** Default location for Kudu backups (registry, shell extensions, etc.) */

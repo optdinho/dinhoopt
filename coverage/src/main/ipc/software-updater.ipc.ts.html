@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>13/13</span>
+                <span class='fraction'>24/24</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">92.3% </span>
+                <span class="strong">88.23% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>12/13</span>
+                <span class='fraction'>15/17</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>12/12</span>
+                <span class='fraction'>22/22</span>
             </div>
         
             
@@ -96,7 +96,14 @@
 <a name='L31'></a><a href='#L31'>31</a>
 <a name='L32'></a><a href='#L32'>32</a>
 <a name='L33'></a><a href='#L33'>33</a>
-<a name='L34'></a><a href='#L34'>34</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -109,31 +116,37 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { ipcMain } from 'electron'
-import { IPC } from '@shared/channels'
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { IPC } from '@shared/channels'
+import type { UpdateCheckResult, UpdateProgress, UpdateResult } from '@shared/types'
+import { ipcMain } from 'electron'
+import { getLogger } from '../services/logger.service'
 import { checkForUpdates, runUpdates } from '../services/software-updater'
 import type { WindowGetter } from './index'
-import type { UpdateCheckResult, UpdateProgress, UpdateResult } from '@shared/types'
 &nbsp;
 export function registerSoftwareUpdaterIpc(getWindow: WindowGetter): void {
   const sendProgress = (data: UpdateProgress): void =&gt; {
@@ -141,26 +154,31 @@ export function registerSoftwareUpdaterIpc(getWindow: WindowGetter): void {
     if (win &amp;&amp; !win.isDestroyed()) win.webContents.send(IPC.SOFTWARE_UPDATE_PROGRESS, data)
   }
 &nbsp;
-  ipcMain.handle(
-    IPC.SOFTWARE_UPDATE_CHECK,
-    async (): Promise&lt;UpdateCheckResult&gt; =&gt; {
-      return checkForUpdates()
-    },
-  )
+  ipcMain.handle(IPC.SOFTWARE_UPDATE_CHECK, async (): Promise&lt;UpdateCheckResult&gt; =&gt; {
+    const logger = getLogger()
+    logger.info('software-updater', 'Starting update check')
+    try {
+      const result = await checkForUpdates()
+      logger.success('software-updater', `Update check complete: ${result.apps.length} updates available`)
+      return result
+    } catch (err) {
+      logger.error('software-updater', `Update check failed: ${err instanceof Error ? err.message : <span class="branch-1 cbranch-no" title="branch not covered" >String(err)}</span>`)
+      return { apps: [], totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0, packageManagerAvailable: false, packageManagerName: null }
+    }
+  })
 &nbsp;
-  ipcMain.handle(
-    IPC.SOFTWARE_UPDATE_RUN,
-    async (_event, appIds: string[], source?: string): Promise&lt;UpdateResult&gt; =&gt; {
-      if (!Array.isArray(appIds) || appIds.length === 0) {
-        return { succeeded: 0, failed: 0, errors: [] }
-      }
-      const safeIds = appIds.filter(
-        (id) =&gt; typeof id === 'string' &amp;&amp; id.length &gt; 0 &amp;&amp; id.length &lt; 200,
-      )
-      const safeSource = typeof source === 'string' ? <span class="branch-0 cbranch-no" title="branch not covered" >source : u</span>ndefined
-      return runUpdates(safeIds, sendProgress, safeSource)
-    },
-  )
+  ipcMain.handle(IPC.SOFTWARE_UPDATE_RUN, async (_event, appIds: string[], source?: string): Promise&lt;UpdateResult&gt; =&gt; {
+    getLogger().info('software-updater', `Running updates for ${appIds?.length ?? 0} apps`)
+    if (!Array.isArray(appIds) || appIds.length === 0) {
+      getLogger().warning('software-updater', 'No app IDs provided for update')
+      return { succeeded: 0, failed: 0, errors: [] }
+    }
+    const safeIds = appIds.filter((id) =&gt; typeof id === 'string' &amp;&amp; id.length &gt; 0 &amp;&amp; id.length &lt; 200)
+    const safeSource = typeof source === 'string' ? <span class="branch-0 cbranch-no" title="branch not covered" >source : u</span>ndefined
+    const result = await runUpdates(safeIds, sendProgress, safeSource)
+    getLogger().success('software-updater', `Updates complete: ${result.succeeded} succeeded, ${result.failed} failed`)
+    return result
+  })
 }
 &nbsp;</pre></td></tr></table></pre>
 
@@ -169,7 +187,7 @@ export function registerSoftwareUpdaterIpc(getWindow: WindowGetter): void {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-10T18:42:25.756Z
+                at 2026-06-15T03:05:41.530Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

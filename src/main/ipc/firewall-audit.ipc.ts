@@ -1,18 +1,19 @@
-import { ipcMain } from 'electron'
 import { IPC } from '@shared/channels'
-import type { WindowGetter } from './index'
 import type {
-  FirewallRule,
-  FirewallScanResult,
-  FirewallApplyResult,
-  FirewallScanProgress,
-  FirewallProfile,
-  FirewallSignatureStatus,
-  FirewallIssue,
-  FirewallRiskLevel,
   FirewallAction,
+  FirewallApplyResult,
+  FirewallIssue,
+  FirewallProfile,
+  FirewallRiskLevel,
+  FirewallRule,
+  FirewallScanProgress,
+  FirewallScanResult,
+  FirewallSignatureStatus,
 } from '@shared/types'
-import { psArgs, psUtf8, execFileAsync } from '../services/exec-utf8'
+import { ipcMain } from 'electron'
+import { execFileAsync, psArgs } from '../services/exec-utf8'
+import { getLogger } from '../services/logger.service'
+import type { WindowGetter } from './index'
 
 const PS_OPTS = { timeout: 120_000, maxBuffer: 50 * 1024 * 1024, windowsHide: true }
 
@@ -22,7 +23,8 @@ const PS_OPTS = { timeout: 120_000, maxBuffer: 50 * 1024 * 1024, windowsHide: tr
 // so that escape neutralizes injection — the regex just needs to block
 // control characters, embedded null/newlines, and the pipe delimiter we
 // use in scan output.
-const RULE_NAME_RE = /^[^\x00-\x1f\x7f|]{1,512}$/
+// biome-ignore lint/suspicious/noControlCharactersInRegex: security-critical — intentionally blocks control chars
+const RULE_NAME_RE = /^[^\x00-\x1F\x7F|]{1,512}$/
 
 function parseProfiles(raw: string): FirewallProfile[] {
   // PowerShell renders the Profile flag enum as "Domain, Private" or "Any".
@@ -38,10 +40,14 @@ function parseProfiles(raw: string): FirewallProfile[] {
 
 function parseSignature(raw: string): FirewallSignatureStatus {
   switch (raw) {
-    case 'signed': return 'signed'
-    case 'unsigned': return 'unsigned'
-    case 'unknown': return 'unknown'
-    default: return 'not-applicable'
+    case 'signed':
+      return 'signed'
+    case 'unsigned':
+      return 'unsigned'
+    case 'unknown':
+      return 'unknown'
+    default:
+      return 'not-applicable'
   }
 }
 
@@ -80,18 +86,16 @@ export function isBuiltinRule(args: {
   return looksLikeResourceRef(args.description) || looksLikeResourceRef(args.group)
 }
 
-export function classifyRule(
-  raw: {
-    program: string
-    programResolved: string
-    programExists: boolean
-    signature: FirewallSignatureStatus
-    profiles: FirewallProfile[]
-    localPort: string
-    remoteAddress: string
-    builtin: boolean
-  }
-): { issues: FirewallIssue[]; risk: FirewallRiskLevel } {
+export function classifyRule(raw: {
+  program: string
+  programResolved: string
+  programExists: boolean
+  signature: FirewallSignatureStatus
+  profiles: FirewallProfile[]
+  localPort: string
+  remoteAddress: string
+  builtin: boolean
+}): { issues: FirewallIssue[]; risk: FirewallRiskLevel } {
   const issues: FirewallIssue[] = []
 
   const hasProgram = !!raw.programResolved
@@ -132,25 +136,25 @@ export function parseRuleLine(line: string): FirewallRule | null {
   const parts = line.split('|')
   if (parts.length < 16) return null
 
-  const name = parts[1]
+  const name = parts[1]!
   if (!name) return null
 
   const description = parts[3] || ''
   const group = parts[4] || ''
-  const profiles = parseProfiles(parts[5])
-  const programResolved = parts[10]
-  const programExists = parts[11].trim().toLowerCase() === 'true'
-  const signature = parseSignature(parts[12].trim().toLowerCase())
-  const isSystemPath = parts[13].trim().toLowerCase() === 'true'
-  const isManaged = parts[14].trim().toLowerCase() === 'true'
-  const enabled = parts[15].trim().toLowerCase() === 'true'
+  const profiles = parseProfiles(parts[5]!)
+  const programResolved = parts[10]!
+  const programExists = parts[11]!.trim().toLowerCase() === 'true'
+  const signature = parseSignature(parts[12]!.trim().toLowerCase())
+  const isSystemPath = parts[13]!.trim().toLowerCase() === 'true'
+  const isManaged = parts[14]!.trim().toLowerCase() === 'true'
+  const enabled = parts[15]!.trim().toLowerCase() === 'true'
 
   const localPort = parts[7] || 'Any'
   const remoteAddress = parts[8] || 'Any'
   const builtin = isBuiltinRule({ description, group, isManaged, isSystemPath })
 
   const { issues, risk } = classifyRule({
-    program: parts[9],
+    program: parts[9]!,
     programResolved,
     programExists,
     signature,
@@ -162,14 +166,14 @@ export function parseRuleLine(line: string): FirewallRule | null {
 
   return {
     name,
-    displayName: parts[2] || name,
+    displayName: parts[2]! || name,
     description,
     group,
     profiles,
-    protocol: parts[6] || 'Any',
+    protocol: parts[6]! || 'Any',
     localPort,
     remoteAddress,
-    program: parts[9] || '',
+    program: parts[9]! || '',
     programResolved,
     programExists,
     signature,
@@ -182,12 +186,14 @@ export function parseRuleLine(line: string): FirewallRule | null {
 }
 
 export async function scanFirewallRules(
-  onProgress?: (data: FirewallScanProgress) => void
+  onProgress?: (data: FirewallScanProgress) => void,
 ): Promise<FirewallScanResult> {
   if (process.platform !== 'win32') {
+    getLogger().warning('firewall-audit', 'Firewall scan skipped: not on Windows')
     return { rules: [], totalCount: 0, staleCount: 0, unsignedCount: 0, broadScopeCount: 0 }
   }
 
+  getLogger().info('firewall-audit', 'Starting firewall rules scan')
   onProgress?.({ phase: 'enumerating', current: 0, total: 0, currentRule: 'Enumerating firewall rules...' })
 
   // Pull all enabled inbound Allow rules and stream a single line per rule.
@@ -280,14 +286,14 @@ export async function scanFirewallRules(
     const line = rawLine.trim()
     if (!line) continue
     if (line.startsWith('TOTAL|')) {
-      const n = parseInt(line.split('|')[1], 10)
+      const n = Number.parseInt(line.split('|')[1]!, 10)
       if (!Number.isNaN(n)) total = n
       continue
     }
     if (line.startsWith('PROG|')) {
       const parts = line.split('|')
-      const cur = parseInt(parts[1], 10)
-      const tot = parseInt(parts[2], 10)
+      const cur = Number.parseInt(parts[1]!, 10)
+      const tot = Number.parseInt(parts[2]!, 10)
       const ruleName = parts[3] ?? ''
       if (!Number.isNaN(cur) && !Number.isNaN(tot)) {
         onProgress?.({ phase: 'classifying', current: cur, total: tot, currentRule: ruleName })
@@ -302,6 +308,11 @@ export async function scanFirewallRules(
   const unsignedCount = rules.filter((r) => r.issues.includes('unsigned')).length
   const broadScopeCount = rules.filter((r) => r.issues.includes('broad-scope')).length
 
+  getLogger().success(
+    'firewall-audit',
+    `Scan complete: ${rules.length} rules (${staleCount} stale, ${unsignedCount} unsigned, ${broadScopeCount} broad-scope)`,
+  )
+
   return {
     rules,
     totalCount: total || rules.length,
@@ -312,22 +323,40 @@ export async function scanFirewallRules(
 }
 
 export async function applyFirewallChanges(
-  changes: { name: string; action: FirewallAction }[]
+  changes: { name: string; action: FirewallAction }[],
 ): Promise<FirewallApplyResult> {
+  getLogger().info('firewall-audit', `Applying ${changes.length} firewall changes`)
+
   if (!Array.isArray(changes) || changes.length === 0) {
+    getLogger().warning('firewall-audit', 'No firewall changes to apply')
     return { succeeded: 0, failed: 0, errors: [] }
   }
   if (process.platform !== 'win32') {
-    return { succeeded: 0, failed: changes.length, errors: changes.map((c) => ({ name: c.name, displayName: c.name, reason: 'Firewall audit is Windows-only' })) }
+    getLogger().warning('firewall-audit', 'Cannot apply firewall changes on non-Windows platform')
+    return {
+      succeeded: 0,
+      failed: changes.length,
+      errors: changes.map((c) => ({ name: c.name, displayName: c.name, reason: 'Firewall audit is Windows-only' })),
+    }
   }
 
   // Validate every name against a strict allowlist before interpolating.
   for (const c of changes) {
     if (typeof c.name !== 'string' || !RULE_NAME_RE.test(c.name)) {
-      return { succeeded: 0, failed: changes.length, errors: [{ name: c.name ?? '', displayName: c.name ?? '', reason: 'Invalid rule name' }] }
+      getLogger().warning('firewall-audit', `Invalid rule name rejected: ${c.name}`)
+      return {
+        succeeded: 0,
+        failed: changes.length,
+        errors: [{ name: c.name ?? '', displayName: c.name ?? '', reason: 'Invalid rule name' }],
+      }
     }
     if (c.action !== 'disable' && c.action !== 'delete') {
-      return { succeeded: 0, failed: changes.length, errors: [{ name: c.name, displayName: c.name, reason: 'Invalid action' }] }
+      getLogger().warning('firewall-audit', `Invalid action for rule ${c.name}: ${c.action}`)
+      return {
+        succeeded: 0,
+        failed: changes.length,
+        errors: [{ name: c.name, displayName: c.name, reason: 'Invalid action' }],
+      }
     }
   }
 
@@ -374,6 +403,7 @@ try {
     }
   } catch (err) {
     failed = changes.length - succeeded
+    getLogger().error('firewall-audit', 'Firewall apply failed', err instanceof Error ? err.message : String(err))
     errors.push({
       name: '',
       displayName: '',
@@ -381,14 +411,17 @@ try {
     })
   }
 
+  getLogger().success('firewall-audit', `Apply complete: ${succeeded} succeeded, ${failed} failed`)
   return { succeeded, failed, errors }
 }
 
 export function registerFirewallAuditIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.FIREWALL_SCAN, () => scanFirewallRules((data) => {
-    const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.FIREWALL_PROGRESS, data)
-  }))
+  ipcMain.handle(IPC.FIREWALL_SCAN, () =>
+    scanFirewallRules((data) => {
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.FIREWALL_PROGRESS, data)
+    }),
+  )
 
   ipcMain.handle(IPC.FIREWALL_APPLY, async (_event, changes: { name: string; action: FirewallAction }[]) => {
     if (!Array.isArray(changes)) return { succeeded: 0, failed: 0, errors: [] }

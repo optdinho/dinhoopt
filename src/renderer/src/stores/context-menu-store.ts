@@ -1,4 +1,3 @@
-import { create } from 'zustand'
 import type {
   ContextMenuApplyProgress,
   ContextMenuApplyResult,
@@ -7,6 +6,7 @@ import type {
   ContextMenuSource,
   ContextMenuStatus,
 } from '@shared/types'
+import { create } from 'zustand'
 
 export interface ContextMenuFilters {
   search: string
@@ -66,8 +66,7 @@ export const useContextMenuStore = create<ContextMenuState>((set) => ({
   setApplyResult: (applyResult) => set({ applyResult }),
   setShowErrors: (showErrors) => set({ showErrors }),
   setError: (error) => set({ error }),
-  setFilter: (key, value) =>
-    set((s) => ({ filters: { ...s.filters, [key]: value } })),
+  setFilter: (key, value) => set((s) => ({ filters: { ...s.filters, [key]: value } })),
   toggleGroup: (key) =>
     set((s) => {
       const next = new Set(s.expandedGroups)
@@ -83,18 +82,14 @@ export const useContextMenuStore = create<ContextMenuState>((set) => ({
     set((s) => {
       const ids = new Set(visibleIds)
       return {
-        entries: s.entries.map((e) =>
-          ids.has(e.id) && !e.protected ? { ...e, selected: select } : e
-        ),
+        entries: s.entries.map((e) => (ids.has(e.id) && !e.protected ? { ...e, selected: select } : e)),
       }
     }),
   applyUpdates: (updates) =>
     set((s) => {
       const map = new Map(updates.map((u) => [u.entryId, u.status]))
       return {
-        entries: s.entries.map((e) =>
-          map.has(e.id) ? { ...e, status: map.get(e.id)!, selected: false } : e
-        ),
+        entries: s.entries.map((e) => (map.has(e.id) ? { ...e, status: map.get(e.id)!, selected: false } : e)),
       }
     }),
   removeEntries: (ids) =>

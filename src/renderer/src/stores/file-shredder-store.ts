@@ -1,9 +1,5 @@
+import type { ShredderEntry, ShredderProgress, ShredderResult } from '@shared/types'
 import { create } from 'zustand'
-import type {
-  ShredderEntry,
-  ShredderProgress,
-  ShredderResult
-} from '@shared/types'
 
 interface FileShredderState {
   entries: ShredderEntry[]
@@ -20,7 +16,7 @@ interface FileShredderState {
   reset: () => void
 }
 
-export const useFileShredderStore = create<FileShredderState>((set, get) => ({
+export const useFileShredderStore = create<FileShredderState>((set, _get) => ({
   entries: [],
   status: 'idle',
   progress: null,
@@ -32,8 +28,7 @@ export const useFileShredderStore = create<FileShredderState>((set, get) => ({
       const unique = newEntries.filter((e) => !existingPaths.has(e.path))
       return { entries: [...s.entries, ...unique] }
     }),
-  removeEntry: (path) =>
-    set((s) => ({ entries: s.entries.filter((e) => e.path !== path) })),
+  removeEntry: (path) => set((s) => ({ entries: s.entries.filter((e) => e.path !== path) })),
   clearEntries: () => set({ entries: [] }),
   setStatus: (status) => set({ status }),
   setProgress: (progress) => set({ progress }),
@@ -43,6 +38,6 @@ export const useFileShredderStore = create<FileShredderState>((set, get) => ({
       entries: [],
       status: 'idle',
       progress: null,
-      result: null
-    })
+      result: null,
+    }),
 }))

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockExecFileAsync = vi.fn()
 
@@ -8,11 +8,11 @@ vi.mock('./exec-utf8', () => ({
 }))
 
 import {
-  listPowerPlans,
   activatePowerPlan,
   createPowerPlan,
   deletePowerPlan,
   getActivePowerPlanGuid,
+  listPowerPlans,
 } from './power-plans'
 
 beforeEach(() => {
@@ -34,14 +34,44 @@ function mockFailure(message: string) {
 describe('listPowerPlans', () => {
   it('returns parsed power plans from powercfg', async () => {
     const json = JSON.stringify([
-      { Guid: 'a-b-c', Name: 'Balanced', IsActive: true, IsHighPerformance: false, IsBalanced: true, IsPowerSaver: false },
-      { Guid: 'd-e-f', Name: 'High Performance', IsActive: false, IsHighPerformance: true, IsBalanced: false, IsPowerSaver: false },
+      {
+        Guid: 'a-b-c',
+        Name: 'Balanced',
+        IsActive: true,
+        IsHighPerformance: false,
+        IsBalanced: true,
+        IsPowerSaver: false,
+      },
+      {
+        Guid: 'd-e-f',
+        Name: 'High Performance',
+        IsActive: false,
+        IsHighPerformance: true,
+        IsBalanced: false,
+        IsPowerSaver: false,
+      },
     ])
     mockPsSuccess(json)
     const plans = await listPowerPlans()
     expect(plans).toHaveLength(2)
-    expect(plans[0]).toEqual({ guid: 'a-b-c', name: 'Balanced', description: 'Balanced', isActive: true, isHighPerformance: false, isBalanced: true, isPowerSaver: false })
-    expect(plans[1]).toEqual({ guid: 'd-e-f', name: 'High Performance', description: 'High Performance', isActive: false, isHighPerformance: true, isBalanced: false, isPowerSaver: false })
+    expect(plans[0]!).toEqual({
+      guid: 'a-b-c',
+      name: 'Balanced',
+      description: 'Balanced',
+      isActive: true,
+      isHighPerformance: false,
+      isBalanced: true,
+      isPowerSaver: false,
+    })
+    expect(plans[1]).toEqual({
+      guid: 'd-e-f',
+      name: 'High Performance',
+      description: 'High Performance',
+      isActive: false,
+      isHighPerformance: true,
+      isBalanced: false,
+      isPowerSaver: false,
+    })
   })
 
   it('returns empty array when output is empty', async () => {
@@ -55,12 +85,19 @@ describe('listPowerPlans', () => {
   })
 
   it('handles single object (not array) JSON', async () => {
-    const json = JSON.stringify({ Guid: 'x-y-z', Name: 'Power Saver', IsActive: true, IsHighPerformance: false, IsBalanced: false, IsPowerSaver: true })
+    const json = JSON.stringify({
+      Guid: 'x-y-z',
+      Name: 'Power Saver',
+      IsActive: true,
+      IsHighPerformance: false,
+      IsBalanced: false,
+      IsPowerSaver: true,
+    })
     mockPsSuccess(json)
     const plans = await listPowerPlans()
     expect(plans).toHaveLength(1)
-    expect(plans[0].guid).toBe('x-y-z')
-    expect(plans[0].isPowerSaver).toBe(true)
+    expect(plans[0]!.guid).toBe('x-y-z')
+    expect(plans[0]!.isPowerSaver).toBe(true)
   })
 
   it('throws when execFileAsync rejects', async () => {
@@ -71,10 +108,10 @@ describe('listPowerPlans', () => {
   it('calls powershell with correct args', async () => {
     mockPsSuccess('[]')
     await listPowerPlans()
-    const args = mockExecFileAsync.mock.calls[0]
+    const args = mockExecFileAsync.mock.calls[0]!
     expect(args[0]).toBe('powershell.exe')
-    expect(args[1][1]).toBe('-NonInteractive')
-    expect(args[1][3]).toContain('powercfg /LIST')
+    expect((args[1] as string[])[1]).toBe('-NonInteractive')
+    expect((args[1] as string[])[3]).toContain('powercfg /LIST')
   })
 })
 
@@ -94,6 +131,7 @@ describe('activatePowerPlan', () => {
   })
 
   it('returns error for non-string input', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = await activatePowerPlan(123 as any)
     expect(result.success).toBe(false)
     expect(result.error).toMatch('Invalid GUID')

@@ -1,16 +1,18 @@
-import { ipcMain } from 'electron'
-import { existsSync } from 'fs'
-import { readdir } from 'fs/promises'
-import { join } from 'path'
+import { randomUUID } from 'node:crypto'
+import { existsSync, statSync } from 'node:fs'
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
+import { CleanerType } from '@shared/enums'
+import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
 import { getPlatform } from '../platform'
-import { scanDirectory, cleanItems } from '../services/file-utils'
+import { cleanItems, scanDirectory } from '../services/file-utils'
+import { validateStringArray } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import { getSettings } from '../services/settings-store'
-import { CleanerType } from '@shared/enums'
-import type { ScanResult, CleanResult } from '@shared/types'
 import type { WindowGetter } from './index'
-import { validateStringArray } from '../services/ipc-validation'
 
 interface ChromiumBrowserDef {
   key: string
@@ -23,8 +25,42 @@ interface ChromiumBrowserDef {
   hasProfiles: boolean
 }
 
+const COOKIE_FILES = ['Cookies', 'Network/Cookies']
+const FIREFOX_COOKIE = 'cookies.sqlite'
+
+function scanCookieFiles(
+  basePath: string,
+  cookieFiles: string[],
+  _browserLabel: string,
+  _profile: string,
+  category: string,
+): ScanItem[] {
+  const items: ScanItem[] = []
+  for (const cookieFile of cookieFiles) {
+    const fullPath = join(basePath, cookieFile)
+    if (existsSync(fullPath)) {
+      try {
+        const size = statSync(fullPath).size
+        items.push({
+          id: randomUUID(),
+          path: fullPath,
+          size,
+          category,
+          subcategory: 'Cookies',
+          lastModified: 0,
+          selected: true,
+        })
+      } catch {
+        /* skip */
+      }
+    }
+  }
+  return items
+}
+
 export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BROWSER_SCAN, async (): Promise<ScanResult[]> => {
+    getLogger().info('browser-cleaner', 'Starting browser scan...')
     const results: ScanResult[] = []
     const category = CleanerType.Browser
     const browserPaths = getPlatform().paths.browserPaths()
@@ -63,8 +99,25 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
             const cachePath = join(browser.base, profile, dir)
             if (existsSync(cachePath)) {
               const result = await scanDirectory(cachePath, category, `${browser.label} - ${profile} ${label}`)
-              if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+              if (result.items.length > 0) {
+                cacheItems(result.items)
+                results.push(result)
+              }
             }
+          }
+          // Cookies
+          const profilePath = join(browser.base, profile)
+          const cookieItems = scanCookieFiles(profilePath, COOKIE_FILES, browser.label, profile, category)
+          if (cookieItems.length > 0) {
+            cacheItems(cookieItems)
+            results.push({
+              category,
+              subcategory: 'Cookies',
+              group: browser.label,
+              items: cookieItems,
+              totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
+              itemCount: cookieItems.length,
+            })
           }
         }
       } else {
@@ -79,8 +132,24 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
           const cachePath = join(browser.base, dir)
           if (existsSync(cachePath)) {
             const result = await scanDirectory(cachePath, category, `${browser.label} - ${label}`)
-            if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+            if (result.items.length > 0) {
+              cacheItems(result.items)
+              results.push(result)
+            }
           }
+        }
+        // Cookies
+        const cookieItems = scanCookieFiles(browser.base, COOKIE_FILES, browser.label, 'Default', category)
+        if (cookieItems.length > 0) {
+          cacheItems(cookieItems)
+          results.push({
+            category,
+            subcategory: 'Cookies',
+            group: browser.label,
+            items: cookieItems,
+            totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
+            itemCount: cookieItems.length,
+          })
         }
       }
     }
@@ -94,12 +163,45 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
             const cachePath = join(browserPaths.firefox.cache, dir.name, 'cache2', 'entries')
             if (existsSync(cachePath)) {
               const result = await scanDirectory(cachePath, category, `Firefox - ${dir.name} Cache`)
-              if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+              if (result.items.length > 0) {
+                cacheItems(result.items)
+                results.push(result)
+              }
             }
           }
         }
       } catch {
-        // Skip
+        getLogger().warning('browser-cleaner', 'Skipped inaccessible Firefox cache')
+      }
+    }
+    // Firefox cookies (in base profiles dir, not cache dir)
+    if (browserPaths.firefox.base && existsSync(browserPaths.firefox.base)) {
+      try {
+        const profileDirs = await readdir(browserPaths.firefox.base, { withFileTypes: true })
+        for (const dir of profileDirs) {
+          if (dir.isDirectory()) {
+            const cookieItems = scanCookieFiles(
+              join(browserPaths.firefox.base, dir.name),
+              [FIREFOX_COOKIE],
+              'Firefox',
+              dir.name,
+              category,
+            )
+            if (cookieItems.length > 0) {
+              cacheItems(cookieItems)
+              results.push({
+                category,
+                subcategory: 'Cookies',
+                group: 'Firefox',
+                items: cookieItems,
+                totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
+                itemCount: cookieItems.length,
+              })
+            }
+          }
+        }
+      } catch {
+        getLogger().warning('browser-cleaner', 'Skipped inaccessible Firefox profiles')
       }
     }
 
@@ -118,51 +220,100 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
             const cachePath = join(fork.cache, dir.name, 'cache2')
             if (existsSync(cachePath)) {
               const result = await scanDirectory(cachePath, category, `${fork.label} - ${dir.name} Cache`)
-              if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+              if (result.items.length > 0) {
+                cacheItems(result.items)
+                results.push(result)
+              }
             }
           }
         }
       } catch {
-        // Skip
+        getLogger().warning('browser-cleaner', `Skipped inaccessible ${fork.label} cache`)
+      }
+      // Fork cookies
+      if (fork.base && existsSync(fork.base)) {
+        try {
+          const profileDirs = await readdir(fork.base, { withFileTypes: true })
+          for (const dir of profileDirs) {
+            if (dir.isDirectory()) {
+              const cookieItems = scanCookieFiles(
+                join(fork.base, dir.name),
+                [FIREFOX_COOKIE],
+                fork.label,
+                dir.name,
+                category,
+              )
+              if (cookieItems.length > 0) {
+                cacheItems(cookieItems)
+                results.push({
+                  category,
+                  subcategory: 'Cookies',
+                  group: fork.label,
+                  items: cookieItems,
+                  totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
+                  itemCount: cookieItems.length,
+                })
+              }
+            }
+          }
+        } catch {
+          getLogger().warning('browser-cleaner', `Skipped inaccessible ${fork.label} profiles`)
+        }
       }
     }
 
     // Safari (macOS only) — cache directory only, never cookies/history/bookmarks
     if (browserPaths.safari && existsSync(browserPaths.safari.cache)) {
       const result = await scanDirectory(browserPaths.safari.cache, category, 'Safari - Cache')
-      if (result.items.length > 0) { cacheItems(result.items); results.push(result) }
+      if (result.items.length > 0) {
+        cacheItems(result.items)
+        results.push(result)
+      }
     }
 
     const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-      phase: 'scanning',
-      category,
-      currentPath: 'Browser scan complete',
-      progress: 100,
-      itemsFound: results.reduce((s, r) => s + r.itemCount, 0),
-      sizeFound: results.reduce((s, r) => s + r.totalSize, 0),
-    })
+    if (win && !win.isDestroyed())
+      win.webContents.send(IPC.SCAN_PROGRESS, {
+        phase: 'scanning',
+        category,
+        currentPath: 'Browser scan complete',
+        progress: 100,
+        itemsFound: results.reduce((s, r) => s + r.itemCount, 0),
+        sizeFound: results.reduce((s, r) => s + r.totalSize, 0),
+      })
 
+    getLogger().success('browser-cleaner', 'Browser scan completed')
     return results
   })
 
   ipcMain.handle(IPC.BROWSER_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+    getLogger().info('browser-cleaner', 'Starting browser clean...')
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    if (!valid) {
+      getLogger().warning('browser-cleaner', 'Invalid item IDs received for browser clean')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
     const settings = getSettings()
     if (settings.cleaner.closeBrowsersBeforeClean) {
       await getPlatform().browser.closeBrowsers()
     }
     return cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
       const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-        phase: 'cleaning',
-        category: CleanerType.Browser,
-        currentPath,
-        progress: (processed / total) * 100,
-        itemsFound: total,
-        sizeFound: cleanedSize,
-      })
+      if (win && !win.isDestroyed())
+        win.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'cleaning',
+          category: CleanerType.Browser,
+          currentPath,
+          progress: (processed / total) * 100,
+          itemsFound: total,
+          sizeFound: cleanedSize,
+        })
+    }).then((result) => {
+      getLogger().success(
+        'browser-cleaner',
+        `Browser clean completed — ${result.totalCleaned} bytes cleaned, ${result.filesDeleted} files deleted`,
+      )
+      return result
     })
   })
 }
@@ -177,7 +328,7 @@ async function getChromiumProfiles(basePath: string): Promise<string[]> {
       }
     }
   } catch {
-    // Skip
+    getLogger().warning('browser-cleaner', 'Skipped inaccessible Chromium profiles directory')
   }
   return profiles
 }

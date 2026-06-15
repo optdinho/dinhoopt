@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { lookupServiceSafety, SERVICE_SAFETY_KB } from './service-safety-kb'
+import { describe, expect, it } from 'vitest'
+import { SERVICE_SAFETY_KB, lookupServiceSafety } from './service-safety-kb'
 
 describe('lookupServiceSafety', () => {
   it('finds a known safe service', () => {

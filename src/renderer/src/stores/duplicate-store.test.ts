@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useDuplicateStore } from './duplicate-store'
 import type { DuplicateScanResult } from '@shared/types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { useDuplicateStore } from './duplicate-store'
 
 function makeResult(groups: { hash: string; fileSize: number; paths: string[] }[]): DuplicateScanResult {
   return {
@@ -9,13 +9,13 @@ function makeResult(groups: { hash: string; fileSize: number; paths: string[] }[
       fullHash: g.hash,
       fileSize: g.fileSize,
       files: g.paths.map((p) => ({ path: p, size: g.fileSize, lastModified: Date.now() })),
-      reclaimableSpace: g.fileSize * (g.paths.length - 1)
+      reclaimableSpace: g.fileSize * (g.paths.length - 1),
     })),
     totalDuplicates: groups.reduce((s, g) => s + g.paths.length - 1, 0),
     totalReclaimable: groups.reduce((s, g) => s + g.fileSize * (g.paths.length - 1), 0),
     totalFilesScanned: 1000,
     duration: 500,
-    cancelled: false
+    cancelled: false,
   }
 }
 
@@ -83,8 +83,8 @@ describe('duplicate-store', () => {
       {
         hash: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
         fileSize: 1000,
-        paths: ['/short.txt', '/a/longer/path.txt', '/a/very/much/longer/path.txt']
-      }
+        paths: ['/short.txt', '/a/longer/path.txt', '/a/very/much/longer/path.txt'],
+      },
     ])
     useDuplicateStore.getState().setResult(result)
     useDuplicateStore.getState().selectAllDuplicates()
@@ -102,13 +102,13 @@ describe('duplicate-store', () => {
       {
         hash: 'aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111',
         fileSize: 500,
-        paths: ['/a.txt', '/b/a.txt']
+        paths: ['/a.txt', '/b/a.txt'],
       },
       {
         hash: 'bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222',
         fileSize: 2000,
-        paths: ['/x.dat', '/y/x.dat', '/z/x.dat']
-      }
+        paths: ['/x.dat', '/y/x.dat', '/z/x.dat'],
+      },
     ])
     useDuplicateStore.getState().setResult(result)
     useDuplicateStore.getState().selectAllDuplicates()
@@ -144,8 +144,8 @@ describe('duplicate-store', () => {
       {
         hash: 'dddd4444dddd4444dddd4444dddd4444dddd4444dddd4444dddd4444dddd4444',
         fileSize: 1000,
-        paths: ['/a.txt', '/b.txt', '/c.txt']
-      }
+        paths: ['/a.txt', '/b.txt', '/c.txt'],
+      },
     ])
     useDuplicateStore.getState().setResult(result)
     useDuplicateStore.getState().togglePath('/b.txt')
@@ -157,10 +157,10 @@ describe('duplicate-store', () => {
     const state = useDuplicateStore.getState()
     // Group should still exist with 2 files remaining
     expect(state.result!.groups).toHaveLength(1)
-    expect(state.result!.groups[0].files).toHaveLength(2)
-    expect(state.result!.groups[0].files.map((f) => f.path).sort()).toEqual(['/a.txt', '/c.txt'])
+    expect(state.result!.groups[0]!.files).toHaveLength(2)
+    expect(state.result!.groups[0]!.files.map((f) => f.path).sort()).toEqual(['/a.txt', '/c.txt'])
     // Reclaimable recalculated: 1000 * (2-1) = 1000
-    expect(state.result!.groups[0].reclaimableSpace).toBe(1000)
+    expect(state.result!.groups[0]!.reclaimableSpace).toBe(1000)
     expect(state.result!.totalDuplicates).toBe(1)
     expect(state.result!.totalReclaimable).toBe(1000)
     // /b.txt removed from selection, /c.txt still selected
@@ -173,13 +173,13 @@ describe('duplicate-store', () => {
       {
         hash: 'eeee5555eeee5555eeee5555eeee5555eeee5555eeee5555eeee5555eeee5555',
         fileSize: 500,
-        paths: ['/x.txt', '/y.txt']
+        paths: ['/x.txt', '/y.txt'],
       },
       {
         hash: 'ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666',
         fileSize: 2000,
-        paths: ['/p.dat', '/q.dat', '/r.dat']
-      }
+        paths: ['/p.dat', '/q.dat', '/r.dat'],
+      },
     ])
     useDuplicateStore.getState().setResult(result)
 
@@ -188,7 +188,7 @@ describe('duplicate-store', () => {
 
     const state = useDuplicateStore.getState()
     expect(state.result!.groups).toHaveLength(1)
-    expect(state.result!.groups[0].fullHash).toBe('ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666')
+    expect(state.result!.groups[0]!.fullHash).toBe('ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666ffff6666')
     expect(state.result!.totalDuplicates).toBe(2) // 3 files - 1 kept = 2
     expect(state.result!.totalReclaimable).toBe(4000) // 2000 * 2
   })
@@ -198,8 +198,8 @@ describe('duplicate-store', () => {
       {
         hash: 'aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111',
         fileSize: 100,
-        paths: ['/a', '/b']
-      }
+        paths: ['/a', '/b'],
+      },
     ])
     useDuplicateStore.getState().setResult(result)
 
@@ -217,11 +217,15 @@ describe('duplicate-store', () => {
     store.setDirectory('/home/user')
     store.setMinFileSize(500)
     store.setStatus('complete')
-    store.setResult(makeResult([{
-      hash: 'cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333',
-      fileSize: 100,
-      paths: ['/a', '/b']
-    }]))
+    store.setResult(
+      makeResult([
+        {
+          hash: 'cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333',
+          fileSize: 100,
+          paths: ['/a', '/b'],
+        },
+      ]),
+    )
     store.togglePath('/a')
 
     useDuplicateStore.getState().reset()

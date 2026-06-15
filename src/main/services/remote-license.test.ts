@@ -1,33 +1,44 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
-import fs from 'fs'
-import path from 'path'
-import { tmpdir } from 'os'
+import fs from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mock state (dynamic per-test) ────────────────────────────────────
 const mockVars = vi.hoisted(() => {
   let _testRoot = ''
   return {
-    setTestRoot: (r: string) => { _testRoot = r },
+    setTestRoot: (r: string) => {
+      _testRoot = r
+    },
     getTestRoot: () => _testRoot,
   }
 })
 
 const mockNet = vi.hoisted(() => {
   let _status = 200
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   let _body: any = { valid: false, reason: 'test-blocked' }
   let _error: string | null = null
   let _capturedPayload = ''
   let _callIndex = 0
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const _responses: Array<{ status?: number; body?: any; error?: string }> = []
 
   return {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     setResponse: (body: any, status = 200) => {
-      _status = status; _body = body; _error = null
-      _responses.length = 0; _callIndex = 0
+      _status = status
+      _body = body
+      _error = null
+      _responses.length = 0
+      _callIndex = 0
     },
     setError: (msg: string) => {
-      _error = msg; _responses.length = 0; _callIndex = 0
+      _error = msg
+      _responses.length = 0
+      _callIndex = 0
     },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     setSequence: (seq: Array<{ status?: number; body?: any; error?: string }>) => {
       _responses.splice(0, _responses.length, ...seq)
       _callIndex = 0
@@ -36,13 +47,14 @@ const mockNet = vi.hoisted(() => {
     _makeRequest: () => {
       _capturedPayload = ''
       return {
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
         on(ev: string, cb: any) {
           const idx = Math.min(_callIndex, _responses.length > 0 ? _responses.length - 1 : 0)
           let status = _status
           let body = _body
           let error = _error
           if (_responses.length > 0) {
-            const r = _responses[idx]
+            const r = _responses[idx]!
             if (r.error !== undefined) error = r.error
             if (r.body !== undefined) body = r.body
             if (r.status !== undefined) status = r.status
@@ -51,20 +63,27 @@ const mockNet = vi.hoisted(() => {
           if (error && ev === 'error') {
             setTimeout(() => cb(new Error(error)), 0)
           } else if (!error && ev === 'response') {
-            setTimeout(() => cb({
-              statusCode: status,
-              response: {
-                on(dEv: string, dCb: any) {
-                  if (dEv === 'data') dCb(Buffer.from(JSON.stringify(body)))
-                  if (dEv === 'end') dCb(null)
-                },
-              },
-            }), 0)
+            setTimeout(
+              () =>
+                cb({
+                  statusCode: status,
+                  response: {
+                    // biome-ignore lint/suspicious/noExplicitAny: test mock
+                    on(dEv: string, dCb: any) {
+                      if (dEv === 'data') dCb(Buffer.from(JSON.stringify(body)))
+                      if (dEv === 'end') dCb(null)
+                    },
+                  },
+                }),
+              0,
+            )
           }
           return this
         },
         setHeader() {},
-        write(data: string) { _capturedPayload = data },
+        write(data: string) {
+          _capturedPayload = data
+        },
         end() {},
       }
     },
@@ -72,11 +91,11 @@ const mockNet = vi.hoisted(() => {
 })
 
 vi.mock('electron', () => {
-  const p = require('path')
-  const os = require('os')
+  const p = require('node:path')
+  const os = require('node:os')
   return {
     app: {
-      getPath: (n: string) => n === 'userData' ? mockVars.getTestRoot() : p.join(os.tmpdir(), n),
+      getPath: (n: string) => (n === 'userData' ? mockVars.getTestRoot() : p.join(os.tmpdir(), n)),
       isPackaged: false,
     },
     net: {
@@ -87,8 +106,8 @@ vi.mock('electron', () => {
 
 vi.mock('./hwid', () => ({ generateHwid: async () => 'test-hwid-12345' }))
 
-import { checkLicense, activateLicense, getHwid, __resetForTest } from './remote-license'
-import type { RemoteLicenseResult } from './remote-license'
+import { __resetForTest, activateLicense, checkLicense, getHwid } from './remote-license'
+
 import { initStore, readSavedKey } from './license-store'
 
 const KEYFILE = 'remote-license.key'
@@ -97,7 +116,9 @@ let testRoot = ''
 beforeEach(() => {
   testRoot = path.join(tmpdir(), 'dinho-license-test', String(Date.now()))
   mockVars.setTestRoot(testRoot)
-  try { fs.rmSync(testRoot, { recursive: true, force: true }) } catch {}
+  try {
+    fs.rmSync(testRoot, { recursive: true, force: true })
+  } catch {}
   fs.mkdirSync(testRoot, { recursive: true })
   __resetForTest()
 })
@@ -165,13 +186,25 @@ describe('remote-license', () => {
       expect(result.expires_at).toBe('2026-12-31')
     })
 
-    it('returns network error when server is unreachable', async () => {
+    it('falls back to offline cache when server is unreachable and cache is valid', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      // write a valid cache entry
+      const cache = { valid: true, type: 'lifetime', expires_at: null, timestamp: Date.now() }
+      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify(cache), 'utf-8')
+      mockNet.setError('connection refused')
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+      expect(result.type).toBe('lifetime')
+    })
+
+    it('returns offline message when server is unreachable and no cache', async () => {
       fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
       mockNet.setError('connection refused')
 
       const result = await checkLicense()
       expect(result.valid).toBe(false)
-      expect(result.reason).toMatch(/conexao|connection|refused/i)
+      expect(result.reason).toBe('Sem validação offline disponível')
     })
 
     it('returns generic invalid when API returns invalid without reason', async () => {
@@ -267,7 +300,7 @@ describe('remote-license', () => {
 
   // ── Payload sent to API ──────────────────────────────────────────
   describe('API payload', () => {
-    it('sends key, hwid, token and action in the request body', async () => {
+    it('sends key, hwid and action in the request body', async () => {
       mockNet.setResponse({ valid: true, type: 'lifetime' })
 
       await activateLicense('MY-KEY')
@@ -277,7 +310,6 @@ describe('remote-license', () => {
       expect(payload.action).toBe('validate')
       expect(payload.key).toBe('MY-KEY')
       expect(payload.hwid).toBe('test-hwid-12345')
-      expect(payload.token).toBe('DiNhoTOKEN0001')
     })
   })
 })

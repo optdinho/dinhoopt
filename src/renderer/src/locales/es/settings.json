@@ -78,5 +78,21 @@
   "reportBug": "Informar de un error",
   "startupSettingFailedToast": "No se pudo habilitar el inicio automático",
   "startupSettingFailedDesc": "Es posible que el Programador de tareas esté restringido por una directiva de grupo o por software de seguridad.",
-  "startupSettingFailedAction": "Más información"
+  "startupSettingFailedAction": "Más información",
+  "themeDark": "Oscuro",
+  "themeLight": "Claro",
+  "themeSystem": "Sistema",
+  "sectionLogs": "Registros",
+  "logsRefresh": "Actualizar",
+  "logsExport": "Exportar",
+  "logsClear": "Limpiar todos los registros",
+  "logsSearchPlaceholder": "Buscar registros...",
+  "logsLevelAll": "Todos los niveles",
+  "logsLevelInfo": "Información",
+  "logsLevelSuccess": "Éxito",
+  "logsLevelWarning": "Advertencia",
+  "logsLevelError": "Error",
+  "logsNoEntries": "No se encontraron registros",
+  "logsRetentionLabel": "Retención (días)",
+  "logsRetentionDesc": "Cuántos días conservar los archivos de registro antes de la limpieza automática"
 }

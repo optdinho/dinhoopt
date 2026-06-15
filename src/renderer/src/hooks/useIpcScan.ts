@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 export function useIpcScan<TResult>({
@@ -30,14 +30,30 @@ export function useIpcScan<TResult>({
   const errorKeyRef = useRef(errorKey)
   const tRef = useRef(t)
 
-  useEffect(() => { scanFnRef.current = scanFn }, [scanFn])
-  useEffect(() => { onResultRef.current = onResult }, [onResult])
-  useEffect(() => { setLoadingRef.current = setLoading }, [setLoading])
-  useEffect(() => { resetStateRef.current = resetState }, [resetState])
-  useEffect(() => { onErrorRef.current = onError }, [onError])
-  useEffect(() => { onSuccessToastRef.current = onSuccessToast }, [onSuccessToast])
-  useEffect(() => { errorKeyRef.current = errorKey }, [errorKey])
-  useEffect(() => { tRef.current = t }, [t])
+  useEffect(() => {
+    scanFnRef.current = scanFn
+  }, [scanFn])
+  useEffect(() => {
+    onResultRef.current = onResult
+  }, [onResult])
+  useEffect(() => {
+    setLoadingRef.current = setLoading
+  }, [setLoading])
+  useEffect(() => {
+    resetStateRef.current = resetState
+  }, [resetState])
+  useEffect(() => {
+    onErrorRef.current = onError
+  }, [onError])
+  useEffect(() => {
+    onSuccessToastRef.current = onSuccessToast
+  }, [onSuccessToast])
+  useEffect(() => {
+    errorKeyRef.current = errorKey
+  }, [errorKey])
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
 
   const scan = useCallback(async () => {
     const loader = setLoadingRef.current ?? setInternalLoading

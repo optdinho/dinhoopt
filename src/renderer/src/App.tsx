@@ -1,53 +1,90 @@
-import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { type ReactNode, Suspense, lazy, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import { RTL_LANGUAGES } from './lib/languages'
-import { useScheduledScan } from './hooks/useScheduledScan'
 import { AppShell } from './components/layout/AppShell'
-import { DashboardPage } from './pages/DashboardPage'
-import { CleanerPage } from './pages/CleanerPage'
-import { RegistryPage } from './pages/RegistryPage'
-import { ContextMenuCleanerPage } from './pages/ContextMenuCleanerPage'
-import { StartupPage } from './pages/StartupPage'
-import { DebloaterPage } from './pages/DebloaterPage'
-import { SoftwareUpdaterPage } from './pages/SoftwareUpdaterPage'
-import { DriverManagerPage } from './pages/DriverManagerPage'
-import { DiskAnalyzerPage } from './pages/DiskAnalyzerPage'
-import { DuplicateFinderPage } from './pages/DuplicateFinderPage'
-import { LargeFileFinderPage } from './pages/LargeFileFinderPage'
-import { EmptyFolderCleanerPage } from './pages/EmptyFolderCleanerPage'
-import { FileShredderPage } from './pages/FileShredderPage'
-import { DiskRepairPage } from './pages/DiskRepairPage'
-import { DiskMaintenancePage } from './pages/DiskMaintenancePage'
-import { SettingsPage } from './pages/SettingsPage'
-import { NetworkCleanupPage } from './pages/NetworkCleanupPage'
-import { MalwareScannerPage } from './pages/MalwareScannerPage'
-import { PrivacyShieldPage } from './pages/PrivacyShieldPage'
-import { HistoryPage } from './pages/HistoryPage'
-import { PerformanceMonitorPage } from './pages/PerformanceMonitorPage'
-import { UninstallerPage } from './pages/UninstallerPage'
-import { ServiceManagerPage } from './pages/ServiceManagerPage'
-import { FirewallAuditPage } from './pages/FirewallAuditPage'
-import { SchedulesPage } from './pages/SchedulesPage'
-import { GameModePage } from './pages/GameModePage'
-import { WindowsTweaksPage } from './pages/WindowsTweaksPage'
-import { BenchmarkPage } from './pages/BenchmarkPage'
-import { MemoryOptimizerPage } from './pages/MemoryOptimizerPage'
-import { PowerPlansPage } from './pages/PowerPlansPage'
-import { CompliancePage } from './pages/CompliancePage'
-import { RestorePointPage } from './pages/RestorePointPage'
-import { AboutPage } from './pages/AboutPage'
-import { LicensePage } from './pages/LicensePage'
+import { useScheduledScan } from './hooks/useScheduledScan'
+import { RTL_LANGUAGES } from './lib/languages'
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+const CleanerPage = lazy(() => import('./pages/CleanerPage').then((m) => ({ default: m.CleanerPage })))
+const RegistryPage = lazy(() => import('./pages/RegistryPage').then((m) => ({ default: m.RegistryPage })))
+const ContextMenuCleanerPage = lazy(() =>
+  import('./pages/ContextMenuCleanerPage').then((m) => ({ default: m.ContextMenuCleanerPage })),
+)
+const StartupPage = lazy(() => import('./pages/StartupPage').then((m) => ({ default: m.StartupPage })))
+const DebloaterPage = lazy(() => import('./pages/DebloaterPage').then((m) => ({ default: m.DebloaterPage })))
+const SoftwareUpdaterPage = lazy(() =>
+  import('./pages/SoftwareUpdaterPage').then((m) => ({ default: m.SoftwareUpdaterPage })),
+)
+const DriverManagerPage = lazy(() =>
+  import('./pages/DriverManagerPage').then((m) => ({ default: m.DriverManagerPage })),
+)
+const DiskAnalyzerPage = lazy(() => import('./pages/DiskAnalyzerPage').then((m) => ({ default: m.DiskAnalyzerPage })))
+const DuplicateFinderPage = lazy(() =>
+  import('./pages/DuplicateFinderPage').then((m) => ({ default: m.DuplicateFinderPage })),
+)
+const LargeFileFinderPage = lazy(() =>
+  import('./pages/LargeFileFinderPage').then((m) => ({ default: m.LargeFileFinderPage })),
+)
+const EmptyFolderCleanerPage = lazy(() =>
+  import('./pages/EmptyFolderCleanerPage').then((m) => ({ default: m.EmptyFolderCleanerPage })),
+)
+const FileShredderPage = lazy(() => import('./pages/FileShredderPage').then((m) => ({ default: m.FileShredderPage })))
+const DiskRepairPage = lazy(() => import('./pages/DiskRepairPage').then((m) => ({ default: m.DiskRepairPage })))
+const DiskMaintenancePage = lazy(() =>
+  import('./pages/DiskMaintenancePage').then((m) => ({ default: m.DiskMaintenancePage })),
+)
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const NetworkCleanupPage = lazy(() =>
+  import('./pages/NetworkCleanupPage').then((m) => ({ default: m.NetworkCleanupPage })),
+)
+const MalwareScannerPage = lazy(() =>
+  import('./pages/MalwareScannerPage').then((m) => ({ default: m.MalwareScannerPage })),
+)
+const PrivacyShieldPage = lazy(() =>
+  import('./pages/PrivacyShieldPage').then((m) => ({ default: m.PrivacyShieldPage })),
+)
+const HistoryPage = lazy(() => import('./pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
+const PerformanceMonitorPage = lazy(() =>
+  import('./pages/PerformanceMonitorPage').then((m) => ({ default: m.PerformanceMonitorPage })),
+)
+const UninstallerPage = lazy(() => import('./pages/UninstallerPage').then((m) => ({ default: m.UninstallerPage })))
+const ServiceManagerPage = lazy(() =>
+  import('./pages/ServiceManagerPage').then((m) => ({ default: m.ServiceManagerPage })),
+)
+const FirewallAuditPage = lazy(() =>
+  import('./pages/FirewallAuditPage').then((m) => ({ default: m.FirewallAuditPage })),
+)
+const SchedulesPage = lazy(() => import('./pages/SchedulesPage').then((m) => ({ default: m.SchedulesPage })))
+const GameModePage = lazy(() => import('./pages/GameModePage').then((m) => ({ default: m.GameModePage })))
+const WindowsTweaksPage = lazy(() =>
+  import('./pages/WindowsTweaksPage').then((m) => ({ default: m.WindowsTweaksPage })),
+)
+const BenchmarkPage = lazy(() => import('./pages/BenchmarkPage').then((m) => ({ default: m.BenchmarkPage })))
+const MemoryOptimizerPage = lazy(() =>
+  import('./pages/MemoryOptimizerPage').then((m) => ({ default: m.MemoryOptimizerPage })),
+)
+const PowerPlansPage = lazy(() => import('./pages/PowerPlansPage').then((m) => ({ default: m.PowerPlansPage })))
+const CompliancePage = lazy(() => import('./pages/CompliancePage').then((m) => ({ default: m.CompliancePage })))
+const VulnerabilityScannerPage = lazy(() =>
+  import('./pages/VulnerabilityScannerPage').then((m) => ({ default: m.VulnerabilityScannerPage })),
+)
+const RestorePointPage = lazy(() => import('./pages/RestorePointPage').then((m) => ({ default: m.RestorePointPage })))
+const HostsEditorPage = lazy(() => import('./pages/HostsEditorPage').then((m) => ({ default: m.HostsEditorPage })))
+const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
+const LicensePage = lazy(() => import('./pages/LicensePage').then((m) => ({ default: m.LicensePage })))
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import LicenseGate from './components/LicenseGate'
 import { Onboarding } from './components/Onboarding'
-import { useStatsStore } from './stores/stats-store'
-import { useHistoryStore } from './stores/history-store'
-import { useAppUpdateStore } from './stores/app-update-store'
 import { useBackgroundScans } from './hooks/useBackgroundScans'
-import { usePlatformLoader, PlatformContext } from './hooks/usePlatform'
+import { PlatformContext, usePlatformLoader } from './hooks/usePlatform'
+import { useAppUpdateStore } from './stores/app-update-store'
 import { initGameModeStore } from './stores/game-mode-store'
+import { useHistoryStore } from './stores/history-store'
 import { useSettingsStore } from './stores/settings-store'
+import { useStatsStore } from './stores/stats-store'
 
 export function App() {
   const { i18n } = useTranslation()
@@ -71,14 +108,15 @@ export function App() {
       const handler = (e: MediaQueryListEvent) => apply(e.matches ? 'dark' : 'light')
       mq.addEventListener('change', handler)
       return () => mq.removeEventListener('change', handler)
-    } else {
-      apply(theme ?? 'dark')
     }
+    apply(theme ?? 'dark')
   }, [theme])
 
-  // Sync RTL direction based on current language
+  // Sync RTL direction and lang attribute based on current language
   useEffect(() => {
-    document.documentElement.dir = RTL_LANGUAGES.includes(i18n.language) ? 'rtl' : 'ltr'
+    const html = document.documentElement
+    html.dir = RTL_LANGUAGES.includes(i18n.language) ? 'rtl' : 'ltr'
+    html.lang = i18n.language
   }, [i18n.language])
 
   useEffect(() => {
@@ -122,7 +160,9 @@ export function App() {
   }, [initAppUpdate])
 
   // Hydrate Game Mode status so the sidebar badge works on all pages
-  useEffect(() => { initGameModeStore() }, [])
+  useEffect(() => {
+    initGameModeStore()
+  }, [])
 
   if (!onboardingChecked) {
     return (
@@ -135,72 +175,120 @@ export function App() {
     )
   }
 
-return (
-  <PlatformContext value={platformInfo}>
-  <HashRouter>
-      <PageTitleUpdater />
-      {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
-      <LicenseGate>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/cleaner" element={<CleanerPage />} />
-          <Route path="/registry" element={<RegistryPage />} />
-          <Route path="/context-menu" element={<ContextMenuCleanerPage />} />
-          <Route path="/startup" element={<StartupPage />} />
-          <Route path="/disk" element={<DiskAnalyzerPage />} />
-          <Route path="/duplicates" element={<DuplicateFinderPage />} />
-          <Route path="/large-files" element={<LargeFileFinderPage />} />
-          <Route path="/empty-folders" element={<EmptyFolderCleanerPage />} />
-          <Route path="/file-shredder" element={<FileShredderPage />} />
-          <Route path="/disk-repair" element={<DiskRepairPage />} />
-          <Route path="/disk-maintenance" element={<DiskMaintenancePage />} />
-          <Route path="/network" element={<NetworkCleanupPage />} />
-          <Route path="/malware" element={<MalwareScannerPage />} />
-          <Route path="/game-mode" element={<GameModePage />} />
-          <Route path="/windows-tweaks" element={<WindowsTweaksPage />} />
-          <Route path="/benchmark" element={<BenchmarkPage />} />
-          <Route path="/memory" element={<MemoryOptimizerPage />} />
-          <Route path="/performance" element={<PerformanceMonitorPage />} />
-          <Route path="/uninstaller" element={<UninstallerPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          {/* Standalone pages */}
-          <Route path="/privacy" element={<PrivacyShieldPage />} />
-          <Route path="/services" element={<ServiceManagerPage />} />
-          <Route path="/compliance" element={<CompliancePage />} />
-          <Route path="/firewall" element={<FirewallAuditPage />} />
-          <Route path="/power-plans" element={<PowerPlansPage />} />
-          <Route path="/debloater" element={<DebloaterPage />} />
-          <Route path="/updates" element={<SoftwareUpdaterPage />} />
-          <Route path="/schedules" element={<SchedulesPage />} />
-          <Route path="/restore-points" element={<RestorePointPage />} />
-          <Route path="/activation" element={<LicensePage />} />
-          {/* Legacy redirects */}
-          <Route path="/hardening" element={<Navigate to="/privacy" replace />} />
-          <Route path="/updater" element={<Navigate to="/updates" replace />} />
-          <Route path="/drivers" element={<DriverManagerPage />} />
-        </Routes>
-      </AppShell>
-      </LicenseGate>
-      <Toaster
-        position="bottom-right"
-        theme={theme === 'system' ? 'system' : theme}
-        toastOptions={{
-          style: {
-            background: 'var(--toast-bg)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: '1px solid var(--border-strong)',
-            color: 'var(--toast-text)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 var(--glass-inset)'
-          }
-        }}
-/>
-</HashRouter>
-</PlatformContext>
-)
+  return (
+    <PlatformContext value={platformInfo}>
+      <HashRouter>
+        <PageTitleUpdater />
+        {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
+        <LicenseGate>
+          <AppShell>
+            <ErrorBoundary>
+              <Suspense
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-amber-500" />
+                  </div>
+                }
+              >
+                <AnimatedRoutes />
+              </Suspense>
+            </ErrorBoundary>
+          </AppShell>
+        </LicenseGate>
+        <Toaster
+          position="bottom-right"
+          theme={theme === 'system' ? 'system' : theme}
+          toastOptions={{
+            style: {
+              background: 'var(--toast-bg)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              border: '1px solid var(--border-strong)',
+              color: 'var(--toast-text)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 var(--glass-inset)',
+            },
+          }}
+        />
+      </HashRouter>
+    </PlatformContext>
+  )
+}
+
+const pageVariants = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+}
+
+const pageTransition = {
+  type: 'tween' as const,
+  ease: 'easeOut' as const,
+  duration: 0.2,
+}
+
+function PageTransition({ children }: { children: ReactNode }) {
+  return (
+    <motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={pageTransition}
+      className="flex h-full w-full flex-col"
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function AnimatedRoutes() {
+  const location = useLocation()
+  const wrap = (element: ReactNode) => <PageTransition>{element}</PageTransition>
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={wrap(<DashboardPage />)} />
+        <Route path="/cleaner" element={wrap(<CleanerPage />)} />
+        <Route path="/registry" element={wrap(<RegistryPage />)} />
+        <Route path="/context-menu" element={wrap(<ContextMenuCleanerPage />)} />
+        <Route path="/startup" element={wrap(<StartupPage />)} />
+        <Route path="/disk" element={wrap(<DiskAnalyzerPage />)} />
+        <Route path="/duplicates" element={wrap(<DuplicateFinderPage />)} />
+        <Route path="/large-files" element={wrap(<LargeFileFinderPage />)} />
+        <Route path="/empty-folders" element={wrap(<EmptyFolderCleanerPage />)} />
+        <Route path="/file-shredder" element={wrap(<FileShredderPage />)} />
+        <Route path="/disk-repair" element={wrap(<DiskRepairPage />)} />
+        <Route path="/disk-maintenance" element={wrap(<DiskMaintenancePage />)} />
+        <Route path="/network" element={wrap(<NetworkCleanupPage />)} />
+        <Route path="/hosts-editor" element={wrap(<HostsEditorPage />)} />
+        <Route path="/malware" element={wrap(<MalwareScannerPage />)} />
+        <Route path="/game-mode" element={wrap(<GameModePage />)} />
+        <Route path="/windows-tweaks" element={wrap(<WindowsTweaksPage />)} />
+        <Route path="/benchmark" element={wrap(<BenchmarkPage />)} />
+        <Route path="/memory" element={wrap(<MemoryOptimizerPage />)} />
+        <Route path="/performance" element={wrap(<PerformanceMonitorPage />)} />
+        <Route path="/uninstaller" element={wrap(<UninstallerPage />)} />
+        <Route path="/history" element={wrap(<HistoryPage />)} />
+        <Route path="/settings" element={wrap(<SettingsPage />)} />
+        <Route path="/about" element={wrap(<AboutPage />)} />
+        <Route path="/privacy" element={wrap(<PrivacyShieldPage />)} />
+        <Route path="/services" element={wrap(<ServiceManagerPage />)} />
+        <Route path="/compliance" element={wrap(<CompliancePage />)} />
+        <Route path="/vulnerability" element={wrap(<VulnerabilityScannerPage />)} />
+        <Route path="/firewall" element={wrap(<FirewallAuditPage />)} />
+        <Route path="/power-plans" element={wrap(<PowerPlansPage />)} />
+        <Route path="/debloater" element={wrap(<DebloaterPage />)} />
+        <Route path="/updates" element={wrap(<SoftwareUpdaterPage />)} />
+        <Route path="/schedules" element={wrap(<SchedulesPage />)} />
+        <Route path="/restore-points" element={wrap(<RestorePointPage />)} />
+        <Route path="/activation" element={wrap(<LicensePage />)} />
+        <Route path="/hardening" element={<Navigate to="/privacy" replace />} />
+        <Route path="/updater" element={<Navigate to="/updates" replace />} />
+        <Route path="/drivers" element={wrap(<DriverManagerPage />)} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AnimatePresence>
+  )
 }
 
 // Maps routes to page titles for the window/tab title.
@@ -210,15 +298,18 @@ const ROUTE_TITLES: Record<string, { key: string; ns?: string } | string> = {
   '/': { key: 'dashboard' },
   '/cleaner': { key: 'cleaner' },
   '/registry': { key: 'registry' },
+  '/context-menu': 'Context Menu Cleaner',
   '/startup': { key: 'startup' },
   '/disk': 'Disk Analyzer',
   '/duplicates': 'Duplicate Finder',
   '/large-files': 'Large File Finder',
   '/empty-folders': 'Empty Folder Cleaner',
   '/file-shredder': 'File Shredder',
+
   '/disk-repair': 'Disk Repair',
   '/disk-maintenance': 'Disk Maintenance',
   '/network': { key: 'network' },
+  '/hosts-editor': 'Hosts Editor',
   '/malware': { key: 'malwareScanner' },
   '/game-mode': { key: 'gameMode' },
   '/windows-tweaks': 'Windows Tweaks',
@@ -232,6 +323,7 @@ const ROUTE_TITLES: Record<string, { key: string; ns?: string } | string> = {
   '/privacy': 'Privacy',
   '/services': 'Services',
   '/compliance': { key: 'compliance' },
+  '/vulnerability': { key: 'vulnerability' },
   '/firewall': 'Firewall Audit',
   '/power-plans': 'Power Plans',
   '/debloater': 'Bloatware Remover',

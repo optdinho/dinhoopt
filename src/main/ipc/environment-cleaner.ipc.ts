@@ -1,12 +1,13 @@
-import { ipcMain } from 'electron'
-import { existsSync } from 'fs'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
-import { cacheItems } from '../services/scan-cache'
+import type { CleanError, CleanResult, ScanItem, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
+import { execFileAsync, execNativeUtf8, psUtf8 } from '../services/exec-utf8'
 import { validateStringArray } from '../services/ipc-validation'
-import { psUtf8, execNativeUtf8, execFileAsync } from '../services/exec-utf8'
-import type { ScanItem, ScanResult, CleanResult, CleanError } from '@shared/types'
+import { getLogger } from '../services/logger.service'
+import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
 
 /**
@@ -38,27 +39,56 @@ function expandWinVars(value: string, registryVars: Map<string, string>): string
 // Only single-directory variables — excludes path-lists (NODE_PATH, PERL5LIB,
 // GEM_PATH, CMAKE_PREFIX_PATH) and URIs (DOCKER_HOST) which would false-positive.
 const DEV_ENV_VARS = [
-  'JAVA_HOME', 'JDK_HOME', 'JRE_HOME',
-  'GOROOT', 'GOBIN',
-  'CARGO_HOME', 'RUSTUP_HOME',
-  'NVM_HOME', 'NVM_DIR', 'NVM_SYMLINK',
-  'CONDA_PREFIX', 'CONDA_HOME', 'VIRTUAL_ENV', 'PYENV_ROOT',
-  'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'ANDROID_NDK_ROOT',
-  'FLUTTER_ROOT', 'FLUTTER_HOME', 'PUB_CACHE',
-  'GRADLE_HOME', 'GRADLE_USER_HOME', 'M2_HOME', 'MAVEN_HOME',
-  'DOTNET_ROOT', 'DOTNET_INSTALL_DIR', 'NUGET_PACKAGES',
-  'RUBY_HOME', 'GEM_HOME', 'RBENV_ROOT',
+  'JAVA_HOME',
+  'JDK_HOME',
+  'JRE_HOME',
+  'GOROOT',
+  'GOBIN',
+  'CARGO_HOME',
+  'RUSTUP_HOME',
+  'NVM_HOME',
+  'NVM_DIR',
+  'NVM_SYMLINK',
+  'CONDA_PREFIX',
+  'CONDA_HOME',
+  'VIRTUAL_ENV',
+  'PYENV_ROOT',
+  'ANDROID_HOME',
+  'ANDROID_SDK_ROOT',
+  'ANDROID_NDK_ROOT',
+  'FLUTTER_ROOT',
+  'FLUTTER_HOME',
+  'PUB_CACHE',
+  'GRADLE_HOME',
+  'GRADLE_USER_HOME',
+  'M2_HOME',
+  'MAVEN_HOME',
+  'DOTNET_ROOT',
+  'DOTNET_INSTALL_DIR',
+  'NUGET_PACKAGES',
+  'RUBY_HOME',
+  'GEM_HOME',
+  'RBENV_ROOT',
   'PERL_HOME',
-  'PHP_HOME', 'COMPOSER_HOME',
-  'SCALA_HOME', 'SBT_HOME',
-  'HASKELL_HOME', 'STACK_ROOT', 'CABAL_DIR',
-  'DENO_INSTALL', 'BUN_INSTALL',
-  'PNPM_HOME', 'YARN_GLOBAL_FOLDER',
+  'PHP_HOME',
+  'COMPOSER_HOME',
+  'SCALA_HOME',
+  'SBT_HOME',
+  'HASKELL_HOME',
+  'STACK_ROOT',
+  'CABAL_DIR',
+  'DENO_INSTALL',
+  'BUN_INSTALL',
+  'PNPM_HOME',
+  'YARN_GLOBAL_FOLDER',
   'VCPKG_ROOT',
-  'CUDA_PATH', 'CUDA_HOME',
+  'CUDA_PATH',
+  'CUDA_HOME',
   'DOCKER_CONFIG',
-  'MINIKUBE_HOME', 'HELM_HOME',
-  'TERRAFORM_HOME', 'PACKER_HOME',
+  'MINIKUBE_HOME',
+  'HELM_HOME',
+  'TERRAFORM_HOME',
+  'PACKER_HOME',
   'GHCUP_HOME',
 ]
 
@@ -78,15 +108,12 @@ interface EnvEntry {
 // ── Windows: read environment variables from the registry ──
 
 async function readWinRegistryEnv(scope: 'user' | 'system'): Promise<Map<string, string>> {
-  const key = scope === 'user'
-    ? 'HKCU\\Environment'
-    : 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
+  const key =
+    scope === 'user' ? 'HKCU\\Environment' : 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
 
   const vars = new Map<string, string>()
   try {
-    const { stdout } = await execNativeUtf8('reg', [
-      'query', key
-    ], { timeout: 10000 })
+    const { stdout } = await execNativeUtf8('reg', ['query', key], { timeout: 10000 })
 
     for (const line of stdout.split('\n')) {
       const trimmed = line.trim()
@@ -94,7 +121,7 @@ async function readWinRegistryEnv(scope: 'user' | 'system'): Promise<Map<string,
       // reg query output: "    NAME    REG_SZ|REG_EXPAND_SZ    VALUE"
       const match = trimmed.match(/^\s*(\S+)\s+REG_(?:SZ|EXPAND_SZ)\s+(.+)$/i)
       if (match) {
-        vars.set(match[1], match[2])
+        vars.set(match[1]!, match[2]!)
       }
     }
   } catch {
@@ -119,7 +146,10 @@ async function scanWindowsPathEntries(): Promise<EnvEntry[]> {
     const pathValue = vars.get('Path') || vars.get('PATH') || vars.get('path')
     if (!pathValue) continue
 
-    const entries = pathValue.split(';').map(e => e.trim()).filter(Boolean)
+    const entries = pathValue
+      .split(';')
+      .map((e) => e.trim())
+      .filter(Boolean)
     for (const entry of entries) {
       const expanded = expandWinVars(entry, mergedVars)
       if (!existsSync(expanded)) {
@@ -187,16 +217,20 @@ function scanUnixEnvVars(): EnvEntry[] {
 // ── Windows cleaning: modify registry PATH and delete env vars ──
 
 async function removeWindowsPathEntry(entry: EnvEntry): Promise<void> {
-  const key = entry.scope === 'user'
-    ? 'HKCU\\Environment'
-    : 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
+  const key =
+    entry.scope === 'user'
+      ? 'HKCU\\Environment'
+      : 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
 
   // Re-read current PATH to avoid stale data
   const vars = await readWinRegistryEnv(entry.scope)
   const currentPath = vars.get('Path') || vars.get('PATH') || vars.get('path') || ''
   const sep = ';'
-  const entries = currentPath.split(sep).map(e => e.trim()).filter(Boolean)
-  const filtered = entries.filter(e => e.toLowerCase() !== entry.value.toLowerCase())
+  const entries = currentPath
+    .split(sep)
+    .map((e) => e.trim())
+    .filter(Boolean)
+  const filtered = entries.filter((e) => e.toLowerCase() !== entry.value.toLowerCase())
 
   // Safety: never write an empty PATH — that would break the system
   if (filtered.length === 0) {
@@ -205,27 +239,29 @@ async function removeWindowsPathEntry(entry: EnvEntry): Promise<void> {
 
   const newPath = filtered.join(sep)
 
-  await execNativeUtf8('reg', [
-    'add', key, '/v', 'Path', '/t', 'REG_EXPAND_SZ', '/d', newPath, '/f'
-  ], { timeout: 10000 })
+  await execNativeUtf8('reg', ['add', key, '/v', 'Path', '/t', 'REG_EXPAND_SZ', '/d', newPath, '/f'], {
+    timeout: 10000,
+  })
 }
 
 async function removeWindowsEnvVar(entry: EnvEntry): Promise<void> {
-  const key = entry.scope === 'user'
-    ? 'HKCU\\Environment'
-    : 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
+  const key =
+    entry.scope === 'user'
+      ? 'HKCU\\Environment'
+      : 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'
 
-  await execNativeUtf8('reg', [
-    'delete', key, '/v', entry.variable, '/f'
-  ], { timeout: 10000 })
+  await execNativeUtf8('reg', ['delete', key, '/v', entry.variable, '/f'], { timeout: 10000 })
 }
 
 async function broadcastWinEnvChange(): Promise<void> {
   // Notify running applications that environment variables changed
   try {
-    await execFileAsync('powershell.exe', [
-      '-NoProfile', '-Command',
-      psUtf8(`
+    await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        psUtf8(`
         Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @'
           [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
           public static extern IntPtr SendMessageTimeout(
@@ -236,8 +272,10 @@ async function broadcastWinEnvChange(): Promise<void> {
         $WM_SETTINGCHANGE = 0x001A
         $result = [UIntPtr]::Zero
         [Win32.NativeMethods]::SendMessageTimeout($HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result) | Out-Null
-      `)
-    ], { timeout: 15000, windowsHide: true })
+      `),
+      ],
+      { timeout: 15000, windowsHide: true },
+    )
   } catch {
     // Best effort — apps may need a restart to see changes
   }
@@ -258,6 +296,7 @@ const envEntryCache = new Map<string, EnvEntry>()
 
 export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.ENVIRONMENT_SCAN, async (): Promise<ScanResult[]> => {
+    getLogger().info('environment-cleaner', 'Starting environment scan')
     envEntryCache.clear()
     const results: ScanResult[] = []
     const category = CleanerType.Environment
@@ -287,7 +326,7 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
     }
 
     if (pathEntries.length > 0) {
-      const items: ScanItem[] = pathEntries.map(entry => {
+      const items: ScanItem[] = pathEntries.map((entry) => {
         const id = randomUUID()
         envEntryCache.set(id, entry)
         return {
@@ -330,7 +369,7 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
     }
 
     if (envVarEntries.length > 0) {
-      const items: ScanItem[] = envVarEntries.map(entry => {
+      const items: ScanItem[] = envVarEntries.map((entry) => {
         const id = randomUUID()
         envEntryCache.set(id, entry)
         return {
@@ -362,13 +401,18 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
       }
     }
 
+    getLogger().success('environment-cleaner', `Scan complete: ${results.length} result groups`)
     sendProgress(2, 2, 'Environment scan complete')
     return results
   })
 
   ipcMain.handle(IPC.ENVIRONMENT_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+    getLogger().info('environment-cleaner', 'Starting environment clean')
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    if (!valid) {
+      getLogger().warning('environment-cleaner', 'Clean skipped — invalid item IDs')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
 
     const isWin = process.platform === 'win32'
     let filesDeleted = 0
@@ -377,7 +421,7 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
     let lastReport = 0
 
     for (let i = 0; i < valid.length; i++) {
-      const id = valid[i]
+      const id = valid[i]!
       const entry = envEntryCache.get(id)
 
       if (!entry) {
@@ -416,14 +460,15 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
       if (now - lastReport > 120 || i === valid.length - 1) {
         lastReport = now
         const win = getWindow()
-        if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-          phase: 'cleaning',
-          category: CleanerType.Environment,
-          currentPath: entry ? `${entry.variable} \u2192 ${entry.value}` : '',
-          progress: ((i + 1) / valid.length) * 100,
-          itemsFound: valid.length,
-          sizeFound: 0,
-        })
+        if (win && !win.isDestroyed())
+          win.webContents.send(IPC.SCAN_PROGRESS, {
+            phase: 'cleaning',
+            category: CleanerType.Environment,
+            currentPath: entry ? `${entry.variable} \u2192 ${entry.value}` : '',
+            progress: ((i + 1) / valid.length) * 100,
+            itemsFound: valid.length,
+            sizeFound: 0,
+          })
       }
     }
 
@@ -432,12 +477,16 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
       await broadcastWinEnvChange()
     }
 
+    getLogger().success(
+      'environment-cleaner',
+      `Cleaned: ${filesDeleted} entries, ${filesSkipped} skipped, ${errors.length} errors`,
+    )
     return {
       totalCleaned: 0,
       filesDeleted,
       filesSkipped,
       errors,
-      needsElevation: errors.some(e => e.reason === 'permission-denied'),
+      needsElevation: errors.some((e) => e.reason === 'permission-denied'),
     }
   })
 }

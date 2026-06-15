@@ -4,6 +4,8 @@
   "addFiles": "Add Files",
   "addFolders": "Add Folders",
   "clearAll": "Clear All",
+  "clearConfirmTitle": "Clear All Items?",
+  "clearConfirmDesc": "Remove {{count}} items from the shred list. Files won't be shredded.",
   "shredButton": "Shred {{count}} items",
   "shredButtonSingle": "Shred 1 item",
   "cancelShred": "Cancel",

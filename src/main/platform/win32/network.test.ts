@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileMock = vi.fn()
 
@@ -35,7 +35,7 @@ describe('win32 network', () => {
       const result = await network.getEstablishedConnections()
 
       expect(result).toHaveLength(2)
-      expect(result[0]).toEqual({
+      expect(result[0]!).toEqual({
         remoteAddress: '93.184.216.34',
         remotePort: 443,
         localPort: 45678,
@@ -54,7 +54,7 @@ describe('win32 network', () => {
 
       const result = await network.getEstablishedConnections()
       expect(result).toHaveLength(1)
-      expect(result[0].remoteAddress).toBe('93.184.216.34')
+      expect(result[0]!.remoteAddress).toBe('93.184.216.34')
     })
 
     it('skips non-ESTABLISHED lines', async () => {
@@ -69,7 +69,7 @@ describe('win32 network', () => {
 
       const result = await network.getEstablishedConnections()
       expect(result).toHaveLength(1)
-      expect(result[0].localPort).toBe(45679)
+      expect(result[0]!.localPort).toBe(45679)
     })
 
     it('handles IPv6 bracket notation', async () => {
@@ -80,8 +80,8 @@ describe('win32 network', () => {
 
       const result = await network.getEstablishedConnections()
       expect(result).toHaveLength(1)
-      expect(result[0].remoteAddress).toBe('2001:db8::1')
-      expect(result[0].remotePort).toBe(443)
+      expect(result[0]!.remoteAddress).toBe('2001:db8::1')
+      expect(result[0]!.remotePort).toBe(443)
     })
 
     it('skips IPv6 loopback addresses', async () => {
@@ -102,7 +102,7 @@ describe('win32 network', () => {
 
       const result = await network.getEstablishedConnections()
       expect(result).toHaveLength(1)
-      expect(result[0].pid).toBeNull()
+      expect(result[0]!.pid).toBeNull()
     })
 
     it('returns empty array on error', async () => {
@@ -207,14 +207,14 @@ describe('win32 network', () => {
   describe('flushDnsCache', () => {
     it('returns true on success', async () => {
       execFileMock.mockResolvedValue({ stdout: '', stderr: '' })
-      const result = await network.flushDnsCache()
+      const result = await network.flushDnsCache!()
       expect(result).toBe(true)
       expect(execFileMock).toHaveBeenCalledWith('ipconfig', ['/flushdns'], { timeout: 10000, windowsHide: true })
     })
 
     it('returns false on error', async () => {
       execFileMock.mockRejectedValue(new Error('failed'))
-      const result = await network.flushDnsCache()
+      const result = await network.flushDnsCache!()
       expect(result).toBe(false)
     })
   })
@@ -235,7 +235,7 @@ describe('win32 network', () => {
           stderr: '',
         })
 
-      const result = await network.getWifiProfiles()
+      const result = await network.getWifiProfiles!()
       expect(result).toEqual([
         { name: 'HomeNetwork', security: 'WPA2-Personal' },
         { name: 'WorkWifi', security: 'WPA3-Enterprise' },
@@ -262,14 +262,14 @@ describe('win32 network', () => {
           stderr: '',
         })
 
-      const result = await network.getWifiProfiles()
+      const result = await network.getWifiProfiles!()
       expect(result).toHaveLength(1)
-      expect(result[0].name).toBe('Safe')
+      expect(result[0]!.name).toBe('Safe')
     })
 
     it('returns empty array on error', async () => {
       execFileMock.mockRejectedValue(new Error('no wifi adapter'))
-      const result = await network.getWifiProfiles()
+      const result = await network.getWifiProfiles!()
       expect(result).toEqual([])
     })
 
@@ -281,7 +281,7 @@ describe('win32 network', () => {
         })
         .mockRejectedValueOnce(new Error('timeout'))
 
-      const result = await network.getWifiProfiles()
+      const result = await network.getWifiProfiles!()
       expect(result).toEqual([{ name: 'TestNet', security: 'Unknown' }])
     })
   })
@@ -289,24 +289,24 @@ describe('win32 network', () => {
   describe('deleteWifiProfile', () => {
     it('returns true on successful deletion', async () => {
       execFileMock.mockResolvedValue({ stdout: '', stderr: '' })
-      const result = await network.deleteWifiProfile('TestNetwork')
+      const result = await network.deleteWifiProfile!('TestNetwork')
       expect(result).toBe(true)
     })
 
     it('returns false when name contains quotes', async () => {
-      const result = await network.deleteWifiProfile('Test"Network')
+      const result = await network.deleteWifiProfile!('Test"Network')
       expect(result).toBe(false)
       expect(execFileMock).not.toHaveBeenCalled()
     })
 
     it('returns false when name contains control characters', async () => {
-      const result = await network.deleteWifiProfile('Test\x00Network')
+      const result = await network.deleteWifiProfile!('Test\x00Network')
       expect(result).toBe(false)
     })
 
     it('returns false on error', async () => {
       execFileMock.mockRejectedValue(new Error('profile not found'))
-      const result = await network.deleteWifiProfile('NonExistent')
+      const result = await network.deleteWifiProfile!('NonExistent')
       expect(result).toBe(false)
     })
   })
@@ -314,13 +314,13 @@ describe('win32 network', () => {
   describe('clearArpCache', () => {
     it('returns true on success', async () => {
       execFileMock.mockResolvedValue({ stdout: '', stderr: '' })
-      const result = await network.clearArpCache()
+      const result = await network.clearArpCache!()
       expect(result).toBe(true)
     })
 
     it('returns false on error', async () => {
       execFileMock.mockRejectedValue(new Error('access denied'))
-      const result = await network.clearArpCache()
+      const result = await network.clearArpCache!()
       expect(result).toBe(false)
     })
   })

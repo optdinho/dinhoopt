@@ -1,5 +1,5 @@
+import type { PrivacyApplyResult, PrivacyScanProgress, PrivacyShieldState } from '@shared/types'
 import { create } from 'zustand'
-import type { PrivacyShieldState, PrivacyApplyResult, PrivacyScanProgress } from '@shared/types'
 
 interface PrivacyStoreState {
   state: PrivacyShieldState | null
@@ -44,7 +44,7 @@ export const usePrivacyStore = create<PrivacyStoreState>((set) => ({
       status: 'idle',
       applyResult: null,
       expandedCategories: new Set<string>(),
-      progress: null
+      progress: null,
     }),
 
   scan: async () => {
@@ -84,5 +84,5 @@ export const usePrivacyStore = create<PrivacyStoreState>((set) => ({
     } catch {
       set({ status: 'done' })
     }
-  }
+  },
 }))

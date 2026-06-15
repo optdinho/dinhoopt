@@ -1,24 +1,23 @@
-import { useEffect, useCallback, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Pause, Play } from 'lucide-react'
-import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { GaugeCard } from '@/components/perf/GaugeCard'
-import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
-import { TimeSeriesChart } from '@/components/perf/TimeSeriesChart'
 import { AlertBanner } from '@/components/perf/AlertBanner'
 import { DiskHealthPanel } from '@/components/perf/DiskHealthPanel'
+import { GaugeCard } from '@/components/perf/GaugeCard'
 import { ProcessTable } from '@/components/perf/ProcessTable'
-import { usePerfStore } from '@/stores/perf-store'
+import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
+import { TimeSeriesChart } from '@/components/perf/TimeSeriesChart'
 import { formatBytes, formatSpeed } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { usePerfStore } from '@/stores/perf-store'
+import { Pause, Play } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 export function PerformanceMonitorPage() {
   const { t } = useTranslation('performance')
   const systemInfo = usePerfStore((s) => s.systemInfo)
   const snapshot = usePerfStore((s) => s.currentSnapshot)
   const history = usePerfStore((s) => s.history)
-  const isMonitoring = usePerfStore((s) => s.isMonitoring)
   const timeRange = usePerfStore((s) => s.timeRange)
   const setSystemInfo = usePerfStore((s) => s.setSystemInfo)
   const pushSnapshot = usePerfStore((s) => s.pushSnapshot)
@@ -38,10 +37,7 @@ export function PerformanceMonitorPage() {
 
     const start = async () => {
       try {
-        const [info, disks] = await Promise.all([
-          window.dinho.perfGetSystemInfo(),
-          window.dinho.perfGetDiskHealth()
-        ])
+        const [info, disks] = await Promise.all([window.dinho.perfGetSystemInfo(), window.dinho.perfGetDiskHealth()])
         setSystemInfo(info)
         setDiskHealth(disks)
 
@@ -68,7 +64,7 @@ export function PerformanceMonitorPage() {
       window.dinho.perfStopMonitoring().catch(() => {})
       reset()
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [t, reset, pushSnapshot, setProcessList, setSystemInfo, setDiskHealth, setMonitoring])
 
   const togglePause = useCallback(async () => {
     if (paused) {
@@ -83,7 +79,7 @@ export function PerformanceMonitorPage() {
   const timeRangeOptions: Array<{ value: '60s' | '5m' | '15m'; label: string }> = [
     { value: '60s', label: '1m' },
     { value: '5m', label: '5m' },
-    { value: '15m', label: '15m' }
+    { value: '15m', label: '15m' },
   ]
 
   return (
@@ -100,19 +96,14 @@ export function PerformanceMonitorPage() {
             >
               {timeRangeOptions.map((opt) => (
                 <button
+                  type="button"
                   key={opt.value}
                   onClick={() => setTimeRange(opt.value)}
                   className={cn(
                     'rounded-md px-3 py-1.5 text-[11px] font-semibold transition-all',
-                    timeRange === opt.value
-                      ? 'text-amber-400'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                    timeRange === opt.value ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
                   )}
-                  style={
-                    timeRange === opt.value
-                      ? { background: 'rgba(245,158,11,0.1)' }
-                      : undefined
-                  }
+                  style={timeRange === opt.value ? { background: 'rgba(245,158,11,0.1)' } : undefined}
                 >
                   {opt.label}
                 </button>
@@ -121,12 +112,13 @@ export function PerformanceMonitorPage() {
 
             {/* Pause/Resume */}
             <button
+              type="button"
               onClick={togglePause}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-colors"
               style={{
                 background: paused ? 'rgba(34,197,94,0.1)' : 'var(--bg-subtle-2)',
                 color: paused ? '#22c55e' : 'var(--text-secondary)',
-                border: `1px solid ${paused ? 'rgba(34,197,94,0.2)' : 'var(--border-medium)'}`
+                border: `1px solid ${paused ? 'rgba(34,197,94,0.2)' : 'var(--border-medium)'}`,
               }}
             >
               {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
@@ -141,15 +133,11 @@ export function PerformanceMonitorPage() {
       <AlertBanner snapshot={snapshot} history={history} />
 
       {/* Gauges */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <GaugeCard
           label={t('gaugeCpu')}
           percent={snapshot?.cpu.overall ?? 0}
-          detail={
-            snapshot
-              ? t('cpuThreadsDetail', { count: snapshot.cpu.perCore.length })
-              : t('noDataPlaceholder')
-          }
+          detail={snapshot ? t('cpuThreadsDetail', { count: snapshot.cpu.perCore.length }) : t('noDataPlaceholder')}
         />
         <GaugeCard
           label={t('gaugeMemory')}
@@ -162,16 +150,27 @@ export function PerformanceMonitorPage() {
         />
         <GaugeCard
           label={t('gaugeDiskIo')}
-          percent={Math.min(100, ((snapshot?.disk.readBytesPerSec ?? 0) + (snapshot?.disk.writeBytesPerSec ?? 0)) / (200 * 1024 * 1024) * 100)}
+          percent={Math.min(
+            100,
+            (((snapshot?.disk.readBytesPerSec ?? 0) + (snapshot?.disk.writeBytesPerSec ?? 0)) / (200 * 1024 * 1024)) *
+              100,
+          )}
           detail={
             snapshot
-              ? t('diskIoDetail', { read: formatSpeed(snapshot.disk.readBytesPerSec), write: formatSpeed(snapshot.disk.writeBytesPerSec) })
+              ? t('diskIoDetail', {
+                  read: formatSpeed(snapshot.disk.readBytesPerSec),
+                  write: formatSpeed(snapshot.disk.writeBytesPerSec),
+                })
               : t('noDataPlaceholder')
           }
         />
         <GaugeCard
           label={t('gaugeNetwork')}
-          percent={Math.min(100, ((snapshot?.network.rxBytesPerSec ?? 0) + (snapshot?.network.txBytesPerSec ?? 0)) / (125 * 1024 * 1024) * 100)}
+          percent={Math.min(
+            100,
+            (((snapshot?.network.rxBytesPerSec ?? 0) + (snapshot?.network.txBytesPerSec ?? 0)) / (125 * 1024 * 1024)) *
+              100,
+          )}
           detail={
             snapshot
               ? `${formatSpeed(snapshot.network.rxBytesPerSec)} / ${formatSpeed(snapshot.network.txBytesPerSec)}`
@@ -181,7 +180,7 @@ export function PerformanceMonitorPage() {
       </div>
 
       {/* Charts */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <TimeSeriesChart
           history={history}
           timeRange={timeRange}

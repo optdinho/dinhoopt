@@ -1,9 +1,9 @@
-import { BrowserWindow, Notification } from 'electron'
 import { IPC } from '@shared/channels'
-import { getSettings, updateScheduleEntry } from './settings-store'
+import type { DiNhoSettings, ScheduleEntry, ScheduleRunStatus } from '@shared/types'
+import { type BrowserWindow, Notification } from 'electron'
 import { t } from '../i18n'
 import { logInfo } from './logger'
-import type { DiNhoSettings, ScheduleEntry, ScheduleRunStatus } from '@shared/types'
+import { getSettings, updateScheduleEntry } from './settings-store'
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
 let initialCheckTimer: ReturnType<typeof setTimeout> | null = null
@@ -91,11 +91,7 @@ function isDueEntry(entry: ScheduleEntry): boolean {
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
 // ─── Legacy single-schedule compat ────────────────────────
@@ -131,7 +127,7 @@ export function getNextScanTime(settings: DiNhoSettings): Date | null {
     autoApply: false,
     lastRunAt: null,
     lastRunStatus: 'never',
-    createdAt: ''
+    createdAt: '',
   }
   return getNextRunTime(legacyEntry)
 }
@@ -161,26 +157,29 @@ function triggerScheduleEntry(mainWindow: BrowserWindow | null, entry: ScheduleE
 
   // Safety timeout — if the renderer never responds (crash, reload, etc.),
   // auto-clear so the schedule isn't stuck forever
-  inFlightTimers.set(entry.id, setTimeout(() => {
-    if (inFlight.has(entry.id)) {
-      logInfo(`Schedule "${entry.name}" timed out — clearing inFlight`)
-      inFlight.delete(entry.id)
-      inFlightTimers.delete(entry.id)
-    }
-  }, IN_FLIGHT_TIMEOUT_MS))
+  inFlightTimers.set(
+    entry.id,
+    setTimeout(() => {
+      if (inFlight.has(entry.id)) {
+        logInfo(`Schedule "${entry.name}" timed out — clearing inFlight`)
+        inFlight.delete(entry.id)
+        inFlightTimers.delete(entry.id)
+      }
+    }, IN_FLIGHT_TIMEOUT_MS),
+  )
 
   mainWindow.webContents.send(IPC.SCHEDULE_RUN_TRIGGER, {
     scheduleId: entry.id,
     scheduleName: entry.name,
     tasks: entry.tasks,
-    autoApply: entry.autoApply
+    autoApply: entry.autoApply,
   })
 
   if (!process.argv.includes('--daemon') && Notification.isSupported()) {
     const notification = new Notification({
       title: t('scheduledTaskNotificationTitle'),
       body: t('scheduledTaskNotificationBody', { name: entry.name }),
-      silent: true
+      silent: true,
     })
     notification.show()
   }
@@ -198,7 +197,7 @@ export function notifyScheduledScanComplete(totalSize: number, itemCount: number
   const notification = new Notification({
     title: t('scanCompleteNotificationTitle'),
     body: t('scanCompleteNotificationBody', { itemCount, sizeMB }),
-    silent: false
+    silent: false,
   })
   notification.show()
 }
@@ -217,7 +216,7 @@ export function completeScheduleRun(scheduleId: string, status: ScheduleRunStatu
   }
   updateScheduleEntry(scheduleId, {
     lastRunAt: new Date().toISOString(),
-    lastRunStatus: status
+    lastRunStatus: status,
   })
 }
 

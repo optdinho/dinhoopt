@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron'
 import { IPC } from '@shared/channels'
+import { ipcMain } from 'electron'
 import { activateLicense, checkLicense, getHwid } from '../services/remote-license'
 
 export function registerLicenseIpc(): void {

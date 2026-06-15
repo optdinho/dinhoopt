@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockExecFileAsync = vi.fn()
 
@@ -7,18 +7,18 @@ vi.mock('./exec-utf8', () => ({
   psUtf8: (s: string) => s,
 }))
 
+import type { GameModeConfig, GameModeSnapshot } from '@shared/types'
 import {
-  auditServiceHealth,
-  auditOrphanProcesses,
   auditAntiCheatRisk,
+  auditConsent,
+  auditOrphanProcesses,
   auditPlatformCompatibility,
   auditRegistryTweakImpact,
   auditRestoreCompleteness,
-  auditConsent,
+  auditServiceHealth,
   auditTimerResolution,
   runGameModeAudit,
 } from './game-mode-audit'
-import type { GameModeConfig, GameModeSnapshot } from '@shared/types'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -42,24 +42,24 @@ describe('auditServiceHealth', () => {
     mockPsSuccess('{ "Status": "Stopped", "StartType": "Disabled" }')
     const checks = await auditServiceHealth([{ name: 'WSearch', originalStartType: 'Automatic', wasRunning: true }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
-    expect(checks[0].severity).toBe('info')
+    expect(checks[0]!.passed).toBe(true)
+    expect(checks[0]!.severity).toBe('info')
   })
 
   it('reports warning when service is still running', async () => {
     mockPsSuccess('{ "Status": "Running", "StartType": "Automatic" }')
     const checks = await auditServiceHealth([{ name: 'WSearch', originalStartType: 'Automatic', wasRunning: true }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('warning')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('warning')
   })
 
   it('reports error when service query fails', async () => {
     mockFailure('Service not found')
     const checks = await auditServiceHealth([{ name: 'WSearch', originalStartType: 'Automatic', wasRunning: true }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('error')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('error')
   })
 
   it('handles multiple services', async () => {
@@ -83,7 +83,7 @@ describe('auditOrphanProcesses', () => {
     mockTasklistSuccess(['svchost.exe', 'explorer.exe'])
     const checks = await auditOrphanProcesses([{ pid: 1234, name: 'chrome.exe' }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('reports warning when some processes are still running', async () => {
@@ -93,16 +93,16 @@ describe('auditOrphanProcesses', () => {
       { pid: 5678, name: 'discord.exe' },
     ])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('warning')
-    expect(checks[0].details).toContain('chrome.exe')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('warning')
+    expect(checks[0]!.details).toContain('chrome.exe')
   })
 
   it('handles tasklist failure gracefully', async () => {
     mockFailure('tasklist failed')
     const checks = await auditOrphanProcesses([{ pid: 1234, name: 'chrome.exe' }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 })
 
@@ -111,17 +111,17 @@ describe('auditAntiCheatRisk', () => {
     mockTasklistSuccess(['svchost.exe', 'explorer.exe'])
     const checks = await auditAntiCheatRisk(['sys-timer-resolution', 'net-disable-nagle'])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('reports warning when anti-cheat is detected with conflicts', async () => {
     mockTasklistSuccess(['EasyAntiCheat.exe', 'explorer.exe'])
     const checks = await auditAntiCheatRisk(['sys-timer-resolution', 'net-disable-nagle'])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('warning')
-    expect(checks[0].category).toBe('anti-cheat')
-    expect(checks[0].details).toContain('EasyAntiCheat.exe')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('warning')
+    expect(checks[0]!.category).toBe('anti-cheat')
+    expect(checks[0]!.details).toContain('EasyAntiCheat.exe')
   })
 
   it('reports multiple anti-cheat conflicts', async () => {
@@ -135,14 +135,14 @@ describe('auditAntiCheatRisk', () => {
     mockTasklistSuccess(['EasyAntiCheat.exe'])
     const checks = await auditAntiCheatRisk(['svc-wsearch'])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('handles tasklist failure', async () => {
     mockFailure('tasklist failed')
     const checks = await auditAntiCheatRisk(['sys-timer-resolution'])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 })
 
@@ -157,15 +157,15 @@ describe('auditPlatformCompatibility', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' })
     const checks = await auditPlatformCompatibility()
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('reports warning on non-win32', async () => {
     Object.defineProperty(process, 'platform', { value: 'linux' })
     const checks = await auditPlatformCompatibility()
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('warning')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('warning')
   })
 })
 
@@ -177,41 +177,33 @@ describe('auditRegistryTweakImpact', () => {
 
   it('reports passed when tweak was applied to 0', async () => {
     mockPsSuccess('0')
-    const checks = await auditRegistryTweakImpact([
-      { path: 'HKCU:\\Test', name: 'TestVal', originalValue: 1 },
-    ])
+    const checks = await auditRegistryTweakImpact([{ path: 'HKCU:\\Test', name: 'TestVal', originalValue: 1 }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('reports passed when tweak had no previous value and current is 0', async () => {
     mockPsSuccess('0')
-    const checks = await auditRegistryTweakImpact([
-      { path: 'HKCU:\\NullVal', name: 'NullVal', originalValue: null },
-    ])
+    const checks = await auditRegistryTweakImpact([{ path: 'HKCU:\\NullVal', name: 'NullVal', originalValue: null }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
-    expect(checks[0].details).toContain('had no previous value')
+    expect(checks[0]!.passed).toBe(true)
+    expect(checks[0]!.details).toContain('had no previous value')
   })
 
   it('reports warning when tweak value is not 0', async () => {
     mockPsSuccess('1')
-    const checks = await auditRegistryTweakImpact([
-      { path: 'HKCU:\\Test', name: 'TestVal', originalValue: 1 },
-    ])
+    const checks = await auditRegistryTweakImpact([{ path: 'HKCU:\\Test', name: 'TestVal', originalValue: 1 }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('warning')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('warning')
   })
 
   it('handles registry read error gracefully', async () => {
     mockFailure('Cannot find path')
-    const checks = await auditRegistryTweakImpact([
-      { path: 'HKCU:\\Test', name: 'TestVal', originalValue: 1 },
-    ])
+    const checks = await auditRegistryTweakImpact([{ path: 'HKCU:\\Test', name: 'TestVal', originalValue: 1 }])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('error')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('error')
   })
 })
 
@@ -219,15 +211,15 @@ describe('auditRestoreCompleteness', () => {
   it('reports passed when no errors occurred', async () => {
     const checks = await auditRestoreCompleteness([])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('reports error when there are restore errors', async () => {
     const checks = await auditRestoreCompleteness(['Failed to restore WSearch', 'Failed to restore power plan'])
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('error')
-    expect(checks[0].details).toContain('2')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('error')
+    expect(checks[0]!.details).toContain('2')
   })
 })
 
@@ -235,14 +227,14 @@ describe('auditConsent', () => {
   it('reports passed when no permanent tweaks', async () => {
     const checks = await auditConsent(false)
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
+    expect(checks[0]!.passed).toBe(true)
   })
 
   it('reports warning when permanent tweaks exist', async () => {
     const checks = await auditConsent(true)
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(false)
-    expect(checks[0].severity).toBe('warning')
+    expect(checks[0]!.passed).toBe(false)
+    expect(checks[0]!.severity).toBe('warning')
   })
 })
 
@@ -250,15 +242,15 @@ describe('auditTimerResolution', () => {
   it('reports passed when timer was not modified', async () => {
     const checks = await auditTimerResolution(null)
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
-    expect(checks[0].details).toContain('was not modified')
+    expect(checks[0]!.passed).toBe(true)
+    expect(checks[0]!.details).toContain('was not modified')
   })
 
   it('reports passed when timer was applied', async () => {
     const checks = await auditTimerResolution(1)
     expect(checks).toHaveLength(1)
-    expect(checks[0].passed).toBe(true)
-    expect(checks[0].details).toContain('NtSetTimerResolution')
+    expect(checks[0]!.passed).toBe(true)
+    expect(checks[0]!.details).toContain('NtSetTimerResolution')
   })
 })
 

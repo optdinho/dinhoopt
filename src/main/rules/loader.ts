@@ -1,12 +1,6 @@
-import path from 'path'
-import { homedir } from 'os'
-import type {
-  CleanTarget,
-  BrowserPathConfig,
-  BrowserPaths,
-  AppCacheDef,
-  DatabaseTarget,
-} from '../platform/types'
+import { homedir } from 'node:os'
+import path from 'node:path'
+import type { AppCacheDef, BrowserPathConfig, BrowserPaths, CleanTarget, DatabaseTarget } from '../platform/types'
 
 // ─── JSON Rule Types ─────────────────────────────────────
 
@@ -127,22 +121,13 @@ function resolveVars(template: string, vars: Record<string, string>): string {
 
 // ─── buildCleanerPaths ──────────────────────────────────
 
-export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
+export function buildCleanerPaths(rulesJson: RulesJsonSet, _platform: string) {
   const vars = getWinVars()
-  const {
-    system,
-    browsers,
-    apps,
-    gaming,
-    gpuCache,
-    steam,
-    databases,
-    misc,
-  } = rulesJson
+  const { system, browsers, apps, gaming, gpuCache, steam, databases, misc } = rulesJson
 
   return {
     systemCleanTargets(): CleanTarget[] {
-      return system.cleanTargets.map(t => ({
+      return system.cleanTargets.map((t) => ({
         path: resolveVars(t.path, vars),
         subcategory: t.subcategory,
         ...(t.needsAdmin ? { needsAdmin: true } : {}),
@@ -150,7 +135,7 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
     },
 
     singleFileCleanTargets(): { path: string; subcategory: string }[] {
-      return system.singleFileTargets.map(t => ({
+      return system.singleFileTargets.map((t) => ({
         path: resolveVars(t.path, vars),
         subcategory: t.subcategory,
       }))
@@ -174,9 +159,10 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
         }
       }
 
-      const br = Object.fromEntries(
-        chromium.map(e => [e.key, makeChromiumPaths(e.base)])
-      ) as Record<string, BrowserPaths>
+      const br = Object.fromEntries(chromium.map((e) => [e.key, makeChromiumPaths(e.base)])) as Record<
+        string,
+        BrowserPaths
+      >
 
       const foxForkMap: Record<string, { base: string; cache: string }> = {}
       for (const entry of firefoxForks) {
@@ -187,58 +173,58 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
       }
 
       return {
-        chrome: br.chrome,
-        edge: br.edge,
-        brave: br.brave,
-        opera: br.opera,
-        operaGX: br.operaGX,
-        vivaldi: br.vivaldi,
-        arc: br.arc,
-        chromium: br.chromium,
-        thorium: br.thorium,
-        supermium: br.supermium,
-        helium: br.helium,
-        cromite: br.cromite,
-        catsxp: br.catsxp,
+        chrome: br.chrome!,
+        edge: br.edge!,
+        brave: br.brave!,
+        opera: br.opera!,
+        operaGX: br.operaGX!,
+        vivaldi: br.vivaldi!,
+        arc: br.arc!,
+        chromium: br.chromium!,
+        thorium: br.thorium!,
+        supermium: br.supermium!,
+        helium: br.helium!,
+        cromite: br.cromite!,
+        catsxp: br.catsxp!,
         firefox: {
           base: resolveVars(firefox.base, vars),
           cache: resolveVars(firefox.cache, vars),
         },
-        librewolf: foxForkMap.librewolf,
-        waterfox: foxForkMap.waterfox,
-        floorp: foxForkMap.floorp,
-        zen: foxForkMap.zen,
+        librewolf: foxForkMap.librewolf!,
+        waterfox: foxForkMap.waterfox!,
+        floorp: foxForkMap.floorp!,
+        zen: foxForkMap.zen!,
         safari: null,
       }
     },
 
     appPaths(): AppCacheDef[] {
-      return apps.apps.map(a => ({
+      return apps.apps.map((a) => ({
         id: a.id,
         name: a.name,
-        paths: a.paths.map(p => resolveVars(p, vars)),
+        paths: a.paths.map((p) => resolveVars(p, vars)),
         ...(a.childSubdir ? { childSubdir: a.childSubdir } : {}),
       }))
     },
 
     gamingPaths(): AppCacheDef[] {
-      return gaming.apps.map(a => ({
+      return gaming.apps.map((a) => ({
         id: a.id,
         name: a.name,
-        paths: a.paths.map(p => resolveVars(p, vars)),
+        paths: a.paths.map((p) => resolveVars(p, vars)),
       }))
     },
 
     gpuCachePaths(): AppCacheDef[] {
-      return gpuCache.apps.map(a => ({
+      return gpuCache.apps.map((a) => ({
         id: a.id,
         name: a.name,
-        paths: a.paths.map(p => resolveVars(p, vars)),
+        paths: a.paths.map((p) => resolveVars(p, vars)),
       }))
     },
 
     steamLibraries(): string[] {
-      return steam.libraries.map(p => resolveVars(p, vars))
+      return steam.libraries.map((p) => resolveVars(p, vars))
     },
 
     steamRedistPatterns(): string[] {
@@ -261,7 +247,7 @@ export function buildCleanerPaths(rulesJson: RulesJsonSet, platform: string) {
         return [...dbFiles]
       }
 
-      return targets.map(t => ({
+      return targets.map((t) => ({
         label: t.label,
         basePath: resolveVars(t.basePath, vars),
         dbFiles: getDbFiles(t.dbFiles),

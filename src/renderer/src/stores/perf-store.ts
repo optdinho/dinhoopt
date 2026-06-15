@@ -1,5 +1,5 @@
+import type { DiskSmartInfo, PerfProcess, PerfSnapshot, PerfSystemInfo } from '@shared/types'
 import { create } from 'zustand'
-import type { PerfSystemInfo, PerfSnapshot, PerfProcess, DiskSmartInfo } from '@shared/types'
 
 const MAX_HISTORY = 900 // 15 minutes at 1s intervals
 const CHART_THROTTLE_MS = 2000 // Only update chart-facing history every 2s
@@ -85,19 +85,18 @@ export const usePerfStore = create<PerfState>((set, get) => ({
         _ringWriteIndex: nextIdx,
         _ringSize: nextSize,
         history: ringToArray(buf, nextIdx, nextSize),
-        _lastHistoryFlush: now
+        _lastHistoryFlush: now,
       })
     } else {
       set({
         currentSnapshot: snap,
         _ringWriteIndex: nextIdx,
-        _ringSize: nextSize
+        _ringSize: nextSize,
       })
     }
   },
 
-  setProcessList: (processes, totalCount) =>
-    set({ processList: processes, processCount: totalCount }),
+  setProcessList: (processes, totalCount) => set({ processList: processes, processCount: totalCount }),
 
   setMonitoring: (on) => set({ isMonitoring: on }),
 
@@ -128,6 +127,6 @@ export const usePerfStore = create<PerfState>((set, get) => ({
       processCount: 0,
       isMonitoring: false,
       processFilter: '',
-      diskHealth: []
-    })
+      diskHealth: [],
+    }),
 }))

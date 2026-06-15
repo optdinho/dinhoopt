@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { usePerfStore } from './perf-store'
 import type { PerfSnapshot } from '@shared/types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { usePerfStore } from './perf-store'
 
 function makeSnapshot(timestamp: number): PerfSnapshot {
   return {

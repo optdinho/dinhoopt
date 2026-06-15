@@ -14,7 +14,7 @@ for (const [path, module] of Object.entries(localeModules)) {
   const parts = path.split('/')
   const lang = parts[parts.length - 2]
   const ns = parts[parts.length - 1]!.replace('.json', '')
-  if (!(LOCALES as readonly string[]).includes(lang)) continue
+  if (!lang || !(LOCALES as readonly string[]).includes(lang)) continue
   resources[lang] ??= {}
   resources[lang][ns] = module.default
 }
@@ -24,7 +24,7 @@ i18n.use(initReactI18next).init({
   lng: 'pt',
   fallbackLng: 'pt',
   defaultNS: 'common',
-  interpolation: { escapeValue: false }
+  interpolation: { escapeValue: false },
 })
 
 export default i18n

@@ -1,7 +1,5 @@
-import { writeFileSync } from 'fs'
-import { app } from 'electron'
-import { randomUUID } from 'crypto'
-import type { DiNhoSettings, AppStats, ScheduleEntry, ScheduleTaskType, MalwareAllowlistEntry } from '@shared/types'
+import { randomUUID } from 'node:crypto'
+import type { AppStats, DiNhoSettings, MalwareAllowlistEntry, ScheduleEntry, ScheduleTaskType } from '@shared/types'
 import { createJsonStore } from './store-base'
 
 interface StoreData {
@@ -29,7 +27,7 @@ const defaults: StoreData = {
       secureDelete: false,
       closeBrowsersBeforeClean: false,
       createRestorePoint: false,
-      protectRecycleBin: true
+      protectRecycleBin: true,
     },
     exclusions: [],
     ignoredSoftwareUpdates: [],
@@ -39,35 +37,41 @@ const defaults: StoreData = {
       enabled: false,
       frequency: 'weekly',
       day: 1,
-      hour: 9
+      hour: 9,
     },
     schedules: [],
     windowsPackageManager: 'winget' as const,
     gameMode: {
       enabledOptimizations: [
-        'svc-wsearch', 'svc-sysmain',
+        'svc-wsearch',
+        'svc-sysmain',
         'proc-kill-updaters',
         'mem-clear-standby',
-        'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep',
-        'sys-disable-game-bar', 'sys-disable-fse-opt', 'sys-timer-resolution', 'cpu-game-priority',
-        'net-flush-dns'
+        'sys-focus-assist',
+        'sys-power-plan',
+        'sys-prevent-sleep',
+        'sys-disable-game-bar',
+        'sys-disable-fse-opt',
+        'sys-timer-resolution',
+        'cpu-game-priority',
+        'net-flush-dns',
       ],
       customProcessKillList: [],
       autoDetect: false,
       autoDeactivate: true,
       customGameProcesses: [],
-      gameProfiles: {}
+      gameProfiles: {},
     },
     registryIgnoredTweaks: [],
-    malwareAllowlist: []
+    malwareAllowlist: [],
   },
   stats: {
     totalSpaceSaved: 0,
     totalFilesCleaned: 0,
     totalScans: 0,
     lastScanDate: null,
-    recentActivity: []
-  }
+    recentActivity: [],
+  },
 }
 
 const store = createJsonStore<StoreData>({
@@ -76,19 +80,23 @@ const store = createJsonStore<StoreData>({
   devSuffix: 'DiNho-Dev',
 })
 
+// biome-ignore lint/suspicious/noExplicitAny: generic constraint for deep merge
 export function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
-  const result = { ...target }
+  const result = JSON.parse(JSON.stringify(target))
   for (const key of Object.keys(source) as Array<keyof T>) {
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
-    const srcVal = source[key]
-    const tgtVal = target[key]
+    const value = source[key]
     if (
-      srcVal !== null && typeof srcVal === 'object' && !Array.isArray(srcVal) &&
-      tgtVal !== null && typeof tgtVal === 'object' && !Array.isArray(tgtVal)
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      typeof result[key] === 'object' &&
+      !Array.isArray(result[key])
     ) {
-      result[key] = deepMerge(tgtVal, srcVal as any)
-    } else if (srcVal !== undefined) {
-      result[key] = srcVal as T[keyof T]
+      // biome-ignore lint/suspicious/noExplicitAny: recursive merge cast
+      result[key] = deepMerge(result[key] as Record<string, any>, value as Record<string, any>)
+    } else if (value !== undefined) {
+      result[key] = value as T[keyof T]
     }
   }
   return result
@@ -100,8 +108,12 @@ function readStore(): StoreData {
     const merged = deepMerge(defaults, parsed)
     if (merged.settings.schedule.enabled && merged.settings.schedules.length === 0) {
       const allCleanerTasks: ScheduleTaskType[] = [
-        'cleaner:system', 'cleaner:browsers', 'cleaner:apps',
-        'cleaner:gaming', 'cleaner:recycleBin', 'cleaner:databases'
+        'cleaner:system',
+        'cleaner:browsers',
+        'cleaner:apps',
+        'cleaner:gaming',
+        'cleaner:recycleBin',
+        'cleaner:databases',
       ]
       const migrated: ScheduleEntry = {
         id: randomUUID(),
@@ -115,11 +127,15 @@ function readStore(): StoreData {
         autoApply: false,
         lastRunAt: null,
         lastRunStatus: 'never',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       }
       merged.settings.schedules = [migrated]
       merged.settings.schedule.enabled = false
-      try { store.save(merged) } catch { /* best-effort */ }
+      try {
+        store.save(merged)
+      } catch {
+        /* best-effort */
+      }
     }
     return merged
   } catch {
@@ -140,7 +156,9 @@ let writeLock: Promise<void> = Promise.resolve()
 export function setSettings(partial: Partial<DiNhoSettings>): void {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   prev.then(() => {
     try {
       const data = readStore()
@@ -155,13 +173,13 @@ export function setSettings(partial: Partial<DiNhoSettings>): void {
 export function updateScheduleEntry(scheduleId: string, patch: Partial<import('@shared/types').ScheduleEntry>): void {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   prev.then(() => {
     try {
       const data = readStore()
-      data.settings.schedules = data.settings.schedules.map((s) =>
-        s.id === scheduleId ? { ...s, ...patch } : s
-      )
+      data.settings.schedules = data.settings.schedules.map((s) => (s.id === scheduleId ? { ...s, ...patch } : s))
       writeStore(data)
     } finally {
       unlock!()
@@ -172,7 +190,9 @@ export function updateScheduleEntry(scheduleId: string, patch: Partial<import('@
 export function updateRegistryIgnoredTweaks(signatures: string[], ignored: boolean): void {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   prev.then(() => {
     try {
       const data = readStore()
@@ -197,7 +217,9 @@ export function getMalwareAllowlist(): MalwareAllowlistEntry[] {
 export function addMalwareAllowlistEntry(entry: MalwareAllowlistEntry): Promise<void> {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   return prev.then(() => {
     try {
       const data = readStore()
@@ -214,7 +236,9 @@ export function addMalwareAllowlistEntry(entry: MalwareAllowlistEntry): Promise<
 export function removeMalwareAllowlistEntry(sha256: string): Promise<void> {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   return prev.then(() => {
     try {
       const data = readStore()
@@ -237,7 +261,9 @@ export function getOnboardingComplete(): boolean {
 export function setOnboardingComplete(value: boolean): Promise<void> {
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   return prev.then(() => {
     try {
       const data = readStore()
@@ -255,7 +281,9 @@ export function getMachineId(): string {
   const id = randomUUID()
   const prev = writeLock
   let unlock: () => void
-  writeLock = new Promise<void>((r) => { unlock = r })
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
   prev.then(() => {
     try {
       const fresh = readStore()

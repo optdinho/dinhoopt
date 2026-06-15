@@ -17,6 +17,7 @@ export function ErrorAlert({ message, onDismiss, className = '' }: ErrorAlertPro
       <p className="flex-1 text-[13px] text-red-400">{message}</p>
       {onDismiss && (
         <button
+          type="button"
           onClick={onDismiss}
           aria-label="Dismiss error"
           className="shrink-0 rounded-lg p-1.5 text-red-500 transition-colors hover:bg-white/5"

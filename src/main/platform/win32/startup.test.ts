@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // startup.ts uses runtime require('../../ipc/startup-manager.ipc') which goes
 // through Node's CJS loader. We hook Module._resolveFilename to redirect to a mock.
@@ -10,8 +10,9 @@ const mockGetBootTrace = vi.fn()
 const MOCK_KEY = '/mock/startup-manager.ipc'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const NativeModule = require('module')
+const NativeModule = require('node:module')
 const origResolve = NativeModule._resolveFilename
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 NativeModule._resolveFilename = function (request: string, parent: any, ...args: any[]) {
   if (request === '../../ipc/startup-manager.ipc') {
     return MOCK_KEY
@@ -31,6 +32,7 @@ require.cache[MOCK_KEY] = {
     getBootTrace: mockGetBootTrace,
   },
   path: '/mock',
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
 } as any
 
 const { createWin32Startup } = await import('./startup')
@@ -66,31 +68,26 @@ describe('win32 startup', () => {
     it('delegates to toggleStartupItem with all parameters', async () => {
       mockToggleStartupItem.mockResolvedValue(true)
 
-      const result = await startup.toggleItem(
-        'Discord', 'HKCU\\...\\Run', 'discord.exe', 'registry' as any, false
-      )
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      const result = await startup.toggleItem('Discord', 'HKCU\\...\\Run', 'discord.exe', 'registry' as any, false)
 
-      expect(mockToggleStartupItem).toHaveBeenCalledWith(
-        'Discord', 'HKCU\\...\\Run', 'discord.exe', 'registry', false
-      )
+      expect(mockToggleStartupItem).toHaveBeenCalledWith('Discord', 'HKCU\\...\\Run', 'discord.exe', 'registry', false)
       expect(result).toBe(true)
     })
 
     it('returns false when toggle fails', async () => {
       mockToggleStartupItem.mockResolvedValue(false)
 
-      const result = await startup.toggleItem(
-        'Test', 'loc', 'cmd', 'registry' as any, true
-      )
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      const result = await startup.toggleItem('Test', 'loc', 'cmd', 'registry' as any, true)
       expect(result).toBe(false)
     })
 
     it('propagates errors from toggleStartupItem', async () => {
       mockToggleStartupItem.mockRejectedValue(new Error('access denied'))
 
-      await expect(
-        startup.toggleItem('Test', 'loc', 'cmd', 'registry' as any, true)
-      ).rejects.toThrow('access denied')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      await expect(startup.toggleItem('Test', 'loc', 'cmd', 'registry' as any, true)).rejects.toThrow('access denied')
     })
   })
 
@@ -99,7 +96,7 @@ describe('win32 startup', () => {
       const mockTrace = { totalBootTimeMs: 15000, items: [] }
       mockGetBootTrace.mockResolvedValue(mockTrace)
 
-      const result = await startup.getBootTrace()
+      const result = await startup.getBootTrace!()
 
       expect(mockGetBootTrace).toHaveBeenCalledTimes(1)
       expect(result).toBe(mockTrace)
@@ -108,7 +105,7 @@ describe('win32 startup', () => {
     it('propagates errors from getBootTrace', async () => {
       mockGetBootTrace.mockRejectedValue(new Error('event log unavailable'))
 
-      await expect(startup.getBootTrace()).rejects.toThrow('event log unavailable')
+      await expect(startup.getBootTrace!()).rejects.toThrow('event log unavailable')
     })
   })
 })

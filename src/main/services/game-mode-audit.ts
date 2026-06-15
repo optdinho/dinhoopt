@@ -1,11 +1,11 @@
-import { execFileAsync, psUtf8 } from './exec-utf8'
 import type {
   GameModeAuditCheck,
   GameModeAuditReport,
-  GameModeSnapshot,
   GameModeConfig,
   GameModeOptimizationId,
+  GameModeSnapshot,
 } from '@shared/types'
+import { execFileAsync, psUtf8 } from './exec-utf8'
 
 const ANTI_CHEAT_CONFLICTS: Record<string, GameModeOptimizationId[]> = {
   'EasyAntiCheat.exe': ['sys-timer-resolution', 'net-disable-nagle'],
@@ -17,29 +17,34 @@ const ANTI_CHEAT_CONFLICTS: Record<string, GameModeOptimizationId[]> = {
 }
 
 async function ps(script: string, timeout = 15000): Promise<string> {
-  const { stdout } = await execFileAsync('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-Command', psUtf8(script),
-  ], { timeout, windowsHide: true })
+  const { stdout } = await execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)],
+    { timeout, windowsHide: true },
+  )
   return stdout.trim()
 }
 
 async function getRunningProcesses(): Promise<string[]> {
   try {
     const { stdout } = await execFileAsync('tasklist', ['/FO', 'CSV', '/NH'], {
-      timeout: 10000, windowsHide: true,
+      timeout: 10000,
+      windowsHide: true,
     })
-    return stdout.split('\n').filter(Boolean).map((line) => {
-      const m = line.match(/^"([^"]+)"/)
-      return m ? m[1].toLowerCase() : ''
-    }).filter(Boolean)
+    return stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const m = line.match(/^"([^"]+)"/)
+        return m ? m[1]!.toLowerCase() : ''
+      })
+      .filter(Boolean)
   } catch {
     return []
   }
 }
 
-export async function auditServiceHealth(
-  services: GameModeSnapshot['services'],
-): Promise<GameModeAuditCheck[]> {
+export async function auditServiceHealth(services: GameModeSnapshot['services']): Promise<GameModeAuditCheck[]> {
   const checks: GameModeAuditCheck[] = []
   for (const svc of services) {
     try {
@@ -59,10 +64,11 @@ export async function auditServiceHealth(
         severity: isStopped && isDisabled ? 'info' : 'warning',
         category: 'service',
         passed: isStopped && isDisabled,
-        details: isStopped && isDisabled
-          ? `${svc.name} is stopped and disabled`
-          : `${svc.name} status=${status}, startType=${startType}`,
-        remediation: !isDisabled ? 'Set service startup type to Disabled manually' : undefined,
+        details:
+          isStopped && isDisabled
+            ? `${svc.name} is stopped and disabled`
+            : `${svc.name} status=${status}, startType=${startType}`,
+        ...(!isDisabled ? { remediation: 'Set service startup type to Disabled manually' } : {}),
       })
     } catch {
       checks.push({
@@ -89,26 +95,30 @@ export async function auditOrphanProcesses(
     return running.some((r) => r === name)
   })
   if (stillAlive.length === 0) {
-    return [{
+    return [
+      {
+        id: 'orphan-processes',
+        name: 'Orphan processes',
+        description: 'Verify no killed processes are still running',
+        severity: 'info',
+        category: 'process',
+        passed: true,
+        details: `All ${killedPids.length} killed process(es) are gone`,
+      },
+    ]
+  }
+  return [
+    {
       id: 'orphan-processes',
       name: 'Orphan processes',
       description: 'Verify no killed processes are still running',
-      severity: 'info',
+      severity: 'warning',
       category: 'process',
-      passed: true,
-      details: `All ${killedPids.length} killed process(es) are gone`,
-    }]
-  }
-  return [{
-    id: 'orphan-processes',
-    name: 'Orphan processes',
-    description: 'Verify no killed processes are still running',
-    severity: 'warning',
-    category: 'process',
-    passed: false,
-    details: `${stillAlive.length} process(es) still running: ${stillAlive.map((p) => p.name).join(', ')}`,
-    remediation: 'Manually kill the remaining processes via Task Manager',
-  }]
+      passed: false,
+      details: `${stillAlive.length} process(es) still running: ${stillAlive.map((p) => p.name).join(', ')}`,
+      remediation: 'Manually kill the remaining processes via Task Manager',
+    },
+  ]
 }
 
 export async function auditAntiCheatRisk(
@@ -154,26 +164,30 @@ export async function auditAntiCheatRisk(
 export async function auditPlatformCompatibility(): Promise<GameModeAuditCheck[]> {
   const platform = process.platform
   if (platform === 'win32') {
-    return [{
+    return [
+      {
+        id: 'platform-compat',
+        name: 'Platform compatibility',
+        description: 'Verify the platform supports Game Mode optimizations',
+        severity: 'info',
+        category: 'platform',
+        passed: true,
+        details: 'Windows detected — all optimizations supported',
+      },
+    ]
+  }
+  return [
+    {
       id: 'platform-compat',
       name: 'Platform compatibility',
       description: 'Verify the platform supports Game Mode optimizations',
-      severity: 'info',
+      severity: 'warning',
       category: 'platform',
-      passed: true,
-      details: 'Windows detected — all optimizations supported',
-    }]
-  }
-  return [{
-    id: 'platform-compat',
-    name: 'Platform compatibility',
-    description: 'Verify the platform supports Game Mode optimizations',
-    severity: 'warning',
-    category: 'platform',
-    passed: false,
-    details: `Game Mode is designed for Windows (current: ${platform}) — some optimizations may not work`,
-    remediation: 'Use on Windows for full functionality',
-  }]
+      passed: false,
+      details: `Game Mode is designed for Windows (current: ${platform}) — some optimizations may not work`,
+      remediation: 'Use on Windows for full functionality',
+    },
+  ]
 }
 
 export async function auditRegistryTweakImpact(
@@ -187,7 +201,7 @@ export async function auditRegistryTweakImpact(
       const out = await ps(
         `$v = (Get-ItemProperty -Path '${tweak.path}' -Name '${tweak.name}' -ErrorAction SilentlyContinue).'${tweak.name}'; if ($v -ne $null) { $v } else { 'NULL' }`,
       )
-      const current = out === 'NULL' || out === '' ? null : parseInt(out, 10)
+      const current = out === 'NULL' || out === '' ? null : Number.parseInt(out, 10)
       if (tweak.originalValue !== null && current === 0) {
         checks.push({
           id: `reg-${tweak.name}`,
@@ -236,84 +250,90 @@ export async function auditRegistryTweakImpact(
   return checks
 }
 
-export async function auditRestoreCompleteness(
-  errors: string[],
-): Promise<GameModeAuditCheck[]> {
+export async function auditRestoreCompleteness(errors: string[]): Promise<GameModeAuditCheck[]> {
   if (errors.length === 0) {
-    return [{
+    return [
+      {
+        id: 'restore-completeness',
+        name: 'Restore completeness',
+        description: 'Verify all settings were restored successfully',
+        severity: 'info',
+        category: 'restore',
+        passed: true,
+        details: 'All settings restored successfully — no residual state',
+      },
+    ]
+  }
+  return [
+    {
       id: 'restore-completeness',
       name: 'Restore completeness',
       description: 'Verify all settings were restored successfully',
-      severity: 'info',
+      severity: 'error',
       category: 'restore',
-      passed: true,
-      details: 'All settings restored successfully — no residual state',
-    }]
-  }
-  return [{
-    id: 'restore-completeness',
-    name: 'Restore completeness',
-    description: 'Verify all settings were restored successfully',
-    severity: 'error',
-    category: 'restore',
-    passed: false,
-    details: `${errors.length} setting(s) could not be restored`,
-    remediation: 'Check for permission issues and retry deactivation',
-  }]
+      passed: false,
+      details: `${errors.length} setting(s) could not be restored`,
+      remediation: 'Check for permission issues and retry deactivation',
+    },
+  ]
 }
 
-export async function auditConsent(
-  hasPermanentTweaks: boolean,
-): Promise<GameModeAuditCheck[]> {
+export async function auditConsent(hasPermanentTweaks: boolean): Promise<GameModeAuditCheck[]> {
   if (!hasPermanentTweaks) {
-    return [{
+    return [
+      {
+        id: 'consent-check',
+        name: 'User consent',
+        description: 'Verify all changes are reversible',
+        severity: 'info',
+        category: 'restore',
+        passed: true,
+        details: 'All optimizations are reversible — nothing permanent',
+      },
+    ]
+  }
+  return [
+    {
       id: 'consent-check',
       name: 'User consent',
       description: 'Verify all changes are reversible',
-      severity: 'info',
+      severity: 'warning',
       category: 'restore',
-      passed: true,
-      details: 'All optimizations are reversible — nothing permanent',
-    }]
-  }
-  return [{
-    id: 'consent-check',
-    name: 'User consent',
-    description: 'Verify all changes are reversible',
-    severity: 'warning',
-    category: 'restore',
-    passed: false,
-    details: 'Some optimizations may leave permanent changes (registry tweaks)',
-    remediation: 'Create a system restore point before activation',
-  }]
+      passed: false,
+      details: 'Some optimizations may leave permanent changes (registry tweaks)',
+      remediation: 'Create a system restore point before activation',
+    },
+  ]
 }
 
-export async function auditTimerResolution(
-  originalValue: number | null,
-): Promise<GameModeAuditCheck[]> {
+export async function auditTimerResolution(originalValue: number | null): Promise<GameModeAuditCheck[]> {
   if (originalValue === null) {
-    return [{
+    return [
+      {
+        id: 'timer-resolution',
+        name: 'Timer resolution',
+        description: 'Check timer resolution was set to 0.5ms',
+        severity: 'info',
+        category: 'process',
+        passed: true,
+        details: 'Timer resolution was not modified',
+      },
+    ]
+  }
+
+  // NtSetTimerResolution(5000) sets a persistent 0.5ms resolution.
+  // We take a pre-change snapshot so we can restore on app restart.
+  return [
+    {
       id: 'timer-resolution',
       name: 'Timer resolution',
       description: 'Check timer resolution was set to 0.5ms',
       severity: 'info',
       category: 'process',
       passed: true,
-      details: 'Timer resolution was not modified',
-    }]
-  }
-
-  // NtSetTimerResolution(5000) sets a persistent 0.5ms resolution.
-  // We take a pre-change snapshot so we can restore on app restart.
-  return [{
-    id: 'timer-resolution',
-    name: 'Timer resolution',
-    description: 'Check timer resolution was set to 0.5ms',
-    severity: 'info',
-    category: 'process',
-    passed: true,
-    details: 'Timer resolution set to 0.5ms via NtSetTimerResolution — snapshot saved for recovery on restart',
-  }]
+      details: 'Timer resolution set to 0.5ms via NtSetTimerResolution — snapshot saved for recovery on restart',
+    },
+  ]
 }
 
 export async function runGameModeAudit(

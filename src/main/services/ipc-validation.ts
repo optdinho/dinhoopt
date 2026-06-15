@@ -3,8 +3,7 @@
  * These guard against malformed or malicious data crossing the IPC boundary.
  */
 
-import { app } from 'electron'
-import { isAbsolute } from 'path'
+import { isAbsolute } from 'node:path'
 import type { ScanHistoryEntry } from '@shared/types'
 
 /** Validate that a partial settings object only contains expected keys and safe values */
@@ -13,11 +12,24 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   const obj = input as Record<string, unknown>
 
   const allowedTopKeys = new Set([
-    'theme', 'language',
-    'minimizeToTray', 'showNotificationOnComplete', 'showThreatNotifications',
-    'runAtStartup', 'autoUpdate', 'autoRestart', 'updateCheckIntervalHours',
-    'cleaner', 'exclusions', 'ignoredSoftwareUpdates', 'backupPath', 'windowsPackageManager',
-    'schedule', 'schedules', 'gameMode', 'registryIgnoredTweaks'
+    'theme',
+    'language',
+    'minimizeToTray',
+    'showNotificationOnComplete',
+    'showThreatNotifications',
+    'runAtStartup',
+    'autoUpdate',
+    'autoRestart',
+    'updateCheckIntervalHours',
+    'cleaner',
+    'exclusions',
+    'ignoredSoftwareUpdates',
+    'backupPath',
+    'windowsPackageManager',
+    'schedule',
+    'schedules',
+    'gameMode',
+    'registryIgnoredTweaks',
   ])
 
   for (const key of Object.keys(obj)) {
@@ -31,18 +43,35 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
 
   // Validate language is a safe locale code string (e.g. 'en', 'zh-CN')
   if ('language' in obj && obj.language !== undefined) {
-    if (typeof obj.language !== 'string' || obj.language.length > 10 || !/^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(obj.language)) return null
+    if (
+      typeof obj.language !== 'string' ||
+      obj.language.length > 10 ||
+      !/^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(obj.language)
+    )
+      return null
   }
 
   // Validate boolean fields have correct types
-  const boolKeys = ['minimizeToTray', 'showNotificationOnComplete', 'showThreatNotifications', 'runAtStartup', 'autoUpdate', 'autoRestart'] as const
+  const boolKeys = [
+    'minimizeToTray',
+    'showNotificationOnComplete',
+    'showThreatNotifications',
+    'runAtStartup',
+    'autoUpdate',
+    'autoRestart',
+  ] as const
   for (const bk of boolKeys) {
     if (bk in obj && obj[bk] !== undefined && typeof obj[bk] !== 'boolean') return null
   }
 
   // Validate updateCheckIntervalHours is a reasonable number
   if ('updateCheckIntervalHours' in obj && obj.updateCheckIntervalHours !== undefined) {
-    if (typeof obj.updateCheckIntervalHours !== 'number' || obj.updateCheckIntervalHours < 1 || obj.updateCheckIntervalHours > 168) return null
+    if (
+      typeof obj.updateCheckIntervalHours !== 'number' ||
+      obj.updateCheckIntervalHours < 1 ||
+      obj.updateCheckIntervalHours > 168
+    )
+      return null
   }
 
   // Validate windowsPackageManager is one of the allowed values
@@ -98,8 +127,15 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
     if (!Array.isArray(obj.schedules)) return null
     if (obj.schedules.length > 10) return null
     const validTaskTypes = new Set([
-      'cleaner:system', 'cleaner:browsers', 'cleaner:apps', 'cleaner:gaming',
-      'cleaner:recycleBin', 'cleaner:databases', 'registry', 'drivers', 'software-update'
+      'cleaner:system',
+      'cleaner:browsers',
+      'cleaner:apps',
+      'cleaner:gaming',
+      'cleaner:recycleBin',
+      'cleaner:databases',
+      'registry',
+      'drivers',
+      'software-update',
     ])
     const validFrequencies = new Set(['daily', 'weekly', 'monthly'])
     const validStatuses = new Set(['success', 'partial', 'failed', 'never'])
@@ -126,11 +162,20 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if ('cleaner' in obj && obj.cleaner !== undefined) {
     const c = obj.cleaner as Record<string, unknown>
     if (typeof c !== 'object' || c === null || Array.isArray(c)) return null
-    const allowedCleanerKeys = new Set(['skipRecentMinutes', 'secureDelete', 'closeBrowsersBeforeClean', 'createRestorePoint'])
+    const allowedCleanerKeys = new Set([
+      'skipRecentMinutes',
+      'secureDelete',
+      'closeBrowsersBeforeClean',
+      'createRestorePoint',
+    ])
     for (const key of Object.keys(c)) {
       if (!allowedCleanerKeys.has(key)) return null
     }
-    if ('skipRecentMinutes' in c && (typeof c.skipRecentMinutes !== 'number' || c.skipRecentMinutes < 0 || c.skipRecentMinutes > 525600)) return null
+    if (
+      'skipRecentMinutes' in c &&
+      (typeof c.skipRecentMinutes !== 'number' || c.skipRecentMinutes < 0 || c.skipRecentMinutes > 525600)
+    )
+      return null
     if ('secureDelete' in c && typeof c.secureDelete !== 'boolean') return null
     if ('closeBrowsersBeforeClean' in c && typeof c.closeBrowsersBeforeClean !== 'boolean') return null
     if ('createRestorePoint' in c && typeof c.createRestorePoint !== 'boolean') return null
@@ -140,14 +185,22 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if ('registryIgnoredTweaks' in obj && obj.registryIgnoredTweaks !== undefined) {
     if (!Array.isArray(obj.registryIgnoredTweaks)) return null
     if (obj.registryIgnoredTweaks.length > 200) return null
-    if (!obj.registryIgnoredTweaks.every((v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 1024)) return null
+    if (!obj.registryIgnoredTweaks.every((v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 1024))
+      return null
   }
 
   // Validate gameMode has expected shape if present
   if ('gameMode' in obj && obj.gameMode !== undefined) {
     const g = obj.gameMode as Record<string, unknown>
     if (typeof g !== 'object' || g === null || Array.isArray(g)) return null
-    const allowedGameModeKeys = new Set(['enabledOptimizations', 'customProcessKillList', 'autoDetect', 'autoDeactivate', 'customGameProcesses', 'gameProfiles'])
+    const allowedGameModeKeys = new Set([
+      'enabledOptimizations',
+      'customProcessKillList',
+      'autoDetect',
+      'autoDeactivate',
+      'customGameProcesses',
+      'gameProfiles',
+    ])
     for (const key of Object.keys(g)) {
       if (!allowedGameModeKeys.has(key)) return null
     }
@@ -155,44 +208,77 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
       if (!Array.isArray(g.enabledOptimizations)) return null
       if (g.enabledOptimizations.length > 30) return null
       const validOptIds = new Set([
-        'svc-wsearch', 'svc-sysmain', 'svc-wuauserv', 'svc-spooler', 'svc-diagtrack',
-        'proc-kill-browsers', 'proc-kill-chat', 'proc-kill-updaters', 'proc-kill-custom',
+        'svc-wsearch',
+        'svc-sysmain',
+        'svc-wuauserv',
+        'svc-spooler',
+        'svc-diagtrack',
+        'proc-kill-browsers',
+        'proc-kill-chat',
+        'proc-kill-updaters',
+        'proc-kill-custom',
         'mem-clear-standby',
-        'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep',
-        'sys-disable-game-bar', 'sys-disable-fse-opt', 'sys-disable-transparency', 'sys-timer-resolution', 'cpu-game-priority',
-        'net-flush-dns', 'net-disable-nagle'
+        'sys-focus-assist',
+        'sys-power-plan',
+        'sys-prevent-sleep',
+        'sys-disable-game-bar',
+        'sys-disable-fse-opt',
+        'sys-disable-transparency',
+        'sys-timer-resolution',
+        'cpu-game-priority',
+        'net-flush-dns',
+        'net-disable-nagle',
       ])
-      if (!g.enabledOptimizations.every((v: unknown) => typeof v === 'string' && validOptIds.has(v as string))) return null
+      if (!g.enabledOptimizations.every((v: unknown) => typeof v === 'string' && validOptIds.has(v as string)))
+        return null
     }
     if ('customProcessKillList' in g) {
       if (!Array.isArray(g.customProcessKillList)) return null
       if (g.customProcessKillList.length > 50) return null
-      if (!g.customProcessKillList.every((v: unknown) =>
-        typeof v === 'string' && v.length > 0 && v.length <= 100 &&
-        /^[A-Za-z0-9._\- ]+$/.test(v)
-      )) return null
+      if (
+        !g.customProcessKillList.every(
+          (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && /^[A-Za-z0-9._\- ]+$/.test(v),
+        )
+      )
+        return null
     }
     if ('autoDetect' in g && typeof g.autoDetect !== 'boolean') return null
     if ('autoDeactivate' in g && typeof g.autoDeactivate !== 'boolean') return null
     if ('customGameProcesses' in g) {
       if (!Array.isArray(g.customGameProcesses)) return null
       if (g.customGameProcesses.length > 50) return null
-      if (!g.customGameProcesses.every((v: unknown) =>
-        typeof v === 'string' && v.length > 0 && v.length <= 100 &&
-        /^[A-Za-z0-9._\- ]+$/.test(v)
-      )) return null
+      if (
+        !g.customGameProcesses.every(
+          (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && /^[A-Za-z0-9._\- ]+$/.test(v),
+        )
+      )
+        return null
     }
     if ('gameProfiles' in g) {
       if (typeof g.gameProfiles !== 'object' || g.gameProfiles === null || Array.isArray(g.gameProfiles)) return null
       const profileKeys = Object.keys(g.gameProfiles as Record<string, unknown>)
       if (profileKeys.length > 30) return null
       const validOptIds = new Set([
-        'svc-wsearch', 'svc-sysmain', 'svc-wuauserv', 'svc-spooler', 'svc-diagtrack',
-        'proc-kill-browsers', 'proc-kill-chat', 'proc-kill-updaters', 'proc-kill-custom',
+        'svc-wsearch',
+        'svc-sysmain',
+        'svc-wuauserv',
+        'svc-spooler',
+        'svc-diagtrack',
+        'proc-kill-browsers',
+        'proc-kill-chat',
+        'proc-kill-updaters',
+        'proc-kill-custom',
         'mem-clear-standby',
-        'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep',
-        'sys-disable-game-bar', 'sys-disable-fse-opt', 'sys-disable-transparency', 'sys-timer-resolution', 'cpu-game-priority',
-        'net-flush-dns', 'net-disable-nagle'
+        'sys-focus-assist',
+        'sys-power-plan',
+        'sys-prevent-sleep',
+        'sys-disable-game-bar',
+        'sys-disable-fse-opt',
+        'sys-disable-transparency',
+        'sys-timer-resolution',
+        'cpu-game-priority',
+        'net-flush-dns',
+        'net-disable-nagle',
       ])
       const PROCESS_NAME_RE = /^[A-Za-z0-9._\- ]+$/
       for (const key of profileKeys) {
@@ -202,9 +288,8 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
         if (typeof profile.gameName !== 'string' || profile.gameName.length > 100) return null
         if (!Array.isArray(profile.enabledOptimizations)) return null
         if (profile.enabledOptimizations.length > 30) return null
-        if (!profile.enabledOptimizations.every((v: unknown) =>
-          typeof v === 'string' && validOptIds.has(v as string)
-        )) return null
+        if (!profile.enabledOptimizations.every((v: unknown) => typeof v === 'string' && validOptIds.has(v as string)))
+          return null
       }
     }
   }
@@ -216,11 +301,7 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
  * Validate that an IPC argument is a string array within reasonable bounds.
  * Returns the validated array (filtered to strings only) or an empty array on invalid input.
  */
-export function validateStringArray(
-  input: unknown,
-  maxItems: number = 10_000,
-  maxItemLength: number = 1024
-): string[] | null {
+export function validateStringArray(input: unknown, maxItems = 10_000, maxItemLength = 1024): string[] | null {
   if (!Array.isArray(input)) return null
   if (input.length > maxItems) return null
   if (!input.every((v: unknown) => typeof v === 'string' && v.length <= maxItemLength)) return null
@@ -233,7 +314,23 @@ export function validateHistoryEntry(input: unknown): ScanHistoryEntry | null {
   const obj = input as Record<string, unknown>
 
   if (typeof obj.id !== 'string' || obj.id.length > 100) return null
-  if (!['cleaner', 'registry', 'debloater', 'network', 'drivers', 'malware', 'privacy', 'startup', 'services', 'software-update', 'compliance'].includes(obj.type as string)) return null
+  if (
+    ![
+      'cleaner',
+      'registry',
+      'debloater',
+      'network',
+      'drivers',
+      'malware',
+      'privacy',
+      'startup',
+      'services',
+      'software-update',
+      'compliance',
+      'vulnerability',
+    ].includes(obj.type as string)
+  )
+    return null
   if (typeof obj.timestamp !== 'string' || obj.timestamp.length > 50) return null
   if (typeof obj.duration !== 'number' || obj.duration < 0) return null
   if (typeof obj.totalItemsFound !== 'number') return null
@@ -247,4 +344,3 @@ export function validateHistoryEntry(input: unknown): ScanHistoryEntry | null {
 
   return obj as unknown as ScanHistoryEntry
 }
-

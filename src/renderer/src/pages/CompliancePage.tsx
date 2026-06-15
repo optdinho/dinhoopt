@@ -1,28 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import {
-  ShieldCheck,
-  ShieldAlert,
-  Lock,
-  Globe,
-  RefreshCw,
-  CheckCircle2,
-  Loader2,
-  AlertTriangle,
-  Eye,
-  Radio,
-  Cpu,
-  HardDrive,
-  Server,
-} from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { cn } from '@/lib/utils'
 import { useComplianceStore } from '@/stores/compliance-store'
 import { useHistoryStore } from '@/stores/history-store'
 import type { ComplianceCheck } from '@shared/types'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  Globe,
+  HardDrive,
+  Loader2,
+  Lock,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 interface CatDef {
   id: ComplianceCheck['category']
@@ -34,22 +30,72 @@ interface CatDef {
 }
 
 const CATEGORIES: CatDef[] = [
-  { id: 'password', labelKey: 'category.password', icon: Lock, color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.15)' },
-  { id: 'audit', labelKey: 'category.audit', icon: Eye, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' },
-  { id: 'network', labelKey: 'category.network', icon: Globe, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.15)' },
-  { id: 'update', labelKey: 'category.update', icon: RefreshCw, color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.15)' },
-  { id: 'bitlocker', labelKey: 'category.bitlocker', icon: HardDrive, color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.15)' },
-  { id: 'firewall', labelKey: 'category.firewall', icon: ShieldAlert, color: '#14b8a6', bg: 'rgba(20,184,166,0.08)', border: 'rgba(20,184,166,0.15)' },
-  { id: 'uac', labelKey: 'category.uac', icon: ShieldCheck, color: '#ec4899', bg: 'rgba(236,72,153,0.08)', border: 'rgba(236,72,153,0.15)' },
+  {
+    id: 'password',
+    labelKey: 'category.password',
+    icon: Lock,
+    color: '#ef4444',
+    bg: 'rgba(239,68,68,0.08)',
+    border: 'rgba(239,68,68,0.15)',
+  },
+  {
+    id: 'audit',
+    labelKey: 'category.audit',
+    icon: Eye,
+    color: '#f59e0b',
+    bg: 'rgba(245,158,11,0.08)',
+    border: 'rgba(245,158,11,0.15)',
+  },
+  {
+    id: 'network',
+    labelKey: 'category.network',
+    icon: Globe,
+    color: '#3b82f6',
+    bg: 'rgba(59,130,246,0.08)',
+    border: 'rgba(59,130,246,0.15)',
+  },
+  {
+    id: 'update',
+    labelKey: 'category.update',
+    icon: RefreshCw,
+    color: '#8b5cf6',
+    bg: 'rgba(139,92,246,0.08)',
+    border: 'rgba(139,92,246,0.15)',
+  },
+  {
+    id: 'bitlocker',
+    labelKey: 'category.bitlocker',
+    icon: HardDrive,
+    color: '#06b6d4',
+    bg: 'rgba(6,182,212,0.08)',
+    border: 'rgba(6,182,212,0.15)',
+  },
+  {
+    id: 'firewall',
+    labelKey: 'category.firewall',
+    icon: ShieldAlert,
+    color: '#14b8a6',
+    bg: 'rgba(20,184,166,0.08)',
+    border: 'rgba(20,184,166,0.15)',
+  },
+  {
+    id: 'uac',
+    labelKey: 'category.uac',
+    icon: ShieldCheck,
+    color: '#ec4899',
+    bg: 'rgba(236,72,153,0.08)',
+    border: 'rgba(236,72,153,0.15)',
+  },
 ]
-
-const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.id, c])) as Record<string, CatDef>
 
 function severityColor(sev: ComplianceCheck['severity']): string {
   switch (sev) {
-    case 'critical': return '#ef4444'
-    case 'warning': return '#f59e0b'
-    case 'info': return '#3b82f6'
+    case 'critical':
+      return '#ef4444'
+    case 'warning':
+      return '#f59e0b'
+    case 'info':
+      return '#3b82f6'
   }
 }
 
@@ -57,7 +103,6 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('compliance')
   const state = useComplianceStore((s) => s.state)
   const status = useComplianceStore((s) => s.status)
-  const applyResult = useComplianceStore((s) => s.applyResult)
   const expandedCategories = useComplianceStore((s) => s.expandedCategories)
   const progress = useComplianceStore((s) => s.progress)
   const addEntry = useHistoryStore((s) => s.addEntry)
@@ -100,35 +145,41 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
     }
   }, [addEntry, t])
 
-  const runApply = useCallback(async (ids: string[]) => {
-    useComplianceStore.getState().setStatus('applying')
-    try {
-      const result = await window.dinho.complianceApply(ids)
-      const updated = await window.dinho.complianceScan()
-      useComplianceStore.getState().setState(updated)
-      useComplianceStore.getState().setApplyResult(result)
-      useComplianceStore.getState().setStatus('done')
-      if (result.succeeded > 0) toast.success(t('checksApplied', { count: result.succeeded }))
-      if (result.failed > 0) toast.error(t('applyFailed'))
-    } catch {
-      useComplianceStore.getState().setStatus('done')
-      toast.error(t('applyFailed'))
-    }
-  }, [t])
+  const runApply = useCallback(
+    async (ids: string[]) => {
+      useComplianceStore.getState().setStatus('applying')
+      try {
+        const result = await window.dinho.complianceApply(ids)
+        const updated = await window.dinho.complianceScan()
+        useComplianceStore.getState().setState(updated)
+        useComplianceStore.getState().setApplyResult(result)
+        useComplianceStore.getState().setStatus('done')
+        if (result.succeeded > 0) toast.success(t('checksApplied', { count: result.succeeded }))
+        if (result.failed > 0) toast.error(t('applyFailed'))
+      } catch {
+        useComplianceStore.getState().setStatus('done')
+        toast.error(t('applyFailed'))
+      }
+    },
+    [t],
+  )
 
-  const runRevert = useCallback(async (ids: string[]) => {
-    useComplianceStore.getState().setStatus('applying')
-    try {
-      const result = await window.dinho.complianceRevert(ids)
-      const updated = await window.dinho.complianceScan()
-      useComplianceStore.getState().setState(updated)
-      useComplianceStore.getState().setApplyResult(result)
-      useComplianceStore.getState().setStatus('done')
-      if (result.succeeded > 0) toast.success(t('checksReverted', { count: result.succeeded }))
-    } catch {
-      useComplianceStore.getState().setStatus('done')
-    }
-  }, [t])
+  const runRevert = useCallback(
+    async (ids: string[]) => {
+      useComplianceStore.getState().setStatus('applying')
+      try {
+        const result = await window.dinho.complianceRevert(ids)
+        const updated = await window.dinho.complianceScan()
+        useComplianceStore.getState().setState(updated)
+        useComplianceStore.getState().setApplyResult(result)
+        useComplianceStore.getState().setStatus('done')
+        if (result.succeeded > 0) toast.success(t('checksReverted', { count: result.succeeded }))
+      } catch {
+        useComplianceStore.getState().setStatus('done')
+      }
+    },
+    [t],
+  )
 
   const checks = state?.checks ?? []
   const total = state?.total ?? 0
@@ -146,10 +197,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
     return map
   }, [checks])
 
-  const nonCompliantIds = useMemo(() =>
-    checks.filter((c) => !c.compliant).map((c) => c.id),
-    [checks],
-  )
+  const nonCompliantIds = useMemo(() => checks.filter((c) => !c.compliant).map((c) => c.id), [checks])
 
   if (!state && status === 'idle') {
     return (
@@ -161,6 +209,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
           description={t('emptyStateDescription')}
           action={
             <button
+              type="button"
               onClick={runScan}
               className="flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium transition-all hover:opacity-80"
               style={{ background: 'var(--accent)', color: '#0a0600' }}
@@ -181,6 +230,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
       {/* Scan / Fix toolbar */}
       <div className="flex items-center gap-3">
         <button
+          type="button"
           onClick={runScan}
           disabled={status === 'scanning' || status === 'applying'}
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium transition-all hover:opacity-80 disabled:opacity-40"
@@ -191,6 +241,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
         </button>
         {nonCompliantIds.length > 0 && status === 'done' && (
           <button
+            type="button"
             onClick={() => runApply(nonCompliantIds)}
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium transition-all hover:opacity-80"
             style={{ background: 'var(--accent-muted-bg)', color: 'var(--accent)' }}
@@ -203,7 +254,10 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
 
       {/* Progress */}
       {progress && (
-        <div className="flex items-center gap-3 rounded-lg px-4 py-3 text-[13px]" style={{ background: 'var(--bg-subtle)' }}>
+        <div
+          className="flex items-center gap-3 rounded-lg px-4 py-3 text-[13px]"
+          style={{ background: 'var(--bg-subtle)' }}
+        >
           <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--accent)' }} />
           <span style={{ color: 'var(--text-secondary)' }}>{progress.currentLabel}</span>
           <span className="ml-auto text-[12px]" style={{ color: 'var(--text-dim)' }}>
@@ -226,7 +280,10 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
               <p className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {t('complianceScore')}
               </p>
-              <p className="mt-1 text-[28px] font-bold" style={{ color: score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444' }}>
+              <p
+                className="mt-1 text-[28px] font-bold"
+                style={{ color: score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444' }}
+              >
                 {score}%
               </p>
               <p className="mt-1 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
@@ -235,16 +292,28 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
             </div>
             <div className="flex gap-6 text-center">
               <div>
-                <p className="text-[22px] font-bold" style={{ color: '#22c55e' }}>{compliant}</p>
-                <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{t('compliant')}</p>
+                <p className="text-[22px] font-bold" style={{ color: '#22c55e' }}>
+                  {compliant}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                  {t('compliant')}
+                </p>
               </div>
               <div>
-                <p className="text-[22px] font-bold" style={{ color: '#ef4444' }}>{nonCompliant}</p>
-                <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{t('noncompliant')}</p>
+                <p className="text-[22px] font-bold" style={{ color: '#ef4444' }}>
+                  {nonCompliant}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                  {t('noncompliant')}
+                </p>
               </div>
               <div>
-                <p className="text-[22px] font-bold" style={{ color: 'var(--text-primary)' }}>{total}</p>
-                <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{t('total')}</p>
+                <p className="text-[22px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                  {total}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                  {t('total')}
+                </p>
               </div>
             </div>
           </div>
@@ -262,6 +331,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
           return (
             <div key={cat.id}>
               <button
+                type="button"
                 onClick={() => useComplianceStore.getState().toggleCategory(cat.id)}
                 className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-[13px] font-medium transition-all hover:opacity-80"
                 style={{ background: cat.bg, border: `1px solid ${cat.border}` }}
@@ -290,7 +360,10 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
                             {check.compliant ? (
                               <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
                             ) : (
-                              <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: severityColor(check.severity) }} />
+                              <AlertTriangle
+                                className="h-4 w-4 shrink-0"
+                                style={{ color: severityColor(check.severity) }}
+                              />
                             )}
                             <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
                               {check.label}
@@ -305,7 +378,10 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
                               {t(`severity.${check.severity}`)}
                             </span>
                             {check.requiresAdmin && (
-                              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                              <span
+                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                                style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
+                              >
                                 {t('adminBadge')}
                               </span>
                             )}
@@ -325,6 +401,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
                         <div className="flex shrink-0 items-center gap-2">
                           {!check.compliant && check.reversible && (
                             <button
+                              type="button"
                               onClick={() => runApply([check.id])}
                               disabled={status === 'applying'}
                               className="rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all hover:opacity-80 disabled:opacity-40"
@@ -335,6 +412,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
                           )}
                           {check.compliant && check.reversible && (
                             <button
+                              type="button"
                               onClick={() => runRevert([check.id])}
                               disabled={status === 'applying'}
                               className="rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all hover:opacity-80 disabled:opacity-40"

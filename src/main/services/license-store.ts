@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
-import { randomBytes, createCipheriv, createDecipheriv, scryptSync } from 'crypto'
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { hostname } from 'node:os'
+import { userInfo } from 'node:os'
 
 export interface StoreOpts {
   keyFile: string
@@ -26,6 +28,30 @@ export function getMachineIdBuf(): Buffer {
 }
 
 function defaultMachineId(): Buffer {
+  const parts: string[] = []
+
+  try {
+    parts.push(hostname())
+  } catch {}
+  try {
+    parts.push(userInfo().username)
+  } catch {}
+
+  const envParts = [
+    process.env.MACHINE_GUID,
+    process.env.MACHINEID,
+    process.env.COMPUTERNAME,
+    process.env.HOSTNAME,
+  ].filter((v): v is string => !!v)
+  parts.push(...envParts)
+
+  const raw = parts.join('|')
+  const buf = Buffer.from(raw, 'utf8')
+  if (buf.length >= 32) return buf.subarray(0, 32)
+  return Buffer.concat([buf, Buffer.alloc(32 - buf.length, 0)]).slice(0, 32)
+}
+
+function legacyMachineId(): Buffer {
   const raw =
     process.env.MACHINE_GUID ||
     process.env.MACHINEID ||
@@ -42,7 +68,9 @@ function loadOrCreateSalt(saltFile: string): Buffer {
     if (existsSync(saltFile)) return readFileSync(saltFile)
   } catch {}
   const s = randomBytes(16)
-  try { writeFileSync(saltFile, s) } catch {}
+  try {
+    writeFileSync(saltFile, s)
+  } catch {}
   return s
 }
 
@@ -62,14 +90,20 @@ export function decryptLicense(payload: Buffer): string | null {
   const iv = payload.subarray(0, 12)
   const tag = payload.subarray(12, 28)
   const enc = payload.subarray(28)
-  try {
-    const key = scryptSync(getMachineIdBuf(), salt, 32)
-    const decipher = createDecipheriv('aes-256-gcm', key, iv)
-    decipher.setAuthTag(tag)
-    return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8')
-  } catch {
-    return null
+  const localSalt = salt
+  const tryDecrypt = (machineIdBuf: Buffer): string | null => {
+    try {
+      const key = scryptSync(machineIdBuf, localSalt, 32)
+      const decipher = createDecipheriv('aes-256-gcm', key, iv)
+      decipher.setAuthTag(tag)
+      return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8')
+    } catch {
+      return null
+    }
   }
+  const result = tryDecrypt(getMachineIdBuf())
+  if (result !== null) return result
+  return tryDecrypt(legacyMachineId())
 }
 
 export function readSavedKey(keyFile: string): string | null {
@@ -78,7 +112,7 @@ export function readSavedKey(keyFile: string): string | null {
     const raw = readFileSync(keyFile)
     const dec = decryptLicense(raw)
     if (dec) return dec
-    if (raw.length && raw[0] > 0 && raw[0] < 127) {
+    if (raw.length && raw[0]! > 0 && raw[0]! < 127) {
       return raw.toString('utf8').trim() || null
     }
     return null
@@ -92,5 +126,7 @@ export function writeSavedKey(keyFile: string, key: string): void {
 }
 
 export function deleteSavedKey(keyFile: string): void {
-  try { unlinkSync(keyFile) } catch {}
+  try {
+    unlinkSync(keyFile)
+  } catch {}
 }

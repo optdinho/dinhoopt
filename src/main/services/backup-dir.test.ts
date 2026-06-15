@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { homedir } from 'os'
+import { homedir } from 'node:os'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('os', () => ({
   homedir: vi.fn(() => 'C:\\Users\\testuser'),
@@ -9,7 +9,7 @@ vi.mock('./settings-store', () => ({
   getSettings: vi.fn(),
 }))
 
-import { getDefaultBackupDir, getBackupDir } from './backup-dir'
+import { getBackupDir, getDefaultBackupDir } from './backup-dir'
 import { getSettings } from './settings-store'
 
 const mockedGetSettings = vi.mocked(getSettings)
@@ -35,31 +35,37 @@ describe('getBackupDir', () => {
   it('returns configured backupPath when valid and absolute', () => {
     mockedGetSettings.mockReturnValue({
       backupPath: 'D:\\MyBackups',
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
     expect(getBackupDir()).toBe('D:\\MyBackups')
   })
 
   it('returns default when backupPath is empty string', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: '' } as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('returns default when backupPath is not a string', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: null } as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('returns default when backupPath is not absolute', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: 'relative\\path' } as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('returns default when backupPath is undefined', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({} as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('calls getSettings once', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: 'C:\\custom' } as any)
     getBackupDir()
     expect(getSettings).toHaveBeenCalledTimes(1)

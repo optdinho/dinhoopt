@@ -65,3 +65,12 @@ Use parallel execution for independent operations.
 ## Git Workflow
 
 Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, test, chore, perf
+
+## Lint Status (2026-06-13)
+
+- `noExplicitAny`: **error** (enabled Jun 13, 2026) — all violations cleaned up:
+  - 6 `catch (err: any)` → `catch (err: unknown)` in production IPC handlers
+  - 1 `app.on(... as any)` → `as never` in `src/main/index.ts`
+  - All test file instances suppressed via `// biome-ignore lint/suspicious/noExplicitAny`
+- `noConsoleLog`: **error** — all violations in main process replaced with `getLogger()`
+- Pre-existing: 476 lint errors remain (primarily `noBannedTypes`/`Function` in test files)

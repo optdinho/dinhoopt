@@ -10,8 +10,8 @@
  *  - Native tools: run via cmd /c with chcp 65001 (UTF-8 code page)
  */
 
-import { execFile, type ExecFileOptions, type ChildProcess } from 'child_process'
-import { promisify } from 'util'
+import { type ChildProcess, type ExecFileOptions, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 export { execFileAsync }
@@ -38,11 +38,16 @@ export function psArgs(script: string): string[] {
 
 /** Tools that may be invoked through cmd.exe via execNativeUtf8 */
 const ALLOWED_TOOLS = new Set([
-  'reg', 'reg.exe',
-  'netsh', 'netsh.exe',
-  'pnputil', 'pnputil.exe',
-  'schtasks', 'schtasks.exe',
-  'ipconfig', 'ipconfig.exe',
+  'reg',
+  'reg.exe',
+  'netsh',
+  'netsh.exe',
+  'pnputil',
+  'pnputil.exe',
+  'schtasks',
+  'schtasks.exe',
+  'ipconfig',
+  'ipconfig.exe',
 ])
 
 // ── Active child-process tracking ──
@@ -90,19 +95,22 @@ export function killAllChildren(): void {
 export async function execTracked(
   file: string,
   args: string[],
-  opts?: Pick<ExecFileOptions, 'windowsHide'> & { timeout?: number; signal?: AbortSignal }
+  opts?: Pick<ExecFileOptions, 'windowsHide' | 'maxBuffer'> & { timeout?: number; signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string }> {
   if (opts?.signal?.aborted) throw new Error('Operation cancelled')
   const timeoutMs = opts?.timeout ?? 15_000
   const promise = execFileAsync(file, args, {
     encoding: 'utf-8' as const,
     windowsHide: opts?.windowsHide ?? true,
+    ...(opts?.maxBuffer != null && { maxBuffer: opts.maxBuffer }),
   }) as Promise<{ stdout: string; stderr: string }> & { child?: ChildProcess }
   let killed = false
-  const cleanup = trackChild(promise.child, timeoutMs, opts?.signal, () => { killed = true })
+  const cleanup = trackChild(promise.child, timeoutMs, opts?.signal, () => {
+    killed = true
+  })
   try {
     return await promise
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (killed || opts?.signal?.aborted) throw new Error('Operation cancelled')
     throw err
   } finally {
@@ -111,7 +119,8 @@ export async function execTracked(
 }
 
 /**
- * Wrap a spawned child process with timeout and abort-signal handling
+
+Wrap a spawned child process with timeout and abort-signal handling
  * that kills the entire process tree (not just the root) on Windows.
  *
  * @returns A cleanup function to call after the promise settles.
@@ -120,7 +129,7 @@ function trackChild(
   child: ChildProcess | undefined,
   timeoutMs: number,
   signal: AbortSignal | undefined,
-  onKill: () => void
+  onKill: () => void,
 ): () => void {
   // In test environments the mock may not return a real ChildProcess.
   if (!child || typeof child.on !== 'function') return () => {}
@@ -190,7 +199,7 @@ function trackChild(
 export async function execNativeUtf8(
   tool: string,
   args: string[],
-  opts?: Pick<ExecFileOptions, 'timeout' | 'windowsHide' | 'maxBuffer'> & { signal?: AbortSignal }
+  opts?: Pick<ExecFileOptions, 'timeout' | 'windowsHide' | 'maxBuffer'> & { signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string }> {
   if (!ALLOWED_TOOLS.has(tool.toLowerCase())) {
     throw new Error(`execNativeUtf8: disallowed tool "${tool}"`)
@@ -216,14 +225,17 @@ export async function execNativeUtf8(
   // If any argument contains %, call the tool directly to avoid cmd.exe's
   // %VAR% expansion which would corrupt literal percent sequences like
   // %APPDATA%\App\app.exe stored in registry values.
-  if (args.some(a => a.includes('%'))) {
-    const promise = execFileAsync(tool, args, baseOpts) as
-      Promise<{ stdout: string; stderr: string }> & { child?: ChildProcess }
+  if (args.some((a) => a.includes('%'))) {
+    const promise = execFileAsync(tool, args, baseOpts) as Promise<{ stdout: string; stderr: string }> & {
+      child?: ChildProcess
+    }
     let killed = false
-    const cleanup = trackChild(promise.child, timeoutMs, opts?.signal, () => { killed = true })
+    const cleanup = trackChild(promise.child, timeoutMs, opts?.signal, () => {
+      killed = true
+    })
     try {
       return await promise
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (killed || opts?.signal?.aborted) throw new Error('Operation cancelled')
       throw err
     } finally {
@@ -244,7 +256,7 @@ export async function execNativeUtf8(
   const refs: string[] = []
   for (let i = 0; i < args.length; i++) {
     const key = `__KA${i}`
-    let value = args[i].replace(/"/g, '""')
+    let value = args[i]!.replace(/"/g, '""')
     const trailing = value.match(/\\+$/)
     if (trailing) value += trailing[0]
     env[key] = value
@@ -261,17 +273,20 @@ export async function execNativeUtf8(
   }) as Promise<{ stdout: string; stderr: string }> & { child?: ChildProcess }
 
   let killed = false
-  const cleanup = trackChild(promise.child, timeoutMs, opts?.signal, () => { killed = true })
+  const cleanup = trackChild(promise.child, timeoutMs, opts?.signal, () => {
+    killed = true
+  })
   try {
     return await promise
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (killed || opts?.signal?.aborted) throw new Error('Operation cancelled')
     // Replace %__KAn% placeholders in the error message with actual
     // argument values so the user sees meaningful commands, not internal
     // variable references.
-    if (err.message) {
-      err.message = err.message.replace(/"%__KA(\d+)%"/g, (_m: string, idx: string) => {
-        const i = parseInt(idx, 10)
+    const error = err as { message?: string }
+    if (error.message) {
+      error.message = error.message.replace(/"%__KA(\d+)%"/g, (_m: string, idx: string) => {
+        const i = Number.parseInt(idx, 10)
         return i < args.length ? JSON.stringify(args[i]) : _m
       })
     }

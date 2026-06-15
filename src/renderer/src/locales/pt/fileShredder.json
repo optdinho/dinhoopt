@@ -4,6 +4,8 @@
   "addFiles": "Adicionar ficheiros",
   "addFolders": "Adicionar pastas",
   "clearAll": "Limpar tudo",
+  "clearConfirmTitle": "Limpar todos os itens?",
+  "clearConfirmDesc": "Remover {{count}} itens da lista de destruição. Os ficheiros não serão destruídos.",
   "shredButton": "Destruir {{count}} itens",
   "shredButtonSingle": "Destruir 1 item",
   "cancelShred": "Cancelar",

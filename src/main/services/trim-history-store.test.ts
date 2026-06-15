@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let testDir: string
 
@@ -13,11 +13,11 @@ vi.mock('electron', () => ({
 }))
 
 import {
-  getTrimHistory,
-  getLastTrimAt,
-  setLastTrimAt,
-  isThrottled,
   _resetTrimHistoryPathCache,
+  getLastTrimAt,
+  getTrimHistory,
+  isThrottled,
+  setLastTrimAt,
 } from './trim-history-store'
 
 describe('trim-history-store', () => {
@@ -59,11 +59,7 @@ describe('trim-history-store', () => {
   })
 
   it('ignores non-numeric values in the persisted file', () => {
-    writeFileSync(
-      join(testDir, 'trim-history.json'),
-      JSON.stringify({ C: 'bad', D: 1234, E: null }),
-      'utf-8'
-    )
+    writeFileSync(join(testDir, 'trim-history.json'), JSON.stringify({ C: 'bad', D: 1234, E: null }), 'utf-8')
     expect(getTrimHistory()).toEqual({ D: 1234 })
   })
 

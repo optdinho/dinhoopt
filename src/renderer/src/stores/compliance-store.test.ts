@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { ComplianceState, ComplianceApplyResult, ComplianceScanProgress } from '@shared/types'
+import type { ComplianceApplyResult, ComplianceState } from '@shared/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useComplianceStore } from './compliance-store'
 
 const mockKudu = {
@@ -13,8 +13,30 @@ vi.stubGlobal('window', { dinho: mockKudu })
 
 const fakeState: ComplianceState = {
   checks: [
-    { id: 'uac-enabled', category: 'uac', severity: 'critical', label: 'UAC', description: 'UAC ativo', compliant: true, reversible: true, requiresAdmin: false, value: 'Ativado', expected: 'Ativado' },
-    { id: 'smb1-disabled', category: 'network', severity: 'critical', label: 'SMBv1', description: 'SMBv1 desativado', compliant: false, reversible: true, requiresAdmin: true, value: 'Ativado', expected: 'Desativado' },
+    {
+      id: 'uac-enabled',
+      category: 'uac',
+      severity: 'critical',
+      label: 'UAC',
+      description: 'UAC ativo',
+      compliant: true,
+      reversible: true,
+      requiresAdmin: false,
+      value: 'Ativado',
+      expected: 'Ativado',
+    },
+    {
+      id: 'smb1-disabled',
+      category: 'network',
+      severity: 'critical',
+      label: 'SMBv1',
+      description: 'SMBv1 desativado',
+      compliant: false,
+      reversible: true,
+      requiresAdmin: true,
+      value: 'Ativado',
+      expected: 'Desativado',
+    },
   ],
   score: 50,
   total: 2,

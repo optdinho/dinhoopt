@@ -1,10 +1,10 @@
-import { create } from 'zustand'
 import type {
-  EmptyFolderScanResult,
-  EmptyFolderScanProgress,
   EmptyFolderDeleteMode,
-  EmptyFolderDeleteResult
+  EmptyFolderDeleteResult,
+  EmptyFolderScanProgress,
+  EmptyFolderScanResult,
 } from '@shared/types'
+import { create } from 'zustand'
 
 interface EmptyFolderState {
   directory: string | null
@@ -38,12 +38,27 @@ export const useEmptyFolderStore = create<EmptyFolderState>((set, get) => ({
   directory: null,
   maxDepth: 20,
   excludePatterns: [
-    'node_modules', '$Recycle.Bin', 'System Volume Information',
-    'Chrome', 'Firefox', 'Edge', 'BraveSoftware', 'Opera', 'Vivaldi',
-    'Cache', 'Code Cache', 'GPUCache', 'ShaderCache', 'GrShaderCache', 'DawnCache',
-    'CacheStorage', 'Service Worker',
+    'node_modules',
+    '$Recycle.Bin',
+    'System Volume Information',
+    'Chrome',
+    'Firefox',
+    'Edge',
+    'BraveSoftware',
+    'Opera',
+    'Vivaldi',
+    'Cache',
+    'Code Cache',
+    'GPUCache',
+    'ShaderCache',
+    'GrShaderCache',
+    'DawnCache',
+    'CacheStorage',
+    'Service Worker',
     'IndexedDB',
-    'Crashpad', 'BrowserMetrics', 'Safe Browsing',
+    'Crashpad',
+    'BrowserMetrics',
+    'Safe Browsing',
   ],
 
   status: 'idle',
@@ -87,7 +102,7 @@ export const useEmptyFolderStore = create<EmptyFolderState>((set, get) => ({
     }
     set({
       result: { ...result, folders },
-      selectedPaths: nextSelected
+      selectedPaths: nextSelected,
     })
   },
   reset: () =>
@@ -96,6 +111,6 @@ export const useEmptyFolderStore = create<EmptyFolderState>((set, get) => ({
       progress: null,
       result: null,
       selectedPaths: new Set(),
-      deleteResult: null
-    })
+      deleteResult: null,
+    }),
 }))

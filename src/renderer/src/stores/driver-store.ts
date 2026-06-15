@@ -1,12 +1,12 @@
-import { create } from 'zustand'
 import type {
+  DriverCleanResult,
   DriverPackage,
   DriverScanProgress,
-  DriverCleanResult,
   DriverUpdate,
+  DriverUpdateInstallResult,
   DriverUpdateProgress,
-  DriverUpdateInstallResult
 } from '@shared/types'
+import { create } from 'zustand'
 
 interface DriverState {
   // Stale packages
@@ -87,17 +87,15 @@ export const useDriverStore = create<DriverState>((set, get) => ({
   setTotalStaleSize: (totalStaleSize) => set({ totalStaleSize }),
   togglePackage: (id) =>
     set((s) => ({
-      packages: s.packages.map((p) =>
-        p.id === id && !p.isCurrent ? { ...p, selected: !p.selected } : p
-      )
+      packages: s.packages.map((p) => (p.id === id && !p.isCurrent ? { ...p, selected: !p.selected } : p)),
     })),
   selectAllStale: () =>
     set((s) => ({
-      packages: s.packages.map((p) => (!p.isCurrent ? { ...p, selected: true } : p))
+      packages: s.packages.map((p) => (!p.isCurrent ? { ...p, selected: true } : p)),
     })),
   deselectAllStale: () =>
     set((s) => ({
-      packages: s.packages.map((p) => (!p.isCurrent ? { ...p, selected: false } : p))
+      packages: s.packages.map((p) => (!p.isCurrent ? { ...p, selected: false } : p)),
     })),
 
   setUpdates: (updates) => set({ updates }),
@@ -108,15 +106,15 @@ export const useDriverStore = create<DriverState>((set, get) => ({
   setUpdateError: (updateError) => set({ updateError }),
   toggleUpdate: (id) =>
     set((s) => ({
-      updates: s.updates.map((u) => (u.id === id ? { ...u, selected: !u.selected } : u))
+      updates: s.updates.map((u) => (u.id === id ? { ...u, selected: !u.selected } : u)),
     })),
   selectAllUpdates: () =>
     set((s) => ({
-      updates: s.updates.map((u) => ({ ...u, selected: true }))
+      updates: s.updates.map((u) => ({ ...u, selected: true })),
     })),
   deselectAllUpdates: () =>
     set((s) => ({
-      updates: s.updates.map((u) => ({ ...u, selected: false }))
+      updates: s.updates.map((u) => ({ ...u, selected: false })),
     })),
 
   setApplying: (applying) => set({ applying }),
@@ -137,7 +135,7 @@ export const useDriverStore = create<DriverState>((set, get) => ({
       installResult: null,
       updateError: null,
       applying: false,
-      hasScanned: false
+      hasScanned: false,
     }),
 
   scan: async () => {
@@ -151,9 +149,9 @@ export const useDriverStore = create<DriverState>((set, get) => ({
       const result = await window.dinho.driverScan()
       set({
         packages: result.packages.map((p) => ({ ...p, selected: false })),
-        totalStaleSize: result.totalSize,
+        totalStaleSize: result.totalStaleSize,
         scanning: false,
-        hasScanned: true
+        hasScanned: true,
       })
     } catch {
       set({ scanning: false })
@@ -190,7 +188,7 @@ export const useDriverStore = create<DriverState>((set, get) => ({
       set({
         updates: result.updates.map((u) => ({ ...u, selected: false })),
         updateScanning: false,
-        hasScanned: true
+        hasScanned: true,
       })
     } catch {
       set({ updateScanning: false })
@@ -213,5 +211,5 @@ export const useDriverStore = create<DriverState>((set, get) => ({
     } catch {
       set({ installing: false })
     }
-  }
+  },
 }))

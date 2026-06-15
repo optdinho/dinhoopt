@@ -1,17 +1,8 @@
+import { type CleanerType, ScanStatus } from '@shared/enums'
+import type { CleanSummaryData, ProgressData, ScanResult } from '@shared/types'
 import { create } from 'zustand'
-import type { ScanResult, ProgressData, ScanItem, CleanError } from '@shared/types'
-import { ScanStatus, CleanerType } from '@shared/enums'
 
-export interface CleanSummaryData {
-  totalCleaned: number
-  filesDeleted: number
-  filesSkipped: number
-  errors: CleanError[]
-  needsElevation: boolean
-  categories: Array<{ name: string; type: string; found: number; cleaned: number; space: number }>
-  duration: number
-  totalSizeBefore: number
-}
+export type { CleanSummaryData }
 
 const EXCLUDED_KEY = 'kudu:excluded-subcategories'
 
@@ -19,14 +10,18 @@ function loadExcluded(): Set<string> {
   try {
     const raw = localStorage.getItem(EXCLUDED_KEY)
     if (raw) return new Set(JSON.parse(raw))
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return new Set()
 }
 
 function saveExcluded(excluded: Set<string>): void {
   try {
     localStorage.setItem(EXCLUDED_KEY, JSON.stringify([...excluded]))
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 interface ScanState {
@@ -68,22 +63,22 @@ export const useScanStore = create<ScanState>((set, get) => ({
   setResults: (results) => {
     const excluded = get().excludedSubcategories
     const selected = new Set<string>()
-    results.forEach((r) =>
-      r.items.forEach((item) => {
+    for (const r of results) {
+      for (const item of r.items) {
         if (!excluded.has(r.subcategory)) selected.add(item.id)
-      })
-    )
+      }
+    }
     set({ results, selectedItems: selected })
   },
   addResults: (newResults) =>
     set((s) => {
       const excluded = s.excludedSubcategories
       const selected = new Set(s.selectedItems)
-      newResults.forEach((r) =>
-        r.items.forEach((item) => {
+      for (const r of newResults) {
+        for (const item of r.items) {
           if (!excluded.has(r.subcategory)) selected.add(item.id)
-        })
-      )
+        }
+      }
       return { results: [...s.results, ...newResults], selectedItems: selected }
     }),
   setProgress: (progress) => set({ progress }),
@@ -115,10 +110,10 @@ export const useScanStore = create<ScanState>((set, get) => ({
       const excluded = new Set(s.excludedSubcategories)
       const allSelected = result.items.every((i) => next.has(i.id))
       if (allSelected) {
-        result.items.forEach((i) => next.delete(i.id))
+        for (const i of result.items) next.delete(i.id)
         excluded.add(result.subcategory)
       } else {
-        result.items.forEach((i) => next.add(i.id))
+        for (const i of result.items) next.add(i.id)
         excluded.delete(result.subcategory)
       }
       saveExcluded(excluded)
@@ -128,12 +123,11 @@ export const useScanStore = create<ScanState>((set, get) => ({
     set((s) => {
       const next = new Set(s.selectedItems)
       const excluded = new Set(s.excludedSubcategories)
-      s.results
-        .filter((r) => r.category === category)
-        .forEach((r) => {
-          r.items.forEach((item) => next.add(item.id))
-          excluded.delete(r.subcategory)
-        })
+      for (const r of s.results) {
+        if (r.category !== category) continue
+        for (const item of r.items) next.add(item.id)
+        excluded.delete(r.subcategory)
+      }
       saveExcluded(excluded)
       return { selectedItems: next, excludedSubcategories: excluded }
     }),
@@ -141,20 +135,17 @@ export const useScanStore = create<ScanState>((set, get) => ({
     set((s) => {
       const next = new Set(s.selectedItems)
       const excluded = new Set(s.excludedSubcategories)
-      s.results
-        .filter((r) => r.category === category)
-        .forEach((r) => {
-          r.items.forEach((item) => next.delete(item.id))
-          excluded.add(r.subcategory)
-        })
+      for (const r of s.results) {
+        if (r.category !== category) continue
+        for (const item of r.items) next.delete(item.id)
+        excluded.add(r.subcategory)
+      }
       saveExcluded(excluded)
       return { selectedItems: next, excludedSubcategories: excluded }
     }),
   toggleCategory: (category) => {
     const state = get()
-    const categoryItems = state.results
-      .filter((r) => r.category === category)
-      .flatMap((r) => r.items)
+    const categoryItems = state.results.filter((r) => r.category === category).flatMap((r) => r.items)
     const allSelected = categoryItems.every((item) => state.selectedItems.has(item.id))
     if (allSelected) {
       state.deselectAll(category)
@@ -167,9 +158,8 @@ export const useScanStore = create<ScanState>((set, get) => ({
   getSelectedSize: () => {
     const selected = get().selectedItems
     return get().results.reduce(
-      (sum, r) =>
-        sum + r.items.filter((item) => selected.has(item.id)).reduce((s, i) => s + i.size, 0),
-      0
+      (sum, r) => sum + r.items.filter((item) => selected.has(item.id)).reduce((s, i) => s + i.size, 0),
+      0,
     )
   },
   reset: () =>
@@ -178,6 +168,6 @@ export const useScanStore = create<ScanState>((set, get) => ({
       results: [],
       selectedItems: new Set(),
       progress: null,
-      cleanSummary: null
-    })
+      cleanSummary: null,
+    }),
 }))

@@ -1,18 +1,25 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock Electron and dependencies before importing
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 const mockNotifications: any[] = []
 let mockNotifySupported = false
 
 vi.mock('electron', () => {
   class MockNotification {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     constructor(opts: any) {
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(this as any).title = opts.title
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(this as any).body = opts.body
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(this as any).show = vi.fn()
       mockNotifications.push(this)
     }
-    static isSupported() { return mockNotifySupported }
+    static isSupported() {
+      return mockNotifySupported
+    }
   }
   return {
     BrowserWindow: class {
@@ -32,26 +39,25 @@ vi.mock('./settings-store', () => ({
 
 beforeEach(() => {
   mockGetSettings.mockReset()
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   mockGetSettings.mockReturnValue({} as any)
 })
 vi.mock('./history-store', () => ({ getHistory: () => [] }))
 vi.mock('./logger', () => ({ logInfo: vi.fn(), logError: vi.fn() }))
 
+import type { DiNhoSettings, ScheduleEntry } from '@shared/types'
+import { logInfo } from './logger'
 import {
-  getNextScanTime,
+  completeScheduleRun,
   getNextRunTime,
+  getNextScanTime,
   isSameDay,
   notifyScheduledScanComplete,
-  completeScheduleRun,
   startScheduler,
   stopScheduler,
 } from './scheduler'
-import { logInfo } from './logger'
-import type { DiNhoSettings, ScheduleEntry } from '@shared/types'
 
-function makeSettings(
-  overrides: Partial<DiNhoSettings['schedule']> & { enabled?: boolean } = {}
-): DiNhoSettings {
+function makeSettings(overrides: Partial<DiNhoSettings['schedule']> & { enabled?: boolean } = {}): DiNhoSettings {
   return {
     theme: 'dark',
     language: 'en',
@@ -225,9 +231,9 @@ describe('getNextScanTime', () => {
     vi.setSystemTime(new Date('2025-06-15T07:00:00')) // Sunday
     const settings = makeSettings({ enabled: false })
     settings.schedules = [
-      makeEntry({ frequency: 'daily', hour: 20 }),    // today at 20:00
-      makeEntry({ frequency: 'daily', hour: 10 }),    // today at 10:00 (soonest)
-      makeEntry({ frequency: 'weekly', day: 3, hour: 9 }),  // Wed at 9:00
+      makeEntry({ frequency: 'daily', hour: 20 }), // today at 20:00
+      makeEntry({ frequency: 'daily', hour: 10 }), // today at 10:00 (soonest)
+      makeEntry({ frequency: 'weekly', day: 3, hour: 9 }), // Wed at 9:00
     ]
     const result = getNextScanTime(settings)!
     expect(result.getHours()).toBe(10)
@@ -239,7 +245,7 @@ describe('getNextScanTime', () => {
 
 function makeEntry(overrides: Partial<ScheduleEntry> = {}): ScheduleEntry {
   return {
-    id: 'test-' + Math.random(),
+    id: `test-${Math.random()}`,
     name: 'Test Schedule',
     enabled: true,
     frequency: 'daily',
@@ -302,6 +308,7 @@ describe('notifyScheduledScanComplete', () => {
     mockNotifications.length = 0
     mockGetSettings.mockReturnValue({
       showNotificationOnComplete: true,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
   })
 
@@ -324,6 +331,7 @@ describe('notifyScheduledScanComplete', () => {
     mockNotifySupported = true
     mockGetSettings.mockReturnValue({
       showNotificationOnComplete: false,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
     notifyScheduledScanComplete(1000, 5)
     expect(mockNotifications).toHaveLength(0)
@@ -381,12 +389,17 @@ describe('startScheduler / stopScheduler', () => {
     vi.useRealTimers()
   })
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   function mockSettingsWithSchedules(schedules: any[]) {
-    mockGetSettings.mockImplementation(() => ({
-      schedule: { enabled: false },
-      showNotificationOnComplete: false,
-      schedules,
-    }) as any)
+    mockGetSettings.mockImplementation(
+      () =>
+        ({
+          schedule: { enabled: false },
+          showNotificationOnComplete: false,
+          schedules,
+          // biome-ignore lint/suspicious/noExplicitAny: test mock
+        }) as any,
+    )
   }
 
   it('starts and stops the scheduler interval', () => {
@@ -413,10 +426,24 @@ describe('startScheduler / stopScheduler', () => {
   it('checks schedules on start (initial check)', () => {
     vi.setSystemTime(new Date('2025-06-15T12:30:00'))
     mockSettingsWithSchedules([
-      { id: 's1', name: 'Test', enabled: true, frequency: 'daily', day: 1, hour: 12, minute: 30, tasks: [], autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '' },
+      {
+        id: 's1',
+        name: 'Test',
+        enabled: true,
+        frequency: 'daily',
+        day: 1,
+        hour: 12,
+        minute: 30,
+        tasks: [],
+        autoApply: false,
+        lastRunAt: null,
+        lastRunStatus: 'never',
+        createdAt: '',
+      },
     ])
     const send = vi.fn()
     const win = { isDestroyed: () => false, webContents: { send } }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     startScheduler(() => win as any)
 
     vi.advanceTimersByTime(5000)
@@ -426,8 +453,11 @@ describe('startScheduler / stopScheduler', () => {
   })
 
   it('does not crash when checkSchedules throws', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockGetSettings.mockReturnValue(undefined as any)
-    const getMainWindow = () => { throw new Error('fail') }
+    const getMainWindow = () => {
+      throw new Error('fail')
+    }
     startScheduler(getMainWindow)
     vi.advanceTimersByTime(5000)
     vi.advanceTimersByTime(60000)
@@ -437,9 +467,22 @@ describe('startScheduler / stopScheduler', () => {
 
   it('cleans up inFlight timers on stop', () => {
     mockSettingsWithSchedules([
-      { id: 's1', name: 'Test', enabled: true, frequency: 'daily', day: 1, hour: 0, minute: 0, tasks: [], autoApply: false, lastRunAt: null, lastRunStatus: 'never' },
+      {
+        id: 's1',
+        name: 'Test',
+        enabled: true,
+        frequency: 'daily',
+        day: 1,
+        hour: 0,
+        minute: 0,
+        tasks: [],
+        autoApply: false,
+        lastRunAt: null,
+        lastRunStatus: 'never',
+      },
     ])
     const win = { isDestroyed: () => false, webContents: { send: vi.fn() } }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     startScheduler(() => win as any)
     vi.advanceTimersByTime(5000)
     stopScheduler()

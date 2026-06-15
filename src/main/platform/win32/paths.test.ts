@@ -1,7 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 // Stub os.homedir before importing the module under test
-vi.mock('os', () => ({ homedir: () => 'C:\\Users\\TestUser', tmpdir: () => 'C:\\Users\\TestUser\\AppData\\Local\\Temp' }))
+vi.mock('os', () => ({
+  homedir: () => 'C:\\Users\\TestUser',
+  tmpdir: () => 'C:\\Users\\TestUser\\AppData\\Local\\Temp',
+}))
 
 // Set deterministic env vars before import
 process.env.LOCALAPPDATA = 'C:\\Users\\TestUser\\AppData\\Local'
@@ -74,7 +77,7 @@ describe('win32 paths', () => {
     it('includes the full memory dump file', () => {
       const targets = paths.singleFileCleanTargets()
       expect(targets.length).toBeGreaterThanOrEqual(1)
-      const dumpTarget = targets.find(t => t.path.includes('MEMORY.DMP'))
+      const dumpTarget = targets.find((t) => t.path.includes('MEMORY.DMP'))
       expect(dumpTarget).toBeDefined()
       expect(dumpTarget!.subcategory).toBe('Full Memory Dump')
     })
@@ -118,7 +121,14 @@ describe('win32 paths', () => {
     })
 
     it('Chromium browsers have consistent cache dir names', () => {
-      const chromiumBrowsers = [browsers.chrome, browsers.edge, browsers.brave, browsers.vivaldi, browsers.arc, browsers.chromium]
+      const chromiumBrowsers = [
+        browsers.chrome,
+        browsers.edge,
+        browsers.brave,
+        browsers.vivaldi,
+        browsers.arc,
+        browsers.chromium,
+      ]
       for (const b of chromiumBrowsers) {
         expect(b.cache).toContain('Cache\\Cache_Data')
         expect(b.codeCache).toContain('Code Cache')
@@ -186,7 +196,7 @@ describe('win32 paths', () => {
   })
 
   describe('malwareScanDirs', () => {
-    const dirs = paths.malwareScanDirs().map(d => d.path)
+    const dirs = paths.malwareScanDirs().map((d) => d.path)
 
     it('includes user Downloads and Desktop', () => {
       expect(dirs.some((d) => d.includes('Downloads'))).toBe(true)

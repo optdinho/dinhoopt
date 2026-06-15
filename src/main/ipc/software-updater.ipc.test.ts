@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -28,8 +28,8 @@ vi.mock('../services/software-updater', () => ({
   runUpdates: (...args: unknown[]) => mockRunUpdates(...args),
 }))
 
-import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
 import type { BrowserWindow } from 'electron'
+import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -65,7 +65,16 @@ describe('software-updater IPC', () => {
 
   describe('SOFTWARE_UPDATE_CHECK', () => {
     it('delegates to checkForUpdates and returns its result', async () => {
-      const expected = { apps: [], upToDate: [], totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0, packageManagerAvailable: true, packageManagerName: 'winget' }
+      const expected = {
+        apps: [],
+        upToDate: [],
+        totalCount: 0,
+        majorCount: 0,
+        minorCount: 0,
+        patchCount: 0,
+        packageManagerAvailable: true,
+        packageManagerName: 'winget',
+      }
       mockCheckForUpdates.mockResolvedValue(expected)
 
       registerSoftwareUpdaterIpc(() => makeWindow())
@@ -74,11 +83,20 @@ describe('software-updater IPC', () => {
       expect(mockCheckForUpdates).toHaveBeenCalledOnce()
     })
 
-    it('propagates errors from checkForUpdates', async () => {
+    it('returns empty result when checkForUpdates throws', async () => {
       mockCheckForUpdates.mockRejectedValue(new Error('network failure'))
 
       registerSoftwareUpdaterIpc(() => makeWindow())
-      await expect(invoke('software-update:check')).rejects.toThrow('network failure')
+      const result = await invoke('software-update:check')
+      expect(result).toEqual({
+        apps: [],
+        totalCount: 0,
+        majorCount: 0,
+        minorCount: 0,
+        patchCount: 0,
+        packageManagerAvailable: false,
+        packageManagerName: null,
+      })
     })
   })
 
@@ -96,9 +114,9 @@ describe('software-updater IPC', () => {
       expect(result).toEqual(expected)
       expect(mockRunUpdates).toHaveBeenCalledOnce()
       // First arg: filtered IDs
-      expect(mockRunUpdates.mock.calls[0][0]).toEqual(['app1', 'app2'])
+      expect(mockRunUpdates.mock.calls[0]![0]).toEqual(['app1', 'app2'])
       // Second arg: sendProgress function
-      expect(typeof mockRunUpdates.mock.calls[0][1]).toBe('function')
+      expect(typeof mockRunUpdates.mock.calls[0]![1]).toBe('function')
     })
 
     it('returns empty result when appIds is not an array', async () => {
@@ -127,7 +145,7 @@ describe('software-updater IPC', () => {
       registerSoftwareUpdaterIpc(() => makeWindow())
 
       await invoke('software-update:run', ['valid-id', 42, '', null, 'another-valid'])
-      expect(mockRunUpdates.mock.calls[0][0]).toEqual(['valid-id', 'another-valid'])
+      expect(mockRunUpdates.mock.calls[0]![0]).toEqual(['valid-id', 'another-valid'])
     })
 
     it('filters out strings that are >= 200 characters', async () => {
@@ -137,12 +155,19 @@ describe('software-updater IPC', () => {
       const longId = 'a'.repeat(200)
       const okId = 'a'.repeat(199)
       await invoke('software-update:run', [longId, okId])
-      expect(mockRunUpdates.mock.calls[0][0]).toEqual([okId])
+      expect(mockRunUpdates.mock.calls[0]![0]).toEqual([okId])
     })
 
     it('sendProgress sends data to window via IPC', async () => {
       mockRunUpdates.mockImplementation(async (_ids: string[], sendProgress: (data: unknown) => void) => {
-        sendProgress({ phase: 'updating', current: 1, total: 2, currentApp: 'App1', percent: 50, status: 'in-progress' })
+        sendProgress({
+          phase: 'updating',
+          current: 1,
+          total: 2,
+          currentApp: 'App1',
+          percent: 50,
+          status: 'in-progress',
+        })
         return { succeeded: 1, failed: 0, errors: [] }
       })
 
@@ -150,10 +175,14 @@ describe('software-updater IPC', () => {
       registerSoftwareUpdaterIpc(() => win)
       await invoke('software-update:run', ['app1'])
 
-      expect(win.webContents.send).toHaveBeenCalledWith(
-        'software-update:progress',
-        { phase: 'updating', current: 1, total: 2, currentApp: 'App1', percent: 50, status: 'in-progress' },
-      )
+      expect(win.webContents.send).toHaveBeenCalledWith('software-update:progress', {
+        phase: 'updating',
+        current: 1,
+        total: 2,
+        currentApp: 'App1',
+        percent: 50,
+        status: 'in-progress',
+      })
     })
 
     it('sendProgress does not throw when window is null', async () => {

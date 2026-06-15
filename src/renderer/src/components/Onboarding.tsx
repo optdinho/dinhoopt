@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Rocket, Check, ChevronRight, ChevronLeft } from 'lucide-react'
-import { usePlatform } from '@/hooks/usePlatform'
 import logoSrc from '@/assets/logo.png'
+import { usePlatform } from '@/hooks/usePlatform'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Check, ChevronLeft, ChevronRight, Rocket, Sparkles } from 'lucide-react'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 interface OnboardingProps {
   onComplete: () => void
@@ -24,14 +24,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [settings, setSettings] = useState<OnboardingSettings>({
     runAtStartup: true,
     minimizeToTray: true,
-    scheduledClean: true
+    scheduledClean: true,
   })
 
   const applyAndFinish = async () => {
     try {
-      const settingsPayload: Record<string, any> = {
+      const settingsPayload: Record<string, unknown> = {
         runAtStartup: settings.runAtStartup,
-        minimizeToTray: settings.minimizeToTray
+        minimizeToTray: settings.minimizeToTray,
       }
       if (settings.scheduledClean) {
         settingsPayload.schedule = { enabled: true, frequency: 'weekly', day: 1, hour: 9 }
@@ -78,13 +78,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
         {/* Step dots */}
         <div className="mt-8 flex justify-center gap-2">
-          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => i).map((stepIdx) => (
             <div
-              key={i}
+              key={stepIdx}
               className="h-1.5 rounded-full transition-all duration-300"
               style={{
-                width: i === step ? 24 : 8,
-                background: i === step ? 'var(--accent)' : 'var(--bg-active)'
+                width: stepIdx === step ? 24 : 8,
+                background: stepIdx === step ? 'var(--accent)' : 'var(--bg-active)',
               }}
             />
           ))}
@@ -107,7 +107,7 @@ function StepWrapper({ children }: { children: React.ReactNode }) {
   )
 }
 
-function WelcomeStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+function WelcomeStep({ onBack: _, onNext }: { onBack: () => void; onNext: () => void }) {
   const { t } = useTranslation('onboarding')
   const { platform } = usePlatform()
   const isWin = platform === 'win32'
@@ -126,6 +126,7 @@ function WelcomeStep({ onBack, onNext }: { onBack: () => void; onNext: () => voi
         </div>
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={onNext}
             className="flex items-center gap-2 rounded-xl px-8 py-3 text-[14px] font-semibold text-zinc-900 transition-opacity hover:opacity-90"
             style={{ background: 'var(--accent)' }}
@@ -141,7 +142,10 @@ function WelcomeStep({ onBack, onNext }: { onBack: () => void; onNext: () => voi
 function Feature({ icon: Icon, label }: { icon: typeof Sparkles; label: string }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--accent-muted-bg)' }}>
+      <div
+        className="flex h-10 w-10 items-center justify-center rounded-xl"
+        style={{ background: 'var(--accent-muted-bg)' }}
+      >
         <Icon className="h-4.5 w-4.5" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
       </div>
       <span className="text-[11px] font-medium text-zinc-500">{label}</span>
@@ -153,7 +157,7 @@ function SettingsStep({
   settings,
   onChange,
   onBack,
-  onNext
+  onNext,
 }: {
   settings: OnboardingSettings
   onChange: (s: OnboardingSettings) => void
@@ -167,9 +171,7 @@ function SettingsStep({
     <StepWrapper>
       <div>
         <h2 className="mb-1 text-[18px] font-bold text-zinc-100">{t('recommendedSetupTitle')}</h2>
-        <p className="mb-6 text-[13px] text-zinc-500">
-          {t('recommendedSetupDescription')}
-        </p>
+        <p className="mb-6 text-[13px] text-zinc-500">{t('recommendedSetupDescription')}</p>
 
         <div className="space-y-1">
           <SettingRow
@@ -195,6 +197,7 @@ function SettingsStep({
 
         <div className="mt-6 flex items-center justify-between">
           <button
+            type="button"
             onClick={onBack}
             className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-500 transition-colors"
             style={{ border: '1px solid var(--border-medium)' }}
@@ -202,6 +205,7 @@ function SettingsStep({
             <ChevronLeft className="h-3.5 w-3.5" /> {t('back')}
           </button>
           <button
+            type="button"
             onClick={onNext}
             className="flex items-center gap-2 rounded-xl px-6 py-2.5 text-[14px] font-semibold text-zinc-900 transition-opacity hover:opacity-90"
             style={{ background: 'var(--accent)' }}
@@ -219,7 +223,7 @@ function SettingRow({
   desc,
   checked,
   onChange,
-  last
+  last,
 }: {
   label: string
   desc: string
@@ -232,12 +236,14 @@ function SettingRow({
       className="flex items-center justify-between rounded-xl px-4 py-3.5"
       style={{
         background: 'var(--bg-subtle)',
-        ...(last ? {} : { marginBottom: 4 })
+        ...(last ? {} : { marginBottom: 4 }),
       }}
     >
       <div className="mr-4">
         <p className="text-[13px] font-medium text-zinc-300">{label}</p>
-        <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>{desc}</p>
+        <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+          {desc}
+        </p>
       </div>
       <Toggle checked={checked} onChange={onChange} />
     </div>
@@ -247,6 +253,7 @@ function SettingRow({
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
+      type="button"
       onClick={() => onChange(!checked)}
       className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors"
       style={{ background: checked ? 'var(--accent)' : 'var(--bg-active)' }}
@@ -261,7 +268,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 function FinishStep({
   scheduledClean,
   onBack,
-  onFinish
+  onFinish,
 }: {
   scheduledClean: boolean
   onBack: () => void
@@ -278,9 +285,7 @@ function FinishStep({
           <Check className="h-8 w-8" style={{ color: '#22c55e' }} strokeWidth={1.8} />
         </div>
         <h2 className="mb-2 text-[18px] font-bold text-zinc-100">{t('allSetTitle')}</h2>
-        <p className="mb-1 text-[13px] leading-relaxed text-zinc-400">
-          {t('allSetDescription')}
-        </p>
+        <p className="mb-1 text-[13px] leading-relaxed text-zinc-400">{t('allSetDescription')}</p>
         {scheduledClean && (
           <p className="text-[12px]" style={{ color: 'var(--accent)' }}>
             {t('firstScanScheduled')}
@@ -289,6 +294,7 @@ function FinishStep({
 
         <div className="mt-6 flex items-center gap-3">
           <button
+            type="button"
             onClick={onBack}
             className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-500 transition-colors"
             style={{ border: '1px solid var(--border-medium)' }}
@@ -296,6 +302,7 @@ function FinishStep({
             <ChevronLeft className="h-3.5 w-3.5" /> {t('back')}
           </button>
           <button
+            type="button"
             onClick={onFinish}
             className="flex items-center gap-2 rounded-xl px-8 py-3 text-[14px] font-semibold text-zinc-900 transition-opacity hover:opacity-90"
             style={{ background: 'var(--accent)' }}

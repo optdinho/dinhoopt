@@ -1,16 +1,44 @@
-import { ipcMain } from 'electron'
+import { homedir } from 'node:os'
+import path from 'node:path'
 import { IPC } from '@shared/channels'
-import { getPlatform } from '../platform'
-import { scanDirectory, scanFile, scanMultipleDirectories, resolveChildSubdirs, cleanItems } from '../services/file-utils'
-import { cacheItems } from '../services/scan-cache'
-import { isAdmin } from '../services/elevation'
-import type { ScanResult, CleanResult } from '@shared/types'
 import { CleanerType } from '@shared/enums'
-import type { WindowGetter } from './index'
+import type { CleanResult, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
+import { getPlatform } from '../platform'
+import { isAdmin } from '../services/elevation'
+import {
+  cleanItems,
+  resolveChildSubdirs,
+  scanDirectory,
+  scanFile,
+  scanMultipleDirectories,
+  scanWithFileMask,
+} from '../services/file-utils'
 import { validateStringArray } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
+import { cacheItems } from '../services/scan-cache'
+import type { WindowGetter } from './index'
+import { getImportedRules } from './winapp2-rules-store'
+
+function resolveWinapp2Path(template: string): string {
+  const home = homedir()
+  const vars: Record<string, string> = {
+    LOCALAPPDATA: process.env.LOCALAPPDATA || path.win32.join(home, 'AppData', 'Local'),
+    APPDATA: process.env.APPDATA || path.win32.join(home, 'AppData', 'Roaming'),
+    WINDIR: process.env.WINDIR || 'C:\\Windows',
+    PROGRAMDATA: process.env.ProgramData || 'C:\\ProgramData',
+    PROGRAMFILES: process.env.ProgramFiles || 'C:\\Program Files',
+    PROGRAMFILES_X86: process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
+    HOME: home,
+    SYSTEMDRIVE: process.env.SystemDrive || 'C:',
+  }
+  return path.win32.normalize(template.replace(/\$\{(\w+)\}/g, (_, name) => vars[name] || ''))
+}
 
 export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.SYSTEM_SCAN, async (): Promise<ScanResult[]> => {
+    const logger = getLogger()
+    logger.info('system-cleaner', 'Scanning system junk...')
     const results: ScanResult[] = []
     const category = CleanerType.System
 
@@ -19,14 +47,13 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
     const targets = platform.paths.systemCleanTargets()
     const protectedEventLogs = platform.paths.protectedEventLogs()
 
-    // Find the event logs target path for filtering
     const eventLogsTarget = targets.find((t) => t.subcategory === 'Event Log Archives')
 
-    // Skip admin-only targets when not elevated so we can report them
     const skippedForElevation: string[] = []
 
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i]
+      if (!target) continue
 
       if (target.needsAdmin && !elevated) {
         skippedForElevation.push(target.subcategory)
@@ -34,8 +61,6 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
       }
 
       try {
-        // For targets with childSubdir, scan path/*/childSubdir instead of path directly
-        // e.g. Flatpak: scan ~/.var/app/*/cache instead of ~/.var/app
         let result: ScanResult
         if (target.childSubdir) {
           const childPaths = await resolveChildSubdirs([target.path], target.childSubdir)
@@ -44,7 +69,6 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
           result = await scanDirectory(target.path, category, target.subcategory)
         }
 
-        // Exclude protected event logs so boot trace data survives cleaning
         if (eventLogsTarget && target.path === eventLogsTarget.path) {
           result.items = result.items.filter((item) => {
             const fileName = item.path.split(/[\\/]/).pop()?.toLowerCase() || ''
@@ -60,20 +84,20 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
         }
 
         const win = getWindow()
-        if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-          phase: 'scanning',
-          category,
-          currentPath: target.path,
-          progress: ((i + 1) / targets.length) * 100,
-          itemsFound: results.reduce((s, r) => s + r.itemCount, 0),
-          sizeFound: results.reduce((s, r) => s + r.totalSize, 0),
-        })
+        if (win && !win.isDestroyed())
+          win.webContents.send(IPC.SCAN_PROGRESS, {
+            phase: 'scanning',
+            category,
+            currentPath: target.path,
+            progress: ((i + 1) / targets.length) * 100,
+            itemsFound: results.reduce((s, r) => s + r.itemCount, 0),
+            sizeFound: results.reduce((s, r) => s + r.totalSize, 0),
+          })
       } catch {
-        // Skip inaccessible targets
+        getLogger().warning('system-cleaner', `Skipped inaccessible target: ${target.path}`)
       }
     }
 
-    // Scan single-file targets (e.g. full memory dump, xsession errors)
     for (const target of platform.paths.singleFileCleanTargets()) {
       try {
         const dumpResult = await scanFile(target.path, category, target.subcategory)
@@ -82,12 +106,25 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
           results.push(dumpResult)
         }
       } catch {
-        // Skip if not present
+        getLogger().warning('system-cleaner', `Single file target not present: ${target.path}`)
       }
     }
 
-    // If any targets were skipped due to missing elevation, add a marker result
-    // so the renderer can inform the user
+    // Scan imported Winapp2 rules (if any)
+    const importedRules = getImportedRules()
+    for (const rule of importedRules) {
+      try {
+        const resolvedPath = resolveWinapp2Path(rule.path)
+        const ruleResult = await scanWithFileMask(resolvedPath, rule.fileMask, rule.recurse, category, rule.subcategory)
+        if (ruleResult.items.length > 0) {
+          cacheItems(ruleResult.items)
+          results.push(ruleResult)
+        }
+      } catch {
+        getLogger().warning('system-cleaner', `Skipped Winapp2 target: ${rule.path}`)
+      }
+    }
+
     if (skippedForElevation.length > 0) {
       results.push({
         category,
@@ -99,22 +136,39 @@ export function registerSystemCleanerIpc(getWindow: WindowGetter): void {
       })
     }
 
+    const totalItems = results.reduce((s, r) => s + r.itemCount, 0)
+    const totalSize = results.reduce((s, r) => s + r.totalSize, 0)
+    logger.success(
+      'system-cleaner',
+      `Scan complete — ${totalItems} items found (${(totalSize / 1024 / 1024).toFixed(1)} MB)`,
+    )
     return results
   })
 
   ipcMain.handle(IPC.SYSTEM_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+    const logger = getLogger()
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
-    return cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
+    if (!valid) {
+      logger.warning('system-cleaner', 'Clean called with invalid item IDs')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
+    logger.info('system-cleaner', `Cleaning ${valid.length} item(s)...`)
+    const result = await cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
       const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-        phase: 'cleaning',
-        category: CleanerType.System,
-        currentPath,
-        progress: (processed / total) * 100,
-        itemsFound: total,
-        sizeFound: cleanedSize,
-      })
+      if (win && !win.isDestroyed())
+        win.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'cleaning',
+          category: CleanerType.System,
+          currentPath,
+          progress: (processed / total) * 100,
+          itemsFound: total,
+          sizeFound: cleanedSize,
+        })
     })
+    logger.success(
+      'system-cleaner',
+      `Cleaned ${result.filesDeleted} file(s) (${(result.totalCleaned / 1024 / 1024).toFixed(1)} MB)`,
+    )
+    return result
   })
 }

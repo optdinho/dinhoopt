@@ -1,5 +1,5 @@
+import type { BenchmarkProgress, BenchmarkResult } from '@shared/types'
 import { create } from 'zustand'
-import type { BenchmarkResult, BenchmarkProgress } from '@shared/types'
 
 interface BenchmarkStoreState {
   status: 'idle' | 'running' | 'done'

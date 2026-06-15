@@ -1,8 +1,8 @@
-import { describe, it, expect, afterAll, vi } from 'vitest'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { rmSync, existsSync } from 'fs'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
+import { existsSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 
 const TEST_DIR = join(tmpdir(), `kudu-test-${randomUUID()}`)
 
@@ -18,8 +18,16 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { setSettings, getSettings, flushSettings, updateRegistryIgnoredTweaks, getMalwareAllowlist, addMalwareAllowlistEntry, removeMalwareAllowlistEntry } from './settings-store'
 import type { MalwareAllowlistEntry } from '@shared/types'
+import {
+  addMalwareAllowlistEntry,
+  flushSettings,
+  getMalwareAllowlist,
+  getSettings,
+  removeMalwareAllowlistEntry,
+  setSettings,
+  updateRegistryIgnoredTweaks,
+} from './settings-store'
 
 describe('settings persistence — game mode toggle round-trip (issue #172)', () => {
   afterAll(() => {
@@ -117,7 +125,7 @@ describe('malware allowlist (false positives)', () => {
     await flushSettings()
     const list = getMalwareAllowlist()
     expect(list).toHaveLength(1)
-    expect(list[0].sha256).toBe('aaa')
+    expect(list[0]!.sha256).toBe('aaa')
   })
 
   it('de-dupes by content hash, refreshing the existing entry', async () => {

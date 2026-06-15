@@ -1,15 +1,12 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { PrivacyApplyResult, PrivacySetting, PrivacyShieldState } from '@shared/types'
 import { app } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
-import { join } from 'path'
-import type { PrivacySetting, PrivacyShieldState, PrivacyApplyResult } from '@shared/types'
 import { getPlatform } from '../platform'
 import { execNativeUtf8 } from './exec-utf8'
 
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms))
-  ])
+  return Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))])
 }
 
 interface SettingDef {
@@ -29,21 +26,27 @@ async function regQueryDword(key: string, value: string): Promise<number | null>
   try {
     const { stdout } = await execNativeUtf8('reg', ['query', key, '/v', value], { timeout: 5000, windowsHide: true })
     const match = stdout.match(new RegExp(`${value}\\s+REG_DWORD\\s+0x([0-9a-fA-F]+)`, 'i'))
-    return match ? parseInt(match[1], 16) : null
+    return match ? Number.parseInt(match[1]!, 16) : null
   } catch {
     return null
   }
 }
 
 async function regSetDword(key: string, value: string, data: number): Promise<void> {
-  await execNativeUtf8('reg', ['add', key, '/v', value, '/t', 'REG_DWORD', '/d', String(data), '/f'], { timeout: 5000, windowsHide: true })
+  await execNativeUtf8('reg', ['add', key, '/v', value, '/t', 'REG_DWORD', '/d', String(data), '/f'], {
+    timeout: 5000,
+    windowsHide: true,
+  })
 }
 
 async function isTaskActive(taskPath: string): Promise<boolean> {
   try {
-    const { stdout } = await execNativeUtf8('schtasks', ['/query', '/tn', taskPath, '/xml'], { timeout: 8000, windowsHide: true })
+    const { stdout } = await execNativeUtf8('schtasks', ['/query', '/tn', taskPath, '/xml'], {
+      timeout: 8000,
+      windowsHide: true,
+    })
     const m = stdout.match(/<Settings>[\s\S]*?<Enabled>(true|false)<\/Enabled>[\s\S]*?<\/Settings>/i)
-    if (m) return m[1].toLowerCase() === 'true'
+    if (m) return m[1]!.toLowerCase() === 'true'
     return true
   } catch {
     return false
@@ -52,7 +55,10 @@ async function isTaskActive(taskPath: string): Promise<boolean> {
 
 async function taskExists(taskPath: string): Promise<boolean> {
   try {
-    await execNativeUtf8('schtasks', ['/query', '/tn', taskPath, '/fo', 'CSV', '/nh'], { timeout: 8000, windowsHide: true })
+    await execNativeUtf8('schtasks', ['/query', '/tn', taskPath, '/fo', 'CSV', '/nh'], {
+      timeout: 8000,
+      windowsHide: true,
+    })
     return true
   } catch {
     return false
@@ -73,9 +79,7 @@ async function enableTask(taskPath: string): Promise<void> {
 }
 
 function getServiceCachePath(): string {
-  const dir = app.isPackaged
-    ? app.getPath('userData')
-    : join(app.getPath('userData'), 'Kudu-Dev')
+  const dir = app.isPackaged ? app.getPath('userData') : join(app.getPath('userData'), 'Kudu-Dev')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return join(dir, 'service-start-types.json')
 }
@@ -87,14 +91,18 @@ function loadServiceStartTypes(): Map<string, number> {
     if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
       return new Map(Object.entries(obj).filter(([, v]) => typeof v === 'number') as [string, number][])
     }
-  } catch { /* file missing or corrupt */ }
+  } catch {
+    /* file missing or corrupt */
+  }
   return new Map()
 }
 
 function saveServiceStartTypes(cache: Map<string, number>): void {
   try {
     writeFileSync(getServiceCachePath(), JSON.stringify(Object.fromEntries(cache), null, 2))
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
 }
 
 const originalServiceStartType = loadServiceStartTypes()
@@ -107,7 +115,21 @@ async function disableService(serviceName: string): Promise<void> {
       saveServiceStartTypes(originalServiceStartType)
     }
   }
-  await execNativeUtf8('reg', ['add', `HKLM\\SYSTEM\\CurrentControlSet\\Services\\${serviceName}`, '/v', 'Start', '/t', 'REG_DWORD', '/d', '4', '/f'], { timeout: 5000, windowsHide: true })
+  await execNativeUtf8(
+    'reg',
+    [
+      'add',
+      `HKLM\\SYSTEM\\CurrentControlSet\\Services\\${serviceName}`,
+      '/v',
+      'Start',
+      '/t',
+      'REG_DWORD',
+      '/d',
+      '4',
+      '/f',
+    ],
+    { timeout: 5000, windowsHide: true },
+  )
 }
 
 const KNOWN_SERVICE_DEFAULTS: Record<string, number> = {
@@ -121,9 +143,23 @@ async function enableService(serviceName: string): Promise<void> {
   let original = originalServiceStartType.get(serviceName)
   if (original === undefined) {
     const current = await regQueryDword(`HKLM\\SYSTEM\\CurrentControlSet\\Services\\${serviceName}`, 'Start')
-    original = (current !== null && current !== 4) ? current : (KNOWN_SERVICE_DEFAULTS[serviceName] ?? 3)
+    original = current !== null && current !== 4 ? current : (KNOWN_SERVICE_DEFAULTS[serviceName] ?? 3)
   }
-  await execNativeUtf8('reg', ['add', `HKLM\\SYSTEM\\CurrentControlSet\\Services\\${serviceName}`, '/v', 'Start', '/t', 'REG_DWORD', '/d', String(original), '/f'], { timeout: 5000, windowsHide: true })
+  await execNativeUtf8(
+    'reg',
+    [
+      'add',
+      `HKLM\\SYSTEM\\CurrentControlSet\\Services\\${serviceName}`,
+      '/v',
+      'Start',
+      '/t',
+      'REG_DWORD',
+      '/d',
+      String(original),
+      '/f',
+    ],
+    { timeout: 5000, windowsHide: true },
+  )
   originalServiceStartType.delete(serviceName)
   saveServiceStartTypes(originalServiceStartType)
 }
@@ -131,7 +167,7 @@ async function enableService(serviceName: string): Promise<void> {
 async function regDeleteValue(key: string, value: string): Promise<void> {
   try {
     await execNativeUtf8('reg', ['delete', key, '/v', value, '/f'], { timeout: 5000, windowsHide: true })
-  } catch (err: any) {
+  } catch (err: unknown) {
     try {
       await execNativeUtf8('reg', ['query', key, '/v', value], { timeout: 5000, windowsHide: true })
     } catch {
@@ -167,7 +203,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', 'AllowTelemetry', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', 'AllowTelemetry')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection', 'AllowTelemetry'),
   },
   {
     id: 'activity-history',
@@ -180,7 +216,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'EnableActivityFeed', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'EnableActivityFeed')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'EnableActivityFeed'),
   },
   {
     id: 'publish-activity',
@@ -193,7 +229,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'PublishUserActivities', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'PublishUserActivities')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'PublishUserActivities'),
   },
   {
     id: 'feedback-frequency',
@@ -206,7 +242,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules', 'NumberOfSIUFInPeriod', 0),
-    revert: () => regDeleteValue('HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules', 'NumberOfSIUFInPeriod')
+    revert: () => regDeleteValue('HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules', 'NumberOfSIUFInPeriod'),
   },
   {
     id: 'handwriting-telemetry',
@@ -219,7 +255,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Input\\TIPC', 'Enabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Input\\TIPC', 'Enabled', 1)
+    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Input\\TIPC', 'Enabled', 1),
   },
   {
     id: 'input-personalization',
@@ -232,7 +268,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Personalization\\Settings', 'AcceptedPrivacyPolicy', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Personalization\\Settings', 'AcceptedPrivacyPolicy', 1)
+    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Personalization\\Settings', 'AcceptedPrivacyPolicy', 1),
   },
   {
     id: 'tailored-experiences',
@@ -241,11 +277,24 @@ const SETTINGS: SettingDef[] = [
     description: 'Stop Microsoft from using diagnostic data to personalize tips and ads',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy', 'TailoredExperiencesWithDiagnosticDataEnabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy',
+        'TailoredExperiencesWithDiagnosticDataEnabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy', 'TailoredExperiencesWithDiagnosticDataEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy', 'TailoredExperiencesWithDiagnosticDataEnabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy',
+        'TailoredExperiencesWithDiagnosticDataEnabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy',
+        'TailoredExperiencesWithDiagnosticDataEnabled',
+        1,
+      ),
   },
   {
     id: 'app-launch-tracking',
@@ -254,11 +303,16 @@ const SETTINGS: SettingDef[] = [
     description: 'Stop Windows from tracking which apps you open to "improve" Start menu',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'Start_TrackProgs')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced',
+        'Start_TrackProgs',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'Start_TrackProgs', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'Start_TrackProgs', 1)
+    apply: () =>
+      regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'Start_TrackProgs', 0),
+    revert: () =>
+      regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'Start_TrackProgs', 1),
   },
   {
     id: 'advertising-id',
@@ -271,7 +325,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', 'Enabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', 'Enabled', 1)
+    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', 'Enabled', 1),
   },
   {
     id: 'suggested-content',
@@ -280,11 +334,24 @@ const SETTINGS: SettingDef[] = [
     description: 'Block Microsoft from showing app suggestions and ads in Settings',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338393Enabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SubscribedContent-338393Enabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338393Enabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338393Enabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SubscribedContent-338393Enabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SubscribedContent-338393Enabled',
+        1,
+      ),
   },
   {
     id: 'tips-notifications',
@@ -293,11 +360,24 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Windows tips, tricks, and suggestion notifications',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338389Enabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SubscribedContent-338389Enabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338389Enabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338389Enabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SubscribedContent-338389Enabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SubscribedContent-338389Enabled',
+        1,
+      ),
   },
   {
     id: 'start-suggestions',
@@ -306,11 +386,24 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable app suggestions (ads) in the Start menu',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SystemPaneSuggestionsEnabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SystemPaneSuggestionsEnabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SystemPaneSuggestionsEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SystemPaneSuggestionsEnabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SystemPaneSuggestionsEnabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SystemPaneSuggestionsEnabled',
+        1,
+      ),
   },
   {
     id: 'lock-screen-spotlight',
@@ -319,11 +412,24 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Microsoft Spotlight ads and suggestions on the lock screen',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'RotatingLockScreenEnabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'RotatingLockScreenEnabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'RotatingLockScreenEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'RotatingLockScreenEnabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'RotatingLockScreenEnabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'RotatingLockScreenEnabled',
+        1,
+      ),
   },
   {
     id: 'silently-installed-apps',
@@ -332,24 +438,50 @@ const SETTINGS: SettingDef[] = [
     description: 'Prevent Windows from automatically installing promoted apps',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SilentInstalledAppsEnabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SilentInstalledAppsEnabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SilentInstalledAppsEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SilentInstalledAppsEnabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SilentInstalledAppsEnabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'SilentInstalledAppsEnabled',
+        1,
+      ),
   },
   {
     id: 'preinstalled-apps',
     category: 'ads',
     label: 'Pre-installed App Suggestions',
-    description: 'Stop Windows from suggesting pre-installed apps you haven\'t used',
+    description: "Stop Windows from suggesting pre-installed apps you haven't used",
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'PreInstalledAppsEnabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'PreInstalledAppsEnabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'PreInstalledAppsEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'PreInstalledAppsEnabled', 1)
+    apply: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'PreInstalledAppsEnabled',
+        0,
+      ),
+    revert: () =>
+      regSetDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager',
+        'PreInstalledAppsEnabled',
+        1,
+      ),
   },
   {
     id: 'bing-start-menu',
@@ -358,11 +490,16 @@ const SETTINGS: SettingDef[] = [
     description: 'Stop search queries from being sent to Bing via Start menu',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', 'DisableSearchBoxSuggestions')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer',
+        'DisableSearchBoxSuggestions',
+      )
       return val === 1
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', 'DisableSearchBoxSuggestions', 1),
-    revert: () => regDeleteValue('HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', 'DisableSearchBoxSuggestions')
+    apply: () =>
+      regSetDword('HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', 'DisableSearchBoxSuggestions', 1),
+    revert: () =>
+      regDeleteValue('HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer', 'DisableSearchBoxSuggestions'),
   },
   {
     id: 'bing-web-search',
@@ -375,7 +512,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search', 'BingSearchEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search', 'BingSearchEnabled', 1)
+    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search', 'BingSearchEnabled', 1),
   },
   {
     id: 'cortana',
@@ -388,7 +525,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', 'AllowCortana', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', 'AllowCortana')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search', 'AllowCortana'),
   },
   {
     id: 'search-highlights',
@@ -397,11 +534,16 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable trending search suggestions and web content in search box',
     requiresAdmin: false,
     check: async () => {
-      const val = await regQueryDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings', 'IsDynamicSearchBoxEnabled')
+      const val = await regQueryDword(
+        'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings',
+        'IsDynamicSearchBoxEnabled',
+      )
       return val === 0
     },
-    apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings', 'IsDynamicSearchBoxEnabled', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings', 'IsDynamicSearchBoxEnabled', 1)
+    apply: () =>
+      regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings', 'IsDynamicSearchBoxEnabled', 0),
+    revert: () =>
+      regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SearchSettings', 'IsDynamicSearchBoxEnabled', 1),
   },
   {
     id: 'store-search-suggestions',
@@ -410,11 +552,14 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Microsoft Store search suggestions that send queries to Microsoft',
     requiresAdmin: true,
     check: async () => {
-      const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsStore', 'DisableStoreSearchSuggestions')
+      const val = await regQueryDword(
+        'HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsStore',
+        'DisableStoreSearchSuggestions',
+      )
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsStore', 'DisableStoreSearchSuggestions', 1),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsStore', 'DisableStoreSearchSuggestions')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsStore', 'DisableStoreSearchSuggestions'),
   },
   {
     id: 'clipboard-sync',
@@ -423,11 +568,14 @@ const SETTINGS: SettingDef[] = [
     description: 'Prevent clipboard data from being synced across devices via the cloud',
     requiresAdmin: true,
     check: async () => {
-      const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'AllowCrossDeviceClipboard')
+      const val = await regQueryDword(
+        'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
+        'AllowCrossDeviceClipboard',
+      )
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'AllowCrossDeviceClipboard', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'AllowCrossDeviceClipboard')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'AllowCrossDeviceClipboard'),
   },
   {
     id: 'clipboard-history',
@@ -440,7 +588,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Clipboard', 'EnableClipboardHistory', 0),
-    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Clipboard', 'EnableClipboardHistory', 1)
+    revert: () => regSetDword('HKCU\\SOFTWARE\\Microsoft\\Clipboard', 'EnableClipboardHistory', 1),
   },
   {
     id: 'settings-sync',
@@ -453,7 +601,7 @@ const SETTINGS: SettingDef[] = [
       return val === 2
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync', 'DisableSettingSync', 2),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync', 'DisableSettingSync')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync', 'DisableSettingSync'),
   },
   {
     id: 'find-my-device',
@@ -466,7 +614,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Microsoft\\MdmCommon\\SettingValues', 'LocationSyncEnabled', 0),
-    revert: () => regSetDword('HKLM\\SOFTWARE\\Microsoft\\MdmCommon\\SettingValues', 'LocationSyncEnabled', 1)
+    revert: () => regSetDword('HKLM\\SOFTWARE\\Microsoft\\MdmCommon\\SettingValues', 'LocationSyncEnabled', 1),
   },
   {
     id: 'copilot',
@@ -475,11 +623,16 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Microsoft Copilot AI assistant across Windows',
     requiresAdmin: true,
     check: async () => {
-      const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot', 'TurnOffWindowsCopilot')
+      const val = await regQueryDword(
+        'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot',
+        'TurnOffWindowsCopilot',
+      )
       return val === 1
     },
-    apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot', 'TurnOffWindowsCopilot', 1),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot', 'TurnOffWindowsCopilot')
+    apply: () =>
+      regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot', 'TurnOffWindowsCopilot', 1),
+    revert: () =>
+      regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot', 'TurnOffWindowsCopilot'),
   },
   {
     id: 'windows-recall',
@@ -488,11 +641,14 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Windows Recall AI screenshot history that captures everything on screen',
     requiresAdmin: true,
     check: async () => {
-      const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableAIDataAnalysis')
+      const val = await regQueryDword(
+        'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI',
+        'DisableAIDataAnalysis',
+      )
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableAIDataAnalysis', 1),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableAIDataAnalysis')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableAIDataAnalysis'),
   },
   {
     id: 'click-to-do',
@@ -505,7 +661,7 @@ const SETTINGS: SettingDef[] = [
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableClickToDo', 1),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableClickToDo')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableClickToDo'),
   },
   {
     id: 'ai-service-autostart',
@@ -516,7 +672,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isServiceEnabled('AiHost')),
     apply: () => disableService('AiHost'),
     revert: () => enableService('AiHost'),
-    applicable: () => serviceExists('AiHost')
+    applicable: () => serviceExists('AiHost'),
   },
   {
     id: 'edge-ai-features',
@@ -529,7 +685,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'ComposeInlineEnabled', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'ComposeInlineEnabled')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'ComposeInlineEnabled'),
   },
   {
     id: 'paint-ai',
@@ -542,7 +698,7 @@ const SETTINGS: SettingDef[] = [
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Paint', 'DisableCocreator', 1),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Paint', 'DisableCocreator')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Paint', 'DisableCocreator'),
   },
   {
     id: 'notepad-ai',
@@ -555,7 +711,7 @@ const SETTINGS: SettingDef[] = [
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsNotepad', 'DisableAIFeatures', 1),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsNotepad', 'DisableAIFeatures')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\WindowsNotepad', 'DisableAIFeatures'),
   },
   {
     id: 'service-diagtrack',
@@ -566,7 +722,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isServiceEnabled('DiagTrack')),
     apply: () => disableService('DiagTrack'),
     revert: () => enableService('DiagTrack'),
-    applicable: () => serviceExists('DiagTrack')
+    applicable: () => serviceExists('DiagTrack'),
   },
   {
     id: 'service-dmwappush',
@@ -577,7 +733,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isServiceEnabled('dmwappushservice')),
     apply: () => disableService('dmwappushservice'),
     revert: () => enableService('dmwappushservice'),
-    applicable: () => serviceExists('dmwappushservice')
+    applicable: () => serviceExists('dmwappushservice'),
   },
   {
     id: 'service-delivery-optimization',
@@ -586,11 +742,15 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Windows Update P2P sharing — stops your PC from uploading update data to other devices',
     requiresAdmin: true,
     check: async () => {
-      const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', 'DODownloadMode')
+      const val = await regQueryDword(
+        'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization',
+        'DODownloadMode',
+      )
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', 'DODownloadMode', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', 'DODownloadMode')
+    revert: () =>
+      regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization', 'DODownloadMode'),
   },
   {
     id: 'service-mapsbroker',
@@ -601,7 +761,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isServiceEnabled('MapsBroker')),
     apply: () => disableService('MapsBroker'),
     revert: () => enableService('MapsBroker'),
-    applicable: () => serviceExists('MapsBroker')
+    applicable: () => serviceExists('MapsBroker'),
   },
   {
     id: 'task-compatibility-appraiser',
@@ -609,10 +769,11 @@ const SETTINGS: SettingDef[] = [
     label: 'Compatibility Appraiser',
     description: 'Disable Microsoft telemetry collector for compatibility data',
     requiresAdmin: true,
-    check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser')),
+    check: async () =>
+      !(await isTaskActive('\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser')),
     apply: () => disableTask('\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser'),
     revert: () => enableTask('\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser'),
   },
   {
     id: 'task-program-data-updater',
@@ -623,7 +784,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater')),
     apply: () => disableTask('\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater'),
     revert: () => enableTask('\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater'),
   },
   {
     id: 'task-autochk-proxy',
@@ -634,7 +795,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Autochk\\Proxy')),
     apply: () => disableTask('\\Microsoft\\Windows\\Autochk\\Proxy'),
     revert: () => enableTask('\\Microsoft\\Windows\\Autochk\\Proxy'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Autochk\\Proxy')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Autochk\\Proxy'),
   },
   {
     id: 'task-ceip-consolidator',
@@ -642,10 +803,11 @@ const SETTINGS: SettingDef[] = [
     label: 'CEIP Consolidator',
     description: 'Disable Customer Experience Improvement Program data upload',
     requiresAdmin: true,
-    check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator')),
+    check: async () =>
+      !(await isTaskActive('\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator')),
     apply: () => disableTask('\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator'),
     revert: () => enableTask('\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator'),
   },
   {
     id: 'task-usb-ceip',
@@ -656,7 +818,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip')),
     apply: () => disableTask('\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip'),
     revert: () => enableTask('\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip'),
   },
   {
     id: 'task-disk-diagnostic',
@@ -664,10 +826,11 @@ const SETTINGS: SettingDef[] = [
     label: 'Disk Diagnostic Collector',
     description: 'Disable disk diagnostic data collection and upload',
     requiresAdmin: true,
-    check: async () => !(await isTaskActive('\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector')),
+    check: async () =>
+      !(await isTaskActive('\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector')),
     apply: () => disableTask('\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector'),
     revert: () => enableTask('\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector')
+    applicable: () => taskExists('\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector'),
   },
   {
     id: 'task-feedback-dm',
@@ -678,7 +841,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient')),
     apply: () => disableTask('\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient'),
     revert: () => enableTask('\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient'),
   },
   {
     id: 'task-maps-update',
@@ -689,7 +852,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Maps\\MapsUpdateTask')),
     apply: () => disableTask('\\Microsoft\\Windows\\Maps\\MapsUpdateTask'),
     revert: () => enableTask('\\Microsoft\\Windows\\Maps\\MapsUpdateTask'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Maps\\MapsUpdateTask')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Maps\\MapsUpdateTask'),
   },
   {
     id: 'task-maps-toast',
@@ -700,7 +863,7 @@ const SETTINGS: SettingDef[] = [
     check: async () => !(await isTaskActive('\\Microsoft\\Windows\\Maps\\MapsToastTask')),
     apply: () => disableTask('\\Microsoft\\Windows\\Maps\\MapsToastTask'),
     revert: () => enableTask('\\Microsoft\\Windows\\Maps\\MapsToastTask'),
-    applicable: () => taskExists('\\Microsoft\\Windows\\Maps\\MapsToastTask')
+    applicable: () => taskExists('\\Microsoft\\Windows\\Maps\\MapsToastTask'),
   },
   {
     id: 'edge-metrics',
@@ -713,7 +876,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'MetricsReportingEnabled', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'MetricsReportingEnabled')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'MetricsReportingEnabled'),
   },
   {
     id: 'edge-site-info',
@@ -726,7 +889,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'SendSiteInfoToImproveServices', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'SendSiteInfoToImproveServices')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'SendSiteInfoToImproveServices'),
   },
   {
     id: 'edge-personalization',
@@ -739,7 +902,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'PersonalizationReportingEnabled', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'PersonalizationReportingEnabled')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'PersonalizationReportingEnabled'),
   },
   {
     id: 'edge-copilot-cdp',
@@ -752,7 +915,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'CopilotCDPPageContext', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'CopilotCDPPageContext')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'CopilotCDPPageContext'),
   },
   {
     id: 'edge-copilot-page',
@@ -765,7 +928,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'CopilotPageContext', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'CopilotPageContext')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'CopilotPageContext'),
   },
   {
     id: 'edge-discover',
@@ -778,7 +941,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'DiscoverPageContextEnabled', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'DiscoverPageContextEnabled')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'DiscoverPageContextEnabled'),
   },
   {
     id: 'edge-sidebar',
@@ -791,7 +954,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'HubsSidebarEnabled', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'HubsSidebarEnabled')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'HubsSidebarEnabled'),
   },
   {
     id: 'edge-shopping',
@@ -804,7 +967,7 @@ const SETTINGS: SettingDef[] = [
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'EdgeShoppingAssistantEnabled', 0),
-    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'EdgeShoppingAssistantEnabled')
+    revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge', 'EdgeShoppingAssistantEnabled'),
   },
   {
     id: 'chrome-metrics',
@@ -813,13 +976,14 @@ const SETTINGS: SettingDef[] = [
     description: 'Stop Chrome from sending usage and crash metrics to Google',
     requiresAdmin: true,
     check: async () => {
-      if (!await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')) return true
+      if (!(await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')))
+        return true
       const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'MetricsReportingEnabled')
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'MetricsReportingEnabled', 0),
     revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'MetricsReportingEnabled'),
-    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')
+    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe'),
   },
   {
     id: 'chrome-feedback',
@@ -828,13 +992,14 @@ const SETTINGS: SettingDef[] = [
     description: 'Prevent Chrome from collecting and sending user feedback data',
     requiresAdmin: true,
     check: async () => {
-      if (!await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')) return true
+      if (!(await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')))
+        return true
       const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'UserFeedbackAllowed')
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'UserFeedbackAllowed', 0),
     revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'UserFeedbackAllowed'),
-    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')
+    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe'),
   },
   {
     id: 'chrome-extended-reporting',
@@ -843,13 +1008,17 @@ const SETTINGS: SettingDef[] = [
     description: 'Stop Chrome from sending extended URL and download reports to Google',
     requiresAdmin: true,
     check: async () => {
-      if (!await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')) return true
-      const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'SafeBrowsingExtendedReportingEnabled')
+      if (!(await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')))
+        return true
+      const val = await regQueryDword(
+        'HKLM\\SOFTWARE\\Policies\\Google\\Chrome',
+        'SafeBrowsingExtendedReportingEnabled',
+      )
       return val === 0
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'SafeBrowsingExtendedReportingEnabled', 0),
     revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Google\\Chrome', 'SafeBrowsingExtendedReportingEnabled'),
-    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe')
+    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe'),
   },
   {
     id: 'firefox-telemetry',
@@ -858,13 +1027,14 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable Firefox telemetry data collection and upload to Mozilla',
     requiresAdmin: true,
     check: async () => {
-      if (!await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe')) return true
+      if (!(await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe')))
+        return true
       const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox', 'DisableTelemetry')
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox', 'DisableTelemetry', 1),
     revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox', 'DisableTelemetry'),
-    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe')
+    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe'),
   },
   {
     id: 'firefox-default-agent',
@@ -873,14 +1043,15 @@ const SETTINGS: SettingDef[] = [
     description: 'Disable the background agent that reports browser usage data to Mozilla',
     requiresAdmin: true,
     check: async () => {
-      if (!await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe')) return true
+      if (!(await isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe')))
+        return true
       const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox', 'DisableDefaultBrowserAgent')
       return val === 1
     },
     apply: () => regSetDword('HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox', 'DisableDefaultBrowserAgent', 1),
     revert: () => regDeleteValue('HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox', 'DisableDefaultBrowserAgent'),
-    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe')
-  }
+    applicable: () => isBrowserInstalled('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\firefox.exe'),
+  },
 ]
 
 export { SETTINGS as PRIVACY_SETTINGS }
@@ -891,18 +1062,26 @@ function getSettingsForPlatform(): SettingDef[] {
 }
 
 export async function scanPrivacy(
-  onProgress?: (data: { current: number; total: number; currentLabel: string; category: string }) => void
+  onProgress?: (data: { current: number; total: number; currentLabel: string; category: string }) => void,
 ): Promise<PrivacyShieldState> {
   const settingDefs = getSettingsForPlatform()
   const settings: PrivacySetting[] = []
   const total = settingDefs.length
   for (let i = 0; i < settingDefs.length; i++) {
-    const def = settingDefs[i]
+    const def = settingDefs[i]!
     onProgress?.({ current: i + 1, total, currentLabel: def.label, category: def.category })
-    const enabled = await withTimeout(def.check().catch(() => false), 10000, false)
+    const enabled = await withTimeout(
+      def.check().catch(() => false),
+      10000,
+      false,
+    )
     const hasRevert = typeof def.revert === 'function'
     const isApplicable = def.applicable
-      ? await withTimeout(def.applicable().catch(() => true), 10000, true)
+      ? await withTimeout(
+          def.applicable().catch(() => true),
+          10000,
+          true,
+        )
       : true
     const reversible = hasRevert && isApplicable
     settings.push({
@@ -913,10 +1092,10 @@ export async function scanPrivacy(
       enabled,
       reversible,
       requiresAdmin: def.requiresAdmin,
-      ...(def.dependsOn ? { dependsOn: def.dependsOn } : {})
+      ...(def.dependsOn ? { dependsOn: def.dependsOn } : {}),
     })
   }
-  const protectedCount = settings.filter(s => s.enabled).length
+  const protectedCount = settings.filter((s) => s.enabled).length
   const score = total > 0 ? Math.round((protectedCount / total) * 100) : 0
   return { settings, score, total, protected: protectedCount }
 }
@@ -927,7 +1106,7 @@ export async function applyPrivacySettings(ids: string[]): Promise<PrivacyApplyR
   let failed = 0
   const errors: PrivacyApplyResult['errors'] = []
   for (const id of ids) {
-    const def = settingDefs.find(s => s.id === id)
+    const def = settingDefs.find((s) => s.id === id)
     if (!def) continue
     try {
       await def.apply()
@@ -946,7 +1125,7 @@ export async function revertPrivacySettings(ids: string[]): Promise<PrivacyApply
   let failed = 0
   const errors: PrivacyApplyResult['errors'] = []
   for (const id of ids) {
-    const def = settingDefs.find(s => s.id === id)
+    const def = settingDefs.find((s) => s.id === id)
     if (!def || !def.revert) {
       failed++
       errors.push({ id, label: id, reason: 'Revert not supported for this setting' })

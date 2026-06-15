@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { StartupItem, StartupSafetyRating } from '@shared/types'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStartupStore } from './startup-store'
-import type { StartupItem } from '@shared/types'
 
 function makeItem(overrides: Partial<StartupItem> = {}): StartupItem {
   return {
@@ -37,24 +37,17 @@ describe('startup-store', () => {
   })
 
   it('updateItem updates a specific item by id', () => {
-    useStartupStore.getState().setItems([
-      makeItem({ id: '1', enabled: true }),
-      makeItem({ id: '2', enabled: true }),
-    ])
+    useStartupStore.getState().setItems([makeItem({ id: '1', enabled: true }), makeItem({ id: '2', enabled: true })])
 
     useStartupStore.getState().updateItem('1', { enabled: false })
 
     const items = useStartupStore.getState().items
-    expect(items[0].enabled).toBe(false)
-    expect(items[1].enabled).toBe(true)
+    expect(items[0]!.enabled).toBe(false)
+    expect(items[1]!.enabled).toBe(true)
   })
 
   it('removeItem removes the item with given id', () => {
-    useStartupStore.getState().setItems([
-      makeItem({ id: '1' }),
-      makeItem({ id: '2' }),
-      makeItem({ id: '3' }),
-    ])
+    useStartupStore.getState().setItems([makeItem({ id: '1' }), makeItem({ id: '2' }), makeItem({ id: '3' })])
 
     useStartupStore.getState().removeItem('2')
     const ids = useStartupStore.getState().items.map((i) => i.id)
@@ -89,6 +82,7 @@ describe('startup-store', () => {
   })
 
   it('setBootTrace stores trace data', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const trace = { totalBootTimeMs: 5000, items: [] } as any
     useStartupStore.getState().setBootTrace(trace)
     expect(useStartupStore.getState().bootTrace).toEqual(trace)
@@ -125,14 +119,14 @@ describe('startup-store', () => {
   })
 
   it('setSafetyRatings converts array to record', () => {
-    const ratings = [
-      { name: 'App1', rating: 'safe' as const },
-      { name: 'App2', rating: 'unsafe' as const },
+    const ratings: StartupSafetyRating[] = [
+      { name: 'App1', safetyScore: 90, description: 'ok', analyzedAt: '' },
+      { name: 'App2', safetyScore: 10, description: 'bad', analyzedAt: '' },
     ]
-    useStartupStore.getState().setSafetyRatings(ratings as any)
+    useStartupStore.getState().setSafetyRatings(ratings)
     const state = useStartupStore.getState()
-    expect(state.safetyRatings.App1?.rating).toBe('safe')
-    expect(state.safetyRatings.App2?.rating).toBe('unsafe')
+    expect(state.safetyRatings.App1?.safetyScore).toBe(90)
+    expect(state.safetyRatings.App2?.safetyScore).toBe(10)
   })
 
   it('setSafetyLoading updates safety loading flag', () => {
@@ -158,9 +152,9 @@ describe('fetchSafetyRatings', () => {
       dinho: {
         startupSafetyFetch: vi.fn().mockResolvedValue({
           ratings: [
-            { name: 'Chrome', rating: 'safe' },
-            { name: 'Discord', rating: 'unsafe' },
-          ],
+            { name: 'Chrome', safetyScore: 95, description: 'Known safe browser', analyzedAt: '2026-06-01' },
+            { name: 'Discord', safetyScore: 85, description: 'Known safe app', analyzedAt: '2026-06-01' },
+          ] satisfies StartupSafetyRating[],
         }),
       },
     })
@@ -169,8 +163,8 @@ describe('fetchSafetyRatings', () => {
 
     const state = useStartupStore.getState()
     expect(state.safetyLoading).toBe(false)
-    expect(state.safetyRatings.Chrome?.rating).toBe('safe')
-    expect(state.safetyRatings.Discord?.rating).toBe('unsafe')
+    expect(state.safetyRatings.Chrome?.safetyScore).toBe(95)
+    expect(state.safetyRatings.Discord?.safetyScore).toBe(85)
   })
 
   it('handles fetch error gracefully', async () => {

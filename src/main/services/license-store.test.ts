@@ -1,13 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import fs, { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
-import path from 'path'
-import { initStore, encryptLicense, decryptLicense, readSavedKey, writeSavedKey, deleteSavedKey } from './license-store'
+import fs, { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { decryptLicense, deleteSavedKey, encryptLicense, initStore, readSavedKey, writeSavedKey } from './license-store'
 
 const ROOT = path.join(tmpdir(), 'dinho-license-store-test')
 
 beforeEach(() => {
-  try { rmSync(ROOT, { recursive: true, force: true }) } catch {}
+  try {
+    rmSync(ROOT, { recursive: true, force: true })
+  } catch {}
   mkdirSync(ROOT, { recursive: true })
   initStore({
     keyFile: path.join(ROOT, 'remote-license.key'),
@@ -16,7 +18,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  try { rmSync(ROOT, { recursive: true, force: true }) } catch {}
+  try {
+    rmSync(ROOT, { recursive: true, force: true })
+  } catch {}
 })
 
 describe('license-store', () => {
@@ -100,5 +104,28 @@ describe('license-store', () => {
 
   it('decrypt returns null for short payload (< 36 bytes)', () => {
     expect(decryptLicense(Buffer.from('short'))).toBeNull()
+  })
+
+  it('decrypt falls back to legacy machine ID when current machine ID fails', () => {
+    const f = path.join(ROOT, 'remote-license.key')
+    // Encrypt using the legacy single-env-var algorithm
+    initStore({
+      keyFile: f,
+      saltFile: path.join(ROOT, '.store-salt'),
+      getMachineId: () => {
+        const raw = process.env.COMPUTERNAME || 'dinho-default-machine-id'
+        const buf = Buffer.from(raw, 'utf8')
+        return buf.length >= 32 ? buf.subarray(0, 32) : Buffer.concat([buf, Buffer.alloc(32 - buf.length, 0)])
+      },
+    })
+    writeSavedKey(f, 'BACKWARD-COMPAT-KEY')
+
+    // Re-init with normal machine ID (different from legacy)
+    initStore({
+      keyFile: f,
+      saltFile: path.join(ROOT, '.store-salt'),
+      getMachineId: () => Buffer.from('different-machine-id-for-test', 'utf8').slice(0, 32),
+    })
+    expect(readSavedKey(f)).toBe('BACKWARD-COMPAT-KEY')
   })
 })

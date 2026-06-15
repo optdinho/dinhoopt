@@ -1,5 +1,5 @@
+import type { TrimDriveInfo, TrimProgress, TrimRunResult } from '@shared/types'
 import { create } from 'zustand'
-import type { TrimDriveInfo, TrimRunResult, TrimProgress } from '@shared/types'
 
 export type RunState = 'idle' | 'running' | 'done' | 'failed'
 export type DriveFilter = 'all' | 'ssd' | 'needs-trim'
@@ -56,12 +56,9 @@ export const useDiskMaintenanceStore = create<DiskMaintenanceState>((set) => ({
   setSelected: (ids) => set({ selected: new Set(ids) }),
   clearSelection: () => set({ selected: new Set() }),
 
-  setRunState: (id, state) =>
-    set((s) => ({ runStates: { ...s.runStates, [id]: state } })),
-  setResult: (id, result) =>
-    set((s) => ({ results: { ...s.results, [id]: result } })),
-  setProgress: (data) =>
-    set((s) => ({ progress: { ...s.progress, [data.driveId]: data } })),
+  setRunState: (id, state) => set((s) => ({ runStates: { ...s.runStates, [id]: state } })),
+  setResult: (id, result) => set((s) => ({ results: { ...s.results, [id]: result } })),
+  setProgress: (data) => set((s) => ({ progress: { ...s.progress, [data.driveId]: data } })),
   clearProgress: () => set({ progress: {} }),
   setBatchRunning: (batchRunning) => set({ batchRunning }),
 

@@ -1,11 +1,11 @@
-import { useState, useMemo, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Search, ArrowUpDown, Zap, X } from 'lucide-react'
-import { toast } from 'sonner'
-import { cn, formatBytes } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { cn, formatBytes } from '@/lib/utils'
 import { usePerfStore } from '@/stores/perf-store'
 import type { PerfProcess } from '@shared/types'
+import { ArrowUpDown, Search, X, Zap } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 export function ProcessTable() {
   const { t } = useTranslation('performance')
@@ -33,9 +33,7 @@ export function ProcessTable() {
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
-      return sortDir === 'asc'
-        ? (aVal as number) - (bVal as number)
-        : (bVal as number) - (aVal as number)
+      return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
     })
 
     return list
@@ -57,14 +55,15 @@ export function ProcessTable() {
       setKilling(false)
       setKillTarget(null)
     }
-  }, [killTarget])
+  }, [killTarget, t])
 
   const SortHeader = ({ column, label, width }: { column: typeof sortColumn; label: string; width: string }) => (
     <button
+      type="button"
       onClick={() => setSort(column)}
       className={cn(
         'flex items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-colors',
-        sortColumn === column ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400'
+        sortColumn === column ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400',
       )}
       style={{ width }}
     >
@@ -106,7 +105,7 @@ export function ProcessTable() {
             style={{ width: 160 }}
           />
           {filter && (
-            <button onClick={() => setFilter('')}>
+            <button type="button" onClick={() => setFilter('')}>
               <X className="h-3 w-3" style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
@@ -156,13 +155,11 @@ export function ProcessTable() {
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${Math.min(100, p.cpuPercent)}%`,
-                    background: cpuBarColor(p.cpuPercent)
+                    background: cpuBarColor(p.cpuPercent),
                   }}
                 />
               </div>
-              <span className="w-10 text-right text-[11px] font-mono text-zinc-400">
-                {p.cpuPercent.toFixed(1)}
-              </span>
+              <span className="w-10 text-right text-[11px] font-mono text-zinc-400">{p.cpuPercent.toFixed(1)}</span>
             </div>
 
             {/* Memory */}
@@ -173,6 +170,7 @@ export function ProcessTable() {
             {/* Kill */}
             <div style={{ width: '10%' }} className="flex justify-end">
               <button
+                type="button"
                 onClick={() => setKillTarget(p)}
                 className="rounded-lg px-2 py-1 text-[10px] font-medium opacity-0 transition-all group-hover:opacity-100"
                 style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}

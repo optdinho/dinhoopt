@@ -1,21 +1,8 @@
-import { useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Cpu,
-  MemoryStick,
-  Wifi,
-  Timer,
-  Thermometer,
-  Zap,
-  Star,
-  Gauge,
-  RefreshCw,
-  CheckCircle2,
-  AlertTriangle,
-} from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useBenchmarkStore } from '@/stores/benchmark-store'
 import type { BenchmarkScoreClass } from '@shared/types'
+import { motion } from 'framer-motion'
+import { CheckCircle2, Cpu, Gauge, MemoryStick, RefreshCw, Star, Thermometer, Timer, Wifi, Zap } from 'lucide-react'
 
 const SCORE_COLORS: Record<BenchmarkScoreClass, string> = {
   S: '#00FF87',
@@ -41,11 +28,17 @@ function ScoreRing({ score, scoreClass }: { score: number; scoreClass: Benchmark
 
   return (
     <div className="relative flex items-center justify-center">
-      <svg width="200" height="200" className="transform -rotate-90">
+      <svg width="200" height="200" className="transform -rotate-90" role="img" aria-label="Benchmark score ring">
+        <title>Benchmark score ring</title>
         <circle cx="100" cy="100" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
         <motion.circle
-          cx="100" cy="100" r={radius} fill="none"
-          stroke={color} strokeWidth="8" strokeLinecap="round"
+          cx="100"
+          cy="100"
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: offset }}
@@ -98,29 +91,75 @@ export function BenchmarkPage() {
   const cancel = useBenchmarkStore((s) => s.cancel)
   const reset = useBenchmarkStore((s) => s.reset)
 
-  const metricCards = result ? [
-    { icon: Cpu, label: 'CPU', score: result.details.cpu.score, max: 20, detail: result.details.cpu.detail, color: '#06b6d4' },
-    { icon: MemoryStick, label: 'RAM', score: result.details.ram.score, max: 20, detail: result.details.ram.detail, color: '#22c55e' },
-    { icon: Wifi, label: 'Rede', score: result.details.network.score, max: 15, detail: result.details.network.detail, color: '#ec4899' },
-    { icon: Timer, label: 'DPC', score: result.details.latencyDpc.score, max: 25, detail: result.details.latencyDpc.detail, color: '#8b5cf6' },
-    { icon: Thermometer, label: 'Temperatura', score: result.details.temperature.score, max: 20, detail: result.details.temperature.detail, color: '#f59e0b' },
-    { icon: Star, label: 'Bônus Tweaks', score: result.details.tweakBonus.score, max: 10, detail: `${result.details.tweakBonus.applied}/${result.details.tweakBonus.total} tweaks`, color: '#14b8a6' },
-    { icon: Zap, label: 'Plano de Energia', score: result.details.powerBonus.score, max: 5, detail: result.details.powerBonus.plan, color: '#eab308' },
-  ] : []
+  const metricCards = result
+    ? [
+        {
+          icon: Cpu,
+          label: 'CPU',
+          score: result.details.cpu.score,
+          max: 20,
+          detail: result.details.cpu.detail,
+          color: '#06b6d4',
+        },
+        {
+          icon: MemoryStick,
+          label: 'RAM',
+          score: result.details.ram.score,
+          max: 20,
+          detail: result.details.ram.detail,
+          color: '#22c55e',
+        },
+        {
+          icon: Wifi,
+          label: 'Rede',
+          score: result.details.network.score,
+          max: 15,
+          detail: result.details.network.detail,
+          color: '#ec4899',
+        },
+        {
+          icon: Timer,
+          label: 'DPC',
+          score: result.details.latencyDpc.score,
+          max: 25,
+          detail: result.details.latencyDpc.detail,
+          color: '#8b5cf6',
+        },
+        {
+          icon: Thermometer,
+          label: 'Temperatura',
+          score: result.details.temperature.score,
+          max: 20,
+          detail: result.details.temperature.detail,
+          color: '#f59e0b',
+        },
+        {
+          icon: Star,
+          label: 'Bônus Tweaks',
+          score: result.details.tweakBonus.score,
+          max: 10,
+          detail: `${result.details.tweakBonus.applied}/${result.details.tweakBonus.total} tweaks`,
+          color: '#14b8a6',
+        },
+        {
+          icon: Zap,
+          label: 'Plano de Energia',
+          score: result.details.powerBonus.score,
+          max: 5,
+          detail: result.details.powerBonus.plan,
+          color: '#eab308',
+        },
+      ]
+    : []
 
   return (
     <div className="p-6">
-      <PageHeader
-        title="Benchmark Competitivo"
-        description="Avalie o desempenho do seu sistema para jogos"
-      />
+      <PageHeader title="Benchmark Competitivo" description="Avalie o desempenho do seu sistema para jogos" />
 
       <div className="mt-6 flex flex-col items-center gap-8">
         {/* Score ring */}
         <div className="relative">
-          {status === 'done' && result && (
-            <ScoreRing score={result.score} scoreClass={result.scoreClass} />
-          )}
+          {status === 'done' && result && <ScoreRing score={result.score} scoreClass={result.scoreClass} />}
           {status === 'idle' && !result && (
             <div className="flex h-[200px] w-[200px] items-center justify-center rounded-full border-2 border-dashed border-zinc-700">
               <Gauge className="h-12 w-12 text-zinc-600" />
@@ -131,7 +170,7 @@ export function BenchmarkPage() {
               <motion.div
                 className="h-16 w-16 rounded-full border-4 border-zinc-700 border-t-cyan-400"
                 animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
               />
             </div>
           )}
@@ -140,12 +179,12 @@ export function BenchmarkPage() {
         {/* Progress steps */}
         {status === 'running' && progress && (
           <div className="w-full max-w-md space-y-2">
-            {STEPS_LABELS.map((label, i) => {
-              const isActive = i === progress.step
-              const isDone = i < progress.step
+            {STEPS_LABELS.map((label, idx) => {
+              const isActive = idx === progress.step
+              const isDone = idx < progress.step
               return (
                 <div
-                  key={i}
+                  key={label}
                   className={`flex items-center gap-3 rounded-lg px-4 py-2 text-sm transition-all ${
                     isActive ? 'bg-cyan-900/10 text-cyan-300' : isDone ? 'text-zinc-500' : 'text-zinc-700'
                   }`}
@@ -156,7 +195,7 @@ export function BenchmarkPage() {
                     <motion.div
                       className="h-4 w-4 shrink-0 rounded-full border-2 border-cyan-400"
                       animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
+                      transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY }}
                     />
                   ) : (
                     <div className="h-4 w-4 shrink-0 rounded-full border-2 border-zinc-700" />
@@ -167,6 +206,7 @@ export function BenchmarkPage() {
             })}
             <div className="mt-4 flex justify-center">
               <button
+                type="button"
                 onClick={cancel}
                 className="rounded-lg border border-red-800 px-4 py-2 text-sm text-red-400 hover:bg-red-900/10"
               >
@@ -196,7 +236,9 @@ export function BenchmarkPage() {
                     <card.icon className="h-4 w-4" style={{ color: card.color }} />
                     <span className="text-xs font-medium text-zinc-400">{card.label}</span>
                   </div>
-                  <div className="text-lg font-bold text-white">{card.score}/{card.max}</div>
+                  <div className="text-lg font-bold text-white">
+                    {card.score}/{card.max}
+                  </div>
                   <div className="mt-1 text-[10px] text-zinc-600">{card.detail}</div>
                   <div className="mt-2 h-1 rounded-full bg-zinc-800">
                     <motion.div
@@ -212,7 +254,10 @@ export function BenchmarkPage() {
             </div>
 
             {/* Score total bar */}
-            <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+            <div
+              className="rounded-xl border p-5"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+            >
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm font-medium text-zinc-300">Score Total</span>
                 <span className="text-lg font-bold" style={{ color: SCORE_COLORS[result.scoreClass] }}>
@@ -232,13 +277,18 @@ export function BenchmarkPage() {
                 />
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-zinc-600">
-                <span>D</span><span>C</span><span>B</span><span>A</span><span>S</span>
+                <span>D</span>
+                <span>C</span>
+                <span>B</span>
+                <span>A</span>
+                <span>S</span>
               </div>
             </div>
 
             {/* Refresh button */}
             <div className="flex justify-center">
               <button
+                type="button"
                 onClick={reset}
                 className="flex items-center gap-2 rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:text-white"
               >
@@ -267,10 +317,12 @@ export function BenchmarkPage() {
 
         {/* Classification legend */}
         {status === 'idle' && !result && (
-          <div className="grid grid-cols-5 gap-3 text-center text-xs">
+          <div className="grid grid-cols-3 gap-3 text-center text-xs sm:grid-cols-5">
             {(['S', 'A', 'B', 'C', 'D'] as BenchmarkScoreClass[]).map((cls) => (
               <div key={cls} className="rounded-lg border border-zinc-800 p-3">
-                <div className="text-lg font-bold" style={{ color: SCORE_COLORS[cls] }}>{cls}</div>
+                <div className="text-lg font-bold" style={{ color: SCORE_COLORS[cls] }}>
+                  {cls}
+                </div>
                 <div className="text-zinc-600">
                   {cls === 'S' ? '≥ 90' : cls === 'A' ? '≥ 80' : cls === 'B' ? '≥ 70' : cls === 'C' ? '≥ 50' : '< 50'}
                 </div>

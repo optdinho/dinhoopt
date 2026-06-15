@@ -1,6 +1,7 @@
-import { cn } from '@/lib/utils'
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
+import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
+import { Skeleton } from './Skeleton'
 
 interface StatCardProps {
   icon: LucideIcon
@@ -10,6 +11,7 @@ interface StatCardProps {
   unit?: string
   variant?: 'default' | 'accent' | 'success' | 'danger'
   className?: string
+  loading?: boolean
 }
 
 const variantConfig = {
@@ -46,26 +48,26 @@ export function StatCard({
   displayValue,
   unit,
   variant = 'default',
-  className
+  className,
+  loading,
 }: StatCardProps) {
   const animatedValue = useAnimatedCounter(value)
   const config = variantConfig[variant]
 
   return (
-    <div
-      role="group"
+    <section
       aria-label={label}
       className={cn(
-        'glass-card glass-card-hover group relative overflow-hidden rounded-2xl p-5',
+        'glass-card glass-card-hover depth-mid group relative overflow-hidden rounded-2xl p-5',
         config.glowClass,
-        className
+        className,
       )}
     >
       {/* Accent line at top */}
       <div
         className="absolute inset-x-0 top-0 h-[2px]"
         style={{
-          background: `linear-gradient(90deg, transparent, ${config.accentLine}, transparent)`
+          background: `linear-gradient(90deg, transparent, ${config.accentLine}, transparent)`,
         }}
       />
 
@@ -77,13 +79,28 @@ export function StatCard({
         <Icon className="h-[18px] w-[18px]" style={{ color: config.iconColor }} strokeWidth={1.8} aria-hidden="true" />
       </div>
 
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-[24px] font-bold tracking-tight text-white">
-          {displayValue ?? Math.round(animatedValue).toLocaleString()}
-        </span>
-        {unit && <span className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>{unit}</span>}
-      </div>
-      <p className="mt-1 text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>{label}</p>
-    </div>
+      {loading ? (
+        <>
+          <Skeleton className="mb-1 h-7 w-20" />
+          <Skeleton className="mt-2 h-3 w-24" />
+        </>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[24px] font-bold tracking-tight text-white">
+              {displayValue ?? Math.round(animatedValue).toLocaleString()}
+            </span>
+            {unit && (
+              <span className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                {unit}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>
+            {label}
+          </p>
+        </>
+      )}
+    </section>
   )
 }

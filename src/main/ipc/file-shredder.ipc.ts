@@ -1,13 +1,10 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { readdir, rmdir, stat, lstat, open, rm } from 'fs/promises'
-import { join, isAbsolute, basename, resolve, normalize } from 'path'
-import { randomBytes } from 'crypto'
+import { randomBytes } from 'node:crypto'
+import { lstat, open, readdir, rm, rmdir, stat } from 'node:fs/promises'
+import { basename, isAbsolute, join, normalize, resolve } from 'node:path'
 import { IPC } from '@shared/channels'
-import type {
-  ShredderEntry,
-  ShredderProgress,
-  ShredderResult
-} from '@shared/types'
+import type { ShredderEntry, ShredderProgress, ShredderResult } from '@shared/types'
+import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
 
 let cancelled = false
@@ -15,19 +12,66 @@ let cancelled = false
 // ── Safety: paths we must never shred ──
 
 const PROTECTED_WIN32 = [
-  'windows', 'system32', 'syswow64', 'winsxs', 'program files', 'program files (x86)',
-  'programdata', 'recovery', 'boot', '$recycle.bin', 'system volume information',
-  'perflogs', 'msocache', 'config.msi', 'drivers', 'inf', 'logs',
+  'windows',
+  'system32',
+  'syswow64',
+  'winsxs',
+  'program files',
+  'program files (x86)',
+  'programdata',
+  'recovery',
+  'boot',
+  '$recycle.bin',
+  'system volume information',
+  'perflogs',
+  'msocache',
+  'config.msi',
+  'drivers',
+  'inf',
+  'logs',
 ]
 const PROTECTED_UNIX = [
-  'bin', 'sbin', 'usr', 'etc', 'var', 'lib', 'lib64', 'opt', 'boot', 'dev',
-  'proc', 'sys', 'run', 'tmp', 'snap', 'root', 'lost+found',
-  'system', 'library', 'applications', 'cores', 'private', 'volumes',
+  'bin',
+  'sbin',
+  'usr',
+  'etc',
+  'var',
+  'lib',
+  'lib64',
+  'opt',
+  'boot',
+  'dev',
+  'proc',
+  'sys',
+  'run',
+  'tmp',
+  'snap',
+  'root',
+  'lost+found',
+  'system',
+  'library',
+  'applications',
+  'cores',
+  'private',
+  'volumes',
 ]
 const PROTECTED_GENERIC = [
-  '.git', '.svn', '.hg', 'node_modules', '.npm', '.cache', '.local',
-  '__pycache__', '.venv', '.env', '.ssh', '.gnupg', '.config',
-  'appdata', '.android', '.gradle',
+  '.git',
+  '.svn',
+  '.hg',
+  'node_modules',
+  '.npm',
+  '.cache',
+  '.local',
+  '__pycache__',
+  '.venv',
+  '.env',
+  '.ssh',
+  '.gnupg',
+  '.config',
+  'appdata',
+  '.android',
+  '.gradle',
 ]
 
 function isProtectedPath(targetPath: string): boolean {
@@ -46,9 +90,10 @@ function isProtectedPath(targetPath: string): boolean {
   if (isRootLevel) return true
 
   // Check against protected name lists
-  const protectedNames = process.platform === 'win32'
-    ? [...PROTECTED_WIN32, ...PROTECTED_GENERIC]
-    : [...PROTECTED_UNIX, ...PROTECTED_GENERIC]
+  const protectedNames =
+    process.platform === 'win32'
+      ? [...PROTECTED_WIN32, ...PROTECTED_GENERIC]
+      : [...PROTECTED_UNIX, ...PROTECTED_GENERIC]
   if (protectedNames.includes(name)) return true
 
   // Never shred user profile root folders
@@ -57,7 +102,7 @@ function isProtectedPath(targetPath: string): boolean {
     const home = (process.env.HOME || process.env.USERPROFILE || '').toLowerCase().replace(/\\/g, '/')
     if (home) {
       const parent = pathLower.substring(0, pathLower.lastIndexOf('/'))
-      if (parent === home || parent === home + '/') return true
+      if (parent === home || parent === `${home}/`) return true
     }
   }
 
@@ -119,7 +164,7 @@ async function collectFiles(
   dirPath: string,
   files: string[],
   state: { depthExceeded: boolean },
-  depth: number = 0
+  depth = 0,
 ): Promise<void> {
   if (depth >= MAX_DEPTH) {
     state.depthExceeded = true
@@ -147,7 +192,7 @@ async function collectFiles(
  * only succeeds on truly empty directories — any un-shredded files that
  * were beyond the depth cutoff are safely preserved.
  */
-async function removeEmptyDirs(dirPath: string, depth: number = 0): Promise<void> {
+async function removeEmptyDirs(dirPath: string, depth = 0): Promise<void> {
   if (depth >= MAX_DEPTH) return
   try {
     const entries = await readdir(dirPath, { withFileTypes: true })
@@ -169,7 +214,7 @@ async function removeEmptyDirs(dirPath: string, depth: number = 0): Promise<void
 /**
  * Get the total size of an entry (file size, or recursive directory size).
  */
-async function getEntrySize(entryPath: string, depth: number = 0): Promise<number> {
+async function getEntrySize(entryPath: string, depth = 0): Promise<number> {
   if (depth >= MAX_DEPTH) return 0
   try {
     const stats = await lstat(entryPath)
@@ -184,7 +229,9 @@ async function getEntrySize(entryPath: string, depth: number = 0): Promise<numbe
       }
       return total
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
   return 0
 }
 
@@ -193,13 +240,16 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
   // opens as a standalone panel instead of a sheet (sidebar items like Desktop
   // are unresponsive in sheet mode).
   ipcMain.handle(IPC.SHREDDER_SELECT_FILES, async () => {
+    getLogger().info('file-shredder', 'Opening file selection dialog')
     const win = getWindow()
     if (!win) return []
     const fileOpts: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'] }
-    const result = process.platform === 'darwin'
-      ? await dialog.showOpenDialog(fileOpts)
-      : await dialog.showOpenDialog(win, fileOpts)
-    if (result.canceled || !result.filePaths.length) return []
+    const result =
+      process.platform === 'darwin' ? await dialog.showOpenDialog(fileOpts) : await dialog.showOpenDialog(win, fileOpts)
+    if (result.canceled || !result.filePaths.length) {
+      getLogger().warning('file-shredder', 'File selection cancelled or empty')
+      return []
+    }
 
     const entries: ShredderEntry[] = []
     for (const filePath of result.filePaths) {
@@ -209,21 +259,29 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
           path: filePath,
           name: filePath.split(/[\\/]/).pop() || filePath,
           size: s.size,
-          isDirectory: false
+          isDirectory: false,
         })
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
+    getLogger().success('file-shredder', `Selected ${entries.length} file(s) for shredding`)
     return entries
   })
 
   ipcMain.handle(IPC.SHREDDER_SELECT_FOLDERS, async () => {
+    getLogger().info('file-shredder', 'Opening folder selection dialog')
     const win = getWindow()
     if (!win) return []
     const folderOpts: Electron.OpenDialogOptions = { properties: ['openDirectory', 'multiSelections'] }
-    const result = process.platform === 'darwin'
-      ? await dialog.showOpenDialog(folderOpts)
-      : await dialog.showOpenDialog(win, folderOpts)
-    if (result.canceled || !result.filePaths.length) return []
+    const result =
+      process.platform === 'darwin'
+        ? await dialog.showOpenDialog(folderOpts)
+        : await dialog.showOpenDialog(win, folderOpts)
+    if (result.canceled || !result.filePaths.length) {
+      getLogger().warning('file-shredder', 'Folder selection cancelled or empty')
+      return []
+    }
 
     const entries: ShredderEntry[] = []
     for (const dirPath of result.filePaths) {
@@ -233,15 +291,19 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
           path: dirPath,
           name: dirPath.split(/[\\/]/).pop() || dirPath,
           size,
-          isDirectory: true
+          isDirectory: true,
         })
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
+    getLogger().success('file-shredder', `Selected ${entries.length} folder(s) for shredding`)
     return entries
   })
 
   // Cancel
   ipcMain.handle(IPC.SHREDDER_CANCEL, () => {
+    getLogger().warning('file-shredder', 'Shredding cancelled by user')
     cancelled = true
   })
 
@@ -250,11 +312,25 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
     cancelled = false
     const startTime = Date.now()
     const win = getWindow()
-    const emptyResult: ShredderResult = { shredded: 0, failed: 0, bytesShredded: 0, duration: 0, errors: [], cancelled: false }
+    const emptyResult: ShredderResult = {
+      shredded: 0,
+      failed: 0,
+      bytesShredded: 0,
+      duration: 0,
+      errors: [],
+      cancelled: false,
+    }
 
-    if (!Array.isArray(paths)) return emptyResult
+    if (!Array.isArray(paths)) {
+      getLogger().warning('file-shredder', 'Shred called with non-array paths')
+      return emptyResult
+    }
     const safePaths = paths.filter((p): p is string => typeof p === 'string' && isAbsolute(p))
-    if (safePaths.length === 0) return emptyResult
+    if (safePaths.length === 0) {
+      getLogger().warning('file-shredder', 'Shred called with empty or invalid paths')
+      return emptyResult
+    }
+    getLogger().info('file-shredder', `Starting shred for ${safePaths.length} path(s)`)
 
     // Reject any protected paths before doing any work
     const errors: { path: string; reason: string }[] = []
@@ -282,7 +358,9 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
         } else if (s.isFile()) {
           allFiles.push(p)
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     // Deduplicate — overlapping selections (parent + child folder, or
@@ -322,7 +400,7 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
           totalFiles: uniqueFiles.length,
           bytesShredded,
           totalBytes,
-          progress: totalBytes > 0 ? (bytesShredded / totalBytes) * 100 : 0
+          progress: totalBytes > 0 ? (bytesShredded / totalBytes) * 100 : 0,
         })
       }
 
@@ -332,9 +410,10 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
         const fileSize = fileSizes.get(filePath) || 0
         bytesShredded += fileSize
         shredded++
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const reason = err instanceof Error ? err.message : 'Unknown error'
         failed++
-        errors.push({ path: filePath, reason: err?.message || 'Unknown error' })
+        errors.push({ path: filePath, reason })
       }
     }
 
@@ -358,10 +437,17 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
       totalFiles: uniqueFiles.length,
       bytesShredded,
       totalBytes,
-      progress: wasCancelled
-        ? (totalBytes > 0 ? (bytesShredded / totalBytes) * 100 : 0)
-        : 100
+      progress: wasCancelled ? (totalBytes > 0 ? (bytesShredded / totalBytes) * 100 : 0) : 100,
     })
+
+    if (wasCancelled) {
+      getLogger().warning('file-shredder', `Shred cancelled after ${shredded} file(s), ${bytesShredded} bytes`)
+    } else {
+      getLogger().success(
+        'file-shredder',
+        `Shred complete: ${shredded} file(s), ${failed} failed, ${bytesShredded} bytes in ${Date.now() - startTime}ms`,
+      )
+    }
 
     return {
       shredded,
@@ -369,12 +455,13 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
       bytesShredded,
       duration: Date.now() - startTime,
       errors,
-      cancelled: wasCancelled
+      cancelled: wasCancelled,
     }
   })
 
   // Open file location
   ipcMain.handle(IPC.SHREDDER_OPEN_LOCATION, (_event, filePath: unknown) => {
+    getLogger().info('file-shredder', `Opening file location: ${filePath}`)
     if (typeof filePath !== 'string' || !isAbsolute(filePath)) return
     shell.showItemInFolder(filePath)
   })

@@ -1,12 +1,12 @@
-import { create } from 'zustand'
-import type {
-  WindowsService,
-  ServiceScanProgress,
-  ServiceApplyResult,
-  ServiceSafety,
-  ServiceCategory
-} from '@shared/types'
 import { isGameCompatible } from '@shared/service-safety-kb'
+import type {
+  ServiceApplyResult,
+  ServiceCategory,
+  ServiceSafety,
+  ServiceScanProgress,
+  WindowsService,
+} from '@shared/types'
+import { create } from 'zustand'
 
 interface ServiceState {
   services: WindowsService[]
@@ -75,10 +75,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   toggleService: (name) =>
     set((s) => ({
       services: s.services.map((svc) =>
-        svc.name === name && svc.safety !== 'unsafe'
-          ? { ...svc, selected: !svc.selected }
-          : svc
-      )
+        svc.name === name && svc.safety !== 'unsafe' ? { ...svc, selected: !svc.selected } : svc,
+      ),
     })),
 
   selectRecommended: (gameName?: string) =>
@@ -88,12 +86,12 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         if (svc.startType === 'Disabled') return { ...svc, selected: false }
         if (gameName && !isGameCompatible(svc.name, gameName)) return { ...svc, selected: false }
         return { ...svc, selected: true }
-      })
+      }),
     })),
 
   deselectAll: () =>
     set((s) => ({
-      services: s.services.map((svc) => ({ ...svc, selected: false }))
+      services: s.services.map((svc) => ({ ...svc, selected: false })),
     })),
 
   reset: () =>
@@ -108,7 +106,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       searchQuery: '',
       safetyFilter: 'all',
       categoryFilter: 'all',
-      statusFilter: 'all'
+      statusFilter: 'all',
     }),
 
   scan: async () => {
@@ -144,5 +142,5 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     } catch {
       set({ applying: false })
     }
-  }
+  },
 }))

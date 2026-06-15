@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileAsyncMock = vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>()
 
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 const execFileMockFn: any = vi.fn()
 execFileMockFn[Symbol.for('nodejs.util.promisify.custom')] = execFileAsyncMock
 
@@ -104,7 +105,7 @@ describe('execNativeUtf8', () => {
 
   it('passes maxBuffer when provided', async () => {
     await execNativeUtf8('reg', ['query'], { maxBuffer: 1024 * 1024 })
-    const callOpts = execFileAsyncMock.mock.calls[0][2] as { maxBuffer: number }
+    const callOpts = execFileAsyncMock.mock.calls[0]![2] as { maxBuffer: number }
     expect(callOpts.maxBuffer).toBe(1024 * 1024)
   })
 
@@ -163,8 +164,8 @@ describe('execTracked', () => {
     ctrl.abort()
     try {
       await promise
-    } catch (e: any) {
-      expect(e.message).toBe('Operation cancelled')
+    } catch (e: unknown) {
+      expect((e as Error).message).toBe('Operation cancelled')
     }
   })
 

@@ -1,24 +1,24 @@
-import { readdir, stat } from 'fs/promises'
-import { join, basename, extname } from 'path'
-import { spawn } from 'child_process'
-import { createHash, randomUUID } from 'crypto'
-import { getPlatform } from '../platform'
-import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
-import { getDirectorySize } from './file-utils'
+import { spawn } from 'node:child_process'
+import { createHash, randomUUID } from 'node:crypto'
+import { readdir, stat } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 import type { InstalledProgram, ScanItem } from '@shared/types'
-import { psUtf8, execNativeUtf8, execFileAsync } from './exec-utf8'
-import { parseRegValue as parseRegValueShared, parseRegDword as parseRegDwordShared, REGISTRY_UNINSTALL_PATHS } from './registry-utils'
+import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
+import { getPlatform } from '../platform'
+import { execFileAsync, execNativeUtf8, psUtf8 } from './exec-utf8'
+import { getDirectorySize } from './file-utils'
+import { REGISTRY_UNINSTALL_PATHS } from './registry-utils'
 export { REGISTRY_UNINSTALL_PATHS }
 
 // Re-export with the original signatures expected by consumers
 export function parseRegValue(block: string, name: string): string {
   const match = block.match(new RegExp(`\\b${name}\\s+REG_SZ\\s+(.+)`, 'i'))
-  return match ? match[1].trim() : ''
+  return match ? match[1]!.trim() : ''
 }
 
 export function parseRegDword(block: string, name: string): number {
   const match = block.match(new RegExp(`\\b${name}\\s+REG_DWORD\\s+(0x[0-9a-fA-F]+)`, 'i'))
-  return match ? parseInt(match[1], 16) : 0
+  return match ? Number.parseInt(match[1]!, 16) : 0
 }
 
 export function extractRegistryKey(block: string): string {
@@ -81,7 +81,10 @@ function getExeNames(program: InstalledProgram): string[] {
   if (program.displayIcon) {
     let iconPath = program.displayIcon
     // Remove icon index suffix like ",0" or ",-1"
-    iconPath = iconPath.replace(/,-?\d+$/, '').replace(/^"/, '').replace(/"$/, '')
+    iconPath = iconPath
+      .replace(/,-?\d+$/, '')
+      .replace(/^"/, '')
+      .replace(/"$/, '')
     if (extname(iconPath).toLowerCase() === '.exe') {
       names.push(basename(iconPath, '.exe').toLowerCase())
     }
@@ -94,7 +97,8 @@ function getExeNames(program: InstalledProgram): string[] {
   }
 
   // From DisplayName — simplified (first word, common pattern)
-  const nameLower = program.displayName.toLowerCase()
+  const nameLower = program.displayName
+    .toLowerCase()
     .replace(/\s+[\d.]+\s*$/, '') // strip trailing version
     .trim()
   if (nameLower.length >= 3) {
@@ -116,22 +120,24 @@ export async function getInstalledProgramsFull(): Promise<InstalledProgram[]> {
   if (process.platform !== 'win32') {
     const platform = getPlatform()
     const apps = await platform.commands.getInstalledApps()
-    return apps.map((app) => ({
-      id: createHash('sha256').update(`${app.name}::${app.publisher}`).digest('hex').substring(0, 16),
-      displayName: app.name,
-      publisher: app.publisher,
-      displayVersion: app.version,
-      installDate: app.installDate || '',
-      estimatedSize: (app.sizeKb || 0) * 1024,
-      installLocation: '',
-      uninstallString: '',
-      quietUninstallString: '',
-      displayIcon: '',
-      registryKey: '',
-      isSystemComponent: false,
-      isWindowsInstaller: false,
-      lastUsed: -1,
-    })).sort((a, b) => a.displayName.localeCompare(b.displayName))
+    return apps
+      .map((app) => ({
+        id: createHash('sha256').update(`${app.name}::${app.publisher}`).digest('hex').substring(0, 16),
+        displayName: app.name,
+        publisher: app.publisher,
+        displayVersion: app.version,
+        installDate: app.installDate || '',
+        estimatedSize: (app.sizeKb || 0) * 1024,
+        installLocation: '',
+        uninstallString: '',
+        quietUninstallString: '',
+        displayIcon: '',
+        registryKey: '',
+        isSystemComponent: false,
+        isWindowsInstaller: false,
+        lastUsed: -1,
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
   }
 
   const programs: InstalledProgram[] = []
@@ -142,7 +148,7 @@ export async function getInstalledProgramsFull(): Promise<InstalledProgram[]> {
 
   for (const key of REGISTRY_UNINSTALL_PATHS) {
     try {
-      const { stdout } = await execNativeUtf8('reg',['query', key, '/s'], {
+      const { stdout } = await execNativeUtf8('reg', ['query', key, '/s'], {
         timeout: 20000,
         maxBuffer: 10 * 1024 * 1024,
       })
@@ -224,12 +230,15 @@ export function splitArgs(str: string): string[] {
   let current = ''
   let inQuote = false
   for (let i = 0; i < str.length; i++) {
-    const ch = str[i]
+    const ch = str[i]!
     if (ch === '"') {
       inQuote = !inQuote
       current += ch
     } else if (/\s/.test(ch) && !inQuote) {
-      if (current) { args.push(current); current = '' }
+      if (current) {
+        args.push(current)
+        current = ''
+      }
     } else {
       current += ch
     }
@@ -266,8 +275,8 @@ export function parseUninstallCommand(program: InstalledProgram): { command: str
   // Unquoted path: try to find .exe boundary
   const exeMatch = raw.match(/^(.+?\.exe)\s*(.*)/i)
   if (exeMatch) {
-    const args = exeMatch[2] ? splitArgs(exeMatch[2].trim()) : []
-    return { command: exeMatch[1], args }
+    const args = exeMatch[2] ? splitArgs(exeMatch[2]!.trim()) : []
+    return { command: exeMatch[1]!, args }
   }
 
   // Fallback: treat whole string as command
@@ -288,10 +297,17 @@ export function runUninstaller(program: InstalledProgram): Promise<number | null
         windowsHide: false,
       })
 
-      const timeout = setTimeout(() => {
-        try { child.kill() } catch { /* already exited */ }
-        resolve(null)
-      }, 10 * 60 * 1000) // 10 minute timeout
+      const timeout = setTimeout(
+        () => {
+          try {
+            child.kill()
+          } catch {
+            /* already exited */
+          }
+          resolve(null)
+        },
+        10 * 60 * 1000,
+      ) // 10 minute timeout
 
       child.on('close', (code) => {
         clearTimeout(timeout)
@@ -313,7 +329,7 @@ export function runUninstaller(program: InstalledProgram): Promise<number | null
  */
 export async function verifyUninstall(registryKey: string): Promise<boolean> {
   try {
-    await execNativeUtf8('reg',['query', registryKey], { timeout: 5000 })
+    await execNativeUtf8('reg', ['query', registryKey], { timeout: 5000 })
     return false // key still exists = not fully uninstalled
   } catch {
     return true // key gone = uninstalled successfully
@@ -394,16 +410,20 @@ async function hasRunningProcesses(folderPaths: string[]): Promise<Set<string>> 
 
   try {
     const procScript = 'Get-Process | Where-Object { $_.Path } | Select-Object -ExpandProperty Path -Unique'
-    const { stdout } = await execFileAsync('powershell', [
-      '-NoProfile', '-NoLogo', '-Command', psUtf8(procScript),
-    ], { timeout: 10000, windowsHide: true })
+    const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NoLogo', '-Command', psUtf8(procScript)], {
+      timeout: 10000,
+      windowsHide: true,
+    })
 
-    const processPaths = stdout.split(/\r?\n/).map((p) => p.trim().toLowerCase()).filter(Boolean)
+    const processPaths = stdout
+      .split(/\r?\n/)
+      .map((p) => p.trim().toLowerCase())
+      .filter(Boolean)
 
     for (const folderPath of folderPaths) {
       const folderLower = folderPath.toLowerCase().replace(/\//g, '\\')
       for (const procPath of processPaths) {
-        if (procPath.startsWith(folderLower + '\\')) {
+        if (procPath.startsWith(`${folderLower}\\`)) {
           running.add(folderPath)
           break
         }

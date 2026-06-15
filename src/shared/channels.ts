@@ -140,12 +140,29 @@ export const IPC = {
   MALWARE_YARA_INFO: 'malware:yara:info',
   MALWARE_YARA_UPDATE: 'malware:yara:update',
   MALWARE_YARA_COMPILE_PROGRESS: 'malware:yara:compile-progress',
+  MALWARE_CANCEL_SCAN: 'malware:cancel-scan',
+  MALWARE_YARA_ROLLBACK: 'yara:rollback-update',
+
+  // File watcher
+  MALWARE_WATCHER_START: 'malware:watcher-start',
+  MALWARE_WATCHER_STOP: 'malware:watcher-stop',
+  MALWARE_WATCHER_STATUS: 'malware:watcher-status',
+
+  // Scan profiles
+  MALWARE_GET_PROFILES: 'malware:get-profiles',
+  MALWARE_SET_PROFILE: 'malware:set-profile',
 
   // Compliance Auditor
   COMPLIANCE_SCAN: 'compliance:scan',
   COMPLIANCE_APPLY: 'compliance:apply',
   COMPLIANCE_REVERT: 'compliance:revert',
   COMPLIANCE_PROGRESS: 'compliance:progress',
+
+  // Vulnerability Scanner
+  VULN_SCAN: 'vuln:scan',
+  VULN_APPLY: 'vuln:apply',
+  VULN_REVERT: 'vuln:revert',
+  VULN_PROGRESS: 'vuln:progress',
 
   // Privacy Shield
   PRIVACY_SCAN: 'privacy:scan',
@@ -193,6 +210,11 @@ export const IPC = {
   SERVICE_SCAN: 'service:scan',
   SERVICE_APPLY: 'service:apply',
   SERVICE_PROGRESS: 'service:progress',
+
+  // WinSxS Cleanup
+  WINSXS_ANALYZE: 'winsxs:analyze',
+  WINSXS_CLEAN: 'winsxs:clean',
+  WINSXS_PROGRESS: 'winsxs:progress',
 
   // Firewall Audit (Windows-only)
   FIREWALL_SCAN: 'firewall:scan',
@@ -256,6 +278,7 @@ export const IPC = {
   WINDOWS_TWEAKS_STATUS: 'windows-tweaks:status',
   WINDOWS_TWEAKS_SET_DNS: 'windows-tweaks:set-dns',
   WINDOWS_TWEAKS_GET_DNS: 'windows-tweaks:get-dns',
+  WINDOWS_TWEAKS_NETSH_TCP: 'windows-tweaks:netsh-tcp',
 
   // Benchmark
   BENCHMARK_RUN: 'benchmark:run',
@@ -277,4 +300,59 @@ export const IPC = {
   POWER_PLANS_ACTIVATE: 'power-plans:activate',
   POWER_PLANS_CREATE: 'power-plans:create',
   POWER_PLANS_DELETE: 'power-plans:delete',
+
+  // HOSTS Editor
+  HOSTS_READ: 'hosts:read',
+  HOSTS_WRITE: 'hosts:write',
+  HOSTS_FLUSH_DNS: 'hosts:flush-dns',
+
+  // Driver Agent Evaluation
+  DRIVER_AGENT_EVALUATE: 'driver:agent:evaluate',
+  DRIVER_AGENT_APPROVE: 'driver:agent:approve',
+
+  // Custom YARA rules
+  MALWARE_CUSTOM_RULES_LIST: 'malware:custom-rules-list',
+  MALWARE_CUSTOM_RULES_ADD: 'malware:custom-rules-add',
+  MALWARE_CUSTOM_RULES_REMOVE: 'malware:custom-rules-remove',
+
+  // Report export
+  MALWARE_EXPORT_REPORT: 'malware:export-report',
+
+  // Logs
+  LOGS_LIST: 'logs:list',
+  LOGS_CLEAR: 'logs:clear',
+  LOGS_EXPORT: 'logs:export',
+  LOGS_CONFIG_GET: 'logs:config:get',
+  LOGS_CONFIG_SET: 'logs:config:set',
+
+  // Memory Scanner (Feature A)
+  MALWARE_MEMORY_SCAN: 'malware:memory-scan',
+
+  // Threat Timeline (Feature B)
+  MALWARE_TIMELINE_GET: 'malware:timeline-get',
+  MALWARE_TIMELINE_CLEAR: 'malware:timeline-clear',
+  MALWARE_TIMELINE_STATS: 'malware:timeline-stats',
+
+  // Threat Intel (Feature C)
+  MALWARE_INTEL_CHECK_HASH: 'malware:intel-check-hash',
+  MALWARE_INTEL_CHECK_DOMAIN: 'malware:intel-check-domain',
+  MALWARE_INTEL_CHECK_IP: 'malware:intel-check-ip',
+  MALWARE_INTEL_STATS: 'malware:intel-stats',
+  MALWARE_INTEL_FEEDS: 'malware:intel-feeds',
+  MALWARE_INTEL_TOGGLE_FEED: 'malware:intel-toggle-feed',
+  MALWARE_INTEL_CLEAR: 'malware:intel-clear',
+
+  // Exploit Detection (Feature D)
+  MALWARE_EXPLOIT_SCAN: 'malware:exploit-scan',
+
+  // Feature E: Cloud Backup
+  MALWARE_BACKUP_CONFIG_GET: 'malware:backup-config-get',
+  MALWARE_BACKUP_CONFIG_SET: 'malware:backup-config-set',
+  MALWARE_BACKUP_NOW: 'malware:backup-now',
+  MALWARE_BACKUP_LIST: 'malware:backup-list',
+  MALWARE_BACKUP_RESTORE: 'malware:backup-restore',
+  MALWARE_BACKUP_STORAGE: 'malware:backup-storage',
+
+  // Feature F: Behavioral Sandbox
+  MALWARE_SANDBOX_ANALYZE: 'malware:sandbox-analyze',
 } as const

@@ -1,15 +1,15 @@
 import type { PlatformProvider } from '../types'
-import { createWin32Paths } from './paths'
-import { createWin32Elevation } from './elevation'
-import { createWin32Security } from './security'
-import { createWin32Commands } from './commands'
-import { createWin32Startup } from './startup'
-import { createWin32Privacy } from './privacy'
-import { createWin32Services } from './services'
-import { createWin32Malware } from './malware'
 import { createWin32Browser } from './browser'
+import { createWin32Commands } from './commands'
+import { createWin32Elevation } from './elevation'
+import { createWin32Malware } from './malware'
 import { createWin32MalwarePaths } from './malware-paths'
 import { createWin32Network } from './network'
+import { createWin32Paths } from './paths'
+import { createWin32Privacy } from './privacy'
+import { createWin32Security } from './security'
+import { createWin32Services } from './services'
+import { createWin32Startup } from './startup'
 
 export function createWin32Provider(): PlatformProvider {
   return {

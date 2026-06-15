@@ -81,5 +81,18 @@
   "startupSettingFailedAction": "Learn more",
   "themeDark": "Dark",
   "themeLight": "Light",
-  "themeSystem": "System"
+  "themeSystem": "System",
+  "sectionLogs": "Logs",
+  "logsRefresh": "Refresh",
+  "logsExport": "Export",
+  "logsClear": "Clear all logs",
+  "logsSearchPlaceholder": "Search logs...",
+  "logsLevelAll": "All levels",
+  "logsLevelInfo": "Info",
+  "logsLevelSuccess": "Success",
+  "logsLevelWarning": "Warning",
+  "logsLevelError": "Error",
+  "logsNoEntries": "No log entries found",
+  "logsRetentionLabel": "Retention (days)",
+  "logsRetentionDesc": "How many days to keep log files before automatic cleanup"
 }

@@ -1,10 +1,16 @@
-import { rm, stat, readdir, open, writeFile } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
-import { randomUUID, randomBytes } from 'crypto'
-import type { ScanItem, ScanResult, CleanResult } from '@shared/types'
+import { randomBytes } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { open, readdir, rm, stat } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { CleanerType } from '@shared/enums'
+import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
 import { getCachedItems } from './scan-cache'
 import { getSettings } from './settings-store'
+
+let nextId = 1
+function nextItemId(): string {
+  return String(nextId++)
+}
 
 export interface DeleteResult {
   path: string
@@ -60,7 +66,13 @@ async function secureOverwrite(filePath: string): Promise<void> {
     let offset = 0
     while (offset < size) {
       const len = Math.min(CHUNK, size - offset)
-      await fh.write(randomBytes(len), 0, len, offset)
+      const buf = await new Promise<Buffer>((resolve, reject) => {
+        randomBytes(len, (err, buf) => {
+          if (err) reject(err)
+          else resolve(buf)
+        })
+      })
+      await fh.write(buf, 0, len, offset)
       offset += len
     }
     await fh.datasync()
@@ -91,17 +103,18 @@ export async function safeDelete(filePath: string): Promise<DeleteResult> {
     }
     await rm(filePath, { force: true, recursive: true })
     return { path: filePath, success: true }
-  } catch (err: any) {
-    if (err.code === 'EBUSY' || err.code === 'EPERM') {
+  } catch (err: unknown) {
+    const nodeErr = err as { code?: string; message?: string }
+    if (nodeErr.code === 'EBUSY' || nodeErr.code === 'EPERM') {
       return { path: filePath, success: false, reason: 'in-use' }
     }
-    if (err.code === 'EACCES') {
+    if (nodeErr.code === 'EACCES') {
       return { path: filePath, success: false, reason: 'permission-denied' }
     }
-    if (err.code === 'ENOENT') {
+    if (nodeErr.code === 'ENOENT') {
       return { path: filePath, success: true }
     }
-    return { path: filePath, success: false, reason: err.message }
+    return { path: filePath, success: false, reason: nodeErr.message || String(err) }
   }
 }
 
@@ -110,12 +123,10 @@ export async function safeDelete(filePath: string): Promise<DeleteResult> {
  */
 export async function cleanItems(
   itemIds: unknown,
-  onProgress?: (processed: number, total: number, currentPath: string, cleanedSize: number) => void
+  onProgress?: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
 ): Promise<CleanResult> {
   // Validate input is a string array
-  const validIds = Array.isArray(itemIds)
-    ? itemIds.filter((v): v is string => typeof v === 'string')
-    : []
+  const validIds = Array.isArray(itemIds) ? itemIds.filter((v): v is string => typeof v === 'string') : []
   const items = getCachedItems(validIds)
   let totalCleaned = 0
   let filesDeleted = 0
@@ -150,9 +161,9 @@ export async function cleanItems(
 
 export async function scanDirectory(
   dirPath: string,
-  category: string,
+  category: CleanerType,
   subcategory: string,
-  skipRecentMinutes = 60
+  skipRecentMinutes = 60,
 ): Promise<ScanResult> {
   const items: ScanItem[] = []
   let totalSize = 0
@@ -163,28 +174,30 @@ export async function scanDirectory(
   try {
     const entries = await readdir(dirPath, { withFileTypes: true })
 
-    for (const entry of entries) {
-      if (items.length >= MAX_ITEMS) break
+    const CONCURRENCY = 50
+
+    async function processEntry(entry: import('fs').Dirent): Promise<void> {
+      if (items.length >= MAX_ITEMS) return
       const fullPath = join(dirPath, entry.name)
 
       // Check exclusions
-      if (isExcluded(fullPath, exclusions)) continue
+      if (isExcluded(fullPath, exclusions)) return
 
       try {
         const stats = await stat(fullPath)
 
-        if (stats.mtimeMs > cutoff) continue
+        if (stats.mtimeMs > cutoff) return
 
         const size = stats.isDirectory() ? await getDirectorySize(fullPath, 2) : stats.size
 
         const item: ScanItem = {
-          id: randomUUID(),
+          id: nextItemId(),
           path: fullPath,
           size,
           category,
           subcategory,
           lastModified: stats.mtimeMs,
-          selected: true
+          selected: true,
         }
 
         items.push(item)
@@ -192,6 +205,11 @@ export async function scanDirectory(
       } catch {
         // Skip inaccessible files
       }
+    }
+
+    for (let i = 0; i < entries.length; i += CONCURRENCY) {
+      const batch = entries.slice(i, i + CONCURRENCY)
+      await Promise.all(batch.map(processEntry))
     }
   } catch {
     // Directory doesn't exist or is inaccessible
@@ -202,7 +220,7 @@ export async function scanDirectory(
     subcategory,
     items,
     totalSize,
-    itemCount: items.length
+    itemCount: items.length,
   }
 }
 
@@ -212,9 +230,9 @@ export async function scanDirectory(
  */
 export async function scanMultipleDirectories(
   dirPaths: string[],
-  category: string,
+  category: CleanerType,
   subcategory: string,
-  skipRecentMinutes = 60
+  skipRecentMinutes = 60,
 ): Promise<ScanResult> {
   const allItems: ScanItem[] = []
   let totalSize = 0
@@ -234,11 +252,7 @@ export async function scanMultipleDirectories(
   }
 }
 
-export async function scanFile(
-  filePath: string,
-  category: string,
-  subcategory: string
-): Promise<ScanResult> {
+export async function scanFile(filePath: string, category: CleanerType, subcategory: string): Promise<ScanResult> {
   const exclusions = getSettings().exclusions
   if (isExcluded(filePath, exclusions)) {
     return { category, subcategory, items: [], totalSize: 0, itemCount: 0 }
@@ -250,13 +264,13 @@ export async function scanFile(
       return { category, subcategory, items: [], totalSize: 0, itemCount: 0 }
     }
     const item: ScanItem = {
-      id: randomUUID(),
+      id: nextItemId(),
       path: filePath,
       size: stats.size,
       category,
       subcategory,
       lastModified: stats.mtimeMs,
-      selected: true
+      selected: true,
     }
     return { category, subcategory, items: [item], totalSize: stats.size, itemCount: 1 }
   } catch {
@@ -270,9 +284,9 @@ export async function scanFile(
  */
 export async function scanDirectoriesAsItems(
   dirPaths: string[],
-  category: string,
+  category: CleanerType,
   subcategory: string,
-  group?: string
+  group?: string,
 ): Promise<ScanResult> {
   const items: ScanItem[] = []
   let totalSize = 0
@@ -288,7 +302,7 @@ export async function scanDirectoriesAsItems(
       if (size < 1024) continue
 
       items.push({
-        id: randomUUID(),
+        id: nextItemId(),
         path: dirPath,
         size,
         category,
@@ -302,7 +316,7 @@ export async function scanDirectoriesAsItems(
     }
   }
 
-  return { category, subcategory, group, items, totalSize, itemCount: items.length }
+  return { category, subcategory, ...(group ? { group } : {}), items, totalSize, itemCount: items.length }
 }
 
 /**
@@ -325,9 +339,80 @@ export async function resolveChildSubdirs(paths: string[], childSubdir?: string)
           if (existsSync(subPath)) resolved.push(subPath)
         }
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   return resolved
+}
+
+/**
+ * Convert a Windows wildcard pattern (e.g. *.log, thumb?.*, *.*) to a RegExp.
+ * Only `*` (any chars) and `?` (single char) are supported.
+ */
+function wildcardToRe(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  const reStr = escaped.replace(/\?/g, '.').replace(/\*/g, '.*')
+  return new RegExp(`^${reStr}$`, 'i')
+}
+
+/**
+ * Scan a directory for files matching a fileMask, optionally recursing.
+ * Returns one ScanItem per matching file (not directories).
+ */
+export async function scanWithFileMask(
+  dirPath: string,
+  fileMask: string,
+  recurse: boolean,
+  category: CleanerType,
+  subcategory: string,
+  skipRecentMinutes = 60,
+): Promise<ScanResult> {
+  const items: ScanItem[] = []
+  let totalSize = 0
+  const cutoff = Date.now() - skipRecentMinutes * 60 * 1000
+  const MAX_ITEMS = 5000
+  const exclusions = getSettings().exclusions
+  const pattern = wildcardToRe(fileMask)
+
+  async function walk(currentPath: string, depth: number): Promise<void> {
+    if (depth > 10 || items.length >= MAX_ITEMS) return
+    let entries: import('fs').Dirent[]
+    try {
+      entries = await readdir(currentPath, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (items.length >= MAX_ITEMS) break
+      const fullPath = join(currentPath, entry.name)
+      if (isExcluded(fullPath, exclusions)) continue
+      if (entry.isDirectory()) {
+        if (recurse) await walk(fullPath, depth + 1)
+      } else if (entry.isFile() && pattern.test(entry.name)) {
+        try {
+          const stats = await stat(fullPath)
+          if (stats.mtimeMs > cutoff) continue
+          items.push({
+            id: nextItemId(),
+            path: fullPath,
+            size: stats.size,
+            category,
+            subcategory,
+            lastModified: stats.mtimeMs,
+            selected: true,
+          })
+          totalSize += stats.size
+        } catch {
+          // Skip inaccessible
+        }
+      }
+    }
+  }
+
+  await walk(dirPath, 0)
+
+  return { category, subcategory, items, totalSize, itemCount: items.length }
 }
 
 export async function getDirectorySize(dirPath: string, maxDepth = 3): Promise<number> {

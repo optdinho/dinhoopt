@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">87.5% </span>
+                <span class="strong">90.32% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>21/24</span>
+                <span class='fraction'>28/31</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">83.33% </span>
+                <span class="strong">85.71% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>5/6</span>
+                <span class='fraction'>6/7</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90.47% </span>
+                <span class="strong">90.32% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>19/21</span>
+                <span class='fraction'>28/31</span>
             </div>
         
             
@@ -120,7 +120,23 @@
 <a name='L55'></a><a href='#L55'>55</a>
 <a name='L56'></a><a href='#L56'>56</a>
 <a name='L57'></a><a href='#L57'>57</a>
-<a name='L58'></a><a href='#L58'>58</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -132,6 +148,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -144,12 +161,13 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -158,15 +176,21 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -175,20 +199,28 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { ipcMain } from 'electron'
-import { IPC } from '@shared/channels'
-import { getPlatform } from '../platform'
-import { scanMultipleDirectories, resolveChildSubdirs, cleanItems } from '../services/file-utils'
-import { cacheItems } from '../services/scan-cache'
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
-import type { ScanResult, CleanResult } from '@shared/types'
-import type { WindowGetter } from './index'
+import type { CleanResult, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
+import { getPlatform } from '../platform'
+import { cleanItems, resolveChildSubdirs, scanMultipleDirectories } from '../services/file-utils'
 import { validateStringArray } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
+import { cacheItems } from '../services/scan-cache'
+import type { WindowGetter } from './index'
 &nbsp;
 export function registerAppCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.APP_SCAN, async (): Promise&lt;ScanResult[]&gt; =&gt; {
+    getLogger().info('app-cleaner', 'Starting app scan...')
     const results: ScanResult[] = []
     const category = CleanerType.App
 &nbsp;
@@ -201,36 +233,49 @@ export function registerAppCleanerIpc(getWindow: WindowGetter): void {
           results.push(result)
         }
       } catch {
-        // Skip
+        getLogger().warning('app-cleaner', `Skipped inaccessible app path: ${app.name}`)
       }
     }
 &nbsp;
     const win = getWindow()
-    if (win &amp;&amp; !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-      phase: 'scanning',
-      category,
-      currentPath: 'App scan complete',
-      progress: 100,
-      itemsFound: results.reduce((s, r) =&gt; s + r.itemCount, 0),
-      sizeFound: results.reduce((s, r) =&gt; s + r.totalSize, 0),
-    })
+    if (win &amp;&amp; !win.isDestroyed())
+      win.webContents.send(IPC.SCAN_PROGRESS, {
+        phase: 'scanning',
+        category,
+        currentPath: 'App scan complete',
+        progress: 100,
+        itemsFound: results.reduce((s, r) =&gt; s + r.itemCount, 0),
+        sizeFound: results.reduce((s, r) =&gt; s + r.totalSize, 0),
+      })
 &nbsp;
+    getLogger().success('app-cleaner', 'App scan completed')
     return results
   })
 &nbsp;
   ipcMain.handle(IPC.APP_CLEAN, async (_event, itemIds: string[]): Promise&lt;CleanResult&gt; =&gt; {
+    getLogger().info('app-cleaner', 'Starting app clean...')
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    if (!valid) {
+      getLogger().warning('app-cleaner', 'Invalid item IDs received for app clean')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
     return cleanItems(valid, <span class="fstat-no" title="function not covered" >(p</span>rocessed, total, currentPath, cleanedSize) =&gt; {
       const win = <span class="cstat-no" title="statement not covered" >getWindow()</span>
-<span class="cstat-no" title="statement not covered" >      if (win &amp;&amp; !win.isDestroyed()) <span class="cstat-no" title="statement not covered" >win.webContents.send(IPC.SCAN_PROGRESS, {</span></span>
-        phase: 'cleaning',
-        category: CleanerType.App,
-        currentPath,
-        progress: (processed / total) * 100,
-        itemsFound: total,
-        sizeFound: cleanedSize,
-      })
+<span class="cstat-no" title="statement not covered" >      if (win &amp;&amp; !win.isDestroyed())</span>
+<span class="cstat-no" title="statement not covered" >        win.webContents.send(IPC.SCAN_PROGRESS, {</span>
+          phase: 'cleaning',
+          category: CleanerType.App,
+          currentPath,
+          progress: (processed / total) * 100,
+          itemsFound: total,
+          sizeFound: cleanedSize,
+        })
+    }).then((result) =&gt; {
+      getLogger().success(
+        'app-cleaner',
+        `App clean completed — ${result.totalCleaned} bytes cleaned, ${result.filesDeleted} files deleted`,
+      )
+      return result
     })
   })
 }
@@ -241,7 +286,7 @@ export function registerAppCleanerIpc(getWindow: WindowGetter): void {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-10T18:42:25.756Z
+                at 2026-06-15T03:05:41.530Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

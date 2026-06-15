@@ -1,7 +1,7 @@
-import { useTranslation } from 'react-i18next'
-import { Cpu, MemoryStick, Monitor, Clock } from 'lucide-react'
 import { formatBytes } from '@/lib/utils'
 import type { PerfSystemInfo } from '@shared/types'
+import { Clock, Cpu, MemoryStick, Monitor } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface SystemInfoHeaderProps {
   info: PerfSystemInfo | null
@@ -25,7 +25,7 @@ export function SystemInfoHeader({ info, uptime }: SystemInfoHeaderProps) {
     { icon: Cpu, label: t('systemInfoCpu'), value: `${info.cpuModel}`, sub: `${info.cpuCores}C / ${info.cpuThreads}T` },
     { icon: MemoryStick, label: t('systemInfoMemory'), value: formatBytes(info.totalMemBytes, 1), sub: '' },
     { icon: Monitor, label: t('systemInfoOs'), value: info.osVersion, sub: '' },
-    { icon: Clock, label: t('systemInfoUptime'), value: formatUptime(uptime), sub: '' }
+    { icon: Clock, label: t('systemInfoUptime'), value: formatUptime(uptime), sub: '' },
   ]
 
   return (
@@ -42,7 +42,9 @@ export function SystemInfoHeader({ info, uptime }: SystemInfoHeaderProps) {
             </span>
             <span className="text-[12px] font-medium text-zinc-300">{item.value}</span>
             {item.sub && (
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{item.sub}</span>
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {item.sub}
+              </span>
             )}
           </div>
         </div>

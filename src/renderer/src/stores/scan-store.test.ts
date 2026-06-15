@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useScanStore } from './scan-store'
-import { ScanStatus } from '@shared/enums'
+import { type CleanerType, ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useScanStore } from './scan-store'
 
 // Mock localStorage
 const storage = new Map<string, string>()
@@ -11,18 +11,14 @@ vi.stubGlobal('localStorage', {
   removeItem: (key: string) => storage.delete(key),
 })
 
-function makeResult(
-  category: string,
-  subcategory: string,
-  items: { id: string; size: number }[]
-): ScanResult {
+function makeResult(category: string, subcategory: string, items: { id: string; size: number }[]): ScanResult {
   return {
-    category,
+    category: category as CleanerType,
     subcategory,
     items: items.map((i) => ({
       ...i,
       path: `C:\\temp\\${i.id}`,
-      category,
+      category: category as CleanerType,
       subcategory,
       lastModified: Date.now(),
       selected: true,
@@ -93,10 +89,12 @@ describe('scan-store', () => {
   })
 
   it('selectAll / deselectAll works per category', () => {
-    useScanStore.getState().setResults([
-      makeResult('system', 'temp', [{ id: 'a', size: 100 }]),
-      makeResult('browser', 'chrome', [{ id: 'b', size: 200 }]),
-    ])
+    useScanStore
+      .getState()
+      .setResults([
+        makeResult('system', 'temp', [{ id: 'a', size: 100 }]),
+        makeResult('browser', 'chrome', [{ id: 'b', size: 200 }]),
+      ])
     useScanStore.getState().deselectAll('system')
     expect(useScanStore.getState().selectedItems.has('a')).toBe(false)
     expect(useScanStore.getState().selectedItems.has('b')).toBe(true)
@@ -105,10 +103,12 @@ describe('scan-store', () => {
   })
 
   it('toggleCategory toggles all items in a category', () => {
-    useScanStore.getState().setResults([
-      makeResult('system', 'temp', [{ id: 'a', size: 100 }]),
-      makeResult('system', 'logs', [{ id: 'b', size: 200 }]),
-    ])
+    useScanStore
+      .getState()
+      .setResults([
+        makeResult('system', 'temp', [{ id: 'a', size: 100 }]),
+        makeResult('system', 'logs', [{ id: 'b', size: 200 }]),
+      ])
     // All selected → deselect all
     useScanStore.getState().toggleCategory('system')
     expect(useScanStore.getState().selectedItems.has('a')).toBe(false)
@@ -120,10 +120,12 @@ describe('scan-store', () => {
   })
 
   it('getTotalSize sums all result sizes', () => {
-    useScanStore.getState().setResults([
-      makeResult('system', 'temp', [{ id: 'a', size: 100 }]),
-      makeResult('system', 'logs', [{ id: 'b', size: 200 }]),
-    ])
+    useScanStore
+      .getState()
+      .setResults([
+        makeResult('system', 'temp', [{ id: 'a', size: 100 }]),
+        makeResult('system', 'logs', [{ id: 'b', size: 200 }]),
+      ])
     expect(useScanStore.getState().getTotalSize()).toBe(300)
   })
 

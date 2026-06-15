@@ -1,5 +1,5 @@
-import { memo } from 'react'
 import { cn } from '@/lib/utils'
+import { memo } from 'react'
 
 interface GaugeCardProps {
   label: string
@@ -26,9 +26,7 @@ export const GaugeCard = memo(function GaugeCard({ label, percent, detail, class
   const gradientId = `gauge-grad-${label.replace(/\s+/g, '-')}`
 
   return (
-    <div
-      className={cn('glass-card glass-card-hover flex flex-col items-center rounded-2xl p-5', className)}
-    >
+    <div className={cn('glass-card glass-card-hover flex flex-col items-center rounded-2xl p-5', className)}>
       <div className="relative inline-flex items-center justify-center">
         {/* Glow */}
         <div
@@ -36,21 +34,15 @@ export const GaugeCard = memo(function GaugeCard({ label, percent, detail, class
           style={{ width: SIZE * 0.5, height: SIZE * 0.5, backgroundColor: color }}
         />
 
-        <svg width={SIZE} height={SIZE} className="-rotate-90">
+        <svg width={SIZE} height={SIZE} className="-rotate-90" role="img" aria-label="Performance gauge">
+          <title>Performance gauge</title>
           <defs>
             <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor={color} stopOpacity="1" />
               <stop offset="100%" stopColor={color} stopOpacity="0.5" />
             </linearGradient>
           </defs>
-          <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={RADIUS}
-            fill="none"
-            stroke="var(--gauge-track)"
-            strokeWidth={STROKE}
-          />
+          <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="var(--gauge-track)" strokeWidth={STROKE} />
           <circle
             cx={SIZE / 2}
             cy={SIZE / 2}
@@ -66,10 +58,10 @@ export const GaugeCard = memo(function GaugeCard({ label, percent, detail, class
         </svg>
 
         <div className="absolute flex flex-col items-center">
-          <span className="text-[26px] font-bold tracking-tight text-white">
-            {Math.round(clamped)}
+          <span className="text-[26px] font-bold tracking-tight text-white">{Math.round(clamped)}</span>
+          <span className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>
+            %
           </span>
-          <span className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>%</span>
         </div>
       </div>
 

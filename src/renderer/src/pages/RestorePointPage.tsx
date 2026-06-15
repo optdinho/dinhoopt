@@ -1,22 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import {
-  Plus,
-  Trash2,
-  RotateCcw,
-  Shield,
-  ShieldOff,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  Clock,
-  FileText
-} from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import type { RestorePointInfo } from '@shared/types'
+import { CheckCircle2, Clock, FileText, Loader2, Plus, RotateCcw, Shield, ShieldOff, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 type PageStatus = 'idle' | 'loading' | 'creating' | 'deleting' | 'restoring' | 'enabling' | 'error'
 
@@ -133,7 +122,12 @@ export function RestorePointPage() {
     setStatus('idle')
   }, [loadPoints])
 
-  const isBusy = status === 'loading' || status === 'creating' || status === 'deleting' || status === 'restoring' || status === 'enabling'
+  const isBusy =
+    status === 'loading' ||
+    status === 'creating' ||
+    status === 'deleting' ||
+    status === 'restoring' ||
+    status === 'enabling'
 
   const typeLabels: Record<string, string> = {
     '0': t('typeApplicationInstall'),
@@ -146,24 +140,18 @@ export function RestorePointPage() {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
-      <PageHeader
-        title={t('pageTitle')}
-        description={t('pageDescription')}
-      />
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       <div className="flex flex-wrap items-center gap-3">
         {!showCreateInput ? (
           <button
+            type="button"
             onClick={() => setShowCreateInput(true)}
             disabled={isBusy}
             className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: 'var(--accent)', color: '#fff' }}
           >
-            {status === 'creating' ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
+            {status === 'creating' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             {t('createButton')}
           </button>
         ) : (
@@ -179,9 +167,9 @@ export function RestorePointPage() {
                 if (e.key === 'Enter') setShowCreateConfirm(true)
                 if (e.key === 'Escape') setShowCreateInput(false)
               }}
-              autoFocus
             />
             <button
+              type="button"
               onClick={() => setShowCreateConfirm(true)}
               disabled={isBusy}
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
@@ -191,7 +179,11 @@ export function RestorePointPage() {
               {t('confirmButton')}
             </button>
             <button
-              onClick={() => { setShowCreateInput(false); setCreateDesc('') }}
+              type="button"
+              onClick={() => {
+                setShowCreateInput(false)
+                setCreateDesc('')
+              }}
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
               style={{ background: 'var(--bg-subtle)', color: 'var(--text-muted)' }}
             >
@@ -200,6 +192,7 @@ export function RestorePointPage() {
           </div>
         )}
         <button
+          type="button"
           onClick={loadPoints}
           disabled={isBusy}
           className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
@@ -211,7 +204,10 @@ export function RestorePointPage() {
       </div>
 
       {successMsg && (
-        <div className="flex items-center gap-3 rounded-xl px-5 py-3 text-sm" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+        <div
+          className="flex items-center gap-3 rounded-xl px-5 py-3 text-sm"
+          style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}
+        >
           <CheckCircle2 className="h-5 w-5 shrink-0" />
           {successMsg}
         </div>
@@ -227,23 +223,19 @@ export function RestorePointPage() {
 
       {!isBusy && points.length === 0 && (
         <div className="space-y-4">
-          <EmptyState
-            icon={ShieldOff}
-            title={t('emptyTitle')}
-            description={t('emptyDescription')}
-          />
+          <EmptyState icon={ShieldOff} title={t('emptyTitle')} description={t('emptyDescription')} />
           <div className="flex justify-center">
             <button
+              type="button"
               onClick={handleEnableProtection}
               disabled={isBusy}
               className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all hover:scale-[1.02] disabled:opacity-40"
-              style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', boxShadow: '0 0 20px rgba(34,197,94,0.2)' }}
+              style={{
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                boxShadow: '0 0 20px rgba(34,197,94,0.2)',
+              }}
             >
-              {status === 'enabling' ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Shield className="h-4 w-4" />
-              )}
+              <Shield className="h-4 w-4" />
               Ativar Proteção do Sistema (C:)
             </button>
           </div>
@@ -255,15 +247,27 @@ export function RestorePointPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr style={{ background: 'var(--bg-subtle)' }}>
-                <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>{t('colDescription')}</th>
-                <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>{t('colDate')}</th>
-                <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>{t('colType')}</th>
-                <th className="px-5 py-3 font-medium text-right" style={{ color: 'var(--text-dim)' }}>{t('colActions')}</th>
+                <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>
+                  {t('colDescription')}
+                </th>
+                <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>
+                  {t('colDate')}
+                </th>
+                <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>
+                  {t('colType')}
+                </th>
+                <th className="px-5 py-3 font-medium text-right" style={{ color: 'var(--text-dim)' }}>
+                  {t('colActions')}
+                </th>
               </tr>
             </thead>
             <tbody>
               {points.map((p) => (
-                <tr key={p.sequenceNumber} className="border-t transition-colors hover:opacity-80" style={{ borderColor: 'var(--border-subtle)' }}>
+                <tr
+                  key={p.sequenceNumber}
+                  className="border-t transition-colors hover:opacity-80"
+                  style={{ borderColor: 'var(--border-subtle)' }}
+                >
                   <td className="flex items-center gap-3 px-5 py-4">
                     <FileText className="h-4 w-4 shrink-0" style={{ color: 'var(--text-muted)' }} />
                     <span>{p.description || `#${p.sequenceNumber}`}</span>
@@ -280,6 +284,7 @@ export function RestorePointPage() {
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        type="button"
                         onClick={() => setRestoreTarget(p)}
                         disabled={isBusy}
                         className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all hover:scale-[1.05] disabled:cursor-not-allowed disabled:opacity-50"
@@ -290,6 +295,7 @@ export function RestorePointPage() {
                         {t('restoreButton')}
                       </button>
                       <button
+                        type="button"
                         onClick={() => setDeleteTarget(p)}
                         disabled={isBusy}
                         className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all hover:scale-[1.05] disabled:cursor-not-allowed disabled:opacity-50"
@@ -323,7 +329,9 @@ export function RestorePointPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         title={t('confirmDeleteTitle')}
-        description={t('confirmDeleteMessage', { description: deleteTarget?.description || `#${deleteTarget?.sequenceNumber}` })}
+        description={t('confirmDeleteMessage', {
+          description: deleteTarget?.description || `#${deleteTarget?.sequenceNumber}`,
+        })}
         confirmLabel={t('confirmDeleteLabel')}
         variant="danger"
       />
@@ -333,7 +341,9 @@ export function RestorePointPage() {
         onConfirm={handleRestore}
         onCancel={() => setRestoreTarget(null)}
         title={t('confirmRestoreTitle')}
-        description={t('confirmRestoreMessage', { description: restoreTarget?.description || `#${restoreTarget?.sequenceNumber}` })}
+        description={t('confirmRestoreMessage', {
+          description: restoreTarget?.description || `#${restoreTarget?.sequenceNumber}`,
+        })}
         confirmLabel={t('confirmRestoreLabel')}
         variant="danger"
       />

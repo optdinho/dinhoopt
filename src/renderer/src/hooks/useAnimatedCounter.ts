@@ -5,6 +5,7 @@ export function useAnimatedCounter(target: number, duration = 800): number {
   const startRef = useRef(0)
   const startTimeRef = useRef<number | null>(null)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: value is the animated state; adding it would restart loop
   useEffect(() => {
     startRef.current = value
     startTimeRef.current = null
@@ -18,7 +19,7 @@ export function useAnimatedCounter(target: number, duration = 800): number {
 
       const elapsed = timestamp - startTimeRef.current
       const progress = Math.min(elapsed / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+      const eased = 1 - (1 - progress) ** 3 // ease-out cubic
 
       setValue(startRef.current + (target - startRef.current) * eased)
 

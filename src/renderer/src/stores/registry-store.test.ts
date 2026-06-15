@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useRegistryStore } from './registry-store'
 import type { RegistryEntry } from '@shared/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useRegistryStore } from './registry-store'
 
 function makeEntry(overrides: Partial<RegistryEntry> = {}): RegistryEntry {
   return {
@@ -25,8 +25,10 @@ function mockKudu() {
     onRegistryFixProgress: vi.fn(() => vi.fn()),
   }
   if (typeof window === 'undefined') {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(globalThis as any).window = {}
   }
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(window as any).dinho = mock
   return mock
 }
@@ -53,64 +55,69 @@ describe('registry-store', () => {
   })
 
   it('toggleEntry flips selected on specific entry', () => {
-    useRegistryStore.getState().setEntries([
-      makeEntry({ id: '1', selected: false }),
-      makeEntry({ id: '2', selected: false }),
-    ])
+    useRegistryStore
+      .getState()
+      .setEntries([makeEntry({ id: '1', selected: false }), makeEntry({ id: '2', selected: false })])
 
     useRegistryStore.getState().toggleEntry('1')
     const entries = useRegistryStore.getState().entries
-    expect(entries[0].selected).toBe(true)
-    expect(entries[1].selected).toBe(false)
+    expect(entries[0]!.selected).toBe(true)
+    expect(entries[1]!.selected).toBe(false)
   })
 
   it('toggleEntry can toggle back off', () => {
     useRegistryStore.getState().setEntries([makeEntry({ id: '1', selected: true })])
     useRegistryStore.getState().toggleEntry('1')
-    expect(useRegistryStore.getState().entries[0].selected).toBe(false)
+    expect(useRegistryStore.getState().entries[0]!.selected).toBe(false)
   })
 
   it('toggleCardAll selects all entries of given types when not all selected', () => {
-    useRegistryStore.getState().setEntries([
-      makeEntry({ id: '1', type: 'broken', selected: false }),
-      makeEntry({ id: '2', type: 'broken', selected: true }),
-      makeEntry({ id: '3', type: 'invalid', selected: false }),
-    ])
+    useRegistryStore
+      .getState()
+      .setEntries([
+        makeEntry({ id: '1', type: 'broken', selected: false }),
+        makeEntry({ id: '2', type: 'broken', selected: true }),
+        makeEntry({ id: '3', type: 'invalid', selected: false }),
+      ])
 
     useRegistryStore.getState().toggleCardAll(['broken'])
 
     const entries = useRegistryStore.getState().entries
-    expect(entries[0].selected).toBe(true) // toggled on
-    expect(entries[1].selected).toBe(true) // stayed on
-    expect(entries[2].selected).toBe(false) // different type, unchanged
+    expect(entries[0]!.selected).toBe(true) // toggled on
+    expect(entries[1]!.selected).toBe(true) // stayed on
+    expect(entries[2]!.selected).toBe(false) // different type, unchanged
   })
 
   it('toggleCardAll deselects all when all are already selected', () => {
-    useRegistryStore.getState().setEntries([
-      makeEntry({ id: '1', type: 'broken', selected: true }),
-      makeEntry({ id: '2', type: 'broken', selected: true }),
-    ])
+    useRegistryStore
+      .getState()
+      .setEntries([
+        makeEntry({ id: '1', type: 'broken', selected: true }),
+        makeEntry({ id: '2', type: 'broken', selected: true }),
+      ])
 
     useRegistryStore.getState().toggleCardAll(['broken'])
 
     const entries = useRegistryStore.getState().entries
-    expect(entries[0].selected).toBe(false)
-    expect(entries[1].selected).toBe(false)
+    expect(entries[0]!.selected).toBe(false)
+    expect(entries[1]!.selected).toBe(false)
   })
 
   it('toggleCardAll works with multiple types', () => {
-    useRegistryStore.getState().setEntries([
-      makeEntry({ id: '1', type: 'broken', selected: false }),
-      makeEntry({ id: '2', type: 'invalid', selected: false }),
-      makeEntry({ id: '3', type: 'orphaned', selected: false }),
-    ])
+    useRegistryStore
+      .getState()
+      .setEntries([
+        makeEntry({ id: '1', type: 'broken', selected: false }),
+        makeEntry({ id: '2', type: 'invalid', selected: false }),
+        makeEntry({ id: '3', type: 'orphaned', selected: false }),
+      ])
 
     useRegistryStore.getState().toggleCardAll(['broken', 'invalid'])
 
     const entries = useRegistryStore.getState().entries
-    expect(entries[0].selected).toBe(true)
-    expect(entries[1].selected).toBe(true)
-    expect(entries[2].selected).toBe(false) // orphan_key not in types
+    expect(entries[0]!.selected).toBe(true)
+    expect(entries[1]!.selected).toBe(true)
+    expect(entries[2]!.selected).toBe(false) // orphan_key not in types
   })
 
   it('toggleCardExpand toggles card expansion', () => {
@@ -167,7 +174,7 @@ describe('registry-store', () => {
   it('toggleEntry does nothing for unknown id', () => {
     useRegistryStore.getState().setEntries([makeEntry({ id: '1' })])
     useRegistryStore.getState().toggleEntry('unknown')
-    expect(useRegistryStore.getState().entries[0].selected).toBe(false)
+    expect(useRegistryStore.getState().entries[0]!.selected).toBe(false)
   })
 
   describe('async actions', () => {
@@ -218,10 +225,7 @@ describe('registry-store', () => {
       const kudu = mockKudu()
       kudu.registryFix.mockResolvedValue({ fixed: 2, failed: 0, failures: [] })
       const store = useRegistryStore.getState()
-      store.setEntries([
-        makeEntry({ id: 'a' }),
-        makeEntry({ id: 'b' }),
-      ])
+      store.setEntries([makeEntry({ id: 'a' }), makeEntry({ id: 'b' })])
 
       await store.fix(['a'])
 

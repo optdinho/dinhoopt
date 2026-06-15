@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -8,11 +9,19 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      rollupOptions: {
-        input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+        rollupOptions: {
+          input: {
+            index: resolve(__dirname, 'src/main/index.ts')
+          },
+          onwarn(warning, warn) {
+            if (warning.code === 'MIXED_DYNAMIC_AND_STATIC_IMPORTS') return
+            warn(warning)
+          }
         }
-      }
+    },
+    define: {
+      'process.env.LICENSE_API_URL': JSON.stringify(process.env.LICENSE_API_URL),
+      'process.env.LICENSE_API_TOKEN': JSON.stringify(process.env.LICENSE_API_TOKEN)
     },
     resolve: {
       alias: {

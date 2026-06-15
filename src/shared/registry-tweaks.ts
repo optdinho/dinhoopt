@@ -45,9 +45,10 @@ export function tweakSignature(entry: Pick<RegistryEntry, 'keyPath' | 'valueName
  * is never pre-ticked (and therefore can't be applied accidentally). Mutates
  * and returns the same array. Non-advisory entries are left untouched.
  */
-export function applyIgnoredTweaks<
-  T extends Pick<RegistryEntry, 'type' | 'keyPath' | 'valueName' | 'selected'>
->(entries: T[], ignored: ReadonlySet<string> | readonly string[]): T[] {
+export function applyIgnoredTweaks<T extends Pick<RegistryEntry, 'type' | 'keyPath' | 'valueName' | 'selected'>>(
+  entries: T[],
+  ignored: ReadonlySet<string> | readonly string[],
+): T[] {
   const set = ignored instanceof Set ? ignored : new Set(ignored)
   if (set.size === 0) return entries
   for (const entry of entries) {

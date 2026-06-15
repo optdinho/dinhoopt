@@ -1,25 +1,26 @@
-import { useTranslation } from 'react-i18next'
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
+import { formatBytes, formatDuration, formatNumber } from '@/lib/utils'
+import type { CleanSummaryData } from '@/stores/scan-store'
 import { motion } from 'framer-motion'
 import {
-  CheckCircle2,
-  HardDrive,
-  Files,
-  Clock,
-  Monitor,
-  Globe,
   AppWindow,
-  Gamepad2,
-  Trash2,
-  Link2Off,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
   Database,
-  Variable,
+  Files,
+  Gamepad2,
+  Globe,
+  HardDrive,
+  Link2Off,
+  Monitor,
+  PackageX,
   ShieldAlert,
-  ChevronDown
+  Trash2,
+  Variable,
 } from 'lucide-react'
-import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
-import { formatBytes, formatNumber, formatDuration } from '@/lib/utils'
-import type { CleanSummaryData } from '@/stores/scan-store'
 import type { LucideIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 const categoryIcons: Record<string, LucideIcon> = {
   system: Monitor,
@@ -29,7 +30,8 @@ const categoryIcons: Record<string, LucideIcon> = {
   recycleBin: Trash2,
   shortcut: Link2Off,
   database: Database,
-  environment: Variable
+  environment: Variable,
+  uninstallLeftovers: PackageX,
 }
 
 interface CleanSummaryProps {
@@ -46,7 +48,7 @@ function MetricCard({
   label,
   color,
   iconBg,
-  delay
+  delay,
 }: {
   icon: LucideIcon
   value: number
@@ -68,17 +70,18 @@ function MetricCard({
       className="rounded-xl p-4"
       style={{ background: 'var(--bg-subtle)' }}
     >
-      <div
-        className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg"
-        style={{ background: iconBg }}
-      >
+      <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: iconBg }}>
         <Icon className="h-4 w-4" style={{ color }} strokeWidth={1.8} />
       </div>
       <div className="flex items-baseline gap-1.5">
         <p className="font-mono text-[22px] font-bold tracking-tight text-white">
           {displayValue ?? (unit ? animated.toFixed(decimals) : Math.round(animated).toLocaleString())}
         </p>
-        {unit && <span className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>{unit}</span>}
+        {unit && (
+          <span className="text-[12px] font-medium" style={{ color: 'var(--text-muted)' }}>
+            {unit}
+          </span>
+        )}
       </div>
       <p className="mt-0.5 text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
         {label}
@@ -92,7 +95,7 @@ function CategoryBar({
   type,
   space,
   maxSpace,
-  delay
+  delay,
 }: {
   name: string
   type: string
@@ -140,7 +143,7 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
 
   // Parse the formatted space into numeric value + unit for animated display
   const spaceStr = formatBytes(summary.totalCleaned)
-  const spaceValue = parseFloat(spaceStr) || 0
+  const spaceValue = Number.parseFloat(spaceStr) || 0
   const spaceUnit = spaceStr.replace(/^[\d.]+\s*/, '')
 
   return (
@@ -213,11 +216,7 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
 
         {/* Category breakdown */}
         {cleanedCategories.length > 1 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.45 }}
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}>
             <p className="mb-3 text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               {t('summaryBreakdown')}
             </p>
@@ -263,6 +262,7 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
             </p>
             {platform !== 'darwin' && (
               <button
+                type="button"
                 onClick={onRelaunchAsAdmin}
                 className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-amber-400 transition-colors hover:bg-amber-500/15"
                 style={{ border: '1px solid rgba(245,158,11,0.2)' }}
@@ -276,14 +276,18 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
         {/* Error details */}
         {summary.errors.length > 0 && (
           <details className="mt-3">
-            <summary className="flex items-center gap-1 text-[11px] cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+            <summary
+              className="flex items-center gap-1 text-[11px] cursor-pointer"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               <ChevronDown className="h-3 w-3" strokeWidth={2} />
               {t('itemsCouldntBeDeleted', { count: summary.errors.length })}
             </summary>
             <div className="mt-1.5 max-h-32 overflow-y-auto space-y-0.5 ml-4">
-              {summary.errors.slice(0, 20).map((err, i) => (
-                <p key={i} className="text-[11px] font-mono truncate" style={{ color: 'var(--text-muted)' }}>
-                  {err.path.split(/[/\\]/).slice(-3).join('/')} — {err.reason === 'permission-denied' ? t('permissionDenied') : err.reason}
+              {summary.errors.slice(0, 20).map((err) => (
+                <p key={err.path} className="text-[11px] font-mono truncate" style={{ color: 'var(--text-muted)' }}>
+                  {err.path.split(/[/\\]/).slice(-3).join('/')} —{' '}
+                  {err.reason === 'permission-denied' ? t('permissionDenied') : err.reason}
                 </p>
               ))}
               {summary.errors.length > 20 && (

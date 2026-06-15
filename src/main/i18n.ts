@@ -11,7 +11,7 @@ export function t(key: string, params?: Record<string, string | number>): string
   } catch {
     lang = 'pt'
   }
-  const str = resources[lang]?.[key] ?? resources.pt[key] ?? key
+  const str = resources[lang]?.[key] ?? resources.pt![key] ?? key
   if (!params) return str
   return str.replace(/\{\{(\w+)\}\}/g, (_, k) => String(params[k] ?? ''))
 }

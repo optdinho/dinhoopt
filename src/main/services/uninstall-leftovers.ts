@@ -1,15 +1,15 @@
-import { readdir, stat } from 'fs/promises'
-import { join, basename } from 'path'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
+import { readdir, stat } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { IPC } from '@shared/channels'
-import type { WindowGetter } from '../ipc/index'
 import { CleanerType } from '@shared/enums'
-import { getPlatform } from '../platform'
-import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
-import { psUtf8, execNativeUtf8, execFileAsync } from './exec-utf8'
-import { REGISTRY_UNINSTALL_PATHS } from './registry-utils'
-import { getDirectorySize } from './file-utils'
 import type { ScanItem, ScanResult } from '@shared/types'
+import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
+import type { WindowGetter } from '../ipc/index'
+import { getPlatform } from '../platform'
+import { execFileAsync, execNativeUtf8, psUtf8 } from './exec-utf8'
+import { getDirectorySize } from './file-utils'
+import { REGISTRY_UNINSTALL_PATHS } from './registry-utils'
 
 interface InstalledProgram {
   displayName: string
@@ -26,7 +26,7 @@ async function getInstalledPrograms(): Promise<InstalledProgram[]> {
 
   for (const key of REGISTRY_UNINSTALL_PATHS) {
     try {
-      const { stdout } = await execNativeUtf8('reg',['query', key, '/s'], {
+      const { stdout } = await execNativeUtf8('reg', ['query', key, '/s'], {
         timeout: 20000,
         maxBuffer: 10 * 1024 * 1024,
       })
@@ -37,14 +37,14 @@ async function getInstalledPrograms(): Promise<InstalledProgram[]> {
         const displayNameMatch = block.match(/DisplayName\s+REG_SZ\s+(.+)/i)
         if (!displayNameMatch) continue
 
-        const displayName = displayNameMatch[1].trim()
+        const displayName = (displayNameMatch[1] ?? '').trim()
         const publisherMatch = block.match(/Publisher\s+REG_SZ\s+(.+)/i)
         const installLocMatch = block.match(/InstallLocation\s+REG_SZ\s+(.+)/i)
 
         programs.push({
           displayName,
-          publisher: publisherMatch ? publisherMatch[1].trim() : '',
-          installLocation: installLocMatch ? installLocMatch[1].trim().replace(/\\$/, '') : '',
+          publisher: publisherMatch ? (publisherMatch[1] ?? '').trim() : '',
+          installLocation: installLocMatch ? (installLocMatch[1] ?? '').trim().replace(/\\$/, '') : '',
         })
       }
     } catch {
@@ -68,7 +68,7 @@ function buildMatchTokens(programs: InstalledProgram[]): Set<string> {
       tokens.add(name)
 
       // Add first word if it's substantial (e.g., "Discord" from "Discord Inc")
-      const firstWord = name.split(/[\s\-_.()]+/)[0]
+      const firstWord = name.split(/[\s\-_.()]+/)[0] ?? ''
       if (firstWord && firstWord.length >= 3) {
         tokens.add(firstWord)
       }
@@ -85,7 +85,7 @@ function buildMatchTokens(programs: InstalledProgram[]): Set<string> {
     if (publisher.length >= 3) {
       tokens.add(publisher)
       // First word of publisher
-      const pubFirst = publisher.split(/[\s\-_.()]+/)[0]
+      const pubFirst = publisher.split(/[\s\-_.()]+/)[0] ?? ''
       if (pubFirst && pubFirst.length >= 3) {
         tokens.add(pubFirst)
       }
@@ -178,9 +178,10 @@ async function hasRunningProcesses(folderPaths: string[]): Promise<Set<string>> 
   try {
     // Get all running process paths in one call
     const procScript = 'Get-Process | Where-Object { $_.Path } | Select-Object -ExpandProperty Path -Unique'
-    const { stdout } = await execFileAsync('powershell', [
-      '-NoProfile', '-NoLogo', '-Command', psUtf8(procScript),
-    ], { timeout: 10000, windowsHide: true })
+    const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NoLogo', '-Command', psUtf8(procScript)], {
+      timeout: 10000,
+      windowsHide: true,
+    })
 
     const processPaths = stdout
       .split(/\r?\n/)
@@ -190,7 +191,7 @@ async function hasRunningProcesses(folderPaths: string[]): Promise<Set<string>> 
     for (const folderPath of folderPaths) {
       const folderLower = folderPath.toLowerCase().replace(/\//g, '\\')
       for (const procPath of processPaths) {
-        if (procPath.startsWith(folderLower + '\\')) {
+        if (procPath.startsWith(`${folderLower}\\`)) {
           running.add(folderPath)
           break
         }
@@ -263,8 +264,7 @@ export async function scanForLeftovers(getWindow: WindowGetter): Promise<ScanRes
   let totalItemsFound = 0
   let totalSizeFound = 0
 
-  for (let dirIdx = 0; dirIdx < totalDirs; dirIdx++) {
-    const target = leftoverDirs[dirIdx]
+  for (const [dirIdx, target] of leftoverDirs.entries()) {
     const items: ScanItem[] = []
 
     safeSend(IPC.SCAN_PROGRESS, {

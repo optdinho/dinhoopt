@@ -1,85 +1,35 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import {
-  MemoryStick,
-  Gauge,
-  RefreshCw,
-  Trash2,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  Cpu,
-  XCircle
-} from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { HealthScore } from '@/components/shared/HealthScore'
-import type { MemoryInfo, MemoryProcess, MemoryOptimizeProgress, MemoryOptimizeResult } from '@shared/types'
+import { useMemoryStore } from '@/stores/memory-store'
+import { CheckCircle2, Cpu, Gauge, Loader2, MemoryStick, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export function MemoryOptimizerPage() {
   const { t } = useTranslation('memory')
-  const [info, setInfo] = useState<MemoryInfo | null>(null)
-  const [processes, setProcesses] = useState<MemoryProcess[]>([])
-  const [loading, setLoading] = useState(false)
-  const [optimizing, setOptimizing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [progress, setProgress] = useState<MemoryOptimizeProgress | null>(null)
-  const [result, setResult] = useState<MemoryOptimizeResult | null>(null)
+  const info = useMemoryStore((s) => s.info)
+  const processes = useMemoryStore((s) => s.processes)
+  const loading = useMemoryStore((s) => s.loading)
+  const optimizing = useMemoryStore((s) => s.optimizing)
+  const error = useMemoryStore((s) => s.error)
+  const success = useMemoryStore((s) => s.success)
+  const progress = useMemoryStore((s) => s.progress)
+  const result = useMemoryStore((s) => s.result)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await window.dinho.memoryInfo()
-      setInfo(data.info)
-      setProcesses(data.processes)
-    } catch {
-      setError(t('loadError'))
-    }
-    setLoading(false)
-  }, [t])
-
+  const loadData = useMemoryStore((s) => s.load)
+  const handleOptimize = useMemoryStore((s) => s.optimize)
+  const clearError = useMemoryStore((s) => s.clearError)
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  useEffect(() => {
-    const unsub = window.dinho.onMemoryProgress((data: MemoryOptimizeProgress) => {
-      setProgress(data)
-    })
-    return unsub
-  }, [])
-
-  const handleOptimize = useCallback(async () => {
-    setOptimizing(true)
-    setError(null)
-    setSuccess(null)
-    setProgress(null)
-    setResult(null)
-    try {
-      const res = await window.dinho.memoryOptimize()
-      setResult(res)
-      if (res.success) {
-        const freedMb = (res.freedBytes / 1024 / 1024).toFixed(1)
-        setSuccess(t('optimizeSuccess', { mb: freedMb }))
-      } else {
-        setError(res.error || t('optimizeError'))
-      }
-      await loadData()
-    } catch {
-      setError(t('optimizeError'))
-    }
-    setOptimizing(false)
-    setProgress(null)
-  }, [t, loadData])
-
   const formatBytes = (bytes: number) => {
-    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB'
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB'
-    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB'
-    return bytes + ' B'
+    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`
+    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${bytes} B`
   }
 
   const getHealthScore = (percent: number) => {
@@ -90,15 +40,15 @@ export function MemoryOptimizerPage() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-      <PageHeader
-        title={t('pageTitle')}
-        description={t('pageDescription')}
-      />
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
-      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
+      {error && <ErrorAlert message={error} onDismiss={clearError} />}
 
       {success && (
-        <div className="flex items-center gap-3 rounded-xl px-5 py-3 text-sm" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+        <div
+          className="flex items-center gap-3 rounded-xl px-5 py-3 text-sm"
+          style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}
+        >
           <CheckCircle2 className="h-5 w-5 shrink-0" />
           {success}
         </div>
@@ -134,7 +84,9 @@ export function MemoryOptimizerPage() {
                 />
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <span className="text-xs" style={{ color: 'var(--text-dim)' }}>{t('available')}:</span>
+                <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                  {t('available')}:
+                </span>
                 <span className="text-xs font-medium text-white">{formatBytes(info.availableBytes)}</span>
               </div>
             </div>
@@ -167,19 +119,17 @@ export function MemoryOptimizerPage() {
 
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={handleOptimize}
               disabled={loading || optimizing}
               className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: 'var(--accent)', color: '#fff' }}
             >
-              {optimizing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
+              {optimizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               {t('optimizeButton')}
             </button>
             <button
+              type="button"
               onClick={loadData}
               disabled={loading || optimizing}
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
@@ -196,7 +146,9 @@ export function MemoryOptimizerPage() {
                 <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent)' }} />
                 <div>
                   <div className="text-sm font-medium text-white">{progress.label}</div>
-                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{progress.detail}</div>
+                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {progress.detail}
+                  </div>
                 </div>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--bg-subtle)' }}>
@@ -213,20 +165,33 @@ export function MemoryOptimizerPage() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr style={{ background: 'var(--bg-subtle)' }}>
-                    <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>{t('step')}</th>
-                    <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>{t('status')}</th>
-                    <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>{t('freed')}</th>
+                    <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>
+                      {t('step')}
+                    </th>
+                    <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>
+                      {t('status')}
+                    </th>
+                    <th className="px-5 py-3 font-medium" style={{ color: 'var(--text-dim)' }}>
+                      {t('freed')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {result.steps.map((s, i) => (
-                    <tr key={i} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <td className="px-5 py-3">{t(`step${i + 1}`, s.name)}</td>
+                  {result.steps.map((s) => (
+                    <tr key={`step-${s.name}`} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <td className="px-5 py-3">{t(`step${result.steps.indexOf(s) + 1}`, s.name)}</td>
                       <td className="px-5 py-3">
-                        {s.success
-                          ? <span className="flex items-center gap-1.5 text-green-500"><CheckCircle2 className="h-4 w-4" />{t('success')}</span>
-                          : <span className="flex items-center gap-1.5 text-red-400" title={s.error}><XCircle className="h-4 w-4" />{t('failed')}</span>
-                        }
+                        {s.success ? (
+                          <span className="flex items-center gap-1.5 text-green-500">
+                            <CheckCircle2 className="h-4 w-4" />
+                            {t('success')}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-red-400" title={s.error}>
+                            <XCircle className="h-4 w-4" />
+                            {t('failed')}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3 font-mono" style={{ color: 'var(--text-muted)' }}>
                         {s.success ? formatBytes(s.freedBytes) : '-'}
@@ -245,21 +210,33 @@ export function MemoryOptimizerPage() {
 
           {!loading && processes.length > 0 && (
             <div className="overflow-hidden rounded-2xl border" style={{ borderColor: 'var(--border-medium)' }}>
-              <div className="px-5 py-3 text-sm font-medium" style={{ background: 'var(--bg-subtle)' }}>{t('allProcesses')}</div>
+              <div className="px-5 py-3 text-sm font-medium" style={{ background: 'var(--bg-subtle)' }}>
+                {t('allProcesses')}
+              </div>
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr style={{ background: 'var(--bg-subtle)' }}>
-                    <th className="px-5 py-2 font-medium" style={{ color: 'var(--text-dim)' }}>PID</th>
-                    <th className="px-5 py-2 font-medium" style={{ color: 'var(--text-dim)' }}>{t('processName')}</th>
-                    <th className="px-5 py-2 font-medium text-right" style={{ color: 'var(--text-dim)' }}>{t('memory')}</th>
+                    <th className="px-5 py-2 font-medium" style={{ color: 'var(--text-dim)' }}>
+                      PID
+                    </th>
+                    <th className="px-5 py-2 font-medium" style={{ color: 'var(--text-dim)' }}>
+                      {t('processName')}
+                    </th>
+                    <th className="px-5 py-2 font-medium text-right" style={{ color: 'var(--text-dim)' }}>
+                      {t('memory')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {processes.map((p) => (
                     <tr key={p.pid} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <td className="px-5 py-2 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{p.pid}</td>
+                      <td className="px-5 py-2 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {p.pid}
+                      </td>
                       <td className="px-5 py-2">{p.name}</td>
-                      <td className="px-5 py-2 text-right font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{formatBytes(p.workingSetBytes)}</td>
+                      <td className="px-5 py-2 text-right font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {formatBytes(p.workingSetBytes)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -270,11 +247,7 @@ export function MemoryOptimizerPage() {
       )}
 
       {!loading && !info && (
-        <EmptyState
-          icon={MemoryStick}
-          title={t('emptyTitle')}
-          description={t('emptyDescription')}
-        />
+        <EmptyState icon={MemoryStick} title={t('emptyTitle')} description={t('emptyDescription')} />
       )}
     </div>
   )

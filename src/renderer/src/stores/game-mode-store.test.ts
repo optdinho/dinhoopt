@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useGameModeStore, initGameModeStore } from './game-mode-store'
 import type { GameModeAuditReport, GameModeConfig } from '@shared/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { initGameModeStore, useGameModeStore } from './game-mode-store'
 
 const mockGameModeRunAudit = vi.fn()
 const mockSettingsSet = vi.fn()
@@ -34,6 +34,7 @@ beforeEach(() => {
 
   mockSettingsSet.mockResolvedValue(undefined)
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(globalThis as any).window = {
     dinho: {
       gameModeRunAudit: mockGameModeRunAudit,
@@ -94,8 +95,13 @@ describe('game-mode-store - audit', () => {
   })
 
   it('runAudit sets auditPhase to running during fetch', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     let resolvePromise!: (v: any) => void
-    mockGameModeRunAudit.mockReturnValue(new Promise((resolve) => { resolvePromise = resolve }))
+    mockGameModeRunAudit.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePromise = resolve
+      }),
+    )
 
     const promise = useGameModeStore.getState().runAudit('pre-activation')
     expect(useGameModeStore.getState().auditPhase).toBe('running')
@@ -131,7 +137,7 @@ describe('game-mode-store - simple setters', () => {
   })
 
   it('setProgress updates progress', () => {
-    const progress = { current: 1, total: 5, step: 'Stopping services' }
+    const progress = { phase: 'activating' as const, current: 1, total: 5, currentLabel: 'Stopping services' }
     useGameModeStore.getState().setProgress(progress)
     expect(useGameModeStore.getState().progress).toEqual(progress)
   })
@@ -238,7 +244,13 @@ describe('game-mode-store - config actions that persist', () => {
 describe('game-mode-store - initGameModeStore', () => {
   it('loads config from settings and checks status', async () => {
     mockSettingsGet.mockResolvedValue({
-      gameMode: { enabledOptimizations: ['svc-wsearch'], customProcessKillList: [], autoDetect: false, autoDeactivate: false, customGameProcesses: [] },
+      gameMode: {
+        enabledOptimizations: ['svc-wsearch'],
+        customProcessKillList: [],
+        autoDetect: false,
+        autoDeactivate: false,
+        customGameProcesses: [],
+      },
     })
     mockGameModeStatus.mockResolvedValue({ active: true, activatedAt: '2025-06-09T12:00:00Z', pendingRestore: false })
 
@@ -286,7 +298,7 @@ describe('game-mode-store - initGameModeStore', () => {
     mockGameModeStatus.mockResolvedValue({ active: false, activatedAt: null, pendingRestore: false })
     initGameModeStore()
 
-    const handler = mockOnGameModeAutoEvent.mock.calls[0][0]
+    const handler = mockOnGameModeAutoEvent.mock.calls[0]![0]
     handler({ type: 'game-detected', processName: 'Minecraft.exe' })
 
     await vi.waitFor(() => {
@@ -301,7 +313,7 @@ describe('game-mode-store - initGameModeStore', () => {
 
     initGameModeStore()
 
-    const handler = mockOnGameModeAutoEvent.mock.calls[0][0]
+    const handler = mockOnGameModeAutoEvent.mock.calls[0]![0]
     handler({ type: 'game-ended' })
 
     await vi.waitFor(() => {
@@ -310,6 +322,7 @@ describe('game-mode-store - initGameModeStore', () => {
   })
 
   it('does not throw when kudu is undefined', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(globalThis as any).window = {}
     expect(() => initGameModeStore()).not.toThrow()
   })

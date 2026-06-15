@@ -1,5 +1,5 @@
+import type { StartupBootTrace, StartupItem, StartupSafetyRating } from '@shared/types'
 import { create } from 'zustand'
-import type { StartupItem, StartupBootTrace, StartupSafetyRating } from '@shared/types'
 
 interface StartupState {
   items: StartupItem[]
@@ -49,11 +49,11 @@ export const useStartupStore = create<StartupState>((set) => ({
   setItems: (items) => set({ items }),
   updateItem: (id, updates) =>
     set((s) => ({
-      items: s.items.map((i) => (i.id === id ? { ...i, ...updates } : i))
+      items: s.items.map((i) => (i.id === id ? { ...i, ...updates } : i)),
     })),
   removeItem: (id) =>
     set((s) => ({
-      items: s.items.filter((i) => i.id !== id)
+      items: s.items.filter((i) => i.id !== id),
     })),
   setLoading: (loading) => set({ loading }),
   setSortBy: (sortBy) => set({ sortBy }),
@@ -62,9 +62,10 @@ export const useStartupStore = create<StartupState>((set) => ({
   setBootTrace: (bootTrace) => set({ bootTrace }),
   setTraceLoading: (traceLoading) => set({ traceLoading }),
   setDeleteTarget: (deleteTarget) => set({ deleteTarget }),
-  setSafetyRatings: (ratings) => set({
-    safetyRatings: Object.fromEntries(ratings.map((r) => [r.name, r]))
-  }),
+  setSafetyRatings: (ratings) =>
+    set({
+      safetyRatings: Object.fromEntries(ratings.map((r) => [r.name, r])),
+    }),
   setSafetyLoading: (safetyLoading) => set({ safetyLoading }),
   setExpandedItemId: (expandedItemId) => set({ expandedItemId }),
   fetchSafetyRatings: async () => {
@@ -91,7 +92,5 @@ export const useStartupStore = create<StartupState>((set) => ({
       safetyRatings: {},
       safetyLoading: false,
       expandedItemId: null,
-    })
+    }),
 }))
-
-

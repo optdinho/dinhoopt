@@ -1,13 +1,14 @@
-import { ipcMain } from 'electron'
-import { existsSync } from 'fs'
+import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
-import type { ScanResult, CleanResult } from '@shared/types'
-import { randomUUID } from 'crypto'
+import type { CleanResult, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
 import { getPlatform } from '../platform'
-import { scanDirectory, cleanItems } from '../services/file-utils'
+import { execFileAsync, psArgs } from '../services/exec-utf8'
+import { cleanItems, scanDirectory } from '../services/file-utils'
+import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
-import { psArgs, psUtf8, execFileAsync } from '../services/exec-utf8'
 
 // Windows: track last scanned size (virtual items have no real path)
 let lastScannedSize = 0
@@ -16,59 +17,80 @@ let lastScannedItemIds: string[] = []
 
 export function registerRecycleBinIpc(): void {
   ipcMain.handle(IPC.RECYCLE_BIN_SCAN, async (): Promise<ScanResult[]> => {
+    getLogger().info('recycle-bin', 'Scanning recycle bin')
     const trashPath = getPlatform().paths.trashPath()
 
     if (trashPath) {
       // macOS / Linux: scan trash directory as real files
       try {
-        if (!existsSync(trashPath)) return []
+        if (!existsSync(trashPath)) {
+          getLogger().info('recycle-bin', 'Trash path does not exist')
+          return []
+        }
         const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash', 0)
         if (result.items.length > 0) {
           cacheItems(result.items)
           lastScannedItemIds = result.items.map((i) => i.id)
+          getLogger().success('recycle-bin', `Found ${result.items.length} items (${result.totalSize} bytes)`)
           return [result]
         }
+        getLogger().info('recycle-bin', 'No items found in trash')
         return []
-      } catch {
+      } catch (err) {
+        getLogger().error('recycle-bin', `Scan failed: ${err}`)
         return []
       }
     }
 
     // Windows: COM-based recycle bin
     try {
-      const { stdout } = await execFileAsync('powershell.exe', psArgs(
-        `$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = $items.Count; $size = ($items | Measure-Object -Property Size -Sum).Sum; Write-Output "$count|$size"`
-      ), { windowsHide: true })
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        psArgs(
+          `$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = $items.Count; $size = ($items | Measure-Object -Property Size -Sum).Sum; Write-Output "$count|$size"`,
+        ),
+        { windowsHide: true },
+      )
 
       const [countStr, sizeStr] = stdout.trim().split('|')
-      const count = parseInt(countStr) || 0
-      const size = parseInt(sizeStr) || 0
+      const count = Number.parseInt(countStr!) || 0
+      const size = Number.parseInt(sizeStr!) || 0
 
       lastScannedSize = size
 
-      if (count === 0) return []
+      if (count === 0) {
+        getLogger().info('recycle-bin', 'Recycle bin is empty')
+        return []
+      }
 
-      return [{
-        category: CleanerType.RecycleBin,
-        subcategory: 'Recycle Bin',
-        items: [{
-          id: randomUUID(),
-          path: 'Recycle Bin',
-          size,
+      getLogger().success('recycle-bin', `Found ${count} items totalling ${size} bytes`)
+      return [
+        {
           category: CleanerType.RecycleBin,
           subcategory: 'Recycle Bin',
-          lastModified: Date.now(),
-          selected: true
-        }],
-        totalSize: size,
-        itemCount: count
-      }]
-    } catch {
+          items: [
+            {
+              id: randomUUID(),
+              path: 'Recycle Bin',
+              size,
+              category: CleanerType.RecycleBin,
+              subcategory: 'Recycle Bin',
+              lastModified: Date.now(),
+              selected: true,
+            },
+          ],
+          totalSize: size,
+          itemCount: count,
+        },
+      ]
+    } catch (err) {
+      getLogger().error('recycle-bin', `Windows scan failed: ${err}`)
       return []
     }
   })
 
   ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (): Promise<CleanResult> => {
+    getLogger().info('recycle-bin', 'Cleaning recycle bin')
     const trashPath = getPlatform().paths.trashPath()
 
     if (trashPath) {
@@ -76,42 +98,71 @@ export function registerRecycleBinIpc(): void {
       try {
         const result = await cleanItems(lastScannedItemIds)
         lastScannedItemIds = []
+        getLogger().success('recycle-bin', `Cleaned ${result.totalCleaned} bytes from trash`)
         return result
-      } catch (err: any) {
-        return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Trash', reason: err.message }], needsElevation: false }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        getLogger().error('recycle-bin', `Trash clean failed: ${message}`)
+        return {
+          totalCleaned: 0,
+          filesDeleted: 0,
+          filesSkipped: 0,
+          errors: [{ path: 'Trash', reason: message }],
+          needsElevation: false,
+        }
       }
     }
 
     // Windows: SHEmptyRecycleBin Win32 API
     const sizeBeforeClean = lastScannedSize
     try {
+      getLogger().info('recycle-bin', 'Emptying recycle bin...')
       // Flags: SHERB_NOCONFIRMATION(1) | SHERB_NOPROGRESSUI(2) | SHERB_NOSOUND(4) = 7
-      await execFileAsync('powershell.exe', psArgs(
-        `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class RecycleBin { [DllImport("Shell32.dll", CharSet = CharSet.Unicode)] public static extern uint SHEmptyRecycleBin(IntPtr hwnd, string pszRootPath, uint dwFlags); }'; [RecycleBin]::SHEmptyRecycleBin([IntPtr]::Zero, $null, 7)`
-      ), { windowsHide: true })
+      await execFileAsync(
+        'powershell.exe',
+        psArgs(
+          `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class RecycleBin { [DllImport("Shell32.dll", CharSet = CharSet.Unicode)] public static extern uint SHEmptyRecycleBin(IntPtr hwnd, string pszRootPath, uint dwFlags); }'; [RecycleBin]::SHEmptyRecycleBin([IntPtr]::Zero, $null, 7)`,
+        ),
+        { windowsHide: true },
+      )
 
       // Verify the bin is actually empty
-      const { stdout } = await execFileAsync('powershell.exe', psArgs(
-        `$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); Write-Output $items.Count`
-      ), { windowsHide: true })
-      const remaining = parseInt(stdout.trim()) || 0
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        psArgs(
+          '$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); Write-Output $items.Count',
+        ),
+        { windowsHide: true },
+      )
+      const remaining = Number.parseInt(stdout.trim()) || 0
 
       if (remaining === 0) {
         lastScannedSize = 0
+        getLogger().success('recycle-bin', `Cleaned ${sizeBeforeClean} bytes from recycle bin`)
         return { totalCleaned: sizeBeforeClean, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
-      } else {
-        // Partial clean - some items couldn't be removed
-        lastScannedSize = 0
-        return {
-          totalCleaned: sizeBeforeClean,
-          filesDeleted: 1,
-          filesSkipped: remaining,
-          errors: [{ path: 'Recycle Bin', reason: `${remaining} item(s) could not be removed (may be in use or protected)` }],
-          needsElevation: false
-        }
       }
-    } catch (err: any) {
-      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [{ path: 'Recycle Bin', reason: err.message }], needsElevation: false }
+      // Partial clean - some items couldn't be removed
+      lastScannedSize = 0
+      getLogger().warning('recycle-bin', `Partial clean: ${remaining} items remaining (may be in use)`)
+      return {
+        totalCleaned: sizeBeforeClean,
+        filesDeleted: 1,
+        filesSkipped: remaining,
+        errors: [
+          { path: 'Recycle Bin', reason: `${remaining} item(s) could not be removed (may be in use or protected)` },
+        ],
+        needsElevation: false,
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      getLogger().error('recycle-bin', `Windows clean failed: ${message}`)
+      return {
+        totalCleaned: 0,
+        filesDeleted: 0,
+        filesSkipped: 0,
+        errors: [{ path: 'Recycle Bin', reason: message }],
+        needsElevation: false,
+      }
     }
   })
 }

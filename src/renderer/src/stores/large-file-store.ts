@@ -1,10 +1,10 @@
-import { create } from 'zustand'
 import type {
-  LargeFileScanResult,
-  LargeFileScanProgress,
   LargeFileDeleteMode,
-  LargeFileDeleteResult
+  LargeFileDeleteResult,
+  LargeFileScanProgress,
+  LargeFileScanResult,
 } from '@shared/types'
+import { create } from 'zustand'
 
 interface LargeFileState {
   directory: string | null
@@ -84,7 +84,7 @@ export const useLargeFileStore = create<LargeFileState>((set, get) => ({
     }
     set({
       result: { ...result, files },
-      selectedPaths: nextSelected
+      selectedPaths: nextSelected,
     })
   },
   reset: () =>
@@ -93,6 +93,6 @@ export const useLargeFileStore = create<LargeFileState>((set, get) => ({
       progress: null,
       result: null,
       selectedPaths: new Set(),
-      deleteResult: null
-    })
+      deleteResult: null,
+    }),
 }))

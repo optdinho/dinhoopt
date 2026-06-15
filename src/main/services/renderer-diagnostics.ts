@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { type BrowserWindow, app } from 'electron'
 import { logError, logInfo } from './logger'
 
 /**
@@ -19,11 +19,13 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
   const wc = win.webContents
 
   wc.on('render-process-gone', (_event, details) => {
-    logError(
-      `Renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`
-    )
+    logError(`Renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`)
     if (app.isPackaged && !wc.isDestroyed() && !wc.isDevToolsOpened()) {
-      try { wc.openDevTools({ mode: 'detach' }) } catch { /* DevTools may be unavailable */ }
+      try {
+        wc.openDevTools({ mode: 'detach' })
+      } catch {
+        /* DevTools may be unavailable */
+      }
     }
   })
 
@@ -31,7 +33,7 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
     // Ignore -3 (ABORTED) — fired routinely when navigation is replaced
     if (errorCode === -3) return
     logError(
-      `Renderer load failed: code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`
+      `Renderer load failed: code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`,
     )
   })
 

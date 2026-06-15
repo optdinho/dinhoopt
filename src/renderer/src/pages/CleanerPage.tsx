@@ -1,38 +1,39 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
-import {
-  Monitor,
-  Globe,
-  AppWindow,
-  Gamepad2,
-  Trash2,
-  Link2Off,
-  Database,
-  Variable,
-  PackageX,
-  Search,
-  Sparkles,
-  ChevronRight,
-  Folder,
-  FolderOpen,
-  AlertTriangle,
-  ShieldAlert,
-  Loader2
-} from 'lucide-react'
+import { CleanSummary } from '@/components/cleaner/CleanSummary'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { ScanProgress } from '@/components/shared/ScanProgress'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { CleanSummary } from '@/components/cleaner/CleanSummary'
-import { cn, formatBytes, formatNumber } from '@/lib/utils'
-import { useScanStore } from '@/stores/scan-store'
-import { useStatsStore } from '@/stores/stats-store'
-import { useHistoryStore } from '@/stores/history-store'
-import { useSettingsStore } from '@/stores/settings-store'
+import { ScanProgress } from '@/components/shared/ScanProgress'
 import { usePlatform } from '@/hooks/usePlatform'
-import { ScanStatus, CleanerType } from '@shared/enums'
+import { cn, formatBytes, formatNumber } from '@/lib/utils'
+import { useHistoryStore } from '@/stores/history-store'
+import { useScanStore } from '@/stores/scan-store'
+import { useSettingsStore } from '@/stores/settings-store'
+import { useStatsStore } from '@/stores/stats-store'
+import { CleanerType, ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
+import {
+  AlertTriangle,
+  AppWindow,
+  Archive,
+  ChevronRight,
+  Database,
+  Folder,
+  FolderOpen,
+  Gamepad2,
+  Globe,
+  Link2Off,
+  Loader2,
+  Monitor,
+  PackageX,
+  Search,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+  Variable,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 /** Check whether a path looks like an absolute filesystem path (not a label like "Recycle Bin" or "PATH → …"). */
@@ -47,14 +48,55 @@ interface CategoryDef {
 
 const categories: CategoryDef[] = [
   { type: CleanerType.System, labelKey: 'categorySystem', icon: Monitor, descriptionKey: 'categorySystemDescription' },
-  { type: CleanerType.Browser, labelKey: 'categoryBrowsers', icon: Globe, descriptionKey: 'categoryBrowsersDescription' },
-  { type: CleanerType.App, labelKey: 'categoryApplications', icon: AppWindow, descriptionKey: 'categoryApplicationsDescription' },
+  {
+    type: CleanerType.WinSxS,
+    labelKey: 'categoryWinSxS',
+    icon: Archive,
+    descriptionKey: 'categoryWinSxSDescription',
+  },
+  {
+    type: CleanerType.Browser,
+    labelKey: 'categoryBrowsers',
+    icon: Globe,
+    descriptionKey: 'categoryBrowsersDescription',
+  },
+  {
+    type: CleanerType.App,
+    labelKey: 'categoryApplications',
+    icon: AppWindow,
+    descriptionKey: 'categoryApplicationsDescription',
+  },
   { type: CleanerType.Gaming, labelKey: 'categoryGaming', icon: Gamepad2, descriptionKey: 'categoryGamingDescription' },
-  { type: CleanerType.RecycleBin, labelKey: 'categoryRecycleBin', icon: Trash2, descriptionKey: 'categoryRecycleBinDescription' },
-  { type: CleanerType.Shortcut, labelKey: 'categoryShortcuts', icon: Link2Off, descriptionKey: 'categoryShortcutsDescription' },
-  { type: CleanerType.Environment, labelKey: 'categoryEnvironment', icon: Variable, descriptionKey: 'categoryEnvironmentDescription' },
-  { type: CleanerType.Database, labelKey: 'categoryDatabases', icon: Database, descriptionKey: 'categoryDatabasesDescription' },
-  { type: CleanerType.UninstallLeftovers, labelKey: 'categoryUninstallLeftovers', icon: PackageX, descriptionKey: 'categoryUninstallLeftoversDescription' }
+  {
+    type: CleanerType.RecycleBin,
+    labelKey: 'categoryRecycleBin',
+    icon: Trash2,
+    descriptionKey: 'categoryRecycleBinDescription',
+  },
+  {
+    type: CleanerType.Shortcut,
+    labelKey: 'categoryShortcuts',
+    icon: Link2Off,
+    descriptionKey: 'categoryShortcutsDescription',
+  },
+  {
+    type: CleanerType.Environment,
+    labelKey: 'categoryEnvironment',
+    icon: Variable,
+    descriptionKey: 'categoryEnvironmentDescription',
+  },
+  {
+    type: CleanerType.Database,
+    labelKey: 'categoryDatabases',
+    icon: Database,
+    descriptionKey: 'categoryDatabasesDescription',
+  },
+  {
+    type: CleanerType.UninstallLeftovers,
+    labelKey: 'categoryUninstallLeftovers',
+    icon: PackageX,
+    descriptionKey: 'categoryUninstallLeftoversDescription',
+  },
 ]
 
 export function CleanerPage() {
@@ -62,12 +104,10 @@ export function CleanerPage() {
   const { platform } = usePlatform()
   const store = useScanStore()
   const recomputeStats = useStatsStore((s) => s.recompute)
-  const historyStore = useHistoryStore()
+  const addEntry = useHistoryStore((s) => s.addEntry)
   const createRestorePointEnabled = useSettingsStore((s) => s.settings.cleaner.createRestorePoint)
   const protectRecycleBin = useSettingsStore((s) => s.settings.cleaner.protectRecycleBin)
-  const visibleCategories = protectRecycleBin
-    ? categories.filter((c) => c.type !== CleanerType.RecycleBin)
-    : categories
+  const visibleCategories = protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories
   const [activeCategory, setActiveCategory] = useState<CleanerType>(CleanerType.System)
   const [showConfirm, setShowConfirm] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -86,16 +126,16 @@ export function CleanerPage() {
       if (data.phase === 'cleaning') {
         const total = cleanTotalRef.current
         const base = (cleanIndexRef.current / total) * 100
-        const slice = (data.progress / total)
+        const slice = data.progress / total
         store.setProgress({ ...data, progress: base + slice })
       } else {
         const total = visibleCategories.length
         const base = (scanIndexRef.current / total) * 100
-        const slice = (data.progress / total)
+        const slice = data.progress / total
         store.setProgress({ ...data, progress: base + slice })
       }
     })
-  }, [])
+  }, [store, visibleCategories])
 
   const [failedCategories, setFailedCategories] = useState<string[]>([])
   const [elevationSkipped, setElevationSkipped] = useState<string[]>([])
@@ -115,6 +155,7 @@ export function CleanerPage() {
     try {
       const scanFns: Partial<Record<CleanerType, () => Promise<ScanResult[]>>> = {
         [CleanerType.System]: () => window.dinho.systemScan(),
+        [CleanerType.WinSxS]: () => window.dinho.winSxSScan(),
         [CleanerType.Browser]: () => window.dinho.browserScan(),
         [CleanerType.App]: () => window.dinho.appScan(),
         [CleanerType.Gaming]: () => window.dinho.gamingScan(),
@@ -122,10 +163,11 @@ export function CleanerPage() {
         [CleanerType.Shortcut]: () => window.dinho.shortcutScan(),
         [CleanerType.Environment]: () => window.dinho.environmentScan(),
         [CleanerType.Database]: () => window.dinho.databaseScan(),
-        [CleanerType.UninstallLeftovers]: () => window.dinho.uninstallLeftoversScan()
+        [CleanerType.UninstallLeftovers]: () => window.dinho.uninstallLeftoversScan(),
       }
       for (let ci = 0; ci < visibleCategories.length; ci++) {
         const cat = visibleCategories[ci]
+        if (!cat) continue
         scanIndexRef.current = ci
         setScanningCategory(cat.type)
         try {
@@ -151,7 +193,7 @@ export function CleanerPage() {
       store.setStatus(ScanStatus.Error)
     }
     store.setProgress(null)
-  }, [])
+  }, [store, visibleCategories, t])
 
   const handleClean = useCallback(async () => {
     setShowConfirm(false)
@@ -161,22 +203,22 @@ export function CleanerPage() {
       // Create a system restore point before cleaning if enabled
       if (createRestorePointEnabled) {
         try {
-          const rpResult = await window.dinho.createRestorePoint(
-            `DiNho Optimizer — ${new Date().toLocaleString()}`
-          )
+          const rpResult = await window.dinho.createRestorePoint(`DiNho Optimizer — ${new Date().toLocaleString()}`)
           if (rpResult.success) {
             toast.success(t('toastRestorePointCreated'))
           } else {
             toast.warning(t('toastRestorePointSkipped'), { description: rpResult.error })
           }
-        } catch {
+        } catch (err) {
+          console.error('Restore point creation failed:', err)
           toast.warning(t('toastRestorePointSkipped'), { description: t('toastRestorePointSkippedDescription') })
         }
       }
 
       const selectedIds = store.getSelectedIds()
-      const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<any>>> = {
+      const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<unknown>>> = {
         [CleanerType.System]: (ids) => window.dinho.systemClean(ids),
+        [CleanerType.WinSxS]: () => window.dinho.winSxSClean(),
         [CleanerType.Browser]: (ids) => window.dinho.browserClean(ids),
         [CleanerType.App]: (ids) => window.dinho.appClean(ids),
         [CleanerType.Gaming]: (ids) => window.dinho.gamingClean(ids),
@@ -184,9 +226,12 @@ export function CleanerPage() {
         [CleanerType.Shortcut]: (ids) => window.dinho.shortcutClean(ids),
         [CleanerType.Environment]: (ids) => window.dinho.environmentClean(ids),
         [CleanerType.Database]: (ids) => window.dinho.databaseClean(ids),
-        [CleanerType.UninstallLeftovers]: (ids) => window.dinho.uninstallLeftoversClean(ids)
+        [CleanerType.UninstallLeftovers]: (ids) => window.dinho.uninstallLeftoversClean(ids),
       }
-      let totalCleaned = 0, totalFiles = 0, totalSkipped = 0, anyNeedsElevation = false
+      let totalCleaned = 0
+      let totalFiles = 0
+      let totalSkipped = 0
+      let anyNeedsElevation = false
       const allErrors: { path: string; reason: string }[] = []
       const categoryBreakdown: Array<{ name: string; type: string; found: number; cleaned: number; space: number }> = []
 
@@ -203,11 +248,10 @@ export function CleanerPage() {
 
       for (let ci = 0; ci < visibleCategories.length; ci++) {
         const cat = visibleCategories[ci]
+        if (!cat) continue
         const catResults = store.results.filter((r) => r.category === cat.type)
         const catItemsAll = catResults.flatMap((r) => r.items)
-        const catItemIds = catItemsAll
-          .filter((item) => selectedIds.includes(item.id))
-          .map((item) => item.id)
+        const catItemIds = catItemsAll.filter((item) => selectedIds.includes(item.id)).map((item) => item.id)
         if (catItemIds.length > 0) {
           cleanIndexRef.current = activeIndex
           try {
@@ -225,19 +269,27 @@ export function CleanerPage() {
                 type: cat.type,
                 found: catItemsAll.length,
                 cleaned: result.filesDeleted || 0,
-                space: result.totalCleaned || 0
+                space: result.totalCleaned || 0,
               })
             }
-          } catch { /* continue */ }
+          } catch {
+            /* continue */
+          }
           activeIndex++
         } else if (catItemsAll.length > 0) {
-          categoryBreakdown.push({ name: t(cat.labelKey), type: cat.type, found: catItemsAll.length, cleaned: 0, space: 0 })
+          categoryBreakdown.push({
+            name: t(cat.labelKey),
+            type: cat.type,
+            found: catItemsAll.length,
+            cleaned: 0,
+            space: 0,
+          })
         }
       }
 
       const totalFound = store.results.reduce((s, r) => s + r.itemCount, 0)
       const duration = Date.now() - cleanStartRef.current
-      await historyStore.addEntry({
+      await addEntry({
         id: Date.now().toString(),
         type: 'cleaner',
         timestamp: new Date().toISOString(),
@@ -247,9 +299,12 @@ export function CleanerPage() {
         totalItemsSkipped: totalSkipped,
         totalSpaceSaved: totalCleaned,
         categories: categoryBreakdown.map((d) => ({
-          name: d.name, itemsFound: d.found, itemsCleaned: d.cleaned, spaceSaved: d.space
+          name: d.name,
+          itemsFound: d.found,
+          itemsCleaned: d.cleaned,
+          spaceSaved: d.space,
         })),
-        errorCount: allErrors.length
+        errorCount: allErrors.length,
       })
       recomputeStats()
 
@@ -261,14 +316,14 @@ export function CleanerPage() {
         needsElevation: anyNeedsElevation,
         categories: categoryBreakdown,
         duration,
-        totalSizeBefore: store.getTotalSize()
+        totalSizeBefore: store.getTotalSize(),
       })
       store.setStatus(ScanStatus.Complete)
     } catch {
       store.setStatus(ScanStatus.Error)
     }
     store.setProgress(null)
-  }, [store.results, createRestorePointEnabled])
+  }, [store, createRestorePointEnabled, t, visibleCategories, addEntry, recomputeStats])
 
   const categoryResults = (type: CleanerType) => store.results.filter((r) => r.category === type)
   const categoryItemCount = (type: CleanerType) => categoryResults(type).reduce((sum, r) => sum + r.itemCount, 0)
@@ -298,6 +353,7 @@ export function CleanerPage() {
         action={
           <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={handleScan}
               disabled={isScanning || isCleaning}
               className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
@@ -307,13 +363,14 @@ export function CleanerPage() {
               {t('scanButton')}
             </button>
             <button
+              type="button"
               onClick={() => setShowConfirm(true)}
               disabled={!hasResults || isScanning || isCleaning || store.getSelectedIds().length === 0}
               className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
               style={{
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: 'var(--text-on-accent)',
-                boxShadow: hasResults ? '0 4px 20px rgba(245,158,11,0.2)' : 'none'
+                boxShadow: hasResults ? '0 4px 20px rgba(245,158,11,0.2)' : 'none',
               }}
             >
               <Sparkles className="h-4 w-4" strokeWidth={2} />
@@ -331,16 +388,20 @@ export function CleanerPage() {
             const isActive = activeCategory === cat.type
             return (
               <button
+                type="button"
                 key={cat.type}
                 onClick={() => setActiveCategory(cat.type)}
                 className="relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
                 style={{
                   background: isActive ? 'var(--accent-muted-bg)' : 'transparent',
-                  color: isActive ? 'var(--accent-hover)' : 'var(--text-muted)'
+                  color: isActive ? 'var(--accent-hover)' : 'var(--text-muted)',
                 }}
               >
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full" style={{ background: 'var(--accent)' }} />
+                  <div
+                    className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full"
+                    style={{ background: 'var(--accent)' }}
+                  />
                 )}
                 {scanningCategory === cat.type ? (
                   <Loader2 className="h-[17px] w-[17px] shrink-0 animate-spin text-amber-400" strokeWidth={1.8} />
@@ -349,7 +410,9 @@ export function CleanerPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <span className="text-[13px] font-medium">{t(cat.labelKey)}</span>
-                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t(cat.descriptionKey)}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {t(cat.descriptionKey)}
+                  </p>
                 </div>
                 {count > 0 && (
                   <span
@@ -364,14 +427,21 @@ export function CleanerPage() {
           })}
 
           {hasResults && (
-            <div className="mt-5 rounded-2xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}>
-              <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{t('totalRecoverable')}</p>
+            <div
+              className="mt-5 rounded-2xl p-4"
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
+            >
+              <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                {t('totalRecoverable')}
+              </p>
               <p className="text-[20px] font-bold tracking-tight text-amber-400">{formatBytes(store.getTotalSize())}</p>
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                 {t('itemsCount', { count: formatNumber(store.results.reduce((s, r) => s + r.itemCount, 0)) })}
               </p>
               <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{t('selectedLabel')}</p>
+                <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                  {t('selectedLabel')}
+                </p>
                 <p className="text-[15px] font-semibold text-zinc-200">{formatBytes(store.getSelectedSize())}</p>
               </div>
             </div>
@@ -415,11 +485,15 @@ export function CleanerPage() {
                   <span style={{ color: 'var(--text-muted)' }}> {t('categoriesSkippedSuffix')}</span>
                 </p>
                 <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
-                  {elevationSkipped.slice(0, 4).join(', ')}{elevationSkipped.length > 4 ? ` ${t('categoriesSkippedMore', { count: elevationSkipped.length - 4 })}` : ''}
+                  {elevationSkipped.slice(0, 4).join(', ')}
+                  {elevationSkipped.length > 4
+                    ? ` ${t('categoriesSkippedMore', { count: elevationSkipped.length - 4 })}`
+                    : ''}
                 </p>
               </div>
               {platform !== 'darwin' && (
                 <button
+                  type="button"
                   onClick={handleRelaunch}
                   className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-amber-400 transition-colors hover:bg-amber-500/15"
                   style={{ border: '1px solid rgba(245,158,11,0.2)' }}
@@ -441,10 +515,14 @@ export function CleanerPage() {
               description={t('noScanResultsDescription')}
               action={
                 <button
+                  type="button"
                   onClick={handleScan}
                   disabled={isCleaning}
                   className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
-                  style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'var(--text-on-accent)' }}
+                  style={{
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: 'var(--text-on-accent)',
+                  }}
                 >
                   <Search className="h-4 w-4" strokeWidth={1.8} />
                   {t('startScan')}
@@ -456,10 +534,16 @@ export function CleanerPage() {
           {hasResults && (
             <div key={activeCategory} className="space-y-2">
               <div className="mb-3 flex items-center justify-between px-1">
-                <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                  {t('categoryItemsHeading', { category: t(categories.find((c) => c.type === activeCategory)?.labelKey ?? '') })}
+                <span
+                  className="text-[11px] font-medium uppercase tracking-wider"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {t('categoryItemsHeading', {
+                    category: t(categories.find((c) => c.type === activeCategory)?.labelKey ?? ''),
+                  })}
                 </span>
                 <button
+                  type="button"
                   onClick={() => store.toggleCategory(activeCategory)}
                   className="text-[12px] font-medium text-amber-500 hover:text-amber-400"
                 >
@@ -492,7 +576,10 @@ export function CleanerPage() {
                   <div key={section.label || '_ungrouped'}>
                     {section.label && (
                       <div className="mt-4 mb-2 flex items-center gap-2 px-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                        <span
+                          className="text-[11px] font-semibold uppercase tracking-wider"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
                           {section.label}
                         </span>
                         <div className="flex-1 h-px" style={{ background: 'var(--bg-hover-2)' }} />
@@ -510,31 +597,67 @@ export function CleanerPage() {
                         const someSelected = selectedInGroup > 0 && !allSelected
 
                         return (
-                          <div key={result.subcategory} className="rounded-xl overflow-hidden"
-                            style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}>
+                          <div
+                            key={result.subcategory}
+                            className="rounded-xl overflow-hidden"
+                            style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
+                          >
                             {/* Group header */}
-                            <div className="flex items-center gap-3 px-4 py-3.5 cursor-pointer"
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 px-4 py-3.5 cursor-pointer"
                               onClick={() => toggleGroup(groupKey)}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-subtle)' }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                              style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--bg-subtle)'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent'
+                              }}
+                            >
                               {/* Checkbox */}
-                              <div onClick={(e) => { e.stopPropagation(); toggleSubcategorySelection(result) }}
-                                className="flex items-center">
-                                <div className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] cursor-pointer"
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleSubcategorySelection(result)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.stopPropagation()
+                                    toggleSubcategorySelection(result)
+                                  }
+                                }}
+                                role="button"
+                                tabIndex={0}
+                                className="flex items-center"
+                              >
+                                <div
+                                  className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] cursor-pointer"
                                   style={{
                                     background: allSelected || someSelected ? 'var(--accent)' : 'var(--bg-hover-2)',
-                                    border: allSelected || someSelected ? 'none' : '1.5px solid var(--border-stronger)'
-                                  }}>
+                                    border: allSelected || someSelected ? 'none' : '1.5px solid var(--border-stronger)',
+                                  }}
+                                >
                                   {allSelected && (
                                     <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                                      <path d="M2.5 6l2.5 2.5 4.5-5" stroke="var(--text-on-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      <title>Checkmark</title>
+                                      <path
+                                        d="M2.5 6l2.5 2.5 4.5-5"
+                                        stroke="var(--text-on-accent)"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
                                     </svg>
                                   )}
                                   {someSelected && (
-                                    <div className="h-[2px] w-2 rounded-full" style={{ background: 'var(--text-on-accent)' }} />
+                                    <div
+                                      className="h-[2px] w-2 rounded-full"
+                                      style={{ background: 'var(--text-on-accent)' }}
+                                    />
                                   )}
                                 </div>
-                              </div>
+                              </span>
 
                               {/* Expand arrow */}
                               <ChevronRight
@@ -544,7 +667,11 @@ export function CleanerPage() {
                               />
 
                               {/* Folder icon */}
-                              <Folder className="h-4 w-4 shrink-0" style={{ color: allSelected ? 'var(--accent)' : 'var(--text-muted)' }} strokeWidth={1.8} />
+                              <Folder
+                                className="h-4 w-4 shrink-0"
+                                style={{ color: allSelected ? 'var(--accent)' : 'var(--text-muted)' }}
+                                strokeWidth={1.8}
+                              />
 
                               {/* Label */}
                               <div className="flex-1 min-w-0">
@@ -552,25 +679,36 @@ export function CleanerPage() {
                               </div>
 
                               {/* Stats */}
-                              <span className="rounded-md px-2 py-0.5 font-mono text-[11px] shrink-0"
-                                style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}>
-                                {t(result.itemCount === 1 ? 'itemCount' : 'itemCountPlural', { count: formatNumber(result.itemCount) })}
+                              <span
+                                className="rounded-md px-2 py-0.5 font-mono text-[11px] shrink-0"
+                                style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}
+                              >
+                                {t(result.itemCount === 1 ? 'itemCount' : 'itemCountPlural', {
+                                  count: formatNumber(result.itemCount),
+                                })}
                               </span>
-                              <span className="font-mono text-[12px] font-medium shrink-0" style={{ color: 'var(--text-muted)' }}>
+                              <span
+                                className="font-mono text-[12px] font-medium shrink-0"
+                                style={{ color: 'var(--text-muted)' }}
+                              >
                                 {formatBytes(result.totalSize)}
                               </span>
 
                               {/* Open location */}
-                              {result.items.length > 0 && isAbsolutePath(result.items[0].path) && (
+                              {result.items.length > 0 && result.items[0] && isAbsolutePath(result.items[0].path) && (
                                 <button
                                   type="button"
                                   title={t('openLocation')}
                                   className="shrink-0 p-1 rounded transition-colors hover:bg-[var(--bg-hover-2)]"
-                                  onClick={(e) => { e.stopPropagation(); window.dinho?.cleanerOpenLocation?.(result.items[0].path) }}>
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (result.items[0]) window.dinho?.cleanerOpenLocation?.(result.items[0].path)
+                                  }}
+                                >
                                   <FolderOpen className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
                                 </button>
                               )}
-                            </div>
+                            </button>
 
                             {/* Expanded item list */}
                             {isExpanded && (
@@ -579,28 +717,57 @@ export function CleanerPage() {
                                   const checked = store.selectedItems.has(item.id)
                                   const pathLabel = item.path.split(/[/\\]/).slice(-2).join('/') || item.path
                                   return (
-                                    <label key={item.id}
+                                    <label
+                                      key={item.id}
                                       className="flex items-center gap-3 px-4 py-2 pl-14 cursor-pointer transition-colors"
                                       style={{ background: checked ? 'rgba(245,158,11,0.03)' : 'transparent' }}
-                                      onMouseEnter={(e) => { e.currentTarget.style.background = checked ? 'rgba(245,158,11,0.05)' : 'var(--bg-subtle)' }}
-                                      onMouseLeave={(e) => { e.currentTarget.style.background = checked ? 'rgba(245,158,11,0.03)' : 'transparent' }}>
-                                      <input type="checkbox" checked={checked} onChange={() => store.toggleItem(item.id)}
-                                        className="sr-only peer" />
-                                      <div className="flex h-[16px] w-[16px] items-center justify-center rounded-[4px] shrink-0"
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = checked
+                                          ? 'rgba(245,158,11,0.05)'
+                                          : 'var(--bg-subtle)'
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = checked
+                                          ? 'rgba(245,158,11,0.03)'
+                                          : 'transparent'
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => store.toggleItem(item.id)}
+                                        className="sr-only peer"
+                                      />
+                                      <div
+                                        className="flex h-[16px] w-[16px] items-center justify-center rounded-[4px] shrink-0"
                                         style={{
                                           background: checked ? 'var(--accent)' : 'var(--bg-hover-2)',
-                                          border: checked ? 'none' : '1.5px solid var(--border-stronger)'
-                                        }}>
+                                          border: checked ? 'none' : '1.5px solid var(--border-stronger)',
+                                        }}
+                                      >
                                         {checked && (
                                           <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-                                            <path d="M2.5 6l2.5 2.5 4.5-5" stroke="var(--text-on-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                            <title>Checked</title>
+                                            <path
+                                              d="M2.5 6l2.5 2.5 4.5-5"
+                                              stroke="var(--text-on-accent)"
+                                              strokeWidth="2"
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                            />
                                           </svg>
                                         )}
                                       </div>
-                                      <span className="flex-1 min-w-0 truncate text-[12px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+                                      <span
+                                        className="flex-1 min-w-0 truncate text-[12px] font-mono"
+                                        style={{ color: 'var(--text-secondary)' }}
+                                      >
                                         {pathLabel}
                                       </span>
-                                      <span className="font-mono text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+                                      <span
+                                        className="font-mono text-[11px] shrink-0"
+                                        style={{ color: 'var(--text-muted)' }}
+                                      >
                                         {formatBytes(item.size)}
                                       </span>
                                       {isAbsolutePath(item.path) && (
@@ -608,7 +775,12 @@ export function CleanerPage() {
                                           type="button"
                                           title={t('openLocation')}
                                           className="shrink-0 p-0.5 rounded transition-colors hover:bg-[var(--bg-hover-2)]"
-                                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.dinho?.cleanerOpenLocation?.(item.path) }}>
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            window.dinho?.cleanerOpenLocation?.(item.path)
+                                          }}
+                                        >
                                           <FolderOpen className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
                                         </button>
                                       )}
@@ -639,7 +811,10 @@ export function CleanerPage() {
         onConfirm={handleClean}
         onCancel={() => setShowConfirm(false)}
         title={t('confirmCleanTitle')}
-        description={t('confirmCleanDescription', { count: formatNumber(store.getSelectedIds().length), size: formatBytes(store.getSelectedSize()) })}
+        description={t('confirmCleanDescription', {
+          count: formatNumber(store.getSelectedIds().length),
+          size: formatBytes(store.getSelectedSize()),
+        })}
         confirmLabel={t('confirmCleanLabel')}
         variant="warning"
       />

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('fs/promises', () => ({
   rm: vi.fn(),
@@ -13,10 +13,14 @@ vi.mock('fs', () => ({
 }))
 
 vi.mock('crypto', () => ({
-  randomUUID: () => 'mock-uuid',
-  randomBytes: (size: number) => Buffer.alloc(size, 0xAB),
+  randomBytes: (size: number, cb?: (err: Error | null, buf: Buffer) => void) => {
+    const buf = Buffer.alloc(size, 0xab)
+    if (cb) cb(null, buf)
+    return buf
+  },
 }))
 
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 let mockSettings: any
 
 vi.mock('./settings-store', () => ({
@@ -27,22 +31,24 @@ vi.mock('./scan-cache', () => ({
   getCachedItems: vi.fn(),
 }))
 
-import { rm, stat, readdir, open, writeFile } from 'fs/promises'
-import { existsSync } from 'fs'
+import { existsSync } from 'node:fs'
+import { open, readdir, rm, stat } from 'node:fs/promises'
 
+import { CleanerType } from '../../shared/enums'
 import {
-  isExcluded,
-  safeDelete,
   cleanItems,
-  scanDirectory,
-  scanMultipleDirectories,
-  scanFile,
-  scanDirectoriesAsItems,
-  resolveChildSubdirs,
   getDirectorySize,
+  isExcluded,
+  resolveChildSubdirs,
+  safeDelete,
+  scanDirectoriesAsItems,
+  scanDirectory,
+  scanFile,
+  scanMultipleDirectories,
+  scanWithFileMask,
 } from './file-utils'
-import { getSettings } from './settings-store'
 import { getCachedItems } from './scan-cache'
+import { getSettings } from './settings-store'
 
 const mockedRm = vi.mocked(rm)
 const mockedStat = vi.mocked(stat)
@@ -63,9 +69,11 @@ beforeEach(() => {
 })
 
 function mockDirEntry(name: string, isDir: boolean) {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   return { name, isDirectory: () => isDir } as any
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 function mockFileStats(size: number, mtimeMs = Date.now()): any {
   return {
     size,
@@ -75,6 +83,7 @@ function mockFileStats(size: number, mtimeMs = Date.now()): any {
   }
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 function mockDirStats(): any {
   return {
     isFile: () => false,
@@ -149,6 +158,7 @@ describe('safeDelete', () => {
     mockedStat.mockResolvedValue(mockFileStats(1024))
     const mockFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn() }
     const mockFileHandle = { ...mockFd, on: vi.fn() }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValue(mockFileHandle as any)
     mockedRm.mockResolvedValue(undefined)
 
@@ -170,6 +180,7 @@ describe('safeDelete', () => {
   })
 
   it('returns in-use for EBUSY error', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const err = new Error('file in use') as any
     err.code = 'EBUSY'
     mockedRm.mockRejectedValue(err)
@@ -179,6 +190,7 @@ describe('safeDelete', () => {
   })
 
   it('returns permission-denied for EACCES error', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const err = new Error('access denied') as any
     err.code = 'EACCES'
     mockedRm.mockRejectedValue(err)
@@ -188,6 +200,7 @@ describe('safeDelete', () => {
   })
 
   it('returns success for ENOENT error (file already gone)', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const err = new Error('not found') as any
     err.code = 'ENOENT'
     mockedRm.mockRejectedValue(err)
@@ -210,8 +223,24 @@ describe('safeDelete', () => {
 describe('cleanItems', () => {
   it('validates and cleans cached items', async () => {
     mockedGetCachedItems.mockReturnValue([
-      { id: '1', path: 'C:\\a.tmp', size: 100, selected: true },
-      { id: '2', path: 'C:\\b.tmp', size: 200, selected: true },
+      {
+        id: '1',
+        path: 'C:\\a.tmp',
+        size: 100,
+        category: 'system',
+        subcategory: 'logs',
+        lastModified: 0,
+        selected: true,
+      },
+      {
+        id: '2',
+        path: 'C:\\b.tmp',
+        size: 200,
+        category: 'system',
+        subcategory: 'logs',
+        lastModified: 0,
+        selected: true,
+      },
     ])
     mockedRm.mockResolvedValue(undefined)
 
@@ -224,7 +253,8 @@ describe('cleanItems', () => {
 
   it('filters out non-string IDs', async () => {
     mockedGetCachedItems.mockReturnValue([])
-    const result = await cleanItems([1, 'valid'] as any)
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    await cleanItems([1, 'valid'] as any)
     expect(mockedGetCachedItems).toHaveBeenCalledWith(['valid'])
   })
 
@@ -236,8 +266,24 @@ describe('cleanItems', () => {
 
   it('reports skipped files and errors', async () => {
     mockedGetCachedItems.mockReturnValue([
-      { id: '1', path: 'C:\\a.tmp', size: 100, selected: true },
-      { id: '2', path: 'C:\\b.tmp', size: 200, selected: true },
+      {
+        id: '1',
+        path: 'C:\\a.tmp',
+        size: 100,
+        category: 'system',
+        subcategory: 'logs',
+        lastModified: 0,
+        selected: true,
+      },
+      {
+        id: '2',
+        path: 'C:\\b.tmp',
+        size: 200,
+        category: 'system',
+        subcategory: 'logs',
+        lastModified: 0,
+        selected: true,
+      },
     ])
     mockedRm.mockRejectedValueOnce(Object.assign(new Error('permission'), { code: 'EACCES' }))
     mockedRm.mockResolvedValueOnce(undefined)
@@ -248,12 +294,20 @@ describe('cleanItems', () => {
     expect(result.totalCleaned).toBe(200)
     expect(result.needsElevation).toBe(true)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].reason).toBe('permission-denied')
+    expect(result.errors[0]!.reason).toBe('permission-denied')
   })
 
   it('calls onProgress callback', async () => {
     mockedGetCachedItems.mockReturnValue([
-      { id: '1', path: 'C:\\a.tmp', size: 100, selected: true },
+      {
+        id: '1',
+        path: 'C:\\a.tmp',
+        size: 100,
+        category: 'system',
+        subcategory: 'logs',
+        lastModified: 0,
+        selected: true,
+      },
     ])
     mockedRm.mockResolvedValue(undefined)
     const onProgress = vi.fn()
@@ -272,10 +326,7 @@ describe('getDirectorySize', () => {
   })
 
   it('sums file sizes in directory', async () => {
-    mockedReaddir.mockResolvedValue([
-      mockDirEntry('a.txt', false),
-      mockDirEntry('b.txt', false),
-    ])
+    mockedReaddir.mockResolvedValue([mockDirEntry('a.txt', false), mockDirEntry('b.txt', false)])
     mockedStat.mockResolvedValueOnce(mockFileStats(100))
     mockedStat.mockResolvedValueOnce(mockFileStats(200))
 
@@ -286,9 +337,7 @@ describe('getDirectorySize', () => {
     mockedReaddir
       .mockResolvedValueOnce([mockDirEntry('sub', true)])
       .mockResolvedValueOnce([mockDirEntry('c.txt', false)])
-    mockedStat
-      .mockResolvedValueOnce(mockDirStats())
-      .mockResolvedValueOnce(mockFileStats(500))
+    mockedStat.mockResolvedValueOnce(mockDirStats()).mockResolvedValueOnce(mockFileStats(500))
 
     expect(await getDirectorySize('C:\\dir', 3)).toBe(500)
   })
@@ -313,60 +362,48 @@ describe('scanDirectory', () => {
   const OLD = Date.now() - 7_200_000
 
   it('scans files and returns ScanResult', async () => {
-    mockedReaddir.mockResolvedValue([
-      mockDirEntry('old.log', false),
-      mockDirEntry('recent.log', false),
-    ])
-    mockedStat
-      .mockResolvedValueOnce(mockFileStats(500, OLD))
-      .mockResolvedValueOnce(mockFileStats(1000, Date.now()))
+    mockedReaddir.mockResolvedValue([mockDirEntry('old.log', false), mockDirEntry('recent.log', false)])
+    mockedStat.mockResolvedValueOnce(mockFileStats(500, OLD)).mockResolvedValueOnce(mockFileStats(1000, Date.now()))
 
-    const result = await scanDirectory('C:\\logs', 'system', 'logs')
+    const result = await scanDirectory('C:\\logs', CleanerType.System, 'logs')
     expect(result.category).toBe('system')
     expect(result.subcategory).toBe('logs')
     expect(result.items).toHaveLength(1)
-    expect(result.items[0].path).toBe('C:\\logs\\old.log')
-    expect(result.items[0].size).toBe(500)
+    expect(result.items[0]!.path).toBe('C:\\logs\\old.log')
+    expect(result.items[0]!.size).toBe(500)
   })
 
   it('skips excluded files', async () => {
     mockSettings.exclusions = ['*.log']
-    mockedReaddir.mockResolvedValue([
-      mockDirEntry('app.log', false),
-      mockDirEntry('data.db', false),
-    ])
-    mockedStat
-      .mockResolvedValueOnce(mockFileStats(100, OLD))
-      .mockResolvedValueOnce(mockFileStats(200, OLD))
+    mockedReaddir.mockResolvedValue([mockDirEntry('app.log', false), mockDirEntry('data.db', false)])
+    mockedStat.mockResolvedValueOnce(mockFileStats(100, OLD)).mockResolvedValueOnce(mockFileStats(200, OLD))
 
-    const result = await scanDirectory('C:\\data', 'system', 'data')
+    const result = await scanDirectory('C:\\data', CleanerType.System, 'data')
     expect(result.items).toHaveLength(1)
-    expect(result.items[0].path).toBe('C:\\data\\data.db')
+    expect(result.items[0]!.path).toBe('C:\\data\\data.db')
   })
 
   it('skips inaccessible files', async () => {
     mockedReaddir.mockResolvedValue([mockDirEntry('secret.tmp', false)])
     mockedStat.mockRejectedValue(new Error('access denied'))
 
-    const result = await scanDirectory('C:\\temp', 'system', 'temp')
+    const result = await scanDirectory('C:\\temp', CleanerType.System, 'temp')
     expect(result.items).toHaveLength(0)
   })
 
   it('returns empty result when readdir fails', async () => {
     mockedReaddir.mockRejectedValue(new Error('no such dir'))
 
-    const result = await scanDirectory('C:\\gone', 'system', 'temp')
+    const result = await scanDirectory('C:\\gone', CleanerType.System, 'temp')
     expect(result.items).toHaveLength(0)
     expect(result.totalSize).toBe(0)
   })
 
   it('respects skipRecentMinutes cutoff', async () => {
-    mockedReaddir.mockResolvedValue([
-      mockDirEntry('recent.txt', false),
-    ])
+    mockedReaddir.mockResolvedValue([mockDirEntry('recent.txt', false)])
     mockedStat.mockResolvedValue(mockFileStats(50, Date.now()))
 
-    const result = await scanDirectory('C:\\temp', 'system', 'temp', 60)
+    const result = await scanDirectory('C:\\temp', CleanerType.System, 'temp', 60)
     expect(result.items).toHaveLength(0)
   })
 
@@ -375,7 +412,7 @@ describe('scanDirectory', () => {
     mockedReaddir.mockResolvedValue(entries)
     mockedStat.mockResolvedValue(mockFileStats(10, OLD))
 
-    const result = await scanDirectory('C:\\bulk', 'system', 'bulk')
+    const result = await scanDirectory('C:\\bulk', CleanerType.System, 'bulk')
     expect(result.items).toHaveLength(5000)
   })
 })
@@ -390,14 +427,9 @@ describe('scanMultipleDirectories', () => {
     mockedReaddir
       .mockResolvedValueOnce([mockDirEntry('a.log', false)])
       .mockResolvedValueOnce([mockDirEntry('b.log', false)])
-    mockedStat
-      .mockResolvedValueOnce(mockFileStats(100, OLD))
-      .mockResolvedValueOnce(mockFileStats(200, OLD))
+    mockedStat.mockResolvedValueOnce(mockFileStats(100, OLD)).mockResolvedValueOnce(mockFileStats(200, OLD))
 
-    const result = await scanMultipleDirectories(
-      ['C:\\dir1', 'C:\\dir2'],
-      'system', 'logs',
-    )
+    const result = await scanMultipleDirectories(['C:\\dir1', 'C:\\dir2'], CleanerType.System, 'logs')
     expect(result.items).toHaveLength(2)
     expect(result.totalSize).toBe(300)
   })
@@ -409,27 +441,27 @@ describe('scanMultipleDirectories', () => {
 describe('scanFile', () => {
   it('returns a single-item ScanResult for a file', async () => {
     mockedStat.mockResolvedValue(mockFileStats(500))
-    const result = await scanFile('C:\\file.txt', 'system', 'files')
+    const result = await scanFile('C:\\file.txt', CleanerType.System, 'files')
     expect(result.items).toHaveLength(1)
-    expect(result.items[0].size).toBe(500)
+    expect(result.items[0]!.size).toBe(500)
     expect(result.totalSize).toBe(500)
   })
 
   it('returns empty when file is excluded', async () => {
     mockSettings.exclusions = ['*.txt']
-    const result = await scanFile('C:\\file.txt', 'system', 'files')
+    const result = await scanFile('C:\\file.txt', CleanerType.System, 'files')
     expect(result.items).toHaveLength(0)
   })
 
   it('returns empty when path is not a file', async () => {
     mockedStat.mockResolvedValue(mockDirStats())
-    const result = await scanFile('C:\\dir', 'system', 'files')
+    const result = await scanFile('C:\\dir', CleanerType.System, 'files')
     expect(result.items).toHaveLength(0)
   })
 
   it('returns empty when stat fails', async () => {
     mockedStat.mockRejectedValue(new Error('not found'))
-    const result = await scanFile('C:\\gone.txt', 'system', 'files')
+    const result = await scanFile('C:\\gone.txt', CleanerType.System, 'files')
     expect(result.items).toHaveLength(0)
   })
 })
@@ -439,37 +471,35 @@ describe('scanFile', () => {
 // ─────────────────────────────────────────────
 describe('scanDirectoriesAsItems', () => {
   it('scans directories as single items', async () => {
-    mockedStat
-      .mockResolvedValueOnce(mockDirStats())
-      .mockResolvedValueOnce(mockFileStats(2048))
+    mockedStat.mockResolvedValueOnce(mockDirStats()).mockResolvedValueOnce(mockFileStats(2048))
     mockedReaddir.mockResolvedValue([mockDirEntry('f.dat', false)])
-    const result = await scanDirectoriesAsItems(['C:\\app'], 'system', 'cache')
+    const result = await scanDirectoriesAsItems(['C:\\app'], CleanerType.System, 'cache')
     expect(result.items).toHaveLength(1)
-    expect(result.items[0].size).toBeGreaterThan(1024)
+    expect(result.items[0]!.size).toBeGreaterThan(1024)
   })
 
   it('skips excluded directories', async () => {
     mockSettings.exclusions = ['C:\\app']
-    const result = await scanDirectoriesAsItems(['C:\\app'], 'system', 'cache')
+    const result = await scanDirectoriesAsItems(['C:\\app'], CleanerType.System, 'cache')
     expect(result.items).toHaveLength(0)
   })
 
   it('skips non-directories', async () => {
     mockedStat.mockResolvedValue(mockFileStats(100))
-    const result = await scanDirectoriesAsItems(['C:\\file.txt'], 'system', 'cache')
+    const result = await scanDirectoriesAsItems(['C:\\file.txt'], CleanerType.System, 'cache')
     expect(result.items).toHaveLength(0)
   })
 
   it('skips directories smaller than 1024 bytes', async () => {
     mockedStat.mockResolvedValue(mockDirStats())
     mockedReaddir.mockResolvedValue([])
-    const result = await scanDirectoriesAsItems(['C:\\empty'], 'system', 'cache')
+    const result = await scanDirectoriesAsItems(['C:\\empty'], CleanerType.System, 'cache')
     expect(result.items).toHaveLength(0)
   })
 
   it('skips inaccessible directories', async () => {
     mockedStat.mockRejectedValue(new Error('access denied'))
-    const result = await scanDirectoriesAsItems(['C:\\secret'], 'system', 'cache')
+    const result = await scanDirectoriesAsItems(['C:\\secret'], CleanerType.System, 'cache')
     expect(result.items).toHaveLength(0)
   })
 })
@@ -523,6 +553,7 @@ describe('secureOverwrite (via safeDelete)', () => {
     mockedStat.mockResolvedValueOnce(mockDirStats())
     mockedStat.mockResolvedValueOnce(childStat)
     const mockFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn() }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValue(mockFd as any)
     mockedRm.mockResolvedValue(undefined)
 
@@ -539,5 +570,117 @@ describe('secureOverwrite (via safeDelete)', () => {
     const result = await safeDelete('C:\\empty.tmp')
     expect(result.success).toBe(true)
     expect(mockedOpen).not.toHaveBeenCalled()
+  })
+})
+
+// ─────────────────────────────────────────────
+// scanWithFileMask
+// ─────────────────────────────────────────────
+describe('scanWithFileMask', () => {
+  const OLD = Date.now() - 3600 * 1000 // 1 hour ago (past cutoff)
+  const RECENT = Date.now() // too recent
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  function fileEntry(name: string): any {
+    return { name, isDirectory: () => false, isFile: () => true }
+  }
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  function dirEntry(name: string): any {
+    return { name, isDirectory: () => true, isFile: () => false }
+  }
+
+  beforeEach(() => {
+    mockedStat.mockReset()
+    mockedReaddir.mockReset()
+  })
+
+  it('returns empty result for non-existent directory', async () => {
+    mockedReaddir.mockRejectedValue(new Error('ENOENT'))
+    const result = await scanWithFileMask('C:\\missing', '*.*', false, CleanerType.System, 'Test')
+    expect(result.items).toEqual([])
+    expect(result.itemCount).toBe(0)
+  })
+
+  it('finds files matching wildcard mask *.*', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('file1.log'), fileEntry('file2.tmp')])
+    mockedStat.mockResolvedValue(mockFileStats(100, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', '*.*', false, CleanerType.System, 'Test')
+
+    expect(result.itemCount).toBe(2)
+    expect(result.subcategory).toBe('Test')
+  })
+
+  it('filters files by *.log mask', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('output.log'), fileEntry('data.tmp'), fileEntry('error.LOG')])
+    mockedStat.mockResolvedValue(mockFileStats(50, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'Logs Only')
+
+    expect(result.itemCount).toBe(2) // output.log and error.LOG (case-insensitive)
+  })
+
+  it('filters files by thumb*.db mask', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('thumb.db'), fileEntry('thumbnail.dat'), fileEntry('other.txt')])
+    mockedStat.mockResolvedValue(mockFileStats(30, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', 'thumb*.db', false, CleanerType.System, 'Thumbs')
+
+    expect(result.itemCount).toBe(1)
+    expect(result.items[0]!.path).toContain('thumb.db')
+  })
+
+  it('skips recent files based on skipRecentMinutes', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('old.log'), fileEntry('recent.log')])
+    mockedStat
+      .mockResolvedValueOnce(mockFileStats(100, OLD)) // old.log passes
+      .mockResolvedValueOnce(mockFileStats(100, RECENT)) // recent.log filtered out
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'Test')
+    expect(result.itemCount).toBe(1)
+  })
+
+  it('scans recursively when recurse=true', async () => {
+    mockedReaddir
+      .mockResolvedValueOnce([dirEntry('sub')]) // top level: 'sub' dir
+      .mockResolvedValueOnce([fileEntry('deep.log')]) // sub/deep.log
+    mockedStat.mockResolvedValueOnce(mockFileStats(200, OLD)) // deep.log
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', true, CleanerType.System, 'Recursive')
+
+    expect(result.itemCount).toBe(1)
+    expect(result.items[0]!.path).toContain('deep.log')
+    expect(mockedReaddir).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT recurse when recurse=false', async () => {
+    mockedReaddir.mockResolvedValueOnce([dirEntry('sub')])
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'NoRecurse')
+
+    expect(result.itemCount).toBe(0)
+    // Should not have read the sub directory
+    expect(mockedReaddir).toHaveBeenCalledTimes(1)
+  })
+
+  it('respects file exclusions', async () => {
+    mockSettings.exclusions = ['*.skipme']
+    mockedReaddir.mockResolvedValue([fileEntry('good.log'), fileEntry('bad.skipme')])
+    mockedStat.mockResolvedValue(mockFileStats(50, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', '*.*', false, CleanerType.System, 'Excluded')
+
+    expect(result.itemCount).toBe(1)
+    expect(result.items[0]!.path).toContain('good.log')
+  })
+
+  it('matches ? wildcard (single char)', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('file1.txt'), fileEntry('file2.txt'), fileEntry('file10.txt')])
+    mockedStat.mockResolvedValue(mockFileStats(10, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', 'file?.txt', false, CleanerType.System, 'SingleChar')
+
+    expect(result.itemCount).toBe(2) // file1.txt, file2.txt — NOT file10.txt (too long)
   })
 })

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useNetworkStore } from './network-store'
 import type { NetworkItem } from '@shared/types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { useNetworkStore } from './network-store'
 
 function makeItem(id: string, type: NetworkItem['type']): NetworkItem {
   return { id, type, label: `Item ${id}`, detail: 'detail', selected: true }
@@ -65,6 +65,7 @@ describe('network-store', () => {
   })
 
   it('setCleanResult stores result', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = { cleaned: 3, failed: 0, details: [] } as any
     useNetworkStore.getState().setCleanResult(result)
     expect(useNetworkStore.getState().cleanResult).toEqual(result)

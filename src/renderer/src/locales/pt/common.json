@@ -19,5 +19,7 @@
   "skipToContent": "Saltar para o conteúdo principal",
   "minimizeWindow": "Minimizar janela",
   "maximizeWindow": "Maximizar janela",
-  "closeWindow": "Fechar janela"
+  "closeWindow": "Fechar janela",
+  "errorTitle": "Algo deu errado",
+  "errorTryAgain": "Tentar novamente"
 }

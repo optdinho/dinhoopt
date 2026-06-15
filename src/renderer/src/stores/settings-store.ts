@@ -1,5 +1,5 @@
-import { create } from 'zustand'
 import type { DiNhoSettings } from '@shared/types'
+import { create } from 'zustand'
 
 interface SettingsState {
   settings: DiNhoSettings
@@ -23,7 +23,7 @@ const defaultSettings: DiNhoSettings = {
     secureDelete: false,
     closeBrowsersBeforeClean: false,
     createRestorePoint: false,
-    protectRecycleBin: true
+    protectRecycleBin: true,
   },
   exclusions: [],
   ignoredSoftwareUpdates: [],
@@ -33,27 +33,31 @@ const defaultSettings: DiNhoSettings = {
     enabled: false,
     frequency: 'weekly',
     day: 1,
-    hour: 9
+    hour: 9,
   },
   schedules: [],
   windowsPackageManager: 'winget',
   gameMode: {
     enabledOptimizations: [
-      'svc-wsearch', 'svc-sysmain',
+      'svc-wsearch',
+      'svc-sysmain',
       'proc-kill-updaters',
       'mem-clear-standby',
-      'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep',
-      'sys-disable-game-bar', 'sys-disable-fse-opt',
-      'net-flush-dns'
+      'sys-focus-assist',
+      'sys-power-plan',
+      'sys-prevent-sleep',
+      'sys-disable-game-bar',
+      'sys-disable-fse-opt',
+      'net-flush-dns',
     ],
     gameProfiles: {},
     customProcessKillList: [],
     autoDetect: false,
     autoDeactivate: true,
-    customGameProcesses: []
+    customGameProcesses: [],
   },
   registryIgnoredTweaks: [],
-  malwareAllowlist: []
+  malwareAllowlist: [],
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -69,16 +73,19 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         schedule: { ...s.settings.schedule, ...(partial.schedule ?? {}) },
         // schedules is an array — replace entirely when provided
         schedules: partial.schedules ?? s.settings.schedules,
-        gameMode: { ...s.settings.gameMode, ...(partial.gameMode ?? {}) }
-      }
-    }))
+        gameMode: { ...s.settings.gameMode, ...(partial.gameMode ?? {}) },
+      },
+    })),
 }))
 
 /** Re-fetch settings from main process into the store */
 export function refreshSettings(): void {
-  window.dinho?.settingsGet?.().then((settings) => {
-    useSettingsStore.getState().setSettings(settings)
-  }).catch(() => {})
+  window.dinho
+    ?.settingsGet?.()
+    .then((settings) => {
+      useSettingsStore.getState().setSettings(settings)
+    })
+    .catch(() => {})
 }
 
 // Hydrate settings eagerly so pages that depend on them (e.g. ThreatMonitorPage)

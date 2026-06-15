@@ -1,9 +1,22 @@
-import { createContext, useContext, useEffect, useState } from 'react'
 import type { PlatformInfo } from '@shared/types'
+import { createContext, useContext, useEffect, useState } from 'react'
 
 const defaultInfo: PlatformInfo = {
   platform: 'win32',
-  features: { registry: true, debloater: true, drivers: true, restorePoint: true, bootTrace: true, gameMode: true, firewallAudit: true, contextMenu: true, windowsTweaks: true, benchmark: true, compliance: true },
+  features: {
+    registry: true,
+    debloater: true,
+    drivers: true,
+    restorePoint: true,
+    bootTrace: true,
+    gameMode: true,
+    firewallAudit: true,
+    contextMenu: true,
+    windowsTweaks: true,
+    benchmark: true,
+    compliance: true,
+    vulnerability: true,
+  },
 }
 
 const PlatformContext = createContext<PlatformInfo>(defaultInfo)
@@ -15,7 +28,10 @@ export function usePlatform(): PlatformInfo {
 export function usePlatformLoader(): PlatformInfo {
   const [info, setInfo] = useState<PlatformInfo>(defaultInfo)
   useEffect(() => {
-    window.dinho?.platformInfo?.().then(setInfo).catch(() => {})
+    window.dinho
+      ?.platformInfo?.()
+      .then(setInfo)
+      .catch(() => {})
   }, [])
   return info
 }

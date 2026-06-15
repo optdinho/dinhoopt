@@ -1,16 +1,16 @@
-import * as si from 'systeminformation'
-import * as os from 'os'
+import * as os from 'node:os'
 import { IPC } from '@shared/channels'
 import type {
-  PerfSystemInfo,
-  PerfSnapshot,
+  DiskSmartInfo,
+  PerfKillResult,
   PerfProcess,
   PerfProcessList,
-  PerfKillResult,
-  DiskSmartInfo,
-  StartupItem
+  PerfSnapshot,
+  PerfSystemInfo,
+  StartupItem,
 } from '@shared/types'
-import { psUtf8, execFileAsync } from './exec-utf8'
+import * as si from 'systeminformation'
+import { execFileAsync, psUtf8 } from './exec-utf8'
 
 export class PerfMonitorService {
   private fastTimer: ReturnType<typeof setInterval> | null = null
@@ -37,15 +37,12 @@ export class PerfMonitorService {
       cpuThreads: cpu.cores,
       totalMemBytes: mem.total,
       osVersion: `${os.distro} ${os.release}`,
-      hostname: os.hostname
+      hostname: os.hostname,
     }
     return this.cachedSystemInfo
   }
 
-  async startMonitoring(
-    sender: Electron.WebContents,
-    getStartupItems?: () => Promise<StartupItem[]>
-  ): Promise<void> {
+  async startMonitoring(sender: Electron.WebContents, getStartupItems?: () => Promise<StartupItem[]>): Promise<void> {
     // If already running, just update the sender
     if (this.fastTimer) {
       this.sender = sender
@@ -63,7 +60,7 @@ export class PerfMonitorService {
           // Extract exe name from command string
           const match = item.command.match(/([^/\\]+\.exe)/i)
           if (match) {
-            this.startupExeMap.set(match[1].toLowerCase(), item.displayName || item.name)
+            this.startupExeMap.set(match[1]!.toLowerCase(), item.displayName || item.name)
           }
         }
       } catch {
@@ -118,13 +115,14 @@ export class PerfMonitorService {
         return { success: true }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err)
-        const requiresAdmin = message.includes('Access') || message.includes('denied') || message.includes('Operation not permitted')
+        const requiresAdmin =
+          message.includes('Access') || message.includes('denied') || message.includes('Operation not permitted')
         return {
           success: false,
           error: requiresAdmin
             ? 'Acesso negado. Execute o DiNho Optimizer como administrador para encerrar este processo.'
             : `Failed to end process: ${message}`,
-          requiresAdmin
+          requiresAdmin,
         }
       }
     }
@@ -166,7 +164,7 @@ export class PerfMonitorService {
           readErrors: rel?.readErrors ?? null,
           writeErrors: rel?.writeErrors ?? null,
           reallocatedSectors: null,
-          smartAttributes: []
+          smartAttributes: [],
         }
       })
     } catch {
@@ -175,15 +173,35 @@ export class PerfMonitorService {
   }
 
   private async getStorageReliability(): Promise<
-    Map<string, { temperature: number | null; powerOnHours: number | null; wear: number | null; readErrors: number | null; writeErrors: number | null }>
+    Map<
+      string,
+      {
+        temperature: number | null
+        powerOnHours: number | null
+        wear: number | null
+        readErrors: number | null
+        writeErrors: number | null
+      }
+    >
   > {
-    const map = new Map<string, { temperature: number | null; powerOnHours: number | null; wear: number | null; readErrors: number | null; writeErrors: number | null }>()
+    const map = new Map<
+      string,
+      {
+        temperature: number | null
+        powerOnHours: number | null
+        wear: number | null
+        readErrors: number | null
+        writeErrors: number | null
+      }
+    >()
 
     try {
-      const script = 'Get-PhysicalDisk | ForEach-Object { $disk = $_; $rel = $_ | Get-StorageReliabilityCounter; [PSCustomObject]@{ DeviceId = $disk.DeviceId; Temperature = $rel.Temperature; PowerOnHours = $rel.PowerOnHours; ReadErrorsTotal = $rel.ReadErrorsTotal; WriteErrorsTotal = $rel.WriteErrorsTotal; Wear = $rel.Wear } } | ConvertTo-Json -Compress'
+      const script =
+        'Get-PhysicalDisk | ForEach-Object { $disk = $_; $rel = $_ | Get-StorageReliabilityCounter; [PSCustomObject]@{ DeviceId = $disk.DeviceId; Temperature = $rel.Temperature; PowerOnHours = $rel.PowerOnHours; ReadErrorsTotal = $rel.ReadErrorsTotal; WriteErrorsTotal = $rel.WriteErrorsTotal; Wear = $rel.Wear } } | ConvertTo-Json -Compress'
 
       const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(script)], {
-        timeout: 10000, windowsHide: true
+        timeout: 10000,
+        windowsHide: true,
       })
 
       const parsed = JSON.parse(stdout.trim())
@@ -195,7 +213,7 @@ export class PerfMonitorService {
           powerOnHours: entry.PowerOnHours ?? null,
           wear: entry.Wear ?? null,
           readErrors: entry.ReadErrorsTotal ?? null,
-          writeErrors: entry.WriteErrorsTotal ?? null
+          writeErrors: entry.WriteErrorsTotal ?? null,
         })
       }
     } catch {
@@ -228,18 +246,20 @@ export class PerfMonitorService {
         si.currentLoad(),
         si.disksIO(),
         needsNetworkPoll ? si.networkStats() : Promise.resolve(null),
-        isWindows ? Promise.resolve(null) : si.mem()
+        isWindows ? Promise.resolve(null) : si.mem(),
       ])
 
       if (net) {
         this.cachedNetworkStats = {
           rxBytesPerSec: net.reduce((sum, n) => sum + n.rx_sec, 0),
-          txBytesPerSec: net.reduce((sum, n) => sum + n.tx_sec, 0)
+          txBytesPerSec: net.reduce((sum, n) => sum + n.tx_sec, 0),
         }
         this.lastNetworkPoll = now
       }
 
-      let usedMem: number, totalMem: number, cachedMem: number
+      let usedMem: number
+      let totalMem: number
+      let cachedMem: number
       if (isWindows) {
         totalMem = os.totalmem()
         usedMem = totalMem - os.freemem()
@@ -260,20 +280,20 @@ export class PerfMonitorService {
         timestamp: Date.now(),
         cpu: {
           overall: load.currentLoad,
-          perCore: load.cpus.map((c) => c.load)
+          perCore: load.cpus.map((c) => c.load),
         },
         memory: {
           usedBytes: usedMem,
           totalBytes: totalMem,
           cachedBytes: cachedMem,
-          percent: (usedMem / totalMem) * 100
+          percent: (usedMem / totalMem) * 100,
         },
         disk: {
           readBytesPerSec: disk?.rIO_sec ?? 0,
-          writeBytesPerSec: disk?.wIO_sec ?? 0
+          writeBytesPerSec: disk?.wIO_sec ?? 0,
         },
         network: this.cachedNetworkStats,
-        uptime: si.time().uptime
+        uptime: si.time().uptime,
       }
 
       if (!this.sender.isDestroyed()) {
@@ -299,15 +319,11 @@ export class PerfMonitorService {
       const totalMem = mem.total
 
       // Sort by CPU + memory and take top 100
-      const sorted = data.list
-        .sort((a, b) => b.cpu + b.memRss - (a.cpu + a.memRss))
-        .slice(0, 100)
+      const sorted = data.list.sort((a, b) => b.cpu + b.memRss - (a.cpu + a.memRss)).slice(0, 100)
 
       const processes: PerfProcess[] = sorted.map((p) => {
         const exeName = (p.name || '').toLowerCase()
-        const startupName = this.startupExeMap.get(
-          exeName.endsWith('.exe') ? exeName : `${exeName}.exe`
-        )
+        const startupName = this.startupExeMap.get(exeName.endsWith('.exe') ? exeName : `${exeName}.exe`)
 
         return {
           pid: p.pid,
@@ -318,14 +334,14 @@ export class PerfMonitorService {
           user: p.user || '',
           started: p.started || '',
           isStartupItem: !!startupName,
-          startupItemName: startupName
+          ...(startupName ? { startupItemName: startupName } : {}),
         }
       })
 
       const result: PerfProcessList = {
         timestamp: Date.now(),
         processes,
-        totalCount: data.all
+        totalCount: data.all,
       }
 
       if (!this.sender.isDestroyed()) {

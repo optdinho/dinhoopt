@@ -1,10 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import {
-  isPersistentTweak,
-  tweakSignature,
-  applyIgnoredTweaks,
-  PERSISTENT_TWEAK_TYPES,
-} from './registry-tweaks'
+import { describe, expect, it } from 'vitest'
+import { PERSISTENT_TWEAK_TYPES, applyIgnoredTweaks, isPersistentTweak, tweakSignature } from './registry-tweaks'
 import type { RegistryEntry } from './types'
 
 function entry(over: Partial<RegistryEntry>): RegistryEntry {
@@ -61,7 +56,12 @@ describe('applyIgnoredTweaks (issue #172)', () => {
   })
 
   it('leaves non-ignored tweaks pre-selected', () => {
-    const llmnr = entry({ type: 'vulnerability', keyPath: 'HKLM\\X\\DNSClient', valueName: 'EnableMulticast', selected: true })
+    const llmnr = entry({
+      type: 'vulnerability',
+      keyPath: 'HKLM\\X\\DNSClient',
+      valueName: 'EnableMulticast',
+      selected: true,
+    })
     applyIgnoredTweaks([llmnr], ['hklm\\system\\currentcontrolset\\services\\sysmain|start'])
     expect(llmnr.selected).toBe(true)
   })

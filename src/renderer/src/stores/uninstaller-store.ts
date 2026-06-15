@@ -1,5 +1,5 @@
+import type { InstalledProgram, StartupSafetyRating, UninstallProgress, UninstallResult } from '@shared/types'
 import { create } from 'zustand'
-import type { InstalledProgram, UninstallProgress, UninstallResult, StartupSafetyRating } from '@shared/types'
 
 type SortField = 'displayName' | 'estimatedSize' | 'installDate' | 'publisher' | 'safety'
 type FilterMode = 'all' | 'unused'
@@ -91,9 +91,10 @@ export const useUninstallerStore = create<UninstallerState>((set) => ({
     }),
   selectAll: (ids) => set({ selectedIds: new Set(ids) }),
   clearSelected: () => set({ selectedIds: new Set<string>() }),
-  setSafetyRatings: (ratings) => set({
-    safetyRatings: Object.fromEntries(ratings.map((r) => [r.name, r])),
-  }),
+  setSafetyRatings: (ratings) =>
+    set({
+      safetyRatings: Object.fromEntries(ratings.map((r) => [r.name, r])),
+    }),
   setSafetyLoading: (safetyLoading) => set({ safetyLoading }),
   setExpandedItemId: (expandedItemId) => set({ expandedItemId }),
   fetchSafetyRatings: async () => {
@@ -128,5 +129,3 @@ export const useUninstallerStore = create<UninstallerState>((set) => ({
       expandedItemId: null,
     }),
 }))
-
-

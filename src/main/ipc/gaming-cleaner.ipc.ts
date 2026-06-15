@@ -1,49 +1,47 @@
-import { ipcMain } from 'electron'
-import { existsSync } from 'fs'
-import { readdir, readFile, stat } from 'fs/promises'
-import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readFile, readdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
-import { getPlatform } from '../platform'
-import { scanDirectoriesAsItems, cleanItems, getDirectorySize } from '../services/file-utils'
-import { cacheItems } from '../services/scan-cache'
 import { CleanerType } from '@shared/enums'
-import type { ScanItem, ScanResult, CleanResult } from '@shared/types'
-import type { WindowGetter } from './index'
+import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
+import { ipcMain } from 'electron'
+import { getPlatform } from '../platform'
+import { cleanItems, getDirectorySize, scanDirectoriesAsItems } from '../services/file-utils'
 import { validateStringArray } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
+import { cacheItems } from '../services/scan-cache'
+import type { WindowGetter } from './index'
 
 export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.GAMING_SCAN, async (): Promise<ScanResult[]> => {
+    getLogger().info('gaming-cleaner', 'Starting gaming scan...')
     const results: ScanResult[] = []
     const category = CleanerType.Gaming
 
     // Launcher caches — directory-level items, one row per launcher
     for (const launcher of getPlatform().paths.gamingPaths()) {
       try {
-        const result = await scanDirectoriesAsItems(
-          launcher.paths, category, launcher.name, 'Launcher Caches'
-        )
+        const result = await scanDirectoriesAsItems(launcher.paths, category, launcher.name, 'Launcher Caches')
         if (result.items.length > 0) {
           cacheItems(result.items)
           results.push(result)
         }
       } catch {
-        // Skip
+        getLogger().warning('gaming-cleaner', `Skipped launcher: ${launcher.name}`)
       }
     }
 
     // GPU shader caches — directory-level items, one row per vendor
     for (const gpu of getPlatform().paths.gpuCachePaths()) {
       try {
-        const result = await scanDirectoriesAsItems(
-          gpu.paths, category, gpu.name, 'GPU Shader Caches'
-        )
+        const result = await scanDirectoriesAsItems(gpu.paths, category, gpu.name, 'GPU Shader Caches')
         if (result.items.length > 0) {
           cacheItems(result.items)
           results.push(result)
         }
       } catch {
-        // Skip
+        getLogger().warning('gaming-cleaner', `Skipped GPU cache: ${gpu.name}`)
       }
     }
 
@@ -53,7 +51,7 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
       for (const r of shaderResults) cacheItems(r.items)
       results.push(...shaderResults)
     } catch {
-      // Skip
+      getLogger().warning('gaming-cleaner', 'Skipped Steam shader cache scan')
     }
 
     // Per-game redistributables — one row per game
@@ -62,36 +60,45 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
       for (const r of redistResults) cacheItems(r.items)
       results.push(...redistResults)
     } catch {
-      // Skip
+      getLogger().warning('gaming-cleaner', 'Skipped Steam redistributables scan')
     }
 
     const win = getWindow()
-    if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-      phase: 'scanning',
-      category,
-      currentPath: 'Gaming scan complete',
-      progress: 100,
-      itemsFound: results.reduce((s, r) => s + r.itemCount, 0),
-      sizeFound: results.reduce((s, r) => s + r.totalSize, 0),
-    })
+    if (win && !win.isDestroyed())
+      win.webContents.send(IPC.SCAN_PROGRESS, {
+        phase: 'scanning',
+        category,
+        currentPath: 'Gaming scan complete',
+        progress: 100,
+        itemsFound: results.reduce((s, r) => s + r.itemCount, 0),
+        sizeFound: results.reduce((s, r) => s + r.totalSize, 0),
+      })
 
+    getLogger().success('gaming-cleaner', `Gaming scan completed: ${results.length} categories found`)
     return results
   })
 
   ipcMain.handle(IPC.GAMING_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+    getLogger().info('gaming-cleaner', 'Starting gaming clean...')
     const valid = validateStringArray(itemIds)
-    if (!valid) return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
-    return cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
+    if (!valid) {
+      getLogger().warning('gaming-cleaner', 'Invalid item IDs provided for gaming clean')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
+    const result = await cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
       const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.SCAN_PROGRESS, {
-        phase: 'cleaning',
-        category: CleanerType.Gaming,
-        currentPath,
-        progress: (processed / total) * 100,
-        itemsFound: total,
-        sizeFound: cleanedSize,
-      })
+      if (win && !win.isDestroyed())
+        win.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'cleaning',
+          category: CleanerType.Gaming,
+          currentPath,
+          progress: (processed / total) * 100,
+          itemsFound: total,
+          sizeFound: cleanedSize,
+        })
     })
+    getLogger().success('gaming-cleaner', `Gaming clean completed: ${result?.filesDeleted ?? 0} files cleaned`)
+    return result
   })
 }
 
@@ -108,7 +115,7 @@ async function getSteamLibraryPaths(): Promise<string[]> {
       const content = await readFile(vdfPath, 'utf-8')
       const pathMatches = content.matchAll(/"path"\s+"([^"]+)"/g)
       for (const match of pathMatches) {
-        libraries.add(match[1].replace(/\\\\/g, '\\'))
+        libraries.add(match[1]!.replace(/\\\\/g, '\\'))
       }
     } catch {
       // VDF not found
@@ -135,7 +142,7 @@ async function buildAppIdMap(steamAppsDir: string): Promise<Map<string, string>>
         const idMatch = content.match(/"appid"\s+"(\d+)"/)
         const nameMatch = content.match(/"name"\s+"([^"]+)"/)
         if (idMatch && nameMatch) {
-          map.set(idMatch[1], nameMatch[1])
+          map.set(idMatch[1]!, nameMatch[1]!)
         }
       } catch {
         // Skip unreadable manifest
@@ -151,7 +158,7 @@ async function buildAppIdMap(steamAppsDir: string): Promise<Map<string, string>>
 // Per-game Steam shader caches
 // ---------------------------------------------------------------------------
 
-async function scanSteamShaderCaches(category: string): Promise<ScanResult[]> {
+async function scanSteamShaderCaches(category: CleanerType): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const libraries = await getSteamLibraryPaths()
 
@@ -180,15 +187,17 @@ async function scanSteamShaderCaches(category: string): Promise<ScanResult[]> {
             category,
             subcategory,
             group: 'Game Shader Caches',
-            items: [{
-              id: randomUUID(),
-              path: cacheDir,
-              size,
-              category,
-              subcategory,
-              lastModified: Date.now(),
-              selected: true,
-            }],
+            items: [
+              {
+                id: randomUUID(),
+                path: cacheDir,
+                size,
+                category,
+                subcategory,
+                lastModified: Date.now(),
+                selected: true,
+              },
+            ],
             totalSize: size,
             itemCount: 1,
           })
@@ -208,7 +217,7 @@ async function scanSteamShaderCaches(category: string): Promise<ScanResult[]> {
 // Per-game redistributables
 // ---------------------------------------------------------------------------
 
-async function scanSteamRedistributables(category: string): Promise<ScanResult[]> {
+async function scanSteamRedistributables(category: CleanerType): Promise<ScanResult[]> {
   const results: ScanResult[] = []
   const libraries = await getSteamLibraryPaths()
 
@@ -233,9 +242,7 @@ async function scanSteamRedistributables(category: string): Promise<ScanResult[]
 
           try {
             const stats = await stat(redistPath)
-            const size = stats.isDirectory()
-              ? await getDirectorySize(redistPath)
-              : stats.size
+            const size = stats.isDirectory() ? await getDirectorySize(redistPath) : stats.size
 
             if (size < 1024) continue
 
@@ -263,13 +270,11 @@ async function scanSteamRedistributables(category: string): Promise<ScanResult[]
               const redistPath = join(gameDir, sub.name, pattern)
               if (!existsSync(redistPath)) continue
               // Avoid duplicates
-              if (gameItems.some(i => i.path === redistPath)) continue
+              if (gameItems.some((i) => i.path === redistPath)) continue
 
               try {
                 const stats = await stat(redistPath)
-                const size = stats.isDirectory()
-                  ? await getDirectorySize(redistPath)
-                  : stats.size
+                const size = stats.isDirectory() ? await getDirectorySize(redistPath) : stats.size
 
                 if (size < 1024) continue
 

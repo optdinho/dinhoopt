@@ -1,35 +1,35 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { cn, formatBytes } from '@/lib/utils'
+import { useDuplicateStore } from '@/stores/duplicate-store'
 import {
-  FolderOpen,
-  Search,
-  X,
-  Trash2,
-  RotateCcw,
   ChevronDown,
   ChevronRight,
   ExternalLink,
-  Settings2,
+  FolderOpen,
   Plus,
-  Shield
+  RotateCcw,
+  Search,
+  Settings2,
+  Shield,
+  Trash2,
+  X,
 } from 'lucide-react'
-import { cn, formatBytes } from '@/lib/utils'
-import { useDuplicateStore } from '@/stores/duplicate-store'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 const SIZE_PRESETS = [
   { label: '100 KB', value: 102_400 },
   { label: '1 MB', value: 1_048_576 },
   { label: '10 MB', value: 10_485_760 },
-  { label: '100 MB', value: 104_857_600 }
+  { label: '100 MB', value: 104_857_600 },
 ]
 
 const EXT_PRESETS: Record<string, string[]> = {
   images: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff'],
   videos: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'],
   audio: ['.mp3', '.flac', '.wav', '.aac', '.ogg', '.wma', '.m4a'],
-  documents: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv']
+  documents: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'],
 }
 
 function formatDuration(ms: number): string {
@@ -46,7 +46,7 @@ const PHASE_LABELS: Record<string, string> = {
   grouping: 'phaseGrouping',
   'partial-hash': 'phasePartialHash',
   'full-hash': 'phaseFullHash',
-  complete: 'phaseComplete'
+  complete: 'phaseComplete',
 }
 
 export function DuplicateFinderPage() {
@@ -95,7 +95,7 @@ export function DuplicateFinderPage() {
         maxFileSize: store.maxFileSize,
         excludePatterns: store.excludePatterns,
         extensionFilter: store.extensionFilter,
-        maxDepth: store.maxDepth
+        maxDepth: store.maxDepth,
       })
       if (result) {
         store.setResult(result)
@@ -180,16 +180,23 @@ export function DuplicateFinderPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-[24px] font-bold tracking-tight text-white">{t('pageTitle')}</h1>
-        <p className="mt-1.5 text-[13px] animate-fade-in" style={{ color: 'var(--text-muted)' }}>{t('pageDescription')}</p>
+        <p className="mt-1.5 text-[13px] animate-fade-in" style={{ color: 'var(--text-muted)' }}>
+          {t('pageDescription')}
+        </p>
       </div>
 
       {/* Directory selector + scan button */}
       <div className="mb-4 flex items-center gap-3">
         <button
+          type="button"
           onClick={handleSelectDir}
           disabled={store.status === 'scanning'}
           className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-colors"
-          style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-medium)' }}
+          style={{
+            background: 'var(--bg-hover)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-medium)',
+          }}
         >
           <FolderOpen className="h-4 w-4" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
           {store.directory ? store.directory : t('selectDirectory')}
@@ -197,6 +204,7 @@ export function DuplicateFinderPage() {
 
         {store.directory && store.status !== 'scanning' && (
           <button
+            type="button"
             onClick={handleScan}
             className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-colors"
             style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
@@ -208,6 +216,7 @@ export function DuplicateFinderPage() {
 
         {store.status === 'scanning' && (
           <button
+            type="button"
             onClick={handleCancel}
             className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium transition-colors"
             style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
@@ -218,10 +227,11 @@ export function DuplicateFinderPage() {
         )}
 
         <button
+          type="button"
           onClick={() => setShowSettings((s) => !s)}
           className={cn(
             'ml-auto flex items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors',
-            showSettings ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300'
+            showSettings ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
           )}
         >
           <Settings2 className="h-4 w-4" strokeWidth={1.8} />
@@ -237,100 +247,118 @@ export function DuplicateFinderPage() {
         >
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             {/* Min file size */}
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            <fieldset>
+              <legend
+                className="mb-2 block text-[11px] font-semibold tracking-wide"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('minFileSize')}
-              </label>
+              </legend>
               <div className="flex flex-wrap gap-1.5">
                 {SIZE_PRESETS.map((p) => (
                   <button
+                    type="button"
                     key={p.value}
                     onClick={() => store.setMinFileSize(p.value)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      store.minFileSize === p.value ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300'
+                      store.minFileSize === p.value ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
                     )}
                     style={{
-                      background: store.minFileSize === p.value ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)'
+                      background: store.minFileSize === p.value ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
                     }}
                   >
                     {p.label}
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             {/* Max file size */}
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            <fieldset>
+              <legend
+                className="mb-2 block text-[11px] font-semibold tracking-wide"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('maxFileSize')}
-              </label>
+              </legend>
               <div className="flex flex-wrap gap-1.5">
                 <button
+                  type="button"
                   onClick={() => store.setMaxFileSize(null)}
                   className={cn(
                     'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                    store.maxFileSize === null ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300'
+                    store.maxFileSize === null ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
                   )}
                   style={{
-                    background: store.maxFileSize === null ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)'
+                    background: store.maxFileSize === null ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
                   }}
                 >
                   {t('noLimit')}
                 </button>
                 {[104_857_600, 1_073_741_824, 5_368_709_120].map((v) => (
                   <button
+                    type="button"
                     key={v}
                     onClick={() => store.setMaxFileSize(v)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      store.maxFileSize === v ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300'
+                      store.maxFileSize === v ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
                     )}
                     style={{
-                      background: store.maxFileSize === v ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)'
+                      background: store.maxFileSize === v ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
                     }}
                   >
                     {formatBytes(v, 0)}
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             {/* Extension filter */}
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            <fieldset>
+              <legend
+                className="mb-2 block text-[11px] font-semibold tracking-wide"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('extensionFilter')}
-              </label>
+              </legend>
               <div className="flex flex-wrap gap-1.5">
                 {(['all', 'images', 'videos', 'audio', 'documents'] as const).map((preset) => (
                   <button
+                    type="button"
                     key={preset}
-                    onClick={() => store.setExtensionFilter(preset === 'all' ? [] : EXT_PRESETS[preset])}
+                    onClick={() => store.setExtensionFilter(preset === 'all' ? [] : (EXT_PRESETS[preset] ?? []))}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      activeExtPreset === preset ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300'
+                      activeExtPreset === preset ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
                     )}
                     style={{
-                      background: activeExtPreset === preset ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)'
+                      background: activeExtPreset === preset ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
                     }}
                   >
                     {t(preset === 'all' ? 'allFiles' : preset)}
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             {/* Max depth */}
             <div>
-              <label className="mb-2 block text-[11px] font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+              <label
+                htmlFor="dup-max-depth"
+                className="mb-2 block text-[11px] font-semibold tracking-wide"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('maxDepth')}
               </label>
               <input
+                id="dup-max-depth"
                 type="number"
                 min={1}
                 max={50}
                 value={store.maxDepth}
-                onChange={(e) => store.setMaxDepth(Math.max(1, Math.min(50, parseInt(e.target.value) || 20)))}
+                onChange={(e) => store.setMaxDepth(Math.max(1, Math.min(50, Number.parseInt(e.target.value) || 20)))}
                 className="w-20 rounded-lg px-3 py-1.5 text-[13px] text-white"
                 style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
               />
@@ -338,7 +366,11 @@ export function DuplicateFinderPage() {
 
             {/* Exclude patterns */}
             <div className="col-span-2">
-              <label className="mb-2 block text-[11px] font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+              <label
+                htmlFor="dup-exclude-input"
+                className="mb-2 block text-[11px] font-semibold tracking-wide"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('excludePatterns')}
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -349,13 +381,18 @@ export function DuplicateFinderPage() {
                     style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}
                   >
                     {p}
-                    <button onClick={() => handleRemoveExclude(p)} className="text-zinc-600 hover:text-zinc-400">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveExclude(p)}
+                      className="text-zinc-600 hover:text-zinc-400"
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </span>
                 ))}
                 <div className="flex items-center gap-1">
                   <input
+                    id="dup-exclude-input"
                     type="text"
                     value={excludeInput}
                     onChange={(e) => setExcludeInput(e.target.value)}
@@ -364,7 +401,12 @@ export function DuplicateFinderPage() {
                     className="w-48 rounded-lg px-2.5 py-1 text-[12px] text-white placeholder-zinc-600"
                     style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
                   />
-                  <button onClick={handleAddExclude} className="text-zinc-500 hover:text-zinc-300">
+                  <button
+                    type="button"
+                    onClick={handleAddExclude}
+                    aria-label="Add to exclude list"
+                    className="text-zinc-500 hover:text-zinc-300"
+                  >
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
@@ -441,6 +483,7 @@ export function DuplicateFinderPage() {
               {/* Action bar */}
               <div className="mb-4 flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={() => {
                     if (selectedCount > 0) store.deselectAll()
                     else store.selectAllDuplicates()
@@ -454,20 +497,22 @@ export function DuplicateFinderPage() {
                 {/* Delete mode toggle */}
                 <div className="flex overflow-hidden rounded-lg" style={{ background: 'var(--bg-subtle-2)' }}>
                   <button
+                    type="button"
                     onClick={() => store.setDeleteMode('recycle')}
                     className={cn(
                       'px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      store.deleteMode === 'recycle' ? 'text-amber-400' : 'text-zinc-500'
+                      store.deleteMode === 'recycle' ? 'text-amber-400' : 'text-zinc-500',
                     )}
                     style={store.deleteMode === 'recycle' ? { background: 'rgba(245,158,11,0.1)' } : undefined}
                   >
                     {t('recycleBin')}
                   </button>
                   <button
+                    type="button"
                     onClick={() => store.setDeleteMode('permanent')}
                     className={cn(
                       'px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      store.deleteMode === 'permanent' ? 'text-red-400' : 'text-zinc-500'
+                      store.deleteMode === 'permanent' ? 'text-red-400' : 'text-zinc-500',
                     )}
                     style={store.deleteMode === 'permanent' ? { background: 'rgba(239,68,68,0.1)' } : undefined}
                   >
@@ -478,6 +523,7 @@ export function DuplicateFinderPage() {
                 <div className="flex-1" />
 
                 <button
+                  type="button"
                   onClick={() => store.reset()}
                   className="flex items-center gap-2 rounded-xl px-4 py-2 text-[12px] font-medium text-zinc-400 transition-colors hover:text-zinc-200"
                   style={{ background: 'var(--bg-subtle-2)' }}
@@ -488,11 +534,12 @@ export function DuplicateFinderPage() {
 
                 {selectedCount > 0 && (
                   <button
+                    type="button"
                     onClick={() => setShowConfirm(true)}
                     className="flex items-center gap-2 rounded-xl px-5 py-2 text-[13px] font-semibold transition-colors"
                     style={{
                       background: store.deleteMode === 'permanent' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
-                      color: store.deleteMode === 'permanent' ? '#ef4444' : '#f59e0b'
+                      color: store.deleteMode === 'permanent' ? '#ef4444' : '#f59e0b',
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -516,12 +563,15 @@ export function DuplicateFinderPage() {
                     >
                       {/* Group header */}
                       <button
+                        type="button"
                         onClick={() => toggleGroup(group.fullHash)}
                         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]"
                       >
-                        {isExpanded
-                          ? <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500" />
-                          : <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />}
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
+                        )}
                         <div className="min-w-0 flex-1">
                           <span className="text-[13px] font-medium text-white">
                             {t('groupHeader', { size: formatBytes(group.fileSize), count: group.files.length })}
@@ -580,6 +630,7 @@ export function DuplicateFinderPage() {
                                   {new Date(file.lastModified).toLocaleDateString()}
                                 </span>
                                 <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     window.dinho?.duplicatesOpenLocation?.(file.path)
@@ -647,11 +698,10 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
       className="rounded-xl px-4 py-3"
       style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
     >
-      <div className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>{label}</div>
-      <div
-        className="mt-1 text-[18px] font-bold"
-        style={{ color: accent ? 'var(--accent)' : 'var(--text-primary)' }}
-      >
+      <div className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+        {label}
+      </div>
+      <div className="mt-1 text-[18px] font-bold" style={{ color: accent ? 'var(--accent)' : 'var(--text-primary)' }}>
         {value}
       </div>
     </div>
@@ -661,7 +711,9 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
 function StatMini({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{label}: </span>
+      <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+        {label}:{' '}
+      </span>
       <span className="text-[12px] font-medium text-white">{value}</span>
     </div>
   )
@@ -672,7 +724,9 @@ function EmptyState({ title, description }: { title: string; description: string
     <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
       <FolderOpen className="mb-4 h-12 w-12" style={{ color: 'var(--text-faint)' }} strokeWidth={1.2} />
       <h3 className="text-[15px] font-semibold text-white">{title}</h3>
-      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-secondary)' }}>{description}</p>
+      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+        {description}
+      </p>
     </div>
   )
 }

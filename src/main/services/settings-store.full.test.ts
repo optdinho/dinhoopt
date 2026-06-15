@@ -1,8 +1,8 @@
-import { describe, it, expect, afterAll, beforeEach, vi } from 'vitest'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { rmSync, existsSync, mkdirSync, writeFileSync } from 'fs'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const TEST_DIR = join(tmpdir(), `kudu-settings-full-${randomUUID()}`)
 
@@ -14,8 +14,13 @@ vi.mock('electron', () => ({
 }))
 
 import {
-  getSettings, setSettings, flushSettings, getOnboardingComplete,
-  setOnboardingComplete, getMachineId, updateScheduleEntry,
+  flushSettings,
+  getMachineId,
+  getOnboardingComplete,
+  getSettings,
+  setOnboardingComplete,
+  setSettings,
+  updateScheduleEntry,
 } from './settings-store'
 import { createJsonStore } from './store-base'
 
@@ -34,13 +39,13 @@ describe('settings-store readStore migration', () => {
           schedules: [],
         },
       }),
-      'utf-8'
+      'utf-8',
     )
     const s = getSettings()
     expect(s.schedules).toHaveLength(1)
-    expect(s.schedules[0].frequency).toBe('daily')
-    expect(s.schedules[0].hour).toBe(22)
-    expect(s.schedules[0].day).toBe(3)
+    expect(s.schedules[0]!.frequency).toBe('daily')
+    expect(s.schedules[0]!.hour).toBe(22)
+    expect(s.schedules[0]!.day).toBe(3)
     expect(s.schedule.enabled).toBe(false)
   })
 })
@@ -52,11 +57,7 @@ describe('settings-store readStore error', () => {
 
   it('returns defaults when config file is corrupt', () => {
     mkdirSync(join(TEST_DIR, 'DiNho-Dev'), { recursive: true })
-    writeFileSync(
-      join(TEST_DIR, 'DiNho-Dev', 'config.json'),
-      '{corrupt json}',
-      'utf-8'
-    )
+    writeFileSync(join(TEST_DIR, 'DiNho-Dev', 'config.json'), '{corrupt json}', 'utf-8')
     const s = getSettings()
     expect(s.theme).toBe('dark')
     expect(s.language).toBe('en')

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ──
 
@@ -73,6 +73,7 @@ describe('APP_SCAN handler', () => {
 
   it('returns empty results when no apps are defined', async () => {
     mockAppPaths.mockReturnValue([])
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = await handler()
@@ -95,6 +96,7 @@ describe('APP_SCAN handler', () => {
       })
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = await handler()
@@ -105,9 +107,7 @@ describe('APP_SCAN handler', () => {
   })
 
   it('skips apps with zero scan items', async () => {
-    mockAppPaths.mockReturnValue([
-      { name: 'EmptyApp', paths: ['/empty'], childSubdir: undefined },
-    ])
+    mockAppPaths.mockReturnValue([{ name: 'EmptyApp', paths: ['/empty'], childSubdir: undefined }])
     mockResolveChildSubdirs.mockResolvedValue(['/empty'])
     mockScanMultipleDirectories.mockResolvedValue({
       category: 'app',
@@ -117,6 +117,7 @@ describe('APP_SCAN handler', () => {
       itemCount: 0,
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = await handler()
@@ -142,28 +143,33 @@ describe('APP_SCAN handler', () => {
       itemCount: 1,
     })
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
-    const results = await handler() as Array<{ subcategory: string }>
+    const results = (await handler()) as Array<{ subcategory: string }>
 
     // Should skip FailApp but include GoodApp
     expect(results).toHaveLength(1)
-    expect(results[0].subcategory).toBe('GoodApp')
+    expect(results[0]!.subcategory).toBe('GoodApp')
   })
 
   it('sends scan progress to the window', async () => {
     mockAppPaths.mockReturnValue([])
     const win = mockWindow()
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:app:scan')
     await handler()
 
-    expect(mockSend).toHaveBeenCalledWith('scan:progress', expect.objectContaining({
-      phase: 'scanning',
-      category: 'app',
-      currentPath: 'App scan complete',
-      progress: 100,
-    }))
+    expect(mockSend).toHaveBeenCalledWith(
+      'scan:progress',
+      expect.objectContaining({
+        phase: 'scanning',
+        category: 'app',
+        currentPath: 'App scan complete',
+        progress: 100,
+      }),
+    )
   })
 
   it('does not send progress when window is null', async () => {
@@ -177,6 +183,7 @@ describe('APP_SCAN handler', () => {
   it('does not send progress when window is destroyed', async () => {
     mockAppPaths.mockReturnValue([])
     const win = { isDestroyed: () => true, webContents: { send: mockSend } }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:app:scan')
     await handler()
@@ -242,9 +249,11 @@ describe('APP_CLEAN handler', () => {
     const result = await handler({}, ['uuid-1', 'uuid-2', 'uuid-3'])
 
     expect(mockCleanItems).toHaveBeenCalledWith(['uuid-1', 'uuid-2', 'uuid-3'], expect.any(Function))
-    expect(result).toEqual(expect.objectContaining({
-      totalCleaned: 1024,
-      filesDeleted: 10,
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        totalCleaned: 1024,
+        filesDeleted: 10,
+      }),
+    )
   })
 })

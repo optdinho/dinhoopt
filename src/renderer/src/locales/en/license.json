@@ -1,0 +1,21 @@
+{
+  "loading": "Verifying license...",
+  "subtitle": "Activate your license to continue",
+  "noActiveLicense": "No Active License",
+  "enterKeyPrompt": "Enter your license key below to unlock the application.",
+  "activationFailed": "Activation Failed",
+  "activationSuccess": "License Activated Successfully!",
+  "redirecting": "Redirecting to the application...",
+  "licenseKey": "License Key",
+  "activating": "Activating...",
+  "activated": "Activated",
+  "activate": "Activate",
+  "hardwareId": "Hardware ID (HWID)",
+  "copied": "Copied!",
+  "copy": "Copy",
+  "generating": "Generating...",
+  "hwidDescription": "This HWID identifies your machine. Send it to support to bind your license.",
+  "licensedBy": "Licensed by DiNho © 2026",
+  "invalidKeyDefault": "Invalid or expired key.",
+  "keyPlaceholder": "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+}

@@ -1,15 +1,16 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { readdir, stat, rm } from 'fs/promises'
-import { join, extname, isAbsolute } from 'path'
+import { readdir, rm, stat } from 'node:fs/promises'
+import { extname, isAbsolute, join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type {
-  LargeFileScanOptions,
-  LargeFileEntry,
-  LargeFileScanResult,
-  LargeFileScanProgress,
   LargeFileDeleteMode,
-  LargeFileDeleteResult
+  LargeFileDeleteResult,
+  LargeFileEntry,
+  LargeFileScanOptions,
+  LargeFileScanProgress,
+  LargeFileScanResult,
 } from '@shared/types'
+import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
 
 let cancelled = false
@@ -27,12 +28,12 @@ async function walkDirectory(
   files: LargeFileEntry[],
   counters: { scanned: number },
   win: BrowserWindow | null,
-  lastReport: { time: number }
+  lastReport: { time: number },
 ): Promise<void> {
   if (cancelled) return
   if (depth > options.maxDepth) return
 
-  let entries
+  let entries: import('node:fs').Dirent[]
   try {
     entries = await readdir(dirPath, { withFileTypes: true })
   } catch {
@@ -48,7 +49,7 @@ async function walkDirectory(
 
     if (entry.isDirectory()) {
       const shouldExclude = options.excludePatterns.some(
-        (p) => entry.name === p || entry.name.toLowerCase() === p.toLowerCase()
+        (p) => entry.name === p || entry.name.toLowerCase() === p.toLowerCase(),
       )
       if (shouldExclude) continue
 
@@ -64,7 +65,7 @@ async function walkDirectory(
             name: entry.name,
             size: s.size,
             lastModified: s.mtimeMs,
-            extension: extname(entry.name).toLowerCase()
+            extension: extname(entry.name).toLowerCase(),
           })
         }
 
@@ -75,7 +76,7 @@ async function walkDirectory(
             currentPath: fullPath,
             filesScanned: counters.scanned,
             largeFilesFound: files.length,
-            progress: 0
+            progress: 0,
           })
         }
       } catch {
@@ -90,29 +91,38 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
   // opens as a standalone panel instead of a sheet (sidebar items like Desktop
   // are unresponsive in sheet mode).
   ipcMain.handle(IPC.LARGE_FILES_SELECT_DIR, async () => {
+    getLogger().info('large-file-finder', 'Opening directory picker')
     const win = getWindow()
     if (!win) return null
     const opts: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
-    const result = process.platform === 'darwin'
-      ? await dialog.showOpenDialog(opts)
-      : await dialog.showOpenDialog(win, opts)
-    if (result.canceled || !result.filePaths.length) return null
+    const result =
+      process.platform === 'darwin' ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+    if (result.canceled || !result.filePaths.length) {
+      getLogger().info('large-file-finder', 'Directory picker cancelled')
+      return null
+    }
+    getLogger().info('large-file-finder', `Directory selected: ${result.filePaths[0]}`)
     return result.filePaths[0]
   })
 
   // Cancel
   ipcMain.handle(IPC.LARGE_FILES_CANCEL, () => {
+    getLogger().info('large-file-finder', 'Scan cancelled by user')
     cancelled = true
   })
 
   // Scan
   ipcMain.handle(IPC.LARGE_FILES_SCAN, async (_event, options: unknown): Promise<LargeFileScanResult> => {
+    getLogger().info('large-file-finder', 'Starting large file scan')
     cancelled = false
     const startTime = Date.now()
     const win = getWindow()
     const emptyResult: LargeFileScanResult = { files: [], totalFilesScanned: 0, duration: 0, cancelled: false }
 
-    if (!options || typeof options !== 'object') return emptyResult
+    if (!options || typeof options !== 'object') {
+      getLogger().warning('large-file-finder', 'Invalid scan options received')
+      return emptyResult
+    }
     const opts = options as Record<string, unknown>
 
     const dir = typeof opts.directory === 'string' ? opts.directory : ''
@@ -122,16 +132,20 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
       maxDepth: typeof opts.maxDepth === 'number' && opts.maxDepth > 0 ? opts.maxDepth : 20,
       excludePatterns: Array.isArray(opts.excludePatterns)
         ? (opts.excludePatterns as unknown[]).filter((p): p is string => typeof p === 'string')
-        : []
+        : [],
     }
 
-    if (!safeOptions.directory) return emptyResult
+    if (!safeOptions.directory) {
+      getLogger().warning('large-file-finder', 'No directory specified for scan')
+      return emptyResult
+    }
 
     // Verify the root directory is readable before starting the walk.
     // On macOS, TCC restrictions can silently block access to user folders.
     try {
       await readdir(safeOptions.directory)
-    } catch {
+    } catch (err) {
+      getLogger().error('large-file-finder', `Cannot read directory: ${safeOptions.directory} — ${err}`)
       return emptyResult
     }
 
@@ -140,7 +154,7 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
       currentPath: safeOptions.directory,
       filesScanned: 0,
       largeFilesFound: 0,
-      progress: 0
+      progress: 0,
     })
 
     const files: LargeFileEntry[] = []
@@ -154,49 +168,66 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
     // Cap at 500 results
     const topFiles = files.slice(0, 500)
 
+    getLogger().success(
+      'large-file-finder',
+      `Scan complete: ${topFiles.length} large files found, ${counters.scanned} files scanned in ${Date.now() - startTime}ms`,
+    )
     return {
       files: topFiles,
       totalFilesScanned: counters.scanned,
       duration: Date.now() - startTime,
-      cancelled
+      cancelled,
     }
   })
 
   // Delete
-  ipcMain.handle(IPC.LARGE_FILES_DELETE, async (_event, paths: unknown, mode: unknown): Promise<LargeFileDeleteResult> => {
-    if (!Array.isArray(paths)) return { deleted: 0, failed: 0, spaceRecovered: 0, errors: [] }
-    const safePaths = paths.filter((p): p is string => typeof p === 'string' && isAbsolute(p))
-    const deleteMode: LargeFileDeleteMode = mode === 'permanent' ? 'permanent' : 'recycle'
+  ipcMain.handle(
+    IPC.LARGE_FILES_DELETE,
+    async (_event, paths: unknown, mode: unknown): Promise<LargeFileDeleteResult> => {
+      getLogger().info(
+        'large-file-finder',
+        `Deleting ${Array.isArray(paths) ? paths.length : 0} large files (mode: ${mode === 'permanent' ? 'permanent' : 'recycle'})`,
+      )
+      if (!Array.isArray(paths)) return { deleted: 0, failed: 0, spaceRecovered: 0, errors: [] }
+      const safePaths = paths.filter((p): p is string => typeof p === 'string' && isAbsolute(p))
+      const deleteMode: LargeFileDeleteMode = mode === 'permanent' ? 'permanent' : 'recycle'
 
-    let deleted = 0
-    let failed = 0
-    let spaceRecovered = 0
-    const errors: { path: string; reason: string }[] = []
+      let deleted = 0
+      let failed = 0
+      let spaceRecovered = 0
+      const errors: { path: string; reason: string }[] = []
 
-    for (const filePath of safePaths) {
-      try {
-        const s = await stat(filePath)
-        const fileSize = s.size
+      for (const filePath of safePaths) {
+        try {
+          const s = await stat(filePath)
+          const fileSize = s.size
 
-        if (deleteMode === 'recycle') {
-          await shell.trashItem(filePath)
-        } else {
-          await rm(filePath, { force: true })
+          if (deleteMode === 'recycle') {
+            await shell.trashItem(filePath)
+          } else {
+            await rm(filePath, { force: true })
+          }
+          deleted++
+          spaceRecovered += fileSize
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? err.message : 'Unknown error'
+          failed++
+          errors.push({ path: filePath, reason })
         }
-        deleted++
-        spaceRecovered += fileSize
-      } catch (err: any) {
-        failed++
-        errors.push({ path: filePath, reason: err?.message || 'Unknown error' })
       }
-    }
 
-    return { deleted, failed, spaceRecovered, errors }
-  })
+      getLogger().success(
+        'large-file-finder',
+        `Deleted ${deleted} files (${spaceRecovered} bytes recovered, ${failed} failed)`,
+      )
+      return { deleted, failed, spaceRecovered, errors }
+    },
+  )
 
   // Open file location
   ipcMain.handle(IPC.LARGE_FILES_OPEN_LOCATION, (_event, filePath: unknown) => {
     if (typeof filePath !== 'string' || !isAbsolute(filePath)) return
+    getLogger().info('large-file-finder', `Opening file location: ${filePath}`)
     shell.showItemInFolder(filePath)
   })
 }

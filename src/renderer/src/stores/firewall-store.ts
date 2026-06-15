@@ -1,10 +1,5 @@
+import type { FirewallApplyResult, FirewallRiskLevel, FirewallRule, FirewallScanProgress } from '@shared/types'
 import { create } from 'zustand'
-import type {
-  FirewallRule,
-  FirewallScanProgress,
-  FirewallApplyResult,
-  FirewallRiskLevel,
-} from '@shared/types'
 
 type RiskFilter = 'all' | FirewallRiskLevel
 type ProgramFilter = 'all' | 'with-program' | 'no-program' | 'stale'
@@ -82,11 +77,9 @@ export const useFirewallStore = create<FirewallState>((set) => ({
       rules: s.rules.map((r) => ({ ...r, selected: r.issues.includes('stale') })),
     })),
 
-  selectAll: () =>
-    set((s) => ({ rules: s.rules.map((r) => ({ ...r, selected: true })) })),
+  selectAll: () => set((s) => ({ rules: s.rules.map((r) => ({ ...r, selected: true })) })),
 
-  deselectAll: () =>
-    set((s) => ({ rules: s.rules.map((r) => ({ ...r, selected: false })) })),
+  deselectAll: () => set((s) => ({ rules: s.rules.map((r) => ({ ...r, selected: false })) })),
 
   reset: () =>
     set({

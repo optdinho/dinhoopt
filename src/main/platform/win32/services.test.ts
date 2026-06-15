@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // services.ts uses runtime require('../../ipc/service-manager.ipc') which goes
 // through Node's CJS loader. We hook Module._resolveFilename to redirect to a mock.
@@ -9,8 +9,9 @@ const mockApplyServiceChanges = vi.fn()
 const MOCK_KEY = '/mock/service-manager.ipc'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const NativeModule = require('module')
+const NativeModule = require('node:module')
 const origResolve = NativeModule._resolveFilename
+// biome-ignore lint/suspicious/noExplicitAny: test mock
 NativeModule._resolveFilename = function (request: string, parent: any, ...args: any[]) {
   if (request === '../../ipc/service-manager.ipc') {
     return MOCK_KEY
@@ -29,6 +30,7 @@ require.cache[MOCK_KEY] = {
     applyServiceChanges: mockApplyServiceChanges,
   },
   path: '/mock',
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
 } as any
 
 const { createWin32Services } = await import('./services')

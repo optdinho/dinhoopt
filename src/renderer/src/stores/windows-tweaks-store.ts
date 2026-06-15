@@ -1,11 +1,5 @@
+import type { DnsPreset, WindowsTweakApplyProgress, WindowsTweakResult, WindowsTweakState } from '@shared/types'
 import { create } from 'zustand'
-import type {
-  WindowsTweakState,
-  WindowsTweakCategory,
-  WindowsTweakApplyProgress,
-  WindowsTweakResult,
-  DnsPreset,
-} from '@shared/types'
 
 interface WindowsTweaksStoreState {
   tweaks: WindowsTweakState[]
@@ -56,7 +50,9 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
     try {
       const dnsPresets = await window.dinho.windowsTweaksGetDnsPresets()
       set({ dnsPresets })
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   },
 
   apply: async () => {
@@ -101,25 +97,28 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
     }
   },
 
-  toggle: (id) => set((s) => {
-    const sel = new Set(s.selectedIds)
-    if (sel.has(id)) sel.delete(id)
-    else sel.add(id)
-    return { selectedIds: sel }
-  }),
+  toggle: (id) =>
+    set((s) => {
+      const sel = new Set(s.selectedIds)
+      if (sel.has(id)) sel.delete(id)
+      else sel.add(id)
+      return { selectedIds: sel }
+    }),
 
-  selectAll: () => set((s) => ({
-    selectedIds: new Set(s.tweaks.filter((t) => !t.applied).map((t) => t.tweak.id))
-  })),
+  selectAll: () =>
+    set((s) => ({
+      selectedIds: new Set(s.tweaks.filter((t) => !t.applied).map((t) => t.tweak.id)),
+    })),
 
   deselectAll: () => set({ selectedIds: new Set() }),
 
-  toggleCategory: (cat) => set((s) => {
-    const next = new Set(s.expandedCategories)
-    if (next.has(cat)) next.delete(cat)
-    else next.add(cat)
-    return { expandedCategories: next }
-  }),
+  toggleCategory: (cat) =>
+    set((s) => {
+      const next = new Set(s.expandedCategories)
+      if (next.has(cat)) next.delete(cat)
+      else next.add(cat)
+      return { expandedCategories: next }
+    }),
 
   setDns: async (primary, secondary) => {
     try {

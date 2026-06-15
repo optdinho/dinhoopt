@@ -1,29 +1,29 @@
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type {
-  PlatformSecurity,
-  AntivirusStatus,
   AntivirusProduct,
-  FirewallStatus,
+  AntivirusStatus,
   DiskEncryptionStatus,
   DiskEncryptionVolume,
-  UpdateStatus,
-  PatchInfo,
-  ScreenLockStatus,
+  FirewallStatus,
   PasswordPolicy,
-  WindowsHelloInfo,
+  PatchInfo,
+  PlatformSecurity,
+  ScreenLockStatus,
+  UpdateStatus,
 } from '../types'
 
 const execFileAsync = promisify(execFile)
 
 function runPowerShell(script: string): Promise<string> {
-  return execFileAsync('powershell', [
-    '-NoProfile', '-NonInteractive', '-Command',
-    script,
-  ]).then(r => r.stdout)
+  return execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script]).then((r) => r.stdout)
 }
 
-function parseProductState(state: number): { enabled: boolean; realtimeProtection: boolean; signaturesUpToDate: boolean } {
+function parseProductState(state: number): {
+  enabled: boolean
+  realtimeProtection: boolean
+  signaturesUpToDate: boolean
+} {
   const enabledLevel = (state >> 12) & 0xf
   const realtime = (state >> 8) & 0xf
   const sigs = (state >> 4) & 0xf
@@ -37,18 +37,20 @@ function parseProductState(state: number): { enabled: boolean; realtimeProtectio
 async function collectAntivirusStatus(): Promise<AntivirusStatus> {
   try {
     const stdout = await runPowerShell(
-      'Get-WmiObject -Namespace root\\SecurityCenter2 -Class AntiVirusProduct | Select-Object displayName, productState | ConvertTo-Json -Compress'
+      'Get-WmiObject -Namespace root\\SecurityCenter2 -Class AntiVirusProduct | Select-Object displayName, productState | ConvertTo-Json -Compress',
     )
     const raw = JSON.parse(stdout)
     const items: Array<{ displayName: string | null; productState: number }> = Array.isArray(raw) ? raw : [raw]
-    const products: AntivirusProduct[] = items.map(item => ({
+    const products: AntivirusProduct[] = items.map((item) => ({
       name: item.displayName || 'Unknown',
       ...parseProductState(item.productState ?? 0),
     }))
-    const thirdParty = products.find(p => p.name !== 'Windows Defender')
+    const thirdParty = products.find((p) => p.name !== 'Windows Defender')
     return {
       products,
-      primary: thirdParty ? thirdParty.name : (products.find(p => p.name === 'Windows Defender')?.name ?? products[0]?.name ?? null),
+      primary: thirdParty
+        ? thirdParty.name
+        : (products.find((p) => p.name === 'Windows Defender')?.name ?? products[0]?.name ?? null),
     }
   } catch {
     return { products: [], primary: null }
@@ -58,18 +60,16 @@ async function collectAntivirusStatus(): Promise<AntivirusStatus> {
 async function collectFirewallStatus(): Promise<FirewallStatus> {
   const [productsResult, profilesResult] = await Promise.allSettled([
     runPowerShell(
-      'Get-WmiObject -Namespace root\\SecurityCenter2 -Class FirewallProduct | Select-Object displayName, productState | ConvertTo-Json -Compress'
-    ).then(stdout => {
+      'Get-WmiObject -Namespace root\\SecurityCenter2 -Class FirewallProduct | Select-Object displayName, productState | ConvertTo-Json -Compress',
+    ).then((stdout) => {
       const raw = JSON.parse(stdout)
       const items: Array<{ displayName: string; productState: number }> = Array.isArray(raw) ? raw : [raw]
-      return items.map(item => ({
+      return items.map((item) => ({
         name: item.displayName ?? 'Unknown',
-        enabled: ((item.productState ?? 0) >> 12 & 0xf) >= 1,
+        enabled: (((item.productState ?? 0) >> 12) & 0xf) >= 1,
       }))
     }),
-    runPowerShell(
-      'Get-NetFirewallProfile | Select-Object Name, Enabled | ConvertTo-Json -Compress'
-    ).then(stdout => {
+    runPowerShell('Get-NetFirewallProfile | Select-Object Name, Enabled | ConvertTo-Json -Compress').then((stdout) => {
       const raw = JSON.parse(stdout)
       const items: Array<{ Name: string; Enabled: boolean | number }> = Array.isArray(raw) ? raw : [raw]
       const profiles: Record<string, boolean> = {}
@@ -85,8 +85,9 @@ async function collectFirewallStatus(): Promise<FirewallStatus> {
   ])
 
   const products = productsResult.status === 'fulfilled' ? productsResult.value : []
-  const windowsProfiles = profilesResult.status === 'fulfilled' ? profilesResult.value : { domain: false, private: false, public: false }
-  const hasEnabledProduct = products.some(p => p.enabled)
+  const windowsProfiles =
+    profilesResult.status === 'fulfilled' ? profilesResult.value : { domain: false, private: false, public: false }
+  const hasEnabledProduct = products.some((p) => p.enabled)
   const allProfilesOn = windowsProfiles.domain && windowsProfiles.private && windowsProfiles.public
   return {
     enabled: hasEnabledProduct || allProfilesOn,
@@ -107,11 +108,13 @@ const VOLUME_STATUS_MAP: Record<number, string> = {
 async function collectDiskEncryptionStatus(): Promise<DiskEncryptionStatus> {
   try {
     const stdout = await runPowerShell(
-      'Get-WmiObject -Namespace root\\cimv2\\Security\\MicrosoftVolumeEncryption -Class Win32_EncryptableVolume | Select-Object MountPoint, VolumeStatus, ProtectionStatus | ConvertTo-Json -Compress'
+      'Get-WmiObject -Namespace root\\cimv2\\Security\\MicrosoftVolumeEncryption -Class Win32_EncryptableVolume | Select-Object MountPoint, VolumeStatus, ProtectionStatus | ConvertTo-Json -Compress',
     )
     const raw = JSON.parse(stdout)
-    const items: Array<{ MountPoint: string; VolumeStatus: number; ProtectionStatus: number }> = Array.isArray(raw) ? raw : [raw]
-    const volumes: DiskEncryptionVolume[] = items.map(item => ({
+    const items: Array<{ MountPoint: string; VolumeStatus: number; ProtectionStatus: number }> = Array.isArray(raw)
+      ? raw
+      : [raw]
+    const volumes: DiskEncryptionVolume[] = items.map((item) => ({
       mount: item.MountPoint,
       status: VOLUME_STATUS_MAP[item.VolumeStatus] ?? 'Unknown',
       protectionOn: item.ProtectionStatus === 1,
@@ -125,11 +128,14 @@ async function collectDiskEncryptionStatus(): Promise<DiskEncryptionStatus> {
 async function collectUpdateStatus(): Promise<UpdateStatus> {
   try {
     const stdout = await runPowerShell(
-      'Get-HotFix | Select-Object HotFixID, InstalledOn, Description | ConvertTo-Json -Compress'
+      'Get-HotFix | Select-Object HotFixID, InstalledOn, Description | ConvertTo-Json -Compress',
     )
     const raw = JSON.parse(stdout)
     const patches: PatchInfo[] = (Array.isArray(raw) ? raw : [raw])
-      .filter((item: { HotFixID?: string | null; InstalledOn?: string | string[] | null }) => item.HotFixID && item.InstalledOn)
+      .filter(
+        (item: { HotFixID?: string | null; InstalledOn?: string | string[] | null }) =>
+          item.HotFixID && item.InstalledOn,
+      )
       .map((item: { HotFixID: string; InstalledOn: string | string[]; Description: string }) => {
         let installedOn: string
         if (Array.isArray(item.InstalledOn)) {
@@ -146,7 +152,7 @@ async function collectUpdateStatus(): Promise<UpdateStatus> {
     if (patches.length === 0) {
       return { recentPatches: [], lastPatchDate: null, daysSinceLastPatch: null }
     }
-    const lastPatchDate = patches[0].installedOn
+    const lastPatchDate = patches[0]!.installedOn
     const daysSince = Math.floor((Date.now() - new Date(lastPatchDate).getTime()) / (1000 * 60 * 60 * 24))
     return { recentPatches: patches, lastPatchDate, daysSinceLastPatch: daysSince }
   } catch {
@@ -174,7 +180,10 @@ $gpoTimeout = (Get-ItemProperty -Path $gpo -Name InactivityTimeoutSecs -ErrorAct
     const ssActive = data.ssActive === null || data.ssActive === undefined ? null : String(data.ssActive)
     const ssSecure = data.ssSecure === null || data.ssSecure === undefined ? null : String(data.ssSecure)
     const ssTimeout = data.ssTimeout === null || data.ssTimeout === undefined ? null : Number(data.ssTimeout)
-    const gpoTimeout = data.gpoTimeout === null || data.gpoTimeout === undefined || data.gpoTimeout === 0 ? null : Number(data.gpoTimeout)
+    const gpoTimeout =
+      data.gpoTimeout === null || data.gpoTimeout === undefined || data.gpoTimeout === 0
+        ? null
+        : Number(data.gpoTimeout)
     return {
       screenSaverEnabled: ssActive === '1',
       lockOnResume: ssSecure === '1',
@@ -213,9 +222,9 @@ try {
 `)
     const data = JSON.parse(stdout)
     const toNum = (v: unknown): number => {
-      if (typeof v === 'number' && !isNaN(v)) return v
+      if (typeof v === 'number' && !Number.isNaN(v)) return v
       const n = Number(v)
-      return isNaN(n) ? 0 : n
+      return Number.isNaN(n) ? 0 : n
     }
     const toBool = (v: unknown): boolean => v === true || v === 1 || v === '1' || v === 'true'
     return {
@@ -236,8 +245,13 @@ try {
     }
   } catch {
     return {
-      minLength: 0, maxAgeDays: 0, minAgeDays: 0, historyCount: 0,
-      complexityRequired: false, lockoutThreshold: 0, lockoutDurationMin: 0,
+      minLength: 0,
+      maxAgeDays: 0,
+      minAgeDays: 0,
+      historyCount: 0,
+      complexityRequired: false,
+      lockoutThreshold: 0,
+      lockoutDurationMin: 0,
       lockoutObservationMin: 0,
       windowsHello: { enrolled: false, faceEnabled: false, fingerprintEnabled: false, pinEnabled: false },
     }
@@ -246,18 +260,32 @@ try {
 
 export function createWin32Security(): PlatformSecurity {
   return {
-    async isServer() { return false },
+    async isServer() {
+      return false
+    },
     collectAntivirusStatus,
     collectFirewallStatus,
     collectDiskEncryptionStatus,
     collectUpdateStatus,
     collectScreenLockStatus,
     collectPasswordPolicy,
-    async collectSshHardening() { return null },
-    async collectFail2ban() { return null },
-    async collectListeningPorts() { return null },
-    async collectAuditd() { return null },
-    async collectSuidSgidBinaries() { return null },
-    async collectLinuxFirewallStatus() { return null },
+    async collectSshHardening() {
+      return null
+    },
+    async collectFail2ban() {
+      return null
+    },
+    async collectListeningPorts() {
+      return null
+    },
+    async collectAuditd() {
+      return null
+    },
+    async collectSuidSgidBinaries() {
+      return null
+    },
+    async collectLinuxFirewallStatus() {
+      return null
+    },
   }
 }

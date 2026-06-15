@@ -46,5 +46,10 @@
   "history": "History",
   "aboutUpdates": "About & Updates",
   "activation": "Activation",
-  "compliance": "Compliance Auditor"
+  "compliance": "Compliance Auditor",
+  "vulnerability": "Vulnerability Scanner",
+  "logs": "Logs",
+  "hostsEditor": "Hosts Editor",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Expand sidebar"
 }

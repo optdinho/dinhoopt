@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockHandlers = new Map<string, Function>()
+const mockHandlers = new Map<string, (...args: unknown[]) => unknown>()
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: (channel: string, handler: Function) => { mockHandlers.set(channel, handler) },
+    handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+      mockHandlers.set(channel, handler)
+    },
   },
 }))
 
@@ -16,13 +18,8 @@ vi.mock('../services/power-plans', () => ({
 }))
 
 import { IPC } from '@shared/channels'
+import { activatePowerPlan, createPowerPlan, deletePowerPlan, listPowerPlans } from '../services/power-plans'
 import { registerPowerPlansIpc } from './power-plans.ipc'
-import {
-  listPowerPlans,
-  activatePowerPlan,
-  createPowerPlan,
-  deletePowerPlan,
-} from '../services/power-plans'
 
 const mockedList = vi.mocked(listPowerPlans)
 const mockedActivate = vi.mocked(activatePowerPlan)
@@ -34,7 +31,7 @@ beforeEach(() => {
   mockHandlers.clear()
 })
 
-function getHandler(channel: string): Function {
+function getHandler(channel: string): (...args: unknown[]) => unknown {
   const handler = mockHandlers.get(channel)
   if (!handler) throw new Error(`No handler for channel: ${channel}`)
   return handler
@@ -52,10 +49,20 @@ describe('registerPowerPlansIpc', () => {
   describe(IPC.POWER_PLANS_LIST, () => {
     it('returns list from service', async () => {
       registerPowerPlansIpc()
-      mockedList.mockResolvedValue([{ guid: 'abc', name: 'Balanced', description: '', isActive: true, isHighPerformance: false, isBalanced: true, isPowerSaver: false }])
+      mockedList.mockResolvedValue([
+        {
+          guid: 'abc',
+          name: 'Balanced',
+          description: '',
+          isActive: true,
+          isHighPerformance: false,
+          isBalanced: true,
+          isPowerSaver: false,
+        },
+      ])
       const result = await getHandler(IPC.POWER_PLANS_LIST)()
       expect(result).toHaveLength(1)
-      expect(result[0].guid).toBe('abc')
+      expect((result as { guid: string }[])[0]!.guid).toBe('abc')
     })
   })
 

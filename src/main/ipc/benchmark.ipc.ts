@@ -1,8 +1,9 @@
-import { ipcMain } from 'electron'
 import { IPC } from '@shared/channels'
-import type { WindowGetter } from './index'
-import { psUtf8, execFileAsync } from '../services/exec-utf8'
 import type { BenchmarkResult, BenchmarkScoreClass } from '@shared/types'
+import { ipcMain } from 'electron'
+import { execFileAsync, psUtf8 } from '../services/exec-utf8'
+import { getLogger } from '../services/logger.service'
+import type { WindowGetter } from './index'
 
 function classifyScore(score: number): BenchmarkScoreClass {
   if (score >= 90) return 'S'
@@ -45,12 +46,20 @@ async function measureCpuUsage(): Promise<number> {
     let total = 0
     for (let i = 0; i < 10; i++) {
       if (cancelled) return 50
-      const { stdout } = await execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        psUtf8('Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average'),
-      ], { timeout: 5000, windowsHide: true })
-      const val = parseInt(stdout.trim(), 10)
-      if (!isNaN(val)) total += val
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          psUtf8(
+            'Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average',
+          ),
+        ],
+        { timeout: 5000, windowsHide: true },
+      )
+      const val = Number.parseInt(stdout.trim(), 10)
+      if (!Number.isNaN(val)) total += val
       await sleep(500)
     }
     return total / 10
@@ -61,10 +70,18 @@ async function measureCpuUsage(): Promise<number> {
 
 async function measureRam(): Promise<{ free: number; total: number }> {
   try {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      psUtf8('$os=Get-CimInstance Win32_OperatingSystem; @{Free=[math]::Round($os.FreePhysicalMemory/1024); Total=[math]::Round($os.TotalVisibleMemorySize/1024)} | ConvertTo-Json -Compress'),
-    ], { timeout: 5000, windowsHide: true })
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        psUtf8(
+          '$os=Get-CimInstance Win32_OperatingSystem; @{Free=[math]::Round($os.FreePhysicalMemory/1024); Total=[math]::Round($os.TotalVisibleMemorySize/1024)} | ConvertTo-Json -Compress',
+        ),
+      ],
+      { timeout: 5000, windowsHide: true },
+    )
     const parsed = JSON.parse(stdout.trim())
     return { free: parsed.Free, total: parsed.Total }
   } catch {
@@ -78,10 +95,13 @@ async function measurePing(): Promise<{ avg: number; jitter: number }> {
     const times: number[] = []
     for (let i = 0; i < 10; i++) {
       if (cancelled) return { avg: 100, jitter: 0 }
-      const { stdout } = await execFileAsync('ping', ['-n', '1', '-w', '3000', '8.8.8.8'], { timeout: 5000, windowsHide: true })
+      const { stdout } = await execFileAsync('ping', ['-n', '1', '-w', '3000', '8.8.8.8'], {
+        timeout: 5000,
+        windowsHide: true,
+      })
       const match = stdout.match(/time[=<](\d+)ms/i)
       if (match) {
-        const t = parseInt(match[1], 10)
+        const t = Number.parseInt(match[1] ?? '', 10)
         times.push(t)
         total += t
       }
@@ -89,9 +109,7 @@ async function measurePing(): Promise<{ avg: number; jitter: number }> {
     }
     if (times.length === 0) return { avg: 100, jitter: 0 }
     const avg = total / times.length
-    const jitter = times.length > 1
-      ? Math.sqrt(times.reduce((sum, t) => sum + (t - avg) ** 2, 0) / times.length)
-      : 0
+    const jitter = times.length > 1 ? Math.sqrt(times.reduce((sum, t) => sum + (t - avg) ** 2, 0) / times.length) : 0
     return { avg: Math.round(avg), jitter: Math.round(jitter) }
   } catch {
     return { avg: 100, jitter: 0 }
@@ -103,12 +121,20 @@ async function measureDpcLatency(): Promise<number> {
     let maxLatency = 0
     for (let i = 0; i < 3; i++) {
       if (cancelled) return 1000
-      const { stdout } = await execFileAsync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        psUtf8('(Get-CimInstance Win32_PerfRawData_Counters_TimerResolution | Select-Object -ExpandProperty Percent_Interval_Timer_Rate) -replace ",", ""'),
-      ], { timeout: 5000, windowsHide: true })
-      const val = parseInt(stdout.trim(), 10)
-      if (!isNaN(val) && val > maxLatency) maxLatency = val
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          psUtf8(
+            '(Get-CimInstance Win32_PerfRawData_Counters_TimerResolution | Select-Object -ExpandProperty Percent_Interval_Timer_Rate) -replace ",", ""',
+          ),
+        ],
+        { timeout: 5000, windowsHide: true },
+      )
+      const val = Number.parseInt(stdout.trim(), 10)
+      if (!Number.isNaN(val) && val > maxLatency) maxLatency = val
       await sleep(300)
     }
     return maxLatency
@@ -119,11 +145,23 @@ async function measureDpcLatency(): Promise<number> {
 
 async function measureTemperature(): Promise<number | null> {
   try {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      psUtf8('Get-CimInstance MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" | Select-Object -ExpandProperty CurrentTemperature | ForEach-Object { [math]::Round(($_ - 2732) / 10) }'),
-    ], { timeout: 5000, windowsHide: true })
-    const temps = stdout.trim().split('\n').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n))
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        psUtf8(
+          'Get-CimInstance MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" | Select-Object -ExpandProperty CurrentTemperature | ForEach-Object { [math]::Round(($_ - 2732) / 10) }',
+        ),
+      ],
+      { timeout: 5000, windowsHide: true },
+    )
+    const temps = stdout
+      .trim()
+      .split('\n')
+      .map((s) => Number.parseInt(s.trim(), 10))
+      .filter((n) => !Number.isNaN(n))
     if (temps.length === 0) return null
     return Math.max(...temps)
   } catch {
@@ -133,12 +171,20 @@ async function measureTemperature(): Promise<number | null> {
 
 async function countTweaksApplied(): Promise<number> {
   try {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      psUtf8('$count=0; @("MouseSpeed","MouseThreshold1","MouseThreshold2","MenuShowDelay").foreach({ $v=Get-ItemPropertyValue -Path "HKCU:\\Control Panel\\Mouse" -Name $_ -ErrorAction SilentlyContinue; if($v -eq "0"){$count++} }); $count'),
-    ], { timeout: 10000, windowsHide: true })
-    const c = parseInt(stdout.trim(), 10)
-    return isNaN(c) ? 0 : c
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        psUtf8(
+          '$count=0; @("MouseSpeed","MouseThreshold1","MouseThreshold2","MenuShowDelay").foreach({ $v=Get-ItemPropertyValue -Path "HKCU:\\Control Panel\\Mouse" -Name $_ -ErrorAction SilentlyContinue; if($v -eq "0"){$count++} }); $count',
+        ),
+      ],
+      { timeout: 10000, windowsHide: true },
+    )
+    const c = Number.parseInt(stdout.trim(), 10)
+    return Number.isNaN(c) ? 0 : c
   } catch {
     return 0
   }
@@ -213,63 +259,62 @@ function scorePowerBonus(plan: string): number {
 export function registerBenchmarkIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BENCHMARK_RUN, async () => {
     cancelled = false
+    getLogger().info('benchmark', 'Starting benchmark...')
     const win = getWindow()
-    const errors: string[] = []
-
-    sendProgress(win, 0, STEPS[0].label, STEPS[0].detail)
+    sendProgress(win, 0, STEPS[0]?.label ?? '', STEPS[0]?.detail ?? '')
     await sleep(500)
 
     // CPU
-    sendProgress(win, 1, STEPS[1].label, STEPS[1].detail)
+    sendProgress(win, 1, STEPS[1]?.label ?? '', STEPS[1]?.detail ?? '')
     const cpuUsage = await measureCpuUsage()
     const cpuScore = scoreCpu(cpuUsage)
     const cpuDetail = `Uso médio: ${cpuUsage.toFixed(1)}%`
 
     // RAM
-    sendProgress(win, 2, STEPS[2].label, STEPS[2].detail)
+    sendProgress(win, 2, STEPS[2]?.label ?? '', STEPS[2]?.detail ?? '')
     const ram = await measureRam()
     const ramFreePercent = ram.total > 0 ? (ram.free / ram.total) * 100 : 0
     const ramScore = scoreRam(ramFreePercent)
     const ramDetail = `Livre: ${ram.free}MB / ${ram.total}MB (${ramFreePercent.toFixed(0)}%)`
 
     // Network
-    sendProgress(win, 3, STEPS[3].label, STEPS[3].detail)
+    sendProgress(win, 3, STEPS[3]?.label ?? '', STEPS[3]?.detail ?? '')
     const { avg: pingAvg, jitter } = await measurePing()
     const netScore = scoreNetwork(pingAvg, jitter)
     const netDetail = `Ping médio: ${pingAvg}ms, Jitter: ${jitter}ms`
 
     // DPC
-    sendProgress(win, 4, STEPS[4].label, STEPS[4].detail)
+    sendProgress(win, 4, STEPS[4]?.label ?? '', STEPS[4]?.detail ?? '')
     const dpc = await measureDpcLatency()
     const dpcScore = scoreDpc(dpc)
     const dpcDetail = `Latência DPC: ${dpc}µs`
 
     // Temperature
-    sendProgress(win, 5, STEPS[5].label, STEPS[5].detail)
+    sendProgress(win, 5, STEPS[5]?.label ?? '', STEPS[5]?.detail ?? '')
     const temp = await measureTemperature()
     const tempScore = scoreTemperature(temp)
     const tempDetail = temp !== null ? `${temp}°C` : 'Indisponível'
 
     // Tweaks
-    sendProgress(win, 6, STEPS[6].label, STEPS[6].detail)
+    sendProgress(win, 6, STEPS[6]?.label ?? '', STEPS[6]?.detail ?? '')
     const tweaksApplied = await countTweaksApplied()
     const totalTweaks = 51
     const tweakBonus = scoreTweakBonus(tweaksApplied, totalTweaks)
-    const tweakDetail = `${tweaksApplied}/${totalTweaks} tweaks`
 
     // Power Plan
-    sendProgress(win, 7, STEPS[7].label, STEPS[7].detail)
+    sendProgress(win, 7, STEPS[7]?.label ?? '', STEPS[7]?.detail ?? '')
     const powerPlan = await getActivePowerPlan()
     const powerBonus = scorePowerBonus(powerPlan)
-    const powerDetail = powerPlan === 'ultimate' ? 'Ultimate Performance' : powerPlan === 'high' ? 'High Performance' : 'Balanced'
+    const powerDetail =
+      powerPlan === 'ultimate' ? 'Ultimate Performance' : powerPlan === 'high' ? 'High Performance' : 'Balanced'
 
     // Score
     const totalScore = cpuScore + ramScore + netScore + dpcScore + tempScore + tweakBonus + powerBonus
 
-    sendProgress(win, 8, STEPS[8].label, STEPS[8].detail)
+    sendProgress(win, 8, STEPS[8]?.label ?? '', STEPS[8]?.detail ?? '')
     await sleep(300)
 
-    sendProgress(win, 9, STEPS[9].label, STEPS[9].detail)
+    sendProgress(win, 9, STEPS[9]?.label ?? '', STEPS[9]?.detail ?? '')
     await sleep(300)
 
     const result: BenchmarkResult = {
@@ -287,10 +332,12 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
       completedAt: new Date().toISOString(),
     }
 
+    getLogger().success('benchmark', `Benchmark completed with score ${totalScore} (${classifyScore(totalScore)})`)
     return result
   })
 
   ipcMain.handle(IPC.BENCHMARK_CANCEL, () => {
+    getLogger().info('benchmark', 'Benchmark cancelled by user')
     cancelled = true
   })
 }

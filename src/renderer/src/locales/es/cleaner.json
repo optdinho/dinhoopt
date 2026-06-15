@@ -11,6 +11,8 @@
   "categoryApplicationsDescription": "Cachés de aplicaciones y herramientas de desarrollo",
   "categoryGaming": "Juegos",
   "categoryGamingDescription": "Cachés de lanzadores y redistribuibles",
+  "categoryWinSxS": "WinSxS",
+  "categoryWinSxSDescription": "Archivos obsoletos del almacén de componentes",
   "categoryRecycleBin": "Papelera de reciclaje",
   "categoryRecycleBinDescription": "Archivos eliminados",
   "categoryShortcuts": "Accesos directos",

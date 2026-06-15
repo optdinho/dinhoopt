@@ -46,5 +46,10 @@
   "history": "Histórico",
   "aboutUpdates": "Acerca e atualizações",
   "activation": "Ativação",
-  "compliance": "Auditor de Conformidade"
+  "compliance": "Auditor de Conformidade",
+  "vulnerability": "Scanner de Vulnerabilidades",
+  "hostsEditor": "Editor de Hosts",
+  "logs": "Registos",
+  "collapseSidebar": "Recolher barra lateral",
+  "expandSidebar": "Expandir barra lateral"
 }

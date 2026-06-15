@@ -343,8 +343,7 @@
 <a name='L278'></a><a href='#L278'>278</a>
 <a name='L279'></a><a href='#L279'>279</a>
 <a name='L280'></a><a href='#L280'>280</a>
-<a name='L281'></a><a href='#L281'>281</a>
-<a name='L282'></a><a href='#L282'>282</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L281'></a><a href='#L281'>281</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -438,10 +437,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -508,10 +503,13 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -625,12 +623,12 @@
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { BrowserWindow, Notification } from 'electron'
-import { IPC } from '@shared/channels'
-import { getSettings, updateScheduleEntry } from './settings-store'
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { IPC } from '@shared/channels'
+import type { DiNhoSettings, ScheduleEntry, ScheduleRunStatus } from '@shared/types'
+import { type BrowserWindow, Notification } from 'electron'
 import { t } from '../i18n'
 import { logInfo } from './logger'
-import type { DiNhoSettings, ScheduleEntry, ScheduleRunStatus } from '@shared/types'
+import { getSettings, updateScheduleEntry } from './settings-store'
 &nbsp;
 let schedulerTimer: ReturnType&lt;typeof setInterval&gt; | null = null
 let initialCheckTimer: ReturnType&lt;typeof setTimeout&gt; | null = null
@@ -718,11 +716,7 @@ function isDueEntry(entry: ScheduleEntry): boolean {
 }
 &nbsp;
 export function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &amp;&amp;
-    a.getMonth() === b.getMonth() &amp;&amp;
-    a.getDate() === b.getDate()
-  )
+  return a.getFullYear() === b.getFullYear() &amp;&amp; a.getMonth() === b.getMonth() &amp;&amp; a.getDate() === b.getDate()
 }
 &nbsp;
 // ─── Legacy single-schedule compat ────────────────────────
@@ -758,7 +752,7 @@ export function getNextScanTime(settings: DiNhoSettings): Date | null {
     autoApply: false,
     lastRunAt: null,
     lastRunStatus: 'never',
-    createdAt: ''
+    createdAt: '',
   }
   return getNextRunTime(legacyEntry)
 }
@@ -788,26 +782,29 @@ function triggerScheduleEntry(mainWindow: BrowserWindow | null, entry: ScheduleE
 &nbsp;
   // Safety timeout — if the renderer never responds (crash, reload, etc.),
   // auto-clear so the schedule isn't stuck forever
-  inFlightTimers.set(entry.id, setTimeout(<span class="fstat-no" title="function not covered" >() =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    if (inFlight.has(entry.id)) {</span>
-<span class="cstat-no" title="statement not covered" >      logInfo(`Schedule "${entry.name}" timed out — clearing inFlight`)</span>
-<span class="cstat-no" title="statement not covered" >      inFlight.delete(entry.id)</span>
-<span class="cstat-no" title="statement not covered" >      inFlightTimers.delete(entry.id)</span>
-    }
-  }, IN_FLIGHT_TIMEOUT_MS))
+  inFlightTimers.set(
+    entry.id,
+    setTimeout(<span class="fstat-no" title="function not covered" >() =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      if (inFlight.has(entry.id)) {</span>
+<span class="cstat-no" title="statement not covered" >        logInfo(`Schedule "${entry.name}" timed out — clearing inFlight`)</span>
+<span class="cstat-no" title="statement not covered" >        inFlight.delete(entry.id)</span>
+<span class="cstat-no" title="statement not covered" >        inFlightTimers.delete(entry.id)</span>
+      }
+    }, IN_FLIGHT_TIMEOUT_MS),
+  )
 &nbsp;
   mainWindow.webContents.send(IPC.SCHEDULE_RUN_TRIGGER, {
     scheduleId: entry.id,
     scheduleName: entry.name,
     tasks: entry.tasks,
-    autoApply: entry.autoApply
+    autoApply: entry.autoApply,
   })
 &nbsp;
   <span class="missing-if-branch" title="else path not taken" >E</span>if (!process.argv.includes('--daemon') &amp;&amp; Notification.isSupported()) {
     const notification = new Notification({
       title: t('scheduledTaskNotificationTitle'),
       body: t('scheduledTaskNotificationBody', { name: entry.name }),
-      silent: true
+      silent: true,
     })
     notification.show()
   }
@@ -825,7 +822,7 @@ export function notifyScheduledScanComplete(totalSize: number, itemCount: number
   const notification = new Notification({
     title: t('scanCompleteNotificationTitle'),
     body: t('scanCompleteNotificationBody', { itemCount, sizeMB }),
-    silent: false
+    silent: false,
   })
   notification.show()
 }
@@ -844,7 +841,7 @@ export function completeScheduleRun(scheduleId: string, status: ScheduleRunStatu
   }
   updateScheduleEntry(scheduleId, {
     lastRunAt: new Date().toISOString(),
-    lastRunStatus: status
+    lastRunStatus: status,
   })
 }
 &nbsp;
@@ -913,7 +910,7 @@ export function stopScheduler(): void {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-10T18:42:25.756Z
+                at 2026-06-15T03:05:41.530Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

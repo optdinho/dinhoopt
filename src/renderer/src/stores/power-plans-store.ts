@@ -1,5 +1,5 @@
+import type { PowerPlanActivateResult, PowerPlanInfo } from '@shared/types'
 import { create } from 'zustand'
-import type { PowerPlanInfo, PowerPlanActivateResult } from '@shared/types'
 
 interface PowerPlansState {
   plans: PowerPlanInfo[]

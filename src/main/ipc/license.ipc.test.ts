@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -37,6 +37,7 @@ import { registerLicenseIpc } from './license.ipc'
 function invoke(channel: string, ...args: unknown[]) {
   const handler = handleMap.get(channel)
   if (!handler) throw new Error(`No handler registered for ${channel}`)
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
   return handler({} as any, ...args)
 }
 

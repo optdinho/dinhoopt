@@ -1,7 +1,7 @@
+import type { PerfSnapshot } from '@shared/types'
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import type { PerfSnapshot } from '@shared/types'
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 interface TimeSeriesChartProps {
   history: PerfSnapshot[]
@@ -16,7 +16,13 @@ const rangeSeconds = { '60s': 60, '5m': 300, '15m': 900 }
 // Cap the number of data points rendered to avoid Recharts SVG thrashing
 const MAX_CHART_POINTS = 120
 
-export const TimeSeriesChart = memo(function TimeSeriesChart({ history, timeRange, dataKey, label, color }: TimeSeriesChartProps) {
+export const TimeSeriesChart = memo(function TimeSeriesChart({
+  history,
+  timeRange,
+  dataKey,
+  label,
+  color,
+}: TimeSeriesChartProps) {
   const { t } = useTranslation('performance')
   const data = useMemo(() => {
     const count = rangeSeconds[timeRange]
@@ -28,6 +34,7 @@ export const TimeSeriesChart = memo(function TimeSeriesChart({ history, timeRang
     const result: Array<Record<string, number>> = []
     for (let i = 0; i < slice.length; i += step) {
       const s = slice[i]
+      if (!s) continue
       if (dataKey === 'cpu') {
         result.push({ t: result.length, value: s.cpu.overall })
       } else if (dataKey === 'memory') {
@@ -36,7 +43,7 @@ export const TimeSeriesChart = memo(function TimeSeriesChart({ history, timeRang
         result.push({
           t: result.length,
           read: s.disk.readBytesPerSec / (1024 * 1024),
-          write: s.disk.writeBytesPerSec / (1024 * 1024)
+          write: s.disk.writeBytesPerSec / (1024 * 1024),
         })
       }
     }
@@ -67,21 +74,20 @@ export const TimeSeriesChart = memo(function TimeSeriesChart({ history, timeRang
             )}
           </defs>
           <XAxis dataKey="t" hide />
-          <YAxis
-            hide
-            domain={isDisk ? ['auto', 'auto'] : [0, 100]}
-          />
+          <YAxis hide domain={isDisk ? ['auto', 'auto'] : [0, 100]} />
           <Tooltip
             contentStyle={{
               background: '#1e1e24',
               border: '1px solid var(--border-strong)',
               borderRadius: '10px',
               fontSize: '12px',
-              color: 'var(--text-primary)'
+              color: 'var(--text-primary)',
             }}
             labelFormatter={() => ''}
             formatter={(val) =>
-              isDisk ? [`${Number(val).toFixed(1)} ${t('chartDiskUnit')}`] : [`${Number(val).toFixed(1)}${t('chartPercentUnit')}`]
+              isDisk
+                ? [`${Number(val).toFixed(1)} ${t('chartDiskUnit')}`]
+                : [`${Number(val).toFixed(1)}${t('chartPercentUnit')}`]
             }
           />
           {isDisk ? (

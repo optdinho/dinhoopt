@@ -1,11 +1,11 @@
-import { create } from 'zustand'
 import type {
+  GameModeAuditReport,
   GameModeConfig,
   GameModeOptimizationId,
   GameModeProgress,
-  GameModeAuditReport,
   GameProfile,
 } from '@shared/types'
+import { create } from 'zustand'
 
 interface GameModeStoreState {
   // Status
@@ -50,11 +50,17 @@ interface GameModeStoreState {
 
 const defaultConfig: GameModeConfig = {
   enabledOptimizations: [
-    'svc-wsearch', 'svc-sysmain',
+    'svc-wsearch',
+    'svc-sysmain',
     'proc-kill-updaters',
     'mem-clear-standby',
-    'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep', 'sys-timer-resolution', 'cpu-game-priority',
-    'sys-disable-game-bar', 'sys-disable-fse-opt',
+    'sys-focus-assist',
+    'sys-power-plan',
+    'sys-prevent-sleep',
+    'sys-timer-resolution',
+    'cpu-game-priority',
+    'sys-disable-game-bar',
+    'sys-disable-fse-opt',
     'net-flush-dns',
   ],
   customProcessKillList: [],
@@ -166,17 +172,23 @@ export const useGameModeStore = create<GameModeStoreState>((set, get) => ({
 
 /** Hydrate config from persisted settings and check active status */
 export function initGameModeStore(): void {
-  window.dinho?.settingsGet?.().then((settings) => {
-    if (settings?.gameMode) {
-      useGameModeStore.getState().setConfig(settings.gameMode)
-    }
-  }).catch(() => {})
+  window.dinho
+    ?.settingsGet?.()
+    .then((settings) => {
+      if (settings?.gameMode) {
+        useGameModeStore.getState().setConfig(settings.gameMode)
+      }
+    })
+    .catch(() => {})
 
-  window.dinho?.gameModeStatus?.().then((status) => {
-    const s = useGameModeStore.getState()
-    s.setActive(status.active, status.activatedAt)
-    s.setPendingRestore(status.pendingRestore ?? false)
-  }).catch(() => {})
+  window.dinho
+    ?.gameModeStatus?.()
+    .then((status) => {
+      const s = useGameModeStore.getState()
+      s.setActive(status.active, status.activatedAt)
+      s.setPendingRestore(status.pendingRestore ?? false)
+    })
+    .catch(() => {})
 
   // Listen for auto-detect events globally so the store stays in sync
   // even when the user is on a different page.
@@ -188,10 +200,13 @@ export function initGameModeStore(): void {
       s.setDetectedGame(null)
     }
     // Refresh active status from main process (source of truth)
-    window.dinho?.gameModeStatus?.().then((status) => {
-      const st = useGameModeStore.getState()
-      st.setActive(status.active, status.activatedAt)
-      st.setPendingRestore(status.pendingRestore ?? false)
-    }).catch(() => {})
+    window.dinho
+      ?.gameModeStatus?.()
+      .then((status) => {
+        const st = useGameModeStore.getState()
+        st.setActive(status.active, status.activatedAt)
+        st.setPendingRestore(status.pendingRestore ?? false)
+      })
+      .catch(() => {})
   })
 }

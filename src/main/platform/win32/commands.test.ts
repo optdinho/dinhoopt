@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileMock = vi.fn()
 
@@ -27,11 +27,7 @@ describe('win32 commands', () => {
 
       await cmds.shutdown(30)
 
-      expect(execFileMock).toHaveBeenCalledWith(
-        'shutdown.exe',
-        ['/s', '/t', '30'],
-        { windowsHide: true }
-      )
+      expect(execFileMock).toHaveBeenCalledWith('shutdown.exe', ['/s', '/t', '30'], { windowsHide: true })
     })
   })
 
@@ -41,11 +37,7 @@ describe('win32 commands', () => {
 
       await cmds.restart(10)
 
-      expect(execFileMock).toHaveBeenCalledWith(
-        'shutdown.exe',
-        ['/r', '/t', '10'],
-        { windowsHide: true }
-      )
+      expect(execFileMock).toHaveBeenCalledWith('shutdown.exe', ['/r', '/t', '10'], { windowsHide: true })
     })
   })
 
@@ -88,7 +80,7 @@ describe('win32 commands', () => {
 
       const result = await cmds.getDnsServers()
       expect(result).toHaveLength(1)
-      expect(result[0].iface).toBe('Ethernet')
+      expect(result[0]!.iface).toBe('Ethernet')
     })
 
     it('returns empty array on error', async () => {
@@ -110,13 +102,15 @@ describe('win32 commands', () => {
 
       const result = await cmds.getEventLog('System', 10)
 
-      expect(result).toEqual([{
-        time: '2024-01-01T00:00:00',
-        eventId: 100,
-        level: 'Warning',
-        provider: 'TestProvider',
-        message: 'Test message',
-      }])
+      expect(result).toEqual([
+        {
+          time: '2024-01-01T00:00:00',
+          eventId: 100,
+          level: 'Warning',
+          provider: 'TestProvider',
+          message: 'Test message',
+        },
+      ])
     })
 
     it('sanitizes unknown log names to System', async () => {
@@ -128,8 +122,8 @@ describe('win32 commands', () => {
       await cmds.getEventLog('MaliciousLog; rm -rf /', 50)
 
       // The command should use 'System' not the injected log name
-      const callArgs = execFileMock.mock.calls[0]
-      const psCommand = callArgs[1][callArgs[1].length - 1]
+      const callArgs = execFileMock.mock.calls[0]!
+      const psCommand = callArgs[1][callArgs[1]!.length - 1]
       expect(psCommand).toContain("'System'")
       expect(psCommand).not.toContain('MaliciousLog')
     })
@@ -142,8 +136,8 @@ describe('win32 commands', () => {
 
       await cmds.getEventLog('System', 500)
 
-      const callArgs = execFileMock.mock.calls[0]
-      const psCommand = callArgs[1][callArgs[1].length - 1]
+      const callArgs = execFileMock.mock.calls[0]!
+      const psCommand = callArgs[1][callArgs[1]!.length - 1]
       expect(psCommand).toContain('-MaxEvents 200')
     })
 
@@ -153,10 +147,10 @@ describe('win32 commands', () => {
         stderr: '',
       })
 
-      await cmds.getEventLog('System', NaN)
+      await cmds.getEventLog('System', Number.NaN)
 
-      const callArgs = execFileMock.mock.calls[0]
-      const psCommand = callArgs[1][callArgs[1].length - 1]
+      const callArgs = execFileMock.mock.calls[0]!
+      const psCommand = callArgs[1][callArgs[1]!.length - 1]
       expect(psCommand).toContain('-MaxEvents 50')
     })
 
@@ -168,9 +162,9 @@ describe('win32 commands', () => {
 
       const result = await cmds.getEventLog('System', 1)
 
-      expect(result[0].level).toBe('Information')
-      expect(result[0].provider).toBe('')
-      expect(result[0].message).toBe('')
+      expect(result[0]!.level).toBe('Information')
+      expect(result[0]!.provider).toBe('')
+      expect(result[0]!.message).toBe('')
     })
   })
 
@@ -178,20 +172,28 @@ describe('win32 commands', () => {
     it('parses installed apps from powershell output', async () => {
       execFileMock.mockResolvedValue({
         stdout: JSON.stringify([
-          { DisplayName: 'App1', DisplayVersion: '1.0', Publisher: 'Pub', InstallDate: '20240101', EstimatedSize: 1024 },
+          {
+            DisplayName: 'App1',
+            DisplayVersion: '1.0',
+            Publisher: 'Pub',
+            InstallDate: '20240101',
+            EstimatedSize: 1024,
+          },
         ]),
         stderr: '',
       })
 
       const result = await cmds.getInstalledApps()
 
-      expect(result).toEqual([{
-        name: 'App1',
-        version: '1.0',
-        publisher: 'Pub',
-        installDate: '20240101',
-        sizeKb: 1024,
-      }])
+      expect(result).toEqual([
+        {
+          name: 'App1',
+          version: '1.0',
+          publisher: 'Pub',
+          installDate: '20240101',
+          sizeKb: 1024,
+        },
+      ])
     })
 
     it('returns empty array for empty output', async () => {
@@ -203,13 +205,19 @@ describe('win32 commands', () => {
 
     it('handles single-object output', async () => {
       execFileMock.mockResolvedValue({
-        stdout: JSON.stringify({ DisplayName: 'Solo', DisplayVersion: null, Publisher: null, InstallDate: null, EstimatedSize: null }),
+        stdout: JSON.stringify({
+          DisplayName: 'Solo',
+          DisplayVersion: null,
+          Publisher: null,
+          InstallDate: null,
+          EstimatedSize: null,
+        }),
         stderr: '',
       })
 
       const result = await cmds.getInstalledApps()
       expect(result).toHaveLength(1)
-      expect(result[0]).toEqual({
+      expect(result[0]!).toEqual({
         name: 'Solo',
         version: '',
         publisher: '',
@@ -229,13 +237,15 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.checkOsUpdates()
-      expect(result).toEqual([{
-        title: 'Security Update',
-        kb: 'KB123',
-        severity: 'Critical',
-        sizeBytes: 50000,
-        downloaded: true,
-      }])
+      expect(result).toEqual([
+        {
+          title: 'Security Update',
+          kb: 'KB123',
+          severity: 'Critical',
+          sizeBytes: 50000,
+          downloaded: true,
+        },
+      ])
     })
 
     it('returns empty array on error', async () => {
@@ -287,7 +297,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemFileCheck()
-      expect(result.status).toBe('repaired')
+      expect(result!.status).toBe('repaired')
     })
 
     it('returns corrupt_unrepairable status', async () => {
@@ -297,7 +307,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemFileCheck()
-      expect(result.status).toBe('corrupt_unrepairable')
+      expect(result!.status).toBe('corrupt_unrepairable')
     })
 
     it('returns failed status when could not perform', async () => {
@@ -307,7 +317,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemFileCheck()
-      expect(result.status).toBe('failed')
+      expect(result!.status).toBe('failed')
     })
 
     it('returns unknown for unrecognized output', async () => {
@@ -317,7 +327,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemFileCheck()
-      expect(result.status).toBe('unknown')
+      expect(result!.status).toBe('unknown')
     })
 
     it('returns failed on error', async () => {
@@ -345,7 +355,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemImageRepair()
-      expect(result.status).toBe('corrupt')
+      expect(result!.status).toBe('corrupt')
     })
 
     it('returns clean when no component store corruption detected', async () => {
@@ -355,7 +365,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemImageRepair()
-      expect(result.status).toBe('clean')
+      expect(result!.status).toBe('clean')
     })
 
     it('returns success for exit code 0 with unrecognized output', async () => {
@@ -365,7 +375,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemImageRepair()
-      expect(result.status).toBe('success')
+      expect(result!.status).toBe('success')
     })
 
     it('returns unknown for non-zero exit with unrecognized output', async () => {
@@ -375,7 +385,7 @@ describe('win32 commands', () => {
       })
 
       const result = await cmds.runSystemImageRepair()
-      expect(result.status).toBe('unknown')
+      expect(result!.status).toBe('unknown')
     })
 
     it('returns failed on error', async () => {

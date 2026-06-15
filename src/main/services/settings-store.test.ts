@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 // Mock Electron before importing the module
 vi.mock('electron', () => ({
@@ -27,6 +27,7 @@ describe('deepMerge', () => {
   it('deep merges nested objects', () => {
     const target = { cleaner: { secureDelete: false, skipRecentMinutes: 60 } }
     const source = { cleaner: { secureDelete: true } }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = deepMerge(target, source as any)
     expect(result.cleaner.secureDelete).toBe(true)
     expect(result.cleaner.skipRecentMinutes).toBe(60)
@@ -41,6 +42,7 @@ describe('deepMerge', () => {
   it('handles null source values by replacing', () => {
     const target = { a: { nested: 1 } }
     const source = { a: null }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = deepMerge(target, source as any)
     expect(result.a).toBeNull()
   })
@@ -48,7 +50,7 @@ describe('deepMerge', () => {
   it('ignores undefined source values', () => {
     const target = { a: 1, b: 2 }
     const source = { a: undefined }
-    expect(deepMerge(target, source)).toEqual({ a: 1, b: 2 })
+    expect(deepMerge(target, source as Record<string, unknown>)).toEqual({ a: 1, b: 2 })
   })
 
   it('handles deeply nested merging', () => {
@@ -67,6 +69,7 @@ describe('deepMerge', () => {
         },
       },
     }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = deepMerge(target, source as any)
     expect(result.level1.level2.a).toBe(1)
     expect(result.level1.level2.b).toBe(99)
@@ -94,6 +97,7 @@ describe('deepMerge', () => {
       schedule: { enabled: true, hour: 14 },
     }
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = deepMerge(defaults, partial as any)
     expect(result.minimizeToTray).toBe(true)
     expect(result.showNotificationOnComplete).toBe(true)

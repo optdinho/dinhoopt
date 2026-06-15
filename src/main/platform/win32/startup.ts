@@ -2,8 +2,8 @@
 // which contains all the registry + Task Scheduler logic.
 // We re-export through the platform interface so darwin/linux can provide alternatives.
 
+import type { StartupBootTrace, StartupItem } from '@shared/types'
 import type { PlatformStartup } from '../types'
-import type { StartupItem, StartupBootTrace } from '@shared/types'
 
 // These imports will be lazy to avoid circular dependency issues at module load.
 // The IPC module exports these functions for direct use.
@@ -20,7 +20,7 @@ export function createWin32Startup(): PlatformStartup {
       location: string,
       command: string,
       source: StartupItem['source'],
-      enabled: boolean
+      enabled: boolean,
     ): Promise<boolean> {
       const { toggleStartupItem } = require('../../ipc/startup-manager.ipc')
       return toggleStartupItem(name, location, command, source, enabled)

@@ -1,7 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-export function useIpcAction<TArgs extends any[], TResult>({
+export function useIpcAction<TArgs extends unknown[], TResult>({
   actionFn,
   onResult,
   setLoading,
@@ -12,7 +12,7 @@ export function useIpcAction<TArgs extends any[], TResult>({
   t,
 }: {
   actionFn: (...args: TArgs) => Promise<TResult>
-  onResult: (result: TResult) => void
+  onResult?: (result: TResult) => void
   setLoading?: (v: boolean) => void
   onStart?: () => void
   onError?: (err: unknown) => void
@@ -30,14 +30,30 @@ export function useIpcAction<TArgs extends any[], TResult>({
   const errorKeyRef = useRef(errorKey)
   const tRef = useRef(t)
 
-  useEffect(() => { actionFnRef.current = actionFn }, [actionFn])
-  useEffect(() => { onResultRef.current = onResult }, [onResult])
-  useEffect(() => { setLoadingRef.current = setLoading }, [setLoading])
-  useEffect(() => { onStartRef.current = onStart }, [onStart])
-  useEffect(() => { onErrorRef.current = onError }, [onError])
-  useEffect(() => { onSuccessToastRef.current = onSuccessToast }, [onSuccessToast])
-  useEffect(() => { errorKeyRef.current = errorKey }, [errorKey])
-  useEffect(() => { tRef.current = t }, [t])
+  useEffect(() => {
+    actionFnRef.current = actionFn
+  }, [actionFn])
+  useEffect(() => {
+    onResultRef.current = onResult
+  }, [onResult])
+  useEffect(() => {
+    setLoadingRef.current = setLoading
+  }, [setLoading])
+  useEffect(() => {
+    onStartRef.current = onStart
+  }, [onStart])
+  useEffect(() => {
+    onErrorRef.current = onError
+  }, [onError])
+  useEffect(() => {
+    onSuccessToastRef.current = onSuccessToast
+  }, [onSuccessToast])
+  useEffect(() => {
+    errorKeyRef.current = errorKey
+  }, [errorKey])
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
 
   const execute = useCallback(async (...args: TArgs): Promise<TResult | undefined> => {
     const loader = setLoadingRef.current ?? setInternalLoading
@@ -45,7 +61,7 @@ export function useIpcAction<TArgs extends any[], TResult>({
     onStartRef.current?.()
     try {
       const result = await actionFnRef.current(...args)
-      onResultRef.current(result)
+      onResultRef.current?.(result)
       if (onSuccessToastRef.current) {
         toast.success(onSuccessToastRef.current)
       }

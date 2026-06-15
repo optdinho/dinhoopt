@@ -1,11 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import {
-  execReg,
-  REGISTRY_UNINSTALL_PATHS,
-  parseRegValue,
-  parseRegDword,
-  extractRegistryKey,
-} from './registry-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { REGISTRY_UNINSTALL_PATHS, execReg, extractRegistryKey, parseRegDword, parseRegValue } from './registry-utils'
 
 vi.mock('./exec-utf8', () => ({
   execNativeUtf8: vi.fn(),
@@ -20,21 +14,17 @@ describe('REGISTRY_UNINSTALL_PATHS', () => {
   })
 
   it('includes HKLM Uninstall', () => {
-    expect(REGISTRY_UNINSTALL_PATHS[0]).toBe(
-      'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
-    )
+    expect(REGISTRY_UNINSTALL_PATHS[0]).toBe('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
   })
 
   it('includes HKLM WOW6432Node Uninstall', () => {
     expect(REGISTRY_UNINSTALL_PATHS[1]).toBe(
-      'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
+      'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
     )
   })
 
   it('includes HKCU Uninstall', () => {
-    expect(REGISTRY_UNINSTALL_PATHS[2]).toBe(
-      'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
-    )
+    expect(REGISTRY_UNINSTALL_PATHS[2]).toBe('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
   })
 })
 
@@ -42,11 +32,7 @@ describe('execReg', () => {
   it('calls execNativeUtf8 with reg and args', async () => {
     mockedExec.mockResolvedValue({ stdout: 'output', stderr: '' })
     const result = await execReg(['query', 'HKLM\\Software', '/v', 'Test'])
-    expect(mockedExec).toHaveBeenCalledWith(
-      'reg',
-      ['query', 'HKLM\\Software', '/v', 'Test'],
-      undefined
-    )
+    expect(mockedExec).toHaveBeenCalledWith('reg', ['query', 'HKLM\\Software', '/v', 'Test'], undefined)
     expect(result.stdout).toBe('output')
   })
 
@@ -85,8 +71,6 @@ describe('parseRegValue', () => {
   it('parses a REG_SZ with version', () => {
     expect(parseRegValue(output, 'DisplayVersion')).toBe('1.0.0')
   })
-
-
 
   it('returns null for missing value', () => {
     expect(parseRegValue(output, 'NonExistent')).toBeNull()

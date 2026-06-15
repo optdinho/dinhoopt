@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { cacheItems, getCachedItem, getCachedItems, clearCache } from './scan-cache'
 import type { ScanItem } from '@shared/types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { cacheItems, clearCache, getCachedItem, getCachedItems } from './scan-cache'
 
 function makeItem(id: string): ScanItem {
   return {
@@ -34,15 +34,15 @@ describe('scan-cache', () => {
     cacheItems(items)
     const result = getCachedItems(['a', 'c'])
     expect(result).toHaveLength(2)
-    expect(result[0].id).toBe('a')
-    expect(result[1].id).toBe('c')
+    expect(result[0]!.id).toBe('a')
+    expect(result[1]!.id).toBe('c')
   })
 
   it('skips unknown ids in getCachedItems', () => {
     cacheItems([makeItem('x')])
     const result = getCachedItems(['x', 'missing'])
     expect(result).toHaveLength(1)
-    expect(result[0].id).toBe('x')
+    expect(result[0]!.id).toBe('x')
   })
 
   it('clearCache removes all items', () => {
@@ -72,5 +72,35 @@ describe('scan-cache', () => {
     // Oldest item should be evicted to make room
     expect(getCachedItem('old-0')).toBeUndefined()
     expect(getCachedItem('new-item')).toBeDefined()
+  })
+
+  it('truncates input exceeding MAX_CACHE_SIZE to 50000 items', () => {
+    const items = Array.from({ length: 50001 }, (_, i) => makeItem(`big-${i}`))
+    cacheItems(items)
+    expect(getCachedItem('big-0')).toBeDefined()
+    expect(getCachedItem('big-49999')).toBeDefined()
+    expect(getCachedItem('big-50000')).toBeUndefined()
+  })
+
+  it('bulk-clears cache partially when toRemove exceeds half of MAX_CACHE_SIZE', () => {
+    // Fill cache to max capacity
+    const batch1 = Array.from({ length: 50000 }, (_, i) => makeItem(`old-${i}`))
+    cacheItems(batch1)
+    expect(getCachedItem('old-0')).toBeDefined()
+
+    // Add 30000 items so that toRemove = 50000 + 30000 - 50000 = 30000 > 25000
+    // keep = entries.slice(30000) → 20000 old items remain
+    const batch2 = Array.from({ length: 30000 }, (_, i) => makeItem(`mid-${i}`))
+    cacheItems(batch2)
+
+    // First 30000 old items evicted
+    expect(getCachedItem('old-0')).toBeUndefined()
+    expect(getCachedItem('old-29999')).toBeUndefined()
+    // Last 20000 old items preserved
+    expect(getCachedItem('old-30000')).toBeDefined()
+    expect(getCachedItem('old-49999')).toBeDefined()
+    // All new items present
+    expect(getCachedItem('mid-0')).toBeDefined()
+    expect(getCachedItem('mid-29999')).toBeDefined()
   })
 })

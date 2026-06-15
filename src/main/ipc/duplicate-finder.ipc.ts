@@ -1,18 +1,19 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { readdir, stat, rm } from 'fs/promises'
-import { createReadStream } from 'fs'
-import { createHash } from 'crypto'
-import { join, extname, isAbsolute } from 'path'
+import { createHash } from 'node:crypto'
+import { type Dirent, createReadStream } from 'node:fs'
+import { readdir, rm, stat } from 'node:fs/promises'
+import { extname, isAbsolute, join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type {
-  DuplicateScanOptions,
+  DuplicateDeleteMode,
+  DuplicateDeleteResult,
   DuplicateFile,
   DuplicateGroup,
-  DuplicateScanResult,
+  DuplicateScanOptions,
   DuplicateScanProgress,
-  DuplicateDeleteMode,
-  DuplicateDeleteResult
+  DuplicateScanResult,
 } from '@shared/types'
+import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
 
 let cancelled = false
@@ -33,12 +34,12 @@ async function walkDirectory(
   depth: number,
   files: DuplicateFile[],
   win: BrowserWindow | null,
-  lastReport: { time: number }
+  lastReport: { time: number },
 ): Promise<void> {
   if (cancelled) return
   if (depth > options.maxDepth) return
 
-  let entries
+  let entries: Dirent[]
   try {
     entries = await readdir(dirPath, { withFileTypes: true })
   } catch {
@@ -56,7 +57,7 @@ async function walkDirectory(
     if (entry.isDirectory()) {
       // Check exclude patterns
       const shouldExclude = options.excludePatterns.some(
-        (p) => entry.name === p || entry.name.toLowerCase() === p.toLowerCase()
+        (p) => entry.name === p || entry.name.toLowerCase() === p.toLowerCase(),
       )
       if (shouldExclude) continue
 
@@ -87,7 +88,7 @@ async function walkDirectory(
             filesScanned: files.length,
             duplicatesFound: 0,
             reclaimableSpace: 0,
-            progress: 0
+            progress: 0,
           })
         }
       } catch {
@@ -140,18 +141,12 @@ function hashFileFull(filePath: string): Promise<string> {
   })
 }
 
-async function processBatch<T, R>(
-  items: T[],
-  batchSize: number,
-  fn: (item: T) => Promise<R>
-): Promise<(R | null)[]> {
+async function processBatch<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<(R | null)[]> {
   const results: (R | null)[] = []
   for (let i = 0; i < items.length; i += batchSize) {
     if (cancelled) break
     const batch = items.slice(i, i + batchSize)
-    const batchResults = await Promise.all(
-      batch.map((item) => fn(item).catch(() => null))
-    )
+    const batchResults = await Promise.all(batch.map((item) => fn(item).catch(() => null)))
     results.push(...batchResults)
   }
   return results
@@ -159,7 +154,7 @@ async function processBatch<T, R>(
 
 async function findDuplicates(
   sizeGroups: Map<number, DuplicateFile[]>,
-  win: BrowserWindow | null
+  win: BrowserWindow | null,
 ): Promise<DuplicateGroup[]> {
   // Collect all files that need partial hashing
   const filesToHash: DuplicateFile[] = []
@@ -184,7 +179,7 @@ async function findDuplicates(
         reclaimableSpace: 0,
         progress: Math.round((hashed / totalToHash) * 50),
         filesToHash: totalToHash,
-        filesHashed: hashed
+        filesHashed: hashed,
       })
     }
     return { file, hash }
@@ -231,7 +226,7 @@ async function findDuplicates(
           reclaimableSpace: fullHashGroups.reduce((s, g) => s + g.reclaimableSpace, 0),
           progress: 50 + Math.round((fullHashed / fullHashFilesTotal) * 50),
           filesToHash: fullHashFilesTotal,
-          filesHashed: fullHashed
+          filesHashed: fullHashed,
         })
       }
       return { file, hash }
@@ -252,9 +247,9 @@ async function findDuplicates(
         fullHashGroups.push({
           hash: fullHash.slice(0, 16),
           fullHash,
-          fileSize: files[0].size,
+          fileSize: files[0]!.size,
           files,
-          reclaimableSpace: files[0].size * (files.length - 1)
+          reclaimableSpace: files[0]!.size * (files.length - 1),
         })
       }
     }
@@ -272,29 +267,45 @@ export function registerDuplicateFinderIpc(getWindow: WindowGetter): void {
   // opens as a standalone panel instead of a sheet (sidebar items like Desktop
   // are unresponsive in sheet mode).
   ipcMain.handle(IPC.DUPLICATES_SELECT_DIR, async () => {
+    getLogger().info('duplicate-finder', 'Opening directory picker')
     const win = getWindow()
     if (!win) return null
     const opts: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
-    const result = process.platform === 'darwin'
-      ? await dialog.showOpenDialog(opts)
-      : await dialog.showOpenDialog(win, opts)
-    if (result.canceled || !result.filePaths.length) return null
+    const result =
+      process.platform === 'darwin' ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+    if (result.canceled || !result.filePaths.length) {
+      getLogger().info('duplicate-finder', 'Directory picker cancelled')
+      return null
+    }
+    getLogger().info('duplicate-finder', `Directory selected: ${result.filePaths[0]}`)
     return result.filePaths[0]
   })
 
   // Cancel
   ipcMain.handle(IPC.DUPLICATES_CANCEL, () => {
+    getLogger().info('duplicate-finder', 'Scan cancelled by user')
     cancelled = true
   })
 
   // Scan
   ipcMain.handle(IPC.DUPLICATES_SCAN, async (_event, options: unknown): Promise<DuplicateScanResult> => {
+    getLogger().info('duplicate-finder', 'Starting duplicate scan')
     cancelled = false
     const startTime = Date.now()
     const win = getWindow()
-    const emptyResult: DuplicateScanResult = { groups: [], totalDuplicates: 0, totalReclaimable: 0, totalFilesScanned: 0, duration: 0, cancelled: false }
+    const emptyResult: DuplicateScanResult = {
+      groups: [],
+      totalDuplicates: 0,
+      totalReclaimable: 0,
+      totalFilesScanned: 0,
+      duration: 0,
+      cancelled: false,
+    }
 
-    if (!options || typeof options !== 'object') return emptyResult
+    if (!options || typeof options !== 'object') {
+      getLogger().warning('duplicate-finder', 'Invalid scan options received')
+      return emptyResult
+    }
     const opts = options as Record<string, unknown>
 
     // Validate options
@@ -303,12 +314,19 @@ export function registerDuplicateFinderIpc(getWindow: WindowGetter): void {
       directory: isAbsolute(dir) ? dir : '',
       minFileSize: typeof opts.minFileSize === 'number' && opts.minFileSize >= 0 ? opts.minFileSize : 1_048_576,
       maxFileSize: typeof opts.maxFileSize === 'number' && opts.maxFileSize > 0 ? opts.maxFileSize : null,
-      excludePatterns: Array.isArray(opts.excludePatterns) ? (opts.excludePatterns as unknown[]).filter((p): p is string => typeof p === 'string') : [],
-      extensionFilter: Array.isArray(opts.extensionFilter) ? (opts.extensionFilter as unknown[]).filter((e): e is string => typeof e === 'string') : [],
-      maxDepth: typeof opts.maxDepth === 'number' && opts.maxDepth > 0 ? opts.maxDepth : 20
+      excludePatterns: Array.isArray(opts.excludePatterns)
+        ? (opts.excludePatterns as unknown[]).filter((p): p is string => typeof p === 'string')
+        : [],
+      extensionFilter: Array.isArray(opts.extensionFilter)
+        ? (opts.extensionFilter as unknown[]).filter((e): e is string => typeof e === 'string')
+        : [],
+      maxDepth: typeof opts.maxDepth === 'number' && opts.maxDepth > 0 ? opts.maxDepth : 20,
     }
 
-    if (!safeOptions.directory) return emptyResult
+    if (!safeOptions.directory) {
+      getLogger().warning('duplicate-finder', 'No directory specified for scan')
+      return emptyResult
+    }
 
     // Phase 1: Walk
     const files: DuplicateFile[] = []
@@ -316,7 +334,15 @@ export function registerDuplicateFinderIpc(getWindow: WindowGetter): void {
     await walkDirectory(safeOptions.directory, safeOptions, 0, files, win, lastReport)
 
     if (cancelled) {
-      return { groups: [], totalDuplicates: 0, totalReclaimable: 0, totalFilesScanned: files.length, duration: Date.now() - startTime, cancelled: true }
+      getLogger().info('duplicate-finder', `Scan cancelled after walking ${files.length} files`)
+      return {
+        groups: [],
+        totalDuplicates: 0,
+        totalReclaimable: 0,
+        totalFilesScanned: files.length,
+        duration: Date.now() - startTime,
+        cancelled: true,
+      }
     }
 
     // Phase 2: Group by size
@@ -326,13 +352,21 @@ export function registerDuplicateFinderIpc(getWindow: WindowGetter): void {
       filesScanned: files.length,
       duplicatesFound: 0,
       reclaimableSpace: 0,
-      progress: 0
+      progress: 0,
     })
 
     const sizeGroups = groupBySize(files)
 
     if (cancelled || sizeGroups.size === 0) {
-      return { groups: [], totalDuplicates: 0, totalReclaimable: 0, totalFilesScanned: files.length, duration: Date.now() - startTime, cancelled }
+      getLogger().info('duplicate-finder', 'No size-based duplicate groups found')
+      return {
+        groups: [],
+        totalDuplicates: 0,
+        totalReclaimable: 0,
+        totalFilesScanned: files.length,
+        duration: Date.now() - startTime,
+        cancelled,
+      }
     }
 
     // Phase 3: Hash
@@ -347,54 +381,71 @@ export function registerDuplicateFinderIpc(getWindow: WindowGetter): void {
       filesScanned: files.length,
       duplicatesFound: totalDuplicates,
       reclaimableSpace: totalReclaimable,
-      progress: 100
+      progress: 100,
     })
 
+    getLogger().success(
+      'duplicate-finder',
+      `Scan complete: ${totalDuplicates} duplicates, ${totalReclaimable} bytes reclaimable, ${files.length} files scanned in ${Date.now() - startTime}ms`,
+    )
     return {
       groups,
       totalDuplicates,
       totalReclaimable,
       totalFilesScanned: files.length,
       duration: Date.now() - startTime,
-      cancelled
+      cancelled,
     }
   })
 
   // Delete
-  ipcMain.handle(IPC.DUPLICATES_DELETE, async (_event, paths: unknown, mode: unknown): Promise<DuplicateDeleteResult> => {
-    if (!Array.isArray(paths)) return { deleted: 0, failed: 0, spaceRecovered: 0, errors: [] }
-    const safePaths = paths.filter((p): p is string => typeof p === 'string' && isAbsolute(p))
-    const deleteMode: DuplicateDeleteMode = mode === 'permanent' ? 'permanent' : 'recycle'
+  ipcMain.handle(
+    IPC.DUPLICATES_DELETE,
+    async (_event, paths: unknown, mode: unknown): Promise<DuplicateDeleteResult> => {
+      getLogger().info(
+        'duplicate-finder',
+        `Deleting ${Array.isArray(paths) ? paths.length : 0} duplicate files (mode: ${mode === 'permanent' ? 'permanent' : 'recycle'})`,
+      )
+      if (!Array.isArray(paths)) return { deleted: 0, failed: 0, spaceRecovered: 0, errors: [] }
+      const safePaths = paths.filter((p): p is string => typeof p === 'string' && isAbsolute(p))
+      const deleteMode: DuplicateDeleteMode = mode === 'permanent' ? 'permanent' : 'recycle'
 
-    let deleted = 0
-    let failed = 0
-    let spaceRecovered = 0
-    const errors: { path: string; reason: string }[] = []
+      let deleted = 0
+      let failed = 0
+      let spaceRecovered = 0
+      const errors: { path: string; reason: string }[] = []
 
-    for (const filePath of safePaths) {
-      try {
-        const s = await stat(filePath)
-        const fileSize = s.size
+      for (const filePath of safePaths) {
+        try {
+          const s = await stat(filePath)
+          const fileSize = s.size
 
-        if (deleteMode === 'recycle') {
-          await shell.trashItem(filePath)
-        } else {
-          await rm(filePath, { force: true })
+          if (deleteMode === 'recycle') {
+            await shell.trashItem(filePath)
+          } else {
+            await rm(filePath, { force: true })
+          }
+          deleted++
+          spaceRecovered += fileSize
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? err.message : 'Unknown error'
+          failed++
+          errors.push({ path: filePath, reason })
         }
-        deleted++
-        spaceRecovered += fileSize
-      } catch (err: any) {
-        failed++
-        errors.push({ path: filePath, reason: err?.message || 'Unknown error' })
       }
-    }
 
-    return { deleted, failed, spaceRecovered, errors }
-  })
+      getLogger().success(
+        'duplicate-finder',
+        `Deleted ${deleted} files (${spaceRecovered} bytes recovered, ${failed} failed)`,
+      )
+      return { deleted, failed, spaceRecovered, errors }
+    },
+  )
 
   // Open file location in system file manager
   ipcMain.handle(IPC.DUPLICATES_OPEN_LOCATION, (_event, filePath: unknown) => {
     if (typeof filePath !== 'string' || !isAbsolute(filePath)) return
+    getLogger().info('duplicate-finder', `Opening file location: ${filePath}`)
     shell.showItemInFolder(filePath)
   })
 }
