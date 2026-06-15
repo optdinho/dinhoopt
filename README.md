@@ -334,6 +334,8 @@ npx playwright test
 
 © 2026 DiNho. Este software não pode ser copiado, distribuído ou modificado sem autorização expressa.
 
+🌐 [https://dinhooptimizer.netlify.app/](https://dinhooptimizer.netlify.app/)
+
 ---
 
 <p align="center">
