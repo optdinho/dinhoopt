@@ -14,9 +14,8 @@ extraResources:
     to: icon.ico
   - from: resources/icon.png
     to: icon.png
-  - from: resources/icons
-    to: icons
-  # Licenses are validated via remote API — local DB is server-side only
+  - from: .env
+    to: .env
 
 win:
   target:

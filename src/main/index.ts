@@ -1,8 +1,16 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import { execFile } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell } from 'electron'
+
+// Carrega .env — em dev usa a raiz do projeto, em produção usa resources
+const envPath = app.isPackaged
+  ? join(process.resourcesPath, '.env')
+  : join(__dirname, '../../.env')
+if (existsSync(envPath)) {
+  dotenv.config({ path: envPath })
+}
 
 // Disable GPU acceleration — Windows 25H2 (10.0.26200) crashes the GPU
 // process with error_code=18, making every renderer navigation fail

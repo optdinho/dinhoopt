@@ -50,6 +50,11 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
 
   daemonMode = opts.daemon === true
 
+  // Token necessário para repositório privado (optdinho/dinhoopt)
+  if (process.env.GH_TOKEN) {
+    autoUpdater.token = process.env.GH_TOKEN
+  }
+
   const settings = getSettings()
   autoUpdater.autoDownload = daemonMode || settings.autoUpdate
   autoUpdater.autoInstallOnAppQuit = true
