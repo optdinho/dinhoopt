@@ -29,7 +29,7 @@ win:
 publish:
   provider: github
   owner: optdinho
-  repo: optdinho
+  repo: dinhoopt
 
 npmRebuild: false
 
