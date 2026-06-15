@@ -4,6 +4,14 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell } from 'electron'
 
+// Disable GPU acceleration — Windows 25H2 (10.0.26200) crashes the GPU
+// process with error_code=18, making every renderer navigation fail
+// with ERR_FAILED (-2). Software rendering is the only reliable fallback.
+app.commandLine.appendSwitch('in-process-gpu')
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+app.commandLine.appendSwitch('no-sandbox')
+
 import { IPC } from '../shared/channels'
 import type { ScheduleRunStatus } from '../shared/types'
 import { runCli } from './cli'
@@ -368,7 +376,7 @@ function initGui(): void {
         // when running as root (e.g. after pkexec relaunch).  The
         // --no-sandbox switch only covers the browser/GPU processes;
         // this flag must also be false to prevent a blank grey window.
-        sandbox: process.platform !== 'linux',
+        sandbox: false,
       },
     })
     // abre em tela cheia

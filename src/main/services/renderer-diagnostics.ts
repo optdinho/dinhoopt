@@ -32,9 +32,8 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
   wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     // Ignore -3 (ABORTED) — fired routinely when navigation is replaced
     if (errorCode === -3) return
-    logError(
-      `Renderer load failed: code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`,
-    )
+    const msg = `Renderer load failed: code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`
+    logError(msg)
   })
 
   wc.on('preload-error', (_event, preloadPath, error) => {
