@@ -5,7 +5,7 @@
 <h1 align="center">🛡️ DiNho Optimizer</h1>
 
 <p align="center">
-  <strong>Plataforma completa de otimização, segurança e privacidade para Windows 10/11</strong>
+  <strong>Plataforma completa de otimização, segurança e privacidade para Windows 10/11 — 55+ módulos</strong>
 </p>
 
 <p align="center">
@@ -46,86 +46,121 @@
 ## ⚡ Funcionalidades
 
 <details open>
-<summary><strong>🧹 Limpeza</strong> — 12 módulos</summary>
+<summary><strong>🔒 Segurança</strong> — 15 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
-| **System Cleaner** | Arquivos temporários, logs do Windows, crash dumps, prefetch, cache DNS, lixeira |
-| **Browser Cleaner** | Chrome, Edge, Firefox, Brave, Opera, Vivaldi — cache, cookies, histórico, sessões |
-| **App Cleaner** | Caches de aplicativos — Discord, VS Code, Spotify, Teams, Zoom, Slack e dezenas mais |
-| **Gaming Cleaner** | Steam, Epic Games, EA App, GOG — caches, logs, shaders compilados |
-| **Registry Cleaner** | Chaves quebradas, entradas órfãs, MRUs, atalhos inválidos — com backup automático |
-| **Context Menu Cleaner** | Extensões de shell, menus de contexto obsoletos ou maliciosos |
-| **Duplicate Finder** | Varredura por hash SHA-256 para localizar arquivos duplicados |
-| **Large File Finder** | Identifica os maiores arquivos ocupando espaço em disco |
-| **Empty Folder Cleaner** | Remove pastas vazias residual de desinstalações |
-| **File Shredder** | Exclusão segura com sobrescrita aleatória (3 passadas) |
-| **WinSxS Cleaner** | Redução do componente store via DISM — recupera gigabytes |
-| **WinApp2 Import** | Importa regras personalizadas da comunidade WinApp2.log |
+| **Scanner de Malware** | Detecção de ameaças usando engine YARA-X + heurística comportamental |
+| **Sandbox Comportamental** | Executa suspeitos em ambiente isolado e analisa comportamento |
+| **Scanner de Memória** | Escaneia memória de processos ativos por assinaturas de malware |
+| **Analisador PE** | Analisa arquivos PE (seções, imports, hashes) |
+| **Detector de Explorações** | Detecta explorações ativas (mimikatz, EternalBlue…) |
+| **Inteligência de Ameaças** | Consulta cruzada a VirusTotal, AbuseIPDB e outras fontes |
+| **Linha do Tempo** | Correlação e timeline de eventos de segurança |
+| **Regras YARA Custom** | Importa e gerencia regras YARA personalizadas |
+| **Quarentena** | Gerenciamento completo com allowlist e restore |
+| **Fortificação do Sistema** | Reforça a segurança com políticas e configurações do Windows |
+| **Scanner de Vulnerabilidades** | CVE scanner para software instalado |
+| **Escudo de Privacidade** | Bloqueia rastreadores, telemetria e coleta de dados |
+| **Auditoria de Firewall** | Audita e gerencia regras do Windows Defender Firewall |
+| **Editor de Hosts** | Bloqueia domínios via edição segura do arquivo hosts |
+| **Domínios Protegidos** | Protege domínios críticos contra alteração por malware |
 
 </details>
 
 <details open>
-<summary><strong>🔒 Segurança</strong> — 10 módulos</summary>
+<summary><strong>📊 Monitoramento</strong> — 3 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
-| **Malware Scanner** | Motor YARA-X + heurística comportamental + integração Windows Defender |
-| **Behavioral Sandbox** | Executa suspeitos em ambiente isolado e analisa comportamento |
-| **Memory Scanner** | Escaneia a memória de processos ativos por assinaturas de malware |
-| **PE Parser** | Analisa arquivos PE (portáteis executáveis) — seções, imports, hashes |
-| **Exploit Detector** | Detecta explorações ativas — mimikatz, EternalBlue, juicing |
-| **Vulnerability Scanner** | CVE scanner para software instalado vs banco de vulnerabilidades conhecidas |
-| **Threat Intel** | Consulta cruzada a inteligência de ameaças (VirusTotal, AbuseIPDB) |
-| **Threat Timeline** | Linha do tempo e correlação de eventos de segurança |
-| **Custom YARA Rules** | Importa regras YARA personalizadas do usuário |
-| **Quarantine** | Gerenciamento completo de quarentena com allowlist e restore |
+| **Monitor de Desempenho** | CPU, memória, disco, rede em tempo real + S.M.A.R.T. |
+| **Scanner de Conformidade** | Verifica se o sistema segue boas práticas de segurança |
+| **Coleta de Métricas** | Análise e coleta de métricas do sistema |
 
 </details>
 
 <details open>
-<summary><strong>🕵️ Privacidade</strong> — 5 módulos</summary>
+<summary><strong>🧹 Limpeza & Manutenção</strong> — 22 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
-| **Privacy Shield** | 30+ configurações — telemetria, Cortana, rastreamento de localização, diagnósticos |
-| **Firewall Audit** | Auditoria completa de regras do Windows Defender Firewall |
-| **Breach Monitor** | Monitoramento de vazamentos via API Have I Been Pwned |
-| **Hosts Editor** | Bloqueio de domínios por edição segura do arquivo hosts |
-| **Protected Domains** | Protege domínios críticos contra alteração por malware |
+| **Limpeza do Sistema** | Temp files, logs, crash dumps, prefetch, cache DNS |
+| **Limpeza de Navegadores** | Chrome, Edge, Firefox, Brave, Opera, Vivaldi e mais |
+| **Limpeza de Apps** | Discord, VS Code, Spotify, Teams, Zoom, Slack e dezenas |
+| **Limpeza de Jogos** | Steam, Epic Games, EA App, GOG — caches e shaders |
+| **Limpeza do Registro** | Entradas inválidas e órfãs com backup automático |
+| **Limpeza de Rede** | DNS, perfis Wi-Fi, cache ARP, rotas |
+| **Limpeza de Atalhos** | Remove atalhos quebrados do sistema |
+| **Limpeza de Lixeira** | Esvazia e gerencia a lixeira do Windows |
+| **Variáveis de Ambiente** | Limpa variáveis de ambiente obsoletas |
+| **Otimizador de Banco de Dados** | Compacta e otimiza bancos do sistema |
+| **WinSxS Cleaner** | Reduz o componente store via DISM |
+| **Importação WinApp2** | Importa regras de limpeza personalizadas |
+| **Gerenciador de Inicialização** | Gerencia programas que iniciam com o Windows |
+| **Gerenciador de Serviços** | Otimiza serviços do Windows por perfil |
+| **Gerenciador de Drivers** | Detecta, backup e remove drivers obsoletos |
+| **Removedor de Bloatware** | Remove aplicativos indesejados do Windows |
+| **Menu de Contexto** | Gerencia entradas do menu de contexto do Explorer |
+| **Ajustes do Windows** | Personaliza desempenho e comportamento do Windows |
+| **Planos de Energia** | Cria, ativa e gerencia planos de energia |
+| **Tarefas Agendadas** | Agenda limpezas e manutenções automáticas |
+| **Pontos de Restauração** | Cria e gerencia pontos de restauração do sistema |
+| **Histórico** | Histórico completo de scans e limpezas realizadas |
 
 </details>
 
 <details open>
-<summary><strong>🔧 Manutenção</strong> — 12 módulos</summary>
+<summary><strong>💾 Ferramentas de Disco</strong> — 7 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
-| **Disk Analyzer** | TreeMap interativo e drill-down do uso de disco |
-| **Disk Repair** | SFC, DISM, CHKDSK com interface unificada |
-| **SSD TRIM** | Manutenção e otimização de unidades de estado sólido |
-| **Startup Manager** | Gerenciamento de inicialização com análise de impacto no boot |
-| **Service Manager** | Otimização de serviços do Windows (configurações seguras por perfil) |
-| **Driver Manager** | Detecção, backup e remoção de drivers obsoletos |
-| **Debloater** | Remoção seletiva de bloatware e aplicativos pré-instalados |
-| **Performance Monitor** | CPU, memória, disco, rede em tempo real + S.M.A.R.T. |
-| **Game Mode** | Otimização automática para jogos — desativa serviços não essenciais |
-| **Network Cleanup** | Limpeza de DNS, perfis Wi-Fi, cache ARP, rotas |
-| **Windows Tweaks** | Ajustes finos de desempenho e comportamento do Windows |
-| **Program Uninstaller** | Desinstalação forçada com limpeza de resíduos |
+| **Analisador de Disco** | TreeMap interativo do uso de espaço no disco |
+| **Buscador de Duplicatas** | Localiza duplicatas por hash SHA-256 |
+| **Buscador de Arquivos Grandes** | Encontra os maiores arquivos do disco |
+| **Limpeza de Pastas Vazias** | Remove pastas vazias residual |
+| **Destruidor de Arquivos** | Exclusão segura com sobrescrita (3 passadas) |
+| **Reparo de Disco** | SFC, DISM, CHKDSK com um clique |
+| **Manutenção de Disco** | SSD TRIM e otimização de unidades |
 
 </details>
 
 <details open>
-<summary><strong>🤖 Automação</strong> — 5 módulos</summary>
+<summary><strong>📦 Software</strong> — 6 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
-| **Schedules** | Agendamento flexível — scans diários, semanais, mensais |
-| **Software Updater** | Atualização em lote de aplicativos via winget |
-| **Auto-Updater** | Atualização automática do próprio DiNho Optimizer |
-| **Daemon Mode** | Execução em segundo plano na bandeja do sistema |
-| **CLI Mode** | Operação completa via linha de comando (headless/scripts) |
+| **Atualizador de Programas** | Atualiza programas instalados via winget |
+| **Atualizador de Drivers** | Detecta e atualiza drivers desatualizados |
+| **Auto-Atualizador** | Atualiza o próprio DiNho Optimizer automaticamente |
+| **Desinstalador** | Remove programas e seus resíduos |
+| **Verificador de Segurança** | Verifica se programas são seguros antes de desinstalar |
+| **Limpeza de Resíduos** | Remove sobras de desinstalações anteriores |
+
+</details>
+
+<details open>
+<summary><strong>⚡ Ferramentas</strong> — 7 módulos</summary>
+
+| Módulo | Descrição |
+|--------|-----------|
+| **Modo Jogo** | Otimiza o sistema para jogos |
+| **Benchmark** | Testa e pontua o desempenho do hardware |
+| **Otimizador de Memória** | Libera RAM em uso |
+| **Modo Daemon** | Execução em segundo plano na bandeja |
+| **Modo CLI** | Operação completa via linha de comando |
+| **Onboarding** | Configuração inicial guiada do usuário |
+| **Exportação de Relatórios** | Exporta resultados em PDF/CSV |
+
+</details>
+
+<details open>
+<summary><strong>☁️ Cloud & Backup</strong> — 3 módulos</summary>
+
+| Módulo | Descrição |
+|--------|-----------|
+| **Cloud Backup** | Backup em nuvem de configurações e regras |
+| **Licenciamento** | Ativação e validação via API remota |
+| **Monitor de Vazamentos** | Alerta de vazamentos via Have I Been Pwned |
 
 </details>
 
@@ -298,7 +333,7 @@ npx playwright test
 
 | Métrica | Valor |
 |---------|-------|
-| Módulos | 35+ |
+| Módulos | 55+ |
 | Páginas | 33 |
 | Stores (Zustand) | 30+ |
 | Componentes React | 60+ |
