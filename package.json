@@ -1,6 +1,6 @@
 {
   "name": "dinho-optimizer",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "DiNho Optimizer — Otimizador de sistema Windows",
   "repository": "optdinho/optdinho",
   "main": "./out/main/index.js",
@@ -9,6 +9,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder --win",
+    "publish": "electron-vite build && electron-builder --win --publish always",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
@@ -17,6 +18,7 @@
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
     "typecheck": "tsc --noEmit",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "clean": "node -e \"const{f}=require('fs');['out','dist','coverage'].forEach(d=>f.rmSync(d,{recursive:true,force:true}))\"",
     "audit": "npm audit --audit-level=high",
     "validate:rules": "npx tsx src/main/rules/validate.ts",
@@ -80,7 +82,7 @@
     "zustand": "^5.0.13"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^12.10.0"
+    "better-sqlite3": "^12.11.1"
   },
   "engines": {
     "node": ">=20.0.0"
