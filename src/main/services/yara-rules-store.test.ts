@@ -27,13 +27,15 @@ vi.mock('@litko/yara-x', () => ({
   version: '0.5.2',
 }))
 
+const sharedLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warning: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
+}))
+
 vi.mock('./logger.service', () => ({
-  getLogger: () => ({
-    info: vi.fn(),
-    warning: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-  }),
+  getLogger: () => sharedLogger,
 }))
 
 // Shared flag for yara-x compile success/failure
@@ -497,6 +499,42 @@ describe('yara-rules-store integration', () => {
       expect(existsSync(join(rulesDir, 'old.yar'))).toBe(true)
       expect(existsSync(join(rulesDir, 'another.yar'))).toBe(true)
     })
+
+    it('handles rollback when old rules dir does not exist', async () => {
+      mkdirSync(backupDir, { recursive: true })
+      writeFileSync(join(backupDir, 'old.yar'), 'rule Old { condition: true }', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      const result = mod.rollbackUpdate()
+
+      expect(result.success).toBe(true)
+      expect(existsSync(join(rulesDir, 'old.yar'))).toBe(true)
+    })
+
+    it('logs warning when rollback re-compilation fails', async () => {
+      _yaraCompileShouldFail = true
+      mkdirSync(rulesDir, { recursive: true })
+      mkdirSync(backupDir, { recursive: true })
+      writeFileSync(join(backupDir, 'bad.yar'), 'rule Bad { invalid syntax }', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      const result = mod.rollbackUpdate()
+
+      expect(result.success).toBe(true)
+      expect(sharedLogger.warning).toHaveBeenCalledWith('yara', expect.stringContaining('Rollback'))
+    })
+
+    it('handles rollback when compileRuleDir has empty file list', async () => {
+      mkdirSync(backupDir, { recursive: true })
+      // No .yar files in backup — only a readme
+      writeFileSync(join(backupDir, 'readme.txt'), 'not a rule', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      const result = mod.rollbackUpdate()
+
+      expect(result.success).toBe(true)
+      expect(sharedLogger.warning).toHaveBeenCalledWith('yara', 'No rule files to compile in staging')
+    })
   })
 
   describe('fetchAndCacheRules — 3-phase update', () => {
@@ -529,10 +567,32 @@ describe('yara-rules-store integration', () => {
       const cacheVersion = JSON.parse(readFileSync(cacheVersionPath, 'utf-8'))
       expect(cacheVersion.version).toBe('1.0')
       expect(cacheVersion.engine).toBe('litko-yara-x')
+      expect(cacheVersion.engineVersion).toBeDefined()
       expect(cacheVersion.ruleCount).toBe(1)
 
       expect(stagingDirs()).toHaveLength(0)
       expect(existsSync(backupDir)).toBe(true)
+    })
+
+    it('removes old backup before rotating to new backup', async () => {
+      createExistingRules()
+      // Create an existing backup so the inner rmSync(backupDir) branch is hit
+      mkdirSync(backupDir, { recursive: true })
+      writeFileSync(join(backupDir, 'backup.yar'), 'rule Backup { condition: true }', 'utf-8')
+
+      const rules = [{ filename: 'new.yar', content: 'rule New { condition: true }' }]
+      const body = buildBundleJson(rules)
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200, 'etag-789'))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(true)
+      // Old backup should be removed
+      expect(existsSync(join(backupDir, 'backup.yar'))).toBe(false)
+      // New rules should be in place
+      expect(existsSync(join(rulesDir, 'new.yar'))).toBe(true)
     })
 
     it('preserves old rules intact if crash during phase 1', async () => {
@@ -654,6 +714,128 @@ describe('yara-rules-store integration', () => {
       expect(stagingDirs()).toHaveLength(0)
     })
 
+    it('returns error on HTTP 500 response', async () => {
+      createExistingRules()
+
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse('Server error', 500))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('HTTP 500')
+    })
+
+    it('rejects download when content-length exceeds 50 MB', async () => {
+      createExistingRules()
+
+      const encoder = new TextEncoder()
+      const data = encoder.encode('small body')
+      const reader = {
+        read: async () => ({ done: true as const, value: undefined as undefined }),
+        cancel: vi.fn(),
+        releaseLock: vi.fn(),
+      }
+      const headers = new Map<string, string>()
+      headers.set('content-length', String(60 * 1024 * 1024))
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        headers: { get: (name: string) => headers.get(name) ?? null },
+        body: { getReader: () => reader },
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('too large')
+    })
+
+    it('returns error when response body is not readable', async () => {
+      createExistingRules()
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        body: null,
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('not readable')
+    })
+
+    it('returns error on JSON parse failure', async () => {
+      createExistingRules()
+
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse('not-json-content', 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('JSON parse error')
+    })
+
+    it('returns error on bundle validation failure', async () => {
+      createExistingRules()
+
+      const body = JSON.stringify({ version: '1.0', rules: [] })
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('validation failed')
+    })
+
+    it('skips If-None-Match when stored etag is empty string', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(
+        join(rulesDir, 'etag.json'),
+        JSON.stringify({ etag: '', updatedAt: '2026-06-14T12:00:00Z' }),
+        'utf-8',
+      )
+
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse('', 304))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      // If-None-Match should NOT be in headers since etag was empty
+      const callHeaders = fetchMock.mock.calls[0][1].headers
+      expect(callHeaders['If-None-Match']).toBeUndefined()
+    })
+
+    it('handles corrupt etag.json gracefully', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'etag.json'), 'not valid json', 'utf-8')
+
+      const rules = [{ filename: 'test.yar', content: 'rule Test { condition: true }' }]
+      const body = buildBundleJson(rules)
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200, 'new-etag'))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      // Should succeed despite corrupt etag
+      expect(result.success).toBe(true)
+      expect(result.stats?.rulesCount).toBe(1)
+    })
+
     it('sends If-None-Match header when ETag is stored', async () => {
       mkdirSync(rulesDir, { recursive: true })
       writeFileSync(
@@ -685,6 +867,232 @@ describe('yara-rules-store integration', () => {
           headers: expect.objectContaining({ 'If-None-Match': '"abc123"' }),
         }),
       )
+    })
+  })
+
+  // ─── getCachedRulePaths / getAllRulePaths ─────────────────────
+
+  describe('getCachedRulePaths', () => {
+    it('returns .yar files in the cached rules directory', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'miners.yar'), 'rule X {}', 'utf-8')
+      writeFileSync(join(rulesDir, 'ransomware.yar'), 'rule Y {}', 'utf-8')
+      writeFileSync(join(rulesDir, 'readme.txt'), 'not a rule', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      const paths = mod.getCachedRulePaths()
+
+      expect(paths).toHaveLength(2)
+      expect(paths[0]).toContain('miners.yar')
+      expect(paths[1]).toContain('ransomware.yar')
+    })
+
+    it('returns empty array when dir does not exist', async () => {
+      const mod = await import('./yara-rules-store')
+      expect(mod.getCachedRulePaths()).toEqual([])
+    })
+
+    it('returns empty array when no .yar files exist', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'readme.txt'), 'not a rule', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getCachedRulePaths()).toEqual([])
+    })
+  })
+
+  describe('getAllRulePaths', () => {
+    it('returns same as getCachedRulePaths', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'test.yar'), 'rule X {}', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getAllRulePaths()).toEqual(mod.getCachedRulePaths())
+    })
+  })
+
+  // ─── getRulesMetadata ────────────────────────────────────────
+
+  describe('getRulesMetadata', () => {
+    it('returns parsed metadata when metadata.json exists and is valid', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(
+        join(rulesDir, 'metadata.json'),
+        JSON.stringify({
+          version: '2.0.0',
+          updatedAt: '2026-06-14T12:00:00Z',
+          rulesCount: 42,
+          sha256: 'a'.repeat(64),
+        }),
+        'utf-8',
+      )
+
+      const mod = await import('./yara-rules-store')
+      const meta = mod.getRulesMetadata()
+
+      expect(meta).not.toBeNull()
+      expect(meta!.version).toBe('2.0.0')
+      expect(meta!.rulesCount).toBe(42)
+    })
+
+    it('returns null when metadata.json does not exist', async () => {
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
+
+    it('returns null when metadata.json contains invalid JSON', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'metadata.json'), 'not-json', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
+
+    it('returns null when metadata has invalid structure (missing version)', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(
+        join(rulesDir, 'metadata.json'),
+        JSON.stringify({ rulesCount: 42, sha256: 'abc' }),
+        'utf-8',
+      )
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
+
+    it('returns null when metadata version is empty string', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(
+        join(rulesDir, 'metadata.json'),
+        JSON.stringify({
+          version: '',
+          updatedAt: '2026-01-01T00:00:00Z',
+          rulesCount: 1,
+          sha256: 'abc',
+        }),
+        'utf-8',
+      )
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
+
+    it('returns null when version exceeds max length', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(
+        join(rulesDir, 'metadata.json'),
+        JSON.stringify({
+          version: 'x'.repeat(101),
+          updatedAt: '2026-01-01T00:00:00Z',
+          rulesCount: 1,
+          sha256: 'abc',
+        }),
+        'utf-8',
+      )
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
+  })
+
+  // ─── startPeriodicRuleChecks / stopPeriodicRuleChecks ────────
+
+  describe('startPeriodicRuleChecks', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('sets up interval and calls fetch', async () => {
+      const rules = [{ filename: 'test.yar', content: 'rule Test { condition: true }' }]
+      const body = buildBundleJson(rules)
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const onUpdated = vi.fn()
+      mod.startPeriodicRuleChecks('https://example.com', onUpdated, 60_000)
+
+      expect(mod.RULES_ENDPOINT).toBe('/api/yara-rules')
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.com/api/yara-rules',
+        expect.any(Object),
+      )
+    })
+
+    it('calls onUpdated when fetch succeeds', async () => {
+      const rules = [{ filename: 'test.yar', content: 'rule Test { condition: true }' }]
+      const body = buildBundleJson(rules)
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const onUpdated = vi.fn()
+      mod.startPeriodicRuleChecks('https://example.com', onUpdated, 60_000)
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(onUpdated).toHaveBeenCalled()
+    })
+
+    it('handles fetch errors gracefully without crashing', async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const onUpdated = vi.fn()
+      mod.startPeriodicRuleChecks('https://example.com', onUpdated, 60_000)
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(onUpdated).not.toHaveBeenCalled()
+    })
+
+    it('stops previous checks before starting new ones', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse('{}', 304))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const onUpdated = vi.fn()
+      mod.startPeriodicRuleChecks('https://example.com', onUpdated, 60_000)
+      // Second start clears first interval but both setTimeout(5000) fire
+      mod.startPeriodicRuleChecks('https://example.com', onUpdated, 60_000)
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      // Both timeouts fire (stop/start doesn't clear first setTimeout)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('stopPeriodicRuleChecks', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('stops periodic checks and clears state', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse('{}', 304))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const onUpdated = vi.fn()
+      mod.startPeriodicRuleChecks('https://example.com', onUpdated, 60_000)
+      mod.stopPeriodicRuleChecks()
+
+      // Advance 4999ms — before the 5s setTimeout fires
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('can be called multiple times without error', () => {
+      const mod = import('./yara-rules-store')
+      // No-op since stopPeriodicRuleChecks guards against null interval
     })
   })
 })

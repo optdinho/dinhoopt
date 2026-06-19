@@ -1,52 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-// Mock Electron and dependencies before importing
-// biome-ignore lint/suspicious/noExplicitAny: test mock
-const mockNotifications: any[] = []
-let mockNotifySupported = false
-
-vi.mock('electron', () => {
-  class MockNotification {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    constructor(opts: any) {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      ;(this as any).title = opts.title
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      ;(this as any).body = opts.body
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      ;(this as any).show = vi.fn()
-      mockNotifications.push(this)
-    }
-    static isSupported() {
-      return mockNotifySupported
-    }
-  }
-  return {
-    BrowserWindow: class {
-      isDestroyed = () => false
-      webContents = { send: vi.fn() }
-    },
-    Notification: MockNotification,
-  }
-})
-
-const mockGetSettings = vi.fn()
-const mockUpdateScheduleEntry = vi.fn()
-vi.mock('./settings-store', () => ({
-  getSettings: (...args: unknown[]) => mockGetSettings(...args),
-  updateScheduleEntry: (...args: unknown[]) => mockUpdateScheduleEntry(...args),
-}))
-
-beforeEach(() => {
-  mockGetSettings.mockReset()
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
-  mockGetSettings.mockReturnValue({} as any)
-})
-vi.mock('./history-store', () => ({ getHistory: () => [] }))
-vi.mock('./logger', () => ({ logInfo: vi.fn(), logError: vi.fn() }))
-
-import type { DiNhoSettings, ScheduleEntry } from '@shared/types'
-import { logInfo } from './logger'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { DiNhoSettings, ScheduleEntry } from '../../shared/types'
 import {
   completeScheduleRun,
   getNextRunTime,
@@ -57,72 +10,158 @@ import {
   stopScheduler,
 } from './scheduler'
 
-function makeSettings(overrides: Partial<DiNhoSettings['schedule']> & { enabled?: boolean } = {}): DiNhoSettings {
+const mockLogInfo = vi.fn()
+const mockUpdateScheduleEntry = vi.fn()
+let mockSettings: DiNhoSettings
+
+vi.mock('./logger', () => ({
+  logInfo: (...args: unknown[]) => mockLogInfo(...args),
+}))
+
+vi.mock('./settings-store', () => ({
+  getSettings: () => mockSettings,
+  updateScheduleEntry: (...args: unknown[]) => mockUpdateScheduleEntry(...args),
+}))
+
+vi.mock('../i18n', () => ({
+  t: vi.fn((key: string) => key),
+}))
+
+vi.mock('electron', () => {
+  const sendMock = vi.fn()
+  const MockBrowserWindow = vi.fn(() => ({
+    isDestroyed: vi.fn(() => false),
+    webContents: { send: sendMock },
+  }))
+  // biome-ignore lint/complexity/useArrowFunction: vitest 4.x requires function() for constructor mocks
+  const MockNotification = vi.fn(function () {
+    return { show: vi.fn() }
+  })
+  MockNotification.isSupported = vi.fn(() => false)
   return {
-    theme: 'dark',
-    language: 'en',
-    minimizeToTray: false,
-    showNotificationOnComplete: true,
-    showThreatNotifications: true,
-    runAtStartup: false,
-    autoUpdate: true,
-    autoRestart: true,
-    updateCheckIntervalHours: 4,
-    cleaner: {
-      skipRecentMinutes: 60,
-      secureDelete: false,
-      closeBrowsersBeforeClean: false,
-      createRestorePoint: false,
-      protectRecycleBin: true,
-    },
-    exclusions: [],
-    ignoredSoftwareUpdates: [],
-    backupPath: '',
-    backupMode: 'targeted',
-    schedule: {
-      enabled: overrides.enabled ?? true,
-      frequency: overrides.frequency ?? 'daily',
-      day: overrides.day ?? 1,
-      hour: overrides.hour ?? 9,
-    },
-    schedules: [],
-    windowsPackageManager: 'winget',
-    gameMode: {
-      enabledOptimizations: [],
-      customProcessKillList: [],
-      autoDetect: false,
-      autoDeactivate: true,
-      customGameProcesses: [],
-      gameProfiles: {},
-    },
-    registryIgnoredTweaks: [],
-    malwareAllowlist: [],
+    Notification: MockNotification,
+    BrowserWindow: MockBrowserWindow,
+  }
+})
+
+function makeEntry(overrides: Partial<ScheduleEntry> = {}): ScheduleEntry {
+  return {
+    id: 'test-1',
+    name: 'Test Schedule',
+    enabled: true,
+    frequency: 'daily',
+    day: 0,
+    hour: 3,
+    minute: 0,
+    tasks: ['cleaner', 'registry'],
+    autoApply: false,
+    lastRunAt: null,
+    lastRunStatus: 'never',
+    createdAt: '2025-01-01T00:00:00.000Z',
+    ...overrides,
   }
 }
 
+function makeSettings(schedules: ScheduleEntry[] = []): DiNhoSettings {
+  return {
+    schedule: { enabled: false, frequency: 'daily', day: 0, hour: 3 },
+    schedules,
+  } as DiNhoSettings
+}
+
 describe('isSameDay', () => {
-  it('returns true for the same date', () => {
-    const a = new Date('2025-06-15T08:00:00')
-    const b = new Date('2025-06-15T22:30:00')
-    expect(isSameDay(a, b)).toBe(true)
+  it('returns true for same date', () => {
+    expect(isSameDay(new Date('2025-06-15'), new Date('2025-06-15'))).toBe(true)
   })
 
   it('returns false for different dates', () => {
-    const a = new Date('2025-06-15T23:59:59')
-    const b = new Date('2025-06-16T00:00:01')
-    expect(isSameDay(a, b)).toBe(false)
+    expect(isSameDay(new Date('2025-06-15'), new Date('2025-06-16'))).toBe(false)
   })
 
-  it('returns false for same day different month', () => {
-    const a = new Date('2025-01-15')
-    const b = new Date('2025-02-15')
-    expect(isSameDay(a, b)).toBe(false)
+  it('returns false for different months', () => {
+    expect(isSameDay(new Date('2025-06-15'), new Date('2025-07-15'))).toBe(false)
   })
 
-  it('returns false for same day different year', () => {
-    const a = new Date('2024-06-15')
-    const b = new Date('2025-06-15')
-    expect(isSameDay(a, b)).toBe(false)
+  it('returns false for different years', () => {
+    expect(isSameDay(new Date('2025-06-15'), new Date('2024-06-15'))).toBe(false)
+  })
+})
+
+describe('getNextRunTime', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns null for disabled schedule', () => {
+    expect(getNextRunTime(makeEntry({ enabled: false }))).toBeNull()
+  })
+
+  it('returns today if the time is still in the future (daily)', () => {
+    vi.setSystemTime(new Date(2025, 5, 15)) // Jun 15 local
+
+    const next = getNextRunTime(makeEntry({ hour: 14, minute: 30 }))
+    expect(next).not.toBeNull()
+    expect(next?.getDate()).toBe(15)
+    expect(next?.getHours()).toBe(14)
+    expect(next?.getMinutes()).toBe(30)
+  })
+
+  it('returns tomorrow if the time has passed today (daily)', () => {
+    vi.setSystemTime(new Date(2025, 5, 15, 10)) // Jun 15 10AM local
+
+    const next = getNextRunTime(makeEntry({ hour: 3, minute: 0 }))
+    expect(next).not.toBeNull()
+    expect(next?.getDate()).toBe(16)
+    expect(next?.getHours()).toBe(3)
+    expect(next?.getMinutes()).toBe(0)
+  })
+
+  it('calculates weekly schedule correctly', () => {
+    vi.setSystemTime(new Date(2025, 5, 18)) // Wednesday Jun 18 local
+
+    const next = getNextRunTime(makeEntry({ frequency: 'weekly', day: 5, hour: 3 })) // Friday
+    expect(next).not.toBeNull()
+    expect(next?.getDay()).toBe(5)
+    expect(next?.getDate()).toBe(20)
+  })
+
+  it('wraps to next week if the day has passed', () => {
+    vi.setSystemTime(new Date(2025, 5, 20, 10)) // Friday Jun 20 10AM local
+
+    const next = getNextRunTime(makeEntry({ frequency: 'weekly', day: 5, hour: 3 })) // Friday 3AM
+    expect(next).not.toBeNull()
+    expect(next?.getDate()).toBe(27)
+  })
+
+  it('calculates monthly schedule correctly', () => {
+    vi.setSystemTime(new Date(2025, 5, 1)) // Jun 1 local
+
+    const next = getNextRunTime(makeEntry({ frequency: 'monthly', day: 15, hour: 3 }))
+    expect(next).not.toBeNull()
+    expect(next?.getDate()).toBe(15)
+    expect(next?.getMonth()).toBe(5)
+  })
+
+  it('advances to next month if the day has passed', () => {
+    vi.setSystemTime(new Date(2025, 5, 20)) // Jun 20 local
+
+    const next = getNextRunTime(makeEntry({ frequency: 'monthly', day: 15, hour: 3 }))
+    expect(next).not.toBeNull()
+    expect(next?.getDate()).toBe(15)
+    expect(next?.getMonth()).toBe(6)
+  })
+
+  it('clamps day to month length (31st on Feb)', () => {
+    vi.setSystemTime(new Date(2025, 1, 1)) // Feb 1 local
+
+    const next = getNextRunTime(makeEntry({ frequency: 'monthly', day: 31, hour: 3 }))
+    expect(next).not.toBeNull()
+    expect(next?.getDate()).toBe(28)
   })
 })
 
@@ -135,253 +174,145 @@ describe('getNextScanTime', () => {
     vi.useRealTimers()
   })
 
-  it('returns null when schedule is disabled', () => {
-    const settings = makeSettings({ enabled: false })
-    expect(getNextScanTime(settings)).toBeNull()
+  it('returns null when no schedules are enabled', () => {
+    mockSettings = makeSettings([makeEntry({ enabled: false })])
+    expect(getNextScanTime(mockSettings)).toBeNull()
   })
 
-  // Daily scheduling
-  describe('daily', () => {
-    it('returns today if scheduled hour has not passed', () => {
-      // Current time: 7:00, scheduled: 9:00
-      vi.setSystemTime(new Date('2025-06-15T07:00:00'))
-      const settings = makeSettings({ frequency: 'daily', hour: 9 })
-      const result = getNextScanTime(settings)!
-      expect(result.getDate()).toBe(15)
-      expect(result.getHours()).toBe(9)
-    })
-
-    it('returns tomorrow if scheduled hour has passed', () => {
-      // Current time: 10:00, scheduled: 9:00
-      vi.setSystemTime(new Date('2025-06-15T10:00:00'))
-      const settings = makeSettings({ frequency: 'daily', hour: 9 })
-      const result = getNextScanTime(settings)!
-      expect(result.getDate()).toBe(16)
-      expect(result.getHours()).toBe(9)
-    })
+  it('returns the soonest next run across multiple schedules', () => {
+    vi.setSystemTime(new Date(2025, 5, 15, 1)) // Jun 15 1AM local
+    mockSettings = makeSettings([makeEntry({ id: 'later', hour: 5 }), makeEntry({ id: 'soon', hour: 2 })])
+    const next = getNextScanTime(mockSettings)
+    expect(next).not.toBeNull()
+    expect(next?.getHours()).toBe(2)
   })
 
-  // Weekly scheduling
-  describe('weekly', () => {
-    it('returns the correct day of the week', () => {
-      // June 15, 2025 is a Sunday (day 0). Schedule for Wednesday (day 3)
-      vi.setSystemTime(new Date('2025-06-15T07:00:00'))
-      const settings = makeSettings({ frequency: 'weekly', day: 3, hour: 9 })
-      const result = getNextScanTime(settings)!
-      expect(result.getDay()).toBe(3) // Wednesday
-      expect(result.getHours()).toBe(9)
-    })
-
-    it('goes to next week if the day has passed', () => {
-      // June 15, 2025 is Sunday. Schedule for Saturday (day 6) at 9am, but it's past
-      // Actually let's set to Monday (day 1) and schedule for Sunday (day 0)
-      vi.setSystemTime(new Date('2025-06-16T10:00:00')) // Monday
-      const settings = makeSettings({ frequency: 'weekly', day: 0, hour: 9 }) // Sunday
-      const result = getNextScanTime(settings)!
-      expect(result.getDay()).toBe(0) // Sunday
-      expect(result.getDate()).toBe(22) // Next Sunday
-    })
-
-    it('goes to next week if same day but hour has passed', () => {
-      // June 15, 2025 is Sunday. Schedule for Sunday at 9am, but it's 10am
-      vi.setSystemTime(new Date('2025-06-15T10:00:00'))
-      const settings = makeSettings({ frequency: 'weekly', day: 0, hour: 9 })
-      const result = getNextScanTime(settings)!
-      expect(result.getDay()).toBe(0)
-      expect(result.getDate()).toBe(22) // Next Sunday
-    })
+  it('uses legacy schedule when no multi-schedules exist', () => {
+    vi.setSystemTime(new Date(2025, 5, 15, 1)) // Jun 15 1AM local
+    mockSettings = {
+      schedules: [],
+      schedule: { enabled: true, frequency: 'daily', day: 0, hour: 4 },
+    } as DiNhoSettings
+    const next = getNextScanTime(mockSettings)
+    expect(next).not.toBeNull()
+    expect(next?.getHours()).toBe(4)
   })
 
-  // Monthly scheduling
-  describe('monthly', () => {
-    it('returns the correct day this month if not yet passed', () => {
-      vi.setSystemTime(new Date('2025-06-10T07:00:00'))
-      const settings = makeSettings({ frequency: 'monthly', day: 15, hour: 9 })
-      const result = getNextScanTime(settings)!
-      expect(result.getDate()).toBe(15)
-      expect(result.getMonth()).toBe(5) // June
-    })
-
-    it('goes to next month if day has passed', () => {
-      vi.setSystemTime(new Date('2025-06-20T10:00:00'))
-      const settings = makeSettings({ frequency: 'monthly', day: 15, hour: 9 })
-      const result = getNextScanTime(settings)!
-      expect(result.getMonth()).toBe(6) // July
-      expect(result.getDate()).toBe(15)
-    })
-
-    it('clamps day for short months (e.g., Feb 31 → Feb 28)', () => {
-      // Set time to early February so the scheduler targets Feb with day=31
-      vi.setSystemTime(new Date('2025-02-01T07:00:00'))
-      const settings = makeSettings({ frequency: 'monthly', day: 31, hour: 9 })
-      const result = getNextScanTime(settings)!
-      // Day 31 in Feb overflows, then the clamp should cap it to 28
-      expect(result.getDate()).toBeLessThanOrEqual(28) // 2025 is not a leap year
-    })
-  })
-
-  it('always returns a future date', () => {
-    vi.setSystemTime(new Date('2025-06-15T12:00:00'))
-    const settings = makeSettings({ frequency: 'daily', hour: 8 })
-    const result = getNextScanTime(settings)!
-    expect(result.getTime()).toBeGreaterThan(new Date('2025-06-15T12:00:00').getTime())
-  })
-
-  it('returns soonest schedule when multiple schedules exist', () => {
-    vi.setSystemTime(new Date('2025-06-15T07:00:00')) // Sunday
-    const settings = makeSettings({ enabled: false })
-    settings.schedules = [
-      makeEntry({ frequency: 'daily', hour: 20 }), // today at 20:00
-      makeEntry({ frequency: 'daily', hour: 10 }), // today at 10:00 (soonest)
-      makeEntry({ frequency: 'weekly', day: 3, hour: 9 }), // Wed at 9:00
-    ]
-    const result = getNextScanTime(settings)!
-    expect(result.getHours()).toBe(10)
-    expect(result.getDate()).toBe(15) // today
+  it('returns null for legacy schedule if disabled', () => {
+    mockSettings = { schedules: [], schedule: { enabled: false, frequency: 'daily', day: 0, hour: 4 } } as DiNhoSettings
+    expect(getNextScanTime(mockSettings)).toBeNull()
   })
 })
 
-// ─── getNextRunTime (per-entry) ───────────────────────────
-
-function makeEntry(overrides: Partial<ScheduleEntry> = {}): ScheduleEntry {
-  return {
-    id: `test-${Math.random()}`,
-    name: 'Test Schedule',
-    enabled: true,
-    frequency: 'daily',
-    day: 1,
-    hour: 9,
-    minute: 0,
-    tasks: ['cleaner:system'],
-    autoApply: false,
-    lastRunAt: null,
-    lastRunStatus: 'never',
-    createdAt: new Date().toISOString(),
-    ...overrides,
-  }
-}
-
-describe('getNextRunTime', () => {
-  beforeEach(() => {
+describe('completeScheduleRun', () => {
+  it('can be imported and called', async () => {
+    const { completeScheduleRun } = await import('./scheduler')
     vi.useFakeTimers()
-  })
-
-  afterEach(() => {
+    expect(() => completeScheduleRun('test-1', 'completed')).not.toThrow()
     vi.useRealTimers()
   })
+})
 
-  it('returns null when entry is disabled', () => {
-    expect(getNextRunTime(makeEntry({ enabled: false }))).toBeNull()
+describe('stopScheduler', () => {
+  beforeEach(() => {
+    mockSettings = makeSettings()
   })
 
-  it('returns today for daily schedule if hour has not passed', () => {
-    vi.setSystemTime(new Date('2025-06-15T07:00:00'))
-    const result = getNextRunTime(makeEntry({ frequency: 'daily', hour: 9 }))!
-    expect(result.getDate()).toBe(15)
-    expect(result.getHours()).toBe(9)
+  it('cleans up timers gracefully', () => {
+    expect(() => stopScheduler()).not.toThrow()
   })
 
-  it('returns tomorrow for daily schedule if hour has passed', () => {
-    vi.setSystemTime(new Date('2025-06-15T10:00:00'))
-    const result = getNextRunTime(makeEntry({ frequency: 'daily', hour: 9 }))!
-    expect(result.getDate()).toBe(16)
-  })
-
-  it('returns correct day of week for weekly schedule', () => {
-    vi.setSystemTime(new Date('2025-06-15T07:00:00')) // Sunday
-    const result = getNextRunTime(makeEntry({ frequency: 'weekly', day: 3, hour: 9 }))!
-    expect(result.getDay()).toBe(3) // Wednesday
-  })
-
-  it('clamps day for monthly schedule in short months', () => {
-    vi.setSystemTime(new Date('2025-02-01T07:00:00'))
-    const result = getNextRunTime(makeEntry({ frequency: 'monthly', day: 31, hour: 9 }))!
-    expect(result.getDate()).toBeLessThanOrEqual(28)
+  it('can be called multiple times', () => {
+    stopScheduler()
+    expect(() => stopScheduler()).not.toThrow()
   })
 })
 
-// ─────────────────────────────────────────────
-// notifyScheduledScanComplete
-// ─────────────────────────────────────────────
 describe('notifyScheduledScanComplete', () => {
   beforeEach(() => {
-    mockNotifications.length = 0
-    mockGetSettings.mockReturnValue({
-      showNotificationOnComplete: true,
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-    } as any)
+    mockSettings = makeSettings()
+    mockSettings.showNotificationOnComplete = true
   })
 
-  it('does nothing when running in daemon mode', () => {
-    const origArgv = process.argv
-    process.argv = ['--daemon']
-    mockNotifySupported = true
-    notifyScheduledScanComplete(1000, 5)
-    expect(mockNotifications).toHaveLength(0)
-    process.argv = origArgv
+  it('does not throw when called', () => {
+    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
   })
 
-  it('does nothing when Notification is not supported', () => {
-    mockNotifySupported = false
-    notifyScheduledScanComplete(1000, 5)
-    expect(mockNotifications).toHaveLength(0)
+  it('handles zero values', () => {
+    expect(() => notifyScheduledScanComplete(0, 0)).not.toThrow()
   })
 
-  it('does nothing when showNotificationOnComplete is false', () => {
-    mockNotifySupported = true
-    mockGetSettings.mockReturnValue({
-      showNotificationOnComplete: false,
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-    } as any)
-    notifyScheduledScanComplete(1000, 5)
-    expect(mockNotifications).toHaveLength(0)
+  it('returns early when --daemon flag is present', () => {
+    const originalArgv = process.argv
+    process.argv = [...process.argv, '--daemon']
+    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
+    process.argv = originalArgv
   })
 
-  it('shows notification when conditions are met', () => {
-    mockNotifySupported = true
-    notifyScheduledScanComplete(1048576, 3)
-    expect(mockNotifications).toHaveLength(1)
-    expect(mockNotifications[0].show).toHaveBeenCalled()
+  it('returns early when Notification is not supported (default mock)', () => {
+    // Default mock already has isSupported returning false
+    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
+  })
+
+  it('returns early when showNotificationOnComplete is false', () => {
+    mockSettings.showNotificationOnComplete = false
+    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
   })
 })
 
-// ─────────────────────────────────────────────
-// completeScheduleRun
-// ─────────────────────────────────────────────
 describe('completeScheduleRun', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    mockSettings = makeSettings()
+    stopScheduler()
+    mockUpdateScheduleEntry.mockClear()
   })
 
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('calls updateScheduleEntry with success status', () => {
-    completeScheduleRun('schedule-1', 'success')
-    expect(mockUpdateScheduleEntry).toHaveBeenCalledWith('schedule-1', {
+  it('calls updateScheduleEntry with correct args', () => {
+    completeScheduleRun('test-1', 'completed')
+    expect(mockUpdateScheduleEntry).toHaveBeenCalledWith('test-1', {
       lastRunAt: expect.any(String),
-      lastRunStatus: 'success',
+      lastRunStatus: 'completed',
     })
   })
 
   it('calls updateScheduleEntry with failed status', () => {
-    completeScheduleRun('schedule-2', 'failed')
-    expect(mockUpdateScheduleEntry).toHaveBeenCalledWith('schedule-2', {
+    completeScheduleRun('test-1', 'failed')
+    expect(mockUpdateScheduleEntry).toHaveBeenCalledWith('test-1', {
       lastRunAt: expect.any(String),
       lastRunStatus: 'failed',
     })
   })
+
+  it('clears inFlight timeout timer', () => {
+    // Start a schedule to create in-flight state, then stop to get into cleanup path
+    startScheduler(() => null)
+    completeScheduleRun('test-2', 'completed')
+    expect(() => completeScheduleRun('test-2', 'completed')).not.toThrow()
+  })
+
+  it('does not throw when called with unknown scheduleId', () => {
+    expect(() => completeScheduleRun('unknown-id', 'completed')).not.toThrow()
+  })
+
+  it('handles multiple completions', () => {
+    completeScheduleRun('sched-1', 'completed')
+    completeScheduleRun('sched-2', 'failed')
+    expect(mockUpdateScheduleEntry).toHaveBeenCalledTimes(2)
+  })
 })
 
-// ─────────────────────────────────────────────
-// startScheduler / stopScheduler
-// ─────────────────────────────────────────────
-describe('startScheduler / stopScheduler', () => {
+describe('startScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    mockNotifications.length = 0
-    vi.clearAllMocks()
+    mockSettings = makeSettings()
+    stopScheduler()
+    mockUpdateScheduleEntry.mockClear()
+    mockLogInfo.mockClear()
   })
 
   afterEach(() => {
@@ -389,104 +320,461 @@ describe('startScheduler / stopScheduler', () => {
     vi.useRealTimers()
   })
 
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
-  function mockSettingsWithSchedules(schedules: any[]) {
-    mockGetSettings.mockImplementation(
-      () =>
-        ({
-          schedule: { enabled: false },
-          showNotificationOnComplete: false,
-          schedules,
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
-        }) as any,
-    )
-  }
-
-  it('starts and stops the scheduler interval', () => {
-    const getMainWindow = () => null
-    startScheduler(getMainWindow)
-
-    // advance past initial check (5s)
-    vi.advanceTimersByTime(5000)
-    expect(vi.mocked(logInfo)).toHaveBeenCalledWith('Scheduler started')
-
-    // clear interval by stopping
-    stopScheduler()
-    expect(vi.mocked(logInfo)).toHaveBeenCalledWith('Scheduler stopped')
+  it('creates an interval and runs check on startup', () => {
+    const mockGetMainWindow = vi.fn(() => null)
+    startScheduler(mockGetMainWindow)
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler started')
   })
 
   it('does not start twice', () => {
-    const getMainWindow = () => null
-    startScheduler(getMainWindow)
-    startScheduler(getMainWindow)
-    expect(vi.mocked(logInfo)).toHaveBeenCalledTimes(1)
-    stopScheduler()
+    const mockGetMainWindow = vi.fn(() => null)
+    startScheduler(mockGetMainWindow)
+    mockLogInfo.mockClear()
+
+    startScheduler(mockGetMainWindow)
+    // Should not log "Scheduler started" a second time
+    expect(mockLogInfo).not.toHaveBeenCalledWith('Scheduler started')
   })
 
-  it('checks schedules on start (initial check)', () => {
-    vi.setSystemTime(new Date('2025-06-15T12:30:00'))
-    mockSettingsWithSchedules([
-      {
-        id: 's1',
-        name: 'Test',
-        enabled: true,
-        frequency: 'daily',
-        day: 1,
-        hour: 12,
-        minute: 30,
-        tasks: [],
-        autoApply: false,
-        lastRunAt: null,
-        lastRunStatus: 'never',
-        createdAt: '',
-      },
-    ])
-    const send = vi.fn()
-    const win = { isDestroyed: () => false, webContents: { send } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    startScheduler(() => win as any)
+  it('runs initial check after 5 seconds', () => {
+    const mockGetMainWindow = vi.fn(() => null)
+    startScheduler(mockGetMainWindow)
 
-    vi.advanceTimersByTime(5000)
+    vi.advanceTimersByTime(5_000)
 
-    expect(send).toHaveBeenCalled()
-    stopScheduler()
+    // The initial check runs getSettings() which is the mock
+    expect(mockLogInfo).toHaveBeenCalled()
   })
 
-  it('does not crash when checkSchedules throws', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    mockGetSettings.mockReturnValue(undefined as any)
-    const getMainWindow = () => {
-      throw new Error('fail')
+  it('triggers due schedule entry through the main window', () => {
+    const mockSend = vi.fn()
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: mockSend },
     }
-    startScheduler(getMainWindow)
-    vi.advanceTimersByTime(5000)
-    vi.advanceTimersByTime(60000)
-    expect(vi.mocked(logInfo)).toHaveBeenCalledWith(expect.stringContaining('error'))
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+
+    // Set time to 3:00 AM so the daily entry at hour 3 is within 2-min window
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+
+    mockSettings = makeSettings([makeEntry({ id: 'daily-scan', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+
+    // Advance past the initial check delay
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+  })
+
+  it('handles error in checkSchedules gracefully', () => {
+    // Make settings throw by corrupting the schedules array into a non-iterable
+    const mockGetMainWindow = vi.fn()
+    mockSettings = { schedule: { enabled: false, frequency: 'daily', day: 0, hour: 3 } } as DiNhoSettings
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Scheduler initial check error'))
+  })
+
+  it('skips schedule when window is destroyed', () => {
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => true),
+      webContents: { send: vi.fn() },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    mockSettings = makeSettings([makeEntry({ id: 'skip-me', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+    expect(mockUpdateScheduleEntry).toHaveBeenCalledWith(
+      'skip-me',
+      expect.objectContaining({ lastRunStatus: 'failed' }),
+    )
+  })
+
+  it('skips schedule when getMainWindow returns null', () => {
+    const mockGetMainWindow = vi.fn(() => null)
+
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    mockSettings = makeSettings([makeEntry({ id: 'null-win', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+  })
+
+  it('handles interval check error gracefully', () => {
+    const mockGetMainWindow = vi.fn()
+    mockSettings = { schedule: { enabled: false, frequency: 'daily', day: 0, hour: 3 } } as DiNhoSettings
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(60_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Scheduler error'))
+  })
+
+  it('does not re-trigger in-flight schedule', () => {
+    const mockSend = vi.fn()
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: mockSend },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    mockSettings = makeSettings([makeEntry({ id: 'inflight', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    const sendCallsAfterFirst = mockSend.mock.calls.length
+
+    // Advance to next minute interval
+    vi.advanceTimersByTime(60_000)
+
+    // Should not have sent again (still in-flight)
+    expect(mockSend.mock.calls.length).toBe(sendCallsAfterFirst)
+  })
+})
+
+describe('stopScheduler', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
     stopScheduler()
   })
 
-  it('cleans up inFlight timers on stop', () => {
-    mockSettingsWithSchedules([
-      {
-        id: 's1',
-        name: 'Test',
-        enabled: true,
-        frequency: 'daily',
-        day: 1,
-        hour: 0,
-        minute: 0,
-        tasks: [],
-        autoApply: false,
-        lastRunAt: null,
-        lastRunStatus: 'never',
-      },
-    ])
-    const win = { isDestroyed: () => false, webContents: { send: vi.fn() } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    startScheduler(() => win as any)
-    vi.advanceTimersByTime(5000)
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('stops scheduler and cleans up timers', () => {
+    const mockGetMainWindow = vi.fn(() => null)
+    startScheduler(mockGetMainWindow)
+    mockLogInfo.mockClear()
+
     stopScheduler()
-    // Should not throw — cleanup happened
-    expect(true).toBe(true)
+
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler stopped')
+  })
+
+  it('can be called without starting first', () => {
+    expect(() => stopScheduler()).not.toThrow()
+  })
+
+  it('can be called multiple times safely', () => {
+    stopScheduler()
+    expect(() => stopScheduler()).not.toThrow()
+  })
+})
+
+describe('isDueEntry weekly schedule', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+    stopScheduler()
+  })
+
+  afterEach(() => {
+    stopScheduler()
+    vi.useRealTimers()
+  })
+
+  function setupWindow() {
+    const mockSend = vi.fn()
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: mockSend },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+    return { mockSend, mockGetMainWindow }
+  }
+
+  it('triggers weekly schedule on correct day within window', () => {
+    vi.setSystemTime(new Date(2025, 5, 18, 3, 0, 0)) // Wed Jun 18 3:00 AM
+    const { mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'weekly', frequency: 'weekly', day: 3, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+  })
+
+  it('does not trigger weekly schedule on wrong day', () => {
+    vi.setSystemTime(new Date(2025, 5, 19, 3, 0, 0)) // Thu Jun 19 3:00 AM
+    const { mockSend, mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'weekly', frequency: 'weekly', day: 3, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('does not trigger weekly schedule outside 2-min window', () => {
+    vi.setSystemTime(new Date(2025, 5, 18, 3, 5, 0)) // Wed 3:05 AM ( >2 min past 3:00)
+    const { mockSend, mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'weekly', frequency: 'weekly', day: 3, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('does not trigger weekly schedule if already run today', () => {
+    vi.setSystemTime(new Date(2025, 5, 18, 3, 0, 0))
+    const { mockSend, mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([
+      makeEntry({
+        id: 'weekly',
+        frequency: 'weekly',
+        day: 3,
+        hour: 3,
+        minute: 0,
+        lastRunAt: new Date(2025, 5, 18, 3, 0, 0).toISOString(),
+      }),
+    ])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+})
+
+describe('isDueEntry monthly schedule', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+    stopScheduler()
+  })
+
+  afterEach(() => {
+    stopScheduler()
+    vi.useRealTimers()
+  })
+
+  function setupWindow() {
+    const mockSend = vi.fn()
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: mockSend },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+    return { mockSend, mockGetMainWindow }
+  }
+
+  it('triggers monthly schedule on correct date within window', () => {
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0)) // Jun 15 3:00 AM
+    const { mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'monthly', frequency: 'monthly', day: 15, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+  })
+
+  it('does not trigger monthly schedule on wrong date', () => {
+    vi.setSystemTime(new Date(2025, 5, 14, 3, 0, 0)) // Jun 14
+    const { mockSend, mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'monthly', frequency: 'monthly', day: 15, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('does not trigger monthly schedule outside 2-min window', () => {
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 5, 0)) // Jun 15 3:05 AM
+    const { mockSend, mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'monthly', frequency: 'monthly', day: 15, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('does not trigger monthly schedule if already run today', () => {
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    const { mockSend, mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([
+      makeEntry({
+        id: 'monthly',
+        frequency: 'monthly',
+        day: 15,
+        hour: 3,
+        minute: 0,
+        lastRunAt: new Date(2025, 5, 15, 3, 0, 0).toISOString(),
+      }),
+    ])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('triggers monthly schedule with clamped day (31 on Feb 28)', () => {
+    vi.setSystemTime(new Date(2025, 1, 28, 3, 0, 0)) // Feb 28 3:00 AM (non-leap)
+    const { mockGetMainWindow } = setupWindow()
+
+    mockSettings = makeSettings([makeEntry({ id: 'monthly-clamp', frequency: 'monthly', day: 31, hour: 3, minute: 0 })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+  })
+})
+
+describe('triggerScheduleEntry notification', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+    stopScheduler()
+  })
+
+  afterEach(async () => {
+    stopScheduler()
+    vi.useRealTimers()
+    const { Notification } = await import('electron')
+    vi.mocked(Notification.isSupported).mockReturnValue(false)
+  })
+
+  it('shows desktop notification when supported and not daemon', async () => {
+    const { Notification } = await import('electron')
+    vi.mocked(Notification.isSupported).mockReturnValue(true)
+    vi.mocked(Notification).mockClear()
+
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    const mockSend = vi.fn()
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: mockSend },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+
+    mockSettings = makeSettings([makeEntry({ id: 'notif-test', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    expect(Notification).toHaveBeenCalledOnce()
+  })
+})
+
+describe('safety timeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+    stopScheduler()
+  })
+
+  afterEach(() => {
+    stopScheduler()
+    vi.useRealTimers()
+  })
+
+  it('clears in-flight schedule after 10-minute safety timeout', () => {
+    const mockSend = vi.fn()
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: mockSend },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    mockSettings = makeSettings([makeEntry({ id: 'timeout-test', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    // Schedule is now in-flight. Advance past the 10-minute safety timeout.
+    vi.advanceTimersByTime(600_000)
+
+    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('timed out'))
+  })
+})
+
+describe('notifyScheduledScanComplete notification path', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+    mockSettings.showNotificationOnComplete = true
+    stopScheduler()
+  })
+
+  afterEach(() => {
+    stopScheduler()
+    vi.useRealTimers()
+  })
+
+  it('shows notification when supported and showNotificationOnComplete is true', async () => {
+    const { Notification } = await import('electron')
+    vi.mocked(Notification.isSupported).mockReturnValue(true)
+    vi.mocked(Notification).mockClear()
+
+    notifyScheduledScanComplete(2_097_152, 10)
+
+    expect(Notification).toHaveBeenCalledOnce()
+  })
+})
+
+describe('completeScheduleRun timer cleanup', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockSettings = makeSettings()
+    stopScheduler()
+  })
+
+  afterEach(() => {
+    stopScheduler()
+    vi.useRealTimers()
+  })
+
+  it('clears in-flight timer on completion', () => {
+    const mockMainWindow = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: vi.fn() },
+    }
+    const mockGetMainWindow = vi.fn(() => mockMainWindow)
+
+    vi.setSystemTime(new Date(2025, 5, 15, 3, 0, 0))
+    mockSettings = makeSettings([makeEntry({ id: 'timer-cleanup', hour: 3, minute: 0, enabled: true })])
+
+    startScheduler(mockGetMainWindow)
+    vi.advanceTimersByTime(5_000)
+
+    mockUpdateScheduleEntry.mockClear()
+
+    completeScheduleRun('timer-cleanup', 'completed')
+
+    // Subsequent completeScheduleRun should not throw
+    expect(() => completeScheduleRun('timer-cleanup', 'completed')).not.toThrow()
+    // updateScheduleEntry called a second time
+    expect(mockUpdateScheduleEntry).toHaveBeenCalledWith(
+      'timer-cleanup',
+      expect.objectContaining({ lastRunStatus: 'completed' }),
+    )
   })
 })

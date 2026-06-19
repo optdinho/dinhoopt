@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Create .env from secrets
+        run: |
+          echo "GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
+          echo "LICENSE_API_URL=${{ secrets.LICENSE_API_URL }}" >> .env
+          echo "LICENSE_API_TOKEN=${{ secrets.LICENSE_API_TOKEN }}" >> .env
+
+      - name: Build + publish installer
+        run: npm run publish
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}

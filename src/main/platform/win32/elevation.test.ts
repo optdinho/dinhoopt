@@ -9,22 +9,38 @@ vi.mock('child_process', () => ({
 describe('win32 elevation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Reset the module-level cache by re-importing fresh each time
     vi.resetModules()
   })
 
-  it('returns true when net session succeeds (admin)', async () => {
-    execFileSyncMock.mockReturnValue(undefined)
+  it('returns true when whoami /groups contains admin SID', async () => {
+    execFileSyncMock.mockReturnValue(
+      'Mandatory Label\\High Mandatory Level                    S-1-16-12288',
+    )
 
     const { createWin32Elevation } = await import('./elevation')
     const elevation = createWin32Elevation()
     const result = elevation.isAdmin()
 
     expect(result).toBe(true)
-    expect(execFileSyncMock).toHaveBeenCalledWith('net', ['session'], { stdio: 'ignore', timeout: 5000 })
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'whoami', ['/groups'],
+      { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 },
+    )
   })
 
-  it('returns false when net session throws (not admin)', async () => {
+  it('returns false when whoami /groups lacks admin SID', async () => {
+    execFileSyncMock.mockReturnValue(
+      'Mandatory Label\\Medium Mandatory Level                   S-1-16-8192',
+    )
+
+    const { createWin32Elevation } = await import('./elevation')
+    const elevation = createWin32Elevation()
+    const result = elevation.isAdmin()
+
+    expect(result).toBe(false)
+  })
+
+  it('returns false when whoami throws (process not admin)', async () => {
     execFileSyncMock.mockImplementation(() => {
       throw new Error('Access denied')
     })
@@ -36,8 +52,10 @@ describe('win32 elevation', () => {
     expect(result).toBe(false)
   })
 
-  it('caches the result after first call', async () => {
-    execFileSyncMock.mockReturnValue(undefined)
+  it('caches the result within TTL window', async () => {
+    execFileSyncMock.mockReturnValue(
+      'Mandatory Label\\High Mandatory Level                    S-1-16-12288',
+    )
 
     const { createWin32Elevation } = await import('./elevation')
     const elevation = createWin32Elevation()
@@ -46,7 +64,6 @@ describe('win32 elevation', () => {
     elevation.isAdmin()
     elevation.isAdmin()
 
-    // execFileSync should only be called once due to caching
     expect(execFileSyncMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -61,8 +61,8 @@ describe('scan-cache', () => {
   })
 
   it('evicts cache when exceeding max size', () => {
-    // Fill cache with items up to the limit (50,000), then add more to trigger eviction
-    const batch1 = Array.from({ length: 50000 }, (_, i) => makeItem(`old-${i}`))
+    // Fill cache with items up to the limit (200,000), then add more to trigger eviction
+    const batch1 = Array.from({ length: 200000 }, (_, i) => makeItem(`old-${i}`))
     cacheItems(batch1)
     expect(getCachedItem('old-0')).toBeDefined()
 
@@ -74,33 +74,33 @@ describe('scan-cache', () => {
     expect(getCachedItem('new-item')).toBeDefined()
   })
 
-  it('truncates input exceeding MAX_CACHE_SIZE to 50000 items', () => {
-    const items = Array.from({ length: 50001 }, (_, i) => makeItem(`big-${i}`))
+  it('truncates input exceeding MAX_CACHE_SIZE to 200000 items', () => {
+    const items = Array.from({ length: 200001 }, (_, i) => makeItem(`big-${i}`))
     cacheItems(items)
     expect(getCachedItem('big-0')).toBeDefined()
-    expect(getCachedItem('big-49999')).toBeDefined()
-    expect(getCachedItem('big-50000')).toBeUndefined()
+    expect(getCachedItem('big-199999')).toBeDefined()
+    expect(getCachedItem('big-200000')).toBeUndefined()
   })
 
-  it('bulk-clears cache partially when toRemove exceeds half of MAX_CACHE_SIZE', () => {
+  it('bulk-clears cache partially when toRemove exceeds three-quarters of MAX_CACHE_SIZE', () => {
     // Fill cache to max capacity
-    const batch1 = Array.from({ length: 50000 }, (_, i) => makeItem(`old-${i}`))
+    const batch1 = Array.from({ length: 200000 }, (_, i) => makeItem(`old-${i}`))
     cacheItems(batch1)
     expect(getCachedItem('old-0')).toBeDefined()
 
-    // Add 30000 items so that toRemove = 50000 + 30000 - 50000 = 30000 > 25000
-    // keep = entries.slice(30000) → 20000 old items remain
-    const batch2 = Array.from({ length: 30000 }, (_, i) => makeItem(`mid-${i}`))
+    // Add 150001 items so that toRemove = 200000 + 150001 - 200000 = 150001 > 150000
+    // keep = entries.slice(150001) → 49999 old items remain
+    const batch2 = Array.from({ length: 150001 }, (_, i) => makeItem(`mid-${i}`))
     cacheItems(batch2)
 
-    // First 30000 old items evicted
+    // First 150001 old items evicted
     expect(getCachedItem('old-0')).toBeUndefined()
-    expect(getCachedItem('old-29999')).toBeUndefined()
-    // Last 20000 old items preserved
-    expect(getCachedItem('old-30000')).toBeDefined()
-    expect(getCachedItem('old-49999')).toBeDefined()
+    expect(getCachedItem('old-150000')).toBeUndefined()
+    // Last 49999 old items preserved
+    expect(getCachedItem('old-150001')).toBeDefined()
+    expect(getCachedItem('old-199999')).toBeDefined()
     // All new items present
     expect(getCachedItem('mid-0')).toBeDefined()
-    expect(getCachedItem('mid-29999')).toBeDefined()
+    expect(getCachedItem('mid-150000')).toBeDefined()
   })
 })

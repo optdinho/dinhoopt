@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+let appExitMock: (...args: unknown[]) => void
+
 vi.mock('electron', () => ({
-  app: { getPath: () => 'C:\\test', getName: () => 'DiNho', getVersion: () => '1.0.0', exit: () => {} },
+  app: {
+    getPath: () => 'C:\\test',
+    getName: () => 'DiNho',
+    getVersion: () => '1.0.0',
+    exit: (...args: unknown[]) => appExitMock(...args),
+  },
 }))
 
 vi.mock('../shared/enums', () => ({
@@ -41,6 +48,7 @@ vi.mock('./services/scan-cache', () => ({
 }))
 
 beforeEach(() => {
+  appExitMock = vi.fn()
   vi.resetModules()
 })
 
@@ -432,5 +440,112 @@ describe('parseCliArgs', () => {
     expect(result.commandArgs).toEqual(['scan'])
     expect(result.ctx.json).toBe(false)
     expect(result.ctx.verbosity).toBe('normal')
+  })
+})
+
+describe('runCli', () => {
+  let stdoutWrite: ReturnType<typeof vi.fn>
+  let stderrWrite: ReturnType<typeof vi.fn>
+  let originalArgv: string[]
+
+  beforeEach(() => {
+    originalArgv = process.argv
+    appExitMock = vi.fn()
+    stdoutWrite = vi.fn()
+    stderrWrite = vi.fn()
+    process.stdout.write = stdoutWrite
+    process.stderr.write = stderrWrite
+  })
+
+  afterEach(() => {
+    process.argv = originalArgv
+  })
+
+  it('prints help and exits with SUCCESS when --help is passed', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', '--help']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(0)
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('DiNho CLI'))
+  })
+
+  it('prints version and exits with SUCCESS when --version is passed', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', '--version']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(0)
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('DiNho v1.0.0'))
+  })
+
+  it('exits with INVALID_ARGS when --verbose and --quiet conflict and --json is set', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', '--verbose', '--quiet', '--json']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(2)
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('invalid_args'))
+  })
+
+  it('exits with INVALID_ARGS when --verbose and -q conflict without JSON', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', '--verbose', '-q']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(2)
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'))
+  })
+
+  it('exits with UNKNOWN_COMMAND for unrecognized command', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', 'nonexistent']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(6)
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Unknown command'))
+  })
+
+  it('runs legacy scan with --all and exits with NOTHING_FOUND', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', '--all']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(5)
+  })
+
+  it('runs legacy scan with --system and exits with NOTHING_FOUND', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', '--system']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    expect(appExitMock).toHaveBeenCalledWith(5)
+  })
+
+  it('handles scan command with --all --clean and shows results', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', 'scan', '--system', '--clean']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    // Legacy scan with system and clean should return nothing found
+    expect(appExitMock).toHaveBeenCalledWith(5)
+  })
+
+  it('handles clean command with --all', async () => {
+    process.argv = ['node.exe', 'script.js', '--cli', 'clean', '--all', '--json']
+    const { runCli } = await import('./cli')
+
+    await runCli()
+
+    // Clean with all categories via JSON
+    expect(appExitMock).toHaveBeenCalledWith(5)
   })
 })

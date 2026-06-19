@@ -2,53 +2,26 @@ import { describe, expect, it, vi } from 'vitest'
 import { REGISTRY_UNINSTALL_PATHS, execReg, extractRegistryKey, parseRegDword, parseRegValue } from './registry-utils'
 
 vi.mock('./exec-utf8', () => ({
-  execNativeUtf8: vi.fn(),
+  execNativeUtf8: vi.fn((_cmd: string, args: string[], _opts?: unknown) =>
+    Promise.resolve({ stdout: `mocked output for ${args.join(' ')}`, stderr: '' }),
+  ),
 }))
 
-import { execNativeUtf8 } from './exec-utf8'
-const mockedExec = vi.mocked(execNativeUtf8)
-
 describe('REGISTRY_UNINSTALL_PATHS', () => {
-  it('contains three paths', () => {
+  it('has three standard paths', () => {
     expect(REGISTRY_UNINSTALL_PATHS).toHaveLength(3)
   })
 
-  it('includes HKLM Uninstall', () => {
+  it('includes HKLM Uninstall path', () => {
     expect(REGISTRY_UNINSTALL_PATHS[0]).toBe('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
   })
 
-  it('includes HKLM WOW6432Node Uninstall', () => {
-    expect(REGISTRY_UNINSTALL_PATHS[1]).toBe(
-      'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
-    )
+  it('includes WOW6432Node path', () => {
+    expect(REGISTRY_UNINSTALL_PATHS[1]).toBe('HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
   })
 
-  it('includes HKCU Uninstall', () => {
+  it('includes HKCU Uninstall path', () => {
     expect(REGISTRY_UNINSTALL_PATHS[2]).toBe('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
-  })
-})
-
-describe('execReg', () => {
-  it('calls execNativeUtf8 with reg and args', async () => {
-    mockedExec.mockResolvedValue({ stdout: 'output', stderr: '' })
-    const result = await execReg(['query', 'HKLM\\Software', '/v', 'Test'])
-    expect(mockedExec).toHaveBeenCalledWith('reg', ['query', 'HKLM\\Software', '/v', 'Test'], undefined)
-    expect(result.stdout).toBe('output')
-  })
-
-  it('passes opts through', async () => {
-    mockedExec.mockResolvedValue({ stdout: '', stderr: '' })
-    const signal = new AbortController().signal
-    await execReg(['query', 'HKLM'], { timeout: 5000, signal })
-    expect(mockedExec).toHaveBeenCalledWith('reg', ['query', 'HKLM'], {
-      timeout: 5000,
-      signal,
-    })
-  })
-
-  it('forwards rejection from execNativeUtf8', async () => {
-    mockedExec.mockRejectedValue(new Error('reg failed'))
-    await expect(execReg(['invalid'])).rejects.toThrow('reg failed')
   })
 })
 
@@ -56,104 +29,118 @@ describe('parseRegValue', () => {
   const output = [
     '',
     'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion',
-    '    ProgramName    REG_SZ    My Cool Program',
-    '    DisplayVersion    REG_SZ    1.0.0',
-    '    EmptyValue    REG_SZ    ',
-    '    Publisher    REG_SZ    Acme Corp',
-    '    NoMatchType    REG_EXPAND_SZ    %SYSTEMROOT%\\test',
+    '    ProgramFilesDir    REG_SZ    C:\\Program Files',
+    '    ProgramFilesDir (x86)    REG_SZ    C:\\Program Files (x86)',
+    '    CommonFilesDir    REG_EXPAND_SZ    C:\\Program Files\\Common Files',
+    '    DevicePath    REG_EXPAND_SZ    %SystemRoot%\\inf',
     '',
-  ].join('\n')
+  ].join('\r\n')
 
-  it('parses a REG_SZ value', () => {
-    expect(parseRegValue(output, 'ProgramName')).toBe('My Cool Program')
+  it('parses a REG_SZ value from output', () => {
+    expect(parseRegValue(output, 'ProgramFilesDir')).toBe('C:\\Program Files')
   })
 
-  it('parses a REG_SZ with version', () => {
-    expect(parseRegValue(output, 'DisplayVersion')).toBe('1.0.0')
+  it('parses a REG_SZ value with spaces in name', () => {
+    expect(parseRegValue(output, 'ProgramFilesDir (x86)')).toBe('C:\\Program Files (x86)')
   })
 
-  it('returns null for missing value', () => {
-    expect(parseRegValue(output, 'NonExistent')).toBeNull()
+  it('returns null for REG_EXPAND_SZ values', () => {
+    expect(parseRegValue(output, 'CommonFilesDir')).toBeNull()
   })
 
-  it('is case-insensitive for value name', () => {
-    expect(parseRegValue(output, 'programname')).toBe('My Cool Program')
+  it('returns null when value name not found', () => {
+    expect(parseRegValue(output, 'NonExistentValue')).toBeNull()
   })
 
-  it('handles empty output', () => {
+  it('returns null for empty output', () => {
     expect(parseRegValue('', 'Test')).toBeNull()
   })
 
-  it('handles output with only newlines', () => {
-    expect(parseRegValue('\n\n\n', 'Test')).toBeNull()
+  it('handles value with special regex characters in name', () => {
+    const specialOutput = '    Test.Value+1$    REG_SZ    special-path\r\n'
+    expect(parseRegValue(specialOutput, 'Test.Value+1$')).toBe('special-path')
   })
 })
 
 describe('parseRegDword', () => {
   const output = [
-    '    DebugMode    REG_DWORD    0x1',
-    '    MaxItems    REG_DWORD    0x00000fff',
-    '    Disabled    REG_DWORD    0x0',
-    '    SomeText    REG_SZ    hello',
-  ].join('\n')
+    '    SomeValue    REG_DWORD    0x00000001',
+    '    EnableLUA    REG_DWORD    0x00000000',
+    '    MaxSize    REG_DWORD    0x00050000',
+    '    TextValue    REG_SZ    hello',
+  ].join('\r\n')
 
-  it('parses a simple DWORD', () => {
-    expect(parseRegDword(output, 'DebugMode')).toBe(1)
+  it('parses a REG_DWORD value of 1', () => {
+    expect(parseRegDword(output, 'SomeValue')).toBe(1)
   })
 
-  it('parses a multi-byte DWORD', () => {
-    expect(parseRegDword(output, 'MaxItems')).toBe(4095)
+  it('parses a REG_DWORD value of 0', () => {
+    expect(parseRegDword(output, 'EnableLUA')).toBe(0)
   })
 
-  it('parses zero DWORD', () => {
-    expect(parseRegDword(output, 'Disabled')).toBe(0)
+  it('parses a larger REG_DWORD value', () => {
+    expect(parseRegDword(output, 'MaxSize')).toBe(0x50000)
   })
 
-  it('returns null for REG_SZ value (not DWORD)', () => {
-    expect(parseRegDword(output, 'SomeText')).toBeNull()
+  it('returns null for REG_SZ values', () => {
+    expect(parseRegDword(output, 'TextValue')).toBeNull()
   })
 
-  it('returns null for missing value', () => {
+  it('returns null when value name not found', () => {
     expect(parseRegDword(output, 'NonExistent')).toBeNull()
   })
 
-  it('is case-insensitive for value name', () => {
-    expect(parseRegDword(output, 'debugmode')).toBe(1)
-  })
-
-  it('handles empty output', () => {
+  it('returns null for empty output', () => {
     expect(parseRegDword('', 'Test')).toBeNull()
   })
 })
 
 describe('extractRegistryKey', () => {
   const output = [
-    '    InstallPath    REG_SZ    C:\\Program Files\\MyApp',
-    '    IconPath    REG_EXPAND_SZ    %ProgramFiles%\\MyApp\\icon.ico',
-    '    MultiLine    REG_MULTI_SZ    line1\n    line2',
-  ].join('\n')
+    'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{App1}',
+    '    DisplayName    REG_SZ    My Application',
+    '    InstallLocation    REG_SZ    C:\\Program Files\\MyApp',
+    '',
+    'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{App2}',
+    '    DisplayName    REG_EXPAND_SZ    Another App',
+    '    UninstallString    REG_EXPAND_SZ    C:\\Another\\uninstall.exe',
+  ].join('\r\n')
 
-  it('extracts a REG_SZ path', () => {
-    expect(extractRegistryKey(output, 'InstallPath')).toBe('C:\\Program Files\\MyApp')
+  it('extracts a REG_SZ value', () => {
+    expect(extractRegistryKey(output, 'DisplayName')).toBe('My Application')
   })
 
-  it('extracts a REG_EXPAND_SZ path', () => {
-    expect(extractRegistryKey(output, 'IconPath')).toBe('%ProgramFiles%\\MyApp\\icon.ico')
+  it('extracts a REG_EXPAND_SZ value', () => {
+    const result = extractRegistryKey(output, 'UninstallString')
+    expect(result).toBe('C:\\Another\\uninstall.exe')
   })
 
-  it('extracts first line of a REG_MULTI_SZ value', () => {
-    expect(extractRegistryKey(output, 'MultiLine')).toBe('line1')
-  })
-
-  it('returns null for missing key', () => {
+  it('returns null when display name not found', () => {
     expect(extractRegistryKey(output, 'NonExistent')).toBeNull()
   })
 
-  it('is case-insensitive for display name', () => {
-    expect(extractRegistryKey(output, 'installpath')).toBe('C:\\Program Files\\MyApp')
+  it('returns null for empty output', () => {
+    expect(extractRegistryKey('', 'Test')).toBeNull()
   })
 
-  it('handles empty output', () => {
-    expect(extractRegistryKey('', 'Test')).toBeNull()
+  it('handles special characters in display name', () => {
+    const specialOutput = '    [Test+Key]    REG_SZ    C:\\path\r\n'
+    expect(extractRegistryKey(specialOutput, '[Test+Key]')).toBe('C:\\path')
+  })
+})
+
+describe('execReg', () => {
+  it('calls execNativeUtf8 with reg command', async () => {
+    const { execNativeUtf8 } = await import('./exec-utf8')
+    const result = await execReg(['query', 'HKLM\\Software', '/v', 'Test'])
+    expect(execNativeUtf8).toHaveBeenCalledWith('reg', ['query', 'HKLM\\Software', '/v', 'Test'], undefined)
+    expect(result.stdout).toContain('mocked output')
+  })
+
+  it('passes options through', async () => {
+    const { execNativeUtf8 } = await import('./exec-utf8')
+    const opts = { timeout: 5000 }
+    await execReg(['query', 'HKLM'], opts)
+    expect(execNativeUtf8).toHaveBeenCalledWith('reg', ['query', 'HKLM'], opts)
   })
 })

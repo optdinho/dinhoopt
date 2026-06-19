@@ -6,6 +6,7 @@ import { getPlatform } from '../platform'
 import { execFileAsync, execNativeUtf8, psUtf8 } from '../services/exec-utf8'
 import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
+import type { WindowGetter } from './index'
 
 async function getDnsCacheCount(): Promise<number> {
   const platform = getPlatform()
@@ -124,12 +125,16 @@ export async function scanNetwork(): Promise<NetworkItem[]> {
   return items
 }
 
-export async function cleanNetworkItems(items: NetworkItem[]): Promise<NetworkCleanResult> {
+export async function cleanNetworkItems(
+  items: NetworkItem[],
+  onProgress?: (processed: number, total: number, label: string) => void,
+): Promise<NetworkCleanResult> {
   getLogger().info('network-cleanup', `Starting network clean for ${items.length} item(s)...`)
   const platform = getPlatform()
   let cleaned = 0
   let failed = 0
   const details: string[] = []
+  const total = items.length
 
   // Separate Wi-Fi profiles for parallel deletion
   const wifiItems: NetworkItem[] = []
@@ -141,6 +146,7 @@ export async function cleanNetworkItems(items: NetworkItem[]): Promise<NetworkCl
   }
 
   // Process non-WiFi items sequentially (each is a single bulk operation)
+  let processed = 0
   for (const item of otherItems) {
     try {
       switch (item.type) {
@@ -196,9 +202,13 @@ export async function cleanNetworkItems(items: NetworkItem[]): Promise<NetworkCl
           break
         }
       }
+      processed++
+      onProgress?.(processed, total, item.label)
     } catch {
       failed++
       details.push(`Failed to clean: ${item.label}`)
+      processed++
+      onProgress?.(processed, total, item.label)
     }
   }
 
@@ -245,7 +255,7 @@ export async function cleanNetworkItems(items: NetworkItem[]): Promise<NetworkCl
 
 const scanSessions = new Map<string, Map<string, NetworkItem>>()
 
-export function registerNetworkCleanupIpc(): void {
+export function registerNetworkCleanupIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.NETWORK_SCAN, async (): Promise<NetworkItem[]> => {
     getLogger().info('network-cleanup', 'IPC network scan requested')
     const items = await scanNetwork()
@@ -278,7 +288,22 @@ export function registerNetworkCleanupIpc(): void {
         }
       }
     }
-    return cleanNetworkItems(items).then((result) => {
+    return cleanNetworkItems(items, (processed, total, label) => {
+      try {
+        const win = getWindow()
+        if (win && !win.isDestroyed())
+          win.webContents.send(IPC.SCAN_PROGRESS, {
+            phase: 'cleaning',
+            category: 'network',
+            currentPath: label,
+            progress: total > 0 ? Math.round((processed / total) * 100) : 100,
+            itemsFound: total,
+            sizeFound: 0,
+          })
+      } catch {
+        /* skip */
+      }
+    }).then((result) => {
       getLogger().success(
         'network-cleanup',
         `IPC network clean completed — ${result.cleaned} cleaned, ${result.failed} failed`,

@@ -128,7 +128,7 @@ async function isSystemRestoreAvailable(): Promise<boolean> {
       $vss = Get-Service VSS -ErrorAction SilentlyContinue
       if (-not $vss -or $vss.Status -ne 'Running') { Write-Output 'NO_VSS'; return }
       $prot = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore' -Name DisableSR -ErrorAction SilentlyContinue
-      if (-not $prot -or $prot.DisableSR -ne 0) {
+      if (-not $prot -or $prot.DisableSR -eq 0) {
         try { Get-WmiObject -Class Win32_SystemRestore -ErrorAction Stop | Out-Null; Write-Output 'OK' }
         catch { try { Get-CimInstance -ClassName Win32_SystemRestore -ErrorAction Stop | Out-Null; Write-Output 'OK' }
         catch { Write-Output 'NO_WMI' } }
@@ -250,17 +250,44 @@ export async function createRestorePoint(description: string): Promise<RestorePo
   const cimOut = (await runPs(cimScript, 60_000)).trim()
 
   if (cimOut === 'CIM_OK') {
+    // Aguarda 1s para o sistema registrar o ponto antes de verificar
+    await new Promise((r) => setTimeout(r, 1000))
     const { verified, sequenceNumber } = await verifyCreation(beforeCount)
     if (verified) {
       getLogger().success('restore-point', `Ponto de restauração criado via CIM (seq: ${sequenceNumber})`)
       return { success: true, sequenceNumber }
     }
-    getLogger().warning('restore-point', 'CIM retornou OK mas ponto não foi criado — tentando Checkpoint-Computer')
+    getLogger().warning('restore-point', 'CIM retornou OK mas ponto não foi criado — tentando WMI class')
   } else {
     getLogger().warning('restore-point', `CIM falhou: ${cimOut}`)
   }
 
-  // Fallback: Checkpoint-Computer
+  // Fallback 2: WMI class method (mais confiável em Windows 11 24H2+)
+  const wmiScript = `
+    try {
+      $class = [wmiclass]'Win32_SystemRestore'
+      $null = $class.CreateRestorePoint('${escapedDesc}', 12, 100)
+      Start-Sleep -Milliseconds 500
+      $null = $class.CreateRestorePoint('${escapedDesc}', 12, 101)
+      Write-Output 'WMICLASS_OK'
+    } catch {
+      Write-Output ('WMICLASS_FAILED:' + $_.Exception.Message)
+    }
+  `
+  const wmiOut = (await runPs(wmiScript, 60_000)).trim()
+
+  if (wmiOut === 'WMICLASS_OK') {
+    const { verified, sequenceNumber } = await verifyCreation(beforeCount)
+    if (verified) {
+      getLogger().success('restore-point', `Ponto de restauração criado via WMI class (seq: ${sequenceNumber})`)
+      return { success: true, sequenceNumber }
+    }
+    getLogger().warning('restore-point', 'WMI class retornou OK mas ponto não foi criado — tentando Checkpoint-Computer')
+  } else {
+    getLogger().warning('restore-point', `WMI class falhou: ${wmiOut}`)
+  }
+
+  // Fallback 3: Checkpoint-Computer (legado, removido no Windows 11 25H2+)
   try {
     const script = `Checkpoint-Computer -Description '${escapedDesc}' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop`
     await runPs(script)

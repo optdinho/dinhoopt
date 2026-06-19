@@ -73,16 +73,26 @@ describe('createRestorePoint', () => {
     vi.clearAllMocks()
   })
 
-  /** Mock para o fluxo completo do createRestorePoint (7+ chamadas execFile).
+  /** Mock para o fluxo completo do createRestorePoint.
    *
-   *  call 1 = isSystemRestoreAvailable
-   *  call 2 = startVss
-   *  call 3 = bypassFrequencyLimit
-   *  call 4 = enableSystemProtectionC
-   *  call 5 = getCurrentCount
-   *  call 6 = CIM create
-   *  call 7 = verifyCreation / Checkpoint-Computer
-   *  call 8+ = verifyCreation após fallback / extras
+   *  success = true -> CIM → verified
+   *    call 1 = isSystemRestoreAvailable
+   *    call 2 = startVss
+   *    call 3 = bypassFrequencyLimit
+   *    call 4 = enableSystemProtectionC
+   *    call 5 = getCurrentCount
+   *    call 6 = CIM create → CIM_OK
+   *    call 7 = verifyCreation after CIM → '1|1'
+   *
+   *  success = false -> CIM → not verified → WMI → not verified → Checkpoint-Computer → error
+   *    call 1 = isSystemRestoreAvailable
+   *    call 2 = startVss
+   *    call 3 = bypassFrequencyLimit
+   *    call 4 = enableSystemProtectionC
+   *    call 5 = getCurrentCount
+   *    call 6 = CIM create → CIM_FAILED:...
+   *    call 7 = WMI class → WMICLASS_FAILED:...
+   *    call 8 = Checkpoint-Computer → error
    */
   function mockCreateFlow(success: boolean, message = '') {
     let callCount = 0
@@ -116,6 +126,11 @@ describe('createRestorePoint', () => {
             if (success) {
               cb(null, '1|1', '')
             } else {
+              cb(null, 'WMICLASS_FAILED:fallback', '')
+            }
+            return
+          case 8:
+            if (!success) {
               cb(new Error(message), '', message || 'erro genérico')
             }
             return
@@ -222,6 +237,9 @@ describe('createRestorePoint', () => {
             cb(null, 'CIM_FAILED:fallback', '')
             return
           case 7:
+            cb(null, 'WMICLASS_FAILED:fallback', '')
+            return
+          case 8:
             cb(new Error(longError), '', longError)
             return
           default:
@@ -457,7 +475,7 @@ describe('restore-point edge cases', () => {
     vi.clearAllMocks()
   })
 
-  it('createRestorePoint returns CIM_OK but verify fails, then fallback Checkpoint-Computer succeeds', async () => {
+  it('createRestorePoint returns CIM_OK but verify fails, then WMI class succeeds', async () => {
     mockedIsAdmin.mockReturnValue(true)
     let callCount = 0
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: (...args: never[]) => unknown) => {
@@ -469,9 +487,9 @@ describe('restore-point edge cases', () => {
         case 4: cb(null, 'ENABLED', ''); return // enableSystemProtectionC
         case 5: cb(null, '0', ''); return // getCurrentCount
         case 6: cb(null, 'CIM_OK', ''); return // CIM create
-        case 7: cb(null, '0|0', ''); return // verifyCreation after CIM (not verified, count still 0)
-        case 8: cb(null, '', ''); return // Checkpoint-Computer fallback
-        case 9: cb(null, '1|5', ''); return // verifyCreation after fallback (verified!)
+        case 7: cb(null, '0|0', ''); return // verifyCreation after CIM (not verified)
+        case 8: cb(null, 'WMICLASS_OK', ''); return // WMI class succeeds
+        case 9: cb(null, '1|5', ''); return // verifyCreation after WMI (verified!)
         default: cb(null, '', '')
       }
     })
@@ -481,7 +499,32 @@ describe('restore-point edge cases', () => {
     expect(result.sequenceNumber).toBe(5)
   })
 
-  it('createRestorePoint falls back to Checkpoint-Computer when CIM fails', async () => {
+  it('createRestorePoint falls back through all methods and Checkpoint-Computer finally succeeds', async () => {
+    mockedIsAdmin.mockReturnValue(true)
+    let callCount = 0
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: (...args: never[]) => unknown) => {
+      callCount++
+      switch (callCount) {
+        case 1: cb(null, 'OK', ''); return
+        case 2: cb(null, 'OK', ''); return
+        case 3: cb(null, '', ''); return
+        case 4: cb(null, 'ENABLED', ''); return
+        case 5: cb(null, '0', ''); return
+        case 6: cb(null, 'CIM_OK', ''); return // CIM create
+        case 7: cb(null, '0|0', ''); return // verifyCreation after CIM — not verified
+        case 8: cb(null, 'WMICLASS_FAILED:error', ''); return // WMI class fails → no verify call
+        case 9: cb(null, '', ''); return // Checkpoint-Computer succeeds
+        case 10: cb(null, '1|5', ''); return // verifyCreation after Checkpoint (verified!)
+        default: cb(null, '', '')
+      }
+    })
+    const { createRestorePoint } = await import('./restore-point')
+    const result = await createRestorePoint('Test')
+    expect(result.success).toBe(true)
+    expect(result.sequenceNumber).toBe(5)
+  })
+
+  it('createRestorePoint falls back through WMI to Checkpoint-Computer when CIM fails', async () => {
     mockedIsAdmin.mockReturnValue(true)
     let callCount = 0
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: (...args: never[]) => unknown) => {
@@ -493,7 +536,8 @@ describe('restore-point edge cases', () => {
         case 4: cb(null, 'ENABLED', ''); return
         case 5: cb(null, '0', ''); return
         case 6: cb(null, 'CIM_FAILED:timeout', ''); return
-        case 7: cb(new Error('Checkpoint-Computer error'), '', 'error'); return
+        case 7: cb(null, 'WMICLASS_FAILED:error', ''); return
+        case 8: cb(new Error('Checkpoint-Computer error'), '', 'error'); return
         default: cb(null, '', '')
       }
     })
@@ -515,7 +559,8 @@ describe('restore-point edge cases', () => {
         case 4: cb(null, 'ENABLED', ''); return
         case 5: cb(null, '0', ''); return
         case 6: cb(null, 'CIM_FAILED:fallback', ''); return
-        case 7: cb(new Error('System Protection is not enabled'), '', 'protection is not enabled'); return
+        case 7: cb(null, 'WMICLASS_FAILED:fallback', ''); return
+        case 8: cb(new Error('System Protection is not enabled'), '', 'protection is not enabled'); return
         default: cb(null, '', '')
       }
     })
@@ -537,7 +582,8 @@ describe('restore-point edge cases', () => {
         case 4: cb(null, 'ENABLED', ''); return
         case 5: cb(null, '0', ''); return
         case 6: cb(null, 'CIM_FAILED:fallback', ''); return
-        case 7: cb(new Error('VSS error: Volume Shadow Copy not available'), '', 'VSS error'); return
+        case 7: cb(null, 'WMICLASS_FAILED:fallback', ''); return
+        case 8: cb(new Error('VSS error: Volume Shadow Copy not available'), '', 'VSS error'); return
         default: cb(null, '', '')
       }
     })

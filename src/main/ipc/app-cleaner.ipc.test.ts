@@ -256,4 +256,62 @@ describe('APP_CLEAN handler', () => {
       }),
     )
   })
+
+  it('sends clean progress to the window when cleanItems invokes callback', async () => {
+    mockCleanItems.mockImplementation(
+      (
+        _ids: string[],
+        onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+      ) => {
+        onProgress(5, 10, '/some/path', 2048)
+        return Promise.resolve({
+          totalCleaned: 2048,
+          filesDeleted: 5,
+          filesSkipped: 0,
+          errors: [],
+          needsElevation: false,
+        })
+      },
+    )
+
+    const win = { isDestroyed: () => false, webContents: { send: mockSend } }
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    registerAppCleanerIpc(() => win as any)
+    const handler = getHandler('cleaner:app:clean')
+    await handler({}, ['uuid-1'])
+
+    expect(mockSend).toHaveBeenCalledWith('scan:progress', {
+      phase: 'cleaning',
+      category: 'app',
+      currentPath: '/some/path',
+      progress: 50,
+      itemsFound: 10,
+      sizeFound: 2048,
+    })
+  })
+
+  it('does not send clean progress when window is null during clean', async () => {
+    mockCleanItems.mockImplementation(
+      (
+        _ids: string[],
+        onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+      ) => {
+        onProgress(5, 10, '/some/path', 2048)
+        return Promise.resolve({
+          totalCleaned: 2048,
+          filesDeleted: 5,
+          filesSkipped: 0,
+          errors: [],
+          needsElevation: false,
+        })
+      },
+    )
+
+    mockSend.mockClear()
+    registerAppCleanerIpc(() => null)
+    const handler = getHandler('cleaner:app:clean')
+    await handler({}, ['uuid-1'])
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
 })

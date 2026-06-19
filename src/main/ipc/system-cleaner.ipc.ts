@@ -32,7 +32,9 @@ function resolveWinapp2Path(template: string): string {
     HOME: home,
     SYSTEMDRIVE: process.env.SystemDrive || 'C:',
   }
-  return path.win32.normalize(template.replace(/\$\{(\w+)\}/g, (_, name) => vars[name] || ''))
+  const withBrace = template.replace(/\$\{(\w+)\}/g, (_, name) => vars[name] || '')
+  const withPercent = withBrace.replace(/%(\w+)%/g, (_, name) => vars[name.toUpperCase()] || process.env[name.toUpperCase()] || '')
+  return path.win32.normalize(withPercent)
 }
 
 export function registerSystemCleanerIpc(getWindow: WindowGetter): void {

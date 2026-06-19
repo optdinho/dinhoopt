@@ -83,4 +83,62 @@ describe('registerComplianceAuditorIpc', () => {
 
     expect(applyComplianceSettings).toHaveBeenCalledWith(['uac-enabled', 'smb1-disabled'])
   })
+
+  it('COMPLIANCE_SCAN sends progress to the window', async () => {
+    const { registerComplianceAuditorIpc } = await import('./compliance-auditor.ipc')
+    const { scanCompliance } = await import('../services/compliance-auditor.service')
+
+    const mockWebContents = { send: vi.fn() }
+    const mockWin = { isDestroyed: () => false, webContents: mockWebContents }
+    const getWindow = () => mockWin
+
+    vi.mocked(scanCompliance).mockImplementation(async (onProgress: (data: object) => void) => {
+      onProgress({ phase: 'scanning', current: 1, total: 5 })
+      return { checks: [], score: 100, succeeded: 0, failed: 0, errors: [] }
+    })
+
+    registerComplianceAuditorIpc(getWindow)
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    const scanHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_SCAN)?.[1]
+    await scanHandler()
+
+    expect(mockWebContents.send).toHaveBeenCalledWith(IPC.COMPLIANCE_PROGRESS, {
+      phase: 'scanning',
+      current: 1,
+      total: 5,
+    })
+  })
+
+  it('COMPLIANCE_SCAN handles window throwing on send', async () => {
+    const { registerComplianceAuditorIpc } = await import('./compliance-auditor.ipc')
+    const { scanCompliance } = await import('../services/compliance-auditor.service')
+
+    const mockWebContents = { send: vi.fn(() => { throw new Error('Window gone') }) }
+    const mockWin = { isDestroyed: () => false, webContents: mockWebContents }
+    const getWindow = () => mockWin
+
+    vi.mocked(scanCompliance).mockImplementation(async (onProgress: (data: object) => void) => {
+      onProgress({ phase: 'scanning' })
+      return { checks: [], score: 100, succeeded: 0, failed: 0, errors: [] }
+    })
+
+    registerComplianceAuditorIpc(getWindow)
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    const scanHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_SCAN)?.[1]
+
+    await expect(scanHandler()).resolves.not.toThrow()
+  })
+
+  it('COMPLIANCE_REVERT passes valid string array to service', async () => {
+    const { registerComplianceAuditorIpc } = await import('./compliance-auditor.ipc')
+    const { revertComplianceSettings } = await import('../services/compliance-auditor.service')
+    const getWindow = () => null
+
+    registerComplianceAuditorIpc(getWindow)
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    const revertHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_REVERT)?.[1]
+    await revertHandler(null, ['setting-1', 'setting-2'])
+
+    expect(revertComplianceSettings).toHaveBeenCalledWith(['setting-1', 'setting-2'])
+  })
 })

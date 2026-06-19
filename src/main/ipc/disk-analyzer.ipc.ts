@@ -392,7 +392,7 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
   }
 
   return new Promise((resolve) => {
-    const child = spawn('cmd', ['/c', 'chcp 65001 >nul & DISM', '/Online', '/Cleanup-Image', '/RestoreHealth'], {
+    const child = spawn('cmd', ['/c', 'chcp 65001 >nul & DISM', '/English', '/Online', '/Cleanup-Image', '/RestoreHealth'], {
       windowsHide: true,
     })
     let stdout = ''

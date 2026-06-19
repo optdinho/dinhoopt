@@ -146,6 +146,13 @@ describe('WINSXS_ANALYZE handler', () => {
     const handler = getHandler('winsxs:analyze')
     const result = await (handler as () => Promise<unknown>)()
 
+    // Verify /English flag is passed to DISM for locale-independent parsing
+    expect(mockExecFileAsync).toHaveBeenCalledWith(
+      'cmd.exe',
+      expect.arrayContaining([expect.stringMatching(/DISM \/English /)]),
+      expect.any(Object),
+    )
+
     const expectedBytes = Math.round(1.1 * 1024 * 1024 * 1024) + Math.round(0.98 * 1024 * 1024 * 1024)
     expect(result).toMatchObject({
       category: CleanerType.WinSxS,
@@ -209,6 +216,7 @@ describe('WINSXS_CLEAN handler', () => {
     expect(spawnCmd[0]).toBe('cmd')
     const args = spawnCmd[1] as string[]
     expect(args.join(' ')).toContain('StartComponentCleanup')
+    expect(args.join(' ')).toContain('/English')
 
     // Simulate DISM completing successfully
     if (spawnCloseCallback) spawnCloseCallback(0)

@@ -536,6 +536,8 @@ describe('cleanNetworkItems', () => {
 //  registerNetworkCleanupIpc
 // ────────────────────────────────────────────
 
+const mockGetWindow = () => null
+
 describe('registerNetworkCleanupIpc', () => {
   beforeEach(() => {
     mocks.getDnsCacheEntries.mockReset()
@@ -549,7 +551,7 @@ describe('registerNetworkCleanupIpc', () => {
   })
 
   it('registers NETWORK_SCAN and NETWORK_CLEAN handlers', () => {
-    registerNetworkCleanupIpc()
+    registerNetworkCleanupIpc(mockGetWindow)
     const channels = mocks.ipcHandle.mock.calls.map((c) => c[0])
     expect(channels).toContain(IPC.NETWORK_SCAN)
     expect(channels).toContain(IPC.NETWORK_CLEAN)
@@ -563,7 +565,7 @@ describe('registerNetworkCleanupIpc', () => {
       mocks.execFileAsync.mockRejectedValue(new Error('no arp'))
       mocks.execNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
 
-      registerNetworkCleanupIpc()
+      registerNetworkCleanupIpc(mockGetWindow)
       const handler = getHandler(IPC.NETWORK_SCAN) as () => Promise<NetworkItem[]>
       const items = await handler()
 
@@ -576,7 +578,7 @@ describe('registerNetworkCleanupIpc', () => {
     it('rejects invalid item IDs and returns empty result', async () => {
       mocks.validateStringArray.mockReturnValue(null)
 
-      registerNetworkCleanupIpc()
+      registerNetworkCleanupIpc(mockGetWindow)
       const handler = getHandler(IPC.NETWORK_CLEAN) as (
         _event: unknown,
         itemIds: string[],
@@ -597,7 +599,7 @@ describe('registerNetworkCleanupIpc', () => {
       mocks.execFileAsync.mockRejectedValue(new Error('no arp'))
       mocks.execNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
 
-      registerNetworkCleanupIpc()
+      registerNetworkCleanupIpc(mockGetWindow)
       const scanHandler = getHandler(IPC.NETWORK_SCAN) as () => Promise<NetworkItem[]>
       await scanHandler()
 
@@ -619,7 +621,7 @@ describe('registerNetworkCleanupIpc', () => {
       mocks.execNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
       mocks.flushDnsCache.mockResolvedValue(true)
 
-      registerNetworkCleanupIpc()
+      registerNetworkCleanupIpc(mockGetWindow)
       const scanHandler = getHandler(IPC.NETWORK_SCAN) as () => Promise<NetworkItem[]>
       await scanHandler()
 

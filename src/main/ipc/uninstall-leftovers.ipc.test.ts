@@ -169,7 +169,7 @@ describe('uninstall-leftovers IPC', () => {
 
       expect(result).toEqual(expected)
       expect(mockValidateStringArray).toHaveBeenCalledWith(ids)
-      expect(mockCleanItems).toHaveBeenCalledWith(ids)
+      expect(mockCleanItems).toHaveBeenCalledWith(ids, expect.any(Function))
     })
 
     it('returns empty result when validation fails (returns null)', async () => {

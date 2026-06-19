@@ -65,7 +65,7 @@ export const useScanStore = create<ScanState>((set, get) => ({
     const selected = new Set<string>()
     for (const r of results) {
       for (const item of r.items) {
-        if (!excluded.has(r.subcategory)) selected.add(item.id)
+        if (!excluded.has(`${r.category}:${r.subcategory}`)) selected.add(item.id)
       }
     }
     set({ results, selectedItems: selected })
@@ -74,12 +74,19 @@ export const useScanStore = create<ScanState>((set, get) => ({
     set((s) => {
       const excluded = s.excludedSubcategories
       const selected = new Set(s.selectedItems)
+      // Dedup by merging new results into existing ones, replacing
+      // any previous entry that has the same (category, subcategory) pair.
+      const existingMap = new Map<string, ScanResult>()
+      for (const r of s.results) {
+        existingMap.set(`${r.category}:${r.subcategory}`, r)
+      }
       for (const r of newResults) {
+        existingMap.set(`${r.category}:${r.subcategory}`, r)
         for (const item of r.items) {
-          if (!excluded.has(r.subcategory)) selected.add(item.id)
+          if (!excluded.has(`${r.category}:${r.subcategory}`)) selected.add(item.id)
         }
       }
-      return { results: [...s.results, ...newResults], selectedItems: selected }
+      return { results: [...existingMap.values()], selectedItems: selected }
     }),
   setProgress: (progress) => set({ progress }),
   setCleanSummary: (cleanSummary) => set({ cleanSummary }),
@@ -95,10 +102,11 @@ export const useScanStore = create<ScanState>((set, get) => ({
       for (const r of s.results) {
         const itemInResult = r.items.find((i) => i.id === id)
         if (!itemInResult) continue
+        const key = `${r.category}:${r.subcategory}`
         const allDeselected = r.items.every((i) => !next.has(i.id))
         const allSelected = r.items.every((i) => next.has(i.id))
-        if (allDeselected) excluded.add(r.subcategory)
-        else if (allSelected) excluded.delete(r.subcategory)
+        if (allDeselected) excluded.add(key)
+        else if (allSelected) excluded.delete(key)
         break
       }
       saveExcluded(excluded)
@@ -108,13 +116,14 @@ export const useScanStore = create<ScanState>((set, get) => ({
     set((s) => {
       const next = new Set(s.selectedItems)
       const excluded = new Set(s.excludedSubcategories)
+      const key = `${result.category}:${result.subcategory}`
       const allSelected = result.items.every((i) => next.has(i.id))
       if (allSelected) {
         for (const i of result.items) next.delete(i.id)
-        excluded.add(result.subcategory)
+        excluded.add(key)
       } else {
         for (const i of result.items) next.add(i.id)
-        excluded.delete(result.subcategory)
+        excluded.delete(key)
       }
       saveExcluded(excluded)
       return { selectedItems: next, excludedSubcategories: excluded }
@@ -126,7 +135,7 @@ export const useScanStore = create<ScanState>((set, get) => ({
       for (const r of s.results) {
         if (r.category !== category) continue
         for (const item of r.items) next.add(item.id)
-        excluded.delete(r.subcategory)
+        excluded.delete(`${r.category}:${r.subcategory}`)
       }
       saveExcluded(excluded)
       return { selectedItems: next, excludedSubcategories: excluded }
@@ -138,7 +147,7 @@ export const useScanStore = create<ScanState>((set, get) => ({
       for (const r of s.results) {
         if (r.category !== category) continue
         for (const item of r.items) next.delete(item.id)
-        excluded.add(r.subcategory)
+        excluded.add(`${r.category}:${r.subcategory}`)
       }
       saveExcluded(excluded)
       return { selectedItems: next, excludedSubcategories: excluded }

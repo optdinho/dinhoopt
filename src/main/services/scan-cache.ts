@@ -2,18 +2,27 @@ import type { ScanItem } from '@shared/types'
 
 /**
  * In-memory cache of scan results so clean handlers can look up
- * item paths by ID. Each scan replaces the previous cache for that category.
+ * item paths by ID. Shared across all cleaner categories.
+ *
+ * Cache lifecycle:
+ * - Entries remain valid for the duration of the current scan cycle.
+ * - Pre-existing entries from prior cycles are harmless (renderer never
+ *   requests stale IDs).
+ * - When the limit is reached, the oldest entries (by insertion order)
+ *   are evicted first. Since categories are scanned in order, the first
+ *   category's items are at highest risk. The limit is set generously
+ *   (200,000) to accommodate a full multi-category scan without eviction.
  */
 const itemCache = new Map<string, ScanItem>()
-const MAX_CACHE_SIZE = 50000
+const MAX_CACHE_SIZE = 200_000
 
 export function cacheItems(originalItems: ScanItem[]): void {
   const items = originalItems.length > MAX_CACHE_SIZE ? originalItems.slice(0, MAX_CACHE_SIZE) : originalItems
-  // Evict oldest entries if cache is getting too large
   if (itemCache.size + items.length > MAX_CACHE_SIZE) {
     const toRemove = itemCache.size + items.length - MAX_CACHE_SIZE
-    if (toRemove > MAX_CACHE_SIZE * 0.5) {
-      // Bulk clear: keep only the newest entries
+    if (toRemove > MAX_CACHE_SIZE * 0.75) {
+      // Bulk clear: keep only the newest entries (avoids O(n) iteration
+      // of the full map when most entries need to go).
       const entries = [...itemCache.entries()]
       const keep = entries.slice(toRemove)
       itemCache.clear()
@@ -21,6 +30,7 @@ export function cacheItems(originalItems: ScanItem[]): void {
         itemCache.set(k, v)
       }
     } else {
+      // Incremental removal of the oldest entries (Map insertion order).
       const keys = itemCache.keys()
       for (let i = 0; i < toRemove; i++) {
         const key = keys.next().value

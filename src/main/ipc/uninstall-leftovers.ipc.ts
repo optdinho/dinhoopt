@@ -46,9 +46,20 @@ export function registerUninstallLeftoversIpc(getWindow: WindowGetter): void {
       getLogger().warning('uninstall-leftovers', 'Clean skipped — invalid item IDs')
       return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     }
-    const result = await cleanItems(valid)
 
     const win = getWindow()
+    const result = await cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
+      if (win && !win.isDestroyed())
+        win.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'cleaning',
+          category: CleanerType.UninstallLeftovers,
+          currentPath,
+          progress: total > 0 ? Math.round((processed / total) * 100) : 100,
+          itemsFound: total,
+          sizeFound: cleanedSize,
+        })
+    })
+
     if (win && !win.isDestroyed())
       win.webContents.send(IPC.SCAN_PROGRESS, {
         phase: 'cleaning',

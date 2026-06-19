@@ -44,24 +44,30 @@ export function isExcluded(filePath: string, exclusions: string[]): boolean {
 /**
  * Overwrite a single file's contents with random data, then zeros, before deletion.
  * For directories, recursively overwrite all files within.
+ *
+ * TOCTOU mitigation: open the file handle first, then `fstat()` via the fd so an
+ * attacker cannot swap the path to a symlink between the stat and open calls.
+ * Directory entries are still subject to TOCTOU (no `openat` in Node.js).
  */
 async function secureOverwrite(filePath: string): Promise<void> {
-  const stats = await stat(filePath)
-
-  if (stats.isDirectory()) {
-    const entries = await readdir(filePath, { withFileTypes: true })
-    for (const entry of entries) {
-      await secureOverwrite(join(filePath, entry.name))
-    }
-    return
-  }
-
-  if (!stats.isFile() || stats.size === 0) return
-
-  const size = stats.size
-  const CHUNK = 1024 * 1024 // 1 MB chunks
   const fh = await open(filePath, 'r+')
   try {
+    const stats = await fh.stat()
+
+    if (stats.isDirectory()) {
+      await fh.close()
+      const entries = await readdir(filePath, { withFileTypes: true })
+      for (const entry of entries) {
+        await secureOverwrite(join(filePath, entry.name))
+      }
+      return
+    }
+
+    if (!stats.isFile() || stats.size === 0) return
+
+    const size = stats.size
+    const CHUNK = 1024 * 1024 // 1 MB chunks
+
     // Pass 1: random data
     let offset = 0
     while (offset < size) {
@@ -163,7 +169,7 @@ export async function scanDirectory(
   dirPath: string,
   category: CleanerType,
   subcategory: string,
-  skipRecentMinutes = 60,
+  skipRecentMinutes = getSettings().cleaner.skipRecentMinutes ?? 60,
 ): Promise<ScanResult> {
   const items: ScanItem[] = []
   let totalSize = 0
@@ -232,7 +238,7 @@ export async function scanMultipleDirectories(
   dirPaths: string[],
   category: CleanerType,
   subcategory: string,
-  skipRecentMinutes = 60,
+  skipRecentMinutes = getSettings().cleaner.skipRecentMinutes ?? 60,
 ): Promise<ScanResult> {
   const allItems: ScanItem[] = []
   let totalSize = 0
@@ -366,7 +372,7 @@ export async function scanWithFileMask(
   recurse: boolean,
   category: CleanerType,
   subcategory: string,
-  skipRecentMinutes = 60,
+  skipRecentMinutes = getSettings().cleaner.skipRecentMinutes ?? 60,
 ): Promise<ScanResult> {
   const items: ScanItem[] = []
   let totalSize = 0

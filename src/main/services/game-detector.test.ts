@@ -104,6 +104,23 @@ describe('suppressCurrentGame', () => {
   it('suppresses without crashing when no game is detected', () => {
     expect(() => suppressCurrentGame()).not.toThrow()
   })
+
+  it('suppresses the currently detected game', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    await vi.waitFor(
+      () => {
+        expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+      },
+      { timeout: 3000, interval: 100 },
+    )
+
+    suppressCurrentGame()
+    expect(getDetectedGame()).toBeNull()
+  })
 })
 
 describe('getDetectedGame', () => {
@@ -122,6 +139,61 @@ describe('isDetectorRunning', () => {
     expect(isDetectorRunning()).toBe(true)
     stopGameDetector()
     expect(isDetectorRunning()).toBe(false)
+  })
+})
+
+describe('error handling', () => {
+  it('handles execFileAsync errors gracefully (caught by getRunningProcessNames)', async () => {
+    mocks.execFileAsync.mockRejectedValue(new Error('Access denied'))
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    await vi.waitFor(
+      () => {
+        expect(onDetected).not.toHaveBeenCalled()
+        expect(onExited).not.toHaveBeenCalled()
+      },
+      { timeout: 3000, interval: 100 },
+    )
+  })
+
+  it('handles onGameDetected callback error gracefully', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn().mockRejectedValue(new Error('Handler error'))
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    await vi.waitFor(
+      () => {
+        expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+      },
+      { timeout: 3000, interval: 100 },
+    )
+  })
+})
+
+describe('suppression across restart', () => {
+  it('preserves suppressedGame when restarting the detector', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    await vi.waitFor(
+      () => {
+        expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+      },
+      { timeout: 3000, interval: 100 },
+    )
+
+    suppressCurrentGame()
+    expect(getDetectedGame()).toBeNull()
+
+    // Restart — suppressedGame should prevent re-detection of the same game
+    onDetected.mockClear()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+    expect(getDetectedGame()).toBeNull()
   })
 })
 
@@ -147,5 +219,109 @@ describe('end-to-end: detection lifecycle', () => {
     // suppress the game (simulates manual deactivation)
     suppressCurrentGame()
     expect(getDetectedGame()).toBeNull()
+  })
+})
+
+describe('custom game process detection via public API', () => {
+  it('detects a custom game process', async () => {
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"mygame.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, ['MyGame.exe'])
+
+    // Wait for the immediate async poll to complete
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    expect(onDetected).toHaveBeenCalledWith('mygame.exe')
+  })
+})
+
+describe('game exited callback', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('calls onGameExited when detected game exits', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    // Immediate poll runs async — flush microtasks
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+
+    // Now the game leaves
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+
+    // Advance by 10 seconds to trigger interval poll
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onExited).toHaveBeenCalled()
+  })
+
+  it('handles onGameExited callback error gracefully', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn().mockRejectedValue(new Error('Exit handler error'))
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onExited).toHaveBeenCalled()
+  })
+})
+
+describe('suppressed game exit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('clears suppressedGame when the suppressed game exits', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    // Wait for detection
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+
+    // Suppress the game
+    suppressCurrentGame()
+    expect(getDetectedGame()).toBeNull()
+
+    // Game exits — mock returns no game processes
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+    onDetected.mockClear()
+
+    // Advance interval — poll runs, sees no game and suppressedGame is set
+    // The !game && !detectedGame && suppressedGame branch clears suppressedGame
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    // Now bring cs2 back — should be detected again since suppressedGame was cleared
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onDetected).toHaveBeenCalledWith('cs2.exe')
   })
 })

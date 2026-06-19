@@ -13,6 +13,7 @@ export default defineConfig({
           input: {
             index: resolve(__dirname, 'src/main/index.ts')
           },
+          external: ['better-sqlite3', 'bindings'],
           onwarn(warning, warn) {
             if (warning.code === 'MIXED_DYNAMIC_AND_STATIC_IMPORTS') return
             warn(warning)

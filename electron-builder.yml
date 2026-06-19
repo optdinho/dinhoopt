@@ -31,7 +31,13 @@ publish:
   repo: dinhoopt
   private: true
 
-npmRebuild: false
+npmRebuild: true
+
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+  - "node_modules/sharp/**"
+  - "node_modules/@img/**"
+  - "node_modules/@litko/yara-x-win32-x64-msvc/**"
 
 electronDownload:
   mirror: https://github.com/electron/electron/releases/download/

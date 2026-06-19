@@ -335,7 +335,7 @@ function readDisabledState(): DisabledStateFile {
     const raw = readFileSync(disabledStatePath(), 'utf-8')
     const parsed = JSON.parse(raw) as DisabledStateFile
     if (parsed?.version !== DISABLED_STATE_VERSION || typeof parsed.entries !== 'object') {
-      console.warn('[context-menu] disabled-state version mismatch, ignoring')
+      getLogger().warning('context-menu-cleaner', 'disabled-state version mismatch, ignoring')
       return empty
     }
     return parsed
@@ -366,7 +366,9 @@ async function resolveClsid(clsid: string, cache: Map<string, ClsidInfo>, signal
   const info: ClsidInfo = { friendlyName: null, dllPath: null }
   try {
     const { stdout } = await execReg(['query', `HKCR\\CLSID\\${canonical}`, '/ve'], { timeout: 4000, signal })
-    const m = stdout.match(/\(Default\)\s+REG_SZ\s+(.*)$/m)
+    // Match any localized "(Default)" label — reg.exe on non-English Windows
+    // returns localized text (e.g. "(Padrão)" in pt-BR, "(Valor padrão)" in pt-PT).
+    const m = stdout.match(/\([^)]+\)\s+REG_SZ\s+(.*)$/m)
     if (m) info.friendlyName = m[1]!.trim() || null
   } catch {
     /* missing key */
@@ -376,7 +378,7 @@ async function resolveClsid(clsid: string, cache: Map<string, ClsidInfo>, signal
       timeout: 4000,
       signal,
     })
-    const m = stdout.match(/\(Default\)\s+REG_(?:SZ|EXPAND_SZ)\s+(.*)$/m)
+    const m = stdout.match(/\([^)]+\)\s+REG_(?:SZ|EXPAND_SZ)\s+(.*)$/m)
     if (m) info.dllPath = m[1]!.trim().replace(/^"+|"+$/g, '') || null
   } catch {
     /* missing key */

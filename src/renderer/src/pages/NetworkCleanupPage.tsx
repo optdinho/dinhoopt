@@ -8,10 +8,10 @@ import { cn } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useNetworkStore } from '@/stores/network-store'
 import { useStatsStore } from '@/stores/stats-store'
-import type { NetworkItem } from '@shared/types'
+import type { NetworkItem, ProgressData } from '@shared/types'
 import { CheckCircle2, Globe, History, Network, Search, Sparkles, Wifi } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 type NetworkCategory = NetworkItem['type']
@@ -51,6 +51,16 @@ export function NetworkCleanupPage() {
   const status = useNetworkStore((s) => s.status)
   const cleanResult = useNetworkStore((s) => s.cleanResult)
   const activeCategory = useNetworkStore((s) => s.activeCategory)
+  const [cleanProgress, setCleanProgress] = useState<ProgressData | null>(null)
+
+  useEffect(() => {
+    if (!window.dinho?.onScanProgress) return
+    return window.dinho.onScanProgress((data) => {
+      if (data.phase === 'cleaning' && data.category === 'network') {
+        setCleanProgress(data)
+      }
+    })
+  }, [])
 
   const [showConfirm, setShowConfirm] = useState(false)
   const addEntry = useHistoryStore((s) => s.addEntry)
@@ -268,11 +278,33 @@ export function NetworkCleanupPage() {
 
           {isCleaning && (
             <div
-              className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
+              className="mb-5 rounded-2xl px-5 py-4"
               style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
             >
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-              <span className="text-[13px] text-zinc-400">{t('cleaningStatus')}</span>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                <span className="text-[13px] text-zinc-300">
+                  {cleanProgress?.currentPath
+                    ? t('cleaningItem', { item: cleanProgress.currentPath })
+                    : t('cleaningStatus')}
+                </span>
+                {cleanProgress && (
+                  <span className="ml-auto text-[12px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                    {cleanProgress.progress}%
+                  </span>
+                )}
+              </div>
+              {cleanProgress && (
+                <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: 'var(--bg-hover-2)' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${cleanProgress.progress}%`,
+                      background: 'linear-gradient(90deg, #f59e0b, #d97706)',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 

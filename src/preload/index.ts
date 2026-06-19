@@ -509,7 +509,7 @@ const api = {
 
   // WinSxS Cleaner
   winSxSScan: (): Promise<ScanResult[]> =>
-    ipcRenderer.invoke(IPC.WINSXS_ANALYZE).then((r) => [r]),
+    ipcRenderer.invoke(IPC.WINSXS_ANALYZE).then((r) => (r ? [r] : [])),
   winSxSClean: (): Promise<CleanResult> => ipcRenderer.invoke(IPC.WINSXS_CLEAN),
 
   // Power Plans

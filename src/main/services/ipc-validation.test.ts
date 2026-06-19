@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateHistoryEntry, validateSettingsPartial } from './ipc-validation'
+import { validateHistoryEntry, validateSettingsPartial, validateStringArray } from './ipc-validation'
 
 describe('validateSettingsPartial', () => {
   it('accepts valid boolean settings', () => {
@@ -411,6 +411,212 @@ describe('validateSettingsPartial', () => {
   it('rejects an oversized registryIgnoredTweaks list', () => {
     expect(validateSettingsPartial({ registryIgnoredTweaks: Array(201).fill('a|b') })).toBeNull()
   })
+
+  it('accepts valid language codes', () => {
+    expect(validateSettingsPartial({ language: 'en' })).toEqual({ language: 'en' })
+    expect(validateSettingsPartial({ language: 'zh-CN' })).toEqual({ language: 'zh-CN' })
+    expect(validateSettingsPartial({ language: 'pt-BR' })).toEqual({ language: 'pt-BR' })
+  })
+
+  it('rejects invalid language codes', () => {
+    expect(validateSettingsPartial({ language: 't' })).toBeNull()
+    expect(validateSettingsPartial({ language: 'eng' })).toBeNull()
+    expect(validateSettingsPartial({ language: 'en_US' })).toBeNull()
+    expect(validateSettingsPartial({ language: 'x'.repeat(11) })).toBeNull()
+    expect(validateSettingsPartial({ language: 42 })).toBeNull()
+  })
+
+  it('accepts valid updateCheckIntervalHours', () => {
+    expect(validateSettingsPartial({ updateCheckIntervalHours: 1 })).toEqual({ updateCheckIntervalHours: 1 })
+    expect(validateSettingsPartial({ updateCheckIntervalHours: 168 })).toEqual({ updateCheckIntervalHours: 168 })
+    expect(validateSettingsPartial({ updateCheckIntervalHours: 24 })).toEqual({ updateCheckIntervalHours: 24 })
+  })
+
+  it('rejects invalid updateCheckIntervalHours', () => {
+    expect(validateSettingsPartial({ updateCheckIntervalHours: 0 })).toBeNull()
+    expect(validateSettingsPartial({ updateCheckIntervalHours: 169 })).toBeNull()
+    expect(validateSettingsPartial({ updateCheckIntervalHours: '24' })).toBeNull()
+    expect(validateSettingsPartial({ updateCheckIntervalHours: -1 })).toBeNull()
+  })
+
+  it('rejects gameMode customGameProcesses with non-array', () => {
+    expect(validateSettingsPartial({ gameMode: { customGameProcesses: 'spotify.exe', enabledOptimizations: [] } })).toBeNull()
+  })
+
+  it('rejects gameMode customGameProcesses with empty string', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { customGameProcesses: [''], enabledOptimizations: [], customProcessKillList: [] },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode customGameProcesses with special characters', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { customGameProcesses: ['evil;rm'], enabledOptimizations: [], customProcessKillList: [] },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode customGameProcesses with overly long name', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { customGameProcesses: ['x'.repeat(101)], enabledOptimizations: [], customProcessKillList: [] },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode customGameProcesses that exceeds max count', () => {
+    const customGameProcesses = Array.from({ length: 51 }, (_, i) => `game${i}.exe`)
+    expect(
+      validateSettingsPartial({
+        gameMode: { customGameProcesses, enabledOptimizations: [], customProcessKillList: [] },
+      }),
+    ).toBeNull()
+  })
+
+  it('accepts valid gameMode customGameProcesses', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { customGameProcesses: ['steam.exe', 'epic.exe'], enabledOptimizations: [], customProcessKillList: [] },
+      }),
+    ).not.toBeNull()
+  })
+
+  it('accepts gameMode gameProfiles', () => {
+    const input = {
+      gameMode: {
+        enabledOptimizations: [],
+        customProcessKillList: [],
+        gameProfiles: {
+          'steam.exe': { gameName: 'Steam', enabledOptimizations: ['mem-clear-standby'] },
+        },
+      },
+    }
+    expect(validateSettingsPartial(input)).toEqual(input)
+  })
+
+  it('accepts gameMode gameProfiles with multiple profiles under 30 limit', () => {
+    const profiles: Record<string, { gameName: string; enabledOptimizations: string[] }> = {}
+    for (let i = 0; i < 30; i++) {
+      profiles[`proc${i}.exe`] = { gameName: `Game ${i}`, enabledOptimizations: ['svc-wsearch'] }
+    }
+    expect(
+      validateSettingsPartial({
+        gameMode: { enabledOptimizations: [], customProcessKillList: [], gameProfiles: profiles },
+      }),
+    ).not.toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles as non-object', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { enabledOptimizations: [], customProcessKillList: [], gameProfiles: 'string' },
+      }),
+    ).toBeNull()
+    expect(
+      validateSettingsPartial({
+        gameMode: { enabledOptimizations: [], customProcessKillList: [], gameProfiles: [] },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with too many profiles', () => {
+    const profiles: Record<string, { gameName: string; enabledOptimizations: string[] }> = {}
+    for (let i = 0; i < 31; i++) {
+      profiles[`proc${i}.exe`] = { gameName: `Game ${i}`, enabledOptimizations: ['svc-wsearch'] }
+    }
+    expect(
+      validateSettingsPartial({
+        gameMode: { enabledOptimizations: [], customProcessKillList: [], gameProfiles: profiles },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with invalid process name key', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'evil;rm': { gameName: 'X', enabledOptimizations: ['mem-clear-standby'] } },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with null profile value', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'steam.exe': null },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with missing gameName', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'steam.exe': { enabledOptimizations: ['mem-clear-standby'] } },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with gameName too long', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'steam.exe': { gameName: 'x'.repeat(101), enabledOptimizations: ['mem-clear-standby'] } },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with non-array enabledOptimizations', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'steam.exe': { gameName: 'Steam', enabledOptimizations: 'not-array' } },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with too many optimizations', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'steam.exe': { gameName: 'Steam', enabledOptimizations: Array(31).fill('svc-wsearch') } },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode gameProfiles with invalid optimization ID', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: {
+          enabledOptimizations: [],
+          customProcessKillList: [],
+          gameProfiles: { 'steam.exe': { gameName: 'Steam', enabledOptimizations: ['invalid-id'] } },
+        },
+      }),
+    ).toBeNull()
+  })
 })
 
 describe('validateHistoryEntry', () => {
@@ -474,5 +680,54 @@ describe('validateHistoryEntry', () => {
   it('rejects missing required fields', () => {
     const { id, ...noId } = validEntry
     expect(validateHistoryEntry(noId)).toBeNull()
+  })
+})
+
+describe('validateStringArray', () => {
+  it('accepts a valid string array', () => {
+    expect(validateStringArray(['a', 'b', 'c'])).toEqual(['a', 'b', 'c'])
+  })
+
+  it('rejects non-array input', () => {
+    expect(validateStringArray(null)).toBeNull()
+    expect(validateStringArray('string')).toBeNull()
+    expect(validateStringArray(42)).toBeNull()
+    expect(validateStringArray({})).toBeNull()
+  })
+
+  it('rejects arrays exceeding maxItems', () => {
+    const arr = Array.from({ length: 10_001 }, (_, i) => `item-${i}`)
+    expect(validateStringArray(arr)).toBeNull()
+  })
+
+  it('rejects arrays with non-string elements', () => {
+    expect(validateStringArray(['a', 42, 'c'])).toBeNull()
+  })
+
+  it('rejects arrays with elements exceeding maxItemLength', () => {
+    expect(validateStringArray(['a', 'x'.repeat(1025)])).toBeNull()
+  })
+
+  it('accepts custom maxItems and maxItemLength parameters', () => {
+    expect(validateStringArray(['a', 'b'], 5, 10)).toEqual(['a', 'b'])
+  })
+
+  it('rejects based on custom maxItems', () => {
+    expect(validateStringArray(['a', 'b', 'c'], 2, 10)).toBeNull()
+  })
+
+  it('accepts empty array', () => {
+    expect(validateStringArray([])).toEqual([])
+  })
+
+  it('accepts array at the maxItems boundary', () => {
+    const arr = Array.from({ length: 10_000 }, (_, i) => `item-${i}`)
+    const result = validateStringArray(arr)
+    expect(result).not.toBeNull()
+    expect(result).toHaveLength(10_000)
+  })
+
+  it('accepts elements at the maxItemLength boundary', () => {
+    expect(validateStringArray(['x'.repeat(1024)])).toEqual(['x'.repeat(1024)])
   })
 })

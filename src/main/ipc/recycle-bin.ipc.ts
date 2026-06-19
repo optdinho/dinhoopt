@@ -7,6 +7,7 @@ import { ipcMain } from 'electron'
 import { getPlatform } from '../platform'
 import { execFileAsync, psArgs } from '../services/exec-utf8'
 import { cleanItems, scanDirectory } from '../services/file-utils'
+import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 
@@ -89,14 +90,22 @@ export function registerRecycleBinIpc(): void {
     }
   })
 
-  ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (): Promise<CleanResult> => {
+  ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (_event, itemIds?: string[]): Promise<CleanResult> => {
     getLogger().info('recycle-bin', 'Cleaning recycle bin')
+
+    // Validate IDs when provided (macOS/Linux path uses them)
+    if (itemIds && !validateStringArray(itemIds)) {
+      getLogger().warning('recycle-bin', 'Clean skipped — invalid item IDs')
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+    }
+
     const trashPath = getPlatform().paths.trashPath()
 
     if (trashPath) {
       // macOS / Linux: delete cached trash items via standard file-utils flow
       try {
-        const result = await cleanItems(lastScannedItemIds)
+        const ids = itemIds ?? lastScannedItemIds
+        const result = await cleanItems(ids)
         lastScannedItemIds = []
         getLogger().success('recycle-bin', `Cleaned ${result.totalCleaned} bytes from trash`)
         return result
@@ -126,26 +135,29 @@ export function registerRecycleBinIpc(): void {
         { windowsHide: true },
       )
 
-      // Verify the bin is actually empty
+      // Re-scan to determine actual cleaned space
       const { stdout } = await execFileAsync(
         'powershell.exe',
         psArgs(
-          '$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); Write-Output $items.Count',
+          `$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = $items.Count; $size = ($items | Measure-Object -Property Size -Sum).Sum; Write-Output "$count|$size"`,
         ),
         { windowsHide: true },
       )
-      const remaining = Number.parseInt(stdout.trim()) || 0
+      const [remainingStr, afterSizeStr] = stdout.trim().split('|')
+      const remaining = Number.parseInt(remainingStr!) || 0
+      const afterSize = Number.parseInt(afterSizeStr!) || 0
+      const actualCleaned = Math.max(0, sizeBeforeClean - afterSize)
+
+      lastScannedSize = afterSize
 
       if (remaining === 0) {
-        lastScannedSize = 0
-        getLogger().success('recycle-bin', `Cleaned ${sizeBeforeClean} bytes from recycle bin`)
-        return { totalCleaned: sizeBeforeClean, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
+        getLogger().success('recycle-bin', `Cleaned ${actualCleaned} bytes from recycle bin`)
+        return { totalCleaned: actualCleaned, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
       }
       // Partial clean - some items couldn't be removed
-      lastScannedSize = 0
       getLogger().warning('recycle-bin', `Partial clean: ${remaining} items remaining (may be in use)`)
       return {
-        totalCleaned: sizeBeforeClean,
+        totalCleaned: actualCleaned,
         filesDeleted: 1,
         filesSkipped: remaining,
         errors: [

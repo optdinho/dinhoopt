@@ -272,8 +272,8 @@ export function CleanerPage() {
                 space: result.totalCleaned || 0,
               })
             }
-          } catch {
-            /* continue */
+          } catch (err) {
+            console.error(`Clean failed for category ${cat.type}:`, err)
           }
           activeIndex++
         } else if (catItemsAll.length > 0) {

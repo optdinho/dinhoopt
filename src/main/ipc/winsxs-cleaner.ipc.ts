@@ -7,6 +7,7 @@ import { ipcMain } from 'electron'
 import { isAdmin } from '../services/elevation'
 import { execFileAsync } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
+import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
 
 const WINSXS_SUBCATEGORY = 'WinSxS Component Store'
@@ -65,7 +66,7 @@ function parseAnalyzeOutput(stdout: string): AnalyzeResult {
 async function runAnalyze(): Promise<AnalyzeResult> {
   const { stdout } = await execFileAsync(
     'cmd.exe',
-    ['/c', 'chcp 65001 >nul & DISM /Online /Cleanup-Image /AnalyzeComponentStore'],
+    ['/c', 'chcp 65001 >nul & DISM /English /Online /Cleanup-Image /AnalyzeComponentStore'],
     { timeout: 120_000, windowsHide: true },
   )
   return parseAnalyzeOutput(stdout)
@@ -118,6 +119,8 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
           selected: true,
         })
       }
+
+      cacheItems(items)
 
       const win = getWindow()
       if (win && !win.isDestroyed()) {
@@ -179,12 +182,28 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
     }
 
     return new Promise((resolve) => {
-      const child = spawn('cmd', ['/c', 'chcp 65001 >nul & DISM /Online /Cleanup-Image /StartComponentCleanup'], {
+      const child = spawn('cmd', ['/c', 'chcp 65001 >nul & DISM /English /Online /Cleanup-Image /StartComponentCleanup'], {
         windowsHide: true,
       })
 
       let lastPercent = 0
       const decoder = new StringDecoder('utf-8')
+
+      // Safety timeout: DISM should complete within 10 minutes
+      const DISM_TIMEOUT = 600_000
+      const timeout = setTimeout(() => {
+        logger.error('winsxs-cleaner', 'DISM cleanup timed out after 10 minutes — killing process')
+        child.kill()
+        // Give it a moment to die, then force-kill via taskkill
+        setTimeout(() => {
+          if (child.killed || child.exitCode !== null) return
+          try { child.kill() } catch { /* already dead */ }
+        }, 5000)
+      }, DISM_TIMEOUT)
+
+      const cleanup = () => {
+        clearTimeout(timeout)
+      }
 
       child.stdout?.on('data', (chunk: Buffer) => {
         const text = decoder.write(chunk)
@@ -209,6 +228,7 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
       })
 
       child.on('error', (err) => {
+        cleanup()
         logger.error('winsxs-cleaner', `Clean failed to start: ${err.message}`)
         resolve({
           totalCleaned: 0,
@@ -220,9 +240,12 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
       })
 
       child.on('close', (code) => {
+        cleanup()
         const success = code === 0
         if (success) {
           logger.success('winsxs-cleaner', 'WinSxS cleanup completed successfully')
+        } else if (code === null) {
+          logger.error('winsxs-cleaner', 'WinSxS cleanup timed out')
         } else {
           logger.error('winsxs-cleaner', `WinSxS cleanup exited with code ${code}`)
         }
@@ -243,7 +266,11 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
           totalCleaned: success ? 1 : 0,
           filesDeleted: success ? 1 : 0,
           filesSkipped: 0,
-          errors: success ? [] : [{ path: 'WinSxS', reason: `DISM exited with code ${code}` }],
+          errors: success
+            ? []
+            : code === null
+              ? [{ path: 'WinSxS', reason: 'DISM timed out after 10 minutes' }]
+              : [{ path: 'WinSxS', reason: `DISM exited with code ${code}` }],
           needsElevation: false,
         })
       })

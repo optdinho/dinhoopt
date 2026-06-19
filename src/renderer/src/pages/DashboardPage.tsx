@@ -52,6 +52,7 @@ const CLEANER_SCAN_FNS: {
   clean: (ids: string[]) => Promise<CleanResult>
 }[] = [
   { type: CleanerType.System, scan: () => window.dinho.systemScan(), clean: (ids) => window.dinho.systemClean(ids) },
+  { type: CleanerType.WinSxS, scan: () => window.dinho.winSxSScan(), clean: () => window.dinho.winSxSClean() },
   { type: CleanerType.Browser, scan: () => window.dinho.browserScan(), clean: (ids) => window.dinho.browserClean(ids) },
   { type: CleanerType.App, scan: () => window.dinho.appScan(), clean: (ids) => window.dinho.appClean(ids) },
   { type: CleanerType.Gaming, scan: () => window.dinho.gamingScan(), clean: (ids) => window.dinho.gamingClean(ids) },
@@ -339,6 +340,8 @@ export function DashboardPage() {
     setPhase('scanning')
     setResult(null)
     setStepProgress({ current: 0, total: 2 })
+    // Yield to let React render the scanning phase before cleaning starts
+    await new Promise<void>((r) => setTimeout(r, 50))
 
     setPhase('cleaning')
     setStepProgress({ current: 1, total: 2 })
@@ -393,6 +396,8 @@ export function DashboardPage() {
     const totalSteps = 5 + (features.registry ? 1 : 0) + (features.drivers ? 1 : 0)
     let step = 0
     setStepProgress({ current: step, total: totalSteps })
+    // Yield to let React render the scanning phase before cleaning starts
+    await new Promise<void>((r) => setTimeout(r, 50))
 
     setPhase('cleaning')
     setStepProgress({ current: ++step, total: totalSteps })

@@ -489,12 +489,6 @@ export async function fetchAndCacheRules(url: string): Promise<{
     // Write engine versioning metadata
     writeCacheVersion(bundle.rules.length)
 
-    // Log engine version mismatch as warning
-    const engineVersion = getEngineVersion()
-    if (engineVersion !== 'unknown' && engineVersion !== CACHE_VERSION_SCHEMA) {
-      getLogger().warning('yara', `Engine version mismatch: expected ${CACHE_VERSION_SCHEMA}, got ${engineVersion}`)
-    }
-
     return {
       success: true,
       stats: { rulesCount: bundle.rules.length, version: bundle.version },

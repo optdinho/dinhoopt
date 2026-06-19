@@ -155,9 +155,9 @@ describe('scan-store', () => {
     const result = makeResult('system', 'temp', [{ id: 'a', size: 100 }])
     useScanStore.getState().setResults([result])
     useScanStore.getState().toggleSubcategory(result)
-    expect(useScanStore.getState().excludedSubcategories.has('temp')).toBe(true)
+    expect(useScanStore.getState().excludedSubcategories.has('system:temp')).toBe(true)
     const stored = JSON.parse(storage.get('kudu:excluded-subcategories')!)
-    expect(stored).toContain('temp')
+    expect(stored).toContain('system:temp')
   })
 
   it('reset clears state back to defaults', () => {

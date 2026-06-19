@@ -130,16 +130,22 @@ async function readWinRegistryEnv(scope: 'user' | 'system'): Promise<Map<string,
   return vars
 }
 
+async function buildMergedRegistryVars(): Promise<{
+  systemVars: Map<string, string>
+  userVars: Map<string, string>
+  mergedVars: Map<string, string>
+}> {
+  const systemVars = await readWinRegistryEnv('system')
+  const userVars = await readWinRegistryEnv('user')
+  const mergedVars = new Map<string, string>()
+  for (const [k, v] of systemVars) mergedVars.set(k, v)
+  for (const [k, v] of userVars) mergedVars.set(k, v)
+  return { systemVars, userVars, mergedVars }
+}
+
 async function scanWindowsPathEntries(): Promise<EnvEntry[]> {
   const orphaned: EnvEntry[] = []
-
-  // Build merged registry vars from both scopes so expandWinVars can resolve
-  // cross-scope references (e.g. a user PATH entry referencing %SystemRoot%)
-  const mergedVars = new Map<string, string>()
-  const systemVars = await readWinRegistryEnv('system')
-  for (const [k, v] of systemVars) mergedVars.set(k, v)
-  const userVars = await readWinRegistryEnv('user')
-  for (const [k, v] of userVars) mergedVars.set(k, v)
+  const { systemVars, userVars, mergedVars } = await buildMergedRegistryVars()
 
   for (const scope of ['user', 'system'] as const) {
     const vars = scope === 'user' ? userVars : systemVars
@@ -163,13 +169,7 @@ async function scanWindowsPathEntries(): Promise<EnvEntry[]> {
 
 async function scanWindowsEnvVars(): Promise<EnvEntry[]> {
   const orphaned: EnvEntry[] = []
-
-  // Build merged registry vars from both scopes for cross-scope resolution
-  const mergedVars = new Map<string, string>()
-  const systemVars = await readWinRegistryEnv('system')
-  for (const [k, v] of systemVars) mergedVars.set(k, v)
-  const userVars = await readWinRegistryEnv('user')
-  for (const [k, v] of userVars) mergedVars.set(k, v)
+  const { systemVars, userVars, mergedVars } = await buildMergedRegistryVars()
 
   for (const scope of ['user', 'system'] as const) {
     const vars = scope === 'user' ? userVars : systemVars

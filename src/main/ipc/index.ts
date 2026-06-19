@@ -89,7 +89,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerDuplicateFinderIpc(getWindow)
   registerLargeFileFinderIpc(getWindow)
   registerEmptyFolderCleanerIpc(getWindow)
-  registerNetworkCleanupIpc()
+  registerNetworkCleanupIpc(getWindow)
   registerMalwareScannerIpc(getWindow)
   registerUninstallLeftoversIpc(getWindow)
   registerComplianceAuditorIpc(getWindow)

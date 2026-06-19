@@ -2,19 +2,27 @@ import { execFileSync } from 'node:child_process'
 import type { PlatformElevation } from '../types'
 
 let _isAdmin: boolean | null = null
+let _lastCheck = 0
+const CACHE_TTL_MS = 60_000
 
 export function createWin32Elevation(): PlatformElevation {
   return {
     isAdmin(): boolean {
-      if (_isAdmin !== null) return _isAdmin
+      const now = Date.now()
+      if (_isAdmin !== null && now - _lastCheck < CACHE_TTL_MS) return _isAdmin
 
       try {
-        execFileSync('net', ['session'], { stdio: 'ignore', timeout: 5000 })
-        _isAdmin = true
+        const stdout = execFileSync(
+          'whoami',
+          ['/groups'],
+          { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 },
+        )
+        _isAdmin = stdout.includes('S-1-16-12288')
       } catch {
         _isAdmin = false
       }
 
+      _lastCheck = Date.now()
       return _isAdmin
     },
   }
