@@ -234,16 +234,6 @@ describe('preload API bridge', () => {
     }
   })
 
-  describe('restore point', () => {
-    for (const m of ['createRestorePoint', 'restorePointList', 'restorePointDelete', 'restorePointRestore', 'enableSystemProtection']) {
-      it(`${m} calls invoke`, async () => {
-        mockIpc.invoke.mockResolvedValueOnce(null)
-        await (api[m] as (...a: unknown[]) => Promise<unknown>)(1)
-        expect(mockIpc.invoke).toHaveBeenCalled()
-      })
-    }
-  })
-
   describe('schedule', () => {
     it('scheduleNextScan calls invoke', async () => {
       mockIpc.invoke.mockResolvedValueOnce(null)

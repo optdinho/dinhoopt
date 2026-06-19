@@ -81,10 +81,6 @@ import type {
   QuarantineMeta,
   QuarantinedItem,
   RegistryEntry,
-  RestorePointDeleteResult,
-  RestorePointListResult,
-  RestorePointRestoreResult,
-  RestorePointResult,
   ScanHistoryEntry,
   ScanResult,
   ServiceApplyResult,
@@ -252,16 +248,6 @@ const api = {
   // Elevation
   elevationCheck: (): Promise<boolean> => ipcRenderer.invoke(IPC.ELEVATION_CHECK),
   elevationRelaunch: (): Promise<void> => ipcRenderer.invoke(IPC.ELEVATION_RELAUNCH),
-
-  // System Restore Point
-  createRestorePoint: (description: string): Promise<RestorePointResult> =>
-    ipcRenderer.invoke(IPC.RESTORE_POINT_CREATE, description),
-  restorePointList: (): Promise<RestorePointListResult> => ipcRenderer.invoke(IPC.RESTORE_POINT_LIST),
-  restorePointDelete: (sequenceNumber: number): Promise<RestorePointDeleteResult> =>
-    ipcRenderer.invoke(IPC.RESTORE_POINT_DELETE, sequenceNumber),
-  restorePointRestore: (sequenceNumber: number): Promise<RestorePointRestoreResult> =>
-    ipcRenderer.invoke(IPC.RESTORE_POINT_RESTORE, sequenceNumber),
-  enableSystemProtection: (): Promise<RestorePointResult> => ipcRenderer.invoke(IPC.RESTORE_POINT_ENABLE_PROTECTION),
 
   // Scheduled scans (legacy)
   scheduleNextScan: (): Promise<string | null> => ipcRenderer.invoke(IPC.SCHEDULE_NEXT_SCAN),

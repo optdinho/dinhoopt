@@ -104,12 +104,6 @@ export const IPC = {
   // System
   ELEVATION_CHECK: 'elevation:check',
   ELEVATION_RELAUNCH: 'elevation:relaunch',
-  RESTORE_POINT_CREATE: 'system:restore-point:create',
-  RESTORE_POINT_LIST: 'system:restore-point:list',
-  RESTORE_POINT_DELETE: 'system:restore-point:delete',
-  RESTORE_POINT_RESTORE: 'system:restore-point:restore',
-  RESTORE_POINT_ENABLE_PROTECTION: 'system:restore-point:enable-protection',
-
   // Scheduled scans (legacy single-schedule)
   SCHEDULE_NEXT_SCAN: 'schedule:next-scan',
   SCHEDULE_SCAN_COMPLETE: 'schedule:scan-complete',

@@ -71,7 +71,6 @@ const CompliancePage = lazy(() => import('./pages/CompliancePage').then((m) => (
 const VulnerabilityScannerPage = lazy(() =>
   import('./pages/VulnerabilityScannerPage').then((m) => ({ default: m.VulnerabilityScannerPage })),
 )
-const RestorePointPage = lazy(() => import('./pages/RestorePointPage').then((m) => ({ default: m.RestorePointPage })))
 const HostsEditorPage = lazy(() => import('./pages/HostsEditorPage').then((m) => ({ default: m.HostsEditorPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 const LicensePage = lazy(() => import('./pages/LicensePage').then((m) => ({ default: m.LicensePage })))
@@ -280,7 +279,6 @@ function AnimatedRoutes() {
         <Route path="/debloater" element={wrap(<DebloaterPage />)} />
         <Route path="/updates" element={wrap(<SoftwareUpdaterPage />)} />
         <Route path="/schedules" element={wrap(<SchedulesPage />)} />
-        <Route path="/restore-points" element={wrap(<RestorePointPage />)} />
         <Route path="/activation" element={wrap(<LicensePage />)} />
         <Route path="/hardening" element={<Navigate to="/privacy" replace />} />
         <Route path="/updater" element={<Navigate to="/updates" replace />} />
@@ -330,7 +328,6 @@ const ROUTE_TITLES: Record<string, { key: string; ns?: string } | string> = {
   '/updates': 'Software Updates',
   '/activation': 'Activation',
   '/schedules': { key: 'schedules' },
-  '/restore-points': 'Restore Points',
   '/drivers': 'Driver Updates',
 }
 

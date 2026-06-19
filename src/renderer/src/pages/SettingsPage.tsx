@@ -203,14 +203,6 @@ export function SettingsPage() {
             onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })}
           />
         </Row>
-        {features.restorePoint && (
-          <Row label={t('createRestorePointLabel')} desc={t('createRestorePointDesc')}>
-            <Toggle
-              checked={settings.cleaner.createRestorePoint}
-              onChange={(v) => save({ cleaner: { ...settings.cleaner, createRestorePoint: v } })}
-            />
-          </Row>
-        )}
         <Row label={t('skipRecentFilesLabel')} desc={t('skipRecentFilesDesc')} last>
           <select
             value={settings.cleaner.skipRecentMinutes}

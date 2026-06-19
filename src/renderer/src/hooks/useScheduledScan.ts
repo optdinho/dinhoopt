@@ -83,19 +83,7 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
     toast.info(`Running "${payload.scheduleName}"`, { description: 'Scheduled task started...' })
     store.setStatus(ScanStatus.Scanning)
     store.setResults([])
-    // ── Restore point before auto-apply cleaning ──
     const cleanerTasks = payload.tasks.filter((t) => t.startsWith('cleaner:'))
-    if (payload.autoApply && cleanerTasks.length > 0) {
-      const { createRestorePoint } = useSettingsStore.getState().settings.cleaner
-      if (createRestorePoint) {
-        try {
-          await window.dinho.createRestorePoint(`DiNho Optimizer - limpeza agendada — ${payload.scheduleName}`)
-        } catch {
-          // Best-effort — don't block the clean
-        }
-      }
-    }
-
     // ── Cleaner tasks ──
     const { protectRecycleBin } = useSettingsStore.getState().settings.cleaner
     for (const taskType of cleanerTasks) {

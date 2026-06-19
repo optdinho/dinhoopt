@@ -431,7 +431,7 @@ const CHECKS: CheckDef[] = [
     label: 'UAC ativo',
     description: 'O Controle de Conta de Usuário (UAC) deve estar ativo',
     expected: 'Ativado',
-    requiresAdmin: false,
+    requiresAdmin: true,
     check: async () => {
       const val = await regQuery('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'EnableLUA')
       const intVal = val != null ? Number.parseInt(val, 16) : undefined
@@ -451,7 +451,7 @@ const CHECKS: CheckDef[] = [
     label: 'UAC — solicitar consentimento do admin',
     description: 'O UAC deve solicitar consentimento ao elevar privilégios (nível 2)',
     expected: 'Nível 2',
-    requiresAdmin: false,
+    requiresAdmin: true,
     check: async () => {
       const val = await regQuery(
         'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System',
@@ -504,6 +504,7 @@ export async function scanCompliance(onProgress?: (data: ComplianceScanProgress)
       description: def.description,
       compliant,
       reversible: typeof def.revert === 'function',
+      applicable: typeof def.apply === 'function',
       requiresAdmin: def.requiresAdmin,
       value,
       expected: def.expected,

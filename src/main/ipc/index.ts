@@ -65,7 +65,6 @@ import { registerLargeFileFinderIpc } from './large-file-finder.ipc'
 import { registerLicenseIpc } from './license.ipc'
 import { registerLoggerIpc } from './logger.ipc'
 import { registerProgramSafetyIpc } from './program-safety.ipc'
-import { registerRestorePointIpc } from './restore-point.ipc'
 import { registerStartupSafetyIpc } from './startup-safety.ipc'
 import { registerWindowsTweaksIpc } from './windows-tweaks.ipc'
 
@@ -111,7 +110,6 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerBenchmarkIpc(getWindow)
   registerPowerPlansIpc()
   registerLoggerIpc()
-  registerRestorePointIpc()
   registerHostsEditorIpc(getWindow)
   registerWinSxSCleanerIpc(getWindow)
 
@@ -129,7 +127,6 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       registry: isWin,
       debloater: isWin,
       drivers: isWin,
-      restorePoint: isWin,
       bootTrace: isWin,
       gameMode: isWin,
       compliance: isWin,

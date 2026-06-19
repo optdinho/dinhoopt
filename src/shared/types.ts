@@ -6,7 +6,6 @@ export interface PlatformInfo {
     registry: boolean
     debloater: boolean
     drivers: boolean
-    restorePoint: boolean
     bootTrace: boolean
     gameMode: boolean
     firewallAudit: boolean
@@ -388,6 +387,7 @@ export interface ComplianceCheck {
   description: string
   compliant: boolean
   reversible: boolean
+  applicable: boolean
   requiresAdmin: boolean
   value?: string
   expected: string
@@ -571,34 +571,6 @@ export interface DriverUpdateProgress {
   percent: number
 }
 
-export interface RestorePointResult {
-  success: boolean
-  error?: string
-}
-
-export interface RestorePointInfo {
-  sequenceNumber: number
-  description: string
-  creationTime: string
-  restorePointType: string
-}
-
-export interface RestorePointListResult {
-  success: boolean
-  points: RestorePointInfo[]
-  error?: string
-}
-
-export interface RestorePointDeleteResult {
-  success: boolean
-  error?: string
-}
-
-export interface RestorePointRestoreResult {
-  success: boolean
-  error?: string
-}
-
 // ─── Performance Monitor ────────────────────────────────────
 export interface PerfSystemInfo {
   cpuModel: string
@@ -769,7 +741,6 @@ export interface DiNhoSettings {
     skipRecentMinutes: number
     secureDelete: boolean
     closeBrowsersBeforeClean: boolean
-    createRestorePoint: boolean
     protectRecycleBin: boolean
   }
   exclusions: string[]

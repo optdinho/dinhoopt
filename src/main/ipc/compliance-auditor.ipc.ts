@@ -37,7 +37,7 @@ export function registerComplianceAuditorIpc(getWindow: WindowGetter): void {
     const valid = validateStringArray(ids, 100)
     if (!valid) {
       getLogger().warning('compliance-auditor', 'Invalid compliance setting IDs provided')
-      return { succeeded: 0, failed: 0, errors: [] }
+      return { succeeded: 0, failed: ids?.length ?? 0, errors: [] }
     }
     const result = await applyComplianceSettings(valid)
     getLogger().success('compliance-auditor', `Applied ${result?.succeeded ?? 0} compliance settings`)

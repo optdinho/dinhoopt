@@ -42,7 +42,6 @@ const mocks = vi.hoisted(() => {
     registerBenchmarkIpc: vi.fn(),
     registerPowerPlansIpc: vi.fn(),
     registerLoggerIpc: vi.fn(),
-    registerRestorePointIpc: vi.fn(),
     registerHostsEditorIpc: vi.fn(),
     registerWinSxSCleanerIpc: vi.fn(),
   }
@@ -313,10 +312,6 @@ vi.mock('./power-plans.ipc', () => ({
   registerPowerPlansIpc: (...a: unknown[]) => mocks.registerFns.registerPowerPlansIpc(...a),
 }))
 vi.mock('./logger.ipc', () => ({ registerLoggerIpc: (...a: unknown[]) => mocks.registerFns.registerLoggerIpc(...a) }))
-vi.mock('./restore-point.ipc', () => ({
-  registerRestorePointIpc: (...a: unknown[]) => mocks.registerFns.registerRestorePointIpc(...a),
-}))
-
 // game-mode.ipc exports both registerGameModeIpc and refreshGameDetector
 vi.mock('./game-mode.ipc', () => ({
   registerGameModeIpc: (...a: unknown[]) => mocks.registerFns.registerGameModeIpc(...a),
@@ -383,10 +378,9 @@ describe('registerCleanerIpc', () => {
       'registerLicenseIpc',
       'registerPowerPlansIpc',
       'registerLoggerIpc',
-      'registerRestorePointIpc',
     ]
 
-    it('calls all 42 register*Ipc functions with correct arguments', () => {
+    it('calls all 41 register*Ipc functions with correct arguments', () => {
       registerCleanerIpc(getWindow)
 
       for (const f of withGetWindow) {
@@ -435,7 +429,6 @@ describe('registerCleanerIpc', () => {
         registry: expect.any(Boolean),
         debloater: expect.any(Boolean),
         drivers: expect.any(Boolean),
-        restorePoint: expect.any(Boolean),
         bootTrace: expect.any(Boolean),
         gameMode: expect.any(Boolean),
         compliance: expect.any(Boolean),

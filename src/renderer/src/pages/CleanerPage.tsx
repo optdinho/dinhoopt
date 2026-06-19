@@ -105,7 +105,7 @@ export function CleanerPage() {
   const store = useScanStore()
   const recomputeStats = useStatsStore((s) => s.recompute)
   const addEntry = useHistoryStore((s) => s.addEntry)
-  const createRestorePointEnabled = useSettingsStore((s) => s.settings.cleaner.createRestorePoint)
+
   const protectRecycleBin = useSettingsStore((s) => s.settings.cleaner.protectRecycleBin)
   const visibleCategories = protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories
   const [activeCategory, setActiveCategory] = useState<CleanerType>(CleanerType.System)
@@ -200,20 +200,6 @@ export function CleanerPage() {
     store.setStatus(ScanStatus.Cleaning)
     cleanStartRef.current = Date.now()
     try {
-      // Create a system restore point before cleaning if enabled
-      if (createRestorePointEnabled) {
-        try {
-          const rpResult = await window.dinho.createRestorePoint(`DiNho Optimizer — ${new Date().toLocaleString()}`)
-          if (rpResult.success) {
-            toast.success(t('toastRestorePointCreated'))
-          } else {
-            toast.warning(t('toastRestorePointSkipped'), { description: rpResult.error })
-          }
-        } catch (err) {
-          console.error('Restore point creation failed:', err)
-          toast.warning(t('toastRestorePointSkipped'), { description: t('toastRestorePointSkippedDescription') })
-        }
-      }
 
       const selectedIds = store.getSelectedIds()
       const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<unknown>>> = {
@@ -323,7 +309,7 @@ export function CleanerPage() {
       store.setStatus(ScanStatus.Error)
     }
     store.setProgress(null)
-  }, [store, createRestorePointEnabled, t, visibleCategories, addEntry, recomputeStats])
+  }, [store, t, visibleCategories, addEntry, recomputeStats])
 
   const categoryResults = (type: CleanerType) => store.results.filter((r) => r.category === type)
   const categoryItemCount = (type: CleanerType) => categoryResults(type).reduce((sum, r) => sum + r.itemCount, 0)

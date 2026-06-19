@@ -150,12 +150,12 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
       useComplianceStore.getState().setStatus('applying')
       try {
         const result = await window.dinho.complianceApply(ids)
-        const updated = await window.dinho.complianceScan()
-        useComplianceStore.getState().setState(updated)
         useComplianceStore.getState().setApplyResult(result)
-        useComplianceStore.getState().setStatus('done')
         if (result.succeeded > 0) toast.success(t('checksApplied', { count: result.succeeded }))
         if (result.failed > 0) toast.error(t('applyFailed'))
+        const updated = await window.dinho.complianceScan()
+        useComplianceStore.getState().setState(updated)
+        useComplianceStore.getState().setStatus('done')
       } catch {
         useComplianceStore.getState().setStatus('done')
         toast.error(t('applyFailed'))
@@ -197,7 +197,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
     return map
   }, [checks])
 
-  const nonCompliantIds = useMemo(() => checks.filter((c) => !c.compliant).map((c) => c.id), [checks])
+  const nonCompliantIds = useMemo(() => checks.filter((c) => !c.compliant && c.applicable).map((c) => c.id), [checks])
 
   if (!state && status === 'idle') {
     return (

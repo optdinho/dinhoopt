@@ -26,7 +26,6 @@ const defaults: StoreData = {
       skipRecentMinutes: 60,
       secureDelete: false,
       closeBrowsersBeforeClean: false,
-      createRestorePoint: false,
       protectRecycleBin: true,
     },
     exclusions: [],

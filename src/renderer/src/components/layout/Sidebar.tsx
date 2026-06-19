@@ -105,7 +105,6 @@ const navGroups: NavGroup[] = [
         ],
       },
       { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
-      { icon: RotateCcw, labelKey: 'restorePoints', path: '/restore-points' },
     ],
   },
   {

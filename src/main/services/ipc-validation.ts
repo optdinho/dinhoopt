@@ -166,7 +166,6 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
       'skipRecentMinutes',
       'secureDelete',
       'closeBrowsersBeforeClean',
-      'createRestorePoint',
     ])
     for (const key of Object.keys(c)) {
       if (!allowedCleanerKeys.has(key)) return null
@@ -178,7 +177,6 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
       return null
     if ('secureDelete' in c && typeof c.secureDelete !== 'boolean') return null
     if ('closeBrowsersBeforeClean' in c && typeof c.closeBrowsersBeforeClean !== 'boolean') return null
-    if ('createRestorePoint' in c && typeof c.createRestorePoint !== 'boolean') return null
   }
 
   // Validate registryIgnoredTweaks is an array of tweak-signature strings if present

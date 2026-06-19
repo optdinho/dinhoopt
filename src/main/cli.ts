@@ -691,9 +691,6 @@ Scan History:
   history list               Show scan history
   history clear              Clear scan history
 
-Restore Points:
-  restore-point create [description]   Create a system restore point
-
 Config Management:
   config get [key]             Show settings
   config set <key> <value>     Update a setting
@@ -1356,24 +1353,6 @@ async function handleHistory(args: string[], ctx: CliContext): Promise<number | 
   }
 }
 
-async function handleRestorePoint(args: string[], ctx: CliContext): Promise<number | undefined> {
-  const { createRestorePoint } = await import('./services/restore-point')
-  const description =
-    args
-      .slice(1)
-      .filter((a) => !a.startsWith('--'))
-      .join(' ') || 'DiNho CLI restore point'
-
-  if (args[0] === 'create') {
-    cliLog(ctx, `Creating restore point: ${description}...`)
-    const result = await createRestorePoint(description)
-    cliOut(ctx, result)
-  } else {
-    cliUsage(ctx, 'dinho --cli restore-point create [description]')
-    return ExitCode.INVALID_ARGS
-  }
-}
-
 // ─── Config management ───────────────────────────────────────
 
 async function handleConfig(args: string[], ctx: CliContext): Promise<number | undefined> {
@@ -1914,9 +1893,6 @@ export async function runCli(): Promise<void> {
         break
       case 'history':
         exitCode = await handleHistory(parsed.commandArgs, ctx)
-        break
-      case 'restore-point':
-        exitCode = await handleRestorePoint(parsed.commandArgs, ctx)
         break
       case 'config':
         exitCode = await handleConfig(parsed.commandArgs, ctx)

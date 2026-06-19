@@ -7,7 +7,6 @@ const defaultInfo: PlatformInfo = {
     registry: true,
     debloater: true,
     drivers: true,
-    restorePoint: true,
     bootTrace: true,
     gameMode: true,
     firewallAudit: true,
