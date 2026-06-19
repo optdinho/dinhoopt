@@ -1,6 +1,6 @@
 {
   "name": "dinho-optimizer",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "DiNho Optimizer — Otimizador de sistema Windows",
   "repository": "optdinho/optdinho",
   "main": "./out/main/index.js",
