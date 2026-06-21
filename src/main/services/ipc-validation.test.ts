@@ -20,7 +20,7 @@ describe('validateSettingsPartial', () => {
     expect(validateSettingsPartial(42)).toBeNull()
   })
 
-  it('rejects unknown top-level keys', () => {
+  it('ignores unknown top-level keys', () => {
     expect(validateSettingsPartial({ hackerField: true })).toBeNull()
   })
 
@@ -617,6 +617,216 @@ describe('validateSettingsPartial', () => {
       }),
     ).toBeNull()
   })
+
+  it('rejects exclusions with path traversal', () => {
+    expect(validateSettingsPartial({ exclusions: ['safe.exe', '../evil.exe'] })).toBeNull()
+    expect(validateSettingsPartial({ exclusions: ['..\\evil.exe'] })).toBeNull()
+  })
+
+  it('rejects exclusions with UNC prefix', () => {
+    expect(validateSettingsPartial({ exclusions: ['\\\\server\\share\\file'] })).toBeNull()
+  })
+
+  it('rejects too many ignoredSoftwareUpdates', () => {
+    expect(validateSettingsPartial({ ignoredSoftwareUpdates: Array.from({ length: 501 }, (_, i) => `upd-${i}`) })).toBeNull()
+  })
+
+  it('rejects overly long ignoredSoftwareUpdate entry', () => {
+    expect(validateSettingsPartial({ ignoredSoftwareUpdates: ['x'.repeat(201)] })).toBeNull()
+  })
+
+  it('rejects schedule as null', () => {
+    expect(validateSettingsPartial({ schedule: null })).toBeNull()
+  })
+
+  it('rejects schedule as primitive', () => {
+    expect(validateSettingsPartial({ schedule: 42 })).toBeNull()
+    expect(validateSettingsPartial({ schedule: 'daily' })).toBeNull()
+  })
+
+  it('rejects schedule with non-boolean enabled', () => {
+    expect(validateSettingsPartial({ schedule: { enabled: 'yes', frequency: 'daily', day: 0, hour: 9 } })).toBeNull()
+  })
+
+  it('rejects schedule entry as null', () => {
+    expect(
+      validateSettingsPartial({ schedules: [null] }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry as primitive', () => {
+    expect(
+      validateSettingsPartial({ schedules: ['string-entry'] }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry as array', () => {
+    expect(
+      validateSettingsPartial({ schedules: [[]] }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid id', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 123, name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid name', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 123, enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with non-boolean enabled', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: 'yes', frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid frequency', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'yearly', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with out-of-range day', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 32, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with out-of-range hour', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 24, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid minute', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, minute: 60,
+          tasks: ['cleaner:system'], autoApply: false, lastRunAt: null, lastRunStatus: 'never',
+          createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with non-array tasks', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: 'cleaner:system',
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with non-boolean autoApply', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: 'yes', lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid lastRunAt', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: 123, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid lastRunStatus', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'unknown', createdAt: '2025-01-01T00:00:00Z',
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects schedule entry with invalid createdAt', () => {
+    expect(
+      validateSettingsPartial({
+        schedules: [{
+          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
+          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: 123,
+        }],
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects cleaner as non-object', () => {
+    expect(validateSettingsPartial({ cleaner: 'string' })).toBeNull()
+    expect(validateSettingsPartial({ cleaner: 42 })).toBeNull()
+  })
+
+  it('rejects cleaner with non-boolean closeBrowsersBeforeClean', () => {
+    expect(validateSettingsPartial({ cleaner: { closeBrowsersBeforeClean: 'yes' } })).toBeNull()
+  })
+
+  it('rejects overly long registryIgnoredTweak', () => {
+    expect(validateSettingsPartial({ registryIgnoredTweaks: ['x'.repeat(1025)] })).toBeNull()
+  })
+
+  it('rejects gameMode with non-boolean autoDetect', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { enabledOptimizations: [], customProcessKillList: [], autoDetect: 'yes' },
+      }),
+    ).toBeNull()
+  })
+
+  it('rejects gameMode with non-boolean autoDeactivate', () => {
+    expect(
+      validateSettingsPartial({
+        gameMode: { enabledOptimizations: [], customProcessKillList: [], autoDeactivate: 'yes' },
+      }),
+    ).toBeNull()
+  })
 })
 
 describe('validateHistoryEntry', () => {
@@ -680,6 +890,48 @@ describe('validateHistoryEntry', () => {
   it('rejects missing required fields', () => {
     const { id, ...noId } = validEntry
     expect(validateHistoryEntry(noId)).toBeNull()
+  })
+
+  it('rejects array input', () => {
+    expect(validateHistoryEntry([])).toBeNull()
+  })
+
+  it('rejects non-string timestamp', () => {
+    expect(validateHistoryEntry({ ...validEntry, timestamp: 12345 })).toBeNull()
+  })
+
+  it('rejects overly long timestamp', () => {
+    expect(validateHistoryEntry({ ...validEntry, timestamp: 'x'.repeat(51) })).toBeNull()
+  })
+
+  it('rejects non-number duration', () => {
+    expect(validateHistoryEntry({ ...validEntry, duration: 'slow' })).toBeNull()
+  })
+
+  it('rejects non-number totalItemsFound', () => {
+    expect(validateHistoryEntry({ ...validEntry, totalItemsFound: 'many' })).toBeNull()
+  })
+
+  it('rejects non-number totalItemsCleaned', () => {
+    expect(validateHistoryEntry({ ...validEntry, totalItemsCleaned: 'some' })).toBeNull()
+  })
+
+  it('rejects non-number totalItemsSkipped', () => {
+    expect(validateHistoryEntry({ ...validEntry, totalItemsSkipped: 'none' })).toBeNull()
+  })
+
+  it('rejects non-number totalSpaceSaved', () => {
+    expect(validateHistoryEntry({ ...validEntry, totalSpaceSaved: 'big' })).toBeNull()
+  })
+
+  it('rejects non-number errorCount', () => {
+    expect(validateHistoryEntry({ ...validEntry, errorCount: 'zero' })).toBeNull()
+  })
+
+  it('accepts all remaining valid type values beyond the initial five', () => {
+    for (const type of ['malware', 'privacy', 'startup', 'services', 'software-update', 'compliance', 'vulnerability']) {
+      expect(validateHistoryEntry({ ...validEntry, type })).not.toBeNull()
+    }
   })
 })
 
