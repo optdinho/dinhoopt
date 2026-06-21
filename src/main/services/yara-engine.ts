@@ -98,7 +98,7 @@ export class YaraEngine {
       this._scanner = yarax.create()
       this._ready = true
     } catch (err) {
-      console.warn('[yara] @litko/yara-x initialization failed:', err)
+      getLogger().warning('yara', '@litko/yara-x initialization failed:', err)
       this._ready = false
       throw err
     }
@@ -138,8 +138,6 @@ export class YaraEngine {
     // We skip files containing a platform tag that doesn't match the current OS.
     const platformSkip: string[] = []
     if (process.platform !== 'win32') platformSkip.push('_windows_', '_win32_')
-    if (process.platform !== 'linux') platformSkip.push('_linux_')
-    if (process.platform !== 'darwin') platformSkip.push('_macos_', '_darwin_')
 
     function shouldSkipForPlatform(name: string): boolean {
       const lower = name.toLowerCase()
@@ -186,7 +184,7 @@ export class YaraEngine {
     } catch {
       // Fast path failed — some rule has bad syntax. Fall back to per-file
       // validation to find and exclude broken files.
-      console.warn('[yara] Bulk compile failed, falling back to per-file validation...')
+      getLogger().warning('yara', 'Bulk compile failed, falling back to per-file validation...')
     }
 
     // Slow path: validate each file individually, exclude broken ones
@@ -239,7 +237,7 @@ export class YaraEngine {
       const results = this._scanner.scan(buffer)
       return results.map((r) => this._convertMatch(r))
     } catch (err) {
-      console.warn('[yara] Scan error:', err)
+      getLogger().warning('yara', 'Scan error:', err)
       return []
     }
   }
@@ -254,7 +252,7 @@ export class YaraEngine {
       const results = this._scanner.scanFile(filePath)
       return results.map((r) => this._convertMatch(r))
     } catch (err) {
-      console.warn('[yara] File scan error:', err)
+      getLogger().warning('yara', 'File scan error:', err)
       return []
     }
   }

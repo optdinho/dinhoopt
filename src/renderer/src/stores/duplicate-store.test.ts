@@ -256,4 +256,27 @@ describe('duplicate-store', () => {
     store.setStatus('deleting')
     expect(useDuplicateStore.getState().status).toBe('deleting')
   })
+
+  it('setProgress stores progress', () => {
+    const progress = { current: 5, total: 100, currentFile: 'test.txt' }
+    useDuplicateStore.getState().setProgress(progress)
+    expect(useDuplicateStore.getState().progress).toEqual(progress)
+    useDuplicateStore.getState().setProgress(null)
+    expect(useDuplicateStore.getState().progress).toBeNull()
+  })
+
+  it('setDeleteResult stores delete result', () => {
+    const result = { deleted: 3, failed: 0, errors: [] }
+    useDuplicateStore.getState().setDeleteResult(result)
+    expect(useDuplicateStore.getState().deleteResult).toEqual(result)
+    useDuplicateStore.getState().setDeleteResult(null)
+    expect(useDuplicateStore.getState().deleteResult).toBeNull()
+  })
+
+  it('removeDeletedFiles returns early when result is null', () => {
+    useDuplicateStore.getState().removeDeletedFiles(new Set(['/a.txt']))
+    const state = useDuplicateStore.getState()
+    expect(state.result).toBeNull()
+    expect(state.selectedPaths.size).toBe(0)
+  })
 })

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   ipcRenderer: {
@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { ipcRenderer, contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import './index'
 
 function getApi(): Record<string, unknown> {
@@ -23,7 +23,12 @@ function getApi(): Record<string, unknown> {
 }
 
 const api = getApi()
-const mockIpc = ipcRenderer as unknown as { invoke: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> }
+const mockIpc = ipcRenderer as unknown as {
+  invoke: ReturnType<typeof vi.fn>
+  send: ReturnType<typeof vi.fn>
+  on: ReturnType<typeof vi.fn>
+  removeListener: ReturnType<typeof vi.fn>
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -59,13 +64,25 @@ describe('preload API bridge', () => {
 
   describe('cleaner methods call ipcRenderer.invoke', () => {
     const cleanerMethods = [
-      'systemScan', 'systemClean', 'browserScan', 'browserClean',
-      'appScan', 'appClean', 'gamingScan', 'gamingClean',
-      'databaseScan', 'databaseClean',
-      'uninstallLeftoversScan', 'uninstallLeftoversClean',
-      'recycleBinScan', 'recycleBinClean',
-      'shortcutScan', 'shortcutClean',
-      'cleanerOpenLocation', 'environmentScan', 'environmentClean',
+      'systemScan',
+      'systemClean',
+      'browserScan',
+      'browserClean',
+      'appScan',
+      'appClean',
+      'gamingScan',
+      'gamingClean',
+      'databaseScan',
+      'databaseClean',
+      'uninstallLeftoversScan',
+      'uninstallLeftoversClean',
+      'recycleBinScan',
+      'recycleBinClean',
+      'shortcutScan',
+      'shortcutClean',
+      'cleanerOpenLocation',
+      'environmentScan',
+      'environmentClean',
     ]
     for (const method of cleanerMethods) {
       it(`${method} calls ipcRenderer.invoke`, async () => {
@@ -78,22 +95,37 @@ describe('preload API bridge', () => {
 
   describe('event listener methods register via ipcRenderer.on', () => {
     const listenerMethods = [
-      'onContextMenuApplyProgress', 'onDebloaterRemoveProgress',
-      'onHistoryChanged', 'onDiskRepairProgress',
+      'onContextMenuApplyProgress',
+      'onDebloaterRemoveProgress',
+      'onHistoryChanged',
+      'onDiskRepairProgress',
       'onDiskTrimProgress',
-      'onScanProgress', 'onRegistryFixProgress',
-      'onPrivacyProgress', 'onComplianceProgress',
-      'onVulnerabilityProgress', 'onMalwareProgress',
-      'onDriverProgress', 'onDriverUpdateProgress',
-      'onServiceProgress', 'onPerfSnapshot',
-      'onPerfProcessList', 'onUpdaterStatus',
-      'onUninstallerProgress', 'onSoftwareUpdateProgress',
-      'onDuplicatesProgress', 'onLargeFilesProgress',
-      'onEmptyFoldersProgress', 'onShredderProgress',
-      'onGameModeProgress', 'onGameModeAutoEvent',
-      'onWindowsTweaksApplyProgress', 'onWindowsTweaksRevertProgress',
-      'onBenchmarkProgress', 'onMemoryProgress',
-      'onScheduleRunTrigger', 'onYaraCompileProgress',
+      'onScanProgress',
+      'onRegistryFixProgress',
+      'onPrivacyProgress',
+      'onComplianceProgress',
+      'onVulnerabilityProgress',
+      'onMalwareProgress',
+      'onDriverProgress',
+      'onDriverUpdateProgress',
+      'onServiceProgress',
+      'onPerfSnapshot',
+      'onPerfProcessList',
+      'onUpdaterStatus',
+      'onUninstallerProgress',
+      'onSoftwareUpdateProgress',
+      'onDuplicatesProgress',
+      'onLargeFilesProgress',
+      'onEmptyFoldersProgress',
+      'onShredderProgress',
+      'onGameModeProgress',
+      'onGameModeAutoEvent',
+      'onWindowsTweaksApplyProgress',
+      'onWindowsTweaksRevertProgress',
+      'onBenchmarkProgress',
+      'onMemoryProgress',
+      'onScheduleRunTrigger',
+      'onYaraCompileProgress',
     ]
     for (const method of listenerMethods) {
       it(`${method} registers listener and returns cleanup`, () => {
@@ -180,7 +212,16 @@ describe('preload API bridge', () => {
   })
 
   describe('disk', () => {
-    for (const m of ['diskAnalyze', 'diskDrives', 'diskFileTypes', 'diskRepairSfc', 'diskRepairDism', 'diskRepairChkdsk', 'diskTrimList', 'diskTrimRun']) {
+    for (const m of [
+      'diskAnalyze',
+      'diskDrives',
+      'diskFileTypes',
+      'diskRepairSfc',
+      'diskRepairDism',
+      'diskRepairChkdsk',
+      'diskTrimList',
+      'diskTrimRun',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)('C')
@@ -235,11 +276,6 @@ describe('preload API bridge', () => {
   })
 
   describe('schedule', () => {
-    it('scheduleNextScan calls invoke', async () => {
-      mockIpc.invoke.mockResolvedValueOnce(null)
-      await (api.scheduleNextScan as () => Promise<unknown>)()
-      expect(mockIpc.invoke).toHaveBeenCalled()
-    })
     it('applyStartup calls invoke', async () => {
       mockIpc.invoke.mockResolvedValueOnce(undefined)
       await (api.applyStartup as (e: boolean) => Promise<unknown>)(true)
@@ -300,7 +336,16 @@ describe('preload API bridge', () => {
   })
 
   describe('malware', () => {
-    for (const m of ['malwareScan', 'malwareCancelScan', 'cancelScan', 'malwareQuarantine', 'malwareDelete', 'malwareQuarantineList', 'malwareAllowlistList', 'malwareYaraInfo', 'malwareYaraUpdate']) {
+    for (const m of [
+      'malwareScan',
+      'malwareCancelScan',
+      'malwareQuarantine',
+      'malwareDelete',
+      'malwareQuarantineList',
+      'malwareAllowlistList',
+      'malwareYaraInfo',
+      'malwareYaraUpdate',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)()
@@ -325,7 +370,14 @@ describe('preload API bridge', () => {
   })
 
   describe('drivers', () => {
-    for (const m of ['driverScan', 'driverClean', 'driverUpdateScan', 'driverUpdateInstall', 'driverAgentEvaluate', 'driverAgentApprove']) {
+    for (const m of [
+      'driverScan',
+      'driverClean',
+      'driverUpdateScan',
+      'driverUpdateInstall',
+      'driverAgentEvaluate',
+      'driverAgentApprove',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)([])
@@ -335,7 +387,14 @@ describe('preload API bridge', () => {
   })
 
   describe('perf', () => {
-    for (const m of ['perfQuickStats', 'perfGetSystemInfo', 'perfStartMonitoring', 'perfStopMonitoring', 'perfKillProcess', 'perfGetDiskHealth']) {
+    for (const m of [
+      'perfQuickStats',
+      'perfGetSystemInfo',
+      'perfStartMonitoring',
+      'perfStopMonitoring',
+      'perfKillProcess',
+      'perfGetDiskHealth',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)(123)
@@ -395,7 +454,13 @@ describe('preload API bridge', () => {
   })
 
   describe('duplicates', () => {
-    for (const m of ['duplicatesSelectDir', 'duplicatesScan', 'duplicatesCancel', 'duplicatesDelete', 'duplicatesOpenLocation']) {
+    for (const m of [
+      'duplicatesSelectDir',
+      'duplicatesScan',
+      'duplicatesCancel',
+      'duplicatesDelete',
+      'duplicatesOpenLocation',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)()
@@ -405,7 +470,13 @@ describe('preload API bridge', () => {
   })
 
   describe('large files', () => {
-    for (const m of ['largeFilesSelectDir', 'largeFilesScan', 'largeFilesCancel', 'largeFilesDelete', 'largeFilesOpenLocation']) {
+    for (const m of [
+      'largeFilesSelectDir',
+      'largeFilesScan',
+      'largeFilesCancel',
+      'largeFilesDelete',
+      'largeFilesOpenLocation',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)()
@@ -415,7 +486,13 @@ describe('preload API bridge', () => {
   })
 
   describe('empty folders', () => {
-    for (const m of ['emptyFoldersSelectDir', 'emptyFoldersScan', 'emptyFoldersCancel', 'emptyFoldersDelete', 'emptyFoldersOpenLocation']) {
+    for (const m of [
+      'emptyFoldersSelectDir',
+      'emptyFoldersScan',
+      'emptyFoldersCancel',
+      'emptyFoldersDelete',
+      'emptyFoldersOpenLocation',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)()
@@ -425,7 +502,13 @@ describe('preload API bridge', () => {
   })
 
   describe('shredder', () => {
-    for (const m of ['shredderSelectFiles', 'shredderSelectFolders', 'shredderShred', 'shredderCancel', 'shredderOpenLocation']) {
+    for (const m of [
+      'shredderSelectFiles',
+      'shredderSelectFolders',
+      'shredderShred',
+      'shredderCancel',
+      'shredderOpenLocation',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)()
@@ -452,6 +535,19 @@ describe('preload API bridge', () => {
         expect(mockIpc.invoke).toHaveBeenCalled()
       })
     }
+
+    it('winSxSScan returns empty array when invoke returns falsy', async () => {
+      mockIpc.invoke.mockResolvedValueOnce(null)
+      const result = await api.winSxSScan()
+      expect(result).toEqual([])
+    })
+
+    it('winSxSScan wraps truthy result in array', async () => {
+      mockIpc.invoke.mockResolvedValueOnce({ id: 'test', category: 'winsxs', path: 'C:\\test', size: 1024 })
+      const result = await api.winSxSScan()
+      expect(result).toHaveLength(1)
+      expect(result[0]!.id).toBe('test')
+    })
   })
 
   describe('power plans', () => {
@@ -475,7 +571,15 @@ describe('preload API bridge', () => {
   })
 
   describe('windows tweaks', () => {
-    for (const m of ['windowsTweaksList', 'windowsTweaksApply', 'windowsTweaksRevert', 'windowsTweaksStatus', 'windowsTweaksGetDnsPresets', 'windowsTweaksSetDns', 'windowsTweaksNetshTcp']) {
+    for (const m of [
+      'windowsTweaksList',
+      'windowsTweaksApply',
+      'windowsTweaksRevert',
+      'windowsTweaksStatus',
+      'windowsTweaksGetDnsPresets',
+      'windowsTweaksSetDns',
+      'windowsTweaksNetshTcp',
+    ]) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)()
@@ -560,11 +664,36 @@ describe('preload API bridge', () => {
     }
   })
 
+  describe('scan profiles', () => {
+    it('setScanProfile calls invoke', async () => {
+      mockIpc.invoke.mockResolvedValueOnce(true)
+      await (api.setScanProfile as (id: string) => Promise<boolean>)('full')
+      expect(mockIpc.invoke).toHaveBeenCalled()
+    })
+  })
+
   describe('features A-F', () => {
-    const methods = ['memoryScan', 'getTimeline', 'clearTimeline', 'getTimelineStats',
-      'intelCheckHash', 'intelCheckDomain', 'intelCheckIp', 'intelStats', 'intelFeeds', 'intelToggleFeed', 'intelClear',
-      'exploitScan', 'backupConfigGet', 'backupConfigSet', 'backupNow', 'backupList', 'backupRestore', 'backupStorage',
-      'sandboxAnalyze']
+    const methods = [
+      'memoryScan',
+      'getTimeline',
+      'clearTimeline',
+      'getTimelineStats',
+      'intelCheckHash',
+      'intelCheckDomain',
+      'intelCheckIp',
+      'intelStats',
+      'intelFeeds',
+      'intelToggleFeed',
+      'intelClear',
+      'exploitScan',
+      'backupConfigGet',
+      'backupConfigSet',
+      'backupNow',
+      'backupList',
+      'backupRestore',
+      'backupStorage',
+      'sandboxAnalyze',
+    ]
     for (const m of methods) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)

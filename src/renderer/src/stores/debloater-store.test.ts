@@ -84,6 +84,20 @@ describe('debloater-store', () => {
     expect(useDebloaterStore.getState().apps.every((a) => !a.selected)).toBe(true)
   })
 
+  it('setScanning updates scanning flag', () => {
+    useDebloaterStore.getState().setScanning(true)
+    expect(useDebloaterStore.getState().scanning).toBe(true)
+    useDebloaterStore.getState().setScanning(false)
+    expect(useDebloaterStore.getState().scanning).toBe(false)
+  })
+
+  it('setRemoving updates removing flag', () => {
+    useDebloaterStore.getState().setRemoving(true)
+    expect(useDebloaterStore.getState().removing).toBe(true)
+    useDebloaterStore.getState().setRemoving(false)
+    expect(useDebloaterStore.getState().removing).toBe(false)
+  })
+
   it('setFilter changes the active filter', () => {
     useDebloaterStore.getState().setFilter('gaming')
     expect(useDebloaterStore.getState().filter).toBe('gaming')

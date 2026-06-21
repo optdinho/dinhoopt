@@ -11,39 +11,42 @@ vi.mock('systeminformation', () => ({
   mem: vi.fn().mockResolvedValue({ total: 17179869184, used: 8589934592 }),
 }))
 
-// Mock history store
+const mockGetHistory = vi.hoisted(() => vi.fn(() => []))
 vi.mock('./history-store', () => ({
-  getHistory: vi.fn().mockReturnValue([
-    {
-      id: '1',
-      type: 'cleaner',
-      timestamp: '2026-03-20T10:00:00.000Z',
-      duration: 5000,
-      totalItemsFound: 100,
-      totalItemsCleaned: 95,
-      totalItemsSkipped: 5,
-      totalSpaceSaved: 1073741824,
-      categories: [],
-      errorCount: 2,
-    },
-    {
-      id: '2',
-      type: 'registry',
-      timestamp: '2026-03-19T10:00:00.000Z',
-      duration: 3000,
-      totalItemsFound: 10,
-      totalItemsCleaned: 10,
-      totalItemsSkipped: 0,
-      totalSpaceSaved: 0,
-      categories: [],
-      errorCount: 0,
-    },
-  ]),
+  getHistory: mockGetHistory,
 }))
 
 import { collectMetrics, formatPrometheus } from './metrics'
 
 describe('collectMetrics', () => {
+  beforeEach(() => {
+    mockGetHistory.mockReturnValue([
+      {
+        id: '1',
+        type: 'cleaner',
+        timestamp: '2026-03-20T10:00:00.000Z',
+        duration: 5000,
+        totalItemsFound: 100,
+        totalItemsCleaned: 95,
+        totalItemsSkipped: 5,
+        totalSpaceSaved: 1073741824,
+        categories: [],
+        errorCount: 2,
+      },
+      {
+        id: '2',
+        type: 'registry',
+        timestamp: '2026-03-19T10:00:00.000Z',
+        duration: 3000,
+        totalItemsFound: 10,
+        totalItemsCleaned: 10,
+        totalItemsSkipped: 0,
+        totalSpaceSaved: 0,
+        categories: [],
+        errorCount: 0,
+      },
+    ])
+  })
   it('returns an array of metric lines', async () => {
     const metrics = await collectMetrics()
     expect(Array.isArray(metrics)).toBe(true)
@@ -107,6 +110,17 @@ describe('collectMetrics', () => {
     expect(ts!.value).toBe(Math.floor(new Date('2026-03-20T10:00:00.000Z').getTime() / 1000))
     expect(dur?.value).toBe(5)
     expect(items?.value).toBe(100)
+  })
+
+  it('omits last scan metrics when history is empty', async () => {
+    mockGetHistory.mockReturnValue([])
+    const metrics = await collectMetrics()
+    const ts = metrics.find((m) => m.name === 'dinho_last_scan_timestamp_seconds')
+    const dur = metrics.find((m) => m.name === 'dinho_last_scan_duration_seconds')
+    const items = metrics.find((m) => m.name === 'dinho_last_scan_items_found')
+    expect(ts).toBeUndefined()
+    expect(dur).toBeUndefined()
+    expect(items).toBeUndefined()
   })
 })
 

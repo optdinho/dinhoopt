@@ -285,6 +285,85 @@ describe('game exited callback', () => {
   })
 })
 
+describe('poll concurrency guard', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('skips poll when pollRunning is true (re-entrant guard)', async () => {
+    mocks.execFileAsync.mockImplementation(
+      () => new Promise(() => {}), // never resolves
+    )
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    // Advance interval to trigger a second poll that should bail early due to pollRunning
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(mocks.execFileAsync).toHaveBeenCalledTimes(1)
+    expect(onDetected).not.toHaveBeenCalled()
+    expect(onExited).not.toHaveBeenCalled()
+  })
+})
+
+describe('suppressed game re-detection guard', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('does not re-detect a suppressed game that is still running', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onDetected).toHaveBeenCalledTimes(1)
+
+    suppressCurrentGame()
+    onDetected.mockClear()
+
+    // Next poll: cs2.exe still running → game === suppressedGame → early return
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onDetected).not.toHaveBeenCalled()
+    expect(getDetectedGame()).toBeNull()
+  })
+})
+
+describe('CSV parsing edge cases', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('gracefully handles malformed tasklist lines', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: '"cs2.exe"\n\n"dota2.exe"\nsome garbled line without quotes\n',
+      stderr: '',
+    })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Should detect cs2.exe (first valid entry) despite garbage lines
+    expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+  })
+})
+
 describe('suppressed game exit', () => {
   beforeEach(() => {
     vi.useFakeTimers()

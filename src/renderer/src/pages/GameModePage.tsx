@@ -246,7 +246,7 @@ export function GameModePage() {
                   <motion.div
                     className="h-full rounded-full"
                     style={{
-                      background: `linear-gradient(90deg, ${CYAN}, ${PURPLE}, ${CYAN})`,
+                      backgroundImage: `linear-gradient(90deg, ${CYAN}, ${PURPLE}, ${CYAN})`,
                       backgroundSize: '200% 100%',
                       animation: 'shimmer 2s linear infinite',
                     }}

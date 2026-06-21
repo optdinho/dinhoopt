@@ -1340,12 +1340,12 @@ const POWERCFG_SETTINGS: Record<
 async function applyPowerCfgTweak(tweakId: string, action: 'apply' | 'revert'): Promise<void> {
   const settings = POWERCFG_SETTINGS[tweakId]
   if (!settings) throw new Error(`Unknown powercfg tweak: ${tweakId}`)
-  const valueKey = action === 'apply' ? 'applyValue' : 'revertValue' as const
+  const valueKey = action === 'apply' ? 'applyValue' : ('revertValue' as const)
   const basePowerKey = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings'
 
   // Get all power scheme GUIDs
   const listOut = await execFileAsync('powercfg', ['/LIST'], { timeout: 10000, windowsHide: true })
-  const guids = [...listOut.stdout.matchAll(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi)].map(m => m[0])
+  const guids = [...listOut.stdout.matchAll(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi)].map((m) => m[0])
 
   // Get active scheme GUID for reactivation
   const activeOut = await execFileAsync('powercfg', ['/GETACTIVESCHEME'], { timeout: 5000, windowsHide: true })
@@ -1355,11 +1355,31 @@ async function applyPowerCfgTweak(tweakId: string, action: 'apply' | 'revert'): 
     const val = s[valueKey]
     // Apply to ALL power schemes (not just scheme_current)
     for (const guid of guids) {
-      await execFileAsync('powercfg', ['-setacvalueindex', guid, s.subgroup, s.setting, String(val)], { timeout: 10000, windowsHide: true })
-      await execFileAsync('powercfg', ['-setdcvalueindex', guid, s.subgroup, s.setting, String(val)], { timeout: 10000, windowsHide: true })
+      await execFileAsync('powercfg', ['-setacvalueindex', guid, s.subgroup, s.setting, String(val)], {
+        timeout: 10000,
+        windowsHide: true,
+      })
+      await execFileAsync('powercfg', ['-setdcvalueindex', guid, s.subgroup, s.setting, String(val)], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     }
     // Also write registry Default so the value survives scheme reset
-    await execFileAsync('reg', ['add', `${basePowerKey}\\${s.subgroup}\\${s.setting}`, '/v', 'Default', '/t', 'REG_DWORD', '/d', String(val), '/f'], { timeout: 10000, windowsHide: true })
+    await execFileAsync(
+      'reg',
+      [
+        'add',
+        `${basePowerKey}\\${s.subgroup}\\${s.setting}`,
+        '/v',
+        'Default',
+        '/t',
+        'REG_DWORD',
+        '/d',
+        String(val),
+        '/f',
+      ],
+      { timeout: 10000, windowsHide: true },
+    )
   }
 
   // Reactivate current scheme so the power manager reloads with new values
@@ -1371,12 +1391,26 @@ async function applyPowerCfgTweak(tweakId: string, action: 'apply' | 'revert'): 
 async function checkPowerCfgTweak(tweakId: string, expectedValue: number): Promise<boolean> {
   const settings = POWERCFG_SETTINGS[tweakId]
   if (!settings || settings.length === 0) return false
-  const { stdout: schemeOut } = await execFileAsync('powercfg', ['/GETACTIVESCHEME'], { timeout: 10000, windowsHide: true })
+  const { stdout: schemeOut } = await execFileAsync('powercfg', ['/GETACTIVESCHEME'], {
+    timeout: 10000,
+    windowsHide: true,
+  })
   const guidMatch = schemeOut.match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i)
   if (!guidMatch) return false
   const schemeGuid = guidMatch[0]
   for (const s of settings) {
-    const { stdout } = await execFileAsync('powercfg', ['-query', schemeGuid, s.subgroup, s.setting], { timeout: 10000, windowsHide: true })
+    let stdout: string
+    try {
+      const result = await execFileAsync('powercfg', ['-query', schemeGuid, s.subgroup, s.setting], {
+        timeout: 10000,
+        windowsHide: true,
+      })
+      stdout = result.stdout
+    } catch {
+      // Subgroup/setting GUID may not exist in the active power scheme
+      // (e.g. PCIe ASPM on systems without that power setting).
+      return false
+    }
     const match = stdout.match(/Current AC Power Setting Index: 0x([0-9a-fA-F]+)/i)
     if (!match) return false
     if (Number.parseInt(match[1], 16) !== expectedValue) return false
@@ -1458,7 +1492,10 @@ async function applyRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolean
 
     // Apply via fsutil for NTFS Last Access (Windows-supported API)
     if (tweak.id === 'ntfs-last-access-off') {
-      await execFileAsync('fsutil', ['behavior', 'set', 'disablelastaccess', value], { timeout: 10000, windowsHide: true })
+      await execFileAsync('fsutil', ['behavior', 'set', 'disablelastaccess', value], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     }
 
     return { ok: true }
@@ -1497,7 +1534,10 @@ async function revertRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolea
 
     // Revert via fsutil for NTFS Last Access
     if (tweak.id === 'ntfs-last-access-off') {
-      await execFileAsync('fsutil', ['behavior', 'set', 'disablelastaccess', value], { timeout: 10000, windowsHide: true })
+      await execFileAsync('fsutil', ['behavior', 'set', 'disablelastaccess', value], {
+        timeout: 10000,
+        windowsHide: true,
+      })
     }
 
     return { ok: true }

@@ -38,11 +38,7 @@ vi.mock('node:fs', () => ({
 }))
 
 import type { RegistryEntry } from '@shared/types'
-import {
-  collectBackupTargets,
-  fixRegistryEntries,
-  scanRegistry,
-} from './registry-cleaner.service'
+import { collectBackupTargets, fixRegistryEntries, scanRegistry } from './registry-cleaner.service'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -54,7 +50,16 @@ beforeEach(() => {
 describe('collectBackupTargets', () => {
   it('collects keys for delete-value operations', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } },
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      },
     ])
     expect(result.keys).toEqual(['HKLM\\Software\\Test'])
     expect(result.tasks).toEqual([])
@@ -62,7 +67,16 @@ describe('collectBackupTargets', () => {
 
   it('collects keys for set-value operations', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'set-value', regType: 'REG_DWORD', data: '0' } },
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'set-value', regType: 'REG_DWORD', data: '0' },
+      },
     ])
     expect(result.keys).toEqual(['HKLM\\Software\\Test'])
     expect(result.tasks).toEqual([])
@@ -70,7 +84,16 @@ describe('collectBackupTargets', () => {
 
   it('collects keys for delete-key operations', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: '', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-key' } },
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-key' },
+      },
     ])
     expect(result.keys).toEqual(['HKLM\\Software\\Test'])
     expect(result.tasks).toEqual([])
@@ -78,7 +101,16 @@ describe('collectBackupTargets', () => {
 
   it('collects tasks for disable-task operations', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'task', keyPath: '\\MyFolder\\MyTask', valueName: '', issue: 'x', risk: 'low', selected: true, fix: { op: 'disable-task' } },
+      {
+        id: '1',
+        type: 'task',
+        keyPath: '\\MyFolder\\MyTask',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'disable-task' },
+      },
     ])
     expect(result.keys).toEqual([])
     expect(result.tasks).toEqual(['\\MyFolder\\MyTask'])
@@ -86,7 +118,16 @@ describe('collectBackupTargets', () => {
 
   it('collects tasks for delete-task operations', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'task', keyPath: '\\MyFolder\\MyTask', valueName: '', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-task' } },
+      {
+        id: '1',
+        type: 'task',
+        keyPath: '\\MyFolder\\MyTask',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-task' },
+      },
     ])
     expect(result.keys).toEqual([])
     expect(result.tasks).toEqual(['\\MyFolder\\MyTask'])
@@ -94,7 +135,15 @@ describe('collectBackupTargets', () => {
 
   it('skips entries without a fix', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true },
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+      },
     ])
     expect(result.keys).toEqual([])
     expect(result.tasks).toEqual([])
@@ -102,15 +151,42 @@ describe('collectBackupTargets', () => {
 
   it('uses fix.key when provided', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Original', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value', key: 'HKLM\\Software\\Override' } },
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Original',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value', key: 'HKLM\\Software\\Override' },
+      },
     ])
     expect(result.keys).toEqual(['HKLM\\Software\\Override'])
   })
 
   it('deduplicates keys', () => {
     const result = collectBackupTargets([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'A', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } },
-      { id: '2', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'B', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } },
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'A',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      },
+      {
+        id: '2',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'B',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      },
     ])
     expect(result.keys).toEqual(['HKLM\\Software\\Test'])
   })
@@ -174,7 +250,8 @@ HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\test.exe
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('App Paths')) {
         return {
-          stdout: '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\test.exe\r\n    (Default)    REG_SZ    C:\\Program Files\\TestApp\\test.exe\r\n',
+          stdout:
+            '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\test.exe\r\n    (Default)    REG_SZ    C:\\Program Files\\TestApp\\test.exe\r\n',
           stderr: '',
         }
       }
@@ -218,9 +295,7 @@ describe('fixRegistryEntries', () => {
   })
 
   it('fixes entries with delete-value operation', async () => {
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
 
     expect(result.fixed).toBe(1)
     expect(result.failed).toBe(0)
@@ -232,16 +307,10 @@ describe('fixRegistryEntries', () => {
   })
 
   it('fixes entries with delete-key operation', async () => {
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-key' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-key' } }) as never])
 
     expect(result.fixed).toBe(1)
-    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
-      'reg',
-      ['delete', 'HKLM\\Software\\Test', '/f'],
-      expect.any(Object),
-    )
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith('reg', ['delete', 'HKLM\\Software\\Test', '/f'], expect.any(Object))
   })
 
   it('fixes entries with set-value operation', async () => {
@@ -259,7 +328,12 @@ describe('fixRegistryEntries', () => {
 
   it('fixes entries with disable-task operation', async () => {
     const result = await fixRegistryEntries([
-      defaultEntry({ type: 'task', keyPath: '\\MyFolder\\MyTask', valueName: '', fix: { op: 'disable-task' } }) as never,
+      defaultEntry({
+        type: 'task',
+        keyPath: '\\MyFolder\\MyTask',
+        valueName: '',
+        fix: { op: 'disable-task' },
+      }) as never,
     ])
 
     expect(result.fixed).toBe(1)
@@ -285,9 +359,7 @@ describe('fixRegistryEntries', () => {
 
   it('counts failures when reg delete fails with access denied', async () => {
     mockExecNativeUtf8.mockRejectedValue(new Error('Access is denied'))
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
 
     expect(result.fixed).toBe(0)
     expect(result.failed).toBe(1)
@@ -296,9 +368,7 @@ describe('fixRegistryEntries', () => {
 
   it('counts failures when key not found', async () => {
     mockExecNativeUtf8.mockRejectedValue(new Error('cannot find'))
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-key' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-key' } }) as never])
 
     expect(result.fixed).toBe(0)
     expect(result.failed).toBe(1)
@@ -306,9 +376,7 @@ describe('fixRegistryEntries', () => {
   })
 
   it('handles entries without fix data', async () => {
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: undefined }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: undefined }) as never])
 
     expect(result.fixed).toBe(0)
     expect(result.failed).toBe(1)
@@ -319,7 +387,12 @@ describe('fixRegistryEntries', () => {
     await fixRegistryEntries(
       [
         defaultEntry({ fix: { op: 'delete-value' } }) as never,
-        defaultEntry({ id: '2', keyPath: 'HKLM\\Software\\Other', valueName: 'OtherVal', fix: { op: 'delete-value' } }) as never,
+        defaultEntry({
+          id: '2',
+          keyPath: 'HKLM\\Software\\Other',
+          valueName: 'OtherVal',
+          fix: { op: 'delete-value' },
+        }) as never,
       ],
       onProgress,
     )
@@ -333,9 +406,7 @@ describe('fixRegistryEntries', () => {
     const onProgress = vi.fn()
 
     const promise = fixRegistryEntries(
-      [
-        defaultEntry({ fix: { op: 'delete-value' } }) as never,
-      ],
+      [defaultEntry({ fix: { op: 'delete-value' } }) as never],
       onProgress,
       ctrl.signal,
     )
@@ -348,8 +419,8 @@ describe('fixRegistryEntries', () => {
   it('handles mixed success and failure', async () => {
     // Backup makes 1 execNativeUtf8 call, then fix loop makes 2
     mockExecNativeUtf8
-      .mockResolvedValueOnce({ stdout: '', stderr: '' })  // backup export
-      .mockResolvedValueOnce({ stdout: '', stderr: '' })  // fix entry 1
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // backup export
+      .mockResolvedValueOnce({ stdout: '', stderr: '' }) // fix entry 1
       .mockRejectedValueOnce(new Error('Access is denied')) // fix entry 2
 
     const result = await fixRegistryEntries([
@@ -363,36 +434,28 @@ describe('fixRegistryEntries', () => {
 
   it('creates backup with targeted mode before fixing', async () => {
     mockGetSettings.mockReturnValue({ backupMode: 'targeted' })
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
     expect(result.fixed).toBe(1)
     expect(mockGetBackupDir).toHaveBeenCalled()
   })
 
   it('creates backup with full mode when configured', async () => {
     mockGetSettings.mockReturnValue({ backupMode: 'full' })
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
     expect(result.fixed).toBe(1)
     expect(mockGetBackupDir).toHaveBeenCalled()
   })
 
   it('classifies network error in fix failures', async () => {
     mockExecNativeUtf8.mockRejectedValue(new Error('network path not found'))
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
     expect(result.failed).toBe(1)
     expect(result.failures[0]!.reason).toBe('Network error')
   })
 
   it('handles unknown error message', async () => {
     mockExecNativeUtf8.mockRejectedValue(new Error(''))
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
     expect(result.failed).toBe(1)
     expect(result.failures[0]!.reason).toBe('Unknown error')
   })
@@ -401,28 +464,20 @@ describe('fixRegistryEntries', () => {
     const err = new Error('wrapper')
     ;(err as { stderr?: string }).stderr = 'Access is denied'
     mockExecNativeUtf8.mockRejectedValue(err)
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
     expect(result.failed).toBe(1)
     expect(result.failures[0]!.reason).toContain('Access denied')
   })
 
   it('handles set-value without regType or data gracefully', async () => {
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'set-value' } }) as never,
-    ])
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'set-value' } }) as never])
     expect(result.fixed).toBe(1)
   })
 
   it('handles full backup mode with export failures', async () => {
     mockGetSettings.mockReturnValue({ backupMode: 'full' })
-    mockExecNativeUtf8
-      .mockResolvedValueOnce({ stdout: '', stderr: '' })
-      .mockRejectedValue(new Error('export failed'))
-    const result = await fixRegistryEntries([
-      defaultEntry({ fix: { op: 'delete-value' } }) as never,
-    ])
+    mockExecNativeUtf8.mockResolvedValueOnce({ stdout: '', stderr: '' }).mockRejectedValue(new Error('export failed'))
+    const result = await fixRegistryEntries([defaultEntry({ fix: { op: 'delete-value' } }) as never])
     expect(result.failed).toBe(1)
   })
 
@@ -432,7 +487,12 @@ describe('fixRegistryEntries', () => {
       .mockRejectedValueOnce(new Error('schtasks failed'))
     mockExecTracked.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      defaultEntry({ type: 'task', keyPath: '\\MyFolder\\MyTask', valueName: '', fix: { op: 'disable-task' } }) as never,
+      defaultEntry({
+        type: 'task',
+        keyPath: '\\MyFolder\\MyTask',
+        valueName: '',
+        fix: { op: 'disable-task' },
+      }) as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -636,7 +696,11 @@ describe('scanRegistry additional scan paths', () => {
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('CLSID') && args.includes('/k')) {
-        return { stdout: '\r\n\r\nHKCR\\CLSID\\{DEADBEEF-0000-0000-C000-000000000046}\\InprocServer32\r\n    (Default)    REG_SZ    C:\\MissingCom.dll\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\CLSID\\{DEADBEEF-0000-0000-C000-000000000046}\\InprocServer32\r\n    (Default)    REG_SZ    C:\\MissingCom.dll\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -654,7 +718,11 @@ describe('scanRegistry additional scan paths', () => {
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('TypeLib') && args.includes('/k')) {
-        return { stdout: '\r\n\r\nHKCR\\TypeLib\\{F00DBABE-0000-0000-C000-000000000046}\\1.0\\0\\win32\r\n    (Default)    REG_SZ    C:\\MissingTypeLib.tlb\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\TypeLib\\{F00DBABE-0000-0000-C000-000000000046}\\1.0\\0\\win32\r\n    (Default)    REG_SZ    C:\\MissingTypeLib.tlb\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -672,7 +740,11 @@ describe('scanRegistry additional scan paths', () => {
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Services') && args.includes('/f')) {
-        return { stdout: '\r\n\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\GhostSvc\r\n    ImagePath    REG_SZ    C:\\GhostSvc.exe\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\GhostSvc\r\n    ImagePath    REG_SZ    C:\\GhostSvc.exe\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -913,7 +985,11 @@ describe('scanRegistry additional scan paths', () => {
   it('scans Browser Helper Objects with missing CLSID', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
-        return { stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{DEADBEEF-0000-0000-C000-000000000046}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{DEADBEEF-0000-0000-C000-000000000046}\r\n',
+          stderr: '',
+        }
       }
       if (args[0] === 'query' && args[1]?.includes('\\CLSID\\')) {
         throw new Error('not found')
@@ -949,7 +1025,11 @@ describe('scanRegistry additional scan paths', () => {
   it('scans FileExts UserChoice for missing ProgID', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('FileExts') && args.includes('UserChoice')) {
-        return { stdout: '\r\nHKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.xyz\\UserChoice\r\n    ProgId    REG_SZ    MyCustomProgId\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.xyz\\UserChoice\r\n    ProgId    REG_SZ    MyCustomProgId\r\n',
+          stderr: '',
+        }
       }
       if (args[0] === 'query' && args[1] === 'HKCR\\MyCustomProgId') {
         throw new Error('not found')
@@ -964,7 +1044,11 @@ describe('scanRegistry additional scan paths', () => {
   it('scans MIME types for missing CLSID handler', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('MIME\\Database')) {
-        return { stdout: '\r\nHKCR\\MIME\\Database\\Content Type\\text/x-test\r\n    CLSID    REG_SZ    {DEADBEEF-0000-0000-C000-000000000046}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKCR\\MIME\\Database\\Content Type\\text/x-test\r\n    CLSID    REG_SZ    {DEADBEEF-0000-0000-C000-000000000046}\r\n',
+          stderr: '',
+        }
       }
       if (args[0] === 'query' && args[1]?.startsWith('HKCR\\CLSID')) {
         throw new Error('not found')
@@ -988,7 +1072,10 @@ describe('scanRegistry additional scan paths', () => {
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1] === 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application') {
-        return { stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\GhostSource\r\n', stderr: '' }
+        return {
+          stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\GhostSource\r\n',
+          stderr: '',
+        }
       }
       if (args[0] === 'query' && args[1]?.includes('GhostSource') && args.includes('EventMessageFile')) {
         return { stdout: '    EventMessageFile    REG_SZ    C:\\GhostEvent.dll', stderr: '' }
@@ -1024,7 +1111,11 @@ describe('scanRegistry additional scan paths', () => {
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Uninstall')) {
-        return { stdout: '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\GhostApp\r\n    DisplayName    REG_SZ    Ghost App\r\n    UninstallString    REG_SZ    "C:\\GhostApp\\uninstall.exe" /quiet\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\GhostApp\r\n    DisplayName    REG_SZ    Ghost App\r\n    UninstallString    REG_SZ    "C:\\GhostApp\\uninstall.exe" /quiet\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1049,7 +1140,9 @@ describe('scanRegistry additional scan paths', () => {
 
   it('handles extractExePath with unquoted space path via Run keys', async () => {
     const { statSync, existsSync } = await import('node:fs')
-    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('not found') })
+    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('not found')
+    })
     ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (typeof path !== 'string') return true
       if (path.includes('MissingWithSpace.exe')) return false
@@ -1070,7 +1163,16 @@ describe('scanRegistry additional scan paths', () => {
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     mockExecTracked.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'task', keyPath: '/Folder/Sub/TaskName', valueName: '', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-task' } } as never,
+      {
+        id: '1',
+        type: 'task',
+        keyPath: '/Folder/Sub/TaskName',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-task' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -1085,7 +1187,16 @@ describe('scanRegistry additional scan paths', () => {
     ])
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -1101,7 +1212,16 @@ describe('scanRegistry additional scan paths', () => {
     ])
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
     expect(rmSync).toHaveBeenCalled()
@@ -1110,13 +1230,19 @@ describe('scanRegistry additional scan paths', () => {
 
   it('handles pruneOldBackups with non-matching filenames', async () => {
     const { readdirSync } = await import('node:fs')
-    ;(readdirSync as ReturnType<typeof vi.fn>).mockReturnValue([
-      'random-file.txt',
-      'other-backup.zip',
-    ])
+    ;(readdirSync as ReturnType<typeof vi.fn>).mockReturnValue(['random-file.txt', 'other-backup.zip'])
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -1124,7 +1250,16 @@ describe('scanRegistry additional scan paths', () => {
   it('handles error without message property', async () => {
     mockExecNativeUtf8.mockRejectedValue(42 as never)
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.failed).toBe(1)
     expect(result.failures[0]!.reason).toBe('Unknown error')
@@ -1136,16 +1271,33 @@ describe('scanRegistry additional scan paths', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
       .mockRejectedValueOnce(new Error('export failed'))
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
 
   it('handles targeted backup with key export failure (catch)', async () => {
-    mockExecNativeUtf8
-      .mockRejectedValueOnce(new Error('export failed'))
+    mockExecNativeUtf8.mockRejectedValueOnce(new Error('export failed'))
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -1157,7 +1309,16 @@ describe('scanRegistry additional scan paths', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
       .mockRejectedValueOnce(new Error('schtasks failed'))
     const result = await fixRegistryEntries([
-      { id: '1', type: 'task', keyPath: '\\MyFolder\\MyTask', valueName: '', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-task' } } as never,
+      {
+        id: '1',
+        type: 'task',
+        keyPath: '\\MyFolder\\MyTask',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-task' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -1169,16 +1330,36 @@ describe('scanRegistry additional scan paths', () => {
     )
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Original', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value', key: 'HKLM\\Software\\Override' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Original',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value', key: 'HKLM\\Software\\Override' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
 
   it('handles backup failure and continues fixing', async () => {
-    mockGetBackupDir.mockImplementation(() => { throw new Error('no backup dir') })
+    mockGetBackupDir.mockImplementation(() => {
+      throw new Error('no backup dir')
+    })
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'invalid', keyPath: 'HKLM\\Software\\Test', valueName: 'Val', issue: 'x', risk: 'low', selected: true, fix: { op: 'delete-value' } } as never,
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value' },
+      } as never,
     ])
     expect(result.fixed).toBe(1)
   })
@@ -1194,17 +1375,33 @@ describe('clsidExists (via shell extensions)', () => {
 
   it('finds CLSID in native view (first query succeeds)', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      if (args[0] === 'query' && args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') && args[1]?.startsWith('HKCR\\CLSID')) {
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') &&
+        args[1]?.startsWith('HKCR\\CLSID')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
-      if (args[0] === 'query' && args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') && args[1]?.includes('InprocServer32')) {
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') &&
+        args[1]?.includes('InprocServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    C:\\Windows\\System32\\existing.dll', stderr: '' }
       }
-      if (args[0] === 'query' && args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') && args[1]?.includes('LocalServer32')) {
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') &&
+        args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '', stderr: '' }
       }
       if (args[0] === 'query' && args[1]?.includes('ContextMenuHandlers')) {
-        return { stdout: '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\ExistingHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000001}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\ExistingHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000001}\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1219,17 +1416,32 @@ describe('clsidExists (via shell extensions)', () => {
       if (args[0] === 'query' && args[1]?.startsWith('HKCR\\CLSID\\{A0000000-0000-0000-C000-000000000002')) {
         throw new Error('not in native')
       }
-      if (args[0] === 'query' && args[1]?.startsWith('HKCR\\WOW6432Node\\CLSID\\{A0000000-0000-0000-C000-000000000002')) {
+      if (
+        args[0] === 'query' &&
+        args[1]?.startsWith('HKCR\\WOW6432Node\\CLSID\\{A0000000-0000-0000-C000-000000000002')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
-      if (args[0] === 'query' && args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000002') && args[1]?.includes('InprocServer32')) {
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000002') &&
+        args[1]?.includes('InprocServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    C:\\Windows\\System32\\existing.dll', stderr: '' }
       }
-      if (args[0] === 'query' && args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000002') && args[1]?.includes('LocalServer32')) {
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000002') &&
+        args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '', stderr: '' }
       }
       if (args[0] === 'query' && args[1]?.includes('ContextMenuHandlers')) {
-        return { stdout: '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\WOW64Handler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000002}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\WOW64Handler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000002}\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1255,7 +1467,11 @@ describe('findMissingClsidDll (via shell extensions)', () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       const query = args.join(' ')
       if (query.includes('ContextMenuHandlers') && !query.includes('CLSID')) {
-        return { stdout: '\r\n\r\nHKCR\\Directory\\shellex\\ContextMenuHandlers\\BadDllHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000003}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\Directory\\shellex\\ContextMenuHandlers\\BadDllHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000003}\r\n',
+          stderr: '',
+        }
       }
       if (query.includes('InprocServer32') && query.includes('A0000000-0000-0000-C000-000000000003')) {
         return { stdout: '    (Default)    REG_SZ    C:\\Program Files\\missing.dll', stderr: '' }
@@ -1279,7 +1495,11 @@ describe('findMissingClsidDll (via shell extensions)', () => {
         throw new Error('no localserver')
       }
       if (args[1]?.includes('ContextMenuHandlers') && !args[1]?.includes('CLSID')) {
-        return { stdout: '\r\n\r\nHKCR\\Folder\\shellex\\ContextMenuHandlers\\NoInprocHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000004}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\Folder\\shellex\\ContextMenuHandlers\\NoInprocHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000004}\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1296,11 +1516,19 @@ describe('findMissingClsidDll (via shell extensions)', () => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000005') && args[1]?.includes('LocalServer32')) {
         throw new Error('no localserver')
       }
-      if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000005') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+      if (
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000005') &&
+        !args[1]?.includes('InprocServer32') &&
+        !args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
       if (args[1]?.includes('ContextMenuHandlers')) {
-        return { stdout: '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\PercentHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000005}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\PercentHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000005}\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1319,11 +1547,19 @@ describe('findMissingClsidDll (via shell extensions)', () => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000006') && args[1]?.includes('LocalServer32')) {
         return { stdout: '    (Default)    REG_SZ    C:\\Program Files\\existing.exe', stderr: '' }
       }
-      if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000006') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+      if (
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000006') &&
+        !args[1]?.includes('InprocServer32') &&
+        !args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
       if (args[1]?.includes('ContextMenuHandlers')) {
-        return { stdout: '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\WithLocalHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000006}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\WithLocalHandler\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000006}\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1343,8 +1579,17 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
 
   it('detects interface with missing proxy stub CLSID', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      if (args[0] === 'query' && args[1]?.includes('HKCR\\Interface') && args.includes('/f') && args.includes('ProxyStubClsid32')) {
-        return { stdout: '\r\n\r\nHKCR\\Interface\\{A0000000-0000-0000-C000-000000000007}\\ProxyStubClsid32\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000008}\r\n', stderr: '' }
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('HKCR\\Interface') &&
+        args.includes('/f') &&
+        args.includes('ProxyStubClsid32')
+      ) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\Interface\\{A0000000-0000-0000-C000-000000000007}\\ProxyStubClsid32\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-000000000008}\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000008')) {
         throw new Error('not found')
@@ -1364,8 +1609,17 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
       return true
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      if (args[0] === 'query' && args[1]?.includes('HKCR\\Interface') && args.includes('/f') && args.includes('ProxyStubClsid32')) {
-        return { stdout: '\r\n\r\nHKCR\\Interface\\{A0000000-0000-0000-C000-000000000009}\\ProxyStubClsid32\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-00000000000A}\r\n', stderr: '' }
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('HKCR\\Interface') &&
+        args.includes('/f') &&
+        args.includes('ProxyStubClsid32')
+      ) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\Interface\\{A0000000-0000-0000-C000-000000000009}\\ProxyStubClsid32\r\n    (Default)    REG_SZ    {A0000000-0000-0000-C000-00000000000A}\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000A') && args[1]?.includes('InprocServer32')) {
         return { stdout: '    (Default)    REG_SZ    C:\\Program Files\\StubMissing.dll', stderr: '' }
@@ -1373,7 +1627,11 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000A') && args[1]?.includes('LocalServer32')) {
         throw new Error('no localserver')
       }
-      if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000A') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+      if (
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000A') &&
+        !args[1]?.includes('InprocServer32') &&
+        !args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
       return { stdout: '', stderr: '' }
@@ -1385,8 +1643,17 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
 
   it('skips known good proxy CLSIDs', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      if (args[0] === 'query' && args[1]?.includes('HKCR\\Interface') && args.includes('/f') && args.includes('ProxyStubClsid32')) {
-        return { stdout: '\r\n\r\nHKCR\\Interface\\{A0000000-0000-0000-C000-00000000000B}\\ProxyStubClsid32\r\n    (Default)    REG_SZ    {00000320-0000-0000-C000-000000000046}\r\n', stderr: '' }
+      if (
+        args[0] === 'query' &&
+        args[1]?.includes('HKCR\\Interface') &&
+        args.includes('/f') &&
+        args.includes('ProxyStubClsid32')
+      ) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\Interface\\{A0000000-0000-0000-C000-00000000000B}\\ProxyStubClsid32\r\n    (Default)    REG_SZ    {00000320-0000-0000-C000-000000000046}\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1407,7 +1674,11 @@ describe('scanRegistry AutoPlay handlers', () => {
   it('detects AutoPlay handler with missing ProgID', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1]?.includes('AutoplayHandlers\\Handlers')) {
-        return { stdout: '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\\MP3PlaybackHandler\r\n    ProgID    REG_SZ    MissingProgID\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\\MP3PlaybackHandler\r\n    ProgID    REG_SZ    MissingProgID\r\n',
+          stderr: '',
+        }
       }
       if (args[1] === 'HKCR\\MissingProgID') {
         throw new Error('not found')
@@ -1422,7 +1693,10 @@ describe('scanRegistry AutoPlay handlers', () => {
   it('skips AutoPlay handler when key equals base key', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1]?.includes('AutoplayHandlers\\Handlers')) {
-        return { stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\r\n', stderr: '' }
+        return {
+          stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1443,7 +1717,11 @@ describe('scanRegistry BHO with existing CLSID', () => {
   it('detects BHO with existing CLSID but missing DLL (no-inproc)', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
-        return { stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{A0000000-0000-0000-C000-00000000000C}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{A0000000-0000-0000-C000-00000000000C}\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000C') && args[1]?.includes('InprocServer32')) {
         throw new Error('no inproc')
@@ -1451,7 +1729,11 @@ describe('scanRegistry BHO with existing CLSID', () => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000C') && args[1]?.includes('LocalServer32')) {
         throw new Error('no localserver')
       }
-      if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000C') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+      if (
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000C') &&
+        !args[1]?.includes('InprocServer32') &&
+        !args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
       return { stdout: '', stderr: '' }
@@ -1470,7 +1752,11 @@ describe('scanRegistry BHO with existing CLSID', () => {
     })
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
-        return { stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{A0000000-0000-0000-C000-00000000000D}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{A0000000-0000-0000-C000-00000000000D}\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000D') && args[1]?.includes('InprocServer32')) {
         return { stdout: '    (Default)    REG_SZ    C:\\Program Files\\BhoMissing.dll', stderr: '' }
@@ -1478,7 +1764,11 @@ describe('scanRegistry BHO with existing CLSID', () => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000D') && args[1]?.includes('LocalServer32')) {
         throw new Error('no localserver')
       }
-      if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000D') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+      if (
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000D') &&
+        !args[1]?.includes('InprocServer32') &&
+        !args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
       return { stdout: '', stderr: '' }
@@ -1493,7 +1783,11 @@ describe('scanRegistry BHO with existing CLSID', () => {
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true)
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
-        return { stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{A0000000-0000-0000-C000-00000000000E}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects\\{A0000000-0000-0000-C000-00000000000E}\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000E') && args[1]?.includes('InprocServer32')) {
         return { stdout: '    (Default)    REG_SZ    C:\\Windows\\System32\\valid.dll', stderr: '' }
@@ -1501,7 +1795,11 @@ describe('scanRegistry BHO with existing CLSID', () => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000E') && args[1]?.includes('LocalServer32')) {
         throw new Error('no localserver')
       }
-      if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000E') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+      if (
+        args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000E') &&
+        !args[1]?.includes('InprocServer32') &&
+        !args[1]?.includes('LocalServer32')
+      ) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
       }
       return { stdout: '', stderr: '' }
@@ -1527,7 +1825,11 @@ describe('scanRegistry third-party scheduled tasks', () => {
       if (cmd === 'powershell.exe' && args[3]?.includes('Get-ScheduledTask') && !args[3]?.includes('thirdPartyTasks')) {
         return { stdout: '', stderr: '' }
       }
-      if (cmd === 'powershell.exe' && args[3]?.includes('Get-ScheduledTask') && args[3]?.includes('thirdPartyTasks') !== false) {
+      if (
+        cmd === 'powershell.exe' &&
+        args[3]?.includes('Get-ScheduledTask') &&
+        args[3]?.includes('thirdPartyTasks') !== false
+      ) {
         // Return with no third-party for the first call, matching tasks for second
         return { stdout: '', stderr: '' }
       }
@@ -1556,7 +1858,9 @@ describe('extractExePath edge cases (via Run keys)', () => {
 
   it('handles unquoted path with fallback to extension match', async () => {
     const { statSync, existsSync } = await import('node:fs')
-    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('not found') })
+    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('not found')
+    })
     ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (typeof path !== 'string') return true
       if (path.includes('FallbackApp.bat')) return false
@@ -1575,7 +1879,9 @@ describe('extractExePath edge cases (via Run keys)', () => {
 
   it('handles command with no executable extension matching', async () => {
     const { statSync, existsSync } = await import('node:fs')
-    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('not found') })
+    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('not found')
+    })
     ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (typeof path !== 'string') return true
       if (path.includes('NoExtBinary')) return false
@@ -1800,7 +2106,11 @@ describe('additional edge cases', () => {
   it('handles MIME CLSID that exists (no entry)', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1]?.includes('MIME\\Database')) {
-        return { stdout: '\r\nHKCR\\MIME\\Database\\Content Type\\text/x-test\r\n    CLSID    REG_SZ    {A0000000-0000-0000-C000-00000000000F}\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\nHKCR\\MIME\\Database\\Content Type\\text/x-test\r\n    CLSID    REG_SZ    {A0000000-0000-0000-C000-00000000000F}\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-00000000000F') && !args[1]?.includes('WOW6432Node')) {
         return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
@@ -1817,7 +2127,10 @@ describe('additional edge cases', () => {
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1] === 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application') {
-        return { stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\TestWithPrimary\r\n', stderr: '' }
+        return {
+          stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\TestWithPrimary\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('TestWithPrimary') && args.includes('EventMessageFile')) {
         return { stdout: '    EventMessageFile    REG_SZ    C:\\MissingEvent.dll', stderr: '' }
@@ -1825,7 +2138,11 @@ describe('additional edge cases', () => {
       if (args[1]?.includes('TestWithPrimary') && args.includes('PrimaryModule')) {
         return { stdout: '    PrimaryModule    REG_SZ    some.dll', stderr: '' }
       }
-      if (args[1]?.includes('TestWithPrimary') && args.includes('EventMessageFile') === false && args.includes('PrimaryModule') === false) {
+      if (
+        args[1]?.includes('TestWithPrimary') &&
+        args.includes('EventMessageFile') === false &&
+        args.includes('PrimaryModule') === false
+      ) {
         // already handled
       }
       return { stdout: '', stderr: '' }
@@ -1840,7 +2157,10 @@ describe('additional edge cases', () => {
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1] === 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application') {
-        return { stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\PctSource\r\n', stderr: '' }
+        return {
+          stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\PctSource\r\n',
+          stderr: '',
+        }
       }
       if (args[1]?.includes('PctSource') && args.includes('EventMessageFile')) {
         return { stdout: '    EventMessageFile    REG_SZ    %ProgramFiles%\\system32\\some.dll', stderr: '' }
@@ -1873,7 +2193,16 @@ describe('additional edge cases', () => {
     mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     mockExecTracked.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await fixRegistryEntries([
-      { id: '1', type: 'task', keyPath: '\\Folder\\Bad<Task>', valueName: '', issue: 'x', risk: 'low', selected: true, fix: { op: 'disable-task' } } as never,
+      {
+        id: '1',
+        type: 'task',
+        keyPath: '\\Folder\\Bad<Task>',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'disable-task' },
+      } as never,
     ])
     expect(result.failed).toBe(1)
     expect(result.failures[0]!.reason).toContain('Invalid task path')
@@ -1882,7 +2211,11 @@ describe('additional edge cases', () => {
   it('handles AutoPlay handler with empty ProgID (skips)', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1]?.includes('AutoplayHandlers\\Handlers')) {
-        return { stdout: '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\\TestHandler\r\n    ProgID    REG_SZ    \r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\\TestHandler\r\n    ProgID    REG_SZ    \r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })
@@ -1909,7 +2242,11 @@ describe('additional edge cases', () => {
   it('handles FileExts OpenWithList with path that does not include \\', async () => {
     mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
       if (args[1]?.includes('FileExts') && !args[1]?.includes('UserChoice')) {
-        return { stdout: '\r\n\r\nHKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.abc\\OpenWithList\r\n    a    REG_SZ    notepad.exe\r\n', stderr: '' }
+        return {
+          stdout:
+            '\r\n\r\nHKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.abc\\OpenWithList\r\n    a    REG_SZ    notepad.exe\r\n',
+          stderr: '',
+        }
       }
       return { stdout: '', stderr: '' }
     })

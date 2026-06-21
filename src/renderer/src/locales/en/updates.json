@@ -5,7 +5,6 @@
     "software": "Software",
     "drivers": "Drivers",
     "softwareDescriptionWindows": "Third-party apps via winget",
-    "softwareDescriptionMac": "Third-party apps via Homebrew",
     "softwareDescriptionLinux": "Third-party apps via package manager",
     "driversDescription": "Updates & stale cleanup"
   },
@@ -31,9 +30,6 @@
     "severityPatch": "Patch",
     "severityUpdate": "Update",
     "packageManagerNotFound": {
-      "brewNotFound": "brew not found",
-      "brewRequired": "Homebrew is required. Install it from",
-      "brewSite": "brew.sh",
       "wingetNotFound": "winget not found",
       "wingetRequired": "Windows Package Manager is required. Install it from the",
       "wingetStore": "Microsoft Store",
@@ -44,13 +40,10 @@
       "scoopNotFound": "scoop not found",
       "scoopRequired": "Scoop is required. Install it from",
       "scoopSite": "scoop.sh",
-      "aptNotFound": "apt not found",
-      "aptRequired": "APT package manager is required. It should be pre-installed on Debian and Ubuntu systems.",
       "dnfNotFound": "dnf not found",
       "dnfRequired": "DNF package manager is required. It should be pre-installed on Fedora and RHEL systems.",
       "pacmanNotFound": "pacman not found",
-      "pacmanRequired": "Pacman package manager is required. It should be pre-installed on Arch Linux systems.",
-      "noPackageManager": "No supported package manager found. Supported: apt (Debian/Ubuntu), dnf (Fedora/RHEL), or pacman (Arch)."
+      "pacmanRequired": "Pacman package manager is required. It should be pre-installed on Arch Linux systems."
     },
     "statOutdatedApps": "Outdated Apps",
     "statMajorUpdates": "Major Updates",

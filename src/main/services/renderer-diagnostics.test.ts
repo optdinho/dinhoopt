@@ -11,9 +11,11 @@ const mocks = vi.hoisted(() => ({
   appIsPackaged: true,
 }))
 
-vi.mock('./logger', () => ({
-  logError: (...args: unknown[]) => mocks.logError(...args),
-  logInfo: (...args: unknown[]) => mocks.logInfo(...args),
+vi.mock('./logger.service', () => ({
+  getLogger: () => ({
+    error: (...args: unknown[]) => mocks.logError(...args),
+    info: (...args: unknown[]) => mocks.logInfo(...args),
+  }),
 }))
 
 vi.mock('electron', () => ({
@@ -76,7 +78,7 @@ describe('attachRendererDiagnostics', () => {
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
     handler({}, { reason: 'crashed', exitCode: 1 })
 
-    expect(mocks.logError).toHaveBeenCalledWith(expect.stringContaining('crashed'))
+    expect(mocks.logError).toHaveBeenCalledWith('RendererDiagnostics', expect.stringContaining('crashed'))
   })
 
   it('ignores did-fail-load with error code -3 (ABORTED)', () => {
@@ -96,7 +98,7 @@ describe('attachRendererDiagnostics', () => {
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'did-fail-load')?.[1]
     handler({}, -6, 'Connection refused', 'http://example.com', true)
 
-    expect(mocks.logError).toHaveBeenCalledWith(expect.stringContaining('-6'))
+    expect(mocks.logError).toHaveBeenCalledWith('RendererDiagnostics', expect.stringContaining('-6'))
   })
 
   it('opens DevTools on renderer crash in packaged build', () => {
@@ -161,7 +163,11 @@ describe('attachRendererDiagnostics', () => {
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'preload-error')?.[1]
     handler({}, '/path/to/preload.js', new Error('preload failed'))
 
-    expect(mocks.logError).toHaveBeenCalledWith(expect.stringContaining('/path/to/preload.js'), expect.any(Error))
+    expect(mocks.logError).toHaveBeenCalledWith(
+      'RendererDiagnostics',
+      expect.stringContaining('/path/to/preload.js'),
+      'preload failed',
+    )
   })
 
   it('logs did-finish-load event', () => {
@@ -171,7 +177,7 @@ describe('attachRendererDiagnostics', () => {
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'did-finish-load')?.[1]
     handler()
 
-    expect(mocks.logInfo).toHaveBeenCalledWith('Renderer finished loading')
+    expect(mocks.logInfo).toHaveBeenCalledWith('RendererDiagnostics', 'Renderer finished loading')
   })
 
   it('logs unresponsive event', () => {
@@ -181,7 +187,7 @@ describe('attachRendererDiagnostics', () => {
     const handler = mocks.winOn.mock.calls.find((c: string[]) => c[0] === 'unresponsive')?.[1]
     handler()
 
-    expect(mocks.logError).toHaveBeenCalledWith('Renderer became unresponsive')
+    expect(mocks.logError).toHaveBeenCalledWith('RendererDiagnostics', 'Renderer became unresponsive')
   })
 
   it('logs responsive event', () => {
@@ -191,7 +197,7 @@ describe('attachRendererDiagnostics', () => {
     const handler = mocks.winOn.mock.calls.find((c: string[]) => c[0] === 'responsive')?.[1]
     handler()
 
-    expect(mocks.logInfo).toHaveBeenCalledWith('Renderer responsive again')
+    expect(mocks.logInfo).toHaveBeenCalledWith('RendererDiagnostics', 'Renderer responsive again')
   })
 
   it('logs renderer console errors (level 3)', () => {
@@ -202,6 +208,7 @@ describe('attachRendererDiagnostics', () => {
     handler({}, 3, 'Something went wrong', 42, 'http://example.com/app.js')
 
     expect(mocks.logError).toHaveBeenCalledWith(
+      'RendererDiagnostics',
       expect.stringContaining('Renderer console.error: Something went wrong'),
     )
   })
@@ -214,6 +221,7 @@ describe('attachRendererDiagnostics', () => {
     handler({}, 2, 'Deprecation warning', 10, 'http://example.com/app.js')
 
     expect(mocks.logError).toHaveBeenCalledWith(
+      'RendererDiagnostics',
       expect.stringContaining('Renderer console.warn: Deprecation warning'),
     )
   })

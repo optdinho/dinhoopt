@@ -12,7 +12,16 @@ const mocks = vi.hoisted(() => {
   const logger = { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() }
   const webContentsSend: ReturnType<typeof vi.fn> = vi.fn()
 
-  return { ipcHandle, dialogShowOpenDialog, shellTrashItem, shellShowItemInFolder, readdir, rmdir, logger, webContentsSend }
+  return {
+    ipcHandle,
+    dialogShowOpenDialog,
+    shellTrashItem,
+    shellShowItemInFolder,
+    readdir,
+    rmdir,
+    logger,
+    webContentsSend,
+  }
 })
 
 vi.mock('electron', () => ({
@@ -245,13 +254,9 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockImplementation(async (_dirPath: string) => {
         const dir = n(_dirPath)
         if (dir === ROOT) {
-          return [
-            { name: 'sub', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'sub', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
-        return [
-          { name: 'file.txt', isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false },
-        ]
+        return [{ name: 'file.txt', isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false }]
       })
       const handler = getHandler('empty-folders:scan')
       const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
@@ -263,13 +268,9 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockImplementation(async (_dirPath: string) => {
         const dir = n(_dirPath)
         if (dir === ROOT) {
-          return [
-            { name: 'sub', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'sub', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
-        return [
-          { name: 'link', isFile: () => false, isDirectory: () => false, isSymbolicLink: () => true },
-        ]
+        return [{ name: 'link', isFile: () => false, isDirectory: () => false, isSymbolicLink: () => true }]
       })
       const handler = getHandler('empty-folders:scan')
       const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
@@ -320,9 +321,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockImplementation(async (_dirPath: string) => {
         const dir = n(_dirPath)
         if (dir === ROOT) {
-          return [
-            { name: 'Build', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'Build', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
         return []
       })
@@ -340,14 +339,10 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockImplementation(async (_dirPath: string) => {
         const dir = n(_dirPath)
         if (dir === ROOT) {
-          return [
-            { name: 'sub1', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'sub1', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
         if (dir.endsWith('/sub1')) {
-          return [
-            { name: 'sub2', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'sub2', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
         sub2Reached = true
         return []
@@ -377,14 +372,10 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockImplementation(async (_dirPath: string) => {
         const dir = n(_dirPath)
         if (dir === ROOT) {
-          return [
-            { name: 'a', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'a', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
         if (dir === `${ROOT}/a`) {
-          return [
-            { name: 'b', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
-          ]
+          return [{ name: 'b', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
         }
         return []
       })
@@ -411,13 +402,8 @@ describe('registerEmptyFolderCleanerIpc', () => {
       const handler = getHandler('empty-folders:scan')
       await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
       // With fast tests (<500ms), the progress throttle prevents sending
-      expect(mocks.webContentsSend).not.toHaveBeenCalledWith(
-        'empty-folders:progress',
-        expect.anything(),
-      )
+      expect(mocks.webContentsSend).not.toHaveBeenCalledWith('empty-folders:progress', expect.anything())
     })
-
-
 
     it('handles cancelled flag during scan (reset per scan)', async () => {
       registerEmptyFolderCleanerIpc(winNull)
@@ -577,7 +563,10 @@ describe('registerEmptyFolderCleanerIpc', () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:open-location')
       handler(undefined, '/some/absolute/path')
-      expect(mocks.logger.info).toHaveBeenCalledWith('empty-folder-cleaner', 'Opening folder location: /some/absolute/path')
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        'empty-folder-cleaner',
+        'Opening folder location: /some/absolute/path',
+      )
       expect(mocks.shellShowItemInFolder).toHaveBeenCalledWith('/some/absolute/path')
     })
 

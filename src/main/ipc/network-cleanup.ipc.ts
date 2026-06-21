@@ -12,26 +12,21 @@ async function getDnsCacheCount(): Promise<number> {
   const platform = getPlatform()
   const entries = await platform.network.getDnsCacheEntries()
   if (entries.length > 0) return entries.length
-  // On Windows, use PowerShell for an accurate count since getDnsCacheEntries may be slow
-  if (process.platform === 'win32') {
-    try {
-      const { stdout } = await execFileAsync(
-        'powershell',
-        ['-NoProfile', '-Command', psUtf8('(Get-DnsClientCache | Measure-Object).Count')],
-        { timeout: 10000, windowsHide: true },
-      )
-      return Number.parseInt(stdout.trim(), 10) || 0
-    } catch {
-      return 0
-    }
+  try {
+    const { stdout } = await execFileAsync(
+      'powershell',
+      ['-NoProfile', '-Command', psUtf8('(Get-DnsClientCache | Measure-Object).Count')],
+      { timeout: 10000, windowsHide: true },
+    )
+    return Number.parseInt(stdout.trim(), 10) || 0
+  } catch {
+    return 0
   }
-  // On Linux/macOS, DNS cache is not queryable but we can still offer to flush it
-  return 1 // Always show the flush option
 }
 
 async function getArpEntryCount(): Promise<number> {
   try {
-    const cmd = process.platform === 'win32' ? 'arp' : '/usr/sbin/arp'
+    const cmd = 'arp'
     const { stdout } = await execFileAsync(cmd, ['-a'], { timeout: 10000 })
     const lines = stdout.split('\n').filter((l) => /\d+\.\d+\.\d+\.\d+/.test(l))
     return lines.length
@@ -41,8 +36,6 @@ async function getArpEntryCount(): Promise<number> {
 }
 
 async function getNetworkHistory(): Promise<{ name: string; guid: string }[]> {
-  // Network history is Windows-only (registry-based)
-  if (process.platform !== 'win32') return []
   try {
     const { stdout } = await execNativeUtf8(
       'reg',
@@ -80,10 +73,7 @@ export async function scanNetwork(): Promise<NetworkItem[]> {
       id: randomUUID(),
       type: 'dns-cache',
       label: 'DNS Resolver Cache',
-      detail:
-        process.platform === 'win32'
-          ? `${dnsCount} cached entries — flushing forces fresh DNS lookups`
-          : 'Flush DNS resolver cache to force fresh lookups',
+      detail: `${dnsCount} cached entries — flushing forces fresh DNS lookups`,
       selected: true,
     })
   }
@@ -175,7 +165,6 @@ export async function cleanNetworkItems(
         }
 
         case 'network-history': {
-          if (process.platform !== 'win32') break
           const histories = await getNetworkHistory()
           if (histories.length === 0) break
           const histResults = await Promise.allSettled(

@@ -182,9 +182,13 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
     }
 
     return new Promise((resolve) => {
-      const child = spawn('cmd', ['/c', 'chcp 65001 >nul & DISM /English /Online /Cleanup-Image /StartComponentCleanup'], {
-        windowsHide: true,
-      })
+      const child = spawn(
+        'cmd',
+        ['/c', 'chcp 65001 >nul & DISM /English /Online /Cleanup-Image /StartComponentCleanup'],
+        {
+          windowsHide: true,
+        },
+      )
 
       let lastPercent = 0
       const decoder = new StringDecoder('utf-8')
@@ -197,7 +201,11 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
         // Give it a moment to die, then force-kill via taskkill
         setTimeout(() => {
           if (child.killed || child.exitCode !== null) return
-          try { child.kill() } catch { /* already dead */ }
+          try {
+            child.kill()
+          } catch {
+            /* already dead */
+          }
         }, 5000)
       }, DISM_TIMEOUT)
 

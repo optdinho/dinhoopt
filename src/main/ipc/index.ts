@@ -122,7 +122,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   // Platform info
   const isWin = process.platform === 'win32'
   ipcMain.handle(IPC.PLATFORM_INFO, () => ({
-    platform: process.platform as 'win32' | 'darwin' | 'linux',
+    platform: process.platform as 'win32',
     features: {
       registry: isWin,
       debloater: isWin,
@@ -171,7 +171,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       defaultPath: getBackupDir(),
     }
     const result =
-      process.platform === 'darwin' || !win ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+      !win ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
     if (result.canceled || !result.filePaths.length) return null
     return result.filePaths[0]
   })
@@ -213,38 +213,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
           app.exit(0)
         }
       })
-    } else if (process.platform === 'linux') {
-      // pkexec strips the environment for security.  We forward display
-      // variables (for GUI) and HOME (so Chromium resolves cache/config
-      // paths to the real user dirs instead of /root).
-      // Use execFile so the app stays visible while the polkit dialog is
-      // open — if the user cancels, we keep running.  The elevated process
-      // is backgrounded with & so pkexec returns after auth succeeds
-      // (same pattern as the macOS osascript path).
-      const sq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`
-      const parts: string[] = []
-      for (const key of [
-        'DISPLAY',
-        'XAUTHORITY',
-        'WAYLAND_DISPLAY',
-        'XDG_RUNTIME_DIR',
-        'HOME',
-        'DBUS_SESSION_BUS_ADDRESS',
-      ]) {
-        if (process.env[key]) parts.push(`${key}=${sq(process.env[key])}`)
-      }
-      parts.push(sq(exePath), '--no-sandbox', `--dinho-data-dir=${sq(userDataDir)}`)
-      execFile('pkexec', ['/bin/sh', '-c', `${parts.join(' ')} > /dev/null 2>&1 &`], (err) => {
-        if (!err) {
-          app.releaseSingleInstanceLock()
-          app.exit(0)
-        }
-        // If err, user declined or pkexec unavailable — don't quit
-      })
     }
-    // macOS: relaunch-as-admin is not supported — the osascript elevation
-    // flow doesn't work reliably.  The renderer hides the relaunch UI on
-    // darwin so this path should never be reached.
   })
 
   // Memory Optimizer

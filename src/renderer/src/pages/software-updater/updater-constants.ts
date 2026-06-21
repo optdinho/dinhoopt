@@ -1,4 +1,4 @@
-export const SEVERITY_STYLES_BASE: Record<string, { bg: string; border: string; text: string; labelKey: string }> = {
+export const SEVERITY_STYLES_BASE = {
   major: {
     bg: 'rgba(239,68,68,0.08)',
     border: 'rgba(239,68,68,0.18)',
@@ -36,7 +36,5 @@ export const FILTER_LABEL_KEYS: Record<string, string> = {
   major: 'softwareUpdater.filterMajor',
   minor: 'softwareUpdater.filterMinor',
   patch: 'softwareUpdater.filterPatch',
+  uptodate: 'softwareUpdater.filterUpToDate',
 }
-
-export type SeverityFilterValue = keyof typeof FILTER_LABEL_KEYS
-export type SortFieldValue = keyof typeof SORT_LABEL_KEYS

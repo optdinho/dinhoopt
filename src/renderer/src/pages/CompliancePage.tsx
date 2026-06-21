@@ -1,3 +1,4 @@
+import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useComplianceStore } from '@/stores/compliance-store'
@@ -181,6 +182,14 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
     [t],
   )
 
+  // Expose scan trigger for E2E tests
+  useEffect(() => {
+    ;(window as unknown as Record<string, unknown>).__complianceRunScan = runScan
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__complianceRunScan
+    }
+  }, [runScan])
+
   const checks = state?.checks ?? []
   const total = state?.total ?? 0
   const compliant = state?.compliant ?? 0
@@ -198,6 +207,7 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
   }, [checks])
 
   const nonCompliantIds = useMemo(() => checks.filter((c) => !c.compliant && c.applicable).map((c) => c.id), [checks])
+  const requiresAdminForFixes = useMemo(() => checks.some((c) => !c.compliant && c.requiresAdmin), [checks])
 
   if (!state && status === 'idle') {
     return (
@@ -251,6 +261,8 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
           </button>
         )}
       </div>
+
+      <ElevationBanner show={requiresAdminForFixes && nonCompliantIds.length > 0 && status === 'done'} />
 
       {/* Progress */}
       {progress && (

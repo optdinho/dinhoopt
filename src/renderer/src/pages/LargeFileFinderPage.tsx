@@ -1,5 +1,5 @@
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { cn, formatBytes } from '@/lib/utils'
+import { cn, formatBytes, formatDuration } from '@/lib/utils'
 import { useLargeFileStore } from '@/stores/large-file-store'
 import { ExternalLink, FileUp, FolderOpen, Plus, RotateCcw, Search, Settings2, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -14,15 +14,6 @@ const SIZE_PRESETS = [
   { label: '500 MB', value: 524_288_000 },
   { label: '1 GB', value: 1_073_741_824 },
 ]
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
-  return `${m}m ${rem}s`
-}
 
 export function LargeFileFinderPage() {
   const { t } = useTranslation('largeFiles')

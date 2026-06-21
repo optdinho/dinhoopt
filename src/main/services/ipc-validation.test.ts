@@ -440,7 +440,9 @@ describe('validateSettingsPartial', () => {
   })
 
   it('rejects gameMode customGameProcesses with non-array', () => {
-    expect(validateSettingsPartial({ gameMode: { customGameProcesses: 'spotify.exe', enabledOptimizations: [] } })).toBeNull()
+    expect(
+      validateSettingsPartial({ gameMode: { customGameProcesses: 'spotify.exe', enabledOptimizations: [] } }),
+    ).toBeNull()
   })
 
   it('rejects gameMode customGameProcesses with empty string', () => {
@@ -479,7 +481,11 @@ describe('validateSettingsPartial', () => {
   it('accepts valid gameMode customGameProcesses', () => {
     expect(
       validateSettingsPartial({
-        gameMode: { customGameProcesses: ['steam.exe', 'epic.exe'], enabledOptimizations: [], customProcessKillList: [] },
+        gameMode: {
+          customGameProcesses: ['steam.exe', 'epic.exe'],
+          enabledOptimizations: [],
+          customProcessKillList: [],
+        },
       }),
     ).not.toBeNull()
   })
@@ -628,7 +634,9 @@ describe('validateSettingsPartial', () => {
   })
 
   it('rejects too many ignoredSoftwareUpdates', () => {
-    expect(validateSettingsPartial({ ignoredSoftwareUpdates: Array.from({ length: 501 }, (_, i) => `upd-${i}`) })).toBeNull()
+    expect(
+      validateSettingsPartial({ ignoredSoftwareUpdates: Array.from({ length: 501 }, (_, i) => `upd-${i}`) }),
+    ).toBeNull()
   })
 
   it('rejects overly long ignoredSoftwareUpdate entry', () => {
@@ -649,30 +657,35 @@ describe('validateSettingsPartial', () => {
   })
 
   it('rejects schedule entry as null', () => {
-    expect(
-      validateSettingsPartial({ schedules: [null] }),
-    ).toBeNull()
+    expect(validateSettingsPartial({ schedules: [null] })).toBeNull()
   })
 
   it('rejects schedule entry as primitive', () => {
-    expect(
-      validateSettingsPartial({ schedules: ['string-entry'] }),
-    ).toBeNull()
+    expect(validateSettingsPartial({ schedules: ['string-entry'] })).toBeNull()
   })
 
   it('rejects schedule entry as array', () => {
-    expect(
-      validateSettingsPartial({ schedules: [[]] }),
-    ).toBeNull()
+    expect(validateSettingsPartial({ schedules: [[]] })).toBeNull()
   })
 
   it('rejects schedule entry with invalid id', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 123, name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 123,
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -680,10 +693,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with invalid name', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 123, enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 123,
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -691,10 +715,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with non-boolean enabled', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: 'yes', frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: 'yes',
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -702,10 +737,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with invalid frequency', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'yearly', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'yearly',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -713,10 +759,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with out-of-range day', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 32, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 32,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -724,10 +781,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with out-of-range hour', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 24, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 24,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -735,11 +803,22 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with invalid minute', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, minute: 60,
-          tasks: ['cleaner:system'], autoApply: false, lastRunAt: null, lastRunStatus: 'never',
-          createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            minute: 60,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -747,10 +826,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with non-array tasks', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: 'cleaner:system',
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: 'cleaner:system',
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -758,10 +848,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with non-boolean autoApply', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: 'yes', lastRunAt: null, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: 'yes',
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -769,10 +870,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with invalid lastRunAt', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: 123, lastRunStatus: 'never', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: 123,
+            lastRunStatus: 'never',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -780,10 +892,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with invalid lastRunStatus', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'unknown', createdAt: '2025-01-01T00:00:00Z',
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'unknown',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -791,10 +914,21 @@ describe('validateSettingsPartial', () => {
   it('rejects schedule entry with invalid createdAt', () => {
     expect(
       validateSettingsPartial({
-        schedules: [{
-          id: 'x', name: 'X', enabled: true, frequency: 'daily', day: 0, hour: 9, tasks: ['cleaner:system'],
-          autoApply: false, lastRunAt: null, lastRunStatus: 'never', createdAt: 123,
-        }],
+        schedules: [
+          {
+            id: 'x',
+            name: 'X',
+            enabled: true,
+            frequency: 'daily',
+            day: 0,
+            hour: 9,
+            tasks: ['cleaner:system'],
+            autoApply: false,
+            lastRunAt: null,
+            lastRunStatus: 'never',
+            createdAt: 123,
+          },
+        ],
       }),
     ).toBeNull()
   })
@@ -929,7 +1063,15 @@ describe('validateHistoryEntry', () => {
   })
 
   it('accepts all remaining valid type values beyond the initial five', () => {
-    for (const type of ['malware', 'privacy', 'startup', 'services', 'software-update', 'compliance', 'vulnerability']) {
+    for (const type of [
+      'malware',
+      'privacy',
+      'startup',
+      'services',
+      'software-update',
+      'compliance',
+      'vulnerability',
+    ]) {
       expect(validateHistoryEntry({ ...validEntry, type })).not.toBeNull()
     }
   })

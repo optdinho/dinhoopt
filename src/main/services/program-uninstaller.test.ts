@@ -1309,9 +1309,7 @@ describe('getInstalledProgramsFull', () => {
 
     // Block with DisplayName and UninstallString but no HK line
     const block =
-      '    DisplayName    REG_SZ    NoKeyApp\r\n' +
-      '    UninstallString    REG_SZ    C:\\uninstall.exe\r\n' +
-      '\r\n'
+      '    DisplayName    REG_SZ    NoKeyApp\r\n' + '    UninstallString    REG_SZ    C:\\uninstall.exe\r\n' + '\r\n'
 
     mockExecFile.mockImplementation(
       (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
@@ -1536,9 +1534,7 @@ describe('scanLeftoversForProgram (extended)', () => {
 
     // First dir: entries don't match program → candidates.length === 0 → continue
     // Second dir: has match → should be found
-    mockReaddir
-      .mockResolvedValueOnce(['NoMatch'])
-      .mockResolvedValueOnce(['TestApp'])
+    mockReaddir.mockResolvedValueOnce(['NoMatch']).mockResolvedValueOnce(['TestApp'])
 
     mockStat.mockResolvedValue({ isDirectory: () => true, mtimeMs: 1000 })
     mockGetDirectorySize.mockResolvedValue(4096)
@@ -1553,9 +1549,7 @@ describe('scanLeftoversForProgram (extended)', () => {
   it('skips folders with running processes', async () => {
     mockGetPlatform.mockReturnValue({
       paths: {
-        uninstallLeftoverDirs: () => [
-          { id: 'appdata', name: 'AppData', path: 'C:\\Users\\User\\AppData' },
-        ],
+        uninstallLeftoverDirs: () => [{ id: 'appdata', name: 'AppData', path: 'C:\\Users\\User\\AppData' }],
       },
     })
 
@@ -1580,9 +1574,7 @@ describe('scanLeftoversForProgram (extended)', () => {
   it('skips candidate when stat fails after size check', async () => {
     mockGetPlatform.mockReturnValue({
       paths: {
-        uninstallLeftoverDirs: () => [
-          { id: 'appdata', name: 'AppData', path: 'C:\\Users\\User\\AppData' },
-        ],
+        uninstallLeftoverDirs: () => [{ id: 'appdata', name: 'AppData', path: 'C:\\Users\\User\\AppData' }],
       },
     })
 

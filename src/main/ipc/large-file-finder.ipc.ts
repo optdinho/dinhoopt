@@ -87,16 +87,12 @@ async function walkDirectory(
 }
 
 export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
-  // Directory picker — on macOS, avoid passing parent window so the dialog
-  // opens as a standalone panel instead of a sheet (sidebar items like Desktop
-  // are unresponsive in sheet mode).
   ipcMain.handle(IPC.LARGE_FILES_SELECT_DIR, async () => {
     getLogger().info('large-file-finder', 'Opening directory picker')
     const win = getWindow()
     if (!win) return null
     const opts: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
-    const result =
-      process.platform === 'darwin' ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+    const result = await dialog.showOpenDialog(win, opts)
     if (result.canceled || !result.filePaths.length) {
       getLogger().info('large-file-finder', 'Directory picker cancelled')
       return null
@@ -141,7 +137,7 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
     }
 
     // Verify the root directory is readable before starting the walk.
-    // On macOS, TCC restrictions can silently block access to user folders.
+    // Verify the root directory is readable before starting the walk.
     try {
       await readdir(safeOptions.directory)
     } catch (err) {

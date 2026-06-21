@@ -342,11 +342,14 @@ describe('parseRuleLine', () => {
   })
 
   it('returns null when name is empty', () => {
-    expect(parseRuleLine('RULE||display|desc|grp|Domain|TCP|443|Any|prog|resolved|true|signed|false|false|true')).toBeNull()
+    expect(
+      parseRuleLine('RULE||display|desc|grp|Domain|TCP|443|Any|prog|resolved|true|signed|false|false|true'),
+    ).toBeNull()
   })
 
   it('parses a valid rule line correctly', () => {
-    const line = 'RULE|MyRule|My Display|My description|My Group|Domain,Private|TCP|443|10.0.0.0/8|C:\\app.exe|C:\\app.exe|true|signed|false|false|true'
+    const line =
+      'RULE|MyRule|My Display|My description|My Group|Domain,Private|TCP|443|10.0.0.0/8|C:\\app.exe|C:\\app.exe|true|signed|false|false|true'
     const rule = parseRuleLine(line)
     expect(rule).not.toBeNull()
     expect(rule!.name).toBe('MyRule')
@@ -376,7 +379,8 @@ describe('parseRuleLine', () => {
   })
 
   it('detects builtin rule via managed flag', () => {
-    const line = 'RULE|Managed|Managed App|Game Bar||Public|Any|Any|Any|C:\\app.exe|C:\\app.exe|true|signed|false|true|true'
+    const line =
+      'RULE|Managed|Managed App|Game Bar||Public|Any|Any|Any|C:\\app.exe|C:\\app.exe|true|signed|false|true|true'
     const rule = parseRuleLine(line)
     expect(rule).not.toBeNull()
     expect(rule!.builtin).toBe(true)
@@ -384,7 +388,8 @@ describe('parseRuleLine', () => {
   })
 
   it('parses a stale rule with program missing', () => {
-    const line = 'RULE|Stale|Stale Rule|desc||Private|TCP|80|Any|C:\\gone.exe|C:\\gone.exe|false|unsigned|false|false|true'
+    const line =
+      'RULE|Stale|Stale Rule|desc||Private|TCP|80|Any|C:\\gone.exe|C:\\gone.exe|false|unsigned|false|false|true'
     const rule = parseRuleLine(line)
     expect(rule).not.toBeNull()
     expect(rule!.issues).toContain('stale')
@@ -463,9 +468,24 @@ describe('scanFirewallRules', () => {
       await scanFirewallRules(onProgress)
 
       expect(onProgress).toHaveBeenCalledTimes(3)
-      expect(onProgress).toHaveBeenNthCalledWith(1, { phase: 'enumerating', current: 0, total: 0, currentRule: 'Enumerating firewall rules...' })
-      expect(onProgress).toHaveBeenNthCalledWith(2, { phase: 'classifying', current: 1, total: 50, currentRule: 'Display1' })
-      expect(onProgress).toHaveBeenNthCalledWith(3, { phase: 'classifying', current: 2, total: 50, currentRule: 'Display2' })
+      expect(onProgress).toHaveBeenNthCalledWith(1, {
+        phase: 'enumerating',
+        current: 0,
+        total: 0,
+        currentRule: 'Enumerating firewall rules...',
+      })
+      expect(onProgress).toHaveBeenNthCalledWith(2, {
+        phase: 'classifying',
+        current: 1,
+        total: 50,
+        currentRule: 'Display1',
+      })
+      expect(onProgress).toHaveBeenNthCalledWith(3, {
+        phase: 'classifying',
+        current: 2,
+        total: 50,
+        currentRule: 'Display2',
+      })
     })
 
     it('counts stale, unsigned, and broad-scope issues', async () => {
@@ -485,9 +505,7 @@ describe('scanFirewallRules', () => {
     })
 
     it('returns totalCount equal to rules length when TOTAL is missing', async () => {
-      const stdout = [
-        'RULE|R1|D1|desc||Domain|TCP|80|Any|||false|not-applicable|false|false|true',
-      ].join('\n')
+      const stdout = ['RULE|R1|D1|desc||Domain|TCP|80|Any|||false|not-applicable|false|false|true'].join('\n')
       mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
 
       const result = await scanFirewallRules()
@@ -587,16 +605,14 @@ describe('applyFirewallChanges', () => {
     })
 
     it('rejects invalid action', async () => {
-      const result = await applyFirewallChanges([
-        { name: 'Rule1', action: 'enable' as unknown as 'disable' },
-      ])
+      const result = await applyFirewallChanges([{ name: 'Rule1', action: 'enable' as unknown as 'disable' }])
       expect(result.succeeded).toBe(0)
       expect(result.failed).toBe(1)
       expect(result.errors[0]!.reason).toBe('Invalid action')
     })
 
     it('successfully disables a rule', async () => {
-      const stdout = "OK|Rule1|Display1\n"
+      const stdout = 'OK|Rule1|Display1\n'
       mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
 
       const result = await applyFirewallChanges([{ name: 'Rule1', action: 'disable' }])
@@ -606,7 +622,7 @@ describe('applyFirewallChanges', () => {
     })
 
     it('successfully deletes a rule', async () => {
-      const stdout = "OK|Rule1|Display1\n"
+      const stdout = 'OK|Rule1|Display1\n'
       mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
 
       const result = await applyFirewallChanges([{ name: 'Rule1', action: 'delete' }])
@@ -700,7 +716,12 @@ describe('registerFirewallAuditIpc', () => {
     mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
 
     await handler()
-    expect(send).toHaveBeenCalledWith(IPC.FIREWALL_PROGRESS, { phase: 'enumerating', current: 0, total: 0, currentRule: 'Enumerating firewall rules...' })
+    expect(send).toHaveBeenCalledWith(IPC.FIREWALL_PROGRESS, {
+      phase: 'enumerating',
+      current: 0,
+      total: 0,
+      currentRule: 'Enumerating firewall rules...',
+    })
   })
 
   it('FIREWALL_SCAN does not send progress when window is destroyed', async () => {

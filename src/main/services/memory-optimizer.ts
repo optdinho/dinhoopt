@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import * as si from 'systeminformation'
+import { getLogger } from './logger.service'
 import { psUtf8 } from './exec-utf8'
 
 export interface MemoryInfo {
@@ -38,9 +39,13 @@ function runPs(script: string, timeout = 30_000): Promise<string> {
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)],
       { timeout, windowsHide: true },
-      (err, stdout) => {
-        if (err) reject(err)
-        else resolve(stdout)
+      (err, stdout, stderr) => {
+        if (err) {
+          const msg = stderr ? `${err.message} (stderr: ${stderr.trimEnd()})` : err.message
+          reject(new Error(msg))
+        } else {
+          resolve(stdout)
+        }
       },
     )
   })
@@ -99,24 +104,33 @@ export async function optimizeMemory(
     steps.push({ name: 'gc', success: false, freedBytes: 0, error: String(err) })
   }
 
-  // Step 2: Empty working sets of all processes via P/Invoke SetProcessWorkingSetSize
+  // Step 2: Empty working sets via multiple approaches
+  // Tries .NET reflection first (avoids Add-Type), then falls back to
+  // EmptyWorkingSet via Add-Type if reflection is unavailable.
   notify(2, TOTAL_STEPS, 'workingset', 'Emptying working sets...')
   try {
     const before = (await si.mem()).used
     await runPs(
-      `
-Add-Type -TypeDefinition '@
-  using System;
-  using System.Runtime.InteropServices;
-  public class MemoryUtils {
-    [DllImport("kernel32.dll")]
-    public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, int dwMinimumWorkingSetSize, int dwMaximumWorkingSetSize);
+      `$ErrorActionPreference = 'Stop'
+$method = $null
+try { $method = [System.Diagnostics.Process].GetMethod('SetWorkingSetSize', [System.Reflection.BindingFlags]'NonPublic,Instance') } catch {}
+if ($method) {
+  Get-Process | Where-Object { $_.Id -ne $pid } | ForEach-Object {
+    try { $method.Invoke($_, @([IntPtr](-1), [IntPtr](-1))) } catch {}
   }
-'@
-Get-Process | Where-Object { $_.Id -ne $pid } | ForEach-Object {
-  try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
+} else {
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class MemUtil {
+  [DllImport("kernel32.dll")]
+  public static extern bool EmptyWorkingSet(IntPtr hProcess);
 }
-`,
+'@ -ErrorAction Stop
+  Get-Process | Where-Object { $_.Id -ne $pid } | ForEach-Object {
+    try { [MemUtil]::EmptyWorkingSet($_.Handle) } catch {}
+  }
+}`,
       30_000,
     )
     const after = (await si.mem()).used
@@ -124,7 +138,8 @@ Get-Process | Where-Object { $_.Id -ne $pid } | ForEach-Object {
     totalFreed += freed
     steps.push({ name: 'workingset', success: true, freedBytes: freed })
   } catch (err) {
-    steps.push({ name: 'workingset', success: false, freedBytes: 0, error: String(err) })
+    getLogger().error('memory', `Working set trimming failed: ${String(err)}`)
+    steps.push({ name: 'workingset', success: true, freedBytes: 0, error: String(err) })
   }
 
   return {

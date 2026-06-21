@@ -14,8 +14,10 @@ const mockLogInfo = vi.fn()
 const mockUpdateScheduleEntry = vi.fn()
 let mockSettings: DiNhoSettings
 
-vi.mock('./logger', () => ({
-  logInfo: (...args: unknown[]) => mockLogInfo(...args),
+vi.mock('./logger.service', () => ({
+  getLogger: () => ({
+    info: (...args: unknown[]) => mockLogInfo(...args),
+  }),
 }))
 
 vi.mock('./settings-store', () => ({
@@ -323,7 +325,7 @@ describe('startScheduler', () => {
   it('creates an interval and runs check on startup', () => {
     const mockGetMainWindow = vi.fn(() => null)
     startScheduler(mockGetMainWindow)
-    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler started')
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', 'Scheduler started')
   })
 
   it('does not start twice', () => {
@@ -333,7 +335,7 @@ describe('startScheduler', () => {
 
     startScheduler(mockGetMainWindow)
     // Should not log "Scheduler started" a second time
-    expect(mockLogInfo).not.toHaveBeenCalledWith('Scheduler started')
+    expect(mockLogInfo).not.toHaveBeenCalledWith('Scheduler', 'Scheduler started')
   })
 
   it('runs initial check after 5 seconds', () => {
@@ -364,7 +366,7 @@ describe('startScheduler', () => {
     // Advance past the initial check delay
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('Schedule triggered'))
   })
 
   it('handles error in checkSchedules gracefully', () => {
@@ -375,7 +377,7 @@ describe('startScheduler', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Scheduler initial check error'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('Scheduler initial check error'))
   })
 
   it('skips schedule when window is destroyed', () => {
@@ -391,7 +393,7 @@ describe('startScheduler', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('skipped'))
     expect(mockUpdateScheduleEntry).toHaveBeenCalledWith(
       'skip-me',
       expect.objectContaining({ lastRunStatus: 'failed' }),
@@ -407,7 +409,7 @@ describe('startScheduler', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('skipped'))
   })
 
   it('handles interval check error gracefully', () => {
@@ -417,7 +419,7 @@ describe('startScheduler', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(60_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Scheduler error'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('Scheduler error'))
   })
 
   it('does not re-trigger in-flight schedule', () => {
@@ -462,7 +464,7 @@ describe('stopScheduler', () => {
 
     stopScheduler()
 
-    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler stopped')
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', 'Scheduler stopped')
   })
 
   it('can be called without starting first', () => {
@@ -506,7 +508,7 @@ describe('isDueEntry weekly schedule', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('Schedule triggered'))
   })
 
   it('does not trigger weekly schedule on wrong day', () => {
@@ -586,7 +588,7 @@ describe('isDueEntry monthly schedule', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('Schedule triggered'))
   })
 
   it('does not trigger monthly schedule on wrong date', () => {
@@ -643,7 +645,7 @@ describe('isDueEntry monthly schedule', () => {
     startScheduler(mockGetMainWindow)
     vi.advanceTimersByTime(5_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('Schedule triggered'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('Schedule triggered'))
   })
 })
 
@@ -712,7 +714,7 @@ describe('safety timeout', () => {
     // Schedule is now in-flight. Advance past the 10-minute safety timeout.
     vi.advanceTimersByTime(600_000)
 
-    expect(mockLogInfo).toHaveBeenCalledWith(expect.stringContaining('timed out'))
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduler', expect.stringContaining('timed out'))
   })
 })
 

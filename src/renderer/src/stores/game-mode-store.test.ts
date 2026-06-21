@@ -326,4 +326,67 @@ describe('game-mode-store - initGameModeStore', () => {
     ;(globalThis as any).window = {}
     expect(() => initGameModeStore()).not.toThrow()
   })
+
+  it('auto-event pendingRestore defaults to false when status returns undefined', async () => {
+    mockSettingsGet.mockResolvedValue({})
+    mockGameModeStatus.mockResolvedValue({ active: false, activatedAt: null, pendingRestore: false })
+    initGameModeStore()
+
+    const handler = mockOnGameModeAutoEvent.mock.calls[0]![0]
+    mockGameModeStatus.mockResolvedValue({ active: true, activatedAt: 'x', pendingRestore: undefined })
+    handler({ type: 'game-detected', processName: 'Game.exe' })
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().pendingRestore).toBe(false)
+    })
+  })
+
+  it('pendingRestore defaults to false when status returns undefined', async () => {
+    mockSettingsGet.mockResolvedValue({})
+    mockGameModeStatus.mockResolvedValue({ active: false, activatedAt: null, pendingRestore: undefined })
+
+    initGameModeStore()
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().pendingRestore).toBe(false)
+    })
+  })
+})
+
+describe('game-mode-store - setGameProfile', () => {
+  it('sets a game profile and persists', () => {
+    const profile = {
+      enabledOptimizations: ['svc-wsearch'],
+      customProcessKillList: [],
+      autoDetect: false,
+      autoDeactivate: true,
+      customGameProcesses: [],
+      gameProfiles: {},
+    }
+    useGameModeStore.getState().setGameProfile('Minecraft.exe', profile)
+    const state = useGameModeStore.getState()
+    expect(state.config.gameProfiles['Minecraft.exe']).toEqual(profile)
+    expect(mockSettingsSet).toHaveBeenCalledWith({
+      gameMode: expect.objectContaining({
+        gameProfiles: { 'Minecraft.exe': profile },
+      }),
+    })
+  })
+
+  it('removes a game profile when profile is null', () => {
+    useGameModeStore.setState({
+      config: {
+        enabledOptimizations: [],
+        customProcessKillList: [],
+        autoDetect: false,
+        autoDeactivate: true,
+        customGameProcesses: [],
+        gameProfiles: { 'Minecraft.exe': { enabledOptimizations: [], customProcessKillList: [], autoDetect: false, autoDeactivate: true, customGameProcesses: [], gameProfiles: {} } },
+      },
+    })
+    useGameModeStore.getState().setGameProfile('Minecraft.exe', null)
+    const state = useGameModeStore.getState()
+    expect(state.config.gameProfiles['Minecraft.exe']).toBeUndefined()
+    expect(mockSettingsSet).toHaveBeenCalled()
+  })
 })

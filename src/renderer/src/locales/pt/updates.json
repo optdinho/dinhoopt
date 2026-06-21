@@ -5,7 +5,6 @@
     "software": "Software",
     "drivers": "Drivers",
     "softwareDescriptionWindows": "Aplicações de terceiros via winget",
-    "softwareDescriptionMac": "Aplicações de terceiros via Homebrew",
     "softwareDescriptionLinux": "Aplicações de terceiros via gestor de pacotes",
     "driversDescription": "Atualizações e limpeza de pacotes obsoletos"
   },
@@ -31,9 +30,6 @@
     "severityPatch": "Correção",
     "severityUpdate": "Atualização",
     "packageManagerNotFound": {
-      "brewNotFound": "brew não encontrado",
-      "brewRequired": "O Homebrew é necessário. Instale-o a partir de",
-      "brewSite": "brew.sh",
       "wingetNotFound": "winget não encontrado",
       "wingetRequired": "O Windows Package Manager é necessário. Instale-o a partir da",
       "wingetStore": "Microsoft Store",
@@ -41,13 +37,10 @@
       "chocoNotFound": "choco não encontrado",
       "chocoRequired": "O Chocolatey é necessário. Instale-o a partir de",
       "chocoSite": "chocolatey.org",
-      "aptNotFound": "apt não encontrado",
-      "aptRequired": "O gestor de pacotes APT é necessário. Deve vir pré-instalado em sistemas Debian e Ubuntu.",
       "dnfNotFound": "dnf não encontrado",
       "dnfRequired": "O gestor de pacotes DNF é necessário. Deve vir pré-instalado em sistemas Fedora e RHEL.",
       "pacmanNotFound": "pacman não encontrado",
-      "pacmanRequired": "O gestor de pacotes Pacman é necessário. Deve vir pré-instalado em sistemas Arch Linux.",
-      "noPackageManager": "Nenhum gestor de pacotes suportado foi encontrado. Suportados: apt (Debian/Ubuntu), dnf (Fedora/RHEL) ou pacman (Arch)."
+      "pacmanRequired": "O gestor de pacotes Pacman é necessário. Deve vir pré-instalado em sistemas Arch Linux."
     },
     "statOutdatedApps": "Aplicações desatualizadas",
     "statMajorUpdates": "Atualizações principais",

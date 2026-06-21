@@ -16,12 +16,10 @@ interface ShortcutInfo {
 const WIN_SYSTEM_SUBDIRS =
   /\\(System Tools|Administrative Tools|Accessibility|Windows PowerShell|Windows System|Windows Accessories)\\/i
 
-function isTargetBrokenLogic(info: ShortcutInfo, platform: string, targetExists: boolean): boolean {
-  if (platform === 'win32') {
-    if (WIN_SYSTEM_SUBDIRS.test(info.path)) return false
-    if (!info.targetPath) return false
-    if (/\\Windows\\/i.test(info.targetPath)) return false
-  }
+function isTargetBrokenLogic(info: ShortcutInfo, targetExists: boolean): boolean {
+  if (WIN_SYSTEM_SUBDIRS.test(info.path)) return false
+  if (!info.targetPath) return false
+  if (/\\Windows\\/i.test(info.targetPath)) return false
   if (!info.targetPath) return true
   if (info.targetPath.trim() === '') return true
   if (/^https?:\/\//i.test(info.targetPath)) return false
@@ -29,7 +27,6 @@ function isTargetBrokenLogic(info: ShortcutInfo, platform: string, targetExists:
   if (/^shell:/i.test(info.targetPath)) return false
   if (/^microsoft\./i.test(info.targetPath)) return false
   if (/\\WindowsApps\\/i.test(info.targetPath)) return false
-  if (platform !== 'win32' && !info.targetPath.startsWith('/')) return false
   return !targetExists
 }
 
@@ -43,7 +40,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\cmd.lnk',
           targetPath: null,
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -56,7 +52,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\ProgramData\\Start Menu\\Programs\\Administrative Tools\\disk.lnk',
           targetPath: null,
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -69,7 +64,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Start Menu\\Programs\\Accessibility\\magnify.lnk',
           targetPath: null,
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -84,7 +78,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Users\\User\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\File Explorer.lnk',
           targetPath: null,
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -97,7 +90,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Users\\User\\AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\explorer.lnk',
           targetPath: null,
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -113,7 +105,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\User Pinned\\TaskBar\\app.lnk',
           targetPath: 'C:\\Missing\\app.exe',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -126,7 +117,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\notepad.lnk',
           targetPath: 'C:\\Windows\\System32\\notepad.exe',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -141,7 +131,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\bookmark.lnk',
           targetPath: 'http://example.com',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -154,7 +143,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\secure.lnk',
           targetPath: 'https://example.com',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -167,7 +155,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\shell.lnk',
           targetPath: 'shell:RecycleBinFolder',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -180,7 +167,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\store.lnk',
           targetPath: 'microsoft.windowsstore:',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -193,7 +179,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\uwp.lnk',
           targetPath: 'C:\\Program Files\\WindowsApps\\SomeApp\\app.exe',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -206,29 +191,12 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\ftp.lnk',
           targetPath: 'ftp://server.com',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
   })
 
   // ── Null and empty targets ──
-
-  it('on Linux, flags null target as broken', () => {
-    // On Linux, a null target means the .desktop file had no Exec line or was
-    // unreadable, which we treat as broken. On Windows, null instead means a
-    // shell-namespace target that we cannot verify (handled above).
-    expect(
-      isTargetBrokenLogic(
-        {
-          path: '/home/user/Desktop/broken.desktop',
-          targetPath: null,
-        },
-        'linux',
-        false,
-      ),
-    ).toBe(true)
-  })
 
   it('flags empty string target as broken', () => {
     expect(
@@ -237,7 +205,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\broken.lnk',
           targetPath: '   ',
         },
-        'win32',
         false,
       ),
     ).toBe(true)
@@ -255,7 +222,6 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\app.lnk',
           targetPath: 'C:\\Missing\\app.exe',
         },
-        'win32',
         false,
       ),
     ).toBe(false)
@@ -268,65 +234,11 @@ describe('isTargetBroken logic', () => {
           path: 'C:\\Desktop\\app.lnk',
           targetPath: 'C:\\Existing\\app.exe',
         },
-        'win32',
         true,
       ),
     ).toBe(false)
   })
 
-  it('flags UNC-style target with missing file on Linux', () => {
-    expect(
-      isTargetBrokenLogic(
-        {
-          path: '/home/user/Desktop/app.desktop',
-          targetPath: '/opt/missing/app',
-        },
-        'linux',
-        false,
-      ),
-    ).toBe(true)
-  })
-
-  // ── Linux-specific ──
-
-  it('on Linux, does not flag non-absolute paths (resolved via PATH)', () => {
-    expect(
-      isTargetBrokenLogic(
-        {
-          path: '/home/user/.local/share/applications/app.desktop',
-          targetPath: 'firefox',
-        },
-        'linux',
-        false,
-      ),
-    ).toBe(false)
-  })
-
-  it('on Linux, flags absolute target that does not exist', () => {
-    expect(
-      isTargetBrokenLogic(
-        {
-          path: '/home/user/Desktop/app.desktop',
-          targetPath: '/usr/bin/nonexistent',
-        },
-        'linux',
-        false,
-      ),
-    ).toBe(true)
-  })
-
-  it('on Linux, does not flag absolute target that exists', () => {
-    expect(
-      isTargetBrokenLogic(
-        {
-          path: '/home/user/Desktop/app.desktop',
-          targetPath: '/usr/bin/existing',
-        },
-        'linux',
-        true,
-      ),
-    ).toBe(false)
-  })
 })
 
 // ── WIN_SYSTEM_SUBDIRS regex ──
@@ -402,79 +314,12 @@ describe('SHORTCUT_CLEAN input validation', () => {
   })
 })
 
-// ── binaryExistsInPath (replica) ──
-
-function binaryExistsInPath(binary: string, pathDirs: string[], existingFiles: Set<string>): boolean {
-  for (const dir of pathDirs) {
-    if (existingFiles.has(`${dir}/${binary}`)) return true
-  }
-  return false
-}
-
-describe('binaryExistsInPath', () => {
-  it('returns true when binary is found in PATH', () => {
-    expect(binaryExistsInPath('firefox', ['/usr/bin', '/usr/local/bin'], new Set(['/usr/bin/firefox']))).toBe(true)
-  })
-
-  it('returns false when binary is not found', () => {
-    expect(binaryExistsInPath('nonexistent', ['/usr/bin'], new Set(['/usr/bin/bash']))).toBe(false)
-  })
-
-  it('returns false with empty PATH', () => {
-    expect(binaryExistsInPath('firefox', [], new Set())).toBe(false)
-  })
-})
-
-// ── Linux .desktop file Exec line parsing ──
-
-describe('Linux .desktop Exec line parsing', () => {
-  it('extracts binary from simple Exec line', () => {
-    const execMatch = 'Exec=/usr/bin/firefox %u'.match(/^Exec\s*=\s*(.+)$/m)
-    expect(execMatch).not.toBeNull()
-    const execLine = execMatch![1]!.trim()
-    const binary = execLine.split(/\s+/)[0]!.replace(/^["']|["']$/g, '')
-    expect(binary).toBe('/usr/bin/firefox')
-  })
-
-  it('strips quotes from binary path', () => {
-    const execMatch = 'Exec="/usr/bin/my app" --flag'.match(/^Exec\s*=\s*(.+)$/m)
-    expect(execMatch).not.toBeNull()
-    const execLine = execMatch![1]!.trim()
-    const binary = execLine.split(/\s+/)[0]!.replace(/^["']|["']$/g, '')
-    expect(binary).toBe('/usr/bin/my')
-  })
-
-  it('strips field codes like %u, %f', () => {
-    const execLine = '/usr/bin/app %u %f'
-    const binary = execLine.split(/\s+/)[0]
-    expect(binary).toBe('/usr/bin/app')
-    // %u and %f are stripped by taking only the first token
-  })
-
-  it('handles PATH-resolved binary (no slash)', () => {
-    const execLine = 'firefox'
-    const binary = execLine.split(/\s+/)[0]!
-    expect(binary).toBe('firefox')
-    expect(binary.startsWith('/')).toBe(false)
-  })
-})
-
 // ── Shortcut directories by platform ──
 
 describe('shortcut directories structure', () => {
   it('Windows has 5 shortcut directories', () => {
     const winDirs = ['Desktop', 'Start Menu Programs', 'Taskbar', 'All Users Start Menu', 'Public Desktop']
     expect(winDirs).toHaveLength(5)
-  })
-
-  it('macOS has 2 shortcut directories', () => {
-    const macDirs = ['Desktop Aliases', 'User Applications']
-    expect(macDirs).toHaveLength(2)
-  })
-
-  it('Linux has 3 shortcut directories', () => {
-    const linuxDirs = ['Desktop Shortcuts', 'User Application Entries', 'System Application Entries']
-    expect(linuxDirs).toHaveLength(3)
   })
 })
 
@@ -559,8 +404,8 @@ vi.mock('../services/scan-cache', () => ({
   cacheItems: (...args: unknown[]) => mockCacheItems(...args),
 }))
 
-import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
 import type { CleanResult } from '@shared/types'
+import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
   const call = mockHandle.mock.calls.find((c) => c[0] === channel)
@@ -793,209 +638,6 @@ describe('registerShortcutCleanerIpc: SHORTCUT_SCAN', () => {
     })
   })
 
-  // ── macOS: resolveMacAliases via readdir/readlink ──
-
-  describe('macOS platform', () => {
-    beforeEach(() => {
-      setPlatform('darwin')
-    })
-    afterEach(restorePlatform)
-
-    it('resolves macOS aliases and returns broken symlinks only', async () => {
-      mockHomedir.mockReturnValue('/Users/user')
-
-      let readdirCount = 0
-      mockReaddir.mockImplementation(() => {
-        readdirCount++
-        // Desktop: has symlinks
-        if (readdirCount === 1) {
-          return Promise.resolve([
-            { name: 'good.app', isSymbolicLink: () => true } as never,
-            { name: 'readme.txt', isSymbolicLink: () => false } as never,
-            { name: 'broken.app', isSymbolicLink: () => true } as never,
-          ])
-        }
-        // User Applications: empty (no files at all)
-        return Promise.resolve([])
-      })
-      mockReadlink.mockImplementation((p: string) => {
-        if (p.includes('good.app')) return Promise.resolve('/Applications/RealApp.app')
-        if (p.includes('broken.app')) return Promise.resolve('/Applications/GoneApp.app')
-        return Promise.reject(new Error('no such file'))
-      })
-      // Dirs exist; good target exists; broken target does NOT exist
-      mockExistsSync.mockImplementation((p: string) => {
-        if (p === '/Applications/GoneApp.app') return false
-        return true
-      })
-      mockStat.mockResolvedValue({ size: 200 } as never)
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      expect(results).toHaveLength(1)
-      expect(results[0]!.subcategory).toBe('Desktop Aliases')
-      expect(results[0]!.items).toHaveLength(1)
-      expect(results[0]!.items[0]!.path).toContain('broken.app')
-    })
-
-    it('readdir error is silently caught per directory', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/Users/user')
-      mockReaddir.mockRejectedValue(new Error('EACCES'))
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-      expect(results).toEqual([])
-    })
-
-    it('readlink error includes path with null target which is broken on non-Windows', async () => {
-      mockHomedir.mockReturnValue('/Users/user')
-      mockExistsSync.mockReturnValue(true) // dirs exist; null target bypasses existsSync
-      let readdirCount = 0
-      mockReaddir.mockImplementation(() => {
-        readdirCount++
-        if (readdirCount === 1) {
-          return Promise.resolve([
-            { name: 'link1', isSymbolicLink: () => true } as never,
-          ])
-        }
-        return Promise.resolve([])
-      })
-      // readlink fails -> targetPath is null -> on darwin, null target = broken
-      mockReadlink.mockRejectedValue(new Error('readlink failed'))
-      mockStat.mockResolvedValue({ size: 50 } as never)
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      expect(results).toHaveLength(1)
-      expect(results[0]!.items).toHaveLength(1)
-    })
-  })
-
-  // ── Linux: resolveLinuxDesktopFiles via readdir/readFile ──
-
-  describe('Linux platform', () => {
-    beforeEach(() => {
-      setPlatform('linux')
-      process.env.PATH = '/usr/bin:/usr/local/bin'
-    })
-    afterEach(() => {
-      restorePlatform()
-      process.env = { ...origEnv }
-    })
-
-    function setupReaddir(firstDirEntries: Array<{ name: string }>, restEmpty = true) {
-      let callCount = 0
-      mockReaddir.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) return Promise.resolve(firstDirEntries.map((e) => ({
-          name: e.name,
-          isFile: () => false,
-          isDirectory: () => false,
-        } as never)))
-        return Promise.resolve([])
-      })
-    }
-
-    it('resolves .desktop files and returns broken shortcuts', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/home/user')
-      setupReaddir([{ name: 'app.desktop' }])
-      mockReadFile.mockResolvedValue('Exec=/usr/bin/goneapp %u')
-      // /usr/bin/goneapp doesn't exist -> broken
-      mockExistsSync.mockImplementation((p: string) => {
-        if (p === '/usr/bin/goneapp') return false
-        return true
-      })
-      mockStat.mockResolvedValue({ size: 100 } as never)
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      expect(results).toHaveLength(1)
-      expect(results[0]!.items).toHaveLength(1)
-    })
-
-    it('flags .desktop with no Exec line as broken (null target = true on Linux)', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/home/user')
-      setupReaddir([{ name: 'broken.desktop' }])
-      mockReadFile.mockResolvedValue('[Desktop Entry]\nName=Test\n')
-      mockStat.mockResolvedValue({ size: 50 } as never)
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      expect(results).toHaveLength(1)
-      expect(results[0]!.items).toHaveLength(1)
-    })
-
-    it('does not flag PATH-resolved binary (non-absolute target = not broken on Linux)', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/home/user')
-      setupReaddir([{ name: 'firefox.desktop' }])
-      mockReadFile.mockResolvedValue('Exec=firefox %u')
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      expect(results).toEqual([])
-    })
-
-    it('returns empty for directory with no .desktop files', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/home/user')
-      mockReaddir.mockResolvedValue([])
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-      expect(results).toEqual([])
-    })
-
-    it('handles Exec line with quoted binary path', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/home/user')
-      setupReaddir([{ name: 'app.desktop' }])
-      mockReadFile.mockResolvedValue('Exec="/usr/bin/my app" --flag')
-      // /usr/bin/my doesn't exist (quote stripping gives /usr/bin/my, not /usr/bin/my app)
-      mockExistsSync.mockImplementation((p: string) => {
-        if (p === '/usr/bin/my') return false
-        return true
-      })
-      mockStat.mockResolvedValue({ size: 75 } as never)
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      expect(results).toHaveLength(1)
-    })
-
-    it('handles readFile error per entry gracefully', async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockHomedir.mockReturnValue('/home/user')
-      setupReaddir([{ name: 'bad.desktop' }])
-      mockReadFile.mockRejectedValue(new Error('EACCES'))
-      mockStat.mockResolvedValue({ size: 30 } as never)
-
-      registerShortcutCleanerIpc(() => mockWindow() as never)
-      const handler = getHandler('cleaner:shortcut:scan')
-      const results = await handler()
-
-      // Null target on Linux = broken
-      expect(results).toHaveLength(1)
-      expect(results[0]!.items).toHaveLength(1)
-    })
-  })
 })
 
 describe('registerShortcutCleanerIpc: SHORTCUT_CLEAN', () => {
@@ -1072,7 +714,9 @@ describe('registerShortcutCleanerIpc: SHORTCUT_CLEAN', () => {
 
   it('sends cleaning progress to the window via cleanItems callback', async () => {
     const win = mockWindow()
-    let progressCallback: ((processed: number, total: number, currentPath: string, cleanedSize: number) => void) | undefined
+    let progressCallback:
+      | ((processed: number, total: number, currentPath: string, cleanedSize: number) => void)
+      | undefined
 
     mockCleanItems.mockImplementation(
       async (

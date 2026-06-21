@@ -38,9 +38,14 @@ vi.mock('@shared/registry-tweaks', () => ({
   applyIgnoredTweaks: (entries: unknown[]) => entries as [],
 }))
 
-import { registerRegistryCleanerIpc, scanRegistry, fixRegistryEntries, collectBackupTargets } from './registry-cleaner.ipc'
 import { IPC } from '@shared/channels'
 import type { RegistryEntry } from '@shared/types'
+import {
+  collectBackupTargets,
+  fixRegistryEntries,
+  registerRegistryCleanerIpc,
+  scanRegistry,
+} from './registry-cleaner.ipc'
 
 // ── Helpers ──
 
@@ -126,10 +131,7 @@ describe('IPC.REGISTRY_SCAN', () => {
     expect(mockScanRegistry).toHaveBeenCalledOnce()
     expect(mockScanRegistry).toHaveBeenCalledWith(expect.any(AbortSignal))
     expect(mockLogger.info).toHaveBeenCalledWith('registry-cleaner', 'Scanning registry for issues...')
-    expect(mockLogger.success).toHaveBeenCalledWith(
-      'registry-cleaner',
-      'Registry scan complete — 2 issues found',
-    )
+    expect(mockLogger.success).toHaveBeenCalledWith('registry-cleaner', 'Registry scan complete — 2 issues found')
   })
 
   it('returns empty array when scan is aborted', async () => {
@@ -158,10 +160,7 @@ describe('IPC.REGISTRY_SCAN', () => {
     registerRegistryCleanerIpc(() => mockWindow() as never)
     const handler = getHandler(IPC.REGISTRY_SCAN)
     await expect(handler()).rejects.toThrow('Permission denied')
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'registry-cleaner',
-      'Registry scan failed: Permission denied',
-    )
+    expect(mockLogger.error).toHaveBeenCalledWith('registry-cleaner', 'Registry scan failed: Permission denied')
   })
 
   it('logs unknown error when scan throws a non-Error value', async () => {
@@ -169,10 +168,7 @@ describe('IPC.REGISTRY_SCAN', () => {
     registerRegistryCleanerIpc(() => mockWindow() as never)
     const handler = getHandler(IPC.REGISTRY_SCAN)
     await expect(handler()).rejects.toBe('raw string error')
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'registry-cleaner',
-      'Registry scan failed: Unknown error',
-    )
+    expect(mockLogger.error).toHaveBeenCalledWith('registry-cleaner', 'Registry scan failed: Unknown error')
   })
 
   it('cleans up old scan sessions beyond the limit of 3', async () => {
@@ -313,10 +309,7 @@ describe('IPC.REGISTRY_FIX', () => {
 
     const fixHandler = getHandler(IPC.REGISTRY_FIX)
     await expect(fixHandler({}, ['error-me'])).rejects.toThrow('Access denied')
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'registry-cleaner',
-      'Registry fix failed: Access denied',
-    )
+    expect(mockLogger.error).toHaveBeenCalledWith('registry-cleaner', 'Registry fix failed: Access denied')
   })
 
   it('logs String(err) when fix throws a non-Error value', async () => {
@@ -332,10 +325,7 @@ describe('IPC.REGISTRY_FIX', () => {
 
     const fixHandler = getHandler(IPC.REGISTRY_FIX)
     await expect(fixHandler({}, ['non-err-fix'])).rejects.toBe(42)
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'registry-cleaner',
-      'Registry fix failed: 42',
-    )
+    expect(mockLogger.error).toHaveBeenCalledWith('registry-cleaner', 'Registry fix failed: 42')
   })
 
   it('sends progress to the window during fix', async () => {
@@ -449,10 +439,7 @@ describe('IPC.REGISTRY_SET_TWEAK_IGNORED', () => {
     const handler = getHandler(IPC.REGISTRY_SET_TWEAK_IGNORED)
     const result = handler({}, ['hkcu\\software\\test|valuename'], true)
     expect(result).toBeUndefined()
-    expect(mockUpdateRegistryIgnoredTweaks).toHaveBeenCalledWith(
-      ['hkcu\\software\\test|valuename'],
-      true,
-    )
+    expect(mockUpdateRegistryIgnoredTweaks).toHaveBeenCalledWith(['hkcu\\software\\test|valuename'], true)
   })
 })
 
@@ -500,17 +487,15 @@ describe('IPC.REGISTRY_FIX_CANCEL', () => {
     const entry = makeEntry('cancel-fix', { selected: true })
     mockScanRegistry.mockResolvedValue([entry])
     mockValidateStringArray.mockReturnValue(['cancel-fix'])
-    mockFixRegistryEntries.mockImplementation(
-      async (_entries: unknown, _onProgress: unknown, signal: AbortSignal) => {
-        return new Promise<never>((_resolve, reject) => {
-          signal.addEventListener('abort', () => {
-            const err = new Error('Cancelled')
-            err.name = 'AbortError'
-            reject(err)
-          })
+    mockFixRegistryEntries.mockImplementation(async (_entries: unknown, _onProgress: unknown, signal: AbortSignal) => {
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const err = new Error('Cancelled')
+          err.name = 'AbortError'
+          reject(err)
         })
-      },
-    )
+      })
+    })
     registerRegistryCleanerIpc(() => mockWindow() as never)
     const scanHandler = getHandler(IPC.REGISTRY_SCAN)
     await scanHandler()

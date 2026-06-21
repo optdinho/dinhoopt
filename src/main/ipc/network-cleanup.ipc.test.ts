@@ -123,10 +123,7 @@ describe('scanNetwork', () => {
     expect(historyItem.selected).toBe(false)
 
     expect(mocks.logger.info).toHaveBeenCalledWith('network-cleanup', 'Starting network scan...')
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'network-cleanup',
-      expect.stringContaining('5 item(s) found'),
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('network-cleanup', expect.stringContaining('5 item(s) found'))
   })
 
   it('returns only DNS item when no WiFi, ARP, or history', async () => {
@@ -152,9 +149,7 @@ describe('scanNetwork', () => {
     expect(items).toHaveLength(0)
   })
 
-  it('has different DNS detail on non-Windows', async () => {
-    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'darwin' })
+  it('uses Windows DNS detail string on all platforms', async () => {
     mocks.getDnsCacheEntries.mockResolvedValue([{ domain: 'a.com', resolvedAddress: '1.1.1.1' }])
     mocks.getWifiProfiles.mockResolvedValue([])
     mocks.execFileAsync.mockRejectedValue(new Error('no arp'))
@@ -162,10 +157,8 @@ describe('scanNetwork', () => {
 
     const items = await scanNetwork()
     expect(items.find((i) => i.type === 'dns-cache')!.detail).toBe(
-      'Flush DNS resolver cache to force fresh lookups',
+      '1 cached entries — flushing forces fresh DNS lookups',
     )
-
-    Object.defineProperty(process, 'platform', origPlatform!)
   })
 
   it('falls back to PowerShell for DNS count on Windows when getDnsCacheEntries is empty', async () => {
@@ -195,21 +188,6 @@ describe('scanNetwork', () => {
     expect(items).toHaveLength(0)
   })
 
-  it('returns 1 on non-Windows when getDnsCacheEntries is empty (always show flush)', async () => {
-    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'darwin' })
-    mocks.getDnsCacheEntries.mockResolvedValue([])
-    mocks.getWifiProfiles.mockResolvedValue([])
-    mocks.execFileAsync.mockRejectedValue(new Error('no arp'))
-    mocks.execNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
-
-    const items = await scanNetwork()
-    expect(items).toHaveLength(1)
-    expect(items[0].type).toBe('dns-cache')
-
-    Object.defineProperty(process, 'platform', origPlatform!)
-  })
-
   it('handles getWifiProfiles being undefined (optional method)', async () => {
     mocks.getWifiProfiles.mockReset()
     mocks.getWifiProfiles = undefined as never
@@ -234,9 +212,12 @@ describe('cleanNetworkItems', () => {
   beforeEach(() => {
     if (mocks.flushDnsCache && typeof mocks.flushDnsCache.mockReset === 'function') mocks.flushDnsCache.mockReset()
     if (mocks.clearArpCache && typeof mocks.clearArpCache.mockReset === 'function') mocks.clearArpCache.mockReset()
-    if (mocks.getWifiProfiles && typeof mocks.getWifiProfiles.mockReset === 'function') mocks.getWifiProfiles.mockReset()
-    if (mocks.deleteWifiProfile && typeof mocks.deleteWifiProfile.mockReset === 'function') mocks.deleteWifiProfile.mockReset()
-    if (mocks.getDnsCacheEntries && typeof mocks.getDnsCacheEntries.mockReset === 'function') mocks.getDnsCacheEntries.mockReset()
+    if (mocks.getWifiProfiles && typeof mocks.getWifiProfiles.mockReset === 'function')
+      mocks.getWifiProfiles.mockReset()
+    if (mocks.deleteWifiProfile && typeof mocks.deleteWifiProfile.mockReset === 'function')
+      mocks.deleteWifiProfile.mockReset()
+    if (mocks.getDnsCacheEntries && typeof mocks.getDnsCacheEntries.mockReset === 'function')
+      mocks.getDnsCacheEntries.mockReset()
     mocks.execFileAsync.mockReset()
     mocks.execNativeUtf8.mockReset()
   })
@@ -328,7 +309,13 @@ describe('cleanNetworkItems', () => {
       .mockResolvedValue({ stdout: '', stderr: '' })
 
     const items: NetworkItem[] = [
-      { id: '1', type: 'network-history', label: 'Network History', detail: '2 saved network profiles', selected: false },
+      {
+        id: '1',
+        type: 'network-history',
+        label: 'Network History',
+        detail: '2 saved network profiles',
+        selected: false,
+      },
     ]
 
     const result = await cleanNetworkItems(items)
@@ -341,7 +328,13 @@ describe('cleanNetworkItems', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' })
 
     const items: NetworkItem[] = [
-      { id: '1', type: 'network-history', label: 'Network History', detail: '2 saved network profiles', selected: false },
+      {
+        id: '1',
+        type: 'network-history',
+        label: 'Network History',
+        detail: '2 saved network profiles',
+        selected: false,
+      },
     ]
 
     const result = await cleanNetworkItems(items)
@@ -372,7 +365,13 @@ describe('cleanNetworkItems', () => {
       .mockRejectedValueOnce(new Error('access denied'))
 
     const items: NetworkItem[] = [
-      { id: '1', type: 'network-history', label: 'Network History', detail: '2 saved network profiles', selected: false },
+      {
+        id: '1',
+        type: 'network-history',
+        label: 'Network History',
+        detail: '2 saved network profiles',
+        selected: false,
+      },
     ]
 
     const result = await cleanNetworkItems(items)
@@ -398,9 +397,7 @@ describe('cleanNetworkItems', () => {
 
   it('handles WiFi profile deletion failure', async () => {
     mocks.deleteWifiProfile.mockResolvedValue(false)
-    const items: NetworkItem[] = [
-      { id: '1', type: 'wifi-profile', label: 'BadWiFi', detail: 'WEP', selected: false },
-    ]
+    const items: NetworkItem[] = [{ id: '1', type: 'wifi-profile', label: 'BadWiFi', detail: 'WEP', selected: false }]
 
     const result = await cleanNetworkItems(items)
     expect(result.cleaned).toBe(0)
@@ -421,9 +418,7 @@ describe('cleanNetworkItems', () => {
   })
 
   it('skips WiFi profiles with empty label', async () => {
-    const items: NetworkItem[] = [
-      { id: '1', type: 'wifi-profile', label: '', detail: 'WPA2', selected: false },
-    ]
+    const items: NetworkItem[] = [{ id: '1', type: 'wifi-profile', label: '', detail: 'WPA2', selected: false }]
 
     const result = await cleanNetworkItems(items)
     expect(result.cleaned).toBe(0)
@@ -444,9 +439,7 @@ describe('cleanNetworkItems', () => {
 
   it('handles deleteWifiProfile being undefined', async () => {
     mocks.deleteWifiProfile = undefined as never
-    const items: NetworkItem[] = [
-      { id: '1', type: 'wifi-profile', label: 'HomeWiFi', detail: 'WPA2', selected: false },
-    ]
+    const items: NetworkItem[] = [{ id: '1', type: 'wifi-profile', label: 'HomeWiFi', detail: 'WPA2', selected: false }]
 
     const result = await cleanNetworkItems(items)
     expect(result.cleaned).toBe(0)
@@ -457,9 +450,7 @@ describe('cleanNetworkItems', () => {
 
   it('handles rejected promise from WiFi profile deletion', async () => {
     mocks.deleteWifiProfile.mockRejectedValue(new Error('unexpected error'))
-    const items: NetworkItem[] = [
-      { id: '1', type: 'wifi-profile', label: 'HomeWiFi', detail: 'WPA2', selected: false },
-    ]
+    const items: NetworkItem[] = [{ id: '1', type: 'wifi-profile', label: 'HomeWiFi', detail: 'WPA2', selected: false }]
 
     const result = await cleanNetworkItems(items)
     expect(result.cleaned).toBe(0)
@@ -494,15 +485,10 @@ describe('cleanNetworkItems', () => {
 
   it('logs success when all items clean without failures', async () => {
     mocks.flushDnsCache.mockResolvedValue(true)
-    const items: NetworkItem[] = [
-      { id: '1', type: 'dns-cache', label: 'DNS', detail: '5 entries', selected: true },
-    ]
+    const items: NetworkItem[] = [{ id: '1', type: 'dns-cache', label: 'DNS', detail: '5 entries', selected: true }]
 
     await cleanNetworkItems(items)
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'network-cleanup',
-      expect.stringContaining('1 cleaned'),
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('network-cleanup', expect.stringContaining('1 cleaned'))
   })
 
   it('processes mixed item types: DNS + WiFi + ARP + history', async () => {
@@ -633,10 +619,7 @@ describe('registerNetworkCleanupIpc', () => {
 
       expect(result.cleaned).toBe(1)
       expect(result.failed).toBe(0)
-      expect(mocks.logger.success).toHaveBeenCalledWith(
-        'network-cleanup',
-        expect.stringContaining('1 cleaned'),
-      )
+      expect(mocks.logger.success).toHaveBeenCalledWith('network-cleanup', expect.stringContaining('1 cleaned'))
     })
   })
 })

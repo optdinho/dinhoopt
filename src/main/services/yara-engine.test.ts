@@ -30,6 +30,7 @@ vi.mock('node:fs', async (importOriginal) => {
 vi.mock('./logger.service', () => ({
   getLogger: vi.fn(() => ({
     info: vi.fn(),
+    warning: vi.fn(),
   })),
 }))
 
@@ -82,8 +83,14 @@ describe('ReadWriteLock', () => {
     const lock = new ReadWriteLock()
     let readersExecuted = 0
     await lock.acquireRead()
-    const p2 = lock.acquireRead().then(() => { readersExecuted++; lock.releaseRead() })
-    const p3 = lock.acquireRead().then(() => { readersExecuted++; lock.releaseRead() })
+    const p2 = lock.acquireRead().then(() => {
+      readersExecuted++
+      lock.releaseRead()
+    })
+    const p3 = lock.acquireRead().then(() => {
+      readersExecuted++
+      lock.releaseRead()
+    })
     await new Promise((r) => setTimeout(r, 50))
     expect(readersExecuted).toBe(2)
     lock.releaseRead()
@@ -95,7 +102,10 @@ describe('ReadWriteLock', () => {
     const lock = new ReadWriteLock()
     let writeExecuted = false
     await lock.acquireRead()
-    const writePromise = lock.acquireWrite().then(() => { writeExecuted = true; lock.releaseWrite() })
+    const writePromise = lock.acquireWrite().then(() => {
+      writeExecuted = true
+      lock.releaseWrite()
+    })
     await new Promise((r) => setTimeout(r, 50))
     expect(writeExecuted).toBe(false)
     lock.releaseRead()
@@ -107,8 +117,14 @@ describe('ReadWriteLock', () => {
     const lock = new ReadWriteLock()
     const order: string[] = []
     await lock.acquireWrite()
-    const p1 = lock.acquireWrite().then(() => { order.push('w1'); lock.releaseWrite() })
-    const p2 = lock.acquireWrite().then(() => { order.push('w2'); lock.releaseWrite() })
+    const p1 = lock.acquireWrite().then(() => {
+      order.push('w1')
+      lock.releaseWrite()
+    })
+    const p2 = lock.acquireWrite().then(() => {
+      order.push('w2')
+      lock.releaseWrite()
+    })
     await new Promise((r) => setTimeout(r, 50))
     expect(order).toEqual([])
     lock.releaseWrite()
@@ -132,8 +148,13 @@ describe('ReadWriteLock', () => {
     const lock = new ReadWriteLock()
     let writeRan = false
     await lock.acquireRead()
-    const writePromise = lock.acquireWrite().then(() => { writeRan = true; lock.releaseWrite() })
-    const readPromise = lock.acquireRead().then(() => { lock.releaseRead() })
+    const writePromise = lock.acquireWrite().then(() => {
+      writeRan = true
+      lock.releaseWrite()
+    })
+    const readPromise = lock.acquireRead().then(() => {
+      lock.releaseRead()
+    })
     await new Promise((r) => setTimeout(r, 50))
     expect(writeRan).toBe(false)
     lock.releaseRead()
@@ -206,8 +227,9 @@ describe('yaraMatchToThreatFields', () => {
   })
 
   it('falls back to rule name', () => {
-    expect(yaraMatchToThreatFields({ ruleName: 'CoinMiner_XMRig', metadata: {}, matchedStrings: [] }).detectionName)
-      .toBe('CoinMiner.XMRig')
+    expect(
+      yaraMatchToThreatFields({ ruleName: 'CoinMiner_XMRig', metadata: {}, matchedStrings: [] }).detectionName,
+    ).toBe('CoinMiner.XMRig')
   })
 
   it('converts underscores to dots', () => {
@@ -220,19 +242,24 @@ describe('yaraMatchToThreatFields', () => {
   })
 
   it('defaults details', () => {
-    expect(yaraMatchToThreatFields({ ruleName: 'RAT', metadata: {}, matchedStrings: [] }).details)
-      .toBe('YARA rule match: RAT')
+    expect(yaraMatchToThreatFields({ ruleName: 'RAT', metadata: {}, matchedStrings: [] }).details).toBe(
+      'YARA rule match: RAT',
+    )
   })
 
   it('handles all severity levels', () => {
     for (const sev of ['critical', 'high', 'medium', 'low'] as const) {
-      expect(yaraMatchToThreatFields({ ruleName: 'T', metadata: { severity: sev }, matchedStrings: [] }).severity).toBe(sev)
+      expect(yaraMatchToThreatFields({ ruleName: 'T', metadata: { severity: sev }, matchedStrings: [] }).severity).toBe(
+        sev,
+      )
     }
   })
 
   it('clamps invalid severity', () => {
     // biome-ignore lint/suspicious/noExplicitAny: test mock
-    expect(yaraMatchToThreatFields({ ruleName: 'T', metadata: { severity: 'info' as any }, matchedStrings: [] }).severity).toBe('high')
+    expect(
+      yaraMatchToThreatFields({ ruleName: 'T', metadata: { severity: 'info' as any }, matchedStrings: [] }).severity,
+    ).toBe('high')
   })
 })
 
@@ -336,29 +363,11 @@ describe('YaraEngine', () => {
       expect(r.errors[0]).toContain('missing.yar')
     })
 
-    it('skips linux rules on win32', async () => {
-      const orig = process.platform
-      setPlatform('win32')
-      await engine.initialize()
-      const r = await engine.loadRules(['/rules/elastic_Linux_Trojan_Mirai.yar'])
-      expect(r.loaded).toBe(0)
-      Object.defineProperty(process, 'platform', { value: orig, configurable: true, writable: true })
-    })
-
     it('skips windows rules on linux', async () => {
       const orig = process.platform
       setPlatform('linux')
       await engine.initialize()
       const r = await engine.loadRules(['/rules/elastic_Windows_Generic.yar'])
-      expect(r.loaded).toBe(0)
-      Object.defineProperty(process, 'platform', { value: orig, configurable: true, writable: true })
-    })
-
-    it('skips macos rules on win32', async () => {
-      const orig = process.platform
-      setPlatform('win32')
-      await engine.initialize()
-      const r = await engine.loadRules(['/rules/elastic_Darwin_Generic.yar'])
       expect(r.loaded).toBe(0)
       Object.defineProperty(process, 'platform', { value: orig, configurable: true, writable: true })
     })

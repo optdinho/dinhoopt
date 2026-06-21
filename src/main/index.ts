@@ -1,15 +1,15 @@
-import dotenv from 'dotenv'
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import dotenv from 'dotenv'
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell } from 'electron'
 
-// Carrega .env — em dev usa a raiz do projeto, em produção usa resources
-const envPath = app.isPackaged
-  ? join(process.resourcesPath, '.env')
-  : join(__dirname, '../../.env')
-if (existsSync(envPath)) {
-  dotenv.config({ path: envPath })
+// Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
+if (!app.isPackaged) {
+  const envPath = join(__dirname, '../../.env')
+  if (existsSync(envPath)) {
+    dotenv.config({ path: envPath })
+  }
 }
 
 // Disable GPU acceleration — Windows 25H2 (10.0.26200) crashes the GPU
@@ -45,11 +45,7 @@ import { getSettings } from './services/settings-store'
 // On some Windows builds the GPU process crashes at launch.
 // disable-gpu forces Skia software rendering (CPU-based),
 // bypassing the broken GPU driver entirely.
-// NOTE: in-process-gpu is intentionally OMITTED — it causes a
-// black screen on 25H2 and similar builds.  When the separate
-// GPU process is disabled, Chromium falls back to the in-process
-// path automatically, so the flag is redundant anyway.
-app.commandLine.appendSwitch('disable-gpu')
+// in-process-gpu is needed to avoid black screen on 25H2.
 
 process.on('uncaughtException', (err) => {
   getLogger().error('app', `Uncaught exception: ${err.message}`)
@@ -81,26 +77,6 @@ if (dataDirFlag) {
   const dir = dataDirFlag.slice('--dinho-data-dir='.length)
   if (dir && require('node:path').isAbsolute(dir)) {
     app.setPath('userData', dir)
-  }
-}
-
-// ─── Root detection (macOS + Linux) ─────────────────────────
-// Chromium refuses to run as root without --no-sandbox.  Also required
-// on macOS for clipboard access (paste) in the elevated process.
-const isRoot =
-  (process.platform === 'linux' || process.platform === 'darwin') &&
-  typeof process.getuid === 'function' &&
-  process.getuid() === 0
-
-if (isRoot) {
-  app.commandLine.appendSwitch('no-sandbox')
-  // On some Linux desktops (e.g. Linux Mint / Cinnamon) the software
-  // compositor still fails to paint when running as root — the window
-  // loads (cursor reacts) but remains grey.  Disabling GPU compositing
-  // forces a fallback path that reliably renders.
-  if (process.platform === 'linux') {
-    app.commandLine.appendSwitch('disable-gpu-compositing')
-    app.commandLine.appendSwitch('in-process-gpu')
   }
 }
 
@@ -141,42 +117,13 @@ function initGui(): void {
   let ipcRegistered = false
 
   function getIconPath(): string {
-    const ext = process.platform === 'darwin' ? 'icns' : process.platform === 'linux' ? 'png' : 'ico'
-    return app.isPackaged ? join(process.resourcesPath, `icon.${ext}`) : join(__dirname, `../../resources/icon.${ext}`)
-  }
-
-  function getIconsDir(): string {
-    return app.isPackaged ? join(process.resourcesPath, 'icons') : join(__dirname, '../../resources/icons')
+    return app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../resources/icon.ico')
   }
 
   function createTrayIcon(): Electron.NativeImage {
-    if (process.platform === 'darwin') {
-      // Build a multi-resolution image so the icon is sharp on Retina displays.
-      // Uses pre-rendered 16×16 (@1x) and 32×32 (@2x) PNGs instead of
-      // down-scaling the 1024×1024 app icon at runtime.
-      const dir = getIconsDir()
-      const trayIcon = nativeImage.createEmpty()
-      trayIcon.addRepresentation({
-        scaleFactor: 1.0,
-        width: 16,
-        height: 16,
-        buffer: readFileSync(join(dir, '16x16.png')),
-      })
-      trayIcon.addRepresentation({
-        scaleFactor: 2.0,
-        width: 32,
-        height: 32,
-        buffer: readFileSync(join(dir, '32x32.png')),
-      })
-      trayIcon.setTemplateImage(true)
-      return trayIcon
-    }
-
-    // Windows / Linux: load the main icon and resize to standard tray size
-    const ext = process.platform === 'win32' ? 'ico' : 'png'
     const iconPath = app.isPackaged
-      ? join(process.resourcesPath, `icon.${ext}`)
-      : join(__dirname, `../../resources/icon.${ext}`)
+      ? join(process.resourcesPath, 'icon.ico')
+      : join(__dirname, '../../resources/icon.ico')
     return nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   }
 
@@ -391,11 +338,7 @@ function initGui(): void {
     mainWindow.maximize()
 
     const settings = getSettings()
-    // Detect startup launch: --startup flag (Windows Task Scheduler / Linux),
-    // or macOS wasOpenedAtLogin (since macOS 13+ drops argv from login items).
-    const isStartupLaunch =
-      process.argv.includes('--startup') ||
-      (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin)
+    const isStartupLaunch = process.argv.includes('--startup')
 
     attachRendererDiagnostics(mainWindow)
 
@@ -479,13 +422,6 @@ function initGui(): void {
       'app',
       `App starting — v${app.getVersion()}, platform: ${process.platform}, elevated: ${isAdmin()}`,
     )
-    // On macOS, ensure the Dock icon is visible.  When relaunched as root
-    // via osascript the binary is executed directly (not through `open` /
-    // LaunchServices), so the Dock icon won't appear automatically.
-    if (process.platform === 'darwin' && app.dock) {
-      app.dock.show()
-    }
-
     // Ensure an Edit menu exists so clipboard shortcuts (Cmd+C/V/X on macOS,
     // Ctrl+C/V/X elsewhere) work in the frameless window.  On macOS Cmd+V
     // relies on an Edit menu with the paste role — without an explicit menu
@@ -582,9 +518,7 @@ function initGui(): void {
       // Stay alive in tray
       return
     }
-    if (process.platform !== 'darwin') {
-      app.quit()
-    }
+    app.quit()
   })
 
   app.on('before-quit', () => {

@@ -1,31 +1,23 @@
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
+import { usePolling } from '@/hooks/usePolling'
 import { ShieldCheck } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import type { PrivacyShieldState } from '@shared/types'
 
+const PRIVACY_POLL_INTERVAL = 120_000
+
 export function PrivacyShieldCard() {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
-  const [state, setState] = useState<PrivacyShieldState | null>(null)
-  const [error, setError] = useState(false)
+  const { data: state, error, loading } = usePolling<PrivacyShieldState>(
+    () => window.dinho?.privacyScan?.() ?? Promise.resolve({ score: 0, protected: 0, total: 0 }),
+    PRIVACY_POLL_INTERVAL,
+  )
 
-  useEffect(() => {
-    let cancelled = false
-    window.dinho?.privacyScan?.()
-      .then((result) => {
-        if (!cancelled) setState(result)
-      })
-      .catch(() => {
-        if (!cancelled) setError(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const score = state?.score ?? 0
+  const score = Math.round(useAnimatedCounter(state?.score ?? 0))
   const protectedCount = state?.protected ?? 0
   const total = state?.total ?? 0
   const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
@@ -61,11 +53,7 @@ export function PrivacyShieldCard() {
             border: `1px solid ${error ? 'var(--border-subtle)' : `${color}35`}`,
           }}
         >
-          <ShieldCheck
-            className="h-4 w-4"
-            style={{ color: error ? 'var(--text-faint)' : color }}
-            strokeWidth={1.8}
-          />
+          <ShieldCheck className="h-4 w-4" style={{ color: error ? 'var(--text-faint)' : color }} strokeWidth={1.8} />
         </div>
         <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           {t('privacyCardTitle')}
@@ -76,7 +64,7 @@ export function PrivacyShieldCard() {
         <span className="mt-4 text-xs" style={{ color: 'var(--text-muted)' }}>
           {t('privacyCardUnavailable')}
         </span>
-      ) : state === null ? (
+      ) : loading ? (
         <div className="mt-4 space-y-2">
           <div className="h-5 w-16 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} />
           <div className="h-3 w-28 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} />

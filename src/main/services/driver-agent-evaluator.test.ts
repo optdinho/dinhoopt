@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { evaluateDrivers, AGENTS } from './driver-agent-evaluator'
 import type { DriverUpdate } from '@shared/types'
+import { describe, expect, it } from 'vitest'
+import { AGENTS, evaluateDrivers } from './driver-agent-evaluator'
 
 function makeUpdate(overrides: Partial<DriverUpdate> = {}): DriverUpdate {
   return {
@@ -67,11 +67,7 @@ describe('driver-agent-evaluator', () => {
     it('tallies counts correctly', () => {
       const result = evaluateDrivers([makeUpdate()])
       const total =
-        result.criticalCount +
-        result.recommendedCount +
-        result.optionalCount +
-        result.cautionCount +
-        result.skipCount
+        result.criticalCount + result.recommendedCount + result.optionalCount + result.cautionCount + result.skipCount
       expect(total).toBe(result.totalCandidates)
     })
   })
@@ -168,19 +164,23 @@ describe('driver-agent-evaluator', () => {
 
   describe('Agent 6: Hardware Match', () => {
     it('scores 90 when update title closely matches device name', () => {
-      const result = evaluateDrivers([makeUpdate({
-        deviceName: 'NVIDIA GeForce RTX 3080',
-        updateTitle: 'NVIDIA GeForce RTX 3080 Driver Update',
-      })])
+      const result = evaluateDrivers([
+        makeUpdate({
+          deviceName: 'NVIDIA GeForce RTX 3080',
+          updateTitle: 'NVIDIA GeForce RTX 3080 Driver Update',
+        }),
+      ])
       const v = result.candidates[0].verdicts.find((v) => v.agentId === 'hardware-match')!
       expect(v.score).toBeGreaterThanOrEqual(80)
     })
 
     it('scores 50 for generic titles with no match', () => {
-      const result = evaluateDrivers([makeUpdate({
-        deviceName: 'NVIDIA GeForce RTX 3080',
-        updateTitle: 'Generic Driver Update Package',
-      })])
+      const result = evaluateDrivers([
+        makeUpdate({
+          deviceName: 'NVIDIA GeForce RTX 3080',
+          updateTitle: 'Generic Driver Update Package',
+        }),
+      ])
       const v = result.candidates[0].verdicts.find((v) => v.agentId === 'hardware-match')!
       expect(v.score).toBeLessThanOrEqual(60)
     })

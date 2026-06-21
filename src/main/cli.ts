@@ -53,24 +53,24 @@ function log(msg: string): void {
   process.stdout.write(`${msg}\n`)
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   return `${(bytes / 1024 ** i).toFixed(2)} ${units[i]}`
 }
 
-function cliLog(ctx: CliContext, msg: string): void {
+export function cliLog(ctx: CliContext, msg: string): void {
   if (ctx.verbosity === 'quiet') return
   process.stdout.write(`${msg}\n`)
 }
 
-function cliVerbose(ctx: CliContext, msg: string): void {
+export function cliVerbose(ctx: CliContext, msg: string): void {
   if (ctx.verbosity !== 'verbose') return
   process.stdout.write(`  [verbose] ${msg}\n`)
 }
 
-function cliOut(ctx: CliContext, data: unknown): void {
+export function cliOut(ctx: CliContext, data: unknown): void {
   if (ctx.json) {
     log(JSON.stringify(data, null, 2))
   } else if (ctx.verbosity === 'quiet') {
@@ -89,7 +89,7 @@ function cliOut(ctx: CliContext, data: unknown): void {
   }
 }
 
-function cliUsage(ctx: CliContext, usage: string): void {
+export function cliUsage(ctx: CliContext, usage: string): void {
   if (ctx.json) {
     log(JSON.stringify({ error: 'invalid_usage', usage }))
   } else {
@@ -98,7 +98,7 @@ function cliUsage(ctx: CliContext, usage: string): void {
   }
 }
 
-function cliNotFound(ctx: CliContext, type: string, name: string): void {
+export function cliNotFound(ctx: CliContext, type: string, name: string): void {
   if (ctx.json) {
     log(JSON.stringify({ error: 'not_found', type, name }))
   } else {
@@ -108,7 +108,7 @@ function cliNotFound(ctx: CliContext, type: string, name: string): void {
 }
 
 /** Whether to show interactive progress (carriage-return overwrites) */
-function showProgress(ctx: CliContext): boolean {
+export function showProgress(ctx: CliContext): boolean {
   return ctx.verbosity !== 'quiet' && !ctx.json
 }
 
@@ -606,7 +606,7 @@ async function getChromiumProfiles(basePath: string): Promise<string[]> {
 
 // ─── Help text ───────────────────────────────────────────────
 
-function printHelp(): void {
+export function printHelp(): void {
   log(
     `
 DiNho CLI — Full-featured command line interface
@@ -695,10 +695,6 @@ Config Management:
   config get [key]             Show settings
   config set <key> <value>     Update a setting
 
-Service Management (Linux):
-  service install              Install as a systemd service
-  service uninstall            Remove the systemd service
-  service status               Show service status
 
 Prometheus Metrics:
   metrics                    Print current metrics (Prometheus text format)
@@ -731,8 +727,7 @@ Examples:
   dinho --cli perf info                 Show system specs
   dinho --cli metrics                   Print Prometheus metrics
   dinho --cli metrics-server --port 9200  Start metrics endpoint
-  dinho --daemon                        Run headless daemon
-  sudo dinho --cli service install      Install as Linux service
+   dinho --daemon                        Run headless daemon
 `.trim(),
   )
 }
@@ -1192,7 +1187,7 @@ async function handleUpdates(args: string[], ctx: CliContext): Promise<number | 
         cliLog(ctx, `  ${result.packageManagerName ?? 'package manager'} is not available on this system`)
         return
       }
-      cliLog(ctx, `Found ${result.apps.length} apps, ${result.apps.filter(a => a.isUpToDate).length} up to date`)
+      cliLog(ctx, `Found ${result.apps.length} apps, ${result.apps.filter((a) => a.isUpToDate).length} up to date`)
       for (const a of result.apps)
         cliLog(ctx, `  ${a.name}: ${a.currentVersion} → ${a.availableVersion} (${a.severity})`)
     }
@@ -1416,180 +1411,6 @@ async function handleConfig(args: string[], ctx: CliContext): Promise<number | u
       cliLog(ctx, '')
       cliLog(ctx, 'Examples:')
       cliLog(ctx, '  dinho --cli config get                        Show all settings')
-    }
-    return ExitCode.INVALID_ARGS
-  }
-}
-
-// ─── Service management (systemd) ────────────────────────────
-
-async function handleService(args: string[], ctx: CliContext): Promise<number | undefined> {
-  const sub = args[0]
-
-  if (process.platform !== 'linux') {
-    if (ctx.json) {
-      cliOut(ctx, {
-        error: 'unsupported_platform',
-        message: 'Service management is only supported on Linux (systemd)',
-        platform: process.platform,
-      })
-    } else {
-      log('Error: Service management is only supported on Linux (systemd).')
-      if (process.platform === 'win32') {
-        log('On Windows, use Task Scheduler or NSSM to run as a service.')
-      } else if (process.platform === 'darwin') {
-        log('On macOS, use launchd with a plist file.')
-      }
-    }
-    return ExitCode.INVALID_ARGS
-  }
-
-  const { writeFileSync, existsSync: fsExistsSync, unlinkSync } = await import('node:fs')
-  const { execFileSync } = await import('node:child_process')
-
-  const serviceName = 'dinho'
-  const servicePath = `/etc/systemd/system/${serviceName}.service`
-  const exePath = app.getPath('exe')
-
-  // Determine the user to run as (prefer the user who invoked sudo)
-  const runUser = process.env.SUDO_USER || process.env.USER || 'root'
-
-  const unitContent = `[Unit]
-Description=DiNho System Cleaner Daemon
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=${runUser}
-ExecStart=${exePath} --daemon
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=dinho
-Environment=ELECTRON_NO_ATTACH_CONSOLE=1
-Environment=DISPLAY=
-
-[Install]
-WantedBy=multi-user.target
-`
-
-  if (sub === 'install') {
-    try {
-      writeFileSync(servicePath, unitContent, 'utf-8')
-      execFileSync('systemctl', ['daemon-reload'])
-      if (ctx.json) {
-        cliOut(ctx, { success: true, path: servicePath })
-      } else {
-        cliLog(ctx, `Service installed: ${servicePath}`)
-        cliLog(ctx, '')
-        cliLog(ctx, 'To start now:          sudo systemctl start dinho')
-        cliLog(ctx, 'To enable on boot:     sudo systemctl enable dinho')
-        cliLog(ctx, 'To do both:            sudo systemctl enable --now dinho')
-        cliLog(ctx, 'To view logs:          journalctl -u dinho -f')
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : ''
-      if (msg.includes('EACCES') || msg.includes('Permission denied')) {
-        if (ctx.json) cliOut(ctx, { error: 'permission_denied', message: 'Run with sudo' })
-        else {
-          log('Error: Permission denied. Run with sudo:')
-          log('  sudo dinho --cli service install')
-        }
-        return ExitCode.PERMISSION_DENIED
-      }
-      if (ctx.json) cliOut(ctx, { error: 'install_failed', message: msg })
-      else log(`Error installing service: ${msg}`)
-      return ExitCode.GENERAL_ERROR
-    }
-  } else if (sub === 'uninstall') {
-    try {
-      // Stop and disable first, ignore errors if not running
-      try {
-        execFileSync('systemctl', ['stop', serviceName])
-      } catch {
-        /* ok */
-      }
-      try {
-        execFileSync('systemctl', ['disable', serviceName])
-      } catch {
-        /* ok */
-      }
-      if (fsExistsSync(servicePath)) {
-        unlinkSync(servicePath)
-        execFileSync('systemctl', ['daemon-reload'])
-      }
-      if (ctx.json) cliOut(ctx, { success: true })
-      else cliLog(ctx, 'Service uninstalled.')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : ''
-      if (msg.includes('EACCES') || msg.includes('Permission denied')) {
-        if (ctx.json) cliOut(ctx, { error: 'permission_denied', message: 'Run with sudo' })
-        else {
-          log('Error: Permission denied. Run with sudo:')
-          log('  sudo dinho --cli service uninstall')
-        }
-        return ExitCode.PERMISSION_DENIED
-      }
-      if (ctx.json) cliOut(ctx, { error: 'uninstall_failed', message: msg })
-      else log(`Error uninstalling service: ${msg}`)
-      return ExitCode.GENERAL_ERROR
-    }
-  } else if (sub === 'status') {
-    try {
-      if (ctx.json) {
-        const output = execFileSync(
-          'systemctl',
-          ['show', serviceName, '--property=ActiveState,SubState,LoadState,MainPID'],
-          { encoding: 'utf-8' },
-        )
-        const parsed = Object.fromEntries(
-          output
-            .trim()
-            .split('\n')
-            .map((l) => l.split('=')),
-        )
-        cliOut(ctx, parsed)
-      } else {
-        const output = execFileSync('systemctl', ['status', serviceName], { encoding: 'utf-8' })
-        log(output)
-      }
-    } catch (err: unknown) {
-      // systemctl status returns exit code 3 if service is not running
-      if (ctx.json) {
-        try {
-          const output = execFileSync(
-            'systemctl',
-            ['show', serviceName, '--property=ActiveState,SubState,LoadState,MainPID'],
-            { encoding: 'utf-8' },
-          )
-          const parsed = Object.fromEntries(
-            output
-              .trim()
-              .split('\n')
-              .map((l) => l.split('=')),
-          )
-          cliOut(ctx, parsed)
-        } catch {
-          cliOut(ctx, { error: 'not_installed', message: 'Service is not installed or not running' })
-        }
-      } else {
-        const execErr = err as { stdout?: string; stderr?: string }
-        if (execErr.stdout) log(execErr.stdout)
-        else if (execErr.stderr) log(execErr.stderr)
-        else cliLog(ctx, 'Service is not installed or not running.')
-      }
-    }
-  } else {
-    if (ctx.json) {
-      cliOut(ctx, { error: 'invalid_usage', usage: 'service <install|uninstall|status>' })
-    } else {
-      cliLog(ctx, 'Usage: dinho --cli service <install|uninstall|status>')
-      cliLog(ctx, '')
-      cliLog(ctx, '  install     Install DiNho as a systemd service')
-      cliLog(ctx, '  uninstall   Stop, disable, and remove the systemd service')
-      cliLog(ctx, '  status      Show current service status')
     }
     return ExitCode.INVALID_ARGS
   }
@@ -1896,9 +1717,6 @@ export async function runCli(): Promise<void> {
         break
       case 'config':
         exitCode = await handleConfig(parsed.commandArgs, ctx)
-        break
-      case 'service':
-        exitCode = await handleService(parsed.commandArgs, ctx)
         break
       case 'cve':
         exitCode = await handleCve(parsed.commandArgs, ctx)

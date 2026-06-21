@@ -9,6 +9,7 @@ function mockKudu() {
     windowsTweaksApply: vi.fn(),
     windowsTweaksRevert: vi.fn(),
     windowsTweaksSetDns: vi.fn(),
+    windowsTweaksNetshTcp: vi.fn(),
     onWindowsTweaksApplyProgress: vi.fn(() => vi.fn()),
     onWindowsTweaksRevertProgress: vi.fn(() => vi.fn()),
   }
@@ -213,5 +214,37 @@ describe('windows-tweaks-store', () => {
     kudu.windowsTweaksSetDns.mockRejectedValue(new Error('fail'))
     const result = await useWindowsTweaksStore.getState().setDns('1.1.1.1')
     expect(result).toBe(false)
+  })
+
+  it('netshTcpApply calls netsh TCP apply', async () => {
+    const kudu = mockKudu()
+    kudu.windowsTweaksNetshTcp.mockResolvedValue({ success: true })
+    const result = await useWindowsTweaksStore.getState().netshTcpApply()
+    expect(kudu.windowsTweaksNetshTcp).toHaveBeenCalledWith('apply')
+    expect(result.success).toBe(true)
+  })
+
+  it('netshTcpApply handles error', async () => {
+    const kudu = mockKudu()
+    kudu.windowsTweaksNetshTcp.mockRejectedValue(new Error('fail'))
+    const result = await useWindowsTweaksStore.getState().netshTcpApply()
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+
+  it('netshTcpRevert calls netsh TCP revert', async () => {
+    const kudu = mockKudu()
+    kudu.windowsTweaksNetshTcp.mockResolvedValue({ success: true })
+    const result = await useWindowsTweaksStore.getState().netshTcpRevert()
+    expect(kudu.windowsTweaksNetshTcp).toHaveBeenCalledWith('revert')
+    expect(result.success).toBe(true)
+  })
+
+  it('netshTcpRevert handles error', async () => {
+    const kudu = mockKudu()
+    kudu.windowsTweaksNetshTcp.mockRejectedValue(new Error('fail'))
+    const result = await useWindowsTweaksStore.getState().netshTcpRevert()
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
   })
 })

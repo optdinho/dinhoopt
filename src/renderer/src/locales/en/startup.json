@@ -14,7 +14,6 @@
   "sourceLaunchAgentUser": "User Launch Agent",
   "sourceLaunchAgentGlobal": "Global Launch Agent",
   "sourceLoginItem": "Login Item",
-  "sourceSystemdUser": "Systemd User Service",
   "sourceAutostartDesktop": "XDG Autostart",
   "sourceCron": "Cron Job",
   "bootTraceAnalyzing": "Analyzing boot trace data...",

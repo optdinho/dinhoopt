@@ -36,12 +36,16 @@ describe('t', () => {
   })
 
   it('falls back to pt when settings throws', () => {
-    mockGetSettings.mockImplementation(() => { throw new Error('Settings unavailable') })
+    mockGetSettings.mockImplementation(() => {
+      throw new Error('Settings unavailable')
+    })
     expect(t('trayTooltip')).toBe('DiNho Optimizer')
   })
 
   it('returns key itself when settings throws and key is missing from pt', () => {
-    mockGetSettings.mockImplementation(() => { throw new Error('Settings unavailable') })
+    mockGetSettings.mockImplementation(() => {
+      throw new Error('Settings unavailable')
+    })
     expect(t('missing.key')).toBe('missing.key')
   })
 

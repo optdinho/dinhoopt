@@ -164,4 +164,22 @@ describe('power-plans-store', () => {
     usePowerPlansStore.getState().clearError()
     expect(usePowerPlansStore.getState().error).toBeNull()
   })
+
+  it('activatePlan uses default error when result.error is undefined', async () => {
+    vi.mocked(window.dinho.powerPlansActivate).mockResolvedValue({ success: false })
+    await usePowerPlansStore.getState().activatePlan('a')
+    expect(usePowerPlansStore.getState().error).toBe('Falha ao ativar')
+  })
+
+  it('createPlan uses default error when result.error is undefined', async () => {
+    vi.mocked(window.dinho.powerPlansCreate).mockResolvedValue({ success: false })
+    await usePowerPlansStore.getState().createPlan('My Plan')
+    expect(usePowerPlansStore.getState().error).toBe('Falha ao criar plano')
+  })
+
+  it('deletePlan uses default error when result.error is undefined', async () => {
+    vi.mocked(window.dinho.powerPlansDelete).mockResolvedValue({ success: false })
+    await usePowerPlansStore.getState().deletePlan('a')
+    expect(usePowerPlansStore.getState().error).toBe('Falha ao remover plano')
+  })
 })

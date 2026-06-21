@@ -3,7 +3,7 @@ import { useUninstallerStore } from '@/stores/uninstaller-store'
 import type { InstalledProgram, StartupSafetyRating } from '@shared/types'
 import type { TFunction } from 'i18next'
 import { AlertTriangle, CheckSquare, Clock, Loader2, Package, Square, Trash2 } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { Fragment, memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDate, formatLastUsed, isUnused, safetyIcon, safetyScoreColor } from './constants'
 
@@ -14,7 +14,11 @@ interface UninstallerProgramCardProps {
   onUninstall: (prog: InstalledProgram) => void
 }
 
-export function UninstallerProgramCard({ prog, uninstalling, onUninstall }: UninstallerProgramCardProps) {
+const UninstallerProgramCard = memo(function UninstallerProgramCard({
+  prog,
+  uninstalling,
+  onUninstall,
+}: UninstallerProgramCardProps) {
   const { t } = useTranslation('uninstaller')
   const selectedIds = useUninstallerStore((s) => s.selectedIds)
   const expandedItemId = useUninstallerStore((s) => s.expandedItemId)
@@ -124,7 +128,9 @@ export function UninstallerProgramCard({ prog, uninstalling, onUninstall }: Unin
       {isExpanded && rating && <SafetyDetailPanel rating={rating} t={t} />}
     </Fragment>
   )
-}
+})
+
+export { UninstallerProgramCard }
 
 function SafetyBadge({
   rating,

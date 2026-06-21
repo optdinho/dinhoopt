@@ -9,9 +9,33 @@ let page: Page
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     args: [resolve(__dirname, '../out/main/index.js')],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: 'test', DINHO_E2E: '1' },
   })
   page = await electronApp.firstWindow()
+  // Dismiss onboarding
+  await page.evaluate(async () => {
+    const d = window.dinho as Record<string, unknown>
+    const onboardingSet = d?.onboardingSet as ((v: boolean) => Promise<void>) | undefined
+    await onboardingSet?.(true)
+  })
+  await page.waitForTimeout(500)
+  await page.reload()
+  await page.waitForTimeout(2000)
+  await page.evaluate(() => { window.location.hash = '#/compliance' })
+  await page.waitForTimeout(3000)
+  // Trigger scan so result-dependent tests can check categories/score/counts
+  await page.evaluate(async () => {
+    const trigger = (window as Record<string, unknown>).__complianceRunScan as (() => Promise<void>) | undefined
+    if (trigger) await trigger()
+  })
+  try {
+    await page.waitForFunction(
+      () => document.body.textContent?.includes('Pontuação de conformidade'),
+      { timeout: 120_000 },
+    )
+  } catch {
+    // scan may fail — dependent tests will fail with clear message
+  }
 })
 
 test.afterAll(async () => {
@@ -19,15 +43,13 @@ test.afterAll(async () => {
 })
 
 test('should navigate to Compliance page', async () => {
-  await page.evaluate(() => { window.location.hash = '#/compliance' })
-  await page.waitForTimeout(1500)
   const hash = await page.evaluate(() => window.location.hash)
   expect(hash).toContain('compliance')
 })
 
-test('should render the Compliance Auditor page header', async () => {
+test('should render the Compliance page header', async () => {
   const hasTitle = await page.evaluate(() => {
-    return document.body.textContent?.includes('Compliance Auditor')
+    return document.body.textContent?.includes('Auditor de Conformidade')
   })
   expect(hasTitle).toBe(true)
 })
@@ -51,13 +73,13 @@ test('should expose compliance IPC handlers', async () => {
 test('should have an Audit button', async () => {
   const hasAuditButton = await page.evaluate(() => {
     const buttons = Array.from(document.querySelectorAll('button'))
-    return buttons.some((b) => b.textContent?.includes('Audit'))
+    return buttons.some((b) => b.textContent?.includes('Auditar'))
   })
   expect(hasAuditButton).toBe(true)
 })
 
 test('should render category sections after scan', async () => {
-  const categories = ['Password Policy', 'Audit & Logging', 'Network Security', 'Windows Update', 'BitLocker', 'Firewall', 'User Account Control']
+  const categories = ['Política de Senhas', 'Auditoria e Logging', 'Segurança de Rede', 'Windows Update', 'BitLocker', 'Firewall', 'Controle de Contas (UAC)']
   for (const cat of categories) {
     const found = await page.evaluate((c) => {
       return document.body.textContent?.includes(c)
@@ -68,15 +90,15 @@ test('should render category sections after scan', async () => {
 
 test('should show compliance score section', async () => {
   const hasScore = await page.evaluate(() => {
-    return document.body.textContent?.includes('Compliance Score')
+    return document.body.textContent?.includes('Pontuação de conformidade')
   })
   expect(hasScore).toBe(true)
 })
 
 test('should display Compliant and Non-Compliant counts', async () => {
   const hasCounts = await page.evaluate(() => {
-    return document.body.textContent?.includes('Compliant')
-      && document.body.textContent?.includes('Non-Compliant')
+    return document.body.textContent?.includes('Conforme')
+      && document.body.textContent?.includes('Não conforme')
   })
   expect(hasCounts).toBe(true)
 })

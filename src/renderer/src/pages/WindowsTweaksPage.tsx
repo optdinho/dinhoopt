@@ -1,5 +1,5 @@
-import { PageHeader } from '@/components/layout/PageHeader'
 import { TweakRow } from '@/components/TweakRow'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 import type { WindowsTweakCategory } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -67,8 +67,7 @@ export function WindowsTweaksPage() {
   const [dnsStatus, setDnsStatus] = useState<string | null>(null)
 
   useEffect(() => {
-    store.getState().load()
-    store.getState().loadDnsPresets()
+    Promise.all([store.getState().load(), store.getState().loadDnsPresets()])
   }, [store])
 
   const appliedCount = tweaks.filter((t) => t.applied).length
@@ -277,6 +276,38 @@ export function WindowsTweaksPage() {
           )}
         </div>
       )}
+
+      {/* Netsh TCP */}
+      <div className="mb-6">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-300">
+          <Zap className="h-4 w-4 text-cyan-400" />
+          TCP/IP Stack Optimization
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => store.getState().netshTcpApply().then((r) => {
+              if (r.success) toast.success('TCP/IP tweaks applied!')
+              else toast.error(r.error ?? 'Failed')
+            })}
+            disabled={applying}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-all hover:border-cyan-700 hover:text-cyan-400 disabled:opacity-40"
+          >
+            Apply TCP Tweaks
+          </button>
+          <button
+            type="button"
+            onClick={() => store.getState().netshTcpRevert().then((r) => {
+              if (r.success) toast.success('TCP/IP tweaks reverted!')
+              else toast.error(r.error ?? 'Failed')
+            })}
+            disabled={applying}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-all hover:border-red-700 hover:text-red-400 disabled:opacity-40"
+          >
+            Revert TCP Tweaks
+          </button>
+        </div>
+      </div>
 
       {/* DNS Presets */}
       {dnsPresets.length > 0 && (

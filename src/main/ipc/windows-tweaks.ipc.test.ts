@@ -576,7 +576,10 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
       const cmdArgs = args[1] as string[]
       cmds.push(cmdArgs.join(' '))
       if (cmdArgs.join(' ').includes('/LIST')) {
-        callback(null, { stdout: 'Existing Power Schemes (* Active)\n---\nPower Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2f  (Balanced)\n' })
+        callback(null, {
+          stdout:
+            'Existing Power Schemes (* Active)\n---\nPower Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2f  (Balanced)\n',
+        })
       } else if (cmdArgs.join(' ').includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
       } else {
@@ -600,7 +603,10 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
       const cmdArgs = args[1] as string[]
       cmds.push(cmdArgs.join(' '))
       if (cmdArgs.join(' ').includes('/LIST')) {
-        callback(null, { stdout: 'Existing Power Schemes (* Active)\n---\nPower Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2f  (Balanced)\n' })
+        callback(null, {
+          stdout:
+            'Existing Power Schemes (* Active)\n---\nPower Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2f  (Balanced)\n',
+        })
       } else if (cmdArgs.join(' ').includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
       } else {
@@ -617,9 +623,13 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
     const powercfgCalls = cmds.filter((c) => c.includes('-setacvalueindex'))
     expect(powercfgCalls.length).toBeGreaterThan(0)
     // The revert value for pcie-aspm-off is 2 (applied to the scheme GUID, not scheme_current)
-    expect(powercfgCalls.some((c) =>
-      c.includes('-setacvalueindex 381b4222-f694-41f0-9685-ff5bb260df2f ee19f59b-bb67-4979-a67f-5f16dfc4bcae 0a717a8c-0a10-4e57-9b23-2b0ad0b32ec8 2'),
-    )).toBe(true)
+    expect(
+      powercfgCalls.some((c) =>
+        c.includes(
+          '-setacvalueindex 381b4222-f694-41f0-9685-ff5bb260df2f ee19f59b-bb67-4979-a67f-5f16dfc4bcae 0a717a8c-0a10-4e57-9b23-2b0ad0b32ec8 2',
+        ),
+      ),
+    ).toBe(true)
   })
 
   it('applies processor-min-max (multi-setting powercfg tweak)', async () => {
@@ -630,7 +640,10 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
       const cmdArgs = args[1] as string[]
       callCount++
       if (cmdArgs.join(' ').includes('/LIST')) {
-        callback(null, { stdout: 'Existing Power Schemes (* Active)\n---\nPower Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2f  (Balanced)\n' })
+        callback(null, {
+          stdout:
+            'Existing Power Schemes (* Active)\n---\nPower Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2f  (Balanced)\n',
+        })
       } else if (cmdArgs.join(' ').includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
       } else {
@@ -822,8 +835,6 @@ describe('WINDOWS_TWEAKS_NETSH_TCP handler', () => {
 
 // ── mapRegError edge cases ──
 // mapRegError is internal; tested indirectly via WINDOWS_TWEAKS_APPLY handler below
-
-
 
 // ── applyRegistryTweak with ntfs-last-access-off ──
 

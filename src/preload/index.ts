@@ -249,8 +249,6 @@ const api = {
   elevationCheck: (): Promise<boolean> => ipcRenderer.invoke(IPC.ELEVATION_CHECK),
   elevationRelaunch: (): Promise<void> => ipcRenderer.invoke(IPC.ELEVATION_RELAUNCH),
 
-  // Scheduled scans (legacy)
-  scheduleNextScan: (): Promise<string | null> => ipcRenderer.invoke(IPC.SCHEDULE_NEXT_SCAN),
   applyStartup: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.SETTINGS_APPLY_STARTUP, enabled),
   applyTray: (enabled: boolean) => ipcRenderer.send(IPC.SETTINGS_APPLY_TRAY, enabled),
   notifyScheduledScanComplete: (totalSize: number, itemCount: number) =>
@@ -300,7 +298,6 @@ const api = {
   malwareScan: (scanId?: string, profileId?: string): Promise<MalwareScanResult> =>
     ipcRenderer.invoke(IPC.MALWARE_SCAN, scanId, profileId),
   malwareCancelScan: (scanId: string): Promise<boolean> => ipcRenderer.invoke(IPC.MALWARE_CANCEL_SCAN, scanId),
-  cancelScan: (scanId: string): Promise<boolean> => ipcRenderer.invoke(IPC.MALWARE_CANCEL_SCAN, scanId),
   malwareQuarantine: (paths: string[], meta?: QuarantineMeta[]): Promise<MalwareActionResult> =>
     ipcRenderer.invoke(IPC.MALWARE_QUARANTINE, paths, meta),
   malwareDelete: (paths: string[]): Promise<MalwareActionResult> => ipcRenderer.invoke(IPC.MALWARE_DELETE, paths),
@@ -470,6 +467,7 @@ const api = {
 
   // Scan profiles
   getScanProfiles: (): Promise<import('@shared/types').ScanProfile[]> => ipcRenderer.invoke(IPC.MALWARE_GET_PROFILES),
+  setScanProfile: (profileId: string): Promise<boolean> => ipcRenderer.invoke(IPC.MALWARE_SET_PROFILE, profileId),
 
   // License / Activation
   licenseActivate: (key: string): Promise<LicenseResult> => ipcRenderer.invoke(IPC.LICENSE_ACTIVATE, key),
@@ -494,8 +492,7 @@ const api = {
     ipcRenderer.invoke(IPC.GAME_MODE_RUN_AUDIT, phase),
 
   // WinSxS Cleaner
-  winSxSScan: (): Promise<ScanResult[]> =>
-    ipcRenderer.invoke(IPC.WINSXS_ANALYZE).then((r) => (r ? [r] : [])),
+  winSxSScan: (): Promise<ScanResult[]> => ipcRenderer.invoke(IPC.WINSXS_ANALYZE).then((r) => (r ? [r] : [])),
   winSxSClean: (): Promise<CleanResult> => ipcRenderer.invoke(IPC.WINSXS_CLEAN),
 
   // Power Plans

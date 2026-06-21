@@ -1,6 +1,6 @@
+import { cn } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { cn } from '@/lib/utils'
 
 interface HealthScoreProps {
   score: number
@@ -11,7 +11,7 @@ interface HealthScoreProps {
 const sizeConfig = {
   sm: { width: 80, strokeWidth: 5, fontSize: 'text-lg', labelSize: 'text-[9px]' },
   md: { width: 150, strokeWidth: 7, fontSize: 'text-[36px]', labelSize: 'text-[11px]' },
-  lg: { width: 190, strokeWidth: 8, fontSize: 'text-[44px]', labelSize: 'text-[12px]' }
+  lg: { width: 190, strokeWidth: 8, fontSize: 'text-[44px]', labelSize: 'text-[12px]' },
 }
 
 function getScoreColors(score: number): { start: string; end: string; glow: string } {
@@ -36,14 +36,18 @@ export function HealthScore({ score, size = 'md', className }: HealthScoreProps)
   const offset = circumference - (animatedScore / 100) * circumference
 
   return (
-    <div className={cn('relative inline-flex items-center justify-center', className)} role="img" aria-label={`${t('health')}: ${Math.round(score)} / 100`}>
+    <div
+      className={cn('relative inline-flex items-center justify-center', className)}
+      role="img"
+      aria-label={`${t('health')}: ${Math.round(score)} / 100`}
+    >
       {/* Outer glow */}
       <div
         className="absolute rounded-full opacity-20 blur-3xl"
         style={{
           width: config.width * 0.75,
           height: config.width * 0.75,
-          backgroundColor: colors.glow
+          backgroundColor: colors.glow,
         }}
       />
 
@@ -76,7 +80,7 @@ export function HealthScore({ score, size = 'md', className }: HealthScoreProps)
           strokeDashoffset={offset}
           style={{
             transition: 'stroke-dashoffset 1s cubic-bezier(0.16,1,0.3,1)',
-            filter: `drop-shadow(0 0 6px ${colors.glow}40)`
+            filter: `drop-shadow(0 0 6px ${colors.glow}40)`,
           }}
         />
       </svg>
@@ -89,7 +93,10 @@ export function HealthScore({ score, size = 'md', className }: HealthScoreProps)
           {Math.round(animatedScore)}
         </span>
         {size !== 'sm' && (
-          <span className={cn(config.labelSize, 'font-medium uppercase tracking-widest')} style={{ color: 'var(--text-muted)' }}>
+          <span
+            className={cn(config.labelSize, 'font-medium uppercase tracking-widest')}
+            style={{ color: 'var(--text-muted)' }}
+          >
             {t('health')}
           </span>
         )}

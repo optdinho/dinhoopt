@@ -8,13 +8,11 @@ interface NetworkState {
   selectedIds: Set<string>
   status: 'idle' | 'scanning' | 'cleaning' | 'complete'
   cleanResult: NetworkCleanResult | null
-  activeCategory: NetworkCategory
 
   setItems: (items: NetworkItem[]) => void
   setSelectedIds: (ids: Set<string>) => void
   setStatus: (status: 'idle' | 'scanning' | 'cleaning' | 'complete') => void
   setCleanResult: (result: NetworkCleanResult | null) => void
-  setActiveCategory: (category: NetworkCategory) => void
   toggleItem: (id: string) => void
   toggleCategory: (type: NetworkCategory) => void
   reset: () => void
@@ -25,13 +23,11 @@ export const useNetworkStore = create<NetworkState>((set) => ({
   selectedIds: new Set<string>(),
   status: 'idle',
   cleanResult: null,
-  activeCategory: 'dns-cache',
 
   setItems: (items) => set({ items }),
   setSelectedIds: (selectedIds) => set({ selectedIds }),
   setStatus: (status) => set({ status }),
   setCleanResult: (cleanResult) => set({ cleanResult }),
-  setActiveCategory: (activeCategory) => set({ activeCategory }),
   toggleItem: (id) =>
     set((s) => {
       const next = new Set(s.selectedIds)

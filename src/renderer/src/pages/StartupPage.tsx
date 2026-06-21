@@ -412,12 +412,14 @@ export function StartupPage() {
   }, [store])
 
   useEffect(() => {
+    const tasks: Promise<void>[] = []
     if (items.length === 0) {
-      loadItems()
+      tasks.push(loadItems())
     }
     if (!bootTrace) {
-      loadBootTrace()
+      tasks.push(loadBootTrace())
     }
+    if (tasks.length > 0) Promise.all(tasks)
   }, [loadItems, loadBootTrace, items, bootTrace])
 
   // Fetch safety ratings

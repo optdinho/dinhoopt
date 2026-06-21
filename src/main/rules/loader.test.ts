@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildCleanerPaths } from './loader'
 import type { RulesJsonSet } from './loader'
 
@@ -13,7 +13,12 @@ const mockRules: RulesJsonSet = {
   },
   browsers: {
     type: 'browsers',
-    chromiumCacheDirs: { cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
+    chromiumCacheDirs: {
+      cache: 'Cache',
+      codeCache: 'Code Cache',
+      gpuCache: 'GPU Cache',
+      serviceWorker: 'Service Worker',
+    },
     chromium: [
       { key: 'chrome', base: '${LOCALAPPDATA}\\Google\\Chrome\\User Data' },
       { key: 'edge', base: '${LOCALAPPDATA}\\Microsoft\\Edge\\User Data' },
@@ -41,21 +46,22 @@ const mockRules: RulesJsonSet = {
   apps: {
     type: 'apps',
     apps: [
-      { id: 'discord', name: 'Discord', paths: ['${APPDATA}\\discord', '${LOCALAPPDATA}\\Discord'], childSubdir: 'Cache' },
+      {
+        id: 'discord',
+        name: 'Discord',
+        paths: ['${APPDATA}\\discord', '${LOCALAPPDATA}\\Discord'],
+        childSubdir: 'Cache',
+      },
       { id: 'slack', name: 'Slack', paths: ['${APPDATA}\\Slack'] },
     ],
   },
   gaming: {
     type: 'gaming',
-    apps: [
-      { id: 'steam', name: 'Steam', paths: ['${PROGRAMFILES_x86}\\Steam'] },
-    ],
+    apps: [{ id: 'steam', name: 'Steam', paths: ['${PROGRAMFILES_x86}\\Steam'] }],
   },
   gpuCache: {
     type: 'gpu-cache',
-    apps: [
-      { id: 'nvidia', name: 'NVIDIA', paths: ['${LOCALAPPDATA}\\NVIDIA'] },
-    ],
+    apps: [{ id: 'nvidia', name: 'NVIDIA', paths: ['${LOCALAPPDATA}\\NVIDIA'] }],
   },
   steam: {
     type: 'steam',
@@ -69,7 +75,13 @@ const mockRules: RulesJsonSet = {
       firefox: ['places.sqlite', 'cookies.sqlite'],
     },
     targets: [
-      { label: 'Chrome History', basePath: '${LOCALAPPDATA}\\Google\\Chrome\\User Data', dbFiles: '$chromium', multiProfile: true, profilePattern: ['Default', 'Profile *'] },
+      {
+        label: 'Chrome History',
+        basePath: '${LOCALAPPDATA}\\Google\\Chrome\\User Data',
+        dbFiles: '$chromium',
+        multiProfile: true,
+        profilePattern: ['Default', 'Profile *'],
+      },
       { label: 'Firefox Places', basePath: '${APPDATA}\\Mozilla\\Firefox\\Profiles', dbFiles: '$firefox' },
       { label: 'Custom DB', basePath: '${PROGRAMDATA}\\App\\Data', dbFiles: 'custom.db' },
     ],
@@ -171,6 +183,29 @@ describe('buildCleanerPaths', () => {
     expect(targets[1].dbFiles).toEqual(['places.sqlite', 'cookies.sqlite'])
     expect(targets[2].label).toBe('Custom DB')
     expect(targets[2].dbFiles).toEqual(['custom.db'])
+  })
+
+  it('databaseOptimizeTargets resolves array dbFiles', () => {
+    const rulesWithArrayDbFiles: RulesJsonSet = {
+      ...mockRules,
+      databases: {
+        ...mockRules.databases,
+        targets: [
+          ...mockRules.databases.targets,
+          {
+            label: 'Array DB',
+            basePath: '${PROGRAMDATA}\\App\\Data',
+            dbFiles: ['extra1.db', 'extra2.db'],
+          },
+        ],
+      },
+    }
+    const cleaners = buildCleanerPaths(rulesWithArrayDbFiles, 'win32')
+    const targets = cleaners.databaseOptimizeTargets()
+    const arrayTarget = targets.find((t) => t.label === 'Array DB')
+    expect(arrayTarget?.dbFiles).toEqual(['extra1.db', 'extra2.db'])
+    expect(arrayTarget?.multiProfile).toBeUndefined()
+    expect(arrayTarget?.profilePattern).toBeUndefined()
   })
 })
 

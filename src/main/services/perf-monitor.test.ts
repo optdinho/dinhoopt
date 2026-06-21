@@ -136,10 +136,7 @@ describe('PerfMonitorService', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockSender.send).toHaveBeenCalledWith(
-          IPC.PERF_PROCESS_LIST,
-          expect.objectContaining({ totalCount: 2 }),
-        )
+        expect(mockSender.send).toHaveBeenCalledWith(IPC.PERF_PROCESS_LIST, expect.objectContaining({ totalCount: 2 }))
       })
     })
 
@@ -148,12 +145,18 @@ describe('PerfMonitorService', () => {
       mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
       mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
       mockedProcesses.mockResolvedValue({
-        all: 1, running: 1, blocked: 0, sleeping: 0, list: [],
+        all: 1,
+        running: 1,
+        blocked: 0,
+        sleeping: 0,
+        list: [],
       })
       mockedMem.mockResolvedValue({ total: 17179869184 })
 
       await service.startMonitoring(mockSender)
-      await vi.waitFor(() => { expect(mockSender.send).toHaveBeenCalled() })
+      await vi.waitFor(() => {
+        expect(mockSender.send).toHaveBeenCalled()
+      })
 
       const newSender = createMockSender()
       await expect(service.startMonitoring(newSender)).resolves.toBeUndefined()
@@ -192,9 +195,10 @@ describe('PerfMonitorService', () => {
         expect(mockSender.send).toHaveBeenCalledWith(IPC.PERF_PROCESS_LIST, expect.any(Object))
       })
 
-      const processListCall = mockSender.send.mock.calls.find(
-        ([ch]: unknown[]) => ch === IPC.PERF_PROCESS_LIST,
-      ) as [string, { processes: Array<{ name: string; isStartupItem: boolean }> }]
+      const processListCall = mockSender.send.mock.calls.find(([ch]: unknown[]) => ch === IPC.PERF_PROCESS_LIST) as [
+        string,
+        { processes: Array<{ name: string; isStartupItem: boolean }> },
+      ]
 
       const steam = processListCall[1].processes.find((p) => p.name === 'steam.exe')
       expect(steam?.isStartupItem).toBe(true)
@@ -210,7 +214,11 @@ describe('PerfMonitorService', () => {
       mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
       mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
       mockedProcesses.mockResolvedValue({
-        all: 1, running: 1, blocked: 0, sleeping: 0, list: [],
+        all: 1,
+        running: 1,
+        blocked: 0,
+        sleeping: 0,
+        list: [],
       })
       mockedMem.mockResolvedValue({ total: 17179869184 })
 
@@ -234,7 +242,11 @@ describe('PerfMonitorService', () => {
       mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
       mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
       mockedProcesses.mockResolvedValue({
-        all: 1, running: 1, blocked: 0, sleeping: 0, list: [],
+        all: 1,
+        running: 1,
+        blocked: 0,
+        sleeping: 0,
+        list: [],
       })
       mockedMem.mockResolvedValue({ total: 17179869184 })
 
@@ -256,7 +268,10 @@ describe('PerfMonitorService', () => {
   describe('getProcessName', () => {
     it('returns the process name for a valid PID', async () => {
       mockedProcesses.mockResolvedValue({
-        all: 2, running: 2, blocked: 0, sleeping: 0,
+        all: 2,
+        running: 2,
+        blocked: 0,
+        sleeping: 0,
         list: [
           { pid: 100, name: 'chrome.exe', cpu: 10, memRss: 200000000, user: 'user', started: '09:00' },
           { pid: 200, name: 'notepad.exe', cpu: 1, memRss: 8000000, user: 'user', started: '09:05' },
@@ -269,7 +284,10 @@ describe('PerfMonitorService', () => {
 
     it('returns null for an unknown PID', async () => {
       mockedProcesses.mockResolvedValue({
-        all: 1, running: 1, blocked: 0, sleeping: 0,
+        all: 1,
+        running: 1,
+        blocked: 0,
+        sleeping: 0,
         list: [{ pid: 100, name: 'chrome.exe', cpu: 10, memRss: 200000000, user: 'user', started: '' }],
       })
 
@@ -302,7 +320,9 @@ describe('PerfMonitorService', () => {
     })
 
     it('falls back to execFileAsync on Windows when process.kill fails', async () => {
-      killSpy.mockImplementation(() => { throw new Error('EPERM') })
+      killSpy.mockImplementation(() => {
+        throw new Error('EPERM')
+      })
       mockedExecFileAsync.mockResolvedValue(undefined)
 
       const result = await service.killProcess(1234)
@@ -313,7 +333,9 @@ describe('PerfMonitorService', () => {
 
     it('falls back to execFileAsync on non-Windows when process.kill fails', async () => {
       Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
-      killSpy.mockImplementation(() => { throw new Error('ESRCH') })
+      killSpy.mockImplementation(() => {
+        throw new Error('ESRCH')
+      })
       mockedExecFileAsync.mockResolvedValue(undefined)
 
       const result = await service.killProcess(1234)
@@ -323,7 +345,9 @@ describe('PerfMonitorService', () => {
     })
 
     it('returns requiresAdmin error on access denied', async () => {
-      killSpy.mockImplementation(() => { throw new Error('EPERM') })
+      killSpy.mockImplementation(() => {
+        throw new Error('EPERM')
+      })
       mockedExecFileAsync.mockRejectedValue(new Error('Access denied'))
 
       const result = await service.killProcess(1234)
@@ -334,7 +358,9 @@ describe('PerfMonitorService', () => {
     })
 
     it('returns generic error on other fallback failures', async () => {
-      killSpy.mockImplementation(() => { throw new Error('EPERM') })
+      killSpy.mockImplementation(() => {
+        throw new Error('EPERM')
+      })
       mockedExecFileAsync.mockRejectedValue(new Error('Unknown error'))
 
       const result = await service.killProcess(1234)
@@ -345,7 +371,9 @@ describe('PerfMonitorService', () => {
     })
 
     it('handles non-Error throw from fallback', async () => {
-      killSpy.mockImplementation(() => { throw new Error('EPERM') })
+      killSpy.mockImplementation(() => {
+        throw new Error('EPERM')
+      })
       mockedExecFileAsync.mockRejectedValue('string error')
 
       const result = await service.killProcess(1234)

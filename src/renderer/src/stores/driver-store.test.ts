@@ -204,6 +204,18 @@ describe('driver-store', () => {
       expect(useDriverStore.getState().totalStaleSize).toBe(1024)
     })
 
+    it('scan progress callback updates scanProgress state', async () => {
+      const kudu = mockKudu()
+      kudu.driverScan!.mockResolvedValue({ packages: [], totalStaleSize: 0 })
+      const store = useDriverStore.getState()
+
+      await store.scan()
+
+      const progressCb = kudu.onDriverProgress!.mock.calls[0]![0]
+      progressCb({ current: 5, total: 10, currentDriver: 'test.inf' })
+      expect(useDriverStore.getState().scanProgress).toEqual({ current: 5, total: 10, currentDriver: 'test.inf' })
+    })
+
     it('scan sets scanning false on error', async () => {
       const kudu = mockKudu()
       kudu.driverScan!.mockRejectedValue(new Error('fail'))
@@ -260,6 +272,18 @@ describe('driver-store', () => {
       expect(kudu.onDriverUpdateProgress!).toHaveBeenCalled()
       expect(kudu.driverUpdateScan!).toHaveBeenCalled()
       expect(useDriverStore.getState().updateScanning).toBe(false)
+    })
+
+    it('updateScan progress callback updates updateProgress state', async () => {
+      const kudu = mockKudu()
+      kudu.driverUpdateScan!.mockResolvedValue({ updates: [] })
+      const store = useDriverStore.getState()
+
+      await store.updateScan()
+
+      const progressCb = kudu.onDriverUpdateProgress!.mock.calls[0]![0]
+      progressCb({ current: 3, total: 8, currentUpdate: 'driver-x' })
+      expect(useDriverStore.getState().updateProgress).toEqual({ current: 3, total: 8, currentUpdate: 'driver-x' })
     })
 
     it('updateScan sets updateScanning false on error', async () => {

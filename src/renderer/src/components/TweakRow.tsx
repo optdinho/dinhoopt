@@ -29,7 +29,9 @@ export const TweakRow = memo(function TweakRow({
         animationDelay: `${index * 30}ms`,
       }}
       onClick={() => onToggle(tweak.id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle(tweak.id) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onToggle(tweak.id)
+      }}
       role="button"
       tabIndex={0}
     >

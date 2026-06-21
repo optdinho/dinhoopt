@@ -9,9 +9,18 @@ let page: Page
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     args: [resolve(__dirname, '../out/main/index.js')],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: 'test', DINHO_E2E: '1' },
   })
   page = await electronApp.firstWindow()
+  // Dismiss onboarding
+  await page.evaluate(async () => {
+    const d = window.dinho as Record<string, unknown>
+    const onboardingSet = d?.onboardingSet as ((v: boolean) => Promise<void>) | undefined
+    await onboardingSet?.(true)
+  })
+  await page.waitForTimeout(500)
+  await page.reload()
+  await page.waitForTimeout(2000)
 })
 
 test.afterAll(async () => {
@@ -58,7 +67,7 @@ test('should expose all game mode IPC handlers', async () => {
 })
 
 test('should render optimization category cards', async () => {
-  const categoryLabels = ['Services', 'Processes', 'Memory', 'System', 'Network']
+  const categoryLabels = ['Serviços', 'Processos', 'Memória', 'Sistema', 'Rede']
   for (const label of categoryLabels) {
     const found = await page.evaluate((lbl) => {
       return document.body.textContent?.includes(lbl)
@@ -90,15 +99,15 @@ test('should toggle an optimization via store and reflect in config', async () =
 test('should have audit section with run button', async () => {
   const hasAuditButton = await page.evaluate(() => {
     const buttons = Array.from(document.querySelectorAll('button'))
-    return buttons.some((b) => b.textContent?.includes('Audit') || b.textContent?.includes('audit'))
+    return buttons.some((b) => b.textContent?.includes('Auditoria') || b.textContent?.includes('Executar Auditoria'))
   })
   expect(hasAuditButton).toBe(true)
 })
 
 test('should show session stats when game mode is active', async () => {
   const hasStats = await page.evaluate(() => {
-    return document.body.textContent?.includes('Optimizations Active')
-      || document.body.textContent?.includes('Session Timer')
+    return document.body.textContent?.includes('Otimizações ativas')
+      || document.body.textContent?.includes('Temporizador da sessão')
   })
   expect(hasStats).toBe(true)
 })

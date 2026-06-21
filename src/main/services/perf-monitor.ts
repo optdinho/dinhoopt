@@ -236,17 +236,10 @@ export class PerfMonitorService {
       const now = Date.now()
       const needsNetworkPoll = now - this.lastNetworkPoll >= this.NETWORK_POLL_INTERVAL_MS
 
-      // On Windows, si.mem() costs ~290ms per call — use os.totalmem()/os.freemem()
-      // instead (identical values, near-zero cost). On Linux/macOS, si.mem() is cheap
-      // (reads /proc/meminfo or vm_stat) and os.freemem() excludes buffers/cache,
-      // so we must keep si.mem() to avoid overstating memory pressure.
-      const isWindows = process.platform === 'win32'
-
-      const [load, disk, net, mem] = await Promise.all([
+      const [load, disk, net] = await Promise.all([
         si.currentLoad(),
         si.disksIO(),
         needsNetworkPoll ? si.networkStats() : Promise.resolve(null),
-        isWindows ? Promise.resolve(null) : si.mem(),
       ])
 
       if (net) {
@@ -257,24 +250,9 @@ export class PerfMonitorService {
         this.lastNetworkPoll = now
       }
 
-      let usedMem: number
-      let totalMem: number
-      let cachedMem: number
-      if (isWindows) {
-        totalMem = os.totalmem()
-        usedMem = totalMem - os.freemem()
-        cachedMem = 0
-      } else if (process.platform === 'darwin') {
-        totalMem = mem!.total
-        // mem.active includes file-backed/reclaimable pages and vastly overstates
-        // real pressure on macOS.  (total − available) matches Activity Monitor.
-        usedMem = totalMem - mem!.available
-        cachedMem = mem!.cached
-      } else {
-        usedMem = mem!.active
-        totalMem = mem!.total
-        cachedMem = mem!.cached
-      }
+      const totalMem = os.totalmem()
+      const usedMem = totalMem - os.freemem()
+      const cachedMem = 0
 
       const snapshot: PerfSnapshot = {
         timestamp: Date.now(),

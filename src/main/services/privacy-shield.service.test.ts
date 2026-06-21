@@ -42,12 +42,7 @@ vi.mock('./exec-utf8', () => ({
   execNativeUtf8: (...args: unknown[]) => mocks.execNativeUtf8Mock(...args),
 }))
 
-import {
-  PRIVACY_SETTINGS,
-  scanPrivacy,
-  applyPrivacySettings,
-  revertPrivacySettings,
-} from './privacy-shield.service'
+import { PRIVACY_SETTINGS, applyPrivacySettings, revertPrivacySettings, scanPrivacy } from './privacy-shield.service'
 
 const SETTING_COUNT = PRIVACY_SETTINGS.length
 
@@ -742,7 +737,16 @@ describe('platform provider (non-Windows)', () => {
 
   it('uses platform provider getSettings() on non-Windows', async () => {
     const mockSettings = [
-      { id: 'mock-tracking', category: 'telemetry' as const, label: 'Mock', description: 'Mock', requiresAdmin: false, check: async () => true, apply: async () => {}, revert: async () => {} },
+      {
+        id: 'mock-tracking',
+        category: 'telemetry' as const,
+        label: 'Mock',
+        description: 'Mock',
+        requiresAdmin: false,
+        check: async () => true,
+        apply: async () => {},
+        revert: async () => {},
+      },
     ]
     mocks.getPlatformMock.mockReturnValue({
       privacy: {
@@ -760,7 +764,15 @@ describe('platform provider (non-Windows)', () => {
   it('platform provider settings are used for apply', async () => {
     const applyMock = vi.fn().mockResolvedValue(undefined)
     const mockSettings = [
-      { id: 'custom-setting', category: 'telemetry' as const, label: 'Custom', description: 'Custom', requiresAdmin: false, check: async () => false, apply: applyMock },
+      {
+        id: 'custom-setting',
+        category: 'telemetry' as const,
+        label: 'Custom',
+        description: 'Custom',
+        requiresAdmin: false,
+        check: async () => false,
+        apply: applyMock,
+      },
     ]
     mocks.getPlatformMock.mockReturnValue({
       privacy: {
@@ -778,7 +790,16 @@ describe('platform provider (non-Windows)', () => {
   it('platform provider settings are used for revert', async () => {
     const revertMock = vi.fn().mockResolvedValue(undefined)
     const mockSettings = [
-      { id: 'custom-setting', category: 'telemetry' as const, label: 'Custom', description: 'Custom', requiresAdmin: false, check: async () => false, apply: async () => {}, revert: revertMock },
+      {
+        id: 'custom-setting',
+        category: 'telemetry' as const,
+        label: 'Custom',
+        description: 'Custom',
+        requiresAdmin: false,
+        check: async () => false,
+        apply: async () => {},
+        revert: revertMock,
+      },
     ]
     mocks.getPlatformMock.mockReturnValue({
       privacy: {

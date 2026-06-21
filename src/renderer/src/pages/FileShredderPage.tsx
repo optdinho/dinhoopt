@@ -1,19 +1,10 @@
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { formatBytes } from '@/lib/utils'
+import { formatBytes, formatDuration } from '@/lib/utils'
 import { useFileShredderStore } from '@/stores/file-shredder-store'
 import { ExternalLink, File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
-  return `${m}m ${rem}s`
-}
 
 export function FileShredderPage() {
   const { t } = useTranslation('fileShredder')

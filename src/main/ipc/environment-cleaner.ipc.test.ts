@@ -171,21 +171,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       expect(result).toEqual([])
     })
 
-    it('scans environment on non-Windows platforms', async () => {
-      const origPlatform = process.platform
-      Object.defineProperty(process, 'platform', { value: 'linux' })
-      try {
-        mocks.existsSync.mockReturnValue(true)
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
-        registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
-        const handler = getHandler('cleaner:environment:scan')
-        const result = (await handler()) as { length: number }[]
-        expect(result.length).toBe(0)
-      } finally {
-        Object.defineProperty(process, 'platform', { value: origPlatform })
-      }
-    })
-
     it('resolves %VAR% references from cross-scope registry vars', async () => {
       mocks.execNativeUtf8
         .mockResolvedValueOnce({ stdout: '    SystemRoot    REG_SZ    C:\\Windows' })
@@ -293,75 +278,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       expect(userResult!.itemCount).toBe(1)
     })
 
-    it('reports orphaned PATH entries on non-Windows', async () => {
-      const origPlatform = process.platform
-      Object.defineProperty(process, 'platform', { value: 'linux' })
-      const origPath = process.env.PATH
-      process.env.PATH = '/usr/bin:/nonexistent/path'
-      try {
-        mocks.existsSync.mockImplementation((p: string) => {
-          if (typeof p !== 'string') return false
-          return p === '/usr/bin'
-        })
-        registerEnvironmentCleanerIpc(() => null)
-        const handler = getHandler('cleaner:environment:scan')
-        // biome-ignore lint/suspicious/noExplicitAny: test
-        const result = (await handler()) as { subcategory: string; items: { path: string }[] }[]
-        expect(result.length).toBeGreaterThan(0)
-        const pathResult = result.find((r) => r.subcategory.includes('PATH'))
-        expect(pathResult).toBeDefined()
-        expect(pathResult!.items[0]!.path).toContain('/nonexistent/path')
-      } finally {
-        Object.defineProperty(process, 'platform', { value: origPlatform })
-        process.env.PATH = origPath
-      }
-    })
-
-    it('handles missing PATH on non-Windows', async () => {
-      const origPlatform = process.platform
-      Object.defineProperty(process, 'platform', { value: 'linux' })
-      const origPath = process.env.PATH
-      delete process.env.PATH
-      try {
-        registerEnvironmentCleanerIpc(() => null)
-        const handler = getHandler('cleaner:environment:scan')
-        const result = (await handler()) as { length: number }[]
-        expect(result).toEqual([])
-      } finally {
-        Object.defineProperty(process, 'platform', { value: origPlatform })
-        if (origPath !== undefined) process.env.PATH = origPath
-      }
-    })
-
-    it('reports orphaned dev env vars on non-Windows', async () => {
-      const origPlatform = process.platform
-      Object.defineProperty(process, 'platform', { value: 'linux' })
-      const origJavaHome = process.env.JAVA_HOME
-      const origGoroot = process.env.GOROOT
-      process.env.JAVA_HOME = '/usr/lib/jvm/java-11'
-      process.env.GOROOT = '/usr/local/go'
-      try {
-        mocks.existsSync.mockImplementation((p: string) => {
-          if (typeof p !== 'string') return false
-          return p === '/usr/lib/jvm/java-11'
-        })
-        registerEnvironmentCleanerIpc(() => null)
-        const handler = getHandler('cleaner:environment:scan')
-        // biome-ignore lint/suspicious/noExplicitAny: test
-        const result = (await handler()) as { subcategory: string; items: { path: string }[] }[]
-        expect(result.length).toBeGreaterThan(0)
-        const envResult = result.find((r) => r.subcategory.includes('Environment Variables'))
-        expect(envResult).toBeDefined()
-        expect(envResult!.items[0]!.path).toContain('GOROOT')
-      } finally {
-        Object.defineProperty(process, 'platform', { value: origPlatform })
-        if (origJavaHome !== undefined) process.env.JAVA_HOME = origJavaHome
-        else delete process.env.JAVA_HOME
-        if (origGoroot !== undefined) process.env.GOROOT = origGoroot
-        else delete process.env.GOROOT
-      }
-    })
-
     it('does not send progress when window is destroyed', async () => {
       mocks.execNativeUtf8
         .mockResolvedValueOnce({ stdout: '' })
@@ -409,7 +325,9 @@ describe('registerEnvironmentCleanerIpc', () => {
       })
     }
 
-    async function runScanAndGetPathId(getWindow: () => unknown = () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } })): Promise<string> {
+    async function runScanAndGetPathId(
+      getWindow: () => unknown = () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }),
+    ): Promise<string> {
       // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(getWindow as any)
       const scanHandler = getHandler('cleaner:environment:scan')
@@ -431,7 +349,11 @@ describe('registerEnvironmentCleanerIpc', () => {
 
       const cleanHandler = getHandler('cleaner:environment:clean')
       // biome-ignore lint/suspicious/noExplicitAny: test
-      const result = (await cleanHandler(null, [id])) as { filesDeleted: number; filesSkipped: number; errors: unknown[] }
+      const result = (await cleanHandler(null, [id])) as {
+        filesDeleted: number
+        filesSkipped: number
+        errors: unknown[]
+      }
       expect(result.filesDeleted).toBe(1)
       expect(result.filesSkipped).toBe(0)
       expect(result.errors).toHaveLength(0)
@@ -443,8 +365,7 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
         .mockResolvedValueOnce({ stdout: '' })
         .mockResolvedValueOnce({
-          stdout:
-            'HKEY_CURRENT_USER\\Environment\n    JAVA_HOME    REG_SZ    C:\\Java',
+          stdout: 'HKEY_CURRENT_USER\\Environment\n    JAVA_HOME    REG_SZ    C:\\Java',
         })
       mocks.existsSync.mockReturnValue(false)
       // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -491,7 +412,11 @@ describe('registerEnvironmentCleanerIpc', () => {
 
       const cleanHandler = getHandler('cleaner:environment:clean')
       // biome-ignore lint/suspicious/noExplicitAny: test
-      const result = (await cleanHandler(null, [id])) as { filesDeleted: number; filesSkipped: number; errors: { reason: string }[] }
+      const result = (await cleanHandler(null, [id])) as {
+        filesDeleted: number
+        filesSkipped: number
+        errors: { reason: string }[]
+      }
       expect(result.filesDeleted).toBe(0)
       expect(result.filesSkipped).toBe(1)
       expect(result.errors[0]!.reason).toBe('permission-denied')
@@ -550,32 +475,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       const result = (await cleanHandler(null, [id])) as { filesSkipped: number; errors: { reason: string }[] }
       expect(result.filesSkipped).toBe(1)
       expect(result.errors[0]!.reason).toContain('Refusing to remove the last PATH entry')
-    })
-
-    it('skips cleaning on non-Windows with manual removal message', async () => {
-      const origPlatform = process.platform
-      Object.defineProperty(process, 'platform', { value: 'linux' })
-      const origPath = process.env.PATH
-      process.env.PATH = '/nonexistent/bin'
-      try {
-        mocks.existsSync.mockReturnValue(false)
-        registerEnvironmentCleanerIpc(() => null)
-        const scanHandler = getHandler('cleaner:environment:scan')
-        // biome-ignore lint/suspicious/noExplicitAny: test
-        const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
-        const id = scanResults[0]!.items[0]!.id
-        mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
-
-        const cleanHandler = getHandler('cleaner:environment:clean')
-        // biome-ignore lint/suspicious/noExplicitAny: test
-        const result = (await cleanHandler(null, [id])) as { filesDeleted: number; filesSkipped: number; errors: { path: string; reason: string }[] }
-        expect(result.filesDeleted).toBe(0)
-        expect(result.filesSkipped).toBe(1)
-        expect(result.errors[0]!.reason).toContain('Manual removal required')
-      } finally {
-        Object.defineProperty(process, 'platform', { value: origPlatform })
-        process.env.PATH = origPath
-      }
     })
 
     it('broadcasts environment change after Windows clean', async () => {

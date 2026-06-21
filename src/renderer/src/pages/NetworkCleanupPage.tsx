@@ -50,7 +50,7 @@ export function NetworkCleanupPage() {
   const selectedIds = useNetworkStore((s) => s.selectedIds)
   const status = useNetworkStore((s) => s.status)
   const cleanResult = useNetworkStore((s) => s.cleanResult)
-  const activeCategory = useNetworkStore((s) => s.activeCategory)
+  const [activeCategory, setActiveCategory] = useState<NetworkCategory>('dns-cache')
   const [cleanProgress, setCleanProgress] = useState<ProgressData | null>(null)
 
   useEffect(() => {
@@ -208,7 +208,7 @@ export function NetworkCleanupPage() {
               <button
                 type="button"
                 key={cat.type}
-                onClick={() => useNetworkStore.getState().setActiveCategory(cat.type)}
+                onClick={() => setActiveCategory(cat.type)}
                 className="relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
                 style={{
                   background: isActive ? 'var(--accent-muted-bg)' : 'transparent',

@@ -153,6 +153,16 @@ describe('uninstall-leftovers IPC', () => {
       expect(result).toEqual([])
       expect(mockCacheItems).not.toHaveBeenCalled()
     })
+
+    it('does not send progress when window is null after scan', async () => {
+      mockScanForLeftovers.mockResolvedValue([makeScanResult([{ id: 'a' }])])
+
+      registerUninstallLeftoversIpc(() => null)
+      const result = await invoke('cleaner:uninstall-leftovers:scan')
+
+      expect(result).toHaveLength(1)
+      expect(mockCacheItems).toHaveBeenCalled()
+    })
   })
 
   // ── UNINSTALL_LEFTOVERS_CLEAN ──────────────────────────────
@@ -239,6 +249,61 @@ describe('uninstall-leftovers IPC', () => {
 
       registerUninstallLeftoversIpc(() => makeWindow())
       await expect(invoke('cleaner:uninstall-leftovers:clean', ['id-1'])).rejects.toThrow('delete failed')
+    })
+
+    it('does not send progress when window is null during clean', async () => {
+      mockValidateStringArray.mockReturnValue(['id-1'])
+      mockCleanItems.mockImplementation(
+        async (
+          _ids: string[],
+          onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+        ) => {
+          onProgress(1, 1, '/path', 512)
+          return { totalCleaned: 512, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
+        },
+      )
+
+      registerUninstallLeftoversIpc(() => null)
+      const result = await invoke('cleaner:uninstall-leftovers:clean', ['id-1'])
+
+      expect(result).toHaveProperty('filesDeleted', 1)
+    })
+
+    it('handles total=0 in progress callback without division by zero', async () => {
+      mockValidateStringArray.mockReturnValue(['id-1'])
+      mockCleanItems.mockImplementation(
+        async (
+          _ids: string[],
+          onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+        ) => {
+          onProgress(0, 0, '/path', 0)
+          return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+        },
+      )
+
+      registerUninstallLeftoversIpc(() => makeWindow())
+      const result = await invoke('cleaner:uninstall-leftovers:clean', ['id-1'])
+
+      expect(result).toHaveProperty('totalCleaned', 0)
+    })
+
+    it('does not send progress when window is destroyed during clean', async () => {
+      mockValidateStringArray.mockReturnValue(['id-1'])
+      const destroyedWindow = { isDestroyed: () => true, webContents: { send: vi.fn() } }
+      mockCleanItems.mockImplementation(
+        async (
+          _ids: string[],
+          onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+        ) => {
+          onProgress(1, 2, '/path', 512)
+          return { totalCleaned: 512, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
+        },
+      )
+
+      registerUninstallLeftoversIpc(() => destroyedWindow as never)
+      const result = await invoke('cleaner:uninstall-leftovers:clean', ['id-1'])
+
+      expect(result).toHaveProperty('filesDeleted', 1)
     })
   })
 })

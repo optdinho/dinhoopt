@@ -187,33 +187,6 @@ async function scanWindowsEnvVars(): Promise<EnvEntry[]> {
   return orphaned
 }
 
-// ── macOS/Linux: scan PATH from the current process environment ──
-
-function scanUnixPathEntries(): EnvEntry[] {
-  const orphaned: EnvEntry[] = []
-  const pathValue = process.env.PATH || ''
-  const entries = pathValue.split(':').filter(Boolean)
-
-  for (const entry of entries) {
-    if (!existsSync(entry)) {
-      orphaned.push({ variable: 'PATH', value: entry, scope: 'user', fullValue: pathValue })
-    }
-  }
-  return orphaned
-}
-
-function scanUnixEnvVars(): EnvEntry[] {
-  const orphaned: EnvEntry[] = []
-  for (const name of DEV_ENV_VARS) {
-    const value = process.env[name]
-    if (!value) continue
-    if (!existsSync(value)) {
-      orphaned.push({ variable: name, value, scope: 'user' })
-    }
-  }
-  return orphaned
-}
-
 // ── Windows cleaning: modify registry PATH and delete env vars ──
 
 async function removeWindowsPathEntry(entry: EnvEntry): Promise<void> {
@@ -300,8 +273,6 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
     envEntryCache.clear()
     const results: ScanResult[] = []
     const category = CleanerType.Environment
-    const isWin = process.platform === 'win32'
-
     const sendProgress = (current: number, total: number, currentPath: string) => {
       const win = getWindow()
       if (win && !win.isDestroyed()) {
@@ -318,12 +289,7 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
 
     // --- Scan orphaned PATH entries ---
     sendProgress(0, 2, 'Scanning PATH entries...')
-    let pathEntries: EnvEntry[]
-    if (isWin) {
-      pathEntries = await scanWindowsPathEntries()
-    } else {
-      pathEntries = scanUnixPathEntries()
-    }
+    const pathEntries = await scanWindowsPathEntries()
 
     if (pathEntries.length > 0) {
       const items: ScanItem[] = pathEntries.map((entry) => {
@@ -361,12 +327,7 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
 
     // --- Scan orphaned environment variables ---
     sendProgress(1, 2, 'Scanning environment variables...')
-    let envVarEntries: EnvEntry[]
-    if (isWin) {
-      envVarEntries = await scanWindowsEnvVars()
-    } else {
-      envVarEntries = scanUnixEnvVars()
-    }
+    const envVarEntries = await scanWindowsEnvVars()
 
     if (envVarEntries.length > 0) {
       const items: ScanItem[] = envVarEntries.map((entry) => {
@@ -414,7 +375,6 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
       return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     }
 
-    const isWin = process.platform === 'win32'
     let filesDeleted = 0
     let filesSkipped = 0
     const errors: CleanError[] = []
@@ -426,16 +386,6 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
 
       if (!entry) {
         filesSkipped++
-        continue
-      }
-
-      // On non-Windows, we can only scan — cleaning requires manual shell config edits
-      if (!isWin) {
-        filesSkipped++
-        errors.push({
-          path: `${entry.variable} \u2192 ${entry.value}`,
-          reason: 'Manual removal required \u2014 edit your shell config files',
-        })
         continue
       }
 
@@ -472,8 +422,8 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
       }
     }
 
-    // Broadcast environment change to running apps on Windows
-    if (isWin && filesDeleted > 0) {
+    // Broadcast environment change to running apps
+    if (filesDeleted > 0) {
       await broadcastWinEnvChange()
     }
 

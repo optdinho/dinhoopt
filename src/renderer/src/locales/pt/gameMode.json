@@ -100,5 +100,14 @@
   "profilesSave": "Salvar",
   "profilesCancel": "Cancelar",
   "profilesEdit": "Editar",
-  "profilesEmpty": "Nenhum perfil ainda — clique em Adicionar Perfil para criar um"
+  "profilesEmpty": "Nenhum perfil ainda — clique em Adicionar Perfil para criar um",
+
+  "auditTitle": "Auditoria",
+  "auditDesc": "Verificar se as otimizações do Modo de Jogo são aplicadas com segurança",
+  "auditButton": "Executar Auditoria",
+  "auditRunning": "A auditar…",
+  "auditDetails": "Ver detalhes",
+  "auditModalTitle": "Relatório de Auditoria",
+  "auditRemediation": "Correção",
+  "auditNoChecks": "Nenhuma verificação foi realizada"
 }

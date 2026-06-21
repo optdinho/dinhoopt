@@ -7,6 +7,7 @@ import { CleanerType } from '@shared/enums'
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getPlatform } from '../platform'
+import { execNativeUtf8 } from '../services/exec-utf8'
 import { cleanItems, getDirectorySize, scanDirectoriesAsItems } from '../services/file-utils'
 import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
@@ -106,10 +107,35 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
 // Steam library discovery
 // ---------------------------------------------------------------------------
 
+/**
+ * Query the Windows registry to discover Steam's real install directory.
+ * Falls back to null if the registry key is unavailable (Steam not installed).
+ */
+async function detectSteamFromRegistry(): Promise<string | null> {
+  try {
+    const { stdout } = await execNativeUtf8('reg', [
+      'query',
+      'HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam',
+      '/v',
+      'InstallPath',
+    ])
+    const match = stdout.match(/REG_SZ\s+(.+)$/m)
+    if (!match) return null
+    return match[1]!.trim()
+  } catch {
+    return null
+  }
+}
+
 async function getSteamLibraryPaths(): Promise<string[]> {
   const libraries: Set<string> = new Set()
 
-  for (const steamDir of getPlatform().paths.steamLibraries()) {
+  // Try dynamic detection from Windows registry first; fall back to
+  // the hardcoded path list from steam.json.
+  const registryDir = await detectSteamFromRegistry()
+  const searchDirs = registryDir ? [registryDir] : getPlatform().paths.steamLibraries()
+
+  for (const steamDir of searchDirs) {
     const vdfPath = join(steamDir, 'steamapps', 'libraryfolders.vdf')
     try {
       const content = await readFile(vdfPath, 'utf-8')
@@ -122,7 +148,7 @@ async function getSteamLibraryPaths(): Promise<string[]> {
     }
   }
 
-  for (const dir of getPlatform().paths.steamLibraries()) {
+  for (const dir of searchDirs) {
     if (existsSync(join(dir, 'steamapps'))) {
       libraries.add(dir)
     }

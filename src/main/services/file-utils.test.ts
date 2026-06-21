@@ -155,7 +155,12 @@ describe('safeDelete', () => {
 
   it('calls secureOverwrite when secureDelete is enabled', async () => {
     mockSettings.cleaner.secureDelete = true
-    const mockFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn(), stat: vi.fn().mockResolvedValue(mockFileStats(1024)) }
+    const mockFd = {
+      write: vi.fn(),
+      datasync: vi.fn(),
+      close: vi.fn(),
+      stat: vi.fn().mockResolvedValue(mockFileStats(1024)),
+    }
     const mockFileHandle = { ...mockFd, on: vi.fn() }
     // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValue(mockFileHandle as any)
@@ -549,7 +554,12 @@ describe('secureOverwrite (via safeDelete)', () => {
     mockSettings.cleaner.secureDelete = true
     mockedReaddir.mockResolvedValue([mockDirEntry('child.dat', false)])
     const dirFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn(), stat: vi.fn().mockResolvedValue(mockDirStats()) }
-    const fileFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn(), stat: vi.fn().mockResolvedValue(mockFileStats(50)) }
+    const fileFd = {
+      write: vi.fn(),
+      datasync: vi.fn(),
+      close: vi.fn(),
+      stat: vi.fn().mockResolvedValue(mockFileStats(50)),
+    }
     // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValueOnce(dirFd as any)
     // biome-ignore lint/suspicious/noExplicitAny: test mock
@@ -563,7 +573,12 @@ describe('secureOverwrite (via safeDelete)', () => {
 
   it('does not overwrite zero-size files', async () => {
     mockSettings.cleaner.secureDelete = true
-    const mockFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn(), stat: vi.fn().mockResolvedValue(mockFileStats(0)) }
+    const mockFd = {
+      write: vi.fn(),
+      datasync: vi.fn(),
+      close: vi.fn(),
+      stat: vi.fn().mockResolvedValue(mockFileStats(0)),
+    }
     // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValue(mockFd as any)
     mockedRm.mockResolvedValue(undefined)

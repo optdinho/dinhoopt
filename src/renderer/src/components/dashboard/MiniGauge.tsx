@@ -13,8 +13,7 @@ export function MiniGauge({
   detail: string
 }) {
   const animatedPct = Math.round(useAnimatedCounter(percent))
-  const color =
-    percent >= 85 ? '#ef4444' : percent >= 60 ? '#f59e0b' : '#22c55e'
+  const color = percent >= 85 ? '#ef4444' : percent >= 60 ? '#f59e0b' : '#22c55e'
 
   return (
     <div className="glass-card glass-card-hover group relative flex flex-col items-center gap-2 overflow-hidden rounded-xl px-3 py-4 transition-shadow duration-300 hover:shadow-[0_0_24px_rgba(139,92,246,0.06)]">
@@ -34,14 +33,14 @@ export function MiniGauge({
         {animatedPct}% &middot; {detail}
       </p>
       <div className="mt-1 h-[2px] w-full overflow-hidden rounded-full" style={{ background: 'var(--bg-subtle-2)' }}>
-        <div
-          className="h-full rounded-full transition-all duration-700 animate-shimmer"
-          style={{
-            width: `${percent}%`,
-            background: `linear-gradient(90deg, ${color}, ${color}cc, ${color})`,
-            backgroundSize: '200% 100%',
-          }}
-        />
+          <div
+            className="h-full rounded-full transition-all duration-700 animate-shimmer"
+            style={{
+              width: `${animatedPct}%`,
+              backgroundImage: `linear-gradient(90deg, ${color}, ${color}cc, ${color})`,
+              backgroundSize: '200% 100%',
+            }}
+          />
       </div>
     </div>
   )

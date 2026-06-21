@@ -14,13 +14,22 @@ import type { ScanItem } from '@shared/types'
  *   (200,000) to accommodate a full multi-category scan without eviction.
  */
 const itemCache = new Map<string, ScanItem>()
-const MAX_CACHE_SIZE = 200_000
+let _maxCacheSize = 200_000
+
+/**
+ * Override the maximum cache size (default: 200,000).
+ * Useful for testing or runtime configuration.
+ */
+export function setMaxCacheSize(n: number): void {
+  _maxCacheSize = Math.max(1, n)
+}
 
 export function cacheItems(originalItems: ScanItem[]): void {
-  const items = originalItems.length > MAX_CACHE_SIZE ? originalItems.slice(0, MAX_CACHE_SIZE) : originalItems
-  if (itemCache.size + items.length > MAX_CACHE_SIZE) {
-    const toRemove = itemCache.size + items.length - MAX_CACHE_SIZE
-    if (toRemove > MAX_CACHE_SIZE * 0.75) {
+  const limit = _maxCacheSize
+  const items = originalItems.length > limit ? originalItems.slice(0, limit) : originalItems
+  if (itemCache.size + items.length > limit) {
+    const toRemove = itemCache.size + items.length - limit
+    if (toRemove > limit * 0.75) {
       // Bulk clear: keep only the newest entries (avoids O(n) iteration
       // of the full map when most entries need to go).
       const entries = [...itemCache.entries()]

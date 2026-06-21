@@ -5,7 +5,7 @@ import { execFileAsync, psUtf8 } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
 
-function classifyScore(score: number): BenchmarkScoreClass {
+export function classifyScore(score: number): BenchmarkScoreClass {
   if (score >= 90) return 'S'
   if (score >= 80) return 'A'
   if (score >= 70) return 'B'
@@ -201,7 +201,7 @@ async function getActivePowerPlan(): Promise<string> {
   }
 }
 
-function scoreCpu(usage: number): number {
+export function scoreCpu(usage: number): number {
   if (usage < 5) return 20
   if (usage < 10) return 17
   if (usage < 20) return 14
@@ -209,7 +209,7 @@ function scoreCpu(usage: number): number {
   return 4
 }
 
-function scoreRam(percent: number): number {
+export function scoreRam(percent: number): number {
   if (percent > 60) return 20
   if (percent > 40) return 16
   if (percent > 25) return 11
@@ -217,7 +217,7 @@ function scoreRam(percent: number): number {
   return 2
 }
 
-function scoreNetwork(avg: number, jitter: number): number {
+export function scoreNetwork(avg: number, jitter: number): number {
   let score = 0
   if (avg < 10) score = 15
   else if (avg < 30) score = 13
@@ -229,7 +229,7 @@ function scoreNetwork(avg: number, jitter: number): number {
   return Math.max(0, score)
 }
 
-function scoreDpc(latency: number): number {
+export function scoreDpc(latency: number): number {
   if (latency < 200) return 25
   if (latency < 500) return 20
   if (latency < 1000) return 13
@@ -237,7 +237,7 @@ function scoreDpc(latency: number): number {
   return 2
 }
 
-function scoreTemperature(temp: number | null): number {
+export function scoreTemperature(temp: number | null): number {
   if (temp === null) return 10
   if (temp < 50) return 20
   if (temp < 60) return 17
@@ -246,11 +246,11 @@ function scoreTemperature(temp: number | null): number {
   return 3
 }
 
-function scoreTweakBonus(applied: number, total: number): number {
+export function scoreTweakBonus(applied: number, total: number): number {
   return Math.round((applied / total) * 10)
 }
 
-function scorePowerBonus(plan: string): number {
+export function scorePowerBonus(plan: string): number {
   if (plan === 'ultimate') return 5
   if (plan === 'high') return 3
   return 0

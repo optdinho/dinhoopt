@@ -33,7 +33,7 @@ vi.mock('./logger.service', () => ({
   }),
 }))
 
-import { ThreatTimelineService } from './threat-timeline.service'
+import { getThreatTimelineService, ThreatTimelineService } from './threat-timeline.service'
 
 describe('ThreatTimelineService', () => {
   let service: ThreatTimelineService
@@ -135,5 +135,58 @@ describe('ThreatTimelineService', () => {
     const entries = service.getEntries()
     expect(entries).toHaveLength(1)
     expect(entries[0]!.threatName).toBe('')
+  })
+
+  it('loads entries from file when it exists', () => {
+    const data = JSON.stringify([
+      { id: '1', threatName: 'Saved Threat', severity: 'high', filePath: 'C:/saved.exe', detectedAt: '2025-01-01', action: 'quarantined', scanId: 'scan-1' },
+    ])
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue(data)
+    const svc = new ThreatTimelineService()
+    const entries = svc.getEntries()
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.threatName).toBe('Saved Threat')
+  })
+
+  it('creates directory during save when it does not exist', () => {
+    mockExistsSync.mockReturnValue(false)
+    service.addEntry({ name: 'New Threat', severity: 'high', filePath: 'C:\\test.exe' }, 'quarantined', 'scan-1')
+    expect(mockMkdirSync).toHaveBeenCalled()
+  })
+
+  it('does not create directory during save when it already exists', () => {
+    mockExistsSync.mockReturnValue(true)
+    service.addEntry({ name: 'New Threat', severity: 'low', filePath: 'C:\\test.exe' }, 'skipped', 'scan-1')
+    expect(mockMkdirSync).not.toHaveBeenCalled()
+  })
+
+  it('handles error during save gracefully', () => {
+    mockWriteFileSync.mockImplementation(() => { throw new Error('disk full') })
+    service.addEntry({ name: 'Bad', severity: 'high', filePath: 'C:\\bad.exe' }, 'quarantined', 'scan-1')
+    // Should not throw — error is caught and logged
+    expect(service.getEntries()).toHaveLength(1)
+  })
+
+  it('handles non-Error throw during save gracefully', () => {
+    mockWriteFileSync.mockImplementation(() => { throw 'string error' })
+    service.addEntry({ name: 'Bad', severity: 'high', filePath: 'C:\\bad.exe' }, 'quarantined', 'scan-1')
+    expect(service.getEntries()).toHaveLength(1)
+  })
+})
+
+describe('getThreatTimelineService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockExistsSync.mockReturnValue(false)
+    // Reset the singleton for each test
+    vi.resetModules()
+  })
+
+  it('creates a new instance on first call and returns same on second', async () => {
+    const mod = await import('./threat-timeline.service')
+    const first = mod.getThreatTimelineService()
+    const second = mod.getThreatTimelineService()
+    expect(first).toBe(second)
   })
 })

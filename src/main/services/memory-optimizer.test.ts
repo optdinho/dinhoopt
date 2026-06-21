@@ -5,6 +5,7 @@ vi.mock('child_process', () => ({ execFile: (...args: unknown[]) => mockExecFile
 
 vi.mock('./elevation', () => ({ isAdmin: vi.fn() }))
 vi.mock('./exec-utf8', () => ({ psUtf8: (s: string) => s }))
+vi.mock('./logger.service', () => ({ getLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn() })) }))
 
 import { isAdmin } from './elevation'
 import { getMemoryInfo, getMemoryProcesses, optimizeMemory } from './memory-optimizer'
@@ -62,6 +63,30 @@ describe('getMemoryInfo', () => {
     expect(result.availableBytes).toBe(5000000000)
     expect(result.usedPercent).toBeGreaterThan(0)
     expect(result.cachedBytes).toBe(1000000000)
+  })
+
+  it('handles null/undefined cachedBytes fallback', async () => {
+    mockedMem.mockResolvedValue({
+      total: 17179869184,
+      free: 4294967296,
+      used: 12884901888,
+      active: 12000000000,
+      available: 5000000000,
+      buffers: 500000000,
+      cached: undefined,
+      slab: 0,
+      buffcache: 0,
+      swaptotal: 0,
+      swapused: 0,
+      swapfree: 0,
+      reclaimable: 0,
+      writeback: null,
+      dirty: null,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any)
+
+    const result = await getMemoryInfo()
+    expect(result.cachedBytes).toBe(0)
   })
 })
 
@@ -234,7 +259,69 @@ describe('optimizeMemory', () => {
     expect(scripts[0]).toContain('[System.GC]::Collect()')
   })
 
-  it('step 2 uses kernel32 SetProcessWorkingSetSize via Add-Type', async () => {
+  it('handles execFile error in both steps gracefully', async () => {
+    mockedIsAdmin.mockReturnValue(false)
+    mockedMem.mockResolvedValue({
+      total: 17179869184,
+      free: 4294967296,
+      used: 12884901888,
+      active: 12000000000,
+      available: 5000000000,
+      buffers: 0,
+      cached: 0,
+      slab: 0,
+      buffcache: 0,
+      swaptotal: 0,
+      swapused: 0,
+      swapfree: 0,
+      reclaimable: 0,
+      writeback: null,
+      dirty: null,
+    })
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(new Error('PowerShell error'), '', '')
+      },
+    )
+    const result = await optimizeMemory()
+    expect(result.steps).toHaveLength(2)
+    expect(result.steps[0]!.success).toBe(false)
+    expect(result.steps[0]!.error).toContain('PowerShell error')
+    // Step 2 degrades gracefully: success=true, freedBytes=0, error recorded
+    expect(result.steps[1]!.success).toBe(true)
+    expect(result.steps[1]!.freedBytes).toBe(0)
+    expect(result.steps[1]!.error).toContain('PowerShell error')
+  })
+
+  it('includes stderr in step 2 error message', async () => {
+    mockedIsAdmin.mockReturnValue(false)
+    mockedMem.mockResolvedValue({
+      total: 1,
+      free: 0,
+      used: 1,
+      active: 1,
+      available: 0,
+      buffers: 0,
+      cached: 0,
+      slab: 0,
+      buffcache: 0,
+      swaptotal: 0,
+      swapused: 0,
+      swapfree: 0,
+      reclaimable: 0,
+      writeback: null,
+      dirty: null,
+    })
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(new Error('exec error'), 'stdout text', 'stderr text')
+      },
+    )
+    const result = await optimizeMemory()
+    expect(result.steps[1]!.error).toContain('stderr: stderr text')
+  })
+
+  it('step 2 uses reflection or Add-Type fallback', async () => {
     mockedIsAdmin.mockReturnValue(false)
     mockedMem.mockResolvedValue({
       total: 1,
@@ -256,8 +343,8 @@ describe('optimizeMemory', () => {
     mockPsSuccess('')
     await optimizeMemory()
     const scripts = captureScripts()
-    expect(scripts[1]).toContain('SetProcessWorkingSetSize')
-    expect(scripts[1]).toContain('kernel32.dll')
-    expect(scripts[1]).toContain('Add-Type -TypeDefinition')
+    expect(scripts[1]).toContain('SetWorkingSetSize')
+    expect(scripts[1]).toContain('[System.Reflection.BindingFlags]')
+    expect(scripts[1]).toContain('EmptyWorkingSet')
   })
 })

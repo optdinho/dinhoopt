@@ -1,35 +1,28 @@
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
+import { usePolling } from '@/hooks/usePolling'
 import { Download } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import type { UpdateCheckResult } from '@shared/types'
 
+const UPDATES_POLL_INTERVAL = 180_000
+
 export function SoftwareUpdatesCard() {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
-  const [data, setData] = useState<UpdateCheckResult | null>(null)
-  const [error, setError] = useState(false)
+  const { data, error, loading } = usePolling<UpdateCheckResult>(
+    () => window.dinho?.softwareUpdateCheck?.() ?? Promise.resolve({ totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0, apps: [], packageManagerAvailable: false, packageManagerName: null }),
+    UPDATES_POLL_INTERVAL,
+  )
 
-  useEffect(() => {
-    let cancelled = false
-    window.dinho?.softwareUpdateCheck?.()
-      .then((result) => {
-        if (!cancelled) setData(result)
-      })
-      .catch(() => {
-        if (!cancelled) setError(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const totalCount = data?.totalCount ?? 0
   const majorCount = data?.majorCount ?? 0
   const minorCount = data?.minorCount ?? 0
   const patchCount = data?.patchCount ?? 0
-  const color = majorCount > 0 ? '#ef4444' : totalCount > 0 ? '#f59e0b' : '#22c55e'
+  const rawTotal = majorCount + minorCount + patchCount
+  const animatedTotal = Math.round(useAnimatedCounter(rawTotal))
+  const color = majorCount > 0 ? '#ef4444' : rawTotal > 0 ? '#f59e0b' : '#22c55e'
 
   const handleClick = useCallback(() => {
     navigate('/software-updates')
@@ -52,7 +45,7 @@ export function SoftwareUpdatesCard() {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      aria-label={t('updatesCardAria', { count: totalCount })}
+      aria-label={t('updatesCardAria', { count: rawTotal })}
     >
       <div className="flex items-center gap-2.5">
         <div
@@ -62,11 +55,7 @@ export function SoftwareUpdatesCard() {
             border: `1px solid ${error ? 'var(--border-subtle)' : `${color}35`}`,
           }}
         >
-          <Download
-            className="h-4 w-4"
-            style={{ color: error ? 'var(--text-faint)' : color }}
-            strokeWidth={1.8}
-          />
+          <Download className="h-4 w-4" style={{ color: error ? 'var(--text-faint)' : color }} strokeWidth={1.8} />
         </div>
         <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           {t('updatesCardTitle')}
@@ -77,7 +66,7 @@ export function SoftwareUpdatesCard() {
         <span className="mt-4 text-xs" style={{ color: 'var(--text-muted)' }}>
           {t('updatesCardUnavailable')}
         </span>
-      ) : data === null ? (
+      ) : loading ? (
         <div className="mt-4 space-y-2">
           <div className="h-5 w-12 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} />
           <div className="h-3 w-24 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} />
@@ -85,13 +74,13 @@ export function SoftwareUpdatesCard() {
       ) : (
         <>
           <div className="mt-4 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold tracking-tight text-white">{totalCount}</span>
+            <span className="text-2xl font-bold tracking-tight text-white">{animatedTotal}</span>
             <span className="text-[10px] font-medium" style={{ color: 'var(--text-dim)' }}>
               {t('updatesCardAvailable')}
             </span>
           </div>
 
-          {totalCount > 0 && (
+          {rawTotal > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {majorCount > 0 && (
                 <span

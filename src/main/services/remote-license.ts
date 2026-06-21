@@ -187,6 +187,9 @@ export async function activateLicense(key: string): Promise<RemoteLicenseResult>
 }
 
 export async function checkLicense(): Promise<RemoteLicenseResult> {
+  if (process.env.DINHO_E2E === '1' && !app.isPackaged) {
+    return { valid: true, type: 'test' }
+  }
   ensureInit()
   const userData = app.getPath('userData')
   const key = readSavedKey(join(userData, 'remote-license.key'))

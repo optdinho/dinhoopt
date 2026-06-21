@@ -1,3 +1,4 @@
+import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useIpcScan } from '@/hooks/useIpcScan'
@@ -25,7 +26,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -389,6 +390,10 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
   const isApplying = status === 'applying'
   const busy = isScanning || isApplying
   const unprotectedCount = state ? state.total - state.protected : 0
+  const requiresAdminForFixes = useMemo(
+    () => (state ? state.settings.some((s) => !s.enabled && s.requiresAdmin) : false),
+    [state],
+  )
 
   const headerAction = (
     <div className="flex items-center gap-2.5">
@@ -817,18 +822,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
         </div>
       )}
 
-      {/* Admin warning */}
-      {state && unprotectedCount > 0 && (
-        <div
-          className="mt-4 flex items-start gap-3 rounded-2xl px-5 py-3"
-          style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid var(--accent-muted-bg)' }}
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" strokeWidth={1.8} />
-          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-            {t('privacy.adminWarning')}
-          </p>
-        </div>
-      )}
+      <ElevationBanner show={requiresAdminForFixes && unprotectedCount > 0 && !busy} />
     </div>
   )
 }

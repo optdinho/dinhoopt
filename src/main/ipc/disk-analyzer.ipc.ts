@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process'
 import { readdir, stat } from 'node:fs/promises'
-import { basename, join, sep } from 'node:path'
-import { extname } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { IPC } from '@shared/channels'
 import type { DiskNode, DiskRepairProgress, DiskRepairResult, DriveInfo, FileTypeInfo } from '@shared/types'
@@ -132,76 +131,40 @@ async function quickSize(dirPath: string): Promise<number> {
 
 export async function getDrives(): Promise<DriveInfo[]> {
   getLogger().info('disk-analyzer', 'Fetching drive list...')
-  if (process.platform === 'win32') {
-    try {
-      const driveScript = `$fixed = (Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }).DeviceID -replace ':',''; Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null -and $fixed -contains $_.Name } | ForEach-Object { "$($_.Name)|$($_.Description)|$($_.Used)|$($_.Free)" }`
-      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(driveScript)], {
-        timeout: 10000,
-        windowsHide: true,
-      })
-
-      const drives: DriveInfo[] = []
-      for (const line of stdout.trim().split('\n')) {
-        const [letter, label, used, free] = line.trim().split('|')
-        if (letter && used && free) {
-          const usedSpace = Number.parseInt(used) || 0
-          const freeSpace = Number.parseInt(free) || 0
-          drives.push({
-            letter: letter.trim(),
-            label: label?.trim() || letter.trim(),
-            totalSize: usedSpace + freeSpace,
-            freeSpace,
-            usedSpace,
-          })
-        }
-      }
-      getLogger().success('disk-analyzer', `Found ${drives.length} drive(s) on Windows`)
-      return drives
-    } catch {
-      getLogger().error('disk-analyzer', 'Failed to fetch drives via WMI')
-      return []
-    }
-  }
-
-  // macOS / Linux: parse `df` output for mounted filesystems
   try {
-    const { stdout } = await execFileAsync('df', ['-Pk'], { timeout: 10000 })
+    const driveScript = `$fixed = (Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }).DeviceID -replace ':',''; Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null -and $fixed -contains $_.Name } | ForEach-Object { "$($_.Name)|$($_.Description)|$($_.Used)|$($_.Free)" }`
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(driveScript)], {
+      timeout: 10000,
+      windowsHide: true,
+    })
+
     const drives: DriveInfo[] = []
-    const lines = stdout.trim().split('\n').slice(1) // skip header
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/)
-      if (parts.length < 6) continue
-      const totalKb = Number.parseInt(parts[1] ?? '0') || 0
-      const usedKb = Number.parseInt(parts[2] ?? '0') || 0
-      const freeKb = Number.parseInt(parts[3] ?? '0') || 0
-      const mount = parts.slice(5).join(' ')
-      // Only include real filesystems (skip tmpfs, devfs, etc.)
-      if (!parts[0]?.startsWith('/dev/')) continue
-      drives.push({
-        letter: mount,
-        label: mount === '/' ? 'Root' : basename(mount!),
-        totalSize: totalKb * 1024,
-        freeSpace: freeKb * 1024,
-        usedSpace: usedKb * 1024,
-      })
+    for (const line of stdout.trim().split('\n')) {
+      const [letter, label, used, free] = line.trim().split('|')
+      if (letter && used && free) {
+        const usedSpace = Number.parseInt(used) || 0
+        const freeSpace = Number.parseInt(free) || 0
+        drives.push({
+          letter: letter.trim(),
+          label: label?.trim() || letter.trim(),
+          totalSize: usedSpace + freeSpace,
+          freeSpace,
+          usedSpace,
+        })
+      }
     }
-    getLogger().success('disk-analyzer', `Found ${drives.length} drive(s) via df`)
+    getLogger().success('disk-analyzer', `Found ${drives.length} drive(s) on Windows`)
     return drives
   } catch {
-    getLogger().error('disk-analyzer', 'Failed to fetch drives via df')
+    getLogger().error('disk-analyzer', 'Failed to fetch drives via WMI')
     return []
   }
 }
 
-/** Resolve a drive identifier to a root path (Windows letter or Unix mount path) */
+/** Resolve a drive identifier to a root path (Windows letter) */
 function resolveRootPath(drive: string): string | null {
   if (typeof drive !== 'string' || !drive) return null
-  if (process.platform === 'win32') {
-    if (/^[A-Za-z]$/.test(drive)) return `${drive.toUpperCase()}:\\`
-    return null
-  }
-  // Unix: accept absolute paths (mount points returned by getDrives)
-  if (drive.startsWith(sep)) return drive
+  if (/^[A-Za-z]$/.test(drive)) return `${drive.toUpperCase()}:\\`
   return null
 }
 
@@ -251,18 +214,6 @@ function sendRepairProgress(win: BrowserWindow | null, data: DiskRepairProgress)
  * SFC outputs progress lines like "Verification 42% complete."
  */
 async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepairResult> {
-  if (process.platform !== 'win32') {
-    getLogger().warning('disk-analyzer', 'SFC skipped: not on Windows')
-    return {
-      tool: 'sfc',
-      success: false,
-      exitCode: null,
-      summary: 'SFC is only available on Windows',
-      log: '',
-      requiresReboot: false,
-      needsAdmin: false,
-    }
-  }
   if (!isAdmin()) {
     getLogger().warning('disk-analyzer', 'SFC skipped: admin privileges required')
     return {
@@ -366,18 +317,6 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
  * DISM outputs progress like "[==                 10.0%                 ]"
  */
 async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
-  if (process.platform !== 'win32') {
-    getLogger().warning('disk-analyzer', 'DISM skipped: not on Windows')
-    return {
-      tool: 'dism',
-      success: false,
-      exitCode: null,
-      summary: 'DISM is only available on Windows',
-      log: '',
-      requiresReboot: false,
-      needsAdmin: false,
-    }
-  }
   if (!isAdmin()) {
     getLogger().warning('disk-analyzer', 'DISM skipped: admin privileges required')
     return {
@@ -392,9 +331,13 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
   }
 
   return new Promise((resolve) => {
-    const child = spawn('cmd', ['/c', 'chcp 65001 >nul & DISM', '/English', '/Online', '/Cleanup-Image', '/RestoreHealth'], {
-      windowsHide: true,
-    })
+    const child = spawn(
+      'cmd',
+      ['/c', 'chcp 65001 >nul & DISM', '/English', '/Online', '/Cleanup-Image', '/RestoreHealth'],
+      {
+        windowsHide: true,
+      },
+    )
     let stdout = ''
     let lastPercent = 0
     const dismDecoder = new StringDecoder('utf-8')
@@ -471,18 +414,6 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
  * CHKDSK outputs progress like "Stage 1: ... (42% complete)"
  */
 async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRepairResult> {
-  if (process.platform !== 'win32') {
-    getLogger().warning('disk-analyzer', 'CHKDSK skipped: not on Windows')
-    return {
-      tool: 'chkdsk',
-      success: false,
-      exitCode: null,
-      summary: 'CHKDSK is only available on Windows',
-      log: '',
-      requiresReboot: false,
-      needsAdmin: false,
-    }
-  }
   if (!isAdmin()) {
     getLogger().warning('disk-analyzer', 'CHKDSK skipped: admin privileges required')
     return {

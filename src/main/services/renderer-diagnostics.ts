@@ -1,5 +1,5 @@
 import { type BrowserWindow, app } from 'electron'
-import { logError, logInfo } from './logger'
+import { getLogger } from './logger.service'
 
 /**
  * Attaches listeners that record renderer-side failures to the log file.
@@ -19,7 +19,10 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
   const wc = win.webContents
 
   wc.on('render-process-gone', (_event, details) => {
-    logError(`Renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`)
+    getLogger().error(
+      'RendererDiagnostics',
+      `Renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`,
+    )
     if (app.isPackaged && !wc.isDestroyed() && !wc.isDevToolsOpened()) {
       try {
         wc.openDevTools({ mode: 'detach' })
@@ -33,23 +36,27 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
     // Ignore -3 (ABORTED) — fired routinely when navigation is replaced
     if (errorCode === -3) return
     const msg = `Renderer load failed: code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`
-    logError(msg)
+    getLogger().error('RendererDiagnostics', msg)
   })
 
   wc.on('preload-error', (_event, preloadPath, error) => {
-    logError(`Preload error in ${preloadPath}:`, error)
+    getLogger().error(
+      'RendererDiagnostics',
+      `Preload error in ${preloadPath}:`,
+      error instanceof Error ? error.message : String(error ?? ''),
+    )
   })
 
   wc.on('did-finish-load', () => {
-    logInfo('Renderer finished loading')
+    getLogger().info('RendererDiagnostics', 'Renderer finished loading')
   })
 
   win.on('unresponsive', () => {
-    logError('Renderer became unresponsive')
+    getLogger().error('RendererDiagnostics', 'Renderer became unresponsive')
   })
 
   win.on('responsive', () => {
-    logInfo('Renderer responsive again')
+    getLogger().info('RendererDiagnostics', 'Renderer responsive again')
   })
 
   // Forward renderer console warnings/errors to the main log. Level: 0=debug,
@@ -57,6 +64,6 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
   wc.on('console-message', (_event, level, message, line, sourceId) => {
     if (level < 2) return
     const label = level === 3 ? 'error' : 'warn'
-    logError(`Renderer console.${label}: ${message} (${sourceId}:${line})`)
+    getLogger().error('RendererDiagnostics', `Renderer console.${label}: ${message} (${sourceId}:${line})`)
   })
 }

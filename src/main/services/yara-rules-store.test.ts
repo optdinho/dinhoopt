@@ -800,6 +800,63 @@ describe('yara-rules-store integration', () => {
       expect(result.error).toContain('validation failed')
     })
 
+    it('rejects bundle with version exceeding 100 chars', async () => {
+      createExistingRules()
+
+      const body = JSON.stringify({
+        version: 'x'.repeat(101),
+        updatedAt: '2026-06-14T12:00:00Z',
+        sha256: 'abc123',
+        rules: [{ filename: 'test.yar', content: 'rule Test { condition: true }' }],
+      })
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('validation failed')
+    })
+
+    it('rejects bundle with updatedAt exceeding 100 chars', async () => {
+      createExistingRules()
+
+      const body = JSON.stringify({
+        version: '2.0.0',
+        updatedAt: 'x'.repeat(101),
+        sha256: 'abc123',
+        rules: [{ filename: 'test.yar', content: 'rule Test { condition: true }' }],
+      })
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('validation failed')
+    })
+
+    it('rejects bundle with sha256 exceeding 128 chars', async () => {
+      createExistingRules()
+
+      const body = JSON.stringify({
+        version: '2.0.0',
+        updatedAt: '2026-06-14T12:00:00Z',
+        sha256: 'x'.repeat(129),
+        rules: [{ filename: 'test.yar', content: 'rule Test { condition: true }' }],
+      })
+      const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse(body, 200))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const mod = await import('./yara-rules-store')
+      const result = await mod.fetchAndCacheRules('https://example.com/api/yara-rules')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('validation failed')
+    })
+
     it('skips If-None-Match when stored etag is empty string', async () => {
       mkdirSync(rulesDir, { recursive: true })
       writeFileSync(
@@ -950,11 +1007,7 @@ describe('yara-rules-store integration', () => {
 
     it('returns null when metadata has invalid structure (missing version)', async () => {
       mkdirSync(rulesDir, { recursive: true })
-      writeFileSync(
-        join(rulesDir, 'metadata.json'),
-        JSON.stringify({ rulesCount: 42, sha256: 'abc' }),
-        'utf-8',
-      )
+      writeFileSync(join(rulesDir, 'metadata.json'), JSON.stringify({ rulesCount: 42, sha256: 'abc' }), 'utf-8')
 
       const mod = await import('./yara-rules-store')
       expect(mod.getRulesMetadata()).toBeNull()
@@ -993,6 +1046,22 @@ describe('yara-rules-store integration', () => {
       const mod = await import('./yara-rules-store')
       expect(mod.getRulesMetadata()).toBeNull()
     })
+
+    it('returns null when metadata.json is a JSON array', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'metadata.json'), '[1, 2, 3]', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
+
+    it('returns null when metadata.json is a primitive string', async () => {
+      mkdirSync(rulesDir, { recursive: true })
+      writeFileSync(join(rulesDir, 'metadata.json'), '"just a string"', 'utf-8')
+
+      const mod = await import('./yara-rules-store')
+      expect(mod.getRulesMetadata()).toBeNull()
+    })
   })
 
   // ─── startPeriodicRuleChecks / stopPeriodicRuleChecks ────────
@@ -1019,10 +1088,7 @@ describe('yara-rules-store integration', () => {
       expect(mod.RULES_ENDPOINT).toBe('/api/yara-rules')
 
       await vi.advanceTimersByTimeAsync(5_000)
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://example.com/api/yara-rules',
-        expect.any(Object),
-      )
+      expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/yara-rules', expect.any(Object))
     })
 
     it('calls onUpdated when fetch succeeds', async () => {
@@ -1090,9 +1156,11 @@ describe('yara-rules-store integration', () => {
       expect(fetchMock).not.toHaveBeenCalled()
     })
 
-    it('can be called multiple times without error', () => {
-      const mod = import('./yara-rules-store')
-      // No-op since stopPeriodicRuleChecks guards against null interval
+    it('can be called multiple times without error', async () => {
+      const mod = await import('./yara-rules-store')
+      // Guard against null _checkInterval — should not throw
+      mod.stopPeriodicRuleChecks()
+      mod.stopPeriodicRuleChecks()
     })
   })
 })

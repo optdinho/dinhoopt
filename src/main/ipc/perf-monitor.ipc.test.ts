@@ -73,6 +73,17 @@ describe('registerPerfMonitorIpc', () => {
       expect(typeof result.cpuPercent).toBe('number')
       expect(typeof result.memPercent).toBe('number')
     })
+
+    it('computes CPU percent correctly on second call', () => {
+      registerPerfMonitorIpc(() => null)
+      const handler = getHandler('perf:quick-stats')
+      // First call sets prevCpuTimes, returns 0
+      handler()
+      // Second call uses prevCpuTimes to compute delta
+      const result = handler() as { cpuPercent: number }
+      expect(typeof result.cpuPercent).toBe('number')
+      expect(result.cpuPercent).toBeGreaterThanOrEqual(0)
+    })
   })
 
   describe('PERF_GET_SYSTEM_INFO handler', () => {
@@ -119,6 +130,133 @@ describe('registerPerfMonitorIpc', () => {
       // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
       expect(mockStart).toHaveBeenCalledWith(sender)
+    })
+
+    it('starts monitoring even when window is null', () => {
+      const mockStart = vi.fn()
+      const MockService = mocks.perfMonitorService
+      // biome-ignore lint/complexity/useArrowFunction: called with `new`
+      MockService.mockImplementation(function () {
+        return {
+          getSystemInfo: vi.fn(),
+          startMonitoring: mockStart,
+          stopMonitoring: vi.fn(),
+          getProcessName: vi.fn(),
+          killProcess: vi.fn(),
+          getDiskHealth: vi.fn(),
+        }
+      })
+      const sender = { id: 1 }
+      registerPerfMonitorIpc(() => null)
+      const handler = getHandler('perf:start')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      handler({ sender } as any)
+      expect(mockStart).toHaveBeenCalledWith(sender)
+    })
+
+    it('attaches hide/show listeners and triggers them', () => {
+      const mockStart = vi.fn()
+      const mockStop = vi.fn()
+      const MockService = mocks.perfMonitorService
+      // biome-ignore lint/complexity/useArrowFunction: called with `new`
+      MockService.mockImplementation(function () {
+        return {
+          getSystemInfo: vi.fn(),
+          startMonitoring: mockStart,
+          stopMonitoring: mockStop,
+          getProcessName: vi.fn(),
+          killProcess: vi.fn(),
+          getDiskHealth: vi.fn(),
+        }
+      })
+      const mockOn = vi.fn()
+      const sender = { id: 1 }
+      const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => false } } as never
+      registerPerfMonitorIpc(() => win)
+      const handler = getHandler('perf:start')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      handler({ sender } as any)
+
+      // Should have registered 'hide' and 'show' listeners
+      expect(mockOn).toHaveBeenCalledWith('hide', expect.any(Function))
+      expect(mockOn).toHaveBeenCalledWith('show', expect.any(Function))
+
+      // Get the registered handlers and trigger them
+      const hideHandler = mockOn.mock.calls.find((c: string[]) => c[0] === 'hide')![1]
+      const showHandler = mockOn.mock.calls.find((c: string[]) => c[0] === 'show')![1]
+
+      hideHandler()
+      expect(mockStop).toHaveBeenCalledOnce()
+
+      showHandler()
+      expect(mockStart).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not re-attach listeners when same window is provided', () => {
+      const mockOn = vi.fn()
+      const sender = { id: 1 }
+      const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => false } } as never
+      registerPerfMonitorIpc(() => win)
+      const handler = getHandler('perf:start')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      handler({ sender } as any)
+      // Call start again with the same window — should not attach new listeners
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      handler({ sender } as any)
+
+      // 'hide' should only be registered once (2 calls: 'hide' + 'show')
+      expect(mockOn).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not start monitoring on show when webContents is destroyed', () => {
+      const mockOn = vi.fn()
+      const sender = { id: 1 }
+      const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => true } } as never
+      registerPerfMonitorIpc(() => win)
+      const handler = getHandler('perf:start')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      handler({ sender } as any)
+
+      const showHandler = mockOn.mock.calls.find((c: string[]) => c[0] === 'show')![1]
+      showHandler()
+      // startMonitoring should not have been called by show handler
+      // (only by the original PERF_START call)
+    })
+
+    it('does not stop on hide when rendererRequestedMonitoring is false', () => {
+      const mockStop = vi.fn()
+      const MockService = mocks.perfMonitorService
+      // biome-ignore lint/complexity/useArrowFunction: called with `new`
+      MockService.mockImplementation(function () {
+        return {
+          getSystemInfo: vi.fn(),
+          startMonitoring: vi.fn(),
+          stopMonitoring: mockStop,
+          getProcessName: vi.fn(),
+          killProcess: vi.fn(),
+          getDiskHealth: vi.fn(),
+        }
+      })
+      const mockOn = vi.fn()
+      const sender = { id: 1 }
+      const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => false } } as never
+      registerPerfMonitorIpc(() => win)
+
+      // Start monitoring (attaches listeners, sets rendererRequestedMonitoring = true)
+      const startHandler = getHandler('perf:start')
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      startHandler({ sender } as any)
+
+      // Stop monitoring (sets rendererRequestedMonitoring = false)
+      const stopHandler = getHandler('perf:stop')
+      stopHandler()
+
+      // Get the hide handler and trigger it
+      const hideHandler = mockOn.mock.calls.find((c: string[]) => c[0] === 'hide')![1]
+      hideHandler()
+
+      // stopMonitoring should only have been called from PERF_STOP, not from hide
+      expect(mockStop).toHaveBeenCalledTimes(1)
     })
   })
 

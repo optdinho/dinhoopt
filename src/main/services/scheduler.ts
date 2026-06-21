@@ -2,7 +2,7 @@ import { IPC } from '@shared/channels'
 import type { DiNhoSettings, ScheduleEntry, ScheduleRunStatus } from '@shared/types'
 import { type BrowserWindow, Notification } from 'electron'
 import { t } from '../i18n'
-import { logInfo } from './logger'
+import { getLogger } from './logger.service'
 import { getSettings, updateScheduleEntry } from './settings-store'
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
@@ -147,12 +147,12 @@ function triggerScheduleEntry(mainWindow: BrowserWindow | null, entry: ScheduleE
 
   // Skip if window is unavailable — mark as failed to prevent re-triggering
   if (!mainWindow || mainWindow.isDestroyed()) {
-    logInfo(`Schedule "${entry.name}" skipped — no window available`)
+    getLogger().info('Scheduler', `Schedule "${entry.name}" skipped — no window available`)
     completeScheduleRun(entry.id, 'failed')
     return
   }
 
-  logInfo(`Schedule triggered: "${entry.name}" (${entry.id})`)
+  getLogger().info('Scheduler', `Schedule triggered: "${entry.name}" (${entry.id})`)
   inFlight.add(entry.id)
 
   // Safety timeout — if the renderer never responds (crash, reload, etc.),
@@ -161,7 +161,7 @@ function triggerScheduleEntry(mainWindow: BrowserWindow | null, entry: ScheduleE
     entry.id,
     setTimeout(() => {
       if (inFlight.has(entry.id)) {
-        logInfo(`Schedule "${entry.name}" timed out — clearing inFlight`)
+        getLogger().info('Scheduler', `Schedule "${entry.name}" timed out — clearing inFlight`)
         inFlight.delete(entry.id)
         inFlightTimers.delete(entry.id)
       }
@@ -239,13 +239,13 @@ function checkSchedules(getMainWindow: () => BrowserWindow | null): void {
 export function startScheduler(getMainWindow: () => BrowserWindow | null): void {
   if (schedulerTimer) return
 
-  logInfo('Scheduler started')
+  getLogger().info('Scheduler', 'Scheduler started')
 
   schedulerTimer = setInterval(() => {
     try {
       checkSchedules(getMainWindow)
     } catch (err) {
-      logInfo(`Scheduler error: ${err}`)
+      getLogger().info('Scheduler', `Scheduler error: ${err}`)
     }
   }, 60_000)
 
@@ -255,7 +255,7 @@ export function startScheduler(getMainWindow: () => BrowserWindow | null): void 
     try {
       checkSchedules(getMainWindow)
     } catch (err) {
-      logInfo(`Scheduler initial check error: ${err}`)
+      getLogger().info('Scheduler', `Scheduler initial check error: ${err}`)
     }
   }, 5_000)
 }
@@ -271,7 +271,7 @@ export function stopScheduler(): void {
   if (schedulerTimer) {
     clearInterval(schedulerTimer)
     schedulerTimer = null
-    logInfo('Scheduler stopped')
+    getLogger().info('Scheduler', 'Scheduler stopped')
   }
   // Clean up any pending inFlight timers
   for (const timer of inFlightTimers.values()) clearTimeout(timer)

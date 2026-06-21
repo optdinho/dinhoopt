@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { memo } from 'react'
 
 interface PageHeaderProps {
   title: string
@@ -7,7 +8,7 @@ interface PageHeaderProps {
   className?: string
 }
 
-export function PageHeader({ title, description, action, className }: PageHeaderProps) {
+const PageHeader = memo(function PageHeader({ title, description, action, className }: PageHeaderProps) {
   return (
     <div className={cn('mb-5 flex items-end justify-between', className)}>
       <div>
@@ -21,4 +22,6 @@ export function PageHeader({ title, description, action, className }: PageHeader
       {action && <div className="flex items-center gap-2.5">{action}</div>}
     </div>
   )
-}
+})
+
+export { PageHeader }

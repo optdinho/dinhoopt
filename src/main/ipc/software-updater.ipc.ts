@@ -20,7 +20,15 @@ export function registerSoftwareUpdaterIpc(getWindow: WindowGetter): void {
       return result
     } catch (err) {
       logger.error('software-updater', `Update check failed: ${err instanceof Error ? err.message : String(err)}`)
-      return { apps: [], totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0, packageManagerAvailable: false, packageManagerName: null }
+      return {
+        apps: [],
+        totalCount: 0,
+        majorCount: 0,
+        minorCount: 0,
+        patchCount: 0,
+        packageManagerAvailable: false,
+        packageManagerName: null,
+      }
     }
   })
 

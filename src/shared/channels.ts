@@ -208,7 +208,6 @@ export const IPC = {
   // WinSxS Cleanup
   WINSXS_ANALYZE: 'winsxs:analyze',
   WINSXS_CLEAN: 'winsxs:clean',
-  WINSXS_PROGRESS: 'winsxs:progress',
 
   // Firewall Audit (Windows-only)
   FIREWALL_SCAN: 'firewall:scan',

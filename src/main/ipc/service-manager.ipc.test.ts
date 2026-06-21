@@ -37,9 +37,9 @@ vi.mock('@shared/service-safety-kb', () => ({
   lookupServiceSafety: (...args: unknown[]) => mocks.lookupServiceSafety(...args),
 }))
 
-import type { ServiceApplyResult, ServiceScanProgress, ServiceScanResult, WindowsService } from '@shared/types'
 import { IPC } from '@shared/channels'
-import { scanServices, applyServiceChanges, registerServiceManagerIpc } from './service-manager.ipc'
+import type { ServiceApplyResult, ServiceScanProgress, ServiceScanResult, WindowsService } from '@shared/types'
+import { applyServiceChanges, registerServiceManagerIpc, scanServices } from './service-manager.ipc'
 
 const ORIGINAL_PLATFORM = process.platform
 
@@ -433,13 +433,16 @@ describe('scanServices', () => {
   const svcLine = (name: string, display: string, state: string, start: string, desc: string, ms: string): string =>
     `SVC|${name}|${display}|${state}|${start}|${desc}|${ms}`
 
-  const depLine = (name: string, deps: string, dependents: string): string =>
-    `DEP|${name}|${deps}|${dependents}`
+  const depLine = (name: string, deps: string, dependents: string): string => `DEP|${name}|${deps}|${dependents}`
 
   it('delegates to non-Windows platform', async () => {
     setPlatform('darwin')
     const platformResult: ServiceScanResult = {
-      services: [], totalCount: 0, runningCount: 0, disabledCount: 0, safeToDisableCount: 0,
+      services: [],
+      totalCount: 0,
+      runningCount: 0,
+      disabledCount: 0,
+      safeToDisableCount: 0,
     }
     mocks.platformServicesScan.mockResolvedValue(platformResult)
 
@@ -456,7 +459,10 @@ describe('scanServices', () => {
     await scanServices(onProgress)
 
     expect(onProgress).toHaveBeenCalledWith({
-      phase: 'enumerating', current: 0, total: 0, currentService: 'Enumerating services...',
+      phase: 'enumerating',
+      current: 0,
+      total: 0,
+      currentService: 'Enumerating services...',
     })
   })
 
@@ -472,10 +478,18 @@ describe('scanServices', () => {
 
     expect(result.totalCount).toBe(2)
     expect(result.services[0]).toMatchObject({
-      name: 'WSearch', displayName: 'Windows Search', status: 'Running', startType: 'Automatic', isMicrosoft: false,
+      name: 'WSearch',
+      displayName: 'Windows Search',
+      status: 'Running',
+      startType: 'Automatic',
+      isMicrosoft: false,
     })
     expect(result.services[1]).toMatchObject({
-      name: 'Spooler', displayName: 'Print Spooler', status: 'Stopped', startType: 'Manual', isMicrosoft: true,
+      name: 'Spooler',
+      displayName: 'Print Spooler',
+      status: 'Stopped',
+      startType: 'Manual',
+      isMicrosoft: true,
     })
     expect(result.services[0].originalStartType).toBe('Automatic')
     expect(result.services[1].originalStartType).toBe('Manual')
@@ -520,9 +534,7 @@ describe('scanServices', () => {
 
     await scanServices(onProgress)
 
-    const classifyCalls = onProgress.mock.calls.filter(
-      (c: [ServiceScanProgress]) => c[0].phase === 'classifying',
-    )
+    const classifyCalls = onProgress.mock.calls.filter((c: [ServiceScanProgress]) => c[0].phase === 'classifying')
     expect(classifyCalls.length).toBeGreaterThanOrEqual(2)
     expect(classifyCalls[0][0].current).toBe(0)
     expect(classifyCalls[classifyCalls.length - 1][0].current).toBe(40)
@@ -551,11 +563,9 @@ describe('scanServices', () => {
   })
 
   it('skips malformed SVC lines with fewer than 7 parts', async () => {
-    const stdout = [
-      svcLine('Good', 'Good', 'Running', 'Auto', 'desc', 'True'),
-      'SVC|bad|line',
-      'not a svc line',
-    ].join('\n')
+    const stdout = [svcLine('Good', 'Good', 'Running', 'Auto', 'desc', 'True'), 'SVC|bad|line', 'not a svc line'].join(
+      '\n',
+    )
     mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
     mocks.lookupServiceSafety.mockReturnValue({ safety: 'caution', category: 'unknown', note: '' })
 
@@ -602,7 +612,10 @@ describe('scanServices', () => {
     const stdout = [svcLine('SysMain', 'SysMain', 'Running', 'Auto', '', 'True')].join('\n')
     mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
     mocks.lookupServiceSafety.mockReturnValue({
-      safety: 'caution', category: 'misc', note: '', incompatibleGames: ['fivem', 'minecraft'],
+      safety: 'caution',
+      category: 'misc',
+      note: '',
+      incompatibleGames: ['fivem', 'minecraft'],
     })
 
     const result = await scanServices()
@@ -657,9 +670,7 @@ describe('scanServices', () => {
   })
 
   it('uses fallback defaults for unrecognized startType/status', async () => {
-    const stdout = [
-      svcLine('UnknownSvc', 'Unknown', 'BogusState', 'UnknownStartType', '', 'True'),
-    ].join('\n')
+    const stdout = [svcLine('UnknownSvc', 'Unknown', 'BogusState', 'UnknownStartType', '', 'True')].join('\n')
     mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
     mocks.lookupServiceSafety.mockReturnValue({ safety: 'caution', category: 'unknown', note: '' })
 
@@ -697,23 +708,28 @@ describe('applyServiceChanges', () => {
     // biome-ignore lint/suspicious/noExplicitAny: testing invalid input
     const result = await applyServiceChanges([{ name: 123 as any, targetStartType: 'Manual' }])
 
-    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }] })
+    expect(result).toEqual({
+      succeeded: 0,
+      failed: 0,
+      errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }],
+    })
   })
 
   it('returns error for invalid service name', async () => {
     const result = await applyServiceChanges([{ name: 'invalid;name', targetStartType: 'Manual' }])
 
     expect(result).toEqual({
-      succeeded: 0, failed: 0, errors: [{ name: 'invalid;name', displayName: 'invalid;name', reason: 'Invalid service name' }],
+      succeeded: 0,
+      failed: 0,
+      errors: [{ name: 'invalid;name', displayName: 'invalid;name', reason: 'Invalid service name' }],
     })
   })
 
   it('filters unsafe services when force is false', async () => {
-    mocks.lookupServiceSafety.mockImplementation(
-      (name: string) =>
-        name === 'SafeSvc'
-          ? { safety: 'safe', category: 'misc', note: '' }
-          : { safety: 'unsafe', category: 'core', note: '' },
+    mocks.lookupServiceSafety.mockImplementation((name: string) =>
+      name === 'SafeSvc'
+        ? { safety: 'safe', category: 'misc', note: '' }
+        : { safety: 'unsafe', category: 'core', note: '' },
     )
     mocks.execFileAsync.mockResolvedValue({ stdout: 'OK|SafeSvc|Safe', stderr: '' })
 
@@ -739,11 +755,9 @@ describe('applyServiceChanges', () => {
 
   it('parses OK and FAIL lines from PowerShell output', async () => {
     mocks.lookupServiceSafety.mockReturnValue({ safety: 'safe', category: 'misc', note: '' })
-    const stdout = [
-      'OK|WSearch|Windows Search',
-      'FAIL|Spooler|Print Spooler|Access denied',
-      'OK|SysMain|SysMain',
-    ].join('\n')
+    const stdout = ['OK|WSearch|Windows Search', 'FAIL|Spooler|Print Spooler|Access denied', 'OK|SysMain|SysMain'].join(
+      '\n',
+    )
     mocks.execFileAsync.mockResolvedValue({ stdout, stderr: '' })
 
     const result = await applyServiceChanges([
@@ -772,7 +786,10 @@ describe('applyServiceChanges', () => {
 
   it('maps targetStartType through ALLOWED_TYPES', async () => {
     mocks.lookupServiceSafety.mockReturnValue({ safety: 'safe', category: 'misc', note: '' })
-    mocks.execFileAsync.mockResolvedValue({ stdout: 'OK|Svc1|Svc1\nOK|Svc2|Svc2\nOK|Svc3|Svc3\nOK|Svc4|Svc4', stderr: '' })
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: 'OK|Svc1|Svc1\nOK|Svc2|Svc2\nOK|Svc3|Svc3\nOK|Svc4|Svc4',
+      stderr: '',
+    })
 
     const result = await applyServiceChanges([
       { name: 'Svc1', targetStartType: 'Manual' },
@@ -830,7 +847,11 @@ describe('applyServiceChanges', () => {
       { name: 42 as any, targetStartType: 'Disabled' },
     ])
 
-    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }] })
+    expect(result).toEqual({
+      succeeded: 0,
+      failed: 0,
+      errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }],
+    })
   })
 })
 

@@ -86,11 +86,7 @@ const BEHAVIOR_RULES: BehaviorRule[] = [
     check: (content, info) => {
       if (!info.isScript) return false
       const str = content.toString('latin1').toLowerCase()
-      return (
-        str.includes('process.start(') ||
-        str.includes('wscript.shell') ||
-        str.includes('shell.execute')
-      )
+      return str.includes('process.start(') || str.includes('wscript.shell') || str.includes('shell.execute')
     },
   },
   {

@@ -195,3 +195,29 @@ describe('killAllChildren', () => {
     expect(() => killAllChildren()).not.toThrow()
   })
 })
+
+describe('execNativeUtf8 direct call (no %) with error', () => {
+  beforeEach(() => {
+    execFileAsyncMock.mockReset()
+  })
+
+  it('throws original error when killed flag is not set', async () => {
+    execFileAsyncMock.mockRejectedValue(new Error('cmd error'))
+    await expect(execNativeUtf8('reg', ['query'])).rejects.toThrow('cmd error')
+  })
+
+  it('replaces arg placeholders in error messages', async () => {
+    execFileAsyncMock.mockRejectedValue(new Error('"%__KA0%" and "%__KA1%"'))
+    await expect(execNativeUtf8('reg', ['foo', 'bar'])).rejects.toThrow(/foo.*bar/)
+  })
+
+  it('leaves out-of-bounds placeholder unchanged', async () => {
+    execFileAsyncMock.mockRejectedValue(new Error('"%__KA9%"'))
+    await expect(execNativeUtf8('reg', ['foo'])).rejects.toThrow('%__KA9%')
+  })
+
+  it('handles error without message property', async () => {
+    execFileAsyncMock.mockRejectedValue({ code: 'ENOENT' })
+    await expect(execNativeUtf8('reg', ['query'])).rejects.toThrow()
+  })
+})

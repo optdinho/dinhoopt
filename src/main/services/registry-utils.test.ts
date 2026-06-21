@@ -17,7 +17,9 @@ describe('REGISTRY_UNINSTALL_PATHS', () => {
   })
 
   it('includes WOW6432Node path', () => {
-    expect(REGISTRY_UNINSTALL_PATHS[1]).toBe('HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
+    expect(REGISTRY_UNINSTALL_PATHS[1]).toBe(
+      'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+    )
   })
 
   it('includes HKCU Uninstall path', () => {

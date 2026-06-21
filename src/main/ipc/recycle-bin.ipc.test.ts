@@ -329,10 +329,7 @@ describe('RECYCLE_BIN_SCAN handler (macOS/Linux with trash path)', () => {
     const result = (await handler()) as Array<{ items: Array<{ id: string }> }>
     expect(result).toEqual([scanResult])
     expect(mocks.cacheItems).toHaveBeenCalledWith(scanResult.items)
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Found 1 items (1024 bytes)',
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('recycle-bin', 'Found 1 items (1024 bytes)')
   })
 
   it('returns empty array when scan returns no items', async () => {
@@ -360,10 +357,7 @@ describe('RECYCLE_BIN_SCAN handler (macOS/Linux with trash path)', () => {
     const handler = getHandler('cleaner:recyclebin:scan')
     const result = await handler()
     expect(result).toEqual([])
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Scan failed: Error: Permission denied',
-    )
+    expect(mocks.logger.error).toHaveBeenCalledWith('recycle-bin', 'Scan failed: Error: Permission denied')
   })
 })
 
@@ -400,10 +394,7 @@ describe('RECYCLE_BIN_SCAN handler (Windows, no trash path)', () => {
     expect(result[0]!.items[0]!.path).toBe('Recycle Bin')
     expect(result[0]!.items[0]!.selected).toBe(true)
     expect(result[0]!.items[0]!.id).toBe('mock-uuid')
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Found 42 items totalling 1048576 bytes',
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('recycle-bin', 'Found 42 items totalling 1048576 bytes')
   })
 
   it('returns empty array when recycle bin is empty', async () => {
@@ -433,11 +424,7 @@ describe('RECYCLE_BIN_SCAN handler (Windows, no trash path)', () => {
     registerRecycleBinIpc()
     const handler = getHandler('cleaner:recyclebin:scan')
     await handler()
-    expect(mocks.execFileAsync).toHaveBeenCalledWith(
-      'powershell.exe',
-      expect.any(Array),
-      { windowsHide: true },
-    )
+    expect(mocks.execFileAsync).toHaveBeenCalledWith('powershell.exe', expect.any(Array), { windowsHide: true })
     expect(mocks.psArgs).toHaveBeenCalledWith(expect.stringContaining('Shell.Application'))
   })
 })
@@ -466,10 +453,7 @@ describe('RECYCLE_BIN_CLEAN handler (macOS/Linux with trash path)', () => {
       errors: [],
       needsElevation: false,
     })
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Cleaned 5000 bytes from trash',
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('recycle-bin', 'Cleaned 5000 bytes from trash')
   })
 
   it('returns error result on clean failure with Error', async () => {
@@ -484,10 +468,7 @@ describe('RECYCLE_BIN_CLEAN handler (macOS/Linux with trash path)', () => {
       errors: [{ path: 'Trash', reason: 'Permission denied' }],
       needsElevation: false,
     })
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Trash clean failed: Permission denied',
-    )
+    expect(mocks.logger.error).toHaveBeenCalledWith('recycle-bin', 'Trash clean failed: Permission denied')
   })
 
   it('handles non-Error rejection gracefully (unknown type)', async () => {
@@ -502,10 +483,7 @@ describe('RECYCLE_BIN_CLEAN handler (macOS/Linux with trash path)', () => {
       errors: [{ path: 'Trash', reason: 'Unknown error' }],
       needsElevation: false,
     })
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Trash clean failed: Unknown error',
-    )
+    expect(mocks.logger.error).toHaveBeenCalledWith('recycle-bin', 'Trash clean failed: Unknown error')
   })
 })
 
@@ -531,10 +509,7 @@ describe('RECYCLE_BIN_CLEAN handler (Windows, no trash path)', () => {
       errors: [],
       needsElevation: false,
     })
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Cleaned 0 bytes from recycle bin',
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('recycle-bin', 'Cleaned 0 bytes from recycle bin')
   })
 
   it('cleans with previously scanned size', async () => {
@@ -553,16 +528,11 @@ describe('RECYCLE_BIN_CLEAN handler (Windows, no trash path)', () => {
       errors: [],
       needsElevation: false,
     })
-    expect(mocks.logger.success).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Cleaned 5000 bytes from recycle bin',
-    )
+    expect(mocks.logger.success).toHaveBeenCalledWith('recycle-bin', 'Cleaned 5000 bytes from recycle bin')
   })
 
   it('reports partial clean when items remain after emptying', async () => {
-    mocks.execFileAsync
-      .mockResolvedValueOnce({ stdout: '' })
-      .mockResolvedValueOnce({ stdout: '3' })
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' }).mockResolvedValueOnce({ stdout: '3' })
     registerRecycleBinIpc()
     const handler = getHandler('cleaner:recyclebin:clean')
     const result = await handler()
@@ -578,10 +548,7 @@ describe('RECYCLE_BIN_CLEAN handler (Windows, no trash path)', () => {
       ],
       needsElevation: false,
     })
-    expect(mocks.logger.warning).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Partial clean: 3 items remaining (may be in use)',
-    )
+    expect(mocks.logger.warning).toHaveBeenCalledWith('recycle-bin', 'Partial clean: 3 items remaining (may be in use)')
   })
 
   it('returns error result on PowerShell clean failure with Error', async () => {
@@ -596,10 +563,7 @@ describe('RECYCLE_BIN_CLEAN handler (Windows, no trash path)', () => {
       errors: [{ path: 'Recycle Bin', reason: 'Access denied' }],
       needsElevation: false,
     })
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Windows clean failed: Access denied',
-    )
+    expect(mocks.logger.error).toHaveBeenCalledWith('recycle-bin', 'Windows clean failed: Access denied')
   })
 
   it('handles non-Error rejection in Windows clean', async () => {
@@ -614,16 +578,11 @@ describe('RECYCLE_BIN_CLEAN handler (Windows, no trash path)', () => {
       errors: [{ path: 'Recycle Bin', reason: 'Unknown error' }],
       needsElevation: false,
     })
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      'recycle-bin',
-      'Windows clean failed: Unknown error',
-    )
+    expect(mocks.logger.error).toHaveBeenCalledWith('recycle-bin', 'Windows clean failed: Unknown error')
   })
 
   it('uses psArgs with SHEmptyRecycleBin and verification PowerShell scripts', async () => {
-    mocks.execFileAsync
-      .mockResolvedValueOnce({ stdout: '' })
-      .mockResolvedValueOnce({ stdout: '0' })
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' }).mockResolvedValueOnce({ stdout: '0' })
     registerRecycleBinIpc()
     const handler = getHandler('cleaner:recyclebin:clean')
     await handler()

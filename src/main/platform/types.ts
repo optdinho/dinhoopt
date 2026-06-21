@@ -211,12 +211,7 @@ export interface PlatformSecurity {
   collectUpdateStatus(): Promise<UpdateStatus>
   collectScreenLockStatus(): Promise<ScreenLockStatus>
   collectPasswordPolicy(): Promise<PasswordPolicy>
-  collectSshHardening(): Promise<null>
-  collectFail2ban(): Promise<null>
   collectListeningPorts(): Promise<null>
-  collectAuditd(): Promise<null>
-  collectSuidSgidBinaries(): Promise<null>
-  collectLinuxFirewallStatus(): Promise<null>
 }
 
 // ─── System Commands ────────────────────────────────────────
@@ -407,7 +402,7 @@ export interface PlatformNetwork {
 // ─── Top-level Provider ─────────────────────────────────────
 
 export interface PlatformProvider {
-  readonly platform: 'win32' | 'darwin' | 'linux'
+  readonly platform: 'win32'
   readonly paths: PlatformPaths
   readonly elevation: PlatformElevation
   readonly security: PlatformSecurity

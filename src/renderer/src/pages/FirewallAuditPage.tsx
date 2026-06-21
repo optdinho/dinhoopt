@@ -326,8 +326,8 @@ export function FirewallAuditPage() {
           </div>
           {applyResult.errors.length > 0 && (
             <div className="mt-2 space-y-1">
-              {applyResult.errors.map((e) => (
-                <div key={e.displayName || e.name} className="text-[11.5px]" style={{ color: 'var(--text-secondary)' }}>
+              {applyResult.errors.map((e, i) => (
+                <div key={`${e.name || e.displayName}-${i}`} className="text-[11.5px]" style={{ color: 'var(--text-secondary)' }}>
                   {e.displayName || e.name}: {e.reason}
                 </div>
               ))}

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type TextEncoding, decodeText, detectEncoding, readTextFile } from './encoding'
+import { decodeText, detectEncoding, detectByNullHeuristic, hasBom, isValidUtf8, readTextFile, swap16 } from './encoding'
 
 function b(...bytes: number[]): Buffer {
   return Buffer.from(bytes)
@@ -149,6 +149,25 @@ describe('readTextFile', () => {
   it('throws on non-existent file', async () => {
     await expect(readTextFile(join(tmpDir, 'nope.txt'))).rejects.toThrow()
   })
+
+  it('reads a UTF-16BE file with BOM', async () => {
+    const filePath = join(tmpDir, 'utf16be.txt')
+    const content = 'DiNho Optimizer'
+    const utf16le = Buffer.from(content, 'utf16le')
+    const utf16be = swap16(utf16le)
+    const buf = Buffer.concat([utf16beBom(), utf16be])
+    await writeFile(filePath, buf)
+    expect(await readTextFile(filePath)).toBe(content)
+  })
+
+  it('reads a UTF-16BE file without BOM', async () => {
+    const filePath = join(tmpDir, 'utf16be-nobom.txt')
+    const content = 'be test'
+    const utf16le = Buffer.from(content, 'utf16le')
+    const utf16be = swap16(utf16le)
+    await writeFile(filePath, utf16be)
+    expect(await readTextFile(filePath)).toBe(content)
+  })
 })
 
 describe('performance', () => {
@@ -160,5 +179,165 @@ describe('performance', () => {
     }
     const elapsed = performance.now() - start
     expect(elapsed).toBeLessThan(100)
+  })
+})
+
+describe('hasBom', () => {
+  it('returns true when buffer starts with BOM', () => {
+    expect(hasBom(utf16leBom(), utf16leBom())).toBe(true)
+    expect(hasBom(utf16beBom(), utf16beBom())).toBe(true)
+  })
+
+  it('returns false when buffer is shorter than BOM', () => {
+    expect(hasBom(Buffer.from([0xff]), utf16leBom())).toBe(false)
+    expect(hasBom(Buffer.alloc(0), utf16beBom())).toBe(false)
+  })
+
+  it('returns false when buffer does not start with BOM', () => {
+    expect(hasBom(Buffer.from([0x41, 0x42]), utf16leBom())).toBe(false)
+    expect(hasBom(Buffer.from([0x41, 0x42]), utf16beBom())).toBe(false)
+  })
+
+  it('returns true when buffer has BOM followed by content', () => {
+    const buf = Buffer.concat([utf16leBom(), Buffer.from('abc')])
+    expect(hasBom(buf, utf16leBom())).toBe(true)
+  })
+})
+
+describe('detectByNullHeuristic', () => {
+  it('returns null for buffer shorter than 2 bytes', () => {
+    expect(detectByNullHeuristic(Buffer.from([0x41]))).toBeNull()
+    expect(detectByNullHeuristic(Buffer.alloc(0))).toBeNull()
+  })
+
+  it('detects UTF-16BE from null-byte pattern (even positions are null)', () => {
+    const buf = Buffer.alloc(100)
+    for (let i = 0; i < buf.length; i += 2) {
+      buf[i] = 0 // null at even positions
+      buf[i + 1] = 0x61 // 'a' at odd positions
+    }
+    expect(detectByNullHeuristic(buf)).toBe('utf16be')
+  })
+
+  it('detects UTF-16LE from null-byte pattern (odd positions are null)', () => {
+    const buf = Buffer.alloc(100)
+    for (let i = 0; i < buf.length; i += 2) {
+      buf[i] = 0x61 // 'a' at even positions
+      buf[i + 1] = 0 // null at odd positions
+    }
+    expect(detectByNullHeuristic(buf)).toBe('utf16le')
+  })
+
+  it('returns null when neither even nor odd null ratio exceeds threshold', () => {
+    // Mixed: need both ratios below 0.8
+    const buf = Buffer.from([0x41, 0x00, 0x41, 0x42, 0x41, 0x00, 0x41, 0x42])
+    // Even: 0x41, 0x41, 0x41, 0x41 = 0 nulls / 4 = 0
+    // Odd: 0x00, 0x42, 0x00, 0x42 = 2 nulls / 4 = 0.5
+    expect(detectByNullHeuristic(buf)).toBeNull()
+  })
+
+  it('limits sample to 2048 bytes', () => {
+    const buf = Buffer.alloc(4096)
+    for (let i = 0; i < buf.length; i += 2) {
+      buf[i] = 0 // null at even
+      buf[i + 1] = 0x61
+    }
+    // First 2048 bytes are sampled, even null ratio = 1.0 > 0.8
+    expect(detectByNullHeuristic(buf)).toBe('utf16be')
+  })
+})
+
+describe('isValidUtf8', () => {
+  it('returns true for valid UTF-8 content', () => {
+    expect(isValidUtf8(Buffer.from('hello world'))).toBe(true)
+    expect(isValidUtf8(Buffer.from('héllo 🎉'))).toBe(true)
+  })
+
+  it('returns false when decoded string contains replacement character', () => {
+    // 0xFF is invalid in UTF-8, decodes to U+FFFD
+    const buf = Buffer.from([0xff])
+    expect(isValidUtf8(buf)).toBe(false)
+  })
+
+  it('returns false for overlong encoding sequences', () => {
+    // Overlong encoding of '/' (0x2F) as 2-byte sequence
+    const buf = Buffer.from([0xc0, 0xaf])
+    expect(isValidUtf8(buf)).toBe(false)
+  })
+})
+
+describe('swap16', () => {
+  it('swaps pairs of bytes', () => {
+    const input = Buffer.from([0x01, 0x02, 0x03, 0x04])
+    const result = swap16(input)
+    expect(result).toEqual(Buffer.from([0x02, 0x01, 0x04, 0x03]))
+  })
+
+  it('handles odd-length buffer (last byte stays in place)', () => {
+    const input = Buffer.from([0x01, 0x02, 0x03])
+    const result = swap16(input)
+    expect(result).toEqual(Buffer.from([0x02, 0x01, 0x03]))
+  })
+
+  it('does not mutate the original buffer', () => {
+    const input = Buffer.from([0x01, 0x02])
+    const result = swap16(input)
+    expect(result).toEqual(Buffer.from([0x02, 0x01]))
+    expect(input).toEqual(Buffer.from([0x01, 0x02]))
+  })
+
+  it('returns empty buffer for empty input', () => {
+    const input = Buffer.alloc(0)
+    expect(swap16(input)).toEqual(Buffer.alloc(0))
+  })
+
+  it('handles single byte', () => {
+    const input = Buffer.from([0x42])
+    expect(swap16(input)).toEqual(Buffer.from([0x42]))
+  })
+})
+
+describe('detectEncoding (extended)', () => {
+  it('detects UTF-16BE from null-byte heuristic (even nulls)', () => {
+    const buf = Buffer.alloc(100)
+    for (let i = 0; i < buf.length; i += 2) {
+      buf[i] = 0 // null at even positions
+      buf[i + 1] = 0x61 // 'a' at odd positions
+    }
+    expect(detectEncoding(buf)).toBe('utf16be')
+  })
+
+  it('falls back to latin1 when heuristic returns null and UTF-8 is invalid', () => {
+    // Buffer with no clear null pattern AND invalid UTF-8
+    const buf = Buffer.from([0xff, 0x80, 0xff, 0x80])
+    // Even: 0xff, 0xff → 0 nulls / 2 = 0
+    // Odd: 0x80, 0x80 → 0 nulls / 2 = 0
+    // Neither > 0.8 → heuristic returns null
+    // isValidUtf8 → false (0xff is invalid)
+    expect(detectEncoding(buf)).toBe('latin1')
+  })
+})
+
+describe('decodeText (extended)', () => {
+  it('decodes UTF-16BE content with BOM', () => {
+    const content = 'hello world'
+    // Create UTF-16BE buffer: swap bytes of UTF-16LE
+    const utf16le = Buffer.from(content, 'utf16le')
+    const utf16be = swap16(utf16le)
+    const buf = Buffer.concat([utf16beBom(), utf16be])
+    expect(decodeText(buf)).toBe(content)
+  })
+
+  it('decodes UTF-16BE content without BOM', () => {
+    const content = 'test message'
+    const utf16le = Buffer.from(content, 'utf16le')
+    const utf16be = swap16(utf16le)
+    expect(decodeText(utf16be)).toBe(content)
+  })
+
+  it('decodes latin1 content', () => {
+    // 0x80 and above decode as-is in latin1
+    const buf = Buffer.from([0xe0, 0xe1, 0xe2])
+    expect(decodeText(buf)).toBe('\u00e0\u00e1\u00e2')
   })
 })

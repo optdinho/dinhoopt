@@ -12,10 +12,10 @@ import { SoftwareUpdatesCard } from '@/components/dashboard/SoftwareUpdatesCard'
 import { StatusBlock } from '@/components/dashboard/StatusBlock'
 import { StorageOverview } from '@/components/dashboard/StorageOverview'
 import type { OneClickPhase, OneClickResult } from '@/components/dashboard/types'
-import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
+import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { StatCard } from '@/components/shared/StatCard'
 import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
@@ -149,11 +149,18 @@ export function DashboardPage() {
   }, [gameModeActive, gameModeActivatedAt])
 
   const refreshDrives = useCallback(() => {
-    window.dinho?.diskDrives?.().then(setDrives).catch(() => {})
+    window.dinho
+      ?.diskDrives?.()
+      .then(setDrives)
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
     refreshDrives()
+    const iv = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshDrives()
+    }, 60_000)
+    return () => clearInterval(iv)
   }, [refreshDrives])
 
   // ── Health score (memoized) ────────────────────────────────
@@ -234,7 +241,9 @@ export function DashboardPage() {
       try {
         setPhaseLabel(t('phaseLabelScanningType', { type }))
         const results = await scan()
-        const selectedIds = results.filter((r) => !excludedSubcategories.has(r.subcategory)).flatMap((r) => r.items.map((i) => i.id))
+        const selectedIds = results
+          .filter((r) => !excludedSubcategories.has(r.subcategory))
+          .flatMap((r) => r.items.map((i) => i.id))
         if (selectedIds.length > 0) {
           setPhaseLabel(t('phaseLabelCleaningType', { type }))
           const res = await clean(selectedIds)
@@ -512,35 +521,39 @@ export function DashboardPage() {
         {/* ── Row 1: MiniGauges ─────────────────────────────── */}
         <StaggerItem>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {loading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder
-                  <MiniGaugeSkeleton key={i} />
-                ))
-              : (
-                <>
-                  <MiniGauge icon={Cpu} label={t('gaugeCpu')} percent={Math.round(cpuPct)} detail={`${Math.round(cpuPct)}%`} />
-                  <MiniGauge
-                    icon={MemoryStick}
-                    label={t('gaugeRam')}
-                    percent={Math.round(ramPct)}
-                    detail={perf ? `${formatBytes(perf.memUsedBytes)} / ${formatBytes(perf.memTotalBytes)}` : '—'}
-                  />
-                  <MiniGauge
-                    icon={HardDrive}
-                    label={t('gaugeDisk')}
-                    percent={diskPct}
-                    detail={`${diskPct}% ${t('gaugeDiskUsed')}`}
-                  />
-                  <MiniGauge
-                    icon={BarChart3}
-                    label={t('gaugeScans')}
-                    percent={Math.min(100, stats.totalScans * 10)}
-                    detail={`${stats.totalScans} ${t('gaugeScansRun')}`}
-                  />
-                </>
-              )
-            }
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder
+                <MiniGaugeSkeleton key={i} />
+              ))
+            ) : (
+              <>
+                <MiniGauge
+                  icon={Cpu}
+                  label={t('gaugeCpu')}
+                  percent={Math.round(cpuPct)}
+                  detail={`${Math.round(cpuPct)}%`}
+                />
+                <MiniGauge
+                  icon={MemoryStick}
+                  label={t('gaugeRam')}
+                  percent={Math.round(ramPct)}
+                  detail={perf ? `${formatBytes(perf.memUsedBytes)} / ${formatBytes(perf.memTotalBytes)}` : '—'}
+                />
+                <MiniGauge
+                  icon={HardDrive}
+                  label={t('gaugeDisk')}
+                  percent={diskPct}
+                  detail={`${diskPct}% ${t('gaugeDiskUsed')}`}
+                />
+                <MiniGauge
+                  icon={BarChart3}
+                  label={t('gaugeScans')}
+                  percent={Math.min(100, stats.totalScans * 10)}
+                  detail={`${stats.totalScans} ${t('gaugeScansRun')}`}
+                />
+              </>
+            )}
           </div>
         </StaggerItem>
 
@@ -604,7 +617,13 @@ export function DashboardPage() {
               variant="accent"
               loading={!statsLoaded}
             />
-            <StatCard icon={FileStack} label={t('statFilesCleaned')} value={stats.totalFilesCleaned} variant="success" loading={!statsLoaded} />
+            <StatCard
+              icon={FileStack}
+              label={t('statFilesCleaned')}
+              value={stats.totalFilesCleaned}
+              variant="success"
+              loading={!statsLoaded}
+            />
             <StatCard icon={BarChart3} label={t('statTotalScans')} value={stats.totalScans} loading={!statsLoaded} />
           </div>
         </StaggerItem>
@@ -675,16 +694,8 @@ function MiniGaugeSkeleton() {
         style={{ background: 'var(--bg-subtle-2)' }}
         aria-hidden="true"
       />
-      <div
-        className="h-4 w-14 animate-pulse rounded"
-        style={{ background: 'var(--bg-subtle-2)' }}
-        aria-hidden="true"
-      />
-      <div
-        className="h-3 w-20 animate-pulse rounded"
-        style={{ background: 'var(--bg-subtle-2)' }}
-        aria-hidden="true"
-      />
+      <div className="h-4 w-14 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} aria-hidden="true" />
+      <div className="h-3 w-20 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} aria-hidden="true" />
     </div>
   )
 }

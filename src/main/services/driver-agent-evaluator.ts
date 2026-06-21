@@ -1,21 +1,52 @@
+import type { AgentEvaluationResult, AgentInfo, AgentVerdict, DriverCandidate } from '@shared/driver-agent-types'
 import type { DriverUpdate } from '@shared/types'
-import type {
-  AgentInfo,
-  AgentVerdict,
-  DriverCandidate,
-  AgentEvaluationResult,
-} from '@shared/driver-agent-types'
 
 export const AGENTS: AgentInfo[] = [
   { id: 'windows-update', nameKey: 'agentWuName', descriptionKey: 'agentWuDesc', icon: 'Cloud', weight: 20 },
-  { id: 'version-freshness', nameKey: 'agentVersionName', descriptionKey: 'agentVersionDesc', icon: 'ArrowUpCircle', weight: 15 },
+  {
+    id: 'version-freshness',
+    nameKey: 'agentVersionName',
+    descriptionKey: 'agentVersionDesc',
+    icon: 'ArrowUpCircle',
+    weight: 15,
+  },
   { id: 'date-maturity', nameKey: 'agentDateName', descriptionKey: 'agentDateDesc', icon: 'CalendarCheck', weight: 10 },
-  { id: 'whql-certification', nameKey: 'agentWhqlName', descriptionKey: 'agentWhqlDesc', icon: 'ShieldCheck', weight: 15 },
-  { id: 'publisher-reputation', nameKey: 'agentPublisherName', descriptionKey: 'agentPublisherDesc', icon: 'Building2', weight: 10 },
+  {
+    id: 'whql-certification',
+    nameKey: 'agentWhqlName',
+    descriptionKey: 'agentWhqlDesc',
+    icon: 'ShieldCheck',
+    weight: 15,
+  },
+  {
+    id: 'publisher-reputation',
+    nameKey: 'agentPublisherName',
+    descriptionKey: 'agentPublisherDesc',
+    icon: 'Building2',
+    weight: 10,
+  },
   { id: 'hardware-match', nameKey: 'agentHardwareName', descriptionKey: 'agentHardwareDesc', icon: 'Cpu', weight: 15 },
-  { id: 'stability-risk', nameKey: 'agentStabilityName', descriptionKey: 'agentStabilityDesc', icon: 'Activity', weight: 5 },
-  { id: 'security-relevance', nameKey: 'agentSecurityName', descriptionKey: 'agentSecurityDesc', icon: 'ShieldAlert', weight: 5 },
-  { id: 'rollback-safety', nameKey: 'agentRollbackName', descriptionKey: 'agentRollbackDesc', icon: 'Undo2', weight: 5 },
+  {
+    id: 'stability-risk',
+    nameKey: 'agentStabilityName',
+    descriptionKey: 'agentStabilityDesc',
+    icon: 'Activity',
+    weight: 5,
+  },
+  {
+    id: 'security-relevance',
+    nameKey: 'agentSecurityName',
+    descriptionKey: 'agentSecurityDesc',
+    icon: 'ShieldAlert',
+    weight: 5,
+  },
+  {
+    id: 'rollback-safety',
+    nameKey: 'agentRollbackName',
+    descriptionKey: 'agentRollbackDesc',
+    icon: 'Undo2',
+    weight: 5,
+  },
   { id: 'consensus', nameKey: 'agentConsensusName', descriptionKey: 'agentConsensusDesc', icon: 'Scale', weight: 0 },
 ]
 
@@ -327,10 +358,19 @@ function evaluateSecurityRelevance(update: DriverUpdate): AgentVerdict {
   const details: string[] = []
 
   const securityKeywords = [
-    'security', 'security update', 'vulnerability', 'cve-',
-    'critical', 'important', 'exploit', 'privilege escalation',
-    'remote code execution', 'denial of service', 'information disclosure',
-    'buffer overflow', 'patch',
+    'security',
+    'security update',
+    'vulnerability',
+    'cve-',
+    'critical',
+    'important',
+    'exploit',
+    'privilege escalation',
+    'remote code execution',
+    'denial of service',
+    'information disclosure',
+    'buffer overflow',
+    'patch',
   ]
 
   const foundKeywords = securityKeywords.filter((kw) => title.includes(kw))

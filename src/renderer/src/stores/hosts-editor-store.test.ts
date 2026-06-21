@@ -108,6 +108,12 @@ describe('hosts-editor-store', () => {
     expect(useHostsEditorStore.getState().entries[0]!.enabled).toBe(true)
   })
 
+  it('toggleEntry preserves non-matching entries', () => {
+    useHostsEditorStore.getState().setEntries([makeEntry({ id: '1', enabled: true }), makeEntry({ id: '2', enabled: false })])
+    useHostsEditorStore.getState().toggleEntry('1')
+    expect(useHostsEditorStore.getState().entries.find((e) => e.id === '2')!.enabled).toBe(false)
+  })
+
   it('updateEntry updates specific fields', () => {
     useHostsEditorStore.getState().setEntries([makeEntry({ id: '1', ip: '0.0.0.0' })])
     useHostsEditorStore.getState().updateEntry('1', { ip: '192.168.1.1', comment: 'updated' })
@@ -115,6 +121,12 @@ describe('hosts-editor-store', () => {
     expect(entry.ip).toBe('192.168.1.1')
     expect(entry.comment).toBe('updated')
     expect(entry.hostname).toBe('localhost')
+  })
+
+  it('updateEntry preserves non-matching entries', () => {
+    useHostsEditorStore.getState().setEntries([makeEntry({ id: '1', ip: '0.0.0.0' }), makeEntry({ id: '2', ip: '1.1.1.1' })])
+    useHostsEditorStore.getState().updateEntry('1', { ip: '192.168.1.1' })
+    expect(useHostsEditorStore.getState().entries.find((e) => e.id === '2')!.ip).toBe('1.1.1.1')
   })
 
   it('addEntry appends a new blank entry', () => {

@@ -40,13 +40,13 @@ vi.mock('../services/logger.service', () => ({
   })),
 }))
 
-import { readFileSync, renameSync, unlinkSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { IPC } from '@shared/channels'
+import type { ContextMenuApplyRequest, ContextMenuEntry, ContextMenuScanResult } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import { ipcMain } from 'electron'
-import { IPC } from '@shared/channels'
-import type { ContextMenuEntry, ContextMenuApplyRequest, ContextMenuScanResult } from '@shared/types'
-import { execNativeUtf8 } from '../services/exec-utf8'
 import { getBackupDir } from '../services/backup-dir'
+import { execNativeUtf8 } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
 
 import {
@@ -422,7 +422,7 @@ describe('scanContextMenu', () => {
     vi.mocked(execNativeUtf8)
       .mockResolvedValueOnce({ stdout: shellBlock, stderr: '' })
       .mockResolvedValueOnce({ stdout: shellexBlock, stderr: '' })
-      // all other roots return empty
+    // all other roots return empty
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const result = await scanContextMenu(new AbortController().signal)
@@ -462,7 +462,14 @@ describe('scanContextMenu', () => {
     const staleEntry = 'deadbeef12345678'
     const disabledState = {
       version: 1,
-      entries: { [staleEntry]: { keyPath: 'HKCR\\*\\shell\\Stale', originalName: 'Stale', disabledAt: '2024-01-01T00:00:00.000Z', kind: 'verb' as const } },
+      entries: {
+        [staleEntry]: {
+          keyPath: 'HKCR\\*\\shell\\Stale',
+          originalName: 'Stale',
+          disabledAt: '2024-01-01T00:00:00.000Z',
+          kind: 'verb' as const,
+        },
+      },
     }
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify(disabledState))
@@ -517,12 +524,11 @@ describe('applyContextMenu', () => {
       '',
     ].join('\n')
 
-    vi.mocked(execNativeUtf8)
-      .mockResolvedValue({ stdout: shellBlock, stderr: '' })
+    vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     expect(scanResult.entries.length).toBeGreaterThan(0)
 
     // Now apply disable on the first verb
@@ -547,12 +553,11 @@ describe('applyContextMenu', () => {
       '    LegacyDisable    REG_SZ    ',
       '',
     ].join('\n')
-    vi.mocked(execNativeUtf8)
-      .mockResolvedValue({ stdout: shellBlock, stderr: '' })
+    vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb' && e.status === 'disabled')!
 
     // Mock execNativeUtf8 for the enable reg delete call
@@ -564,7 +569,11 @@ describe('applyContextMenu', () => {
     expect(result.succeeded).toBe(1)
     expect(result.updates[0]!.status).toBe('enabled')
     const expectedArgs = ['delete', targetEntry.keyPath, '/v', 'LegacyDisable', '/f']
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith('reg', expectedArgs, expect.objectContaining({ timeout: 8000 }))
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
+      'reg',
+      expectedArgs,
+      expect.objectContaining({ timeout: 8000 }),
+    )
   })
 
   it('deletes a verb entry', async () => {
@@ -575,16 +584,12 @@ describe('applyContextMenu', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\DeleteMe',
-      '    (Default)    REG_SZ    Delete Me',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\DeleteMe', '    (Default)    REG_SZ    Delete Me', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.name === 'DeleteMe')!
 
     vi.mocked(execNativeUtf8).mockReset()
@@ -593,7 +598,11 @@ describe('applyContextMenu', () => {
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
     const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])
     expect(result.succeeded).toBe(1)
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith('reg', ['delete', targetEntry.keyPath, '/f'], expect.anything())
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
+      'reg',
+      ['delete', targetEntry.keyPath, '/f'],
+      expect.anything(),
+    )
   })
 
   it('disables a handler entry (copy + delete)', async () => {
@@ -613,7 +622,7 @@ describe('applyContextMenu', () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.name === 'TestHandler')!
     expect(targetEntry.kind).toBe('handler')
     expect(targetEntry.status).toBe('enabled')
@@ -627,8 +636,18 @@ describe('applyContextMenu', () => {
     expect(result.updates[0]!.status).toBe('disabled')
     // backupShellExtensionHives runs 11 export calls + 2 applyOne calls
     expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledTimes(13)
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(12, 'reg', ['copy', targetEntry.keyPath, expect.stringContaining('-TestHandler'), '/s', '/f'], expect.anything())
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(13, 'reg', ['delete', targetEntry.keyPath, '/f'], expect.anything())
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(
+      12,
+      'reg',
+      ['copy', targetEntry.keyPath, expect.stringContaining('-TestHandler'), '/s', '/f'],
+      expect.anything(),
+    )
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(
+      13,
+      'reg',
+      ['delete', targetEntry.keyPath, '/f'],
+      expect.anything(),
+    )
   })
 
   it('enables a handler entry (copy disabled ← + delete disabled)', async () => {
@@ -648,7 +667,7 @@ describe('applyContextMenu', () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.name === 'TestHandler')!
     expect(targetEntry.status).toBe('disabled')
 
@@ -661,8 +680,18 @@ describe('applyContextMenu', () => {
     expect(result.updates[0]!.status).toBe('enabled')
     // backupShellExtensionHives runs 11 export calls + 2 applyOne calls
     expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledTimes(13)
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(12, 'reg', ['copy', expect.stringContaining('-TestHandler'), targetEntry.keyPath, '/s', '/f'], expect.anything())
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(13, 'reg', ['delete', expect.stringContaining('-TestHandler'), '/f'], expect.anything())
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(
+      12,
+      'reg',
+      ['copy', expect.stringContaining('-TestHandler'), targetEntry.keyPath, '/s', '/f'],
+      expect.anything(),
+    )
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenNthCalledWith(
+      13,
+      'reg',
+      ['delete', expect.stringContaining('-TestHandler'), '/f'],
+      expect.anything(),
+    )
   })
 
   it('deletes a handler entry (enabled state)', async () => {
@@ -682,7 +711,7 @@ describe('applyContextMenu', () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.name === 'DelHandler')!
     expect(targetEntry.status).toBe('enabled')
 
@@ -693,7 +722,11 @@ describe('applyContextMenu', () => {
     const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])
     expect(result.succeeded).toBe(1)
     // Delete in enabled state deletes the enabled path
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith('reg', ['delete', targetEntry.keyPath, '/f'], expect.anything())
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
+      'reg',
+      ['delete', targetEntry.keyPath, '/f'],
+      expect.anything(),
+    )
   })
 
   it('deletes a handler entry (disabled state)', async () => {
@@ -713,7 +746,7 @@ describe('applyContextMenu', () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.name === 'DelHandler')!
     expect(targetEntry.status).toBe('disabled')
 
@@ -724,7 +757,11 @@ describe('applyContextMenu', () => {
     const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])
     expect(result.succeeded).toBe(1)
     // Delete in disabled state deletes the disabled path (with - prefix)
-    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith('reg', ['delete', expect.stringContaining('-DelHandler'), '/f'], expect.anything())
+    expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
+      'reg',
+      ['delete', expect.stringContaining('-DelHandler'), '/f'],
+      expect.anything(),
+    )
   })
 
   it('returns protected entry error when disabling a protected verb', async () => {
@@ -735,16 +772,12 @@ describe('applyContextMenu', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\open',
-      '    (Default)    REG_SZ    &Open',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\open', '    (Default)    REG_SZ    &Open', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const protectedEntry = scanResult.entries.find((e) => e.protected)!
     expect(protectedEntry).toBeDefined()
 
@@ -774,7 +807,7 @@ describe('applyContextMenu', () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const protectedEntry = scanResult.entries.find((e) => e.protected && e.status === 'disabled')!
     expect(protectedEntry).toBeDefined()
 
@@ -794,16 +827,12 @@ describe('applyContextMenu', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\TestVerb',
-      '    (Default)    REG_SZ    Test Verb',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.name === 'TestVerb')!
 
     vi.mocked(execNativeUtf8).mockReset()
@@ -853,7 +882,7 @@ describe('applyContextMenu', () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const entries = scanResult.entries
 
     vi.mocked(execNativeUtf8).mockReset()
@@ -880,16 +909,12 @@ describe('applyContextMenu', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\TestVerb',
-      '    (Default)    REG_SZ    Test Verb',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb')!
 
     vi.mocked(execNativeUtf8).mockReset()
@@ -925,13 +950,22 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     // Pre-populate disabled state
     const existingDisabledId = 'pre-existing-id'
-    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-      version: 1,
-      entries: { [existingDisabledId]: { keyPath: 'HKCR\\*\\shell\\Old', originalName: 'Old', disabledAt: '2024-01-01T00:00:00.000Z', kind: 'verb' } },
-    }))
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        version: 1,
+        entries: {
+          [existingDisabledId]: {
+            keyPath: 'HKCR\\*\\shell\\Old',
+            originalName: 'Old',
+            disabledAt: '2024-01-01T00:00:00.000Z',
+            kind: 'verb',
+          },
+        },
+      }),
+    )
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb' && e.status === 'disabled')!
 
     vi.mocked(execNativeUtf8).mockReset()
@@ -1004,7 +1038,13 @@ describe('registerContextMenuCleanerIpc', () => {
     expect(result).toMatchObject({
       succeeded: 0,
       failed: 0,
-      errors: [{ entryId: '', displayName: '(invalid request)', reason: 'Malformed payload — expected an array of {entryId, action}.' }],
+      errors: [
+        {
+          entryId: '',
+          displayName: '(invalid request)',
+          reason: 'Malformed payload — expected an array of {entryId, action}.',
+        },
+      ],
     })
   })
 
@@ -1023,7 +1063,13 @@ describe('registerContextMenuCleanerIpc', () => {
     expect(result).toMatchObject({
       succeeded: 0,
       failed: 0,
-      errors: [{ entryId: '', displayName: '(invalid request)', reason: 'Malformed payload — expected an array of {entryId, action}.' }],
+      errors: [
+        {
+          entryId: '',
+          displayName: '(invalid request)',
+          reason: 'Malformed payload — expected an array of {entryId, action}.',
+        },
+      ],
     })
   })
 
@@ -1081,20 +1127,18 @@ describe('cleanRegError (indirect)', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\TestVerb',
-      '    (Default)    REG_SZ    Test Verb',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb')!
 
     vi.mocked(execNativeUtf8).mockReset()
-    vi.mocked(execNativeUtf8).mockRejectedValue(new Error('ERROR: The system was unable to find the specified registry key or value.\r\n'))
+    vi.mocked(execNativeUtf8).mockRejectedValue(
+      new Error('ERROR: The system was unable to find the specified registry key or value.\r\n'),
+    )
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
     const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
@@ -1110,16 +1154,12 @@ describe('cleanRegError (indirect)', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\TestVerb',
-      '    (Default)    REG_SZ    Test Verb',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb')!
 
     vi.mocked(execNativeUtf8).mockReset()
@@ -1139,16 +1179,12 @@ describe('cleanRegError (indirect)', () => {
     })
     registerContextMenuCleanerIpc(() => null)
 
-    const shellBlock = [
-      'HKEY_CLASSES_ROOT\\*\\shell\\TestVerb',
-      '    (Default)    REG_SZ    Test Verb',
-      '',
-    ].join('\n')
+    const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: shellBlock, stderr: '' })
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
 
     const scanHandler = handlers.get(IPC.CONTEXT_MENU_SCAN)!
-    const scanResult = await scanHandler() as ContextMenuScanResult
+    const scanResult = (await scanHandler()) as ContextMenuScanResult
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb')!
 
     vi.mocked(execNativeUtf8).mockReset()

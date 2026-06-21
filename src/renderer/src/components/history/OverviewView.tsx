@@ -174,7 +174,7 @@ export function OverviewView({
               </ResponsiveContainer>
               <div className="mt-2 space-y-1.5">
                 {typeBreakdown.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-2">
+                  <div key={`${item.name}-${i}`} className="flex items-center gap-2">
                     <div
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}

@@ -20,12 +20,54 @@ vi.mock('../services/logger.service', () => ({
   getLogger: () => mocks.logger,
 }))
 
-import { registerBenchmarkIpc } from './benchmark.ipc'
+import {
+  classifyScore,
+  registerBenchmarkIpc,
+  scoreCpu,
+  scoreDpc,
+  scoreNetwork,
+  scorePowerBonus,
+  scoreRam,
+  scoreTemperature,
+  scoreTweakBonus,
+} from './benchmark.ipc'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
   const call = mocks.ipcHandle.mock.calls.find((c) => c[0] === channel)
   if (!call) throw new Error(`No handler for ${channel}`)
   return call[1] as (...args: unknown[]) => unknown
+}
+
+function mockBenchmarkRun(config: {
+  cpuReadings: number[]
+  ramFree: number
+  ramTotal: number
+  pingLines: string[]
+  dpcReadings: number[]
+  tempLine: string
+  tweaksLine: string
+  powerPlanLine: string
+}): () => Promise<unknown> {
+  for (const cpu of config.cpuReadings) {
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: String(cpu) })
+  }
+  mocks.execFileAsync.mockResolvedValueOnce({
+    stdout: JSON.stringify({ Free: config.ramFree, Total: config.ramTotal }),
+  })
+  for (const ping of config.pingLines) {
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: ping })
+  }
+  for (const dpc of config.dpcReadings) {
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: String(dpc) })
+  }
+  mocks.execFileAsync.mockResolvedValueOnce({ stdout: config.tempLine })
+  mocks.execFileAsync.mockResolvedValueOnce({ stdout: config.tweaksLine })
+  mocks.execFileAsync.mockResolvedValueOnce({ stdout: config.powerPlanLine })
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+  const handler = getHandler('benchmark:run')
+  return handler as () => Promise<unknown>
 }
 
 describe('registerBenchmarkIpc', () => {
@@ -43,9 +85,6 @@ describe('registerBenchmarkIpc', () => {
 
   describe('BENCHMARK_RUN handler', () => {
     it('returns benchmark result with score and details', async () => {
-      // Benchmark makes 27 execFileAsync calls in sequence:
-      //   10x CPU (powershell), 1x RAM (powershell), 10x ping, 3x DPC (powershell),
-      //   1x temperature (powershell), 1x tweaks (powershell), 1x power plan (powercfg)
       for (let i = 0; i < 10; i++) {
         mocks.execFileAsync.mockResolvedValueOnce({ stdout: '10' })
       }
@@ -86,6 +125,40 @@ describe('registerBenchmarkIpc', () => {
       expect(result).toHaveProperty('score')
       expect(result).toHaveProperty('scoreClass')
     }, 10000)
+
+    it('returns class S for best-case metrics', async () => {
+      const run = mockBenchmarkRun({
+        cpuReadings: Array(10).fill(2),
+        ramFree: 11468,
+        ramTotal: 16384,
+        pingLines: Array(10).fill('Reply from 8.8.8.8: time=5ms TTL=118'),
+        dpcReadings: [100, 100, 100],
+        tempLine: '45\n',
+        tweaksLine: '51',
+        powerPlanLine: 'Ultimate Performance (e9a42b02-d5df-448d-aa00-03f14749eb61)',
+      })
+
+      const result = (await run()) as { score: number; scoreClass: string }
+      expect(result.scoreClass).toBe('S')
+      expect(result.score).toBeGreaterThanOrEqual(90)
+    }, 30000)
+
+    it('returns class D for worst-case metrics', async () => {
+      const run = mockBenchmarkRun({
+        cpuReadings: Array(10).fill(80),
+        ramFree: 512,
+        ramTotal: 16384,
+        pingLines: Array(10).fill('Request timed out'),
+        dpcReadings: [10000, 10000, 10000],
+        tempLine: '',
+        tweaksLine: '0',
+        powerPlanLine: 'Balanced',
+      })
+
+      const result = (await run()) as { score: number; scoreClass: string }
+      expect(result.scoreClass).toBe('D')
+      expect(result.score).toBeLessThan(50)
+    }, 30000)
   })
 
   describe('BENCHMARK_CANCEL handler', () => {
@@ -93,8 +166,156 @@ describe('registerBenchmarkIpc', () => {
       registerBenchmarkIpc(() => null)
       const handler = getHandler('benchmark:cancel')
       handler()
-      // Call run and check that it returns early
       expect(true).toBe(true)
+    })
+  })
+})
+
+describe('scoring functions', () => {
+  describe('classifyScore', () => {
+    it('returns S for 90+', () => {
+      expect(classifyScore(95)).toBe('S')
+    })
+    it('returns A for 80-89', () => {
+      expect(classifyScore(85)).toBe('A')
+    })
+    it('returns B for 70-79', () => {
+      expect(classifyScore(75)).toBe('B')
+    })
+    it('returns C for 50-69', () => {
+      expect(classifyScore(60)).toBe('C')
+    })
+    it('returns D for < 50', () => {
+      expect(classifyScore(40)).toBe('D')
+    })
+  })
+
+  describe('scoreCpu', () => {
+    it('returns 20 for usage < 5', () => {
+      expect(scoreCpu(2)).toBe(20)
+    })
+    it('returns 17 for usage < 10', () => {
+      expect(scoreCpu(7)).toBe(17)
+    })
+    it('returns 14 for usage < 20', () => {
+      expect(scoreCpu(15)).toBe(14)
+    })
+    it('returns 9 for usage < 35', () => {
+      expect(scoreCpu(25)).toBe(9)
+    })
+    it('returns 4 for usage >= 35', () => {
+      expect(scoreCpu(50)).toBe(4)
+    })
+  })
+
+  describe('scoreRam', () => {
+    it('returns 20 for > 60% free', () => {
+      expect(scoreRam(70)).toBe(20)
+    })
+    it('returns 16 for > 40% free', () => {
+      expect(scoreRam(50)).toBe(16)
+    })
+    it('returns 11 for > 25% free', () => {
+      expect(scoreRam(30)).toBe(11)
+    })
+    it('returns 6 for > 10% free', () => {
+      expect(scoreRam(15)).toBe(6)
+    })
+    it('returns 2 for <= 10% free', () => {
+      expect(scoreRam(5)).toBe(2)
+    })
+  })
+
+  describe('scoreNetwork', () => {
+    it('returns 15 for avg < 10', () => {
+      expect(scoreNetwork(5, 0)).toBe(15)
+    })
+    it('returns 13 for avg < 30', () => {
+      expect(scoreNetwork(20, 0)).toBe(13)
+    })
+    it('returns 10 for avg < 60', () => {
+      expect(scoreNetwork(40, 0)).toBe(10)
+    })
+    it('returns 6 for avg < 100', () => {
+      expect(scoreNetwork(80, 0)).toBe(6)
+    })
+    it('returns 2 for avg >= 100', () => {
+      expect(scoreNetwork(150, 0)).toBe(2)
+    })
+    it('subtracts 8 for jitter > 60', () => {
+      expect(scoreNetwork(5, 70)).toBe(7)
+    })
+    it('subtracts 4 for jitter > 30', () => {
+      expect(scoreNetwork(5, 40)).toBe(11)
+    })
+    it('clamps score to minimum 0', () => {
+      expect(scoreNetwork(150, 100)).toBe(0)
+    })
+  })
+
+  describe('scoreDpc', () => {
+    it('returns 25 for latency < 200', () => {
+      expect(scoreDpc(100)).toBe(25)
+    })
+    it('returns 20 for latency < 500', () => {
+      expect(scoreDpc(300)).toBe(20)
+    })
+    it('returns 13 for latency < 1000', () => {
+      expect(scoreDpc(700)).toBe(13)
+    })
+    it('returns 6 for latency < 2000', () => {
+      expect(scoreDpc(1500)).toBe(6)
+    })
+    it('returns 2 for latency >= 2000', () => {
+      expect(scoreDpc(5000)).toBe(2)
+    })
+  })
+
+  describe('scoreTemperature', () => {
+    it('returns 10 for null temp', () => {
+      expect(scoreTemperature(null)).toBe(10)
+    })
+    it('returns 20 for temp < 50', () => {
+      expect(scoreTemperature(40)).toBe(20)
+    })
+    it('returns 17 for temp < 60', () => {
+      expect(scoreTemperature(55)).toBe(17)
+    })
+    it('returns 13 for temp < 70', () => {
+      expect(scoreTemperature(65)).toBe(13)
+    })
+    it('returns 8 for temp < 80', () => {
+      expect(scoreTemperature(75)).toBe(8)
+    })
+    it('returns 3 for temp >= 80', () => {
+      expect(scoreTemperature(90)).toBe(3)
+    })
+  })
+
+  describe('scoreTweakBonus', () => {
+    it('returns proportional score', () => {
+      expect(scoreTweakBonus(25, 50)).toBe(5)
+    })
+    it('returns 0 for 0 applied', () => {
+      expect(scoreTweakBonus(0, 50)).toBe(0)
+    })
+    it('returns 10 for all applied', () => {
+      expect(scoreTweakBonus(50, 50)).toBe(10)
+    })
+  })
+
+  describe('scorePowerBonus', () => {
+    it('returns 5 for ultimate', () => {
+      expect(scorePowerBonus('ultimate')).toBe(5)
+    })
+    it('returns 3 for high', () => {
+      expect(scorePowerBonus('high')).toBe(3)
+    })
+    it('returns 0 for balanced', () => {
+      expect(scorePowerBonus('balanced')).toBe(0)
+    })
+    it('returns 0 for unknown', () => {
+      expect(scorePowerBonus('unknown')).toBe(0)
     })
   })
 })

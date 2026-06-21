@@ -109,7 +109,7 @@ export function GameModeHero({
           className="pointer-events-none absolute inset-0 rounded-2xl"
           style={{
             padding: '1px',
-            background: 'linear-gradient(90deg, #06b6d4, #8b5cf6, #ec4899, #8b5cf6, #06b6d4)',
+            backgroundImage: 'linear-gradient(90deg, #06b6d4, #8b5cf6, #ec4899, #8b5cf6, #06b6d4)',
             backgroundSize: '300% 100%',
             animation: 'game-mode-border-flow 3s linear infinite',
             WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',

@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
+import { memo } from 'react'
 
-export function MiniStat({
+const MiniStat = memo(function MiniStat({
   icon: Icon,
   label,
   value,
@@ -20,4 +21,6 @@ export function MiniStat({
       <span className="text-[20px] font-bold tracking-tight text-zinc-100">{value}</span>
     </div>
   )
-}
+})
+
+export { MiniStat }

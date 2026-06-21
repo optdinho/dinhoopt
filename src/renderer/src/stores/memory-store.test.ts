@@ -102,6 +102,37 @@ describe('memory-store', () => {
     expect(api.memoryOptimize).not.toHaveBeenCalled()
   })
 
+  it('optimize res.success = false with error field', async () => {
+    const unsub = vi.fn()
+    api.onMemoryProgress.mockReturnValueOnce(unsub)
+    api.memoryOptimize.mockResolvedValueOnce({
+      success: false,
+      freedBytes: 0,
+      error: 'Not enough memory',
+      steps: [],
+    })
+    api.memoryInfo.mockRejectedValueOnce(new Error('load fail'))
+    await useMemoryStore.getState().optimize()
+    const state = useMemoryStore.getState()
+    expect(state.result).toMatchObject({ success: false })
+    expect(state.optimizing).toBe(false)
+  })
+
+  it('optimize res.success = false without error field (fallback msg)', async () => {
+    const unsub = vi.fn()
+    api.onMemoryProgress.mockReturnValueOnce(unsub)
+    api.memoryOptimize.mockResolvedValueOnce({
+      success: false,
+      freedBytes: 0,
+      steps: [],
+    })
+    api.memoryInfo.mockRejectedValueOnce(new Error('load fail'))
+    await useMemoryStore.getState().optimize()
+    const state = useMemoryStore.getState()
+    expect(state.result).toMatchObject({ success: false })
+    expect(state.optimizing).toBe(false)
+  })
+
   it('reset returns to initial state', () => {
     useMemoryStore.setState({
       info: fakeInfo.info,

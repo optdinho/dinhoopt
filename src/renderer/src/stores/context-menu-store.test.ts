@@ -118,6 +118,12 @@ describe('context-menu-store', () => {
     expect(useContextMenuStore.getState().entries[0]!.selected).toBe(false)
   })
 
+  it('toggleEntry preserves non-matching entries', () => {
+    useContextMenuStore.getState().setEntries([makeEntry('1'), makeEntry('2')])
+    useContextMenuStore.getState().toggleEntry('1')
+    expect(useContextMenuStore.getState().entries.find((e) => e.id === '2')!.selected).toBe(false)
+  })
+
   it('toggleAllVisible selects visible unprotected entries', () => {
     useContextMenuStore.getState().setEntries([makeEntry('1'), { ...makeEntry('2'), protected: true }])
     useContextMenuStore.getState().toggleAllVisible(['1', '2'], true)
@@ -137,6 +143,17 @@ describe('context-menu-store', () => {
     expect(entries.find((e) => e.id === '2')!.selected).toBe(true)
   })
 
+  it('toggleAllVisible ignores entries not in visibleIds', () => {
+    useContextMenuStore.getState().setEntries([
+      { ...makeEntry('1'), selected: false },
+      { ...makeEntry('hidden'), selected: false },
+    ])
+    useContextMenuStore.getState().toggleAllVisible(['1'], true)
+    const entries = useContextMenuStore.getState().entries
+    expect(entries.find((e) => e.id === '1')!.selected).toBe(true)
+    expect(entries.find((e) => e.id === 'hidden')!.selected).toBe(false)
+  })
+
   it('applyUpdates updates entry status and clears selected', () => {
     useContextMenuStore.getState().setEntries([
       { ...makeEntry('1'), selected: true },
@@ -149,6 +166,20 @@ describe('context-menu-store', () => {
     const entries = useContextMenuStore.getState().entries
     expect(entries.find((e) => e.id === '1')!.status).toBe('disabled')
     expect(entries.find((e) => e.id === '1')!.selected).toBe(false)
+    expect(entries.find((e) => e.id === '2')!.status).toBe('enabled')
+  })
+
+  it('applyUpdates preserves entries not in updates', () => {
+    useContextMenuStore.getState().setEntries([
+      { ...makeEntry('1'), selected: true },
+      { ...makeEntry('2'), selected: true },
+    ])
+    useContextMenuStore.getState().applyUpdates([
+      { entryId: '1', status: 'disabled' },
+    ])
+    const entries = useContextMenuStore.getState().entries
+    expect(entries.find((e) => e.id === '1')!.status).toBe('disabled')
+    expect(entries.find((e) => e.id === '2')!.selected).toBe(true)
     expect(entries.find((e) => e.id === '2')!.status).toBe('enabled')
   })
 

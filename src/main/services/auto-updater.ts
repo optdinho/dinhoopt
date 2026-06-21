@@ -41,13 +41,6 @@ interface InitOptions {
 export function initAutoUpdater(opts: InitOptions = {}): void {
   if (!app.isPackaged) return
 
-  // On Linux, electron-updater only supports AppImage.
-  // Skip if not running as an AppImage to avoid silent failures.
-  if (process.platform === 'linux' && !process.env.APPIMAGE) {
-    getLogger().info('auto-updater', 'Skipping on Linux (not running as AppImage)')
-    return
-  }
-
   daemonMode = opts.daemon === true
 
   // GH_TOKEN carregado via dotenv no index.ts — o providerFactory

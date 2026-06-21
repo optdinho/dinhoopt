@@ -1,22 +1,48 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  BREW_PATH_CANDIDATES,
+  checkForUpdates,
   cleanOutput,
   computeSeverity,
-  parseAptUpgradable,
-  parseBrewInstalledJson,
-  parseBrewOutdatedJson,
+  isValidAppId,
   parseChocoListOutput,
   parseChocoOutdatedOutput,
-  parseDnfCheckUpdate,
-  parseDpkgInstalled,
-  parsePacmanQu,
   parseScoopListOutput,
   parseScoopStatusOutput,
   parseWingetListOutput,
   parseWingetUpgradeOutput,
+  runUpdates,
   stripTrailingVersion,
 } from './software-updater'
+
+const execFileAsyncMock = vi.hoisted(() => vi.fn())
+const psUtf8Mock = vi.hoisted(() => vi.fn((s: string) => s))
+
+vi.mock('./exec-utf8', () => ({
+  execFileAsync: execFileAsyncMock,
+  psUtf8: psUtf8Mock,
+}))
+
+const isAdminMock = vi.hoisted(() => vi.fn(() => false))
+vi.mock('./elevation', () => ({
+  isAdmin: isAdminMock,
+}))
+
+const getSettingsMock = vi.hoisted(() => vi.fn(() => ({ windowsPackageManager: 'winget' })))
+vi.mock('./settings-store', () => ({
+  getSettings: getSettingsMock,
+}))
+
+function setPlatform(p: string) {
+  Object.defineProperty(process, 'platform', { value: p, configurable: true })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
+
+afterEach(() => {
+  setPlatform('win32')
+})
 
 describe('cleanOutput', () => {
   it('strips ANSI escape sequences', () => {
@@ -93,20 +119,6 @@ describe('stripTrailingVersion', () => {
   })
 })
 
-describe('BREW_PATH_CANDIDATES', () => {
-  it('includes Apple Silicon path first', () => {
-    expect(BREW_PATH_CANDIDATES[0]).toBe('/opt/homebrew/bin/brew')
-  })
-
-  it('includes Intel path second', () => {
-    expect(BREW_PATH_CANDIDATES[1]).toBe('/usr/local/bin/brew')
-  })
-
-  it('includes PATH fallback last', () => {
-    expect(BREW_PATH_CANDIDATES[2]).toBe('brew')
-  })
-})
-
 describe('parseWingetUpgradeOutput', () => {
   // winget uses fixed-width columns; align test data to header positions
   // Name(0-18, 19) + Id(19-39, 21) + Version(40-57, 18) + Available(58-74, 17) + Source(75+)
@@ -136,22 +148,14 @@ describe('parseWingetUpgradeOutput', () => {
   })
 
   it('strips > and < prefixes from version', () => {
-    const output = [
-      header,
-      separator,
-      padCols('MyApp', 'MyApp.MyApp', '> 1.0.0', '< 2.0.0', 'winget'),
-    ].join('\r\n')
+    const output = [header, separator, padCols('MyApp', 'MyApp.MyApp', '> 1.0.0', '< 2.0.0', 'winget')].join('\r\n')
     const result = parseWingetUpgradeOutput(output)
     expect(result[0]?.currentVersion).toBe('1.0.0')
     expect(result[0]?.availableVersion).toBe('2.0.0')
   })
 
   it('skips apps where installed version equals available', () => {
-    const output = [
-      header,
-      separator,
-      padCols('SameApp', 'Same.Id', '1.0.0', '1.0.0', 'winget'),
-    ].join('\r\n')
+    const output = [header, separator, padCols('SameApp', 'Same.Id', '1.0.0', '1.0.0', 'winget')].join('\r\n')
     expect(parseWingetUpgradeOutput(output)).toHaveLength(0)
   })
 
@@ -190,20 +194,12 @@ describe('parseWingetListOutput', () => {
   })
 
   it('skips ARP entries', () => {
-    const output = [
-      header,
-      separator,
-      padCols('OldApp', 'ARP\\OldApp', '1.0.0', 'winget'),
-    ].join('\r\n')
+    const output = [header, separator, padCols('OldApp', 'ARP\\OldApp', '1.0.0', 'winget')].join('\r\n')
     expect(parseWingetListOutput(output)).toHaveLength(0)
   })
 
   it('skips unknown version', () => {
-    const output = [
-      header,
-      separator,
-      padCols('Unknown', 'Unknown.Id', 'Unknown', 'winget'),
-    ].join('\r\n')
+    const output = [header, separator, padCols('Unknown', 'Unknown.Id', 'Unknown', 'winget')].join('\r\n')
     expect(parseWingetListOutput(output)).toHaveLength(0)
   })
 })
@@ -296,118 +292,582 @@ describe('parseScoopListOutput', () => {
   })
 })
 
-describe('parseBrewOutdatedJson', () => {
-  it('parses brew outdated JSON', () => {
-    const json = JSON.stringify({
-      formulae: [
-        { name: 'curl', installed_versions: ['8.0.1'], current_version: '8.1.0' },
-        { name: 'git', installed_versions: ['2.40.0'], current_version: '2.41.0' },
-      ],
-      casks: [
-        { name: 'firefox', token: 'firefox', installed_versions: '120.0', current_version: '121.0' },
-      ],
-    })
-    const result = parseBrewOutdatedJson(json)
-    expect(result).toHaveLength(3)
-    expect(result[0]?.id).toBe('curl')
-    expect(result[0]?.currentVersion).toBe('8.0.1')
-    expect(result[0]?.availableVersion).toBe('8.1.0')
-    expect(result[0]?.severity).toBe('minor')
-    expect(result[2]?.id).toBe('firefox')
+// ─── isValidAppId ────────────────────────────────────────────
+
+describe('isValidAppId', () => {
+  it('accepts valid winget-style IDs on win32', () => {
+    expect(isValidAppId('Google.Chrome')).toBe(true)
+    expect(isValidAppId('7zip.7zip')).toBe(true)
+    expect(isValidAppId('Microsoft.DotNet.Runtime.6')).toBe(true)
+    expect(isValidAppId('a')).toBe(true)
   })
 
-  it('returns empty array for invalid JSON', () => {
-    expect(parseBrewOutdatedJson('not json')).toEqual([])
+  it('rejects invalid winget-style IDs on win32', () => {
+    expect(isValidAppId('')).toBe(false)
+    expect(isValidAppId('.starts.with.dot')).toBe(false)
+    expect(isValidAppId('a'.repeat(250))).toBe(false)
+    expect(isValidAppId('has spaces')).toBe(false)
   })
 })
 
-describe('parseBrewInstalledJson', () => {
-  it('parses brew installed JSON', () => {
-    const json = JSON.stringify({
-      formulae: [
-        { name: 'curl', installed: [{ version: '8.0.1' }], versions: { stable: '8.0.1' } },
-      ],
-      casks: [
-        { token: 'firefox', installed: '120.0', version: '120.0' },
-      ],
-    })
-    const result = parseBrewInstalledJson(json)
-    expect(result).toHaveLength(2)
-    expect(result[0]?.id).toBe('curl')
-    expect(result[0]?.isUpToDate).toBe(true)
-    expect(result[1]?.id).toBe('firefox')
-  })
+// ─── Helper: fresh module load (for tests needing clean state) ──
 
-  it('returns empty array for invalid JSON', () => {
-    expect(parseBrewInstalledJson('not json')).toEqual([])
-  })
-})
+async function freshMod() {
+  vi.resetModules()
+  const mod = await import('./software-updater')
+  return mod
+}
 
-describe('parseAptUpgradable', () => {
-  it('parses apt list --upgradable output', () => {
-    const output = [
-      'Listing...',
-      'curl/jammy-updates 7.81.0-1ubuntu1.16 amd64 [upgradable from: 7.81.0-1ubuntu1.15]',
-      'libssl3/jammy-updates 3.0.2-0ubuntu1.12 amd64 [upgradable from: 3.0.2-0ubuntu1.11]',
+// ─── checkForUpdates — win32 ─────────────────────────────────
+
+describe('checkForUpdates (win32)', () => {
+  beforeEach(() => setPlatform('win32'))
+
+  it('returns winget result when winget is available', async () => {
+    const upgradeOutput = [
+      'Name    Id          Version     Available   Source',
+      '-----------------------------------------------',
+      'App     Some.App    1.0.0       2.0.0       winget',
     ].join('\n')
-    const result = parseAptUpgradable(output)
-    expect(result).toHaveLength(2)
-    expect(result[0]?.id).toBe('curl')
-    expect(result[0]?.currentVersion).toBe('7.81.0-1ubuntu1.15')
-    expect(result[0]?.availableVersion).toBe('7.81.0-1ubuntu1.16')
-  })
-
-  it('returns empty array for empty output', () => {
-    expect(parseAptUpgradable('')).toEqual([])
-  })
-})
-
-describe('parseDpkgInstalled', () => {
-  it('parses dpkg-query output', () => {
-    const output = 'curl\t7.81.0-1ubuntu1.15\nlibssl3\t3.0.2-0ubuntu1.11\n'
-    const result = parseDpkgInstalled(output)
-    expect(result).toHaveLength(2)
-    expect(result[0]?.id).toBe('curl')
-    expect(result[0]?.currentVersion).toBe('7.81.0-1ubuntu1.15')
-    expect(result[0]?.isUpToDate).toBe(true)
-  })
-
-  it('returns empty array for empty output', () => {
-    expect(parseDpkgInstalled('')).toEqual([])
-  })
-})
-
-describe('parseDnfCheckUpdate', () => {
-  it('parses dnf check-update output', () => {
-    const output = [
-      'curl.x86_64    7.76.1-23.el9    baseos',
-      'libxml2.x86_64    2.9.13-6.el9    appstream',
+    const listOutput = [
+      'Name        Id              Version    Available  Source',
+      '---------------------------------------------------------',
+      'App         Some.App        2.0.0                 winget',
+      'Node.js     OpenJS.NodeJS   20.10.0              winget',
     ].join('\n')
-    const result = parseDnfCheckUpdate(output)
-    expect(result).toHaveLength(2)
-    expect(result[0]?.id).toBe('curl')
-    expect(result[0]?.availableVersion).toBe('7.76.1-23.el9')
+
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'winget' && args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+      if (cmd === 'winget' && args?.[0] === 'upgrade') return { stdout: upgradeOutput, stderr: '' }
+      if (cmd === 'winget' && args?.[0] === 'list') return { stdout: listOutput, stderr: '' }
+      if (cmd === 'choco' || cmd === 'scoop') throw new Error('not found')
+      throw new Error('unexpected')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerName).toBe('winget')
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(2)
+    expect(result.apps[0]?.id).toBe('Some.App')
   })
 
-  it('skips metadata lines', () => {
-    const output = 'Last metadata expiration check: 1:00:00 ago\ncurl.x86_64    7.76.1-23.el9    baseos\n'
-    const result = parseDnfCheckUpdate(output)
-    expect(result).toHaveLength(1)
+  it('returns choco result when only choco is available', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'choco' && args?.[0] === '--version') return { stdout: '2.0', stderr: '' }
+      if (cmd === 'choco' && args?.[0] === 'outdated') return { stdout: 'pkg1|1.0.0|2.0.0|false\n', stderr: '' }
+      if (cmd === 'choco' && args?.[0] === 'list') return { stdout: 'pkg1|2.0.0\n', stderr: '' }
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.packageManagerName).toContain('choco')
+  })
+
+  it('returns scoop result when only scoop is available', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'scoop' && args?.[0] === '--version') return { stdout: 'v0.3', stderr: '' }
+      if (cmd === 'scoop' && args?.[0] === 'status') {
+        return {
+          stdout: ['    Name   Installed  Available  Requested', '    7zip   24.07      24.08      Latest'].join('\n'),
+          stderr: '',
+        }
+      }
+      if (cmd === 'scoop' && args?.[0] === 'list') {
+        return {
+          stdout: ['    Name   Version   Source', '    7zip   24.08     main'].join('\n'),
+          stderr: '',
+        }
+      }
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.packageManagerName).toContain('scoop')
+  })
+
+  it('returns no manager when all unavailable', async () => {
+    execFileAsyncMock.mockRejectedValue(new Error('not found'))
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(false)
+    expect(result.packageManagerName).toBeNull()
+  })
+
+  it('handles winget upgrade non-zero exit with stdout', async () => {
+    const upgradeOutput = [
+      'Name    Id          Version     Available   Source',
+      '-----------------------------------------------',
+      'App     Some.App    1.0.0       2.0.0       winget',
+    ].join('\n')
+
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'winget' && args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+      if (cmd === 'winget' && args?.[0] === 'upgrade') throw { stdout: upgradeOutput, message: 'exit 1', code: '1' }
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(1)
+  })
+
+  it('handles winget upgrade non-zero exit without stdout', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'winget' && args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+      if (cmd === 'winget' && args?.[0] === 'upgrade') throw new Error('no output')
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(0)
+  })
+
+  it('handles winget list non-zero exit gracefully', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'winget' && args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
+      if (cmd === 'winget' && args?.[0] === 'upgrade') return { stdout: '', stderr: '' }
+      if (cmd === 'winget' && args?.[0] === 'list') throw new Error('list failed')
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    // Should still succeed with upgrade result, just not up-to-date list
+    expect(result.packageManagerAvailable).toBe(true)
+  })
+
+  it('handles choco outdated non-zero exit with stdout', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'choco' && args?.[0] === '--version') return { stdout: '2.0', stderr: '' }
+      if (cmd === 'choco' && args?.[0] === 'outdated') throw { stdout: 'pkg1|1.0.0|2.0.0|false\n', code: '1' }
+      if (cmd === 'choco' && args?.[0] === 'list') throw new Error('list failed')
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(1)
+  })
+
+  it('handles choco outdated non-zero exit without stdout', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'choco' && args?.[0] === '--version') return { stdout: '2.0', stderr: '' }
+      if (cmd === 'choco' && args?.[0] === 'outdated') throw new Error('no output')
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(0)
+  })
+
+  it('handles scoop status non-zero exit with stdout', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'scoop' && args?.[0] === '--version') return { stdout: 'v0.3', stderr: '' }
+      if (cmd === 'scoop' && args?.[0] === 'status') {
+        throw {
+          stdout: ['    Name  Installed  Available  Requested', '    7zip  24.07      24.08      Latest'].join('\n'),
+          code: '1',
+        }
+      }
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(1)
+  })
+
+  it('handles scoop status non-zero exit without stdout', async () => {
+    execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'scoop' && args?.[0] === '--version') return { stdout: 'v0.3', stderr: '' }
+      if (cmd === 'scoop' && args?.[0] === 'status') throw new Error('no output')
+      throw new Error('not found')
+    })
+
+    const result = await checkForUpdates()
+    expect(result.packageManagerAvailable).toBe(true)
+    expect(result.apps).toHaveLength(0)
   })
 })
 
-describe('parsePacmanQu', () => {
-  it('parses pacman -Qu output', () => {
-    const output = 'curl 7.87.0-1 -> 7.88.0-1\nfirefox 120.0-1 -> 121.0-1\n'
-    const result = parsePacmanQu(output)
-    expect(result).toHaveLength(2)
-    expect(result[0]?.id).toBe('curl')
-    expect(result[0]?.currentVersion).toBe('7.87.0-1')
-    expect(result[0]?.availableVersion).toBe('7.88.0-1')
-    expect(result[0]?.severity).toBe('minor')
+// ─── runUpdates — win32: winget pipeline ────────────────────
+
+describe('runUpdates (win32) — winget', () => {
+  beforeEach(() => {
+    setPlatform('win32')
+    isAdminMock.mockReturnValue(true)
   })
 
-  it('returns empty array for empty output', () => {
-    expect(parsePacmanQu('')).toEqual([])
+  it('upgrades app via winget successfully', async () => {
+    execFileAsyncMock.mockResolvedValueOnce({ stdout: 'successfully upgraded', stderr: '' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('returns failure when exit code 0 with failure pattern', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'installer failed: Some.App', stderr: '' })
+      .mockRejectedValueOnce({ stdout: 'still failed', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('returns success when exit code 1 with success pattern', async () => {
+    execFileAsyncMock.mockRejectedValueOnce({ stdout: 'successfully upgraded Some.App', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('returns failure when exit code 1 without success pattern', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'no applicable update', code: '1' })
+      .mockRejectedValueOnce({ stdout: 'still failed', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('returns success when other exit code but output shows success', async () => {
+    execFileAsyncMock.mockRejectedValueOnce({ stdout: 'installer succeeded Some.App', code: '42' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('returns failure when other exit code and output shows failure', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'installer failed Some.App', code: '42' })
+      .mockRejectedValueOnce({ stdout: 'still failed', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('handles invalid app ID format', async () => {
+    const result = await runUpdates(['  '], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('handles execFileAsync error without stdout', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('winget crashed'))
+      .mockRejectedValueOnce(new Error('winget crashed'))
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]?.reason).toContain('winget crashed')
+  })
+
+  it('retries with elevation when output indicates admin needed', async () => {
+    isAdminMock.mockReturnValue(false)
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'access is denied: Some.App', code: '1' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'No updates available', stderr: '' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('handles elevation failure when UAC denied', async () => {
+    isAdminMock.mockReturnValue(false)
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'access is denied: Some.App', code: '1' })
+      .mockRejectedValueOnce(new Error('UAC denied'))
+      .mockRejectedValueOnce({ stdout: 'installer failed', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('handles elevation check when app still needs upgrade', async () => {
+    isAdminMock.mockReturnValue(false)
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'access is denied', code: '1' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'Some.App 1.0.0 2.0.0 ready', stderr: '' })
+      .mockRejectedValueOnce({ stdout: 'installer failed', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('returns specific error when install technology changed', async () => {
+    isAdminMock.mockReturnValue(true)
+    execFileAsyncMock.mockRejectedValueOnce({ stdout: 'install technology is different', code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]?.reason).toContain('Installer type changed')
+  })
+
+  it('retries with --force on second failure', async () => {
+    isAdminMock.mockReturnValue(true)
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'installer failed: version mismatch', code: '1' })
+      .mockResolvedValueOnce({ stdout: 'successfully upgraded Some.App', stderr: '' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('truncates error messages longer than 200 chars', async () => {
+    const longLine = `E:${'x'.repeat(300)}`
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: longLine, code: '1' })
+      .mockRejectedValueOnce({ stdout: longLine, code: '1' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]?.reason).toMatch(/\.\.\.$/)
+    expect(result.errors[0]?.reason!.length).toBeLessThanOrEqual(203)
+  })
+
+  it('skips elevation when already admin', async () => {
+    isAdminMock.mockReturnValue(true)
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stdout: 'access is denied', code: '1' })
+      .mockResolvedValueOnce({ stdout: 'successfully upgraded', stderr: '' })
+
+    const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('handles empty appIds array', async () => {
+    const result = await runUpdates([], vi.fn(), 'winget')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(0)
+  })
+})
+
+// ─── runUpdates — win32: choco pipeline ─────────────────────
+
+describe('runUpdates (win32) — choco', () => {
+  beforeEach(() => {
+    setPlatform('win32')
+    isAdminMock.mockReturnValue(true)
+  })
+
+  it('upgrades app via choco successfully', async () => {
+    execFileAsyncMock.mockResolvedValueOnce({ stdout: 'googlechrome was successful', stderr: '' })
+
+    const result = await runUpdates(['googlechrome'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('returns failure when choco output shows failure pattern', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'was not successful', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'installer failed', stderr: '' })
+
+    const result = await runUpdates(['googlechrome'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('handles choco exec error without stdout', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('choco not found'))
+      .mockRejectedValueOnce(new Error('choco not found'))
+
+    const result = await runUpdates(['googlechrome'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('handles exec error with choco stdout', async () => {
+    execFileAsyncMock.mockRejectedValueOnce({ stdout: 'choco was successful: some.pkg', message: 'exit 1', code: '1' })
+
+    const result = await runUpdates(['some.pkg'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('rejects invalid choco package ID format', async () => {
+    const result = await runUpdates(['../invalid'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('retries with elevation when output indicates admin needed', async () => {
+    isAdminMock.mockReturnValue(false)
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'access to the path is denied', stderr: '' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+
+    const result = await runUpdates(['some.pkg'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('retries with --force when still failed after elevation', async () => {
+    isAdminMock.mockReturnValue(false)
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'access to the path is denied', stderr: '' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'some.pkg|1.0.0|2.0.0|false\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'some.pkg was successful', stderr: '' })
+
+    const result = await runUpdates(['some.pkg'], vi.fn(), 'choco')
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('handles failed elevation and force retry', async () => {
+    isAdminMock.mockReturnValue(false)
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'access to the path is denied', stderr: '' })
+      .mockRejectedValueOnce(new Error('powershell denied'))
+      .mockRejectedValueOnce({ stdout: 'installer failed', stderr: '' })
+
+    const result = await runUpdates(['some.pkg'], vi.fn(), 'choco')
+    expect(result.failed).toBe(1)
+  })
+})
+
+// ─── runUpdates — win32: scoop pipeline ─────────────────────
+
+describe('runUpdates (win32) — scoop', () => {
+  beforeEach(() => setPlatform('win32'))
+
+  it('upgrades app via scoop successfully', async () => {
+    execFileAsyncMock.mockResolvedValue({ stdout: 'Updated 7zip', stderr: '' })
+
+    const result = await runUpdates(['7zip'], vi.fn(), 'scoop')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('rejects invalid scoop package name format', async () => {
+    execFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })
+
+    const result = await runUpdates(['InvalidName'], vi.fn(), 'scoop')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('retries with --global on first failure', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('access denied'))
+      .mockResolvedValueOnce({ stdout: 'Updated 7zip', stderr: '' })
+
+    const result = await runUpdates(['7zip'], vi.fn(), 'scoop')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('retries with --force when --global also fails', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('access denied'))
+      .mockRejectedValueOnce(new Error('still denied'))
+      .mockResolvedValueOnce({ stdout: 'Updated 7zip', stderr: '' })
+
+    const result = await runUpdates(['7zip'], vi.fn(), 'scoop')
+    expect(result.succeeded).toBe(1)
+    expect(result.failed).toBe(0)
+  })
+
+  it('returns failure when all retries exhausted', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('error 1'))
+      .mockRejectedValueOnce(new Error('error 2'))
+      .mockRejectedValueOnce(new Error('error 3'))
+
+    const result = await runUpdates(['7zip'], vi.fn(), 'scoop')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+
+  it('handles scoop exec error output', async () => {
+    execFileAsyncMock.mockRejectedValue({ stdout: '', message: 'scoop update failed' })
+
+    const result = await runUpdates(['7zip'], vi.fn(), 'scoop')
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+})
+
+// ─── runUpdates — win32: fallback order ─────────────────────
+
+describe('runUpdates (win32) — fallback', () => {
+  beforeEach(() => setPlatform('win32'))
+
+  it('tries winget first when no source specified and winget available', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'successfully upgraded', stderr: '' })
+
+    const result = await runUpdates(['Some.App'], vi.fn())
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('falls back to choco when winget unavailable', async () => {
+    getSettingsMock.mockReturnValue({ windowsPackageManager: 'winget' })
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('winget not found'))
+      .mockResolvedValueOnce({ stdout: 'choco 2.0', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'some.pkg was successful', stderr: '' })
+
+    const result = await runUpdates(['some.pkg'], vi.fn())
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('falls back to scoop when winget and choco unavailable', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce(new Error('winget not found'))
+      .mockRejectedValueOnce(new Error('choco not found'))
+      .mockResolvedValueOnce({ stdout: 'scoop v0.3', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'Updated 7zip', stderr: '' })
+
+    const result = await runUpdates(['7zip'], vi.fn())
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('returns all failed when no package manager available', async () => {
+    execFileAsyncMock.mockRejectedValue(new Error('not found'))
+
+    const result = await runUpdates(['Some.App'], vi.fn())
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]?.reason).toBe('No package manager available')
+  })
+
+  it('uses choco preferred order when settings specify it', async () => {
+    getSettingsMock.mockReturnValue({ windowsPackageManager: 'choco' })
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'choco 2.0', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'some.pkg was successful', stderr: '' })
+
+    const result = await runUpdates(['some.pkg'], vi.fn())
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('uses scoop preferred order when settings specify it', async () => {
+    getSettingsMock.mockReturnValue({ windowsPackageManager: 'scoop' })
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'scoop v0.3', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'Updated 7zip', stderr: '' })
+
+    const result = await runUpdates(['7zip'], vi.fn())
+    expect(result.succeeded).toBe(1)
   })
 })

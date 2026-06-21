@@ -2,12 +2,12 @@ import { cn } from '@/lib/utils'
 import { getNextRunTime } from '@/pages/schedules-utils'
 import type { ScheduleEntry } from '@shared/types'
 import { AlertTriangle, CheckCircle2, Clock, Copy, Minus, Pencil, Trash2, XCircle } from 'lucide-react'
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toggle } from './Toggle'
 import { formatFrequency, formatLastRun, formatNextRun, useAllTasks } from './constants'
 
-export function ScheduleCard({
+const ScheduleCard = memo(function ScheduleCard({
   entry,
   onToggle,
   onEdit,
@@ -113,7 +113,9 @@ export function ScheduleCard({
       </div>
     </div>
   )
-}
+})
+
+export { ScheduleCard }
 
 function IconBtn({
   icon: Icon,

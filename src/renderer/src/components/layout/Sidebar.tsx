@@ -86,12 +86,7 @@ const navGroups: NavGroup[] = [
       { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner' },
       { icon: Database, labelKey: 'registry', path: '/registry' },
       { icon: Zap, labelKey: 'startup', path: '/startup' },
-      {
-        icon: Wifi,
-        labelKey: 'network',
-        path: '/network',
-        children: [{ icon: Wifi, labelKey: 'network', path: '/network' }],
-      },
+      { icon: Wifi, labelKey: 'network', path: '/network' },
       {
         icon: Package,
         labelKey: 'software',

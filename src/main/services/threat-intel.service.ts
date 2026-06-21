@@ -106,7 +106,11 @@ export class ThreatIntelService {
         results.push({ feed: feed.name, added })
         feed.lastUpdated = Date.now()
       } catch (err: unknown) {
-        getLogger().warning('threat-intel', `Failed to update feed: ${feed.name}`, err instanceof Error ? err.message : String(err))
+        getLogger().warning(
+          'threat-intel',
+          `Failed to update feed: ${feed.name}`,
+          err instanceof Error ? err.message : String(err),
+        )
         results.push({ feed: feed.name, added: 0 })
       }
     }

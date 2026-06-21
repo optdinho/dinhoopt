@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
   send: vi.fn(),
   getAllWindows: vi.fn(),
+  storeLoad: vi.fn(),
+  storeSave: vi.fn(),
 }))
 
 vi.mock('node:fs', () => ({
@@ -30,6 +32,16 @@ vi.mock('electron', () => ({
   },
 }))
 
+vi.mock('./store-base', () => ({
+  createJsonStore: () => ({
+    load: (...args: unknown[]) => mocks.storeLoad(...args),
+    save: (...args: unknown[]) => mocks.storeSave(...args),
+    update: vi.fn(),
+    path: '/fake/store.json',
+    resetCache: vi.fn(),
+  }),
+}))
+
 import type { ScanHistoryEntry } from '@shared/types'
 import { addHistoryEntry, clearHistory, getHistory } from './history-store'
 
@@ -47,6 +59,7 @@ beforeEach(() => {
   // Default: store file doesn't exist yet
   mocks.existsSync.mockReturnValue(false)
   mocks.getAllWindows.mockReturnValue([])
+  mocks.storeLoad.mockReturnValue([])
 })
 
 afterEach(() => {
@@ -60,23 +73,22 @@ describe('getHistory', () => {
   })
 
   it('returns parsed history when file exists', () => {
-    mocks.existsSync.mockReturnValue(true)
-    mocks.readFileSync.mockReturnValue(JSON.stringify([SAMPLE_ENTRY]))
+    mocks.storeLoad.mockReturnValue([SAMPLE_ENTRY])
     const history = getHistory()
     expect(history).toHaveLength(1)
     expect(history[0]!.id).toBe('test-1')
   })
 
   it('returns empty array on parse error', () => {
-    mocks.existsSync.mockReturnValue(true)
-    mocks.readFileSync.mockReturnValue('invalid json')
+    mocks.storeLoad.mockImplementation(() => {
+      throw new Error('parse error')
+    })
     const history = getHistory()
     expect(history).toEqual([])
   })
 
   it('returns empty array for non-array data', () => {
-    mocks.existsSync.mockReturnValue(true)
-    mocks.readFileSync.mockReturnValue('{"some": "object"}')
+    mocks.storeLoad.mockReturnValue({ some: 'object' })
     const history = getHistory()
     expect(history).toEqual([])
   })
@@ -84,9 +96,7 @@ describe('getHistory', () => {
 
 describe('addHistoryEntry', () => {
   it('prepends entry to history and sends IPC', async () => {
-    // Setup: existing file has empty array
-    mocks.existsSync.mockReturnValue(true)
-    mocks.readFileSync.mockReturnValue('[]')
+    mocks.storeLoad.mockReturnValue([])
     mocks.getAllWindows.mockReturnValue([{ isDestroyed: () => false, webContents: { send: mocks.send } }])
 
     addHistoryEntry(SAMPLE_ENTRY)
@@ -94,15 +104,15 @@ describe('addHistoryEntry', () => {
     // Wait for the write lock chain to resolve
     await vi.waitFor(
       () => {
-        expect(mocks.writeFileSync).toHaveBeenCalled()
+        expect(mocks.storeSave).toHaveBeenCalled()
       },
       { timeout: 3000, interval: 50 },
     )
 
     // Verify the written data
-    const writeCall = mocks.writeFileSync.mock.calls[0]
-    expect(writeCall).toBeDefined()
-    const written = JSON.parse(writeCall[1] as string)
+    const saveCall = mocks.storeSave.mock.calls[0]
+    expect(saveCall).toBeDefined()
+    const written = saveCall[0] as ScanHistoryEntry[]
     expect(written).toHaveLength(1)
     expect(written[0].id).toBe('test-1')
 
@@ -111,32 +121,30 @@ describe('addHistoryEntry', () => {
   })
 
   it('limits history to 100 entries', async () => {
-    mocks.existsSync.mockReturnValue(true)
     const existing = Array.from({ length: 100 }, (_, i) => ({
       ...SAMPLE_ENTRY,
       id: `old-${i}`,
     }))
-    mocks.readFileSync.mockReturnValue(JSON.stringify(existing))
+    mocks.storeLoad.mockReturnValue(existing)
     mocks.getAllWindows.mockReturnValue([{ isDestroyed: () => false, webContents: { send: mocks.send } }])
 
     addHistoryEntry(SAMPLE_ENTRY)
 
     await vi.waitFor(
       () => {
-        expect(mocks.writeFileSync).toHaveBeenCalled()
+        expect(mocks.storeSave).toHaveBeenCalled()
       },
       { timeout: 3000, interval: 50 },
     )
 
-    const writeCall = mocks.writeFileSync.mock.calls[0]
-    const written = JSON.parse(writeCall[1] as string)
+    const saveCall = mocks.storeSave.mock.calls[0]
+    const written = saveCall[0] as ScanHistoryEntry[]
     expect(written).toHaveLength(100)
     expect(written[0].id).toBe('test-1')
   })
 
   it('handles missing window gracefully', async () => {
-    mocks.existsSync.mockReturnValue(true)
-    mocks.readFileSync.mockReturnValue('[]')
+    mocks.storeLoad.mockReturnValue([])
     mocks.getAllWindows.mockReturnValue([])
 
     addHistoryEntry(SAMPLE_ENTRY)
@@ -144,7 +152,7 @@ describe('addHistoryEntry', () => {
     // Should still write, even without windows
     await vi.waitFor(
       () => {
-        expect(mocks.writeFileSync).toHaveBeenCalled()
+        expect(mocks.storeSave).toHaveBeenCalled()
       },
       { timeout: 3000, interval: 50 },
     )
@@ -154,6 +162,6 @@ describe('addHistoryEntry', () => {
 describe('clearHistory', () => {
   it('writes empty array', () => {
     clearHistory()
-    expect(mocks.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('history.json'), '[]')
+    expect(mocks.storeSave).toHaveBeenCalledWith([])
   })
 })

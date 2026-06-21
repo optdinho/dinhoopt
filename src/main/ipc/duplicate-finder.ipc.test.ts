@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC } from '@shared/channels'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ──
 
@@ -172,19 +172,19 @@ describe('registerDuplicateFinderIpc', () => {
   describe('IPC.DUPLICATES_SCAN', () => {
     it('returns empty result for null options', async () => {
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, null) as Record<string, unknown>
+      const result = (await handler(null, null)) as Record<string, unknown>
       expect(result).toMatchObject({ groups: [], totalDuplicates: 0, totalReclaimable: 0 })
     })
 
     it('returns empty result for non-object options', async () => {
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, 'invalid') as Record<string, unknown>
+      const result = (await handler(null, 'invalid')) as Record<string, unknown>
       expect(result).toMatchObject({ groups: [], totalDuplicates: 0, totalReclaimable: 0 })
     })
 
     it('returns empty result when no directory specified', async () => {
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, {}) as Record<string, unknown>
+      const result = (await handler(null, {})) as Record<string, unknown>
       expect(result).toMatchObject({ groups: [], totalDuplicates: 0, totalReclaimable: 0 })
     })
 
@@ -214,10 +214,10 @@ describe('registerDuplicateFinderIpc', () => {
           return 'a'.repeat(64)
         }),
       })
-    mockCreateReadStream.mockImplementation(() => makeHashStream())
+      mockCreateReadStream.mockImplementation(() => makeHashStream())
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
 
       expect(result).toMatchObject({
         totalDuplicates: 2,
@@ -257,7 +257,7 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 500, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, { ...defaultScanOptions(), minFileSize: 1024 }) as Record<string, unknown>
+      const result = (await handler(null, { ...defaultScanOptions(), minFileSize: 1024 })) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(0)
     })
 
@@ -266,19 +266,22 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, { ...defaultScanOptions(), maxFileSize: 1_000_000 }) as Record<string, unknown>
+      const result = (await handler(null, { ...defaultScanOptions(), maxFileSize: 1_000_000 })) as Record<
+        string,
+        unknown
+      >
       expect(result.totalFilesScanned).toBe(0)
     })
 
     it('respects extension filter', async () => {
-      mockReaddir.mockResolvedValue([
-        makeDirent('file.txt', 'file'),
-        makeDirent('file.jpg', 'file'),
-      ])
+      mockReaddir.mockResolvedValue([makeDirent('file.txt', 'file'), makeDirent('file.jpg', 'file')])
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, { ...defaultScanOptions(), extensionFilter: ['.jpg'] }) as Record<string, unknown>
+      const result = (await handler(null, { ...defaultScanOptions(), extensionFilter: ['.jpg'] })) as Record<
+        string,
+        unknown
+      >
       expect(result.totalFilesScanned).toBe(1)
     })
 
@@ -286,19 +289,16 @@ describe('registerDuplicateFinderIpc', () => {
       mockReaddir.mockResolvedValue([makeDirent('subdir', 'dir')])
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, { ...defaultScanOptions(), maxDepth: 0 }) as Record<string, unknown>
+      const result = (await handler(null, { ...defaultScanOptions(), maxDepth: 0 })) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(0)
     })
 
     it('skips symlinks', async () => {
-      mockReaddir.mockResolvedValue([
-        makeDirent('real.txt', 'file'),
-        makeDirent('link.txt', 'symlink'),
-      ])
+      mockReaddir.mockResolvedValue([makeDirent('real.txt', 'file'), makeDirent('link.txt', 'symlink')])
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(1)
     })
 
@@ -306,7 +306,7 @@ describe('registerDuplicateFinderIpc', () => {
       mockReaddir.mockRejectedValue(new Error('EACCES'))
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(0)
       expect(result.cancelled).toBe(false)
     })
@@ -316,15 +316,12 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockRejectedValue(new Error('EACCES'))
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(0)
     })
 
     it('returns cancelled result when cancelled during walk', async () => {
-      mockReaddir.mockResolvedValue([
-        makeDirent('file1.txt', 'file'),
-        makeDirent('file2.txt', 'file'),
-      ])
+      mockReaddir.mockResolvedValue([makeDirent('file1.txt', 'file'), makeDirent('file2.txt', 'file')])
       let statCalls = 0
       mockStat.mockImplementation(async () => {
         statCalls++
@@ -336,7 +333,7 @@ describe('registerDuplicateFinderIpc', () => {
       })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.cancelled).toBe(true)
       expect(result.totalFilesScanned).toBe(1)
     })
@@ -346,17 +343,14 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.groups).toHaveLength(0)
       expect(result.totalDuplicates).toBe(0)
       expect(result.cancelled).toBe(false)
     })
 
     it('returns empty result when cancelled during hashing', async () => {
-      mockReaddir.mockResolvedValue([
-        makeDirent('file1.txt', 'file'),
-        makeDirent('file2.txt', 'file'),
-      ])
+      mockReaddir.mockResolvedValue([makeDirent('file1.txt', 'file'), makeDirent('file2.txt', 'file')])
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       let digestCalls = 0
@@ -373,16 +367,13 @@ describe('registerDuplicateFinderIpc', () => {
       })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.cancelled).toBe(true)
       expect(result.groups).toHaveLength(0)
     })
 
     it('recovers from stream error during hashing', async () => {
-      mockReaddir.mockResolvedValue([
-        makeDirent('file1.txt', 'file'),
-        makeDirent('file2.txt', 'file'),
-      ])
+      mockReaddir.mockResolvedValue([makeDirent('file1.txt', 'file'), makeDirent('file2.txt', 'file')])
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
       mockCreateHash.mockReturnValue(makeHashObj('a'.repeat(64)))
 
@@ -403,22 +394,22 @@ describe('registerDuplicateFinderIpc', () => {
       })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.groups).toHaveLength(0)
     })
 
     it('excludes directories matching excludePatterns', async () => {
       mockReaddir.mockImplementation((path: string) => {
         if (path.includes('node_modules')) return [makeDirent('dep.js', 'file')]
-        return [
-          makeDirent('file.txt', 'file'),
-          makeDirent('node_modules', 'dir'),
-        ]
+        return [makeDirent('file.txt', 'file'), makeDirent('node_modules', 'dir')]
       })
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, { ...defaultScanOptions(), excludePatterns: ['node_modules'] }) as Record<string, unknown>
+      const result = (await handler(null, { ...defaultScanOptions(), excludePatterns: ['node_modules'] })) as Record<
+        string,
+        unknown
+      >
       expect(result.totalFilesScanned).toBe(1)
     })
 
@@ -427,7 +418,7 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 500, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, { directory: '/test', minFileSize: 1000 }) as Record<string, unknown>
+      const result = (await handler(null, { directory: '/test', minFileSize: 1000 })) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(0)
     })
 
@@ -436,12 +427,12 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, {
+      const result = (await handler(null, {
         directory: '/test',
         minFileSize: 0,
         excludePatterns: 'not-array' as unknown as string[],
         extensionFilter: 123 as unknown as string[],
-      }) as Record<string, unknown>
+      })) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(1)
     })
   })
@@ -453,7 +444,11 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
       mockTrashItem.mockResolvedValue(undefined)
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['C:\\file1.txt', 'C:\\file2.txt'], 'recycle')
 
       expect(result).toMatchObject({ deleted: 2, failed: 0, spaceRecovered: 4_000_000, errors: [] })
@@ -465,7 +460,11 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
       mockRm.mockResolvedValue(undefined)
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['C:\\file.txt'], 'permanent')
 
       expect(result).toMatchObject({ deleted: 1, failed: 0, spaceRecovered: 2_000_000, errors: [] })
@@ -477,7 +476,11 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 1_000_000, mtimeMs: 1000 })
       mockTrashItem.mockResolvedValue(undefined)
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['C:\\file.txt'], 'unknown-mode')
 
       expect(result).toMatchObject({ deleted: 1, failed: 0, spaceRecovered: 1_000_000 })
@@ -485,7 +488,11 @@ describe('registerDuplicateFinderIpc', () => {
     })
 
     it('returns zero counts for non-array paths', async () => {
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, null, 'permanent')
 
       expect(result).toMatchObject({ deleted: 0, failed: 0, spaceRecovered: 0, errors: [] })
@@ -495,7 +502,11 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 1_000_000, mtimeMs: 1000 })
       mockRm.mockResolvedValue(undefined)
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['relative/path.txt', 123 as unknown as string, 'C:\\valid.txt'], 'permanent')
 
       expect(result).toMatchObject({ deleted: 1, failed: 0, spaceRecovered: 1_000_000 })
@@ -504,7 +515,11 @@ describe('registerDuplicateFinderIpc', () => {
     it('handles stat errors gracefully', async () => {
       mockStat.mockRejectedValue(new Error('File not found'))
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['C:\\missing.txt'], 'permanent')
 
       expect(result).toMatchObject({ deleted: 0, failed: 1, spaceRecovered: 0 })
@@ -516,7 +531,11 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
       mockTrashItem.mockRejectedValue(new Error('Trash unavailable'))
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['C:\\file.txt'], 'recycle')
 
       expect(result).toMatchObject({ deleted: 0, failed: 1, spaceRecovered: 0 })
@@ -527,7 +546,11 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
       mockRm.mockRejectedValue(new Error('Access denied'))
 
-      const handler = getHandler(IPC.DUPLICATES_DELETE) as (_e: unknown, paths: unknown, mode: unknown) => Promise<unknown>
+      const handler = getHandler(IPC.DUPLICATES_DELETE) as (
+        _e: unknown,
+        paths: unknown,
+        mode: unknown,
+      ) => Promise<unknown>
       const result = await handler(null, ['C:\\file.txt'], 'permanent')
 
       expect(result).toMatchObject({ deleted: 0, failed: 1, spaceRecovered: 0 })
@@ -584,7 +607,7 @@ describe('registerDuplicateFinderIpc', () => {
       mockStat.mockResolvedValue({ size: 2_000_000, mtimeMs: 1000 })
 
       const handler = getHandler(IPC.DUPLICATES_SCAN) as (_e: unknown, opts: unknown) => Promise<unknown>
-      const result = await handler(null, defaultScanOptions()) as Record<string, unknown>
+      const result = (await handler(null, defaultScanOptions())) as Record<string, unknown>
       expect(result.totalFilesScanned).toBe(1)
     })
   })

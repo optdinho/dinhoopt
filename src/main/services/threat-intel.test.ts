@@ -47,7 +47,9 @@ describe('ThreatIntelService', () => {
     vi.clearAllMocks()
     mockExistsSync.mockReturnValue(false)
     service = new ThreatIntelService()
-    service.getFeeds().forEach((f) => { f.enabled = false })
+    service.getFeeds().forEach((f) => {
+      f.enabled = false
+    })
   })
 
   it('addEntry stores by type:value key', () => {
@@ -258,7 +260,12 @@ describe('ThreatIntelService', () => {
   })
 
   it('loads entries from cache file when it exists', () => {
-    const entries: [string, ThreatIntelEntry][] = [['hash:abc', { type: 'hash', value: 'abc', source: 'cache', severity: 'high', description: 'cached', addedAt: '' }]]
+    const entries: [string, ThreatIntelEntry][] = [
+      [
+        'hash:abc',
+        { type: 'hash', value: 'abc', source: 'cache', severity: 'high', description: 'cached', addedAt: '' },
+      ],
+    ]
     mockExistsSync.mockReturnValue(true)
     mockReadFileSync.mockReturnValue(JSON.stringify({ entries }))
     const svc = new ThreatIntelService()
@@ -267,7 +274,9 @@ describe('ThreatIntelService', () => {
   })
 
   it('loads feeds from cache file', () => {
-    const customFeeds = [{ name: 'Custom Feed', url: 'http://example.com', enabled: true, updateInterval: 1000, parser: 'csv' }]
+    const customFeeds = [
+      { name: 'Custom Feed', url: 'http://example.com', enabled: true, updateInterval: 1000, parser: 'csv' },
+    ]
     mockExistsSync.mockReturnValue(true)
     mockReadFileSync.mockReturnValue(JSON.stringify({ entries: [], feeds: customFeeds }))
     const svc = new ThreatIntelService()
@@ -278,12 +287,16 @@ describe('ThreatIntelService', () => {
 
   it('handles load errors gracefully when JSON.parse fails', () => {
     mockExistsSync.mockReturnValue(true)
-    mockReadFileSync.mockImplementation(() => { throw new Error('read error') })
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('read error')
+    })
     expect(() => new ThreatIntelService()).not.toThrow()
   })
 
   it('handles save errors gracefully', () => {
-    mockWriteFileSync.mockImplementation(() => { throw new Error('write error') })
+    mockWriteFileSync.mockImplementation(() => {
+      throw new Error('write error')
+    })
     const svc = new ThreatIntelService()
     expect(() => svc.toggleFeed('Abuse.ch SSL Blacklist', true)).not.toThrow()
   })
@@ -312,7 +325,9 @@ describe('ThreatIntelService', () => {
     vi.mocked((await import('./logger.service')).getLogger).mockReturnValueOnce({
       error: vi.fn(),
       warn: vi.fn(),
-      info: vi.fn(() => { throw new Error('parse failed') }),
+      info: vi.fn(() => {
+        throw new Error('parse failed')
+      }),
       success: vi.fn(),
       warning: vi.fn(),
     })
@@ -323,10 +338,12 @@ describe('ThreatIntelService', () => {
 
   it('updateFeed handles unknown parser type via cache', async () => {
     mockExistsSync.mockReturnValue(true)
-    mockReadFileSync.mockReturnValue(JSON.stringify({
-      entries: [],
-      feeds: [{ name: 'STIX Feed', url: 'http://example.com', enabled: true, updateInterval: 1000, parser: 'stix' }],
-    }))
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        entries: [],
+        feeds: [{ name: 'STIX Feed', url: 'http://example.com', enabled: true, updateInterval: 1000, parser: 'stix' }],
+      }),
+    )
     const svc = new ThreatIntelService()
     const results = await svc.updateAllFeeds()
     expect(results).toHaveLength(1)
@@ -340,8 +357,22 @@ describe('ThreatIntelService', () => {
   })
 
   it('addEntry with same severity does not overwrite', () => {
-    const entry1: ThreatIntelEntry = { type: 'hash', value: 'samesev', source: 't', severity: 'high', description: 'first', addedAt: '' }
-    const entry2: ThreatIntelEntry = { type: 'hash', value: 'samesev', source: 't', severity: 'high', description: 'second', addedAt: '' }
+    const entry1: ThreatIntelEntry = {
+      type: 'hash',
+      value: 'samesev',
+      source: 't',
+      severity: 'high',
+      description: 'first',
+      addedAt: '',
+    }
+    const entry2: ThreatIntelEntry = {
+      type: 'hash',
+      value: 'samesev',
+      source: 't',
+      severity: 'high',
+      description: 'second',
+      addedAt: '',
+    }
     service.addEntry(entry1)
     service.addEntry(entry2)
     const result = service.checkHash('samesev')
@@ -355,12 +386,16 @@ describe('ThreatIntelService', () => {
 
   it('handles non-Error in load catch', () => {
     mockExistsSync.mockReturnValue(true)
-    mockReadFileSync.mockImplementation(() => { throw 'string error' })
+    mockReadFileSync.mockImplementation(() => {
+      throw 'string error'
+    })
     expect(() => new ThreatIntelService()).not.toThrow()
   })
 
   it('handles non-Error in save catch', () => {
-    mockWriteFileSync.mockImplementation(() => { throw 'string write error' })
+    mockWriteFileSync.mockImplementation(() => {
+      throw 'string write error'
+    })
     const svc = new ThreatIntelService()
     expect(() => svc.toggleFeed('Abuse.ch SSL Blacklist', true)).not.toThrow()
   })
@@ -389,7 +424,9 @@ describe('ThreatIntelService', () => {
     vi.mocked((await import('./logger.service')).getLogger).mockReturnValueOnce({
       error: vi.fn(),
       warn: vi.fn(),
-      info: vi.fn(() => { throw 'string error' }),
+      info: vi.fn(() => {
+        throw 'string error'
+      }),
       success: vi.fn(),
       warning: vi.fn(),
     })

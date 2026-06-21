@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockSetDaemonMode = vi.fn()
 const mockInitAutoUpdater = vi.fn()
 const mockGetVersion = vi.fn(() => '1.0.0')
 const mockExit = vi.fn()
@@ -16,10 +15,6 @@ vi.mock('./services/auto-updater', () => ({
   initAutoUpdater: (...args: unknown[]) => mockInitAutoUpdater(...args),
 }))
 
-vi.mock('./services/logger', () => ({
-  setDaemonMode: (...args: unknown[]) => mockSetDaemonMode(...args),
-}))
-
 import { runDaemon } from './daemon'
 
 beforeEach(() => {
@@ -27,10 +22,9 @@ beforeEach(() => {
 })
 
 describe('runDaemon', () => {
-  it('sets daemon mode and starts auto-updater', async () => {
+  it('starts auto-updater', async () => {
     const promise = runDaemon()
 
-    expect(mockSetDaemonMode).toHaveBeenCalledWith(true)
     expect(mockInitAutoUpdater).toHaveBeenCalledWith({ daemon: true })
     await promise
   })

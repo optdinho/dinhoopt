@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   isPackaged: false,
 }))
 
+let electronIsPackaged = false
+
 vi.mock('node:fs', () => ({
   existsSync: (...args: unknown[]) => mocks.existsSync(...args),
   readFileSync: (...args: unknown[]) => mocks.readFileSync(...args),
@@ -23,7 +25,9 @@ vi.mock('node:path', () => ({
 
 vi.mock('electron', () => ({
   app: {
-    isPackaged: false,
+    get isPackaged() {
+      return electronIsPackaged
+    },
     getPath: () => mocks.userData,
   },
 }))
@@ -39,10 +43,12 @@ const DEFAULTS: TestData = { items: [], count: 0 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  electronIsPackaged = false
 })
 
 afterEach(() => {
   vi.resetAllMocks()
+  electronIsPackaged = false
 })
 
 describe('createJsonStore', () => {
@@ -130,6 +136,15 @@ describe('createJsonStore', () => {
       mocks.existsSync.mockReturnValue(false)
       store.load()
       expect(mocks.readFileSync).not.toHaveBeenCalled()
+    })
+
+    it('uses plain userData path when app is packaged', () => {
+      electronIsPackaged = true
+      const store = createJsonStore<TestData>({ name: 'test.json', defaults: DEFAULTS, devSuffix: 'MyDev' })
+      mocks.existsSync.mockReturnValue(false)
+      store.load()
+      expect(mocks.readFileSync).not.toHaveBeenCalled()
+      electronIsPackaged = false
     })
   })
 })

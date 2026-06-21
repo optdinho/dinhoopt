@@ -1,9 +1,10 @@
 import { formatBytes } from '@/lib/utils'
 import type { ScanHistoryEntry } from '@shared/types'
+import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTypeConfig } from './useTypeConfig'
 
-export function RecentScanRow({ entry }: { entry: ScanHistoryEntry }) {
+const RecentScanRow = memo(function RecentScanRow({ entry }: { entry: ScanHistoryEntry }) {
   const { t } = useTranslation('history')
   const typeConfig = useTypeConfig()
   const config = typeConfig[entry.type]
@@ -29,4 +30,6 @@ export function RecentScanRow({ entry }: { entry: ScanHistoryEntry }) {
       </span>
     </div>
   )
-}
+})
+
+export { RecentScanRow }

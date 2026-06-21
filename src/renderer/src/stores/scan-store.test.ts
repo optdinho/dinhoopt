@@ -169,4 +169,50 @@ describe('scan-store', () => {
     expect(state.results).toEqual([])
     expect(state.selectedItems.size).toBe(0)
   })
+
+  it('setProgress stores progress data', () => {
+    const progress = { current: 50, total: 100, phase: 'scanning', currentItem: 'test.log' }
+    useScanStore.getState().setProgress(progress)
+    expect(useScanStore.getState().progress).toEqual(progress)
+
+    useScanStore.getState().setProgress(null)
+    expect(useScanStore.getState().progress).toBeNull()
+  })
+
+  it('setCleanSummary stores clean summary data', () => {
+    const summary = { totalCleaned: 1024, itemsCleaned: 10, duration: 500 }
+    useScanStore.getState().setCleanSummary(summary)
+    expect(useScanStore.getState().cleanSummary).toEqual(summary)
+
+    useScanStore.getState().setCleanSummary(null)
+    expect(useScanStore.getState().cleanSummary).toBeNull()
+  })
+
+  it('setActiveCategory stores active category', () => {
+    useScanStore.getState().setActiveCategory('system')
+    expect(useScanStore.getState().activeCategory).toBe('system')
+
+    useScanStore.getState().setActiveCategory(null)
+    expect(useScanStore.getState().activeCategory).toBeNull()
+  })
+
+  it('addResults does not auto-select items from excluded subcategories', () => {
+    useScanStore.setState({ excludedSubcategories: new Set<string>() })
+    const result = makeResult('system', 'temp', [{ id: 'a', size: 100 }])
+    useScanStore.getState().setResults([result])
+    useScanStore.getState().toggleSubcategory(result)
+
+    useScanStore.getState().addResults([makeResult('system', 'temp', [{ id: 'b', size: 200 }])])
+
+    const state = useScanStore.getState()
+    expect(state.selectedItems.has('b')).toBe(false)
+  })
+
+  it('toggleItem handles unknown id not in any result', () => {
+    useScanStore.setState({ excludedSubcategories: new Set<string>() })
+    useScanStore.getState().setResults([makeResult('system', 'temp', [{ id: 'a', size: 100 }])])
+    useScanStore.getState().toggleItem('unknown')
+    expect(useScanStore.getState().excludedSubcategories.size).toBe(0)
+    expect(useScanStore.getState().selectedItems.has('unknown')).toBe(true)
+  })
 })

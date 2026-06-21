@@ -1,10 +1,4 @@
-import type {
-  UpdatableApp,
-  UpdateCheckResult,
-  UpdateProgress,
-  UpdateResult,
-  UpdateSeverity,
-} from '@shared/types'
+import type { UpdatableApp, UpdateCheckResult, UpdateProgress, UpdateResult, UpdateSeverity } from '@shared/types'
 import { isAdmin } from './elevation'
 import { execFileAsync, psUtf8 } from './exec-utf8'
 import { getSettings } from './settings-store'
@@ -189,7 +183,16 @@ export function parseWingetListOutput(stdout: string): UpdatableApp[] {
     // Skip ARP entries (not real winget packages)
     if (id.startsWith('ARP\\')) continue
 
-    apps.push({ id, name: stripTrailingVersion(name) || id, currentVersion: version, availableVersion: version, source: source || 'winget', severity: 'unknown', selected: false, isUpToDate: true })
+    apps.push({
+      id,
+      name: stripTrailingVersion(name) || id,
+      currentVersion: version,
+      availableVersion: version,
+      source: source || 'winget',
+      severity: 'unknown',
+      selected: false,
+      isUpToDate: true,
+    })
   }
   return apps
 }
@@ -578,7 +581,16 @@ export function parseChocoListOutput(stdout: string): UpdatableApp[] {
     if (parts.length < 2) continue
     const [id, version] = parts
     if (!id || !version) continue
-    apps.push({ id: id.trim(), name: id.trim(), currentVersion: version.trim(), availableVersion: version.trim(), source: 'choco', severity: 'unknown', selected: false, isUpToDate: true })
+    apps.push({
+      id: id.trim(),
+      name: id.trim(),
+      currentVersion: version.trim(),
+      availableVersion: version.trim(),
+      source: 'choco',
+      severity: 'unknown',
+      selected: false,
+      isUpToDate: true,
+    })
   }
   return apps
 }
@@ -903,7 +915,16 @@ export function parseScoopListOutput(stdout: string): UpdatableApp[] {
     if (parts.length < 2) continue
     const [name, version] = parts
     if (!name || !version) continue
-    apps.push({ id: name.trim(), name: name.trim(), currentVersion: version.trim(), availableVersion: version.trim(), source: 'scoop', severity: 'unknown', selected: false, isUpToDate: true })
+    apps.push({
+      id: name.trim(),
+      name: name.trim(),
+      currentVersion: version.trim(),
+      availableVersion: version.trim(),
+      source: 'scoop',
+      severity: 'unknown',
+      selected: false,
+      isUpToDate: true,
+    })
   }
   return apps
 }
@@ -1067,11 +1088,7 @@ async function runUpdatesScoop(
 
 async function checkForUpdatesWindows(): Promise<UpdateCheckResult> {
   // Run all 3 managers in parallel and merge results
-  const results = await Promise.allSettled([
-    checkForUpdatesWinget(),
-    checkForUpdatesChoco(),
-    checkForUpdatesScoop(),
-  ])
+  const results = await Promise.allSettled([checkForUpdatesWinget(), checkForUpdatesChoco(), checkForUpdatesScoop()])
 
   const availableResults: UpdateCheckResult[] = []
   for (const r of results) {
@@ -1179,691 +1196,14 @@ async function runUpdatesWindows(
   }
 }
 
-// ─── Homebrew (macOS) ───────────────────────────────────────
 
-/** Brew formula/cask name: lowercase alphanumeric, hyphens, dots, underscores, optional tap prefix */
-const BREW_ID_PATTERN = /^[a-z0-9][a-z0-9@._+-]*(\/[a-z0-9][a-z0-9@._+-]*)?$/
 
-interface BrewOutdatedFormula {
-  name: string
-  installed_versions: string[]
-  current_version: string
-}
 
-interface BrewOutdatedCask {
-  name: string
-  token: string
-  installed_versions: string
-  current_version: string
-}
-
-interface BrewOutdatedJson {
-  formulae: BrewOutdatedFormula[]
-  casks: BrewOutdatedCask[]
-}
-
-interface BrewInfoFormula {
-  name: string
-  installed: { version: string }[]
-  versions: { stable: string }
-}
-
-interface BrewInfoCask {
-  token: string
-  installed: string | null
-  version: string
-}
-
-interface BrewInfoJson {
-  formulae: BrewInfoFormula[]
-  casks: BrewInfoCask[]
-}
-
-/**
- * Brew install locations to probe, in priority order. macOS GUI apps inherit
- * PATH from launchd (typically just /usr/bin:/bin:/usr/sbin:/sbin) and never
- * read the user's shell rc files, so a bare `brew` lookup fails even when
- * brew is installed and on the user's interactive shell PATH. We probe the
- * standard install locations first, then fall back to a PATH lookup so
- * non-standard installs still work when the user launched Kudu from a shell.
- */
-export const BREW_PATH_CANDIDATES = [
-  '/opt/homebrew/bin/brew', // Apple Silicon default
-  '/usr/local/bin/brew', // Intel default
-  'brew', // PATH lookup fallback
-]
-
-let cachedBrewPath: string | null | undefined
-
-/** Resolve the path to the brew executable, or null if brew is not installed. */
-async function resolveBrewPath(): Promise<string | null> {
-  if (cachedBrewPath !== undefined) return cachedBrewPath
-  for (const candidate of BREW_PATH_CANDIDATES) {
-    try {
-      await execFileAsync(candidate, ['--version'], { timeout: 10_000 })
-      cachedBrewPath = candidate
-      return candidate
-    } catch {
-      /* try next candidate */
-    }
-  }
-  cachedBrewPath = null
-  return null
-}
-
-export function parseBrewOutdatedJson(stdout: string): UpdatableApp[] {
-  let data: BrewOutdatedJson
-  try {
-    data = JSON.parse(stdout)
-  } catch {
-    return []
-  }
-
-  const apps: UpdatableApp[] = []
-
-  for (const f of data.formulae ?? []) {
-    const currentVersion = f.installed_versions?.[0] ?? ''
-    apps.push({
-      id: f.name,
-      name: f.name,
-      currentVersion,
-      availableVersion: f.current_version,
-      source: 'brew',
-      severity: computeSeverity(currentVersion, f.current_version),
-      selected: true,
-    })
-  }
-
-  for (const c of data.casks ?? []) {
-    const id = c.token || c.name
-    const currentVersion = typeof c.installed_versions === 'string' ? c.installed_versions : ''
-    apps.push({
-      id,
-      name: id,
-      currentVersion,
-      availableVersion: c.current_version,
-      source: 'brew',
-      severity: computeSeverity(currentVersion, c.current_version),
-      selected: true,
-    })
-  }
-
-  return apps
-}
-
-export function parseBrewInstalledJson(stdout: string): UpdatableApp[] {
-  let data: BrewInfoJson
-  try {
-    data = JSON.parse(stdout)
-  } catch {
-    return []
-  }
-
-  const apps: UpdatableApp[] = []
-
-  for (const f of data.formulae ?? []) {
-    const version = f.installed?.[0]?.version ?? f.versions?.stable ?? ''
-    if (!version) continue
-    apps.push({ id: f.name, name: f.name, currentVersion: version, availableVersion: version, source: 'brew', severity: 'unknown', selected: false, isUpToDate: true })
-  }
-
-  for (const c of data.casks ?? []) {
-    const version = c.installed ?? c.version ?? ''
-    if (!version) continue
-    apps.push({ id: c.token, name: c.token, currentVersion: version, availableVersion: version, source: 'brew', severity: 'unknown', selected: false, isUpToDate: true })
-  }
-
-  return apps
-}
-
-async function checkForUpdatesBrew(): Promise<UpdateCheckResult> {
-  const brewPath = await resolveBrewPath()
-  if (!brewPath) {
-    return emptyResult(false, 'brew')
-  }
-
-  try {
-    // Get outdated packages as JSON
-    let outdatedStdout = ''
-    try {
-      const result = await execFileAsync(brewPath, ['outdated', '--json=v2'], {
-        timeout: 60_000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      outdatedStdout = result.stdout
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-      if (e?.stdout) {
-        outdatedStdout = e.stdout
-      } else {
-        return emptyResult(true, 'brew')
-      }
-    }
-
-    const apps = parseBrewOutdatedJson(outdatedStdout)
-
-    // Get all installed packages for the "up to date" list
-    let upToDateApps: UpdatableApp[] = []
-    try {
-      let infoStdout = ''
-      try {
-        const infoResult = await execFileAsync(brewPath, ['info', '--json=v2', '--installed'], {
-          timeout: 60_000,
-          maxBuffer: 10 * 1024 * 1024,
-        })
-        infoStdout = infoResult.stdout
-      } catch (err: unknown) {
-        const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-        if (e?.stdout) infoStdout = e.stdout
-      }
-      if (infoStdout) {
-        const allApps = parseBrewInstalledJson(infoStdout)
-        const outdatedIds = new Set(apps.map((a) => a.id))
-        upToDateApps = allApps.filter((a) => !outdatedIds.has(a.id))
-      }
-    } catch {
-      // Non-critical — just skip the up-to-date list
-    }
-
-    return {
-      apps: [...apps, ...upToDateApps],
-      totalCount: apps.length,
-      majorCount: apps.filter((a) => a.severity === 'major').length,
-      minorCount: apps.filter((a) => a.severity === 'minor').length,
-      patchCount: apps.filter((a) => a.severity === 'patch').length,
-      packageManagerAvailable: true,
-      packageManagerName: 'brew',
-    }
-  } catch {
-    return emptyResult(true, 'brew')
-  }
-}
-
-/** Attempt a single brew upgrade */
-async function attemptBrewUpgrade(name: string): Promise<{ success: boolean; error?: string }> {
-  if (!BREW_ID_PATTERN.test(name) || name.length > 200) {
-    return { success: false, error: 'Invalid package name format' }
-  }
-
-  const brewPath = await resolveBrewPath()
-  if (!brewPath) {
-    return { success: false, error: 'brew not found' }
-  }
-
-  try {
-    await execFileAsync(brewPath, ['upgrade', name], { timeout: 10 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 })
-    return { success: true }
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-    const output = cleanOutput(e?.stderr || e?.stdout || e?.message || 'Unknown error')
-    const lastLine = output.trim().split('\n').pop() || 'Upgrade failed'
-    return { success: false, error: lastLine.length > 200 ? `${lastLine.slice(0, 200)}...` : lastLine }
-  }
-}
-
-async function runUpdatesBrew(appIds: string[], onProgress: (progress: UpdateProgress) => void): Promise<UpdateResult> {
-  let succeeded = 0
-  let failed = 0
-  const errors: UpdateResult['errors'] = []
-  const total = appIds.length
-
-  // brew doesn't handle parallel upgrades well — run sequentially
-  for (let i = 0; i < total; i++) {
-    const appId = appIds[i]
-    if (!appId) continue
-    onProgress({
-      phase: 'updating',
-      current: i + 1,
-      total,
-      currentApp: appId,
-      percent: Math.round((i / total) * 100),
-      status: 'in-progress',
-    })
-
-    const result = await attemptBrewUpgrade(appId)
-
-    if (result.success) {
-      succeeded++
-      onProgress({
-        phase: 'updating',
-        current: i + 1,
-        total,
-        currentApp: appId,
-        percent: Math.round(((i + 1) / total) * 100),
-        status: 'done',
-      })
-    } else {
-      failed++
-      errors.push({ appId, name: appId, reason: result.error || 'Upgrade failed' })
-      onProgress({
-        phase: 'updating',
-        current: i + 1,
-        total,
-        currentApp: appId,
-        percent: Math.round(((i + 1) / total) * 100),
-        status: 'failed',
-      })
-    }
-  }
-
-  return { succeeded, failed, errors }
-}
-
-// ─── Linux (apt / dnf / pacman) ─────────────────────────────
-
-type LinuxPM = 'apt' | 'dnf' | 'pacman'
-
-async function detectLinuxPackageManager(): Promise<LinuxPM | null> {
-  const candidates: Array<{ name: LinuxPM; paths: string[] }> = [
-    { name: 'apt', paths: ['/usr/bin/apt', '/bin/apt'] },
-    { name: 'dnf', paths: ['/usr/bin/dnf', '/bin/dnf'] },
-    { name: 'pacman', paths: ['/usr/bin/pacman', '/bin/pacman'] },
-  ]
-  for (const { name, paths } of candidates) {
-    for (const p of paths) {
-      try {
-        await execFileAsync(p, ['--version'], { timeout: 3_000 })
-        return name
-      } catch {
-        /* not found */
-      }
-    }
-  }
-  return null
-}
-
-/** Linux package name: alphanumeric (mixed case for RPM), hyphens, dots, underscores, plus, colons (for arch qualifiers) */
-const LINUX_PKG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9.+\-_:]{0,200}$/
-
-// ── apt ──
-
-/**
- * Parse `apt list --upgradable` output.
- * Format: package/distro version_new arch [upgradable from: version_old]
- */
-export function parseAptUpgradable(stdout: string): UpdatableApp[] {
-  const apps: UpdatableApp[] = []
-  for (const line of stdout.split('\n')) {
-    // Skip the "Listing..." header and empty lines
-    if (!line.trim() || line.startsWith('Listing')) continue
-    // e.g. "curl/jammy-updates 7.81.0-1ubuntu1.16 amd64 [upgradable from: 7.81.0-1ubuntu1.15]"
-    const match = line.match(/^(\S+?)\/\S+\s+(\S+)\s+\S+\s+\[upgradable from:\s+(\S+?)\]/)
-    if (!match) continue
-    const name = match[1] ?? ''
-    const availableVersion = match[2] ?? ''
-    const currentVersion = match[3] ?? ''
-    if (!name) continue
-    apps.push({
-      id: name,
-      name,
-      currentVersion,
-      availableVersion,
-      source: 'apt',
-      severity: computeSeverity(currentVersion, availableVersion),
-      selected: true,
-    })
-  }
-  return apps
-}
-
-/** Parse `dpkg-query -W` output into up-to-date list */
-export function parseDpkgInstalled(stdout: string): UpdatableApp[] {
-  return stdout
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split('\t')
-      const name = parts[0] ?? ''
-      const version = parts[1] ?? ''
-      return { id: name, name, currentVersion: version, availableVersion: version, source: 'apt', severity: 'unknown', selected: false, isUpToDate: true }
-    })
-}
-
-async function checkForUpdatesApt(): Promise<UpdateCheckResult> {
-  try {
-    // Refresh package cache (may fail without root — that's OK, uses stale cache)
-    try {
-      await execFileAsync('/usr/bin/apt-get', ['update', '-qq'], { timeout: 60_000 })
-    } catch {
-      /* non-root: use existing cache */
-    }
-
-    let upgradableStdout = ''
-    try {
-      const result = await execFileAsync('/usr/bin/apt', ['list', '--upgradable'], {
-        timeout: 30_000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      upgradableStdout = result.stdout
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-      if (e?.stdout) upgradableStdout = e.stdout
-      else return emptyResult(true, 'apt')
-    }
-
-    const apps = parseAptUpgradable(upgradableStdout)
-
-    // Get installed packages for the "up to date" list
-    let upToDateApps: UpdatableApp[] = []
-    try {
-      const { stdout: dpkgOut } = await execFileAsync('/usr/bin/dpkg-query', ['-W', '-f', '${Package}\t${Version}\n'], {
-        timeout: 30_000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      const allInstalled = parseDpkgInstalled(dpkgOut)
-      const outdatedIds = new Set(apps.map((a) => a.id))
-      upToDateApps = allInstalled.filter((a) => !outdatedIds.has(a.id))
-    } catch {
-      /* non-critical */
-    }
-
-    return {
-      apps: [...apps, ...upToDateApps],
-      totalCount: apps.length,
-      majorCount: apps.filter((a) => a.severity === 'major').length,
-      minorCount: apps.filter((a) => a.severity === 'minor').length,
-      patchCount: apps.filter((a) => a.severity === 'patch').length,
-      packageManagerAvailable: true,
-      packageManagerName: 'apt',
-    }
-  } catch {
-    return emptyResult(true, 'apt')
-  }
-}
-
-// ── dnf ──
-
-/**
- * Parse `dnf check-update` output.
- * Format: package.arch   version   repo
- * dnf exits with code 100 when updates are available.
- */
-export function parseDnfCheckUpdate(stdout: string): UpdatableApp[] {
-  const apps: UpdatableApp[] = []
-  for (const line of stdout.split('\n')) {
-    if (!line.trim() || line.startsWith('Last metadata') || line.startsWith('Obsoleting')) continue
-    // e.g. "curl.x86_64    7.76.1-23.el9    baseos"
-    // Use greedy match so we split on the LAST dot (arch never contains dots)
-    const match = line.match(/^(\S+)\.(\w+)\s+(\S+)\s+(\S+)/)
-    if (!match) continue
-    const nameWithoutArch = match[1] ?? ''
-    const availableVersion = match[3] ?? ''
-    const repo = match[4] ?? ''
-    if (!nameWithoutArch) continue
-    apps.push({
-      id: nameWithoutArch,
-      name: nameWithoutArch,
-      currentVersion: '', // filled in below
-      availableVersion,
-      source: repo || 'dnf',
-      severity: 'unknown',
-      selected: true,
-    })
-  }
-  return apps
-}
-
-async function checkForUpdatesDnf(): Promise<UpdateCheckResult> {
-  try {
-    // dnf check-update exits 100 when updates are available
-    let checkStdout = ''
-    try {
-      const result = await execFileAsync('/usr/bin/dnf', ['check-update', '-q'], {
-        timeout: 60_000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      checkStdout = result.stdout
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-      checkStdout = e?.stdout ?? ''
-    }
-
-    const apps = parseDnfCheckUpdate(checkStdout)
-
-    // Get installed versions to fill in currentVersion and build up-to-date list
-    const upToDateApps: UpdatableApp[] = []
-    try {
-      const { stdout: rpmOut } = await execFileAsync(
-        '/usr/bin/rpm',
-        ['-qa', '--queryformat', '%{NAME}\t%{VERSION}-%{RELEASE}\n'],
-        { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 },
-      )
-
-      const installedMap = new Map<string, string>()
-      for (const line of rpmOut.trim().split('\n')) {
-        if (!line.trim()) continue
-        const parts = line.split('\t')
-        const name = parts[0] ?? ''
-        const version = parts[1] ?? ''
-        if (name) installedMap.set(name, version)
-      }
-
-      // Fill in current versions and compute severity
-      for (const app of apps) {
-        const current = installedMap.get(app.id)
-        if (current) {
-          app.currentVersion = current
-          app.severity = computeSeverity(current, app.availableVersion)
-        }
-      }
-
-      // Build up-to-date list
-      const outdatedIds = new Set(apps.map((a) => a.id))
-      for (const [name, version] of installedMap) {
-        if (!outdatedIds.has(name)) {
-          upToDateApps.push({ id: name, name, currentVersion: version, availableVersion: version, source: 'dnf', severity: 'unknown', selected: false, isUpToDate: true })
-        }
-      }
-    } catch {
-      /* non-critical */
-    }
-
-    return {
-      apps: [...apps, ...upToDateApps],
-      totalCount: apps.length,
-      majorCount: apps.filter((a) => a.severity === 'major').length,
-      minorCount: apps.filter((a) => a.severity === 'minor').length,
-      patchCount: apps.filter((a) => a.severity === 'patch').length,
-      packageManagerAvailable: true,
-      packageManagerName: 'dnf',
-    }
-  } catch {
-    return emptyResult(true, 'dnf')
-  }
-}
-
-// ── pacman ──
-
-/**
- * Parse `pacman -Qu` output.
- * Format: package old_version -> new_version
- */
-export function parsePacmanQu(stdout: string): UpdatableApp[] {
-  const apps: UpdatableApp[] = []
-  for (const line of stdout.split('\n')) {
-    if (!line.trim()) continue
-    // e.g. "curl 7.87.0-1 -> 7.88.0-1"
-    const match = line.match(/^(\S+)\s+(\S+)\s+->\s+(\S+)/)
-    if (!match) continue
-    const name = match[1] ?? ''
-    const currentVersion = match[2] ?? ''
-    const availableVersion = match[3] ?? ''
-    if (!name) continue
-    apps.push({
-      id: name,
-      name,
-      currentVersion,
-      availableVersion,
-      source: 'pacman',
-      severity: computeSeverity(currentVersion, availableVersion),
-      selected: true,
-    })
-  }
-  return apps
-}
-
-async function checkForUpdatesPacman(): Promise<UpdateCheckResult> {
-  try {
-    // Sync database first
-    try {
-      await execFileAsync('/usr/bin/pacman', ['-Sy'], { timeout: 60_000 })
-    } catch {
-      /* may need root — use stale db */
-    }
-
-    let quStdout = ''
-    try {
-      const result = await execFileAsync('/usr/bin/pacman', ['-Qu'], {
-        timeout: 30_000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      quStdout = result.stdout
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-      // pacman -Qu exits 1 when no updates available
-      if (e?.stdout) quStdout = e.stdout
-    }
-
-    const apps = parsePacmanQu(quStdout)
-
-    // Get all installed for up-to-date list
-    const upToDateApps: UpdatableApp[] = []
-    try {
-      const { stdout: qOut } = await execFileAsync('/usr/bin/pacman', ['-Q'], {
-        timeout: 30_000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      const outdatedIds = new Set(apps.map((a) => a.id))
-      for (const line of qOut.trim().split('\n')) {
-        if (!line.trim()) continue
-        const [name, version] = line.split(' ')
-        if (name && !outdatedIds.has(name)) {
-          upToDateApps.push({ id: name, name, currentVersion: version ?? '', availableVersion: version ?? '', source: 'pacman', severity: 'unknown', selected: false, isUpToDate: true })
-        }
-      }
-    } catch {
-      /* non-critical */
-    }
-
-    return {
-      apps: [...apps, ...upToDateApps],
-      totalCount: apps.length,
-      majorCount: apps.filter((a) => a.severity === 'major').length,
-      minorCount: apps.filter((a) => a.severity === 'minor').length,
-      patchCount: apps.filter((a) => a.severity === 'patch').length,
-      packageManagerAvailable: true,
-      packageManagerName: 'pacman',
-    }
-  } catch {
-    return emptyResult(true, 'pacman')
-  }
-}
-
-// ── Linux: check dispatcher ──
-
-async function checkForUpdatesLinux(): Promise<UpdateCheckResult> {
-  const pm = await detectLinuxPackageManager()
-  if (!pm) return emptyResult(false, null)
-  if (pm === 'apt') return checkForUpdatesApt()
-  if (pm === 'dnf') return checkForUpdatesDnf()
-  return checkForUpdatesPacman()
-}
-
-// ── Linux: run updates ──
-
-async function attemptLinuxUpgrade(pm: LinuxPM, appId: string): Promise<{ success: boolean; error?: string }> {
-  if (!LINUX_PKG_PATTERN.test(appId)) {
-    return { success: false, error: 'Invalid package name format' }
-  }
-
-  try {
-    if (pm === 'apt') {
-      await execFileAsync('/usr/bin/apt-get', ['install', '-y', '-qq', appId], {
-        timeout: 10 * 60 * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-    } else if (pm === 'dnf') {
-      await execFileAsync('/usr/bin/dnf', ['upgrade', '-y', '-q', appId], {
-        timeout: 10 * 60 * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-    } else {
-      await execFileAsync('/usr/bin/pacman', ['-S', '--noconfirm', appId], {
-        timeout: 10 * 60 * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-    }
-    return { success: true }
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-    const output = cleanOutput(e?.stderr || e?.stdout || e?.message || 'Unknown error')
-    const lastLine = output.trim().split('\n').pop() || 'Upgrade failed'
-    return { success: false, error: lastLine.length > 200 ? `${lastLine.slice(0, 200)}...` : lastLine }
-  }
-}
-
-async function runUpdatesLinux(
-  appIds: string[],
-  onProgress: (progress: UpdateProgress) => void,
-): Promise<UpdateResult> {
-  const pm = await detectLinuxPackageManager()
-  if (!pm) return { succeeded: 0, failed: 0, errors: [] }
-
-  let succeeded = 0
-  let failed = 0
-  const errors: UpdateResult['errors'] = []
-  const total = appIds.length
-
-  // Run sequentially — apt/dnf/pacman don't handle parallel installs
-  for (let i = 0; i < total; i++) {
-    const appId = appIds[i]
-    if (!appId) continue
-    onProgress({
-      phase: 'updating',
-      current: i + 1,
-      total,
-      currentApp: appId,
-      percent: Math.round((i / total) * 100),
-      status: 'in-progress',
-    })
-
-    const result = await attemptLinuxUpgrade(pm, appId)
-
-    if (result.success) {
-      succeeded++
-      onProgress({
-        phase: 'updating',
-        current: i + 1,
-        total,
-        currentApp: appId,
-        percent: Math.round(((i + 1) / total) * 100),
-        status: 'done',
-      })
-    } else {
-      failed++
-      errors.push({ appId, name: appId, reason: result.error || 'Upgrade failed' })
-      onProgress({
-        phase: 'updating',
-        current: i + 1,
-        total,
-        currentApp: appId,
-        percent: Math.round(((i + 1) / total) * 100),
-        status: 'failed',
-      })
-    }
-  }
-
-  return { succeeded, failed, errors }
-}
 
 // ─── Platform-dispatched exports ────────────────────────────
 
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
-  if (process.platform === 'darwin') return checkForUpdatesBrew()
-  if (process.platform === 'win32') return checkForUpdatesWindows()
-  if (process.platform === 'linux') return checkForUpdatesLinux()
-  return emptyResult(false, null)
+  return checkForUpdatesWindows()
 }
 
 export async function runUpdates(
@@ -1871,15 +1211,10 @@ export async function runUpdates(
   onProgress: (progress: UpdateProgress) => void,
   source?: string,
 ): Promise<UpdateResult> {
-  if (process.platform === 'darwin') return runUpdatesBrew(appIds, onProgress)
-  if (process.platform === 'win32') return runUpdatesWindows(appIds, onProgress, source)
-  if (process.platform === 'linux') return runUpdatesLinux(appIds, onProgress)
-  return { succeeded: 0, failed: 0, errors: [] }
+  return runUpdatesWindows(appIds, onProgress, source)
 }
 
 /** Validate an app ID for the current platform's package manager */
 export function isValidAppId(id: string): boolean {
-  if (process.platform === 'darwin') return BREW_ID_PATTERN.test(id) && id.length <= 200
-  if (process.platform === 'linux') return LINUX_PKG_PATTERN.test(id)
   return /^[\w][\w.\-]{0,200}$/.test(id)
 }

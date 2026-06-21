@@ -14,6 +14,18 @@ function resolveLogDir(): string {
   }
 }
 
+function localTimestamp(): string {
+  const d = new Date()
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
+}
+
+function localDate(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 class LoggerService {
   private logDir: string
   private retentionDays: number
@@ -22,7 +34,7 @@ class LoggerService {
 
   constructor() {
     this.retentionDays = DEFAULT_RETENTION_DAYS
-    this.currentDate = new Date().toISOString().slice(0, 10)
+    this.currentDate = localDate()
     this.logDir = resolveLogDir()
     this._ready = this.init()
   }
@@ -47,7 +59,7 @@ class LoggerService {
   async log(level: LogLevel, module: string, message: string, details?: string): Promise<void> {
     await this._ready
     const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: localTimestamp(),
       level,
       module,
       message,

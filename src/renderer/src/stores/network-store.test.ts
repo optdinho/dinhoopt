@@ -73,12 +73,6 @@ describe('network-store', () => {
     expect(useNetworkStore.getState().cleanResult).toBeNull()
   })
 
-  it('setActiveCategory updates active category', () => {
-    expect(useNetworkStore.getState().activeCategory).toBe('dns-cache')
-    useNetworkStore.getState().setActiveCategory('wifi-profile')
-    expect(useNetworkStore.getState().activeCategory).toBe('wifi-profile')
-  })
-
   it('setStatus updates status', () => {
     useNetworkStore.getState().setStatus('scanning')
     expect(useNetworkStore.getState().status).toBe('scanning')

@@ -30,31 +30,6 @@ const PROTECTED_WIN32 = [
   'inf',
   'logs',
 ]
-const PROTECTED_UNIX = [
-  'bin',
-  'sbin',
-  'usr',
-  'etc',
-  'var',
-  'lib',
-  'lib64',
-  'opt',
-  'boot',
-  'dev',
-  'proc',
-  'sys',
-  'run',
-  'tmp',
-  'snap',
-  'root',
-  'lost+found',
-  'system',
-  'library',
-  'applications',
-  'cores',
-  'private',
-  'volumes',
-]
 const PROTECTED_GENERIC = [
   '.git',
   '.svn',
@@ -83,17 +58,14 @@ function isProtectedPath(targetPath: string): boolean {
   // Never shred filesystem roots (/, C:\)
   if (segments.length === 0) return true
   // On Windows C:/ has segments ['c:'] — depth 1 is the drive root
-  if (process.platform === 'win32' && segments.length <= 1) return true
+  if (segments.length <= 1) return true
 
   // Never shred root-level directories (C:\Windows, /usr, etc.)
-  const isRootLevel = process.platform === 'win32' ? segments.length <= 2 : segments.length <= 1
+  const isRootLevel = segments.length <= 2
   if (isRootLevel) return true
 
   // Check against protected name lists
-  const protectedNames =
-    process.platform === 'win32'
-      ? [...PROTECTED_WIN32, ...PROTECTED_GENERIC]
-      : [...PROTECTED_UNIX, ...PROTECTED_GENERIC]
+  const protectedNames = [...PROTECTED_WIN32, ...PROTECTED_GENERIC]
   if (protectedNames.includes(name)) return true
 
   // Never shred user profile root folders
@@ -236,16 +208,12 @@ async function getEntrySize(entryPath: string, depth = 0): Promise<number> {
 }
 
 export function registerFileShredderIpc(getWindow: WindowGetter): void {
-  // File/folder pickers — on macOS, avoid passing parent window so the dialog
-  // opens as a standalone panel instead of a sheet (sidebar items like Desktop
-  // are unresponsive in sheet mode).
   ipcMain.handle(IPC.SHREDDER_SELECT_FILES, async () => {
     getLogger().info('file-shredder', 'Opening file selection dialog')
     const win = getWindow()
     if (!win) return []
     const fileOpts: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'] }
-    const result =
-      process.platform === 'darwin' ? await dialog.showOpenDialog(fileOpts) : await dialog.showOpenDialog(win, fileOpts)
+    const result = await dialog.showOpenDialog(win, fileOpts)
     if (result.canceled || !result.filePaths.length) {
       getLogger().warning('file-shredder', 'File selection cancelled or empty')
       return []
@@ -274,10 +242,7 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
     const win = getWindow()
     if (!win) return []
     const folderOpts: Electron.OpenDialogOptions = { properties: ['openDirectory', 'multiSelections'] }
-    const result =
-      process.platform === 'darwin'
-        ? await dialog.showOpenDialog(folderOpts)
-        : await dialog.showOpenDialog(win, folderOpts)
+    const result = await dialog.showOpenDialog(win, folderOpts)
     if (result.canceled || !result.filePaths.length) {
       getLogger().warning('file-shredder', 'Folder selection cancelled or empty')
       return []

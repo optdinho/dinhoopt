@@ -132,6 +132,13 @@ describe('updater-store', () => {
     expect(useUpdaterStore.getState().apps[0]!.selected).toBe(false)
   })
 
+  it('toggleAppSelected preserves non-target apps', () => {
+    useUpdaterStore.getState().setApps([makeApp('1'), makeApp('2')])
+    useUpdaterStore.getState().toggleAppSelected('1')
+    expect(useUpdaterStore.getState().apps[0]!.selected).toBe(true)
+    expect(useUpdaterStore.getState().apps[1]!.selected).toBe(false)
+  })
+
   it('selectAll selects all apps', () => {
     useUpdaterStore.getState().setApps([makeApp('1'), makeApp('2')])
     useUpdaterStore.getState().selectAll()
@@ -173,12 +180,28 @@ describe('updater-store', () => {
     expect(window.dinho.settingsSet).toHaveBeenCalledWith({ ignoredSoftwareUpdates: ['1'] })
   })
 
+  it('ignoreApp does nothing when app not found', () => {
+    useUpdaterStore.getState().setApps([makeApp('1')])
+    useUpdaterStore.getState().ignoreApp('nonexistent')
+    expect(useUpdaterStore.getState().ignoredIds.has('nonexistent')).toBe(true)
+    expect(useUpdaterStore.getState().apps).toHaveLength(1)
+    expect(useUpdaterStore.getState().ignoredApps).toHaveLength(0)
+  })
+
   it('unignoreApp moves app back from ignored list', () => {
     useUpdaterStore.setState({ apps: [makeApp('2')], ignoredApps: [makeApp('1')], ignoredIds: new Set(['1']) })
     useUpdaterStore.getState().unignoreApp('1')
     expect(useUpdaterStore.getState().ignoredIds.has('1')).toBe(false)
     expect(useUpdaterStore.getState().apps).toHaveLength(2)
     expect(useUpdaterStore.getState().ignoredApps).toHaveLength(0)
+  })
+
+  it('unignoreApp does nothing when app not in ignored list', () => {
+    useUpdaterStore.setState({ apps: [], ignoredApps: [makeApp('1')], ignoredIds: new Set(['1']) })
+    useUpdaterStore.getState().unignoreApp('nonexistent')
+    expect(useUpdaterStore.getState().ignoredIds.has('nonexistent')).toBe(false)
+    expect(useUpdaterStore.getState().apps).toHaveLength(0)
+    expect(useUpdaterStore.getState().ignoredApps).toHaveLength(1)
   })
 
   it('reset restores initial state', () => {

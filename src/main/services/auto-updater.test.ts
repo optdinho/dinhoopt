@@ -107,17 +107,6 @@ describe('initAutoUpdater', () => {
     expect(mocks.autoUpdaterCheck).not.toHaveBeenCalled()
   })
 
-  it('skips on Linux without APPIMAGE', () => {
-    const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux' as never)
-    const orig = process.env.APPIMAGE
-    delete process.env.APPIMAGE
-    initAutoUpdater()
-    expect(mocks.autoUpdaterOn).not.toHaveBeenCalled()
-    expect(mocks.autoUpdaterCheck).not.toHaveBeenCalled()
-    if (orig !== undefined) process.env.APPIMAGE = orig
-    platformSpy.mockRestore()
-  })
-
   it('sets autoDownload from daemon mode', () => {
     initAutoUpdater({ daemon: true })
     expect(mockAutoUpdater.autoDownload).toBe(true)

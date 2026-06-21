@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, readdir, readlink, stat } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
@@ -58,114 +58,23 @@ Get-ChildItem -Path '${dir.replace(/'/g, "''")}' -Filter '*.lnk' -Recurse -Error
   }
 }
 
-/**
- * Check if a binary name can be found in common PATH directories.
- */
-function binaryExistsInPath(binary: string): boolean {
-  const pathDirs = (process.env.PATH || '').split(':').filter(Boolean)
-  for (const dir of pathDirs) {
-    if (existsSync(join(dir, binary))) return true
-  }
-  return false
-}
-
-async function resolveLinuxDesktopFiles(dir: string): Promise<ShortcutInfo[]> {
-  if (!existsSync(dir)) return []
-  const results: ShortcutInfo[] = []
-  try {
-    const entries = await readdir(dir, { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.name.endsWith('.desktop')) continue
-      const fullPath = join(dir, entry.name)
-      try {
-        const content = await readFile(fullPath, 'utf-8')
-        const execMatch = content.match(/^Exec\s*=\s*(.+)$/m)
-        if (execMatch) {
-          // Extract the binary path (first token, strip field codes like %u %f)
-          const execLine = execMatch[1]!.trim()
-          const binary = execLine.split(/\s+/)[0]!.replace(/^["']|["']$/g, '')
-          // Resolve to full path: if it's already absolute, use as-is;
-          // otherwise check PATH directories
-          let resolvedPath: string | null = null
-          if (binary?.startsWith('/')) {
-            resolvedPath = binary
-          } else if (binary) {
-            // Check if the binary exists anywhere in PATH
-            resolvedPath = binaryExistsInPath(binary) ? binary : null
-          }
-          results.push({ path: fullPath, targetPath: resolvedPath })
-        } else {
-          results.push({ path: fullPath, targetPath: null })
-        }
-      } catch {
-        results.push({ path: fullPath, targetPath: null })
-      }
-    }
-  } catch {
-    // Directory inaccessible
-  }
-  return results
-}
-
-/**
- * Resolve macOS alias/symlink targets in a directory.
- */
-async function resolveMacAliases(dir: string): Promise<ShortcutInfo[]> {
-  if (!existsSync(dir)) return []
-  const results: ShortcutInfo[] = []
-  try {
-    const entries = await readdir(dir, { withFileTypes: true })
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name)
-      try {
-        if (entry.isSymbolicLink()) {
-          const target = await readlink(fullPath)
-          results.push({ path: fullPath, targetPath: resolve(dir, target) })
-        }
-      } catch {
-        results.push({ path: fullPath, targetPath: null })
-      }
-    }
-  } catch {
-    // Directory inaccessible
-  }
-  return results
-}
-
-// ── Shortcut directories by platform ──
+// ── Shortcut directories ──
 
 function getShortcutDirs(): { path: string; subcategory: string }[] {
   const home = homedir()
-
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming')
-    return [
-      { path: join(home, 'Desktop'), subcategory: 'Desktop Shortcuts' },
-      { path: join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'), subcategory: 'Start Menu Shortcuts' },
-      {
-        path: join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar'),
-        subcategory: 'Taskbar Shortcuts',
-      },
-      {
-        path: join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
-        subcategory: 'All Users Start Menu',
-      },
-      { path: join(process.env.PUBLIC || 'C:\\Users\\Public', 'Desktop'), subcategory: 'Public Desktop Shortcuts' },
-    ]
-  }
-
-  if (process.platform === 'darwin') {
-    return [
-      { path: join(home, 'Desktop'), subcategory: 'Desktop Aliases' },
-      { path: join(home, 'Applications'), subcategory: 'User Applications' },
-    ]
-  }
-
-  // Linux
+  const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming')
   return [
     { path: join(home, 'Desktop'), subcategory: 'Desktop Shortcuts' },
-    { path: join(home, '.local', 'share', 'applications'), subcategory: 'User Application Entries' },
-    { path: '/usr/share/applications', subcategory: 'System Application Entries' },
+    { path: join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'), subcategory: 'Start Menu Shortcuts' },
+    {
+      path: join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar'),
+      subcategory: 'Taskbar Shortcuts',
+    },
+    {
+      path: join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+      subcategory: 'All Users Start Menu',
+    },
+    { path: join(process.env.PUBLIC || 'C:\\Users\\Public', 'Desktop'), subcategory: 'Public Desktop Shortcuts' },
   ]
 }
 
@@ -199,8 +108,6 @@ function isTargetBroken(info: ShortcutInfo): boolean {
   if (/^microsoft\./i.test(info.targetPath)) return false
   // Skip targets that reference Windows Apps store folder (UWP apps)
   if (/\\WindowsApps\\/i.test(info.targetPath)) return false
-  // Linux: if the target was resolved via PATH (not an absolute path), it's valid
-  if (process.platform !== 'win32' && !info.targetPath.startsWith('/')) return false
   // Check if the target exists on disk
   return !existsSync(info.targetPath)
 }
@@ -213,19 +120,9 @@ export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
     const results: ScanResult[] = []
     const category = CleanerType.Shortcut
     const dirs = getShortcutDirs()
-    const isWin = process.platform === 'win32'
-    const isMac = process.platform === 'darwin'
-
     for (const dir of dirs) {
       try {
-        let shortcuts: ShortcutInfo[]
-        if (isWin) {
-          shortcuts = await resolveWinShortcuts(dir.path)
-        } else if (isMac) {
-          shortcuts = await resolveMacAliases(dir.path)
-        } else {
-          shortcuts = await resolveLinuxDesktopFiles(dir.path)
-        }
+        const shortcuts = await resolveWinShortcuts(dir.path)
 
         const brokenItems: ScanItem[] = []
         for (const sc of shortcuts) {

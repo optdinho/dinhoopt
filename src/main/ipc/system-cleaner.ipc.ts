@@ -33,7 +33,10 @@ function resolveWinapp2Path(template: string): string {
     SYSTEMDRIVE: process.env.SystemDrive || 'C:',
   }
   const withBrace = template.replace(/\$\{(\w+)\}/g, (_, name) => vars[name] || '')
-  const withPercent = withBrace.replace(/%(\w+)%/g, (_, name) => vars[name.toUpperCase()] || process.env[name.toUpperCase()] || '')
+  const withPercent = withBrace.replace(
+    /%(\w+)%/g,
+    (_, name) => vars[name.toUpperCase()] || process.env[name.toUpperCase()] || '',
+  )
   return path.win32.normalize(withPercent)
 }
 

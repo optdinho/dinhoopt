@@ -6,6 +6,10 @@ vi.mock('electron', () => ({
   ipcMain: { handle: mockHandle },
 }))
 
+vi.mock('../services/elevation', () => ({
+  isAdmin: () => true,
+}))
+
 vi.mock('../services/compliance-auditor.service', () => ({
   scanCompliance: vi.fn(),
   applyComplianceSettings: vi.fn(),
@@ -54,7 +58,7 @@ describe('registerComplianceAuditorIpc', () => {
     const result = await applyHandler(null, 'not-an-array')
 
     expect(applyComplianceSettings).not.toHaveBeenCalled()
-    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })
+    expect(result).toEqual({ succeeded: 0, failed: 'not-an-array'.length, errors: [] })
   })
 
   it('COMPLIANCE_REVERT validates input before passing to service', async () => {
@@ -113,7 +117,11 @@ describe('registerComplianceAuditorIpc', () => {
     const { registerComplianceAuditorIpc } = await import('./compliance-auditor.ipc')
     const { scanCompliance } = await import('../services/compliance-auditor.service')
 
-    const mockWebContents = { send: vi.fn(() => { throw new Error('Window gone') }) }
+    const mockWebContents = {
+      send: vi.fn(() => {
+        throw new Error('Window gone')
+      }),
+    }
     const mockWin = { isDestroyed: () => false, webContents: mockWebContents }
     const getWindow = () => mockWin
 

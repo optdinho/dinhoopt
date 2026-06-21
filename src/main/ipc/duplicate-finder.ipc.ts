@@ -263,16 +263,12 @@ async function findDuplicates(
 // ── IPC registration ──
 
 export function registerDuplicateFinderIpc(getWindow: WindowGetter): void {
-  // Directory picker — on macOS, avoid passing parent window so the dialog
-  // opens as a standalone panel instead of a sheet (sidebar items like Desktop
-  // are unresponsive in sheet mode).
   ipcMain.handle(IPC.DUPLICATES_SELECT_DIR, async () => {
     getLogger().info('duplicate-finder', 'Opening directory picker')
     const win = getWindow()
     if (!win) return null
     const opts: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
-    const result =
-      process.platform === 'darwin' ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+    const result = await dialog.showOpenDialog(win, opts)
     if (result.canceled || !result.filePaths.length) {
       getLogger().info('duplicate-finder', 'Directory picker cancelled')
       return null

@@ -12,11 +12,7 @@ export function createWin32Elevation(): PlatformElevation {
       if (_isAdmin !== null && now - _lastCheck < CACHE_TTL_MS) return _isAdmin
 
       try {
-        const stdout = execFileSync(
-          'whoami',
-          ['/groups'],
-          { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 },
-        )
+        const stdout = execFileSync('whoami', ['/groups'], { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 })
         _isAdmin = stdout.includes('S-1-16-12288')
       } catch {
         _isAdmin = false

@@ -1,3 +1,4 @@
+import { formatBytes } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -24,13 +25,6 @@ export function MemoryOptimizerPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  const formatBytes = (bytes: number) => {
-    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`
-    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
-    return `${bytes} B`
-  }
 
   const getHealthScore = (percent: number) => {
     if (percent < 50) return 100 - percent

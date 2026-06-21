@@ -200,7 +200,6 @@ export function CleanerPage() {
     store.setStatus(ScanStatus.Cleaning)
     cleanStartRef.current = Date.now()
     try {
-
       const selectedIds = store.getSelectedIds()
       const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<unknown>>> = {
         [CleanerType.System]: (ids) => window.dinho.systemClean(ids),

@@ -1,6 +1,5 @@
 import { app } from 'electron'
 import { initAutoUpdater } from './services/auto-updater'
-import { setDaemonMode } from './services/logger'
 
 function log(msg: string): void {
   const ts = new Date().toISOString()
@@ -8,8 +7,6 @@ function log(msg: string): void {
 }
 
 export async function runDaemon(): Promise<void> {
-  setDaemonMode(true)
-
   log(`DiNho daemon v${app.getVersion()} starting`)
   log(`Platform: ${process.platform} (${process.arch})`)
   log(`PID: ${process.pid}`)

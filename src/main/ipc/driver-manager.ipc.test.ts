@@ -277,7 +277,9 @@ describe('registerDriverManagerIpc', () => {
 
   describe('DRIVER_UPDATE_INSTALL handler with valid input', () => {
     it('installs updates successfully', async () => {
-      mocks.execFileAsync.mockResolvedValue({ stdout: 'STATUS|downloading|1\nSTATUS|installing|1\nINSTALLED|Driver1\nRESULT|1|0|false' })
+      mocks.execFileAsync.mockResolvedValue({
+        stdout: 'STATUS|downloading|1\nSTATUS|installing|1\nINSTALLED|Driver1\nRESULT|1|0|false',
+      })
       registerDriverManagerIpc(() => null)
       const handler = getHandler('driver:update:install')
       const result = await handler({} as unknown[], ['update-001'])
@@ -301,8 +303,24 @@ describe('scanDrivers', () => {
   it('returns classified drivers with stale and current', async () => {
     mocks.execFileAsync.mockResolvedValueOnce({
       stdout: JSON.stringify([
-        { PublishedName: 'oem0.inf', OriginalName: '', ProviderName: 'Intel', ClassName: 'Display', DriverVersion: '10.0.1', DriverDate: '2024-01-01', SignerName: 'Microsoft' },
-        { PublishedName: 'oem1.inf', OriginalName: '', ProviderName: 'Intel', ClassName: 'Display', DriverVersion: '10.0.2', DriverDate: '2024-06-01', SignerName: 'Microsoft' },
+        {
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        },
+        {
+          PublishedName: 'oem1.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.2',
+          DriverDate: '2024-06-01',
+          SignerName: 'Microsoft',
+        },
       ]),
     })
     mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' }) // getActiveDriverNames
@@ -324,8 +342,24 @@ describe('scanDrivers', () => {
   it('marks active driver as current even when older', async () => {
     mocks.execFileAsync.mockResolvedValueOnce({
       stdout: JSON.stringify([
-        { PublishedName: 'oem0.inf', OriginalName: '', ProviderName: 'Intel', ClassName: 'Display', DriverVersion: '10.0.1', DriverDate: '2024-01-01', SignerName: 'Microsoft' },
-        { PublishedName: 'oem1.inf', OriginalName: '', ProviderName: 'Intel', ClassName: 'Display', DriverVersion: '10.0.2', DriverDate: '2024-06-01', SignerName: 'Microsoft' },
+        {
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        },
+        {
+          PublishedName: 'oem1.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.2',
+          DriverDate: '2024-06-01',
+          SignerName: 'Microsoft',
+        },
       ]),
     })
     mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'oem0.inf\n' }) // activeNames includes oem0
@@ -343,7 +377,15 @@ describe('scanDrivers', () => {
   it('calls onProgress with phase updates', async () => {
     mocks.execFileAsync.mockResolvedValueOnce({
       stdout: JSON.stringify([
-        { PublishedName: 'oem0.inf', OriginalName: '', ProviderName: 'Intel', ClassName: 'Display', DriverVersion: '10.0.1', DriverDate: '2024-01-01', SignerName: 'Microsoft' },
+        {
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        },
       ]),
     })
     mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' })
@@ -369,14 +411,20 @@ describe('scanDrivers', () => {
   it('computes folder size when OEM mapping exists', async () => {
     mocks.execFileAsync.mockResolvedValueOnce({
       stdout: JSON.stringify([
-        { PublishedName: 'oem0.inf', OriginalName: '', ProviderName: 'Intel', ClassName: 'Display', DriverVersion: '10.0.1', DriverDate: '2024-01-01', SignerName: 'Microsoft' },
+        {
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        },
       ]),
     })
     mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' }) // getActiveDriverNames
     mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'oem0.inf|folder123\n' }) // getOemFolderMap
-    mocks.readdirSync.mockReturnValueOnce([
-      { isFile: () => true, isDirectory: () => false, name: 'driver.sys' },
-    ])
+    mocks.readdirSync.mockReturnValueOnce([{ isFile: () => true, isDirectory: () => false, name: 'driver.sys' }])
     mocks.statSync.mockReturnValueOnce({ size: 5000 })
 
     const result = await scanDrivers()
@@ -479,7 +527,8 @@ describe('scanDriverUpdates', () => {
 
   it('returns updates from Windows Update', async () => {
     mocks.execFileAsync.mockResolvedValue({
-      stdout: 'DRVUPD|Intel Graphics|HWID001|Display|10.0.1|2024-01-01|upd-001|2024-06-01|Intel|Intel Driver Update 27.20.100.1|10 MB',
+      stdout:
+        'DRVUPD|Intel Graphics|HWID001|Display|10.0.1|2024-01-01|upd-001|2024-06-01|Intel|Intel Driver Update 27.20.100.1|10 MB',
     })
 
     const result = await scanDriverUpdates()
@@ -548,7 +597,10 @@ describe('installDriverUpdates', () => {
     setPlatform('linux')
     const result = await installDriverUpdates(['upd-001'])
     expect(result).toEqual({ installed: 0, failed: 0, rebootRequired: false, errors: [] })
-    expect(mocks.logger.warning).toHaveBeenCalledWith('driver-manager', 'Driver update install skipped — not on Windows')
+    expect(mocks.logger.warning).toHaveBeenCalledWith(
+      'driver-manager',
+      'Driver update install skipped — not on Windows',
+    )
   })
 
   it('returns early when empty array provided', async () => {
@@ -643,8 +695,6 @@ describe('installDriverUpdates', () => {
 
     const onProgress = vi.fn()
     await installDriverUpdates(['upd-001', 'upd-002'], onProgress)
-    expect(onProgress).toHaveBeenCalledWith(
-      expect.objectContaining({ phase: 'installing', percent: 50 }),
-    )
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'installing', percent: 50 }))
   })
 })

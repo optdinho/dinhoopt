@@ -1,6 +1,6 @@
 import type { ScanItem } from '@shared/types'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { cacheItems, clearCache, getCachedItem, getCachedItems } from './scan-cache'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cacheItems, clearCache, getCachedItem, getCachedItems, setMaxCacheSize } from './scan-cache'
 
 function makeItem(id: string): ScanItem {
   return {
@@ -17,6 +17,7 @@ function makeItem(id: string): ScanItem {
 describe('scan-cache', () => {
   beforeEach(() => {
     clearCache()
+    setMaxCacheSize(200_000)
   })
 
   it('caches and retrieves a single item by id', () => {
@@ -58,6 +59,35 @@ describe('scan-cache', () => {
     cacheItems([item1])
     cacheItems([item2])
     expect(getCachedItem('a')?.size).toBe(9999)
+  })
+
+  it('setMaxCacheSize reduces the effective cache limit', () => {
+    setMaxCacheSize(100)
+    const batch1 = Array.from({ length: 100 }, (_, i) => makeItem(`evict-${i}`))
+    cacheItems(batch1)
+    expect(getCachedItem('evict-0')).toBeDefined()
+
+    const batch2 = [makeItem('overflow')]
+    cacheItems(batch2)
+    expect(getCachedItem('evict-0')).toBeUndefined()
+    expect(getCachedItem('overflow')).toBeDefined()
+  })
+
+  it('setMaxCacheSize with 0 is clamped to 1', () => {
+    setMaxCacheSize(0)
+    const items = Array.from({ length: 2 }, (_, i) => makeItem(`clamp-${i}`))
+    cacheItems(items)
+    // Only the first item fits (limit=1, items truncated to 1)
+    expect(getCachedItem('clamp-0')).toBeDefined()
+    expect(getCachedItem('clamp-1')).toBeUndefined()
+  })
+
+  it('setMaxCacheSize with negative is clamped to 1', () => {
+    setMaxCacheSize(-5)
+    const items = Array.from({ length: 2 }, (_, i) => makeItem(`neg-${i}`))
+    cacheItems(items)
+    expect(getCachedItem('neg-0')).toBeDefined()
+    expect(getCachedItem('neg-1')).toBeUndefined()
   })
 
   it('evicts cache when exceeding max size', () => {
@@ -102,5 +132,49 @@ describe('scan-cache', () => {
     // All new items present
     expect(getCachedItem('mid-0')).toBeDefined()
     expect(getCachedItem('mid-150000')).toBeDefined()
+  })
+
+  it('handles undefined keys in incremental removal (defensive guard on line 46)', () => {
+    // The Map supports any key type. When an entry has key=undefined,
+    // keys.next().value returns undefined, exercising the else path
+    // of `if (key !== undefined)` in the incremental removal branch.
+    setMaxCacheSize(10)
+    // biome-ignore lint/suspicious/noExplicitAny: testing defensive guard with undefined key
+    const itemWithUndefinedId = { ...makeItem('ignored'), id: undefined as any }
+    const fill = Array.from({ length: 9 }, (_, i) => makeItem(`fill-${i}`))
+    // Insert the undefined-key item first (Map preserves insertion order)
+    cacheItems([itemWithUndefinedId, ...fill])
+    // Cache now has 10 entries: {undefined, fill-0...fill-8}
+    expect(getCachedItem('fill-0')).toBeDefined()
+
+    // Add 1 more item → toRemove = 1 → incremental removal
+    // First key from iterator is undefined → else path of key !== undefined
+    cacheItems([makeItem('new-item')])
+    // The undefined-key entry was skipped (not deleted), new-item added
+    // fill-0 was NOT deleted because the loop consumed only 1 key (undefined)
+    // and skipped deletion, leaving fill-0 in place
+    expect(getCachedItem('new-item')).toBeDefined()
+    expect(getCachedItem('fill-0')).toBeDefined()
+  })
+
+  it('caches if originalItems length equals limit exactly', () => {
+    setMaxCacheSize(3)
+    const items = Array.from({ length: 3 }, (_, i) => makeItem(`exact-${i}`))
+    cacheItems(items)
+    expect(getCachedItem('exact-0')).toBeDefined()
+    expect(getCachedItem('exact-2')).toBeDefined()
+  })
+
+  it('handles empty items array', () => {
+    cacheItems([])
+    expect(getCachedItems([])).toEqual([])
+  })
+
+  it('returns all matching items with getCachedItems', () => {
+    const items = [makeItem('a'), makeItem('b'), makeItem('c')]
+    cacheItems(items)
+    const result = getCachedItems(['a', 'b', 'c'])
+    expect(result).toHaveLength(3)
+    expect(result.map((r) => r.id)).toEqual(['a', 'b', 'c'])
   })
 })

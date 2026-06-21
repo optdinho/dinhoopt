@@ -21,6 +21,8 @@ interface WindowsTweaksStoreState {
   deselectAll: () => void
   toggleCategory: (cat: string) => void
   setDns: (primary: string, secondary?: string) => Promise<boolean>
+  netshTcpApply: () => Promise<{ success: boolean; error?: string }>
+  netshTcpRevert: () => Promise<{ success: boolean; error?: string }>
 }
 
 const defaultProgress: WindowsTweakApplyProgress = { current: 0, total: 0, currentTweak: '' }
@@ -125,6 +127,22 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
       return await window.dinho.windowsTweaksSetDns(primary, secondary)
     } catch {
       return false
+    }
+  },
+
+  netshTcpApply: async () => {
+    try {
+      return await window.dinho.windowsTweaksNetshTcp('apply')
+    } catch {
+      return { success: false, error: 'Failed to apply netsh TCP tweaks' }
+    }
+  },
+
+  netshTcpRevert: async () => {
+    try {
+      return await window.dinho.windowsTweaksNetshTcp('revert')
+    } catch {
+      return { success: false, error: 'Failed to revert netsh TCP tweaks' }
     }
   },
 }))

@@ -6,7 +6,7 @@ const UTF16LE_BOM = Buffer.from([0xff, 0xfe])
 const UTF16BE_BOM = Buffer.from([0xfe, 0xff])
 const REPLACEMENT_CHAR = '\uFFFD'
 
-function hasBom(buffer: Buffer, bom: Buffer): boolean {
+export function hasBom(buffer: Buffer, bom: Buffer): boolean {
   if (buffer.length < bom.length) return false
   for (let i = 0; i < bom.length; i++) {
     if (buffer[i] !== bom[i]) return false
@@ -14,7 +14,7 @@ function hasBom(buffer: Buffer, bom: Buffer): boolean {
   return true
 }
 
-function detectByNullHeuristic(buffer: Buffer): TextEncoding | null {
+export function detectByNullHeuristic(buffer: Buffer): TextEncoding | null {
   const sample = buffer.subarray(0, Math.min(buffer.length, 2048))
   if (sample.length < 2) return null
 
@@ -46,7 +46,7 @@ function detectByNullHeuristic(buffer: Buffer): TextEncoding | null {
   return null
 }
 
-function isValidUtf8(buffer: Buffer): boolean {
+export function isValidUtf8(buffer: Buffer): boolean {
   try {
     const decoded = buffer.toString('utf8')
     return !decoded.includes(REPLACEMENT_CHAR)
@@ -55,7 +55,7 @@ function isValidUtf8(buffer: Buffer): boolean {
   }
 }
 
-function swap16(buffer: Buffer): Buffer {
+export function swap16(buffer: Buffer): Buffer {
   const result = Buffer.alloc(buffer.length)
   for (let i = 0; i < buffer.length; i += 2) {
     if (i + 1 < buffer.length) {

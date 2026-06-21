@@ -1,0 +1,14 @@
+{
+  "threats": [],
+  "filesScanned": 2241,
+  "duration": 11501,
+  "engines": [
+    "Heuristic Analysis",
+    "YARA Rules Engine",
+    "Script Analysis",
+    "System Integrity",
+    "Persistence Scan"
+  ],
+  "scanId": "708adddd-0402-4773-b8c5-d656d6134a2d",
+  "cancelled": false
+}

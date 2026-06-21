@@ -1,3 +1,4 @@
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
 import { MemoryStick, Zap } from 'lucide-react'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +14,7 @@ export function MemoryStatusCard({ memPercent, memUsedBytes, memTotalBytes }: Me
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
 
+  const animatedPct = Math.round(useAnimatedCounter(memPercent))
   const color = memPercent >= 85 ? '#ef4444' : memPercent >= 60 ? '#f59e0b' : '#06b6d4'
 
   const handleClick = useCallback(() => {
@@ -29,13 +31,10 @@ export function MemoryStatusCard({ memPercent, memUsedBytes, memTotalBytes }: Me
     [navigate],
   )
 
-  const handleOptimize = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      window.dinho?.memoryOptimize?.()
-    },
-    [],
-  )
+  const handleOptimize = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    window.dinho?.memoryOptimize?.()
+  }, [])
 
   return (
     <div
@@ -79,9 +78,7 @@ export function MemoryStatusCard({ memPercent, memUsedBytes, memTotalBytes }: Me
       </div>
 
       <div className="mt-4 flex items-baseline gap-1.5">
-        <span className="text-2xl font-bold tracking-tight text-white">
-          {memPercent}%
-        </span>
+        <span className="text-2xl font-bold tracking-tight text-white">{animatedPct}%</span>
         <span className="text-[10px] font-medium" style={{ color: 'var(--text-dim)' }}>
           {t('memoryCardUsed')}
         </span>

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ─── Module-level mocks ──────────────────────────────────────────
 // These must be hoisted before any imports of the module under test.
@@ -49,9 +49,9 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
 }))
 
+import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
 // ─── Import after mocks are set up ────────────────────────────────
 import { scanForLeftovers } from './uninstall-leftovers'
-import { SAFE_FOLDER_NAMES, SAFE_PREFIXES } from '../constants/uninstall-safelist'
 
 // ─── Replicas of internal pure functions (not exported) ──────────
 // These are safety-critical — they decide what gets flagged vs protected.
@@ -363,11 +363,7 @@ describe('scanForLeftovers', () => {
     mockReaddir.mockImplementation((_path: string, _opts?: object) => {
       const p = typeof _path === 'string' ? _path : ''
       if (p.includes('AppData\\Local')) {
-        return Promise.resolve([
-          dir('OldApp'),
-          dir('AnotherGone'),
-          file('some.log'),
-        ] as Dirent[])
+        return Promise.resolve([dir('OldApp'), dir('AnotherGone'), file('some.log')] as Dirent[])
       }
       if (p.includes('AppData\\Roaming')) {
         return Promise.resolve([dir('GoneRoaming'), dir('Windows'), file('data.db')] as Dirent[])
@@ -379,9 +375,21 @@ describe('scanForLeftovers', () => {
     mockStat.mockImplementation((_path: string) => {
       const p = typeof _path === 'string' ? _path : ''
       // dir stat returns old timestamp
-      if (p.includes('OldApp')) return Promise.resolve({ mtimeMs: Date.now() - 60 * 24 * 60 * 60 * 1000, isDirectory: () => true } as ReturnType<typeof Object>)
-      if (p.includes('AnotherGone')) return Promise.resolve({ mtimeMs: Date.now() - 90 * 24 * 60 * 60 * 1000, isDirectory: () => true } as ReturnType<typeof Object>)
-      if (p.includes('GoneRoaming')) return Promise.resolve({ mtimeMs: Date.now() - 45 * 24 * 60 * 60 * 1000, isDirectory: () => true } as ReturnType<typeof Object>)
+      if (p.includes('OldApp'))
+        return Promise.resolve({
+          mtimeMs: Date.now() - 60 * 24 * 60 * 60 * 1000,
+          isDirectory: () => true,
+        } as ReturnType<typeof Object>)
+      if (p.includes('AnotherGone'))
+        return Promise.resolve({
+          mtimeMs: Date.now() - 90 * 24 * 60 * 60 * 1000,
+          isDirectory: () => true,
+        } as ReturnType<typeof Object>)
+      if (p.includes('GoneRoaming'))
+        return Promise.resolve({
+          mtimeMs: Date.now() - 45 * 24 * 60 * 60 * 1000,
+          isDirectory: () => true,
+        } as ReturnType<typeof Object>)
       // 'Windows' is safe so it's never checked, but be safe
       return Promise.reject(new Error('ENOENT'))
     })
@@ -473,11 +481,7 @@ describe('scanForLeftovers', () => {
   })
 
   it('returns empty when every folder is safe', async () => {
-    mockReaddir.mockResolvedValue([
-      dir('Microsoft'),
-      dir('Windows'),
-      dir('Common Files'),
-    ] as Dirent[])
+    mockReaddir.mockResolvedValue([dir('Microsoft'), dir('Windows'), dir('Common Files')] as Dirent[])
 
     const results = await scanForLeftovers(makeWindowGetter())
     expect(results).toHaveLength(0)
@@ -543,7 +547,11 @@ describe('scanForLeftovers', () => {
       callCount++
       const p = typeof _path === 'string' ? _path : ''
       // For recency check: return old mtime so the item proceeds
-      if (p.includes('OldApp') && callCount <= 3) return Promise.resolve({ mtimeMs: Date.now() - 60 * 24 * 60 * 60 * 1000, isDirectory: () => true } as ReturnType<typeof Object>)
+      if (p.includes('OldApp') && callCount <= 3)
+        return Promise.resolve({
+          mtimeMs: Date.now() - 60 * 24 * 60 * 60 * 1000,
+          isDirectory: () => true,
+        } as ReturnType<typeof Object>)
       // For final stat: fail
       return Promise.reject(new Error('ENOENT'))
     })
@@ -561,10 +569,7 @@ describe('scanForLeftovers', () => {
   })
 
   it('skips a directory if readdir succeeds but has no directories', async () => {
-    mockReaddir.mockResolvedValue([
-      file('readme.txt'),
-      file('data.log'),
-    ] as Dirent[])
+    mockReaddir.mockResolvedValue([file('readme.txt'), file('data.log')] as Dirent[])
 
     const results = await scanForLeftovers(makeWindowGetter())
     expect(results).toHaveLength(0)
@@ -705,10 +710,7 @@ describe('scanForLeftovers', () => {
     mockGetPlatform.mockReturnValue({
       paths: { uninstallLeftoverDirs: () => [DEFAULT_LEFTOVER_DIRS[0]!] },
     })
-    mockReaddir.mockResolvedValue([
-      dir('{7B849F69-2F1A-4C8F-9C1A-5E7B3E2A8D1F}'),
-      dir('RealApp'),
-    ] as Dirent[])
+    mockReaddir.mockResolvedValue([dir('{7B849F69-2F1A-4C8F-9C1A-5E7B3E2A8D1F}'), dir('RealApp')] as Dirent[])
     mockStat.mockResolvedValue({ mtimeMs: Date.now() - 60 * 24 * 60 * 60 * 1000 } as ReturnType<typeof Object>)
     mockGetDirectorySize.mockResolvedValue(1024 * 50)
 
@@ -721,9 +723,7 @@ describe('scanForLeftovers', () => {
   it('handles single target directory', async () => {
     mockGetPlatform.mockReturnValue({
       paths: {
-        uninstallLeftoverDirs: () => [
-          { id: 'only-dir', name: 'Only Dir', path: 'C:\\Only' },
-        ],
+        uninstallLeftoverDirs: () => [{ id: 'only-dir', name: 'Only Dir', path: 'C:\\Only' }],
       },
     })
 
@@ -743,11 +743,11 @@ describe('scanForLeftovers', () => {
     })
 
     mockReaddir.mockResolvedValue([
-      dir('Microsoft'),       // Layer 1: safe
-      dir('MyOldApp'),        // Layer 2: matched in registry
-      dir('RecentApp'),       // Layer 3: recently modified
-      dir('RunningApp'),      // Layer 4: running process (and recently modified)
-      dir('Tiny'),            // Layer 5: too small
+      dir('Microsoft'), // Layer 1: safe
+      dir('MyOldApp'), // Layer 2: matched in registry
+      dir('RecentApp'), // Layer 3: recently modified
+      dir('RunningApp'), // Layer 4: running process (and recently modified)
+      dir('Tiny'), // Layer 5: too small
     ] as Dirent[])
 
     mockStat.mockImplementation((_path: string) => {

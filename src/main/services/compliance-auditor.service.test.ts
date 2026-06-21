@@ -148,7 +148,13 @@ describe('scanCompliance - password policies', () => {
     })
 
     const result = await scanCompliance()
-    const pwPolicy = ['password-complexity', 'password-min-length', 'password-max-age', 'lockout-threshold', 'lockout-duration']
+    const pwPolicy = [
+      'password-complexity',
+      'password-min-length',
+      'password-max-age',
+      'lockout-threshold',
+      'lockout-duration',
+    ]
     for (const id of pwPolicy) {
       expect(result.checks.find((c) => c.id === id)!.compliant).toBe(true)
     }
@@ -375,10 +381,15 @@ describe('applyComplianceSettings', () => {
   it('applies various settings', async () => {
     mocks.execNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await applyComplianceSettings([
-      'password-complexity', 'password-min-length', 'password-max-age',
-      'lockout-threshold', 'lockout-duration',
-      'clear-text-password', 'lm-hash',
-      'audit-policy', 'wuauserv-enabled',
+      'password-complexity',
+      'password-min-length',
+      'password-max-age',
+      'lockout-threshold',
+      'lockout-duration',
+      'clear-text-password',
+      'lm-hash',
+      'audit-policy',
+      'wuauserv-enabled',
       'uac-admin-prompt',
     ])
     expect(result.succeeded).toBe(10)
@@ -411,11 +422,17 @@ describe('revertComplianceSettings', () => {
   it('reverts various settings', async () => {
     mocks.execNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
     const result = await revertComplianceSettings([
-      'password-complexity', 'password-min-length', 'password-max-age',
-      'lockout-threshold', 'lockout-duration',
-      'clear-text-password', 'lm-hash',
-      'audit-policy', 'wuauserv-enabled',
-      'uac-enabled', 'uac-admin-prompt',
+      'password-complexity',
+      'password-min-length',
+      'password-max-age',
+      'lockout-threshold',
+      'lockout-duration',
+      'clear-text-password',
+      'lm-hash',
+      'audit-policy',
+      'wuauserv-enabled',
+      'uac-enabled',
+      'uac-admin-prompt',
     ])
     expect(result.succeeded).toBe(11)
     expect(result.failed).toBe(0)

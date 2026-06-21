@@ -213,6 +213,72 @@ describe('SYSTEM_SCAN handler', () => {
     expect(results).toHaveLength(1)
   })
 
+  it('skips single file target with empty items', async () => {
+    mockSystemCleanTargets.mockReturnValue([])
+    mockSingleFileCleanTargets.mockReturnValue([
+      { path: '/tmp/empty.dmp', subcategory: 'Empty', needsAdmin: false },
+    ])
+    mockScanFile.mockResolvedValue({
+      category: 'system',
+      subcategory: 'Empty',
+      items: [],
+      totalSize: 0,
+      itemCount: 0,
+    })
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:scan')
+    const results = await handler()
+    expect(results).toHaveLength(0)
+  })
+
+  it('scans target with childSubdir path', async () => {
+    mockSystemCleanTargets.mockReturnValue([
+      { path: '/tmp/parent', subcategory: 'Child Subdirs', needsAdmin: false, childSubdir: 'child' },
+    ])
+    mockSingleFileCleanTargets.mockReturnValue([])
+    mockResolveChildSubdirs.mockResolvedValue(['/tmp/parent/child/a', '/tmp/parent/child/b'])
+    mockScanMultipleDirectories.mockResolvedValue({
+      category: 'system',
+      subcategory: 'Child Subdirs',
+      items: [{ id: '1', path: '/tmp/parent/child/a/file', size: 200 }],
+      totalSize: 200,
+      itemCount: 1,
+    })
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:scan')
+    const results = await handler()
+    expect(results).toHaveLength(1)
+    expect(mockResolveChildSubdirs).toHaveBeenCalledWith(['/tmp/parent'], 'child')
+    expect(mockScanMultipleDirectories).toHaveBeenCalled()
+  })
+
+  it('filters event log with empty filename after pop', async () => {
+    mockProtectedEventLogs.mockReturnValue(['protected.evtx'])
+    mockSystemCleanTargets.mockReturnValue([
+      { path: '/logs/event', subcategory: 'Event Log Archives', needsAdmin: false, childSubdir: undefined },
+    ])
+    mockSingleFileCleanTargets.mockReturnValue([])
+    mockScanDirectory.mockResolvedValue({
+      category: 'system',
+      subcategory: 'Event Log Archives',
+      items: [
+        { id: '1', path: '', size: 100 },
+        { id: '2', path: '/logs/event/normal.evtx', size: 500 },
+      ],
+      totalSize: 600,
+      itemCount: 2,
+    })
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:scan')
+    const results = await handler() as Array<{ items: Array<{ path: string }>; totalSize: number; itemCount: number }>
+    expect(results).toHaveLength(1)
+    expect(results[0]!.items).toHaveLength(2)
+    expect(results[0]!.items.some((i) => i.path.includes('normal.evtx'))).toBe(true)
+  })
+
   it('scans winapp2 imported rules', async () => {
     mockSystemCleanTargets.mockReturnValue([])
     mockSingleFileCleanTargets.mockReturnValue([])
@@ -232,6 +298,26 @@ describe('SYSTEM_SCAN handler', () => {
     const results = await handler()
     expect(results).toHaveLength(1)
     expect(mockScanWithFileMask).toHaveBeenCalled()
+  })
+
+  it('skips winapp2 rule with empty items', async () => {
+    mockSystemCleanTargets.mockReturnValue([])
+    mockSingleFileCleanTargets.mockReturnValue([])
+    mockGetImportedRules.mockReturnValue([
+      { path: '${LOCALAPPDATA}\\Temp', fileMask: '*', recurse: true, subcategory: 'Winapp2 Empty' },
+    ])
+    mockScanWithFileMask.mockResolvedValue({
+      category: 'system',
+      subcategory: 'Winapp2 Empty',
+      items: [],
+      totalSize: 0,
+      itemCount: 0,
+    })
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:scan')
+    const results = await handler()
+    expect(results).toHaveLength(0)
   })
 })
 
@@ -272,5 +358,40 @@ describe('SYSTEM_CLEAN handler', () => {
     const result = await handler({}, ['id-1', 'id-2'])
     expect(mockCleanItems).toHaveBeenCalledWith(['id-1', 'id-2'], expect.any(Function))
     expect((result as { filesDeleted: number }).filesDeleted).toBe(10)
+  })
+
+  it('does not send clean progress when window is null', async () => {
+    mockCleanItems.mockImplementation(
+      async (
+        _ids: string[],
+        onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+      ) => {
+        onProgress(1, 2, '/path', 1024)
+        return { totalCleaned: 1024, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
+      },
+    )
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:clean')
+    const result = await handler({}, ['id-1'])
+    expect(result).toHaveProperty('filesDeleted', 1)
+  })
+
+  it('does not send clean progress when window is destroyed', async () => {
+    const destroyedWindow = { isDestroyed: () => true, webContents: { send: vi.fn() } }
+    mockCleanItems.mockImplementation(
+      async (
+        _ids: string[],
+        onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+      ) => {
+        onProgress(1, 2, '/path', 1024)
+        return { totalCleaned: 1024, filesDeleted: 1, filesSkipped: 0, errors: [], needsElevation: false }
+      },
+    )
+
+    registerSystemCleanerIpc(() => destroyedWindow as never)
+    const handler = getHandler('cleaner:system:clean')
+    const result = await handler({}, ['id-1'])
+    expect(result).toHaveProperty('filesDeleted', 1)
   })
 })

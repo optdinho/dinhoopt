@@ -227,6 +227,14 @@
   *::after {
     transition: background-color 0.2s ease, border-color 0.2s ease;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+    }
+  }
 }
 
 @layer components {

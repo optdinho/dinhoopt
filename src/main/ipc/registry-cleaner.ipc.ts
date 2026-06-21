@@ -107,7 +107,10 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
           getLogger().info('registry-cleaner', 'Registry fix cancelled')
           return { fixed: 0, failed: 0, failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }] }
         }
-        getLogger().error('registry-cleaner', `Registry fix failed: ${err instanceof Error ? err.message : String(err)}`)
+        getLogger().error(
+          'registry-cleaner',
+          `Registry fix failed: ${err instanceof Error ? err.message : String(err)}`,
+        )
         throw err
       } finally {
         if (fixAbort?.signal === signal) fixAbort = null

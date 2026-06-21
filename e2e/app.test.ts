@@ -12,9 +12,19 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      DINHO_E2E: '1',
     },
   })
   page = await electronApp.firstWindow()
+  // Dismiss onboarding
+  await page.evaluate(async () => {
+    const d = window.dinho as Record<string, unknown>
+    const onboardingSet = d?.onboardingSet as ((v: boolean) => Promise<void>) | undefined
+    await onboardingSet?.(true)
+  })
+  await page.waitForTimeout(500)
+  await page.reload()
+  await page.waitForTimeout(2000)
 })
 
 test.afterAll(async () => {

@@ -177,6 +177,47 @@ describe('registry-store', () => {
     expect(useRegistryStore.getState().entries[0]!.selected).toBe(false)
   })
 
+  it('toggleEntry calls registrySetTweakIgnored for persistent tweak types', () => {
+    const kudu = mockKudu()
+    useRegistryStore
+      .getState()
+      .setEntries([
+        makeEntry({ id: '1', type: 'performance', keyPath: 'HKLM\\Software\\Test', valueName: 'Enable', selected: false }),
+      ])
+
+    useRegistryStore.getState().toggleEntry('1')
+
+    expect(kudu.registrySetTweakIgnored).toHaveBeenCalledWith(['hklm\\software\\test|enable'], false)
+  })
+
+  it('toggleEntry registrySetTweakIgnored error is silently caught', () => {
+    const kudu = mockKudu()
+    kudu.registrySetTweakIgnored.mockRejectedValue(new Error('network'))
+    useRegistryStore
+      .getState()
+      .setEntries([
+        makeEntry({ id: '1', type: 'performance', keyPath: 'HKLM\\Software\\Test', valueName: 'Enable', selected: true }),
+      ])
+
+    useRegistryStore.getState().toggleEntry('1')
+
+    expect(kudu.registrySetTweakIgnored).toHaveBeenCalled()
+    expect(useRegistryStore.getState().entries[0]!.selected).toBe(false)
+  })
+
+  it('toggleCardAll calls registrySetTweakIgnored for persistent tweak types', () => {
+    const kudu = mockKudu()
+    useRegistryStore
+      .getState()
+      .setEntries([
+        makeEntry({ id: '1', type: 'performance', keyPath: 'HKLM\\Software\\Test', valueName: '', selected: false }),
+      ])
+
+    useRegistryStore.getState().toggleCardAll(['performance'])
+
+    expect(kudu.registrySetTweakIgnored).toHaveBeenCalled()
+  })
+
   describe('async actions', () => {
     it('scan calls kudu.registryScan and stores entries', async () => {
       const kudu = mockKudu()

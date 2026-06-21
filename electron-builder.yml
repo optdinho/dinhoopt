@@ -14,8 +14,6 @@ extraResources:
     to: icon.ico
   - from: resources/icon.png
     to: icon.png
-  - from: .env
-    to: .env
 
 win:
   target:
@@ -35,8 +33,6 @@ npmRebuild: true
 
 asarUnpack:
   - "node_modules/better-sqlite3/**"
-  - "node_modules/sharp/**"
-  - "node_modules/@img/**"
   - "node_modules/@litko/yara-x-win32-x64-msvc/**"
 
 electronDownload:

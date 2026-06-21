@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { PROTECTED_DOMAINS, getDomainSeverity, isHighImpactDomain, isProtectedDomain, searchProtectedDomains } from './protected-domains'
+import {
+  PROTECTED_DOMAINS,
+  getDomainSeverity,
+  isHighImpactDomain,
+  isProtectedDomain,
+  searchProtectedDomains,
+} from './protected-domains'
 
 describe('PROTECTED_DOMAINS', () => {
   it('has 106 entries', () => {

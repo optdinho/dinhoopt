@@ -24,6 +24,10 @@ vi.mock('../services/exec-utf8', () => ({
   psUtf8: (cmd: string) => cmd,
 }))
 
+vi.mock('../services/elevation', () => ({
+  isAdmin: () => true,
+}))
+
 vi.mock('fs', () => ({
   readFileSync: vi.fn(() => '{}'),
   writeFileSync: vi.fn(),

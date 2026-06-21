@@ -14,7 +14,6 @@
   "sourceLaunchAgentUser": "Agente de inicio de usuario",
   "sourceLaunchAgentGlobal": "Agente de inicio global",
   "sourceLoginItem": "Elemento de inicio de sesión",
-  "sourceSystemdUser": "Servicio de usuario de Systemd",
   "sourceAutostartDesktop": "Inicio automático XDG",
   "sourceCron": "Tarea Cron",
   "bootTraceAnalyzing": "Analizando los datos de seguimiento del arranque...",

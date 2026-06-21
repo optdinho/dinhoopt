@@ -35,31 +35,6 @@ const PROTECTED_WIN32 = [
   'inf',
   'logs',
 ]
-const PROTECTED_UNIX = [
-  'bin',
-  'sbin',
-  'usr',
-  'etc',
-  'var',
-  'lib',
-  'lib64',
-  'opt',
-  'boot',
-  'dev',
-  'proc',
-  'sys',
-  'run',
-  'tmp',
-  'snap',
-  'root',
-  'lost+found',
-  'system',
-  'library',
-  'applications',
-  'cores',
-  'private',
-  'volumes',
-]
 const PROTECTED_GENERIC = [
   '.git',
   '.svn',
@@ -88,15 +63,12 @@ function isProtectedFolder(folderPath: string): boolean {
   const segments = pathLower.split('/').filter(Boolean)
   // On Windows paths like C:/Windows, segments = ['c:', 'windows'] — depth 2 means root-level folder
   // On Unix /usr — segments = ['usr'] — depth 1 means root-level folder
-  const isRootLevel = process.platform === 'win32' ? segments.length <= 2 : segments.length <= 1
+  const isRootLevel = segments.length <= 2
 
   if (isRootLevel) return true
 
   // Check against protected lists
-  const protectedNames =
-    process.platform === 'win32'
-      ? [...PROTECTED_WIN32, ...PROTECTED_GENERIC]
-      : [...PROTECTED_UNIX, ...PROTECTED_GENERIC]
+  const protectedNames = [...PROTECTED_WIN32, ...PROTECTED_GENERIC]
 
   if (protectedNames.includes(name)) return true
 
@@ -215,16 +187,12 @@ async function findEmptyFolders(
 }
 
 export function registerEmptyFolderCleanerIpc(getWindow: WindowGetter): void {
-  // Directory picker — on macOS, avoid passing parent window so the dialog
-  // opens as a standalone panel instead of a sheet (sidebar items like Desktop
-  // are unresponsive in sheet mode).
   ipcMain.handle(IPC.EMPTY_FOLDERS_SELECT_DIR, async () => {
     getLogger().info('empty-folder-cleaner', 'Opening directory selection dialog')
     const win = getWindow()
     if (!win) return null
     const opts: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
-    const result =
-      process.platform === 'darwin' ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+    const result = await dialog.showOpenDialog(win, opts)
     if (result.canceled || !result.filePaths.length) {
       getLogger().warning('empty-folder-cleaner', 'Directory selection cancelled')
       return null

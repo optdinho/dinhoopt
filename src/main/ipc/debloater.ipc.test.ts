@@ -343,15 +343,26 @@ describe('scanBloatware', () => {
       const callback = args[args.length - 1] as (...args: never[]) => unknown
       callCount++
       if (typeof callback === 'function') {
-        if (callCount === 1) { callback(null, { stdout: '[]' }) }
-        else if (callCount === 2) { callback(null, { stdout: '[]' }) }
-        else if (callCount === 3) {
-          callback(null, { stdout: JSON.stringify([{
-            DisplayName: '3D Viewer', Publisher: 'Microsoft',
-            EstimatedSize: 2097152, // > 1 GB in KB
-            UninstallString: 'dummy', QuietUninstallString: '', ProductCode: '',
-          }]) })
-        } else { callback(null, { stdout: '' }) }
+        if (callCount === 1) {
+          callback(null, { stdout: '[]' })
+        } else if (callCount === 2) {
+          callback(null, { stdout: '[]' })
+        } else if (callCount === 3) {
+          callback(null, {
+            stdout: JSON.stringify([
+              {
+                DisplayName: '3D Viewer',
+                Publisher: 'Microsoft',
+                EstimatedSize: 2097152, // > 1 GB in KB
+                UninstallString: 'dummy',
+                QuietUninstallString: '',
+                ProductCode: '',
+              },
+            ]),
+          })
+        } else {
+          callback(null, { stdout: '' })
+        }
       }
     })
 
@@ -366,10 +377,15 @@ describe('scanBloatware', () => {
       const callback = args[args.length - 1] as (...args: never[]) => unknown
       callCount++
       if (typeof callback === 'function') {
-        if (callCount === 1) { callback(null, { stdout: '[]' }) }
-        else if (callCount === 2) { callback(null, { stdout: '[]' }) }
-        else if (callCount === 3) { callback(new Error('Phase 3 fail'), '', '') }
-        else { callback(null, { stdout: '' }) }
+        if (callCount === 1) {
+          callback(null, { stdout: '[]' })
+        } else if (callCount === 2) {
+          callback(null, { stdout: '[]' })
+        } else if (callCount === 3) {
+          callback(new Error('Phase 3 fail'), '', '')
+        } else {
+          callback(null, { stdout: '' })
+        }
       }
     })
 
@@ -531,14 +547,16 @@ describe('removeBloatware', () => {
           callback(null, { stdout: '[]' })
         } else if (scanCallCount === 3) {
           // Phase 3: Win32 scan - return a match for BingNews
-          const win32Match = [{
-            DisplayName: 'Bing News',
-            Publisher: 'Microsoft',
-            EstimatedSize: 5000,
-            UninstallString: '',
-            QuietUninstallString: '',
-            ProductCode: '{ABC-123}',
-          }]
+          const win32Match = [
+            {
+              DisplayName: 'Bing News',
+              Publisher: 'Microsoft',
+              EstimatedSize: 5000,
+              UninstallString: '',
+              QuietUninstallString: '',
+              ProductCode: '{ABC-123}',
+            },
+          ]
           callback(null, { stdout: JSON.stringify(win32Match) })
         } else {
           // Removal: msiexec call succeeds
@@ -584,14 +602,16 @@ describe('removeBloatware', () => {
         } else if (scanCallCount === 2) {
           callback(null, { stdout: '[]' })
         } else if (scanCallCount === 3) {
-          const win32Match = [{
-            DisplayName: 'Bing News',
-            Publisher: 'Microsoft',
-            EstimatedSize: 5000,
-            UninstallString: '',
-            QuietUninstallString: 'MsiExec.exe /I{ABC-123}',
-            ProductCode: '',
-          }]
+          const win32Match = [
+            {
+              DisplayName: 'Bing News',
+              Publisher: 'Microsoft',
+              EstimatedSize: 5000,
+              UninstallString: '',
+              QuietUninstallString: 'MsiExec.exe /I{ABC-123}',
+              ProductCode: '',
+            },
+          ]
           callback(null, { stdout: JSON.stringify(win32Match) })
         } else {
           callback(null, { stdout: '' })
@@ -627,14 +647,26 @@ describe('removeBloatware', () => {
       const callback = args[args.length - 1] as (...args: never[]) => unknown
       scanCallCount++
       if (typeof callback === 'function') {
-        if (scanCallCount === 1) { callback(null, { stdout: '[]' }) }
-        else if (scanCallCount === 2) { callback(null, { stdout: '[]' }) }
-        else if (scanCallCount === 3) {
-          callback(null, { stdout: JSON.stringify([{
-            DisplayName: 'Bing News', Publisher: 'Microsoft', EstimatedSize: 5000,
-            UninstallString: '', QuietUninstallString: '', ProductCode: '{ABC-123}',
-          }]) })
-        } else { callback(null, { stdout: '' }) }
+        if (scanCallCount === 1) {
+          callback(null, { stdout: '[]' })
+        } else if (scanCallCount === 2) {
+          callback(null, { stdout: '[]' })
+        } else if (scanCallCount === 3) {
+          callback(null, {
+            stdout: JSON.stringify([
+              {
+                DisplayName: 'Bing News',
+                Publisher: 'Microsoft',
+                EstimatedSize: 5000,
+                UninstallString: '',
+                QuietUninstallString: '',
+                ProductCode: '{ABC-123}',
+              },
+            ]),
+          })
+        } else {
+          callback(null, { stdout: '' })
+        }
       }
     })
     await mod.scanBloatware()

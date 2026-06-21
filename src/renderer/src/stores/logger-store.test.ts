@@ -106,6 +106,14 @@ describe('logger-store', () => {
     expect(useLoggerStore.getState().loading).toBe(false)
   })
 
+  it('fetchLogs does not update entries when result is null', async () => {
+    const kudu = mockKudu()
+    kudu.logsList.mockResolvedValue(null)
+    await useLoggerStore.getState().fetchLogs()
+    expect(useLoggerStore.getState().entries).toEqual([])
+    expect(useLoggerStore.getState().total).toBe(0)
+  })
+
   it('clearLogs calls kudu.logsClear and resets entries', async () => {
     const kudu = mockKudu()
     kudu.logsClear.mockResolvedValue(undefined)
@@ -140,6 +148,13 @@ describe('logger-store', () => {
     expect(result).toBe('')
   })
 
+  it('exportLogs returns empty string when result is null', async () => {
+    const kudu = mockKudu()
+    kudu.logsExport.mockResolvedValue(null)
+    const result = await useLoggerStore.getState().exportLogs()
+    expect(result).toBe('')
+  })
+
   it('fetchConfig calls kudu.logsConfigGet and stores config', async () => {
     const kudu = mockKudu()
     const config = makeLogConfig({ retentionDays: 30 })
@@ -151,6 +166,13 @@ describe('logger-store', () => {
   it('fetchConfig handles error gracefully', async () => {
     const kudu = mockKudu()
     kudu.logsConfigGet.mockRejectedValue(new Error('fail'))
+    await useLoggerStore.getState().fetchConfig()
+    expect(useLoggerStore.getState().config).toEqual({ retentionDays: 7 })
+  })
+
+  it('fetchConfig does not update config when result is null', async () => {
+    const kudu = mockKudu()
+    kudu.logsConfigGet.mockResolvedValue(null)
     await useLoggerStore.getState().fetchConfig()
     expect(useLoggerStore.getState().config).toEqual({ retentionDays: 7 })
   })

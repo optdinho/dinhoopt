@@ -1,5 +1,5 @@
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { cn, formatBytes } from '@/lib/utils'
+import { cn, formatBytes, formatDuration } from '@/lib/utils'
 import { useDuplicateStore } from '@/stores/duplicate-store'
 import {
   ChevronDown,
@@ -30,15 +30,6 @@ const EXT_PRESETS: Record<string, string[]> = {
   videos: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'],
   audio: ['.mp3', '.flac', '.wav', '.aac', '.ogg', '.wma', '.m4a'],
   documents: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'],
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
-  return `${m}m ${rem}s`
 }
 
 const PHASE_LABELS: Record<string, string> = {

@@ -33,7 +33,11 @@ export class FileWatcherService extends EventEmitter {
         })
         this.watchers.set(dirPath, { path: dirPath, watcher })
       } catch (err) {
-        getLogger().warning('file-watcher', `Failed to watch directory: ${dirPath}`, err instanceof Error ? err.message : String(err))
+        getLogger().warning(
+          'file-watcher',
+          `Failed to watch directory: ${dirPath}`,
+          err instanceof Error ? err.message : String(err),
+        )
       }
     }
     this.isWatching = true

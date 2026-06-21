@@ -374,8 +374,8 @@ describe('BROWSER_SCAN handler', () => {
     const handler = getHandler('cleaner:browser:scan')
     await handler()
 
-    const cookieCacheCalls = mockCacheItems.mock.calls.filter(
-      ([items]) => items.some((i: { subcategory: string }) => i.subcategory === 'Cookies'),
+    const cookieCacheCalls = mockCacheItems.mock.calls.filter(([items]) =>
+      items.some((i: { subcategory: string }) => i.subcategory === 'Cookies'),
     )
     expect(cookieCacheCalls.length).toBeGreaterThan(0)
   })
@@ -434,9 +434,7 @@ describe('BROWSER_SCAN handler', () => {
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ group: string; subcategory: string }>
-    const firefoxCookieResults = results.filter(
-      (r) => r.group === 'Firefox' && r.subcategory === 'Cookies',
-    )
+    const firefoxCookieResults = results.filter((r) => r.group === 'Firefox' && r.subcategory === 'Cookies')
     expect(firefoxCookieResults.length).toBeGreaterThan(0)
   })
 
@@ -485,9 +483,7 @@ describe('BROWSER_SCAN handler', () => {
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ group: string; subcategory: string }>
     // Cookie scan results always have group === fork.label
-    const librewolfCookieResults = results.filter(
-      (r) => r.subcategory === 'Cookies' && r.group === 'LibreWolf',
-    )
+    const librewolfCookieResults = results.filter((r) => r.subcategory === 'Cookies' && r.group === 'LibreWolf')
     expect(librewolfCookieResults.length).toBeGreaterThan(0)
   })
 
@@ -555,8 +551,8 @@ describe('BROWSER_SCAN handler', () => {
     const handler = getHandler('cleaner:browser:scan')
     await handler()
 
-    const safariCalls = mockScanDirectory.mock.calls.filter(
-      ([_path, _cat, label]) => (label as string).includes('Safari'),
+    const safariCalls = mockScanDirectory.mock.calls.filter(([_path, _cat, label]) =>
+      (label as string).includes('Safari'),
     )
     expect(safariCalls.length).toBeGreaterThan(0)
   })
@@ -697,10 +693,7 @@ describe('BROWSER_CLEAN handler', () => {
     const handler = getHandler('cleaner:browser:clean')
     await handler({}, ['id-1'])
 
-    expect(mockSend).toHaveBeenCalledWith(
-      'scan:progress',
-      expect.objectContaining({ phase: 'cleaning', progress: 20 }),
-    )
+    expect(mockSend).toHaveBeenCalledWith('scan:progress', expect.objectContaining({ phase: 'cleaning', progress: 20 }))
   })
 
   it('does not send clean progress when window is null', async () => {
