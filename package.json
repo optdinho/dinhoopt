@@ -1,6 +1,6 @@
 {
   "name": "dinho-optimizer",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "DiNho Optimizer — Otimizador de sistema Windows",
   "repository": "optdinho/optdinho",
   "main": "./out/main/index.js",
@@ -55,8 +55,6 @@
     "jsdom": "^29.1.1",
     "patch-package": "^8.0.1",
     "playwright": "^1.60.0",
-    "png-to-ico": "^3.0.1",
-    "sharp": "^0.35.0",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.2",
