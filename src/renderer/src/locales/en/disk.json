@@ -31,6 +31,8 @@
   "fileTypeTableHeaderFiles": "Files",
   "fileTypeTableHeaderSize": "Size",
   "fileTypeTableHeaderShare": "Share",
+  "repairWindowsOnly": "Windows Only",
+  "repairWindowsOnlyDesc": "Disk repair tools are only available on Windows.",
   "repairTitle": "Windows System Repair",
   "repairDescription": "Use these built-in Windows tools to scan for and repair corrupted system files.",
   "repairRunOrder": "Run {{dism}} first to repair the component store, then {{sfc}} to fix system files.",
@@ -104,5 +106,6 @@
   "trimFailedToast_one": "TRIM failed on {{count}} drive",
   "trimFailedToast_other": "TRIM failed on {{count}} drives",
   "trimBatchFailed": "Failed to run TRIM",
-  "trimListFailed": "Failed to list drives"
+  "trimListFailed": "Failed to list drives",
+  "encryptedAria": "Encrypted"
 }

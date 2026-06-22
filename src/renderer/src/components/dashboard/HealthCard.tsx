@@ -17,21 +17,21 @@ export function HealthCard({
 
   return (
     <div
-      className="glass-card depth-emphasis flex flex-col items-center justify-center rounded-2xl px-6 py-6 animate-fade-in"
+      className="glass-card depth-emphasis flex flex-col items-center justify-center rounded-2xl px-4 py-5 sm:px-6 sm:py-6 animate-fade-in"
       style={{
         borderLeft: '2px solid var(--accent)',
         boxShadow: '0 0 24px rgba(139,92,246,0.04), 0 2px 8px rgba(0,0,0,0.12), inset 0 1px 0 var(--glass-inset)',
       }}
     >
       <HealthScore score={healthScore} size="md" />
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-4 flex flex-wrap justify-center items-center gap-1.5 sm:gap-2">
         {toolCoverage.map((tool, i) => {
           const Icon = tool.icon
           const route = toolRoutes[tool.key]
           return (
             <div
               key={tool.key}
-              className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-all duration-200 hover:brightness-110 hover:scale-110"
+              className="relative flex h-7 w-7 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-lg transition-all duration-200 hover:brightness-110 hover:scale-110"
               style={{
                 animation: `fade-in 0.3s ease-out ${0.2 + i * 0.05}s both`,
                 background: tool.usedRecently ? `${tool.color}18` : 'var(--bg-subtle)',
@@ -49,7 +49,7 @@ export function HealthCard({
               tabIndex={0}
             >
               <Icon
-                className="h-4 w-4"
+                className="h-3.5 w-3.5 sm:h-4 sm:w-4"
                 style={{ color: tool.usedRecently ? tool.color : 'var(--text-faint)' }}
                 strokeWidth={1.8}
               />

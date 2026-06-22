@@ -27,12 +27,19 @@ export function AdminBanner() {
         border: '1px solid var(--accent-muted-border)',
       }}
     >
-      <ShieldAlert size={18} className="shrink-0 text-amber-500" aria-hidden="true" />
-      <span className="text-zinc-300">{t('adminBannerMessage')}</span>
+      <ShieldAlert size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+      <span style={{ color: 'var(--text-secondary)' }}>{t('adminBannerMessage')}</span>
       <button
         type="button"
         onClick={() => window.dinho.elevationRelaunch()}
-        className="ml-1 shrink-0 rounded px-3 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/15"
+        className="ml-1 shrink-0 rounded px-3 py-1 text-xs font-medium transition-colors"
+        style={{ color: 'var(--accent)' }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--accent-muted-bg)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
+        }}
       >
         {t('relaunchAsAdmin')}
       </button>

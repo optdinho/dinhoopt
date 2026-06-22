@@ -69,10 +69,11 @@ describe('benchmark-store', () => {
   })
 
   it('reset restores initial state', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     useBenchmarkStore.setState({
       status: 'done',
+      // biome-ignore lint/suspicious/noExplicitAny: test
       progress: { phase: 'cpu', percent: 50 } as any,
+      // biome-ignore lint/suspicious/noExplicitAny: test
       result: { score: 100 } as any,
     })
     useBenchmarkStore.getState().reset()

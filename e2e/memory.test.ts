@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test'
+import { resolve } from 'node:path'
+import { expect, test } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import type { ElectronApplication, Page } from 'playwright'
-import { resolve } from 'path'
 
 let electronApp: ElectronApplication
 let page: Page
@@ -28,7 +28,9 @@ test.afterAll(async () => {
 })
 
 test('should navigate to Memory Optimizer page', async () => {
-  await page.evaluate(() => { window.location.hash = '#/memory' })
+  await page.evaluate(() => {
+    window.location.hash = '#/memory'
+  })
   await page.waitForTimeout(1500)
   const hash = await page.evaluate(() => window.location.hash)
   expect(hash).toContain('memory')

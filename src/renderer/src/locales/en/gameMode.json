@@ -110,5 +110,27 @@
   "profilesSave": "Save",
   "profilesCancel": "Cancel",
   "profilesEdit": "Edit",
-  "profilesEmpty": "No profiles yet — click Add Profile to create one"
+  "profilesEmpty": "No profiles yet — click Add Profile to create one",
+
+  "auditTitle": "Audit",
+  "auditDesc": "Verify Game Mode optimizations are applied safely",
+  "auditButton": "Run Audit",
+  "auditRunning": "Auditing…",
+  "auditDetails": "View details",
+  "auditModalTitle": "Audit Report",
+  "auditRemediation": "Remediation",
+  "auditNoChecks": "No checks were performed",
+
+  "toastAllFailed": "All optimizations failed",
+  "toastSomeFailed_one": "{{count}} optimization failed",
+  "toastSomeFailed_other": "{{count}} optimizations failed",
+  "toastActivationFailed": "Activation failed",
+  "toastRestoreFailed_one": "{{count}} setting could not be restored — use the cleanup banner below to retry once the cause is fixed",
+  "toastRestoreFailed_other": "{{count}} settings could not be restored — use the cleanup banner below to retry once the cause is fixed",
+  "toastDeactivationFailed": "Deactivation failed",
+  "validationProcessName": "Process name can only contain letters, numbers, dots, hyphens, underscores, and spaces",
+  "pendingRestoreMessage": "Some settings from the last session couldn't be restored automatically. Retry once the cause (e.g. admin rights) is resolved.",
+  "retryCleanup": "Retry cleanup",
+  "retrying": "Retrying\u2026",
+  "ariaHexGrid": "Hex grid background"
 }

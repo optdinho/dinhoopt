@@ -21,7 +21,7 @@ export function GameModeCard({
       type="button"
       onClick={() => navigate('/game-mode')}
       className={cn(
-        'glass-card glass-card-hover depth-emphasis group relative flex flex-col items-center justify-center rounded-2xl px-6 py-6 text-center transition-all duration-500',
+        'glass-card glass-card-hover depth-emphasis group relative flex flex-col items-center justify-center rounded-2xl px-4 py-5 sm:px-6 sm:py-6 text-center transition-all duration-500',
       )}
       style={{
         background: gameModeActive
@@ -34,7 +34,7 @@ export function GameModeCard({
       aria-label={gameModeActive ? t('gameModeActive') : t('gameModeReady')}
     >
       <div
-        className="flex h-14 w-14 items-center justify-center rounded-full transition-all duration-500"
+        className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full transition-all duration-500"
         style={{
           background: gameModeActive ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)' : 'var(--bg-hover)',
           border: `2px solid ${gameModeActive ? '#06b6d4' : 'var(--border-strong)'}`,

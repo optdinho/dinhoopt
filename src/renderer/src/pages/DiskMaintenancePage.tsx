@@ -1,10 +1,12 @@
-import { formatBytes } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
+import logger from '@/lib/renderer-logger'
+import { formatBytes } from '@/lib/utils'
 import { type DriveFilter, applyFilter, isSelectable, useDiskMaintenanceStore } from '@/stores/disk-maintenance-store'
 import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
 import {
@@ -143,7 +145,7 @@ export function DiskMaintenancePage() {
       }
       await handleRefresh()
     } catch (err) {
-      console.error('Trim batch failed:', err)
+      logger.error('DiskMaintenancePage', 'Trim batch failed', err)
       toast.error(t('trimBatchFailed'))
       for (const id of selectableSelected) {
         store.setRunState(id, 'failed')
@@ -321,13 +323,12 @@ function DriveRow({
       style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
     >
       <div className="flex items-center gap-4">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={selected}
           onChange={onToggle}
           disabled={!selectable || runState === 'running'}
+          size="sm"
           aria-label={`Select ${drive.label}`}
-          className="h-4 w-4 shrink-0 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-30"
         />
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
@@ -350,7 +351,12 @@ function DriveRow({
               </span>
             )}
             {drive.isEncrypted && (
-              <Lock className="h-3 w-3" strokeWidth={2} style={{ color: 'var(--text-muted)' }} aria-label="Encrypted" />
+              <Lock
+                className="h-3 w-3"
+                strokeWidth={2}
+                style={{ color: 'var(--text-muted)' }}
+                aria-label={t('encryptedAria')}
+              />
             )}
           </div>
           <div className="mt-0.5 flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>

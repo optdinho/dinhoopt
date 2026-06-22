@@ -36,19 +36,8 @@ export function psArgs(script: string): string[] {
   return ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)]
 }
 
-/** Tools that may be invoked through cmd.exe via execNativeUtf8 */
-const ALLOWED_TOOLS = new Set([
-  'reg',
-  'reg.exe',
-  'netsh',
-  'netsh.exe',
-  'pnputil',
-  'pnputil.exe',
-  'schtasks',
-  'schtasks.exe',
-  'ipconfig',
-  'ipconfig.exe',
-])
+/** Regex matching tools allowed through execNativeUtf8 */
+const ALLOWED_TOOL_RE = /^(reg|netsh|pnputil|schtasks|ipconfig)(\.exe)?$/i
 
 // ── Active child-process tracking ──
 // Every process spawned by execNativeUtf8 is tracked here so we can
@@ -201,7 +190,7 @@ export async function execNativeUtf8(
   args: string[],
   opts?: Pick<ExecFileOptions, 'timeout' | 'windowsHide' | 'maxBuffer'> & { signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string }> {
-  if (!ALLOWED_TOOLS.has(tool.toLowerCase())) {
+  if (!ALLOWED_TOOL_RE.test(tool)) {
     throw new Error(`execNativeUtf8: disallowed tool "${tool}"`)
   }
 

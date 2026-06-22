@@ -109,5 +109,18 @@
   "auditDetails": "Ver detalhes",
   "auditModalTitle": "Relatório de Auditoria",
   "auditRemediation": "Correção",
-  "auditNoChecks": "Nenhuma verificação foi realizada"
+  "auditNoChecks": "Nenhuma verificação foi realizada",
+
+  "toastAllFailed": "Todas as otimizações falharam",
+  "toastSomeFailed_one": "{{count}} otimização falhou",
+  "toastSomeFailed_other": "{{count}} otimizações falharam",
+  "toastActivationFailed": "Ativação falhou",
+  "toastRestoreFailed_one": "{{count}} definição não pôde ser restaurada — use o banner de limpeza abaixo para tentar novamente quando a causa for resolvida",
+  "toastRestoreFailed_other": "{{count}} definições não puderam ser restauradas — use o banner de limpeza abaixo para tentar novamente quando a causa for resolvida",
+  "toastDeactivationFailed": "Desativação falhou",
+  "validationProcessName": "O nome do processo só pode conter letras, números, pontos, hífenes, sublinhados e espaços",
+  "pendingRestoreMessage": "Algumas definições da última sessão não puderam ser restauradas automaticamente. Tente novamente quando a causa (ex.: direitos de administrador) for resolvida.",
+  "retryCleanup": "Tentar limpeza novamente",
+  "retrying": "A tentar\u2026",
+  "ariaHexGrid": "Fundo de grade hexagonal"
 }

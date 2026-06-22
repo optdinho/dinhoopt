@@ -4,9 +4,10 @@ import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
 import { StatCard } from '@/components/shared/StatCard'
 import { usePlatform } from '@/hooks/usePlatform'
+import logger from '@/lib/renderer-logger'
 import { useHistoryStore } from '@/stores/history-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { useUpdaterStore } from '@/stores/updater-store'
+import { type SeverityFilter, type SortField, useUpdaterStore } from '@/stores/updater-store'
 import type { UpdatableApp, UpdateProgress } from '@shared/types'
 import {
   AlertTriangle,
@@ -97,7 +98,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         }
       })
       .catch((err) => {
-        console.error('Update check failed:', err)
+        logger.error('SoftwareUpdaterPage', 'Update check failed', err)
         useUpdaterStore.getState().setError(t('softwareUpdater.errorCheckFailed'))
       })
       .finally(() => {
@@ -167,12 +168,12 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         errorCount: result.failed,
       })
     } catch (err) {
-      console.error('Update failed:', err)
+      logger.error('SoftwareUpdaterPage', 'Update failed', err)
       useUpdaterStore.getState().setError(t('softwareUpdater.errorUpdateFailed'))
     } finally {
       useUpdaterStore.getState().setUpdating(false)
     }
-  }, [])
+  }, [t])
 
   const handleUpdateSelected = useCallback(() => {
     const selectedIds = useUpdaterStore
@@ -198,7 +199,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
             color: 'var(--text-on-accent)',
           }}
-        >
+         type="button">
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
           ) : (
@@ -257,7 +258,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         {/* Severity filter */}
         {hasChecked && apps.length > 0 && (
           <OutsideClickHandler isOpen={showFilterMenu} onClose={() => setShowFilterMenu(false)} className="relative">
-            <button
+            <button type="button"
               onClick={() => setShowFilterMenu(!showFilterMenu)}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-all"
               style={{
@@ -279,10 +280,10 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 }}
               >
                 {Object.entries(FILTER_LABEL_KEYS).map(([key, labelKey]) => (
-                  <button
+                  <button type="button"
                     key={key}
                     onClick={() => {
-                      useUpdaterStore.getState().setSeverityFilter(key as any)
+                      useUpdaterStore.getState().setSeverityFilter(key as SeverityFilter)
                       setShowFilterMenu(false)
                     }}
                     className="flex w-full items-center gap-2 px-4 py-2 text-[12px] text-zinc-300 hover:bg-white/5 transition-colors"
@@ -301,7 +302,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         {/* Sort */}
         {hasChecked && apps.length > 0 && (
           <OutsideClickHandler isOpen={showSortMenu} onClose={() => setShowSortMenu(false)} className="relative">
-            <button
+            <button type="button"
               onClick={() => setShowSortMenu(!showSortMenu)}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-all"
               style={{
@@ -323,14 +324,14 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 }}
               >
                 {Object.entries(SORT_LABEL_KEYS).map(([field, labelKey]) => (
-                  <button
+                  <button type="button"
                     key={field}
                     onClick={() => {
                       const store = useUpdaterStore.getState()
                       if (sortField === field) {
                         store.setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
                       } else {
-                        store.setSortField(field as any)
+                        store.setSortField(field as SortField)
                         store.setSortDirection('asc')
                       }
                       setShowSortMenu(false)
@@ -542,7 +543,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Selection controls + Update button */}
       {hasChecked && apps.length > 0 && !loading && (
         <div className="mb-4 flex items-center gap-3">
-          <button
+          <button type="button"
             onClick={() => {
               const store = useUpdaterStore.getState()
               allSelected ? store.deselectAll() : store.selectAll()
@@ -572,7 +573,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
 
           <div className="flex-1" />
 
-          <button
+          <button type="button"
             onClick={handleUpdateSelected}
             disabled={selectedCount === 0 || updating}
             className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
@@ -603,7 +604,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: 'var(--text-on-accent)',
               }}
-            >
+             type="button">
               <RefreshCw className="h-4 w-4" strokeWidth={2} />
               {t('softwareUpdater.checkForUpdatesButton')}
             </button>
@@ -660,7 +661,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Ignored apps */}
       {hasChecked && !loading && ignoredApps.length > 0 && (
         <div className="mb-6">
-          <button
+          <button type="button"
             onClick={() => setShowIgnored(!showIgnored)}
             className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
           >
@@ -686,7 +687,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Up to date apps */}
       {hasChecked && !loading && packageManagerAvailable && upToDate.length > 0 && (
         <div className="mb-6">
-          <button
+          <button type="button"
             onClick={() => setShowUpToDate(!showUpToDate)}
             className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
           >
@@ -738,7 +739,7 @@ function AppRow({
       }}
     >
       {/* Checkbox */}
-      <button onClick={onToggle} disabled={updating} className="shrink-0 disabled:opacity-40">
+      <button onClick={onToggle} disabled={updating} className="shrink-0 disabled:opacity-40" type="button">
         <div
           className="flex h-4.5 w-4.5 items-center justify-center rounded"
           style={{
@@ -806,7 +807,7 @@ function AppRow({
         title={t('softwareUpdater.ignoreButton')}
         className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-500 transition-all hover:bg-white/5 hover:text-zinc-300 disabled:opacity-30 shrink-0"
         style={{ border: '1px solid var(--border-medium)' }}
-      >
+       type="button">
         <EyeOff className="h-3.5 w-3.5" strokeWidth={1.8} />
       </button>
 
@@ -816,7 +817,7 @@ function AppRow({
         disabled={updating}
         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-green-400 transition-all hover:bg-green-500/10 disabled:opacity-30 shrink-0"
         style={{ border: '1px solid rgba(34,197,94,0.15)' }}
-      >
+       type="button">
         <Download className="h-3.5 w-3.5" strokeWidth={1.8} />
         {t('softwareUpdater.updateButton')}
       </button>
@@ -859,7 +860,7 @@ function IgnoredRow({ app, onUnignore }: { app: UpdatableApp; onUnignore: () => 
         onClick={onUnignore}
         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-zinc-400 transition-all hover:bg-white/5 hover:text-zinc-200 shrink-0"
         style={{ border: '1px solid var(--border-medium)' }}
-      >
+       type="button">
         <Eye className="h-3.5 w-3.5" strokeWidth={1.8} />
         {t('softwareUpdater.unignoreButton')}
       </button>

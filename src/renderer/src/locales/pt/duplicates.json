@@ -49,5 +49,6 @@
   "emptyDescription": "Não foram encontrados ficheiros duplicados com as definições atuais.",
   "idleTitle": "Encontrar ficheiros duplicados",
   "idleDescription": "Selecione um diretório para procurar ficheiros duplicados e recuperar espaço em disco desperdiçado.",
-  "scanCancelled": "A análise foi cancelada — a mostrar resultados parciais."
+  "scanCancelled": "A análise foi cancelada — a mostrar resultados parciais.",
+  "addExcludeAria": "Adicionar à lista de exclusão"
 }

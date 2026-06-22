@@ -5,9 +5,9 @@
 // Run: npm run preview-rule -- <app-id>
 // Run: npm run preview-rule            (lists all available IDs)
 
-const { readFileSync, readdirSync, statSync, existsSync } = require('fs')
-const { homedir, tmpdir, platform } = require('os')
-const path = require('path')
+const { readFileSync, readdirSync, statSync, existsSync } = require('node:fs')
+const { homedir, tmpdir, platform } = require('node:os')
+const path = require('node:path')
 
 const RULES_DIR = path.resolve(__dirname, '..', 'rules')
 const currentPlatform = platform()
@@ -47,9 +47,7 @@ function resolveVars() {
 }
 
 function resolvePath(templatePath, vars) {
-  return path.normalize(
-    templatePath.replace(/\$\{([A-Z_]+)\}/g, (_, name) => vars[name] || `\${${name}}`)
-  )
+  return path.normalize(templatePath.replace(/\$\{([A-Z_]+)\}/g, (_, name) => vars[name] || `\${${name}}`))
 }
 
 function formatSize(bytes) {
@@ -75,9 +73,13 @@ function getDirStats(dir) {
           } else if (stat.isDirectory()) {
             walk(full)
           }
-        } catch { /* skip inaccessible */ }
+        } catch {
+          /* skip inaccessible */
+        }
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   walk(dir)
@@ -110,12 +112,12 @@ function main() {
   const apps = loadAllApps()
 
   if (!targetId || targetId === '--list') {
-    console.log(`\n📋 Available rule IDs for ${currentPlatform}:\n`)
-    const maxName = Math.max.apply(null, apps.map((a) => a.name.length))
+    const maxName = Math.max.apply(
+      null,
+      apps.map((a) => a.name.length),
+    )
     for (const app of apps) {
-      console.log(`  ${app.id.padEnd(25)} ${app.name.padEnd(maxName + 2)} (${app._source})`)
     }
-    console.log(`\nUsage: npm run preview-rule -- <app-id>`)
     return
   }
 
@@ -127,23 +129,16 @@ function main() {
   }
 
   const vars = resolveVars()
-
-  console.log(`\n🔎 Kudu — Rule Preview: ${app.name} (${app.id})\n`)
-  console.log(`  Source:  ${currentPlatform}/${app._source}`)
-  if (app.childSubdir) console.log(`  childSubdir: ${app.childSubdir}`)
-  if (app.description) console.log(`  Description: ${app.description}`)
-  console.log()
+  if (app.childSubdir) 
+  if (app.description) 
 
   let grandTotal = 0
   let grandFiles = 0
 
   for (const templatePath of app.paths) {
     const resolved = resolvePath(templatePath, vars)
-    console.log(`  📁 ${templatePath}`)
-    console.log(`     → ${resolved}`)
 
     if (!existsSync(resolved)) {
-      console.log('     ⚪ Does not exist on this machine\n')
       continue
     }
 
@@ -152,7 +147,6 @@ function main() {
       const { totalSize, fileCount } = getDirStats(resolved)
       grandTotal += totalSize
       grandFiles += fileCount
-      console.log(`     🟢 Exists — ${fileCount} files, ${formatSize(totalSize)}`)
 
       // Show top-level contents
       try {
@@ -162,23 +156,20 @@ function main() {
           try {
             const s = statSync(childFull)
             const type = s.isDirectory() ? '📂' : '📄'
-            console.log(`        ${type} ${child}  (${formatSize(s.isDirectory() ? getDirStats(childFull).totalSize : s.size)})`)
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
         const total = readdirSync(resolved).length
-        if (total > 10) console.log(`        ... and ${total - 10} more`)
-      } catch { /* skip */ }
+        if (total > 10) 
+      } catch {
+        /* skip */
+      }
     } else {
       grandTotal += stat.size
       grandFiles++
-      console.log(`     🟢 Exists — single file, ${formatSize(stat.size)}`)
     }
-    console.log()
   }
-
-  console.log('─'.repeat(60))
-  console.log(`  Total: ${grandFiles} files, ${formatSize(grandTotal)}`)
-  console.log(`  ⚠ DRY RUN — nothing was deleted\n`)
 }
 
 main()

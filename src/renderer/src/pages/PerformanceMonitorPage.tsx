@@ -5,10 +5,11 @@ import { GaugeCard } from '@/components/perf/GaugeCard'
 import { ProcessTable } from '@/components/perf/ProcessTable'
 import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
 import { TimeSeriesChart } from '@/components/perf/TimeSeriesChart'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { formatBytes, formatSpeed } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { usePerfStore } from '@/stores/perf-store'
-import { Pause, Play } from 'lucide-react'
+import { Activity, Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -81,6 +82,17 @@ export function PerformanceMonitorPage() {
     { value: '5m', label: '5m' },
     { value: '15m', label: '15m' },
   ]
+
+  const noData = !snapshot && !systemInfo
+
+  if (noData) {
+    return (
+      <div className="mx-auto max-w-[1200px]">
+        <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
+        <EmptyState icon={Activity} title={t('noDataTitle')} description={t('noDataDescription')} />
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-[1200px]">

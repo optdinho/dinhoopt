@@ -5,6 +5,7 @@ import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { UninstallerProgramCard } from '@/components/uninstaller/UninstallerProgramCard'
 import { UninstallerToolbar } from '@/components/uninstaller/UninstallerToolbar'
 import { isUnused } from '@/components/uninstaller/constants'
+import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
@@ -62,7 +63,7 @@ export function UninstallerPage() {
       s.setHasLoaded(true)
       s.fetchSafetyRatings()
     } catch (err) {
-      console.error('Failed to list programs:', err)
+      logger.error('UninstallerPage', 'Failed to list programs', err)
       toast.error(t('failedToLoadToast'))
       useUninstallerStore.getState().setError(t('failedToLoadError'))
     } finally {
@@ -132,7 +133,7 @@ export function UninstallerPage() {
         }
       }
     } catch (err) {
-      console.error('Uninstall failed:', err)
+      logger.error('UninstallerPage', 'Uninstall failed', err)
       toast.error(t('uninstallFailedToast'))
       useUninstallerStore.getState().setError(t('uninstallFailedError'))
     } finally {
@@ -267,7 +268,7 @@ export function UninstallerPage() {
         }
       }
     } catch (err) {
-      console.error('Force remove failed:', err)
+      logger.error('UninstallerPage', 'Force remove failed', err)
       toast.error(t('uninstallFailedToast'))
       useUninstallerStore.getState().setError(t('uninstallFailedError'))
     } finally {

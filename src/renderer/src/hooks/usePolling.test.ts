@@ -99,7 +99,12 @@ describe('usePolling', () => {
 
   it('skips .then update when unmounted before fetch resolves', async () => {
     let deferredResolve!: (v: string) => void
-    const fetcher = vi.fn(() => new Promise<string>((resolve) => { deferredResolve = resolve }))
+    const fetcher = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          deferredResolve = resolve
+        }),
+    )
     const { result, unmount } = renderHook(() => usePolling(fetcher, 10000))
 
     await vi.waitFor(() => {
@@ -119,7 +124,12 @@ describe('usePolling', () => {
 
   it('skips .catch update when unmounted before fetch rejects', async () => {
     let deferredReject!: (e: Error) => void
-    const fetcher = vi.fn(() => new Promise<string>((_, reject) => { deferredReject = reject }))
+    const fetcher = vi.fn(
+      () =>
+        new Promise<string>((_, reject) => {
+          deferredReject = reject
+        }),
+    )
     const { result, unmount } = renderHook(() => usePolling(fetcher, 10000))
 
     await vi.waitFor(() => {

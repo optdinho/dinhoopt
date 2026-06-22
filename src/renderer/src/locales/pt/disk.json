@@ -31,6 +31,8 @@
   "fileTypeTableHeaderFiles": "Ficheiros",
   "fileTypeTableHeaderSize": "Tamanho",
   "fileTypeTableHeaderShare": "Percentagem",
+  "repairWindowsOnly": "Apenas Windows",
+  "repairWindowsOnlyDesc": "As ferramentas de reparação do disco estão disponíveis apenas no Windows.",
   "repairTitle": "Reparação do Sistema Windows",
   "repairDescription": "Utilize estas ferramentas integradas do Windows para analisar e reparar ficheiros de sistema corrompidos.",
   "repairRunOrder": "Execute primeiro {{dism}} para reparar o arquivo de componentes e, em seguida, {{sfc}} para corrigir os ficheiros do sistema.",
@@ -104,5 +106,6 @@
   "trimFailedToast_one": "Falha do TRIM em {{count}} unidade",
   "trimFailedToast_other": "Falha do TRIM em {{count}} unidades",
   "trimBatchFailed": "Falha ao executar o TRIM",
-  "trimListFailed": "Falha ao listar as unidades"
+  "trimListFailed": "Falha ao listar as unidades",
+  "encryptedAria": "Criptografado"
 }

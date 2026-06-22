@@ -270,5 +270,7 @@
     "statusStartPending": "Start Pending",
     "statusStopPending": "Stop Pending",
     "statusUnknown": "Unknown"
-  }
+  },
+  "expandAria": "Expand",
+  "scoreGaugeAria": "Privacy score gauge"
 }

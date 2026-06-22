@@ -96,5 +96,6 @@
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago"
   },
-  "copyNameSuffix": "(copy)"
+  "copyNameSuffix": "(copy)",
+  "checkedAria": "Checked"
 }

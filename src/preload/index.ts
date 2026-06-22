@@ -1,4 +1,4 @@
-import { IPC } from '@shared/channels'
+import { IPC, RENDERER_LOG } from '@shared/channels'
 import type { AgentEvaluationResult } from '@shared/driver-agent-types'
 import type { LicenseResult } from '@shared/types'
 import type {
@@ -121,6 +121,9 @@ function onEvent<T>(channel: string, callback: (data: T) => void): () => void {
 }
 
 const api = {
+  // Renderer logging
+  log: (level: string, message: string) => ipcRenderer.send(RENDERER_LOG, level, message),
+
   // Platform
   platformInfo: (): Promise<PlatformInfo> => ipcRenderer.invoke(IPC.PLATFORM_INFO),
 

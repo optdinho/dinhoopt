@@ -652,10 +652,7 @@ describe('useScheduledScan', () => {
     await vi.advanceTimersByTimeAsync(310_000)
 
     expect(window.dinho.scheduleRunComplete).toHaveBeenCalledWith('sched-timeout', 'failed')
-    expect(toast.warning).toHaveBeenCalledWith(
-      expect.stringContaining('Timeout Scan'),
-      expect.any(Object),
-    )
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('Timeout Scan'), expect.any(Object))
     expect(window.dinho.systemScan).not.toHaveBeenCalled()
   })
 
@@ -731,9 +728,7 @@ describe('useScheduledScan', () => {
     expect(entry.totalItemsSkipped).toBe(0)
     expect(entry.totalSpaceSaved).toBe(300)
     expect(entry.scheduled).toBe(true)
-    expect(entry.categories).toEqual([
-      { name: 'System', itemsFound: 2, itemsCleaned: 2, spaceSaved: 300 },
-    ])
+    expect(entry.categories).toEqual([{ name: 'System', itemsFound: 2, itemsCleaned: 2, spaceSaved: 300 }])
   })
 
   it('calls success toast after completing a scheduled run', async () => {
@@ -757,10 +752,7 @@ describe('useScheduledScan', () => {
     triggerCb!(payload)
     await vi.advanceTimersByTimeAsync(10_000)
 
-    expect(toast.success).toHaveBeenCalledWith(
-      expect.stringContaining('Toast Test'),
-      expect.any(Object),
-    )
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Toast Test'), expect.any(Object))
   })
 
   it('calls notifyScheduledScanComplete with correct totals', async () => {

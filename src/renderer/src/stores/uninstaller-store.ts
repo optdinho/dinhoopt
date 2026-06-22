@@ -1,7 +1,7 @@
 import type { InstalledProgram, StartupSafetyRating, UninstallProgress, UninstallResult } from '@shared/types'
 import { create } from 'zustand'
 
-type SortField = 'displayName' | 'estimatedSize' | 'installDate' | 'publisher' | 'safety'
+export type SortField = 'displayName' | 'estimatedSize' | 'installDate' | 'publisher' | 'safety'
 type FilterMode = 'all' | 'unused'
 
 interface UninstallerState {

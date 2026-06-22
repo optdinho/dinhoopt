@@ -174,9 +174,7 @@ describe('context-menu-store', () => {
       { ...makeEntry('1'), selected: true },
       { ...makeEntry('2'), selected: true },
     ])
-    useContextMenuStore.getState().applyUpdates([
-      { entryId: '1', status: 'disabled' },
-    ])
+    useContextMenuStore.getState().applyUpdates([{ entryId: '1', status: 'disabled' }])
     const entries = useContextMenuStore.getState().entries
     expect(entries.find((e) => e.id === '1')!.status).toBe('disabled')
     expect(entries.find((e) => e.id === '2')!.selected).toBe(true)

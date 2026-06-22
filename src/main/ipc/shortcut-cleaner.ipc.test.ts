@@ -238,7 +238,6 @@ describe('isTargetBroken logic', () => {
       ),
     ).toBe(false)
   })
-
 })
 
 // ── WIN_SYSTEM_SUBDIRS regex ──
@@ -637,7 +636,6 @@ describe('registerShortcutCleanerIpc: SHORTCUT_SCAN', () => {
       expect(results[0]!.items[0]!.size).toBe(0)
     })
   })
-
 })
 
 describe('registerShortcutCleanerIpc: SHORTCUT_CLEAN', () => {

@@ -270,5 +270,7 @@
     "statusStartPending": "Início Pendente",
     "statusStopPending": "Paragem Pendente",
     "statusUnknown": "Desconhecido"
-  }
+  },
+  "expandAria": "Expandir",
+  "scoreGaugeAria": "Medidor de privacidade"
 }

@@ -2,6 +2,7 @@ import { useUpdaterStore } from '@/stores/updater-store'
 import { useEffect } from 'react'
 
 export function useInitialLoader(onAutoCheck: () => void) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect
   useEffect(() => {
     window.dinho
       .settingsGet()
@@ -15,5 +16,5 @@ export function useInitialLoader(onAutoCheck: () => void) {
         const s = useUpdaterStore.getState()
         if (!s.hasChecked && !s.loading) onAutoCheck()
       })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 }

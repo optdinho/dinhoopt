@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -6,6 +7,7 @@ import { ScanProgress } from '@/components/shared/ScanProgress'
 import { useIpcAction } from '@/hooks/useIpcAction'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
+import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
 import { useDriverStore } from '@/stores/driver-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -95,7 +97,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
         staleSize = staleResult.value.totalStaleSize
         useDriverStore.getState().selectAllStale()
       } else {
-        console.error('Driver scan failed:', staleResult.reason)
+        logger.error('DriverManagerPage', 'Driver scan failed', staleResult.reason)
         toast.error(t('driverManager.scanFailedToast'), { description: t('driverManager.scanFailedDescription') })
         s.setError(t('driverManager.scanFailedError'))
       }
@@ -104,7 +106,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
         s.setUpdates(updateResult.value.updates)
         updateCount = updateResult.value.updates.length
       } else {
-        console.error('Driver update scan failed:', updateResult.reason)
+        logger.error('DriverManagerPage', 'Driver update scan failed', updateResult.reason)
         toast.error(t('driverManager.updateScanFailedToast'), {
           description: t('driverManager.updateScanFailedDescription'),
         })
@@ -137,7 +139,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
       }
     },
     onError: (err) => {
-      console.error('Driver scan unexpected error:', err)
+      logger.error('DriverManagerPage', 'Driver scan unexpected error', err)
       useDriverStore.getState().setScanProgress(null)
       useDriverStore.getState().setUpdateProgress(null)
     },
@@ -164,7 +166,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
           const result = await window.dinho.driverUpdateInstall(ids)
           useDriverStore.getState().setInstallResult(result)
         } catch (err) {
-          console.error('Driver install failed:', err)
+          logger.error('DriverManagerPage', 'Driver install failed', err)
           toast.error(t('driverManager.installFailedToast'), {
             description: t('driverManager.installFailedDescription'),
           })
@@ -219,7 +221,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
           })
           recomputeStats()
         } catch (err) {
-          console.error('Driver clean failed:', err)
+          logger.error('DriverManagerPage', 'Driver clean failed', err)
           toast.error(t('driverManager.cleanFailedToast'), { description: t('driverManager.cleanFailedDescription') })
           useDriverStore.getState().setError(t('driverManager.cleanFailedError'))
         } finally {
@@ -258,7 +260,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
       // handled in actionFn
     },
     onError: (err) => {
-      console.error('Driver apply failed:', err)
+      logger.error('DriverManagerPage', 'Driver apply failed', err)
       toast.error(t('driverManager.applyFailedToast'))
     },
   })
@@ -530,14 +532,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
                   border: `1px solid ${upd.selected ? 'rgba(59,130,246,0.1)' : 'var(--border-subtle)'}`,
                 }}
               >
-                <div className="w-6">
-                  <input
-                    type="checkbox"
-                    checked={upd.selected}
-                    readOnly
-                    className="pointer-events-none accent-blue-500 cursor-pointer"
-                  />
-                </div>
+                <Checkbox checked={upd.selected} />
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                   style={{ background: 'rgba(59,130,246,0.1)' }}
@@ -623,14 +618,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
                   border: `1px solid ${pkg.selected ? 'rgba(245,158,11,0.1)' : 'var(--border-subtle)'}`,
                 }}
               >
-                <div className="w-6">
-                  <input
-                    type="checkbox"
-                    checked={pkg.selected}
-                    readOnly
-                    className="pointer-events-none accent-amber-500 cursor-pointer"
-                  />
-                </div>
+                <Checkbox checked={pkg.selected} />
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                   style={{ background: 'rgba(245,158,11,0.1)' }}

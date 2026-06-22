@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useIpcAction } from '@/hooks/useIpcAction'
@@ -389,7 +390,7 @@ export function NetworkCleanupPage() {
                   const checked = selectedIds.has(item.id)
                   const CatIcon = categories.find((c) => c.type === item.type)?.icon || Network
                   return (
-                    <label
+                    <div
                       key={item.id}
                       className={cn(
                         'flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3.5 transition-all',
@@ -406,32 +407,7 @@ export function NetworkCleanupPage() {
                         e.currentTarget.style.background = checked ? 'rgba(245,158,11,0.04)' : 'var(--card-bg)'
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => useNetworkStore.getState().toggleItem(item.id)}
-                        className="sr-only"
-                      />
-                      <div
-                        className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] shrink-0"
-                        style={{
-                          background: checked ? 'var(--accent)' : 'var(--bg-hover-2)',
-                          border: checked ? 'none' : '1.5px solid var(--border-stronger)',
-                        }}
-                      >
-                        {checked && (
-                          <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                            <title>Checkmark</title>
-                            <path
-                              d="M2.5 6l2.5 2.5 4.5-5"
-                              stroke="var(--text-on-accent)"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </div>
+                      <Checkbox checked={checked} onChange={() => useNetworkStore.getState().toggleItem(item.id)} />
                       <CatIcon
                         className="h-4 w-4 shrink-0"
                         style={{ color: checked ? 'var(--accent)' : 'var(--text-muted)' }}
@@ -443,7 +419,7 @@ export function NetworkCleanupPage() {
                           {item.detail}
                         </p>
                       </div>
-                    </label>
+                    </div>
                   )
                 })}
               </div>

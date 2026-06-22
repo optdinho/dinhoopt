@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('os', () => ({
@@ -9,7 +10,7 @@ vi.mock('./settings-store', () => ({
   getSettings: vi.fn(),
 }))
 
-import { getBackupDir, getDefaultBackupDir } from './backup-dir'
+import { getBackupDir, getDefaultBackupDir, resolveBackupPath } from './backup-dir'
 import { getSettings } from './settings-store'
 
 const mockedGetSettings = vi.mocked(getSettings)
@@ -69,5 +70,62 @@ describe('getBackupDir', () => {
     mockedGetSettings.mockReturnValue({ backupPath: 'C:\\custom' } as any)
     getBackupDir()
     expect(getSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves relative segments in configured backupPath', () => {
+    mockedGetSettings.mockReturnValue({
+      backupPath: 'C:\\Users\\testuser\\Documents\\..\\..\\Windows\\System32',
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any)
+    const result = getBackupDir()
+    expect(result).toBe(path.resolve('C:\\Users\\testuser\\Documents\\..\\..\\Windows\\System32'))
+    expect(result).not.toContain('..')
+  })
+
+  it('resolves dotted relative segments in configured backupPath', () => {
+    mockedGetSettings.mockReturnValue({
+      backupPath: 'C:\\Users\\.\\testuser\\.\\.\\Documents',
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any)
+    const result = getBackupDir()
+    expect(result).toBe(path.resolve('C:\\Users\\.\\testuser\\.\\.\\Documents'))
+    expect(result).toBe('C:\\Users\\testuser\\Documents')
+  })
+})
+
+describe('resolveBackupPath', () => {
+  beforeEach(() => {
+    mockedGetSettings.mockReturnValue({
+      backupPath: 'C:\\BackupDir',
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any)
+  })
+
+  it('returns resolved path for a safe subpath', () => {
+    expect(resolveBackupPath('config.json')).toBe('C:\\BackupDir\\config.json')
+  })
+
+  it('returns resolved path for a nested subpath', () => {
+    expect(resolveBackupPath('subfolder\\file.txt')).toBe('C:\\BackupDir\\subfolder\\file.txt')
+  })
+
+  it('throws for path traversal with parent directory', () => {
+    expect(() => resolveBackupPath('..\\..\\Windows\\System32\\evil.dll')).toThrow('Path traversal blocked')
+  })
+
+  it('throws for path traversal with absolute subpath', () => {
+    expect(() => resolveBackupPath('D:\\Malicious\\file.exe')).toThrow('Path traversal blocked')
+  })
+
+  it('throws for path traversal with leading parent', () => {
+    expect(() => resolveBackupPath('..\\secret.txt')).toThrow('Path traversal blocked')
+  })
+
+  it('uses current getBackupDir value on each call', () => {
+    mockedGetSettings.mockReturnValue({
+      backupPath: 'E:\\CustomBackup',
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any)
+    expect(resolveBackupPath('safe.txt')).toBe('E:\\CustomBackup\\safe.txt')
   })
 })

@@ -49,5 +49,6 @@
   "emptyDescription": "No duplicate files were found with the current settings.",
   "idleTitle": "Find Duplicate Files",
   "idleDescription": "Select a directory to scan for duplicate files and reclaim wasted disk space.",
-  "scanCancelled": "Scan was cancelled — showing partial results."
+  "scanCancelled": "Scan was cancelled — showing partial results.",
+  "addExcludeAria": "Add to exclude list"
 }

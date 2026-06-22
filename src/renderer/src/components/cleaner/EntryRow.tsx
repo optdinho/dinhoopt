@@ -1,3 +1,4 @@
+import { Checkbox } from '@/components/shared/Checkbox'
 import type { ContextMenuAction, ContextMenuEntry } from '@shared/types'
 import { CheckCircle2, Lock, Power, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -22,16 +23,12 @@ export function EntryRow({ entry, isLast, onToggle, onAction }: EntryRowProps) {
         opacity: entry.protected ? 0.7 : 1,
       }}
     >
-      <div className="w-6 shrink-0">
-        <input
-          type="checkbox"
-          checked={entry.selected}
-          disabled={entry.protected}
-          onChange={onToggle}
-          className="accent-amber-500"
-          aria-label={`select ${entry.displayName}`}
-        />
-      </div>
+      <Checkbox
+        checked={entry.selected}
+        disabled={entry.protected}
+        onChange={onToggle}
+        aria-label={`select ${entry.displayName}`}
+      />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">

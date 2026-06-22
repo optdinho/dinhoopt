@@ -2,6 +2,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import logger from '@/lib/renderer-logger'
 import { cn } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStartupStore } from '@/stores/startup-store'
@@ -394,7 +395,7 @@ export function StartupPage() {
       const list = await window.dinho.startupList()
       store.getState().setItems(list)
     } catch (err) {
-      console.error('Failed to load startup items:', err)
+      logger.error('StartupPage', 'Failed to load startup items', err)
       store.getState().setError(t('errorFailedToLoad'))
     }
     store.getState().setLoading(false)
@@ -406,7 +407,7 @@ export function StartupPage() {
       const trace = await window.dinho.startupBootTrace()
       store.getState().setBootTrace(trace)
     } catch (err) {
-      console.error('Failed to load boot trace:', err)
+      logger.error('StartupPage', 'Failed to load boot trace', err)
     }
     store.getState().setTraceLoading(false)
   }, [store])

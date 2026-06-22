@@ -20,5 +20,3 @@ export function Skeleton({ className, width, height }: SkeletonProps) {
     />
   )
 }
-
-

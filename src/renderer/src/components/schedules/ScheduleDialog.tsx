@@ -441,6 +441,7 @@ export function ScheduleDialog({
 }
 
 function TaskCheckbox({ task, checked, onChange }: { task: TaskDef; checked: boolean; onChange: () => void }) {
+  const { t } = useTranslation('schedules')
   return (
     <button
       type="button"
@@ -462,8 +463,8 @@ function TaskCheckbox({ task, checked, onChange }: { task: TaskDef; checked: boo
         }}
       >
         {checked && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" role="img" aria-label="Checked">
-            <title>Checked</title>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" role="img" aria-label={t('checkedAria')}>
+            <title>{t('checkedAria')}</title>
             <path
               d="M2 5L4.2 7.5L8 2.5"
               stroke="var(--text-on-accent)"

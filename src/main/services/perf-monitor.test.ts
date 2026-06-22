@@ -38,7 +38,7 @@ function createMockSender() {
 
 describe('PerfMonitorService', () => {
   let service: PerfMonitorService
-  // biome-ignore lint/suspicious/noExplicitAny
+  // biome-ignore lint/suspicious/noExplicitAny: test
   let mockSender: any
   let origPlatform: string
 

@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { usePlatform } from '@/hooks/usePlatform'
+import logger from '@/lib/renderer-logger'
 import { useDiskStore } from '@/stores/disk-store'
 import {
   AlertTriangle,
@@ -49,7 +50,7 @@ export function DiskRepairPage() {
         toast.error(t('sfcFinishedWithIssuesToast'), { description: result.summary })
       }
     } catch (err) {
-      console.error('SFC failed:', err)
+      logger.error('DiskRepairPage', 'SFC failed', err)
       toast.error(t('sfcFailedToast'))
     }
     store.setRepairRunning(false)
@@ -71,7 +72,7 @@ export function DiskRepairPage() {
         toast.error(t('dismFinishedWithIssuesToast'), { description: result.summary })
       }
     } catch (err) {
-      console.error('DISM failed:', err)
+      logger.error('DiskRepairPage', 'DISM failed', err)
       toast.error(t('dismFailedToast'))
     }
     store.setRepairRunning(false)
@@ -93,7 +94,7 @@ export function DiskRepairPage() {
         toast.error(t('chkdskFinishedWithIssuesToast'), { description: result.summary })
       }
     } catch (err) {
-      console.error('CHKDSK failed:', err)
+      logger.error('DiskRepairPage', 'CHKDSK failed', err)
       toast.error(t('chkdskFailedToast'))
     }
     store.setRepairRunning(false)
@@ -104,7 +105,7 @@ export function DiskRepairPage() {
     return (
       <div className="animate-fade-in">
         <PageHeader title={t('repairTitle')} description={t('repairDescription')} />
-        <EmptyState icon={Wrench} title="Windows Only" description="Disk repair tools are only available on Windows." />
+        <EmptyState icon={Wrench} title={t('repairWindowsOnly')} description={t('repairWindowsOnlyDesc')} />
       </div>
     )
   }

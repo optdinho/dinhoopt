@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test'
+import { resolve } from 'node:path'
+import { expect, test } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import type { ElectronApplication, Page } from 'playwright'
-import { resolve } from 'path'
 
 let electronApp: ElectronApplication
 let page: Page
@@ -21,7 +21,9 @@ test.beforeAll(async () => {
   await page.waitForTimeout(500)
   await page.reload()
   await page.waitForTimeout(2000)
-  await page.evaluate(() => { window.location.hash = '#/compliance' })
+  await page.evaluate(() => {
+    window.location.hash = '#/compliance'
+  })
   await page.waitForTimeout(3000)
   // Trigger scan so result-dependent tests can check categories/score/counts
   await page.evaluate(async () => {
@@ -29,10 +31,9 @@ test.beforeAll(async () => {
     if (trigger) await trigger()
   })
   try {
-    await page.waitForFunction(
-      () => document.body.textContent?.includes('Pontuação de conformidade'),
-      { timeout: 120_000 },
-    )
+    await page.waitForFunction(() => document.body.textContent?.includes('Pontuação de conformidade'), {
+      timeout: 120_000,
+    })
   } catch {
     // scan may fail — dependent tests will fail with clear message
   }
@@ -79,7 +80,15 @@ test('should have an Audit button', async () => {
 })
 
 test('should render category sections after scan', async () => {
-  const categories = ['Política de Senhas', 'Auditoria e Logging', 'Segurança de Rede', 'Windows Update', 'BitLocker', 'Firewall', 'Controle de Contas (UAC)']
+  const categories = [
+    'Política de Senhas',
+    'Auditoria e Logging',
+    'Segurança de Rede',
+    'Windows Update',
+    'BitLocker',
+    'Firewall',
+    'Controle de Contas (UAC)',
+  ]
   for (const cat of categories) {
     const found = await page.evaluate((c) => {
       return document.body.textContent?.includes(c)
@@ -97,8 +106,7 @@ test('should show compliance score section', async () => {
 
 test('should display Compliant and Non-Compliant counts', async () => {
   const hasCounts = await page.evaluate(() => {
-    return document.body.textContent?.includes('Conforme')
-      && document.body.textContent?.includes('Não conforme')
+    return document.body.textContent?.includes('Conforme') && document.body.textContent?.includes('Não conforme')
   })
   expect(hasCounts).toBe(true)
 })

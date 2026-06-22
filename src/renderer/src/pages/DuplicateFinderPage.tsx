@@ -1,4 +1,6 @@
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { cn, formatBytes, formatDuration } from '@/lib/utils'
 import { useDuplicateStore } from '@/stores/duplicate-store'
 import {
@@ -395,7 +397,7 @@ export function DuplicateFinderPage() {
                   <button
                     type="button"
                     onClick={handleAddExclude}
-                    aria-label="Add to exclude list"
+                    aria-label={t('addExcludeAria')}
                     className="text-zinc-500 hover:text-zinc-300"
                   >
                     <Plus className="h-4 w-4" />
@@ -595,11 +597,10 @@ export function DuplicateFinderPage() {
                                 className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-white/[0.02]"
                                 style={idx > 0 ? { borderTop: '1px solid var(--bg-subtle)' } : undefined}
                               >
-                                <input
-                                  type="checkbox"
+                                <Checkbox
                                   checked={store.selectedPaths.has(file.path)}
                                   onChange={() => store.togglePath(file.path)}
-                                  className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded accent-amber-500"
+                                  size="sm"
                                 />
                                 <span
                                   className="min-w-0 flex-1 truncate text-[12px]"
@@ -642,14 +643,14 @@ export function DuplicateFinderPage() {
               </div>
             </>
           ) : (
-            <EmptyState title={t('emptyTitle')} description={t('emptyDescription')} />
+            <EmptyState icon={FolderOpen} title={t('emptyTitle')} description={t('emptyDescription')} />
           )}
         </>
       )}
 
       {/* Idle state */}
       {store.status === 'idle' && !store.result && (
-        <EmptyState title={t('idleTitle')} description={t('idleDescription')} />
+        <EmptyState icon={FolderOpen} title={t('idleTitle')} description={t('idleDescription')} />
       )}
 
       {/* Deleting overlay */}
@@ -706,18 +707,6 @@ function StatMini({ label, value }: { label: string; value: string }) {
         {label}:{' '}
       </span>
       <span className="text-[12px] font-medium text-white">{value}</span>
-    </div>
-  )
-}
-
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
-      <FolderOpen className="mb-4 h-12 w-12" style={{ color: 'var(--text-faint)' }} strokeWidth={1.2} />
-      <h3 className="text-[15px] font-semibold text-white">{title}</h3>
-      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-        {description}
-      </p>
     </div>
   )
 }

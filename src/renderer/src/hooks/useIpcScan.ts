@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import logger from '../lib/renderer-logger'
 
 export function useIpcScan<TResult>({
   scanFn,
@@ -66,7 +67,7 @@ export function useIpcScan<TResult>({
         toast.success(onSuccessToastRef.current)
       }
     } catch (err) {
-      console.error('IPC scan failed:', err)
+      logger.error('useIpcScan', 'IPC scan failed', err)
       onErrorRef.current?.(err)
       if (errorKeyRef.current && tRef.current) {
         toast.error(tRef.current(`${errorKeyRef.current}.scanFailedToast`), {

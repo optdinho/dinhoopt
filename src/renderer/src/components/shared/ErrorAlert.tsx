@@ -1,4 +1,5 @@
 import { AlertTriangle, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface ErrorAlertProps {
   message: string
@@ -7,6 +8,7 @@ interface ErrorAlertProps {
 }
 
 export function ErrorAlert({ message, onDismiss, className = '' }: ErrorAlertProps) {
+  const { t } = useTranslation('common')
   return (
     <div
       role="alert"
@@ -19,7 +21,7 @@ export function ErrorAlert({ message, onDismiss, className = '' }: ErrorAlertPro
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss error"
+          aria-label={t('dismissError')}
           className="shrink-0 rounded-lg p-1.5 text-red-500 transition-colors hover:bg-white/5"
         >
           <X className="h-4 w-4" strokeWidth={1.8} aria-hidden="true" />

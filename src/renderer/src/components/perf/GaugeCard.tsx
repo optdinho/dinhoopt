@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface GaugeCardProps {
   label: string
@@ -20,6 +21,7 @@ const RADIUS = (SIZE - STROKE * 2) / 2
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 export const GaugeCard = memo(function GaugeCard({ label, percent, detail, className }: GaugeCardProps) {
+  const { t } = useTranslation('performance')
   const clamped = Math.max(0, Math.min(100, percent))
   const offset = CIRCUMFERENCE - (clamped / 100) * CIRCUMFERENCE
   const color = getColor(clamped)
@@ -34,8 +36,8 @@ export const GaugeCard = memo(function GaugeCard({ label, percent, detail, class
           style={{ width: SIZE * 0.5, height: SIZE * 0.5, backgroundColor: color }}
         />
 
-        <svg width={SIZE} height={SIZE} className="-rotate-90" role="img" aria-label="Performance gauge">
-          <title>Performance gauge</title>
+        <svg width={SIZE} height={SIZE} className="-rotate-90" role="img" aria-label={t('ariaGauge')}>
+          <title>{t('ariaGauge')}</title>
           <defs>
             <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor={color} stopOpacity="1" />

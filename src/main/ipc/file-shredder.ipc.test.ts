@@ -904,6 +904,7 @@ describe('SHREDDER_SHRED handler', () => {
     })
 
     try {
+      // biome-ignore lint/suspicious/noExplicitAny: test
       registerFileShredderIpc(() => mockWindow() as any)
       const handler = getHandler('shredder:shred')
       await handler({}, ['/home/user/temp/file.txt'])
@@ -942,6 +943,7 @@ describe('SHREDDER_SHRED handler', () => {
     })
 
     try {
+      // biome-ignore lint/suspicious/noExplicitAny: test
       registerFileShredderIpc(() => mockWindow() as any)
       const handler = getHandler('shredder:shred')
       await handler({}, ['/home/user/temp/a.txt', '/home/user/temp/b.txt'])

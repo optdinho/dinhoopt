@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -640,12 +641,7 @@ function RegistryPageContent() {
                           role="button"
                           tabIndex={0}
                         >
-                          <input
-                            type="checkbox"
-                            checked={entry.selected}
-                            readOnly
-                            className="pointer-events-none accent-amber-500"
-                          />
+                          <Checkbox checked={entry.selected} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] text-zinc-300">{entry.issue}</p>

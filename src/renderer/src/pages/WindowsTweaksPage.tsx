@@ -1,5 +1,6 @@
 import { TweakRow } from '@/components/TweakRow'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 import type { WindowsTweakCategory } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 interface CategoryDef {
@@ -32,28 +34,8 @@ interface CategoryDef {
   glow: string
 }
 
-const CATEGORIES: CategoryDef[] = [
-  { id: 'mouse', label: 'Mouse', icon: Mouse, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
-  { id: 'keyboard', label: 'Teclado', icon: Keyboard, color: '#8b5cf6', glow: 'rgba(139,92,246,0.12)' },
-  { id: 'accessibility', label: 'Acessibilidade', icon: Accessibility, color: '#22c55e', glow: 'rgba(34,197,94,0.12)' },
-  { id: 'network', label: 'Rede', icon: Wifi, color: '#ec4899', glow: 'rgba(236,72,153,0.12)' },
-  { id: 'gpu', label: 'GPU', icon: Monitor, color: '#f59e0b', glow: 'rgba(245,158,11,0.12)' },
-  { id: 'system', label: 'Sistema', icon: MonitorCog, color: '#14b8a6', glow: 'rgba(20,184,166,0.12)' },
-  { id: 'gaming', label: 'Gaming', icon: Gamepad2, color: '#f97316', glow: 'rgba(249,115,22,0.12)' },
-  { id: 'privacy', label: 'Privacidade', icon: Shield, color: '#a855f7', glow: 'rgba(168,85,247,0.12)' },
-  { id: 'mmcss', label: 'MMCSS', icon: Cpu, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
-  { id: 'energy', label: 'Energia', icon: Zap, color: '#eab308', glow: 'rgba(234,179,8,0.12)' },
-]
-
-const CAT_COLORS = CATEGORIES.reduce(
-  (acc, c) => {
-    acc[c.id] = { color: c.color, glow: c.glow }
-    return acc
-  },
-  {} as Record<string, { color: string; glow: string }>,
-)
-
 export function WindowsTweaksPage() {
+  const { t } = useTranslation('windowsTweaks')
   const store = useWindowsTweaksStore
   const tweaks = useWindowsTweaksStore((s) => s.tweaks)
   const dnsPresets = useWindowsTweaksStore((s) => s.dnsPresets)
@@ -65,6 +47,63 @@ export function WindowsTweaksPage() {
   const revertResult = useWindowsTweaksStore((s) => s.revertResult)
   const expandedCategories = useWindowsTweaksStore((s) => s.expandedCategories)
   const [dnsStatus, setDnsStatus] = useState<string | null>(null)
+
+  const CATEGORIES: CategoryDef[] = [
+    { id: 'mouse', label: t('categories.mouse', 'Mouse'), icon: Mouse, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
+    {
+      id: 'keyboard',
+      label: t('categories.keyboard', 'Keyboard'),
+      icon: Keyboard,
+      color: '#8b5cf6',
+      glow: 'rgba(139,92,246,0.12)',
+    },
+    {
+      id: 'accessibility',
+      label: t('categories.accessibility', 'Accessibility'),
+      icon: Accessibility,
+      color: '#22c55e',
+      glow: 'rgba(34,197,94,0.12)',
+    },
+    {
+      id: 'network',
+      label: t('categories.network', 'Network'),
+      icon: Wifi,
+      color: '#ec4899',
+      glow: 'rgba(236,72,153,0.12)',
+    },
+    { id: 'gpu', label: t('categories.gpu', 'GPU'), icon: Monitor, color: '#f59e0b', glow: 'rgba(245,158,11,0.12)' },
+    {
+      id: 'system',
+      label: t('categories.system', 'System'),
+      icon: MonitorCog,
+      color: '#14b8a6',
+      glow: 'rgba(20,184,166,0.12)',
+    },
+    {
+      id: 'gaming',
+      label: t('categories.gaming', 'Gaming'),
+      icon: Gamepad2,
+      color: '#f97316',
+      glow: 'rgba(249,115,22,0.12)',
+    },
+    {
+      id: 'privacy',
+      label: t('categories.privacy', 'Privacy'),
+      icon: Shield,
+      color: '#a855f7',
+      glow: 'rgba(168,85,247,0.12)',
+    },
+    { id: 'mmcss', label: t('categories.mmcss', 'MMCSS'), icon: Cpu, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
+    { id: 'energy', label: t('categories.power', 'Power'), icon: Zap, color: '#eab308', glow: 'rgba(234,179,8,0.12)' },
+  ]
+
+  const CAT_COLORS = CATEGORIES.reduce(
+    (acc, c) => {
+      acc[c.id] = { color: c.color, glow: c.glow }
+      return acc
+    },
+    {} as Record<string, { color: string; glow: string }>,
+  )
 
   useEffect(() => {
     Promise.all([store.getState().load(), store.getState().loadDnsPresets()])
@@ -86,12 +125,12 @@ export function WindowsTweaksPage() {
 
   const handleApply = async () => {
     await store.getState().apply()
-    toast.success('Tweaks aplicados com sucesso!')
+    toast.success(t('toastAppliedSuccess', 'Tweaks applied successfully!'))
   }
 
   const handleRevert = async () => {
     await store.getState().revert()
-    toast.success('Tweaks revertidos!')
+    toast.success(t('toastRevertedSuccess', 'Tweaks reverted!'))
   }
 
   const handleSelectAll = () => store.getState().selectAll()
@@ -99,26 +138,37 @@ export function WindowsTweaksPage() {
 
   const handleSetDns = async (primary: string, secondary: string) => {
     const ok = await store.getState().setDns(primary, secondary)
-    setDnsStatus(ok ? 'DNS alterado com sucesso!' : 'Falha ao alterar DNS')
-    if (ok) toast.success('DNS alterado!')
-    else toast.error('Falha ao alterar DNS')
+    setDnsStatus(
+      ok ? t('dnsChangedSuccess', 'DNS changed successfully!') : t('dnsChangeFailed', 'Failed to change DNS'),
+    )
+    if (ok) toast.success(t('dnsChanged', 'DNS changed!'))
+    else toast.error(t('dnsChangeFailed', 'Failed to change DNS'))
   }
 
   if (scanning) {
     return (
       <div className="p-6">
-        <PageHeader title="Windows Tweaks" description="Catálogo de otimizações para Windows" />
+        <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
         <div className="mt-8 flex items-center justify-center">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-cyan-400" />
-          <span className="ml-3 text-zinc-400">Verificando tweaks...</span>
+          <span className="ml-3 text-zinc-400">{t('scanningTweaks', 'Checking tweaks...')}</span>
         </div>
+      </div>
+    )
+  }
+
+  if (tweaks.length === 0) {
+    return (
+      <div className="p-6">
+        <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
+        <EmptyState icon={MonitorCog} title={t('emptyStateTitle')} description={t('emptyStateDescription')} />
       </div>
     )
   }
 
   return (
     <div className="p-6">
-      <PageHeader title="Windows Tweaks" description="Catálogo de otimizações para Windows" />
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       {/* Stats bar */}
       <div
@@ -128,11 +178,11 @@ export function WindowsTweaksPage() {
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-green-400" />
           <span className="text-sm text-zinc-300">
-            {appliedCount}/{tweaks.length} tweaks ativos
+            {t('tweaksActive', { count: appliedCount, total: tweaks.length })}
           </span>
         </div>
         <div className="h-4 w-px bg-zinc-700" />
-        <span className="text-sm text-zinc-500">{selectedIds.size} selecionados</span>
+        <span className="text-sm text-zinc-500">{t('selectedCount', { count: selectedIds.size })}</span>
       </div>
 
       {/* Action buttons */}
@@ -143,7 +193,7 @@ export function WindowsTweaksPage() {
           disabled={applying}
           className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:text-white disabled:opacity-40"
         >
-          Selecionar não aplicados
+          {t('selectUnapplied', 'Select unapplied')}
         </button>
         <button
           type="button"
@@ -151,7 +201,7 @@ export function WindowsTweaksPage() {
           disabled={applying}
           className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:text-white disabled:opacity-40"
         >
-          Desmarcar todos
+          {t('deselectAll')}
         </button>
         <button
           type="button"
@@ -164,8 +214,8 @@ export function WindowsTweaksPage() {
           }}
         >
           {applying
-            ? `Aplicando... ${progress ? `${progress.current}/${progress.total}` : ''}`
-            : `Aplicar (${selectedIds.size})`}
+            ? `${t('applying', 'Applying...')} ${progress ? `${progress.current}/${progress.total}` : ''}`
+            : t('applyWithCount', { count: selectedIds.size })}
         </button>
         <button
           type="button"
@@ -173,7 +223,7 @@ export function WindowsTweaksPage() {
           disabled={selectedIds.size === 0 || applying}
           className="rounded-lg border border-red-800 px-5 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-900/20 disabled:opacity-40"
         >
-          Reverter
+          {t('revert')}
         </button>
       </div>
 
@@ -210,8 +260,8 @@ export function WindowsTweaksPage() {
         <div className="mb-6 space-y-2">
           <div className="flex items-center gap-2 rounded-lg border border-green-800 bg-green-900/10 px-4 py-3 text-sm text-green-400">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
-            {lastResult.succeeded} tweaks aplicados
-            {lastResult.failed > 0 && `, ${lastResult.failed} falhas`}
+            {t('tweaksAppliedResult', { count: lastResult.succeeded })}
+            {lastResult.failed > 0 && `, ${t('tweaksFailedResult', { count: lastResult.failed })}`}
           </div>
           {lastResult.errors.length > 0 && (
             <div className="space-y-1 rounded-lg border border-red-800 bg-red-900/10 px-4 py-3 text-sm">
@@ -230,10 +280,10 @@ export function WindowsTweaksPage() {
             <div className="flex items-start gap-2 rounded-lg border border-yellow-800 bg-yellow-900/10 px-4 py-3 text-sm text-yellow-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <span className="font-medium">Reinicialização necessária</span>
+                <span className="font-medium">{t('restartRequired', 'Restart required')}</span>
                 <ul className="mt-1 list-inside list-disc text-yellow-300/80">
-                  {lastResult.rebootRequired.map((t) => (
-                    <li key={t.id}>{t.name}</li>
+                  {lastResult.rebootRequired.map((item) => (
+                    <li key={item.id}>{item.name}</li>
                   ))}
                 </ul>
               </div>
@@ -243,10 +293,10 @@ export function WindowsTweaksPage() {
             <div className="flex items-start gap-2 rounded-lg border border-blue-800 bg-blue-900/10 px-4 py-3 text-sm text-blue-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <span className="font-medium">Re-logue necessária</span>
+                <span className="font-medium">{t('relogRequired', 'Re-login required')}</span>
                 <ul className="mt-1 list-inside list-disc text-blue-300/80">
-                  {lastResult.logoffRequired.map((t) => (
-                    <li key={t.id}>{t.name}</li>
+                  {lastResult.logoffRequired.map((item) => (
+                    <li key={item.id}>{item.name}</li>
                   ))}
                 </ul>
               </div>
@@ -258,8 +308,8 @@ export function WindowsTweaksPage() {
         <div className="mb-6 space-y-2">
           <div className="flex items-center gap-2 rounded-lg border border-yellow-800 bg-yellow-900/10 px-4 py-3 text-sm text-yellow-400">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            {revertResult.succeeded} tweaks revertidos
-            {revertResult.failed > 0 && `, ${revertResult.failed} falhas`}
+            {t('tweaksRevertedResult', { count: revertResult.succeeded })}
+            {revertResult.failed > 0 && `, ${t('tweaksFailedResult', { count: revertResult.failed })}`}
           </div>
           {revertResult.errors.length > 0 && (
             <div className="space-y-1 rounded-lg border border-red-800 bg-red-900/10 px-4 py-3 text-sm">
@@ -281,30 +331,40 @@ export function WindowsTweaksPage() {
       <div className="mb-6">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-300">
           <Zap className="h-4 w-4 text-cyan-400" />
-          TCP/IP Stack Optimization
+          {t('tcpIpOptimization', 'TCP/IP Stack Optimization')}
         </h3>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => store.getState().netshTcpApply().then((r) => {
-              if (r.success) toast.success('TCP/IP tweaks applied!')
-              else toast.error(r.error ?? 'Failed')
-            })}
+            onClick={() =>
+              store
+                .getState()
+                .netshTcpApply()
+                .then((r) => {
+                  if (r.success) toast.success(t('tcpIpApplied', 'TCP/IP tweaks applied!'))
+                  else toast.error(r.error ?? t('failed', 'Failed'))
+                })
+            }
             disabled={applying}
             className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-all hover:border-cyan-700 hover:text-cyan-400 disabled:opacity-40"
           >
-            Apply TCP Tweaks
+            {t('applyTcpTweaks', 'Apply TCP Tweaks')}
           </button>
           <button
             type="button"
-            onClick={() => store.getState().netshTcpRevert().then((r) => {
-              if (r.success) toast.success('TCP/IP tweaks reverted!')
-              else toast.error(r.error ?? 'Failed')
-            })}
+            onClick={() =>
+              store
+                .getState()
+                .netshTcpRevert()
+                .then((r) => {
+                  if (r.success) toast.success(t('tcpIpReverted', 'TCP/IP tweaks reverted!'))
+                  else toast.error(r.error ?? t('failed', 'Failed'))
+                })
+            }
             disabled={applying}
             className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-all hover:border-red-700 hover:text-red-400 disabled:opacity-40"
           >
-            Revert TCP Tweaks
+            {t('revertTcpTweaks', 'Revert TCP Tweaks')}
           </button>
         </div>
       </div>
@@ -314,7 +374,7 @@ export function WindowsTweaksPage() {
         <div className="mb-6">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-300">
             <Globe className="h-4 w-4 text-cyan-400" />
-            DNS Presets
+            {t('dnsPresets', 'DNS Presets')}
           </h3>
           <div className="flex flex-wrap gap-2">
             {dnsPresets.map((preset) => (
@@ -359,7 +419,7 @@ export function WindowsTweaksPage() {
                 <div className="flex-1">
                   <div className="text-sm font-medium text-zinc-200">{cat.label}</div>
                   <div className="text-xs text-zinc-500">
-                    {stats.applied}/{stats.total} ativos
+                    {t('categoryStats', { applied: stats.applied, total: stats.total })}
                   </div>
                 </div>
                 <ChevronDown

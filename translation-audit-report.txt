@@ -1,0 +1,118 @@
+===== benchmark.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== cleaner.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== common.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== compliance.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== contextMenu.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== dashboard.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== disk.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== duplicates.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== emptyFolders.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== fileShredder.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== gameMode.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== hardening.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== history.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== hostsEditor.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== largeFiles.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== license.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== malware.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== memory.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== network.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== onboarding.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== performance.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== powerPlans.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== registry.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== schedules.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== settings.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== sidebar.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== startup.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== tray.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== uninstaller.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== updates.json =====
+  [PT] MISSING KEYS (3):
+    - softwareUpdater.packageManagerNotFound.scoopNotFound
+    - softwareUpdater.packageManagerNotFound.scoopRequired
+    - softwareUpdater.packageManagerNotFound.scoopSite
+  [ES] MISSING KEYS (3):
+    - softwareUpdater.packageManagerNotFound.scoopNotFound
+    - softwareUpdater.packageManagerNotFound.scoopRequired
+    - softwareUpdater.packageManagerNotFound.scoopSite
+
+===== vulnerability.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+===== windowsTweaks.json =====
+  ALL KEYS PRESENT AND MATCHING ( keys)
+
+========== SUMMARY ==========
+Total files per locale: 32
+
+Total keys per locale:
+  en: 2088
+  pt: 2085
+  es: 2085
+
+Missing keys (exist in en but missing from other):
+  pt: 3 missing
+  es: 3 missing
+
+Orphaned keys (exist in locale but NOT in en):
+  pt: 0 orphaned
+  es: 0 orphaned

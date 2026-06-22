@@ -20,6 +20,8 @@
   "minimizeWindow": "Minimizar janela",
   "maximizeWindow": "Maximizar janela",
   "closeWindow": "Fechar janela",
+  "dismissError": "Dispensar erro",
+  "windowControls": "Controlos da janela",
   "errorTitle": "Algo deu errado",
   "errorTryAgain": "Tentar novamente"
 }

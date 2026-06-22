@@ -38,6 +38,7 @@ vi.mock('@shared/service-safety-kb', () => ({
 }))
 
 import { IPC } from '@shared/channels'
+// biome-ignore lint/suspicious/noRedeclare: test
 import type { ServiceApplyResult, ServiceScanProgress, ServiceScanResult, WindowsService } from '@shared/types'
 import { applyServiceChanges, registerServiceManagerIpc, scanServices } from './service-manager.ipc'
 

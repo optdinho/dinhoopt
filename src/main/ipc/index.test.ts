@@ -46,12 +46,14 @@ const mocks = vi.hoisted(() => {
     registerWinSxSCleanerIpc: vi.fn(),
   }
   const ipcHandle = vi.fn()
+  const ipcOn = vi.fn()
   const appEmit = vi.fn()
 
   return {
     registerFns,
     refreshGameDetector: vi.fn(),
     ipcHandle,
+    ipcOn,
     appEmit,
     execFile: vi.fn(),
     mkdirSync: vi.fn(),
@@ -100,6 +102,7 @@ vi.mock('electron', () => ({
   },
   ipcMain: {
     handle: (...args: unknown[]) => mocks.ipcHandle(...args),
+    on: (...args: unknown[]) => mocks.ipcOn(...args),
   },
   shell: {
     showItemInFolder: (...args: unknown[]) => mocks.showItemInFolder(...args),
@@ -107,7 +110,14 @@ vi.mock('electron', () => ({
   },
 }))
 
+vi.mock('../services/logger.service', () => ({
+  getLogger: () => ({
+    log: vi.fn(),
+  }),
+}))
+
 vi.mock('@shared/channels', () => ({
+  RENDERER_LOG: 'renderer-log',
   IPC: {
     CLEANER_OPEN_LOCATION: 'cleaner:open-location',
     PLATFORM_INFO: 'platform:info',

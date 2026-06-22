@@ -1,4 +1,4 @@
-import { useUninstallerStore } from '@/stores/uninstaller-store'
+import { type SortField, useUninstallerStore } from '@/stores/uninstaller-store'
 import { AlertTriangle, ArrowUpDown, ChevronDown, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -139,8 +139,7 @@ export function UninstallerToolbar({
                     if (sortField === field) {
                       store.setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
                     } else {
-                      // biome-ignore lint/suspicious/noExplicitAny: field is a string key
-                      store.setSortField(field as any)
+                      store.setSortField(field as SortField)
                       store.setSortDirection(field === 'estimatedSize' ? 'desc' : 'asc')
                     }
                     setShowSortMenu(false)

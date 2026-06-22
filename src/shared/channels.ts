@@ -1,3 +1,5 @@
+export const RENDERER_LOG = 'renderer-log' as const
+
 export const IPC = {
   // System cleaner
   SYSTEM_SCAN: 'cleaner:system:scan',

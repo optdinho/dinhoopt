@@ -13,10 +13,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-const CYAN = '#06b6d4'
-const PURPLE = '#8b5cf6'
-const CYAN_BORDER = 'rgba(6,182,212,0.15)'
-
 export function GameModePage() {
   const { t } = useTranslation('gameMode')
   const store = useGameModeStore
@@ -85,13 +81,13 @@ export function GameModePage() {
       }
       store.getState().setLastResult({ type: 'activate', succeeded: result.succeeded, failed: result.failed })
       if (result.succeeded === 0 && result.failed > 0) {
-        toast.error(result.errors[0]?.reason ?? 'All optimizations failed')
+        toast.error(result.errors[0]?.reason ?? t('toastAllFailed'))
       } else if (result.failed > 0) {
-        toast.warning(`${result.failed} optimization(s) failed`)
+        toast.warning(t('toastSomeFailed', { count: result.failed }))
       }
     } catch (err: unknown) {
       const e = err as { message?: string }
-      toast.error(e?.message ?? 'Activation failed')
+      toast.error(e?.message ?? t('toastActivationFailed'))
     } finally {
       store.getState().setStatus('idle')
       store.getState().setProgress(null)
@@ -112,32 +108,30 @@ export function GameModePage() {
       store.getState().setActive(false, null)
       store.getState().setPendingRestore(result.failed > 0)
       if (result.failed > 0) {
-        toast.warning(
-          `${result.failed} setting(s) could not be restored — use the cleanup banner below to retry once the cause is fixed`,
-        )
+        toast.warning(t('toastRestoreFailed', { count: result.failed }))
       }
       store.getState().setLastResult({ type: 'deactivate', succeeded: result.restored, failed: result.failed })
     } catch (err: unknown) {
       const e = err as { message?: string }
-      toast.error(e?.message ?? 'Deactivation failed')
+      toast.error(e?.message ?? t('toastDeactivationFailed'))
     } finally {
       store.getState().setStatus('idle')
       store.getState().setProgress(null)
       progressCleanupRef.current?.()
       progressCleanupRef.current = null
     }
-  }, [store])
+  }, [store, t])
 
   const handleAddCustomProcess = useCallback(() => {
     const name = customInput.trim()
     if (!name || name.length > 100 || config.customProcessKillList.includes(name)) return
     if (!/^[A-Za-z0-9._\- ]+$/.test(name)) {
-      toast.error('Process name can only contain letters, numbers, dots, hyphens, underscores, and spaces')
+      toast.error(t('validationProcessName'))
       return
     }
     store.getState().setCustomProcessKillList([...config.customProcessKillList, name])
     setCustomInput('')
-  }, [customInput, config.customProcessKillList, store])
+  }, [customInput, config.customProcessKillList, store, t])
 
   const handleRemoveCustomProcess = useCallback(
     (name: string) => {
@@ -150,12 +144,12 @@ export function GameModePage() {
     const name = gameInput.trim()
     if (!name || name.length > 100 || (config.customGameProcesses ?? []).includes(name)) return
     if (!/^[A-Za-z0-9._\- ]+$/.test(name)) {
-      toast.error('Process name can only contain letters, numbers, dots, hyphens, underscores, and spaces')
+      toast.error(t('validationProcessName'))
       return
     }
     store.getState().setCustomGameProcesses([...(config.customGameProcesses ?? []), name])
     setGameInput('')
-  }, [gameInput, config.customGameProcesses, store])
+  }, [gameInput, config.customGameProcesses, store, t])
 
   const handleRemoveGameProcess = useCallback(
     (name: string) => {
@@ -201,8 +195,13 @@ export function GameModePage() {
               className="grid grid-cols-1 gap-3 sm:grid-cols-3"
             >
               {[
-                { icon: Zap, label: t('statOptimizationsActive'), value: String(enabledCount), color: CYAN },
-                { icon: Activity, label: t('statServicesDisabled'), value: String(serviceCount), color: PURPLE },
+                { icon: Zap, label: t('statOptimizationsActive'), value: String(enabledCount), color: 'var(--accent)' },
+                {
+                  icon: Activity,
+                  label: t('statServicesDisabled'),
+                  value: String(serviceCount),
+                  color: 'var(--accent-hover)',
+                },
                 { icon: Timer, label: t('statSessionTimer'), value: formatElapsed(elapsed), color: '#22c55e' },
               ].map((stat) => (
                 <div
@@ -230,13 +229,13 @@ export function GameModePage() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden rounded-xl"
-              style={{ background: 'var(--bg-subtle)', border: `1px solid ${CYAN_BORDER}` }}
+              style={{ background: 'var(--bg-subtle)', border: '1px solid var(--accent-muted-border)' }}
             >
               <div className="px-5 py-4">
                 <div className="mb-3 flex items-center gap-3">
                   <div
                     className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"
-                    style={{ borderColor: `${CYAN} transparent ${CYAN} ${CYAN}` }}
+                    style={{ borderColor: 'var(--accent) transparent var(--accent) var(--accent)' }}
                   />
                   <span className="text-[13px] text-zinc-300">
                     {progress.phase === 'activating' ? t('activatingProgress') : t('deactivatingProgress')}
@@ -246,7 +245,7 @@ export function GameModePage() {
                   <motion.div
                     className="h-full rounded-full"
                     style={{
-                      backgroundImage: `linear-gradient(90deg, ${CYAN}, ${PURPLE}, ${CYAN})`,
+                      backgroundImage: 'linear-gradient(90deg, var(--accent), var(--accent-hover), var(--accent))',
                       backgroundSize: '200% 100%',
                       animation: 'shimmer 2s linear infinite',
                     }}
@@ -295,7 +294,11 @@ export function GameModePage() {
         {active && (
           <div
             className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-[12px]"
-            style={{ background: 'rgba(6,182,212,0.06)', border: `1px solid ${CYAN_BORDER}`, color: CYAN }}
+            style={{
+              background: 'var(--accent-muted-bg)',
+              border: '1px solid var(--accent-muted-border)',
+              color: 'var(--accent)',
+            }}
           >
             <Shield className="h-3.5 w-3.5 shrink-0" />
             {t('configLockedWhileActive')}
@@ -308,10 +311,7 @@ export function GameModePage() {
             style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}
           >
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span className="flex-1">
-              Some settings from the last session couldn't be restored automatically. Retry once the cause (e.g. admin
-              rights) is resolved.
-            </span>
+            <span className="flex-1">{t('pendingRestoreMessage')}</span>
             <button
               type="button"
               onClick={handleDeactivate}
@@ -323,7 +323,7 @@ export function GameModePage() {
                 border: '1px solid rgba(245,158,11,0.3)',
               }}
             >
-              {isBusy ? 'Retrying…' : 'Retry cleanup'}
+              {isBusy ? t('retrying') : t('retryCleanup')}
             </button>
           </div>
         )}

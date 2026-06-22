@@ -16,6 +16,8 @@
   "chartMemoryUsage": "Uso de memoria",
   "chartDiskIo": "E/S de disco",
   "noDataPlaceholder": "--",
+  "noDataTitle": "No hay datos de monitoreo aún",
+  "noDataDescription": "Los datos de monitoreo aparecerán aquí una vez que el sistema comience a recolectar métricas. Esto puede tomar unos segundos.",
   "failedToStartToast": "No se pudo iniciar la supervisión del rendimiento",
   "processes": "Procesos",
   "totalSuffix": "total",
@@ -54,5 +56,6 @@
   "chartDiskReadName": "Lectura",
   "chartDiskWriteName": "Escritura",
   "chartDiskUnit": "MB/s",
-  "chartPercentUnit": "%"
+  "chartPercentUnit": "%",
+  "ariaGauge": "Medidor de rendimiento"
 }

@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test'
+import { resolve } from 'node:path'
+import { expect, test } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import type { ElectronApplication, Page } from 'playwright'
-import { resolve } from 'path'
 
 let electronApp: ElectronApplication
 let page: Page
@@ -28,7 +28,9 @@ test.afterAll(async () => {
 })
 
 test('should navigate to Game Mode page', async () => {
-  await page.evaluate(() => { window.location.hash = '#/game-mode' })
+  await page.evaluate(() => {
+    window.location.hash = '#/game-mode'
+  })
   await page.waitForTimeout(1500)
   const hash = await page.evaluate(() => window.location.hash)
   expect(hash).toContain('game-mode')
@@ -106,8 +108,10 @@ test('should have audit section with run button', async () => {
 
 test('should show session stats when game mode is active', async () => {
   const hasStats = await page.evaluate(() => {
-    return document.body.textContent?.includes('Otimizações ativas')
-      || document.body.textContent?.includes('Temporizador da sessão')
+    return (
+      document.body.textContent?.includes('Otimizações ativas') ||
+      document.body.textContent?.includes('Temporizador da sessão')
+    )
   })
   expect(hasStats).toBe(true)
 })

@@ -381,7 +381,16 @@ describe('game-mode-store - setGameProfile', () => {
         autoDetect: false,
         autoDeactivate: true,
         customGameProcesses: [],
-        gameProfiles: { 'Minecraft.exe': { enabledOptimizations: [], customProcessKillList: [], autoDetect: false, autoDeactivate: true, customGameProcesses: [], gameProfiles: {} } },
+        gameProfiles: {
+          'Minecraft.exe': {
+            enabledOptimizations: [],
+            customProcessKillList: [],
+            autoDetect: false,
+            autoDeactivate: true,
+            customGameProcesses: [],
+            gameProfiles: {},
+          },
+        },
       },
     })
     useGameModeStore.getState().setGameProfile('Minecraft.exe', null)

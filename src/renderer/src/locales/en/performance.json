@@ -16,6 +16,8 @@
   "chartMemoryUsage": "Memory Usage",
   "chartDiskIo": "Disk I/O",
   "noDataPlaceholder": "--",
+  "noDataTitle": "No monitoring data yet",
+  "noDataDescription": "Monitoring data will appear here once the system starts collecting metrics. This may take a few seconds.",
   "failedToStartToast": "Failed to start performance monitoring",
   "processes": "Processes",
   "totalSuffix": "total",
@@ -54,5 +56,6 @@
   "chartDiskReadName": "Read",
   "chartDiskWriteName": "Write",
   "chartDiskUnit": "MB/s",
-  "chartPercentUnit": "%"
+  "chartPercentUnit": "%",
+  "ariaGauge": "Performance gauge"
 }

@@ -3,6 +3,7 @@ import { useBenchmarkStore } from '@/stores/benchmark-store'
 import type { BenchmarkScoreClass } from '@shared/types'
 import { motion } from 'framer-motion'
 import { CheckCircle2, Cpu, Gauge, MemoryStick, RefreshCw, Star, Thermometer, Timer, Wifi, Zap } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 const SCORE_COLORS: Record<BenchmarkScoreClass, string> = {
   S: '#00FF87',
@@ -21,6 +22,7 @@ const SCORE_GLOWS: Record<BenchmarkScoreClass, string> = {
 }
 
 function ScoreRing({ score, scoreClass }: { score: number; scoreClass: BenchmarkScoreClass }) {
+  const { t } = useTranslation('benchmark')
   const radius = 80
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (score / 100) * circumference
@@ -28,8 +30,8 @@ function ScoreRing({ score, scoreClass }: { score: number; scoreClass: Benchmark
 
   return (
     <div className="relative flex items-center justify-center">
-      <svg width="200" height="200" className="transform -rotate-90" role="img" aria-label="Benchmark score ring">
-        <title>Benchmark score ring</title>
+      <svg width="200" height="200" className="transform -rotate-90" role="img" aria-label={t('scoreRingAriaLabel')}>
+        <title>{t('scoreRingAriaLabel')}</title>
         <circle cx="100" cy="100" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
         <motion.circle
           cx="100"
@@ -70,20 +72,21 @@ function ScoreRing({ score, scoreClass }: { score: number; scoreClass: Benchmark
   )
 }
 
-const STEPS_LABELS = [
-  'Inicializando sensores...',
-  'Medindo CPU (baseline)',
-  'Medindo RAM disponível',
-  'Medindo latência de rede',
-  'Medindo latência DPC',
-  'Medindo temperaturas',
-  'Verificando tweaks aplicados',
-  'Verificando plano de energia',
-  'Calculando score competitivo',
-  'Gerando recomendações',
+const STEPS_KEYS = [
+  'steps.init',
+  'steps.cpuBaseline',
+  'steps.ramAvailable',
+  'steps.networkLatency',
+  'steps.dpcLatency',
+  'steps.temperatures',
+  'steps.tweaksCheck',
+  'steps.powerPlan',
+  'steps.scoreCalc',
+  'steps.recommendations',
 ]
 
 export function BenchmarkPage() {
+  const { t } = useTranslation('benchmark')
   const status = useBenchmarkStore((s) => s.status)
   const progress = useBenchmarkStore((s) => s.progress)
   const result = useBenchmarkStore((s) => s.result)
@@ -95,7 +98,7 @@ export function BenchmarkPage() {
     ? [
         {
           icon: Cpu,
-          label: 'CPU',
+          label: t('cpu'),
           score: result.details.cpu.score,
           max: 20,
           detail: result.details.cpu.detail,
@@ -103,7 +106,7 @@ export function BenchmarkPage() {
         },
         {
           icon: MemoryStick,
-          label: 'RAM',
+          label: t('ram'),
           score: result.details.ram.score,
           max: 20,
           detail: result.details.ram.detail,
@@ -111,7 +114,7 @@ export function BenchmarkPage() {
         },
         {
           icon: Wifi,
-          label: 'Rede',
+          label: t('network'),
           score: result.details.network.score,
           max: 15,
           detail: result.details.network.detail,
@@ -119,7 +122,7 @@ export function BenchmarkPage() {
         },
         {
           icon: Timer,
-          label: 'DPC',
+          label: t('dpc'),
           score: result.details.latencyDpc.score,
           max: 25,
           detail: result.details.latencyDpc.detail,
@@ -127,7 +130,7 @@ export function BenchmarkPage() {
         },
         {
           icon: Thermometer,
-          label: 'Temperatura',
+          label: t('temperature'),
           score: result.details.temperature.score,
           max: 20,
           detail: result.details.temperature.detail,
@@ -135,7 +138,7 @@ export function BenchmarkPage() {
         },
         {
           icon: Star,
-          label: 'Bônus Tweaks',
+          label: t('tweakBonus'),
           score: result.details.tweakBonus.score,
           max: 10,
           detail: `${result.details.tweakBonus.applied}/${result.details.tweakBonus.total} tweaks`,
@@ -143,7 +146,7 @@ export function BenchmarkPage() {
         },
         {
           icon: Zap,
-          label: 'Plano de Energia',
+          label: t('powerBonus'),
           score: result.details.powerBonus.score,
           max: 5,
           detail: result.details.powerBonus.plan,
@@ -154,7 +157,7 @@ export function BenchmarkPage() {
 
   return (
     <div className="p-6">
-      <PageHeader title="Benchmark Competitivo" description="Avalie o desempenho do seu sistema para jogos" />
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       <div className="mt-6 flex flex-col items-center gap-8">
         {/* Score ring */}
@@ -179,12 +182,12 @@ export function BenchmarkPage() {
         {/* Progress steps */}
         {status === 'running' && progress && (
           <div className="w-full max-w-md space-y-2">
-            {STEPS_LABELS.map((label, idx) => {
+            {STEPS_KEYS.map((stepKey, idx) => {
               const isActive = idx === progress.step
               const isDone = idx < progress.step
               return (
                 <div
-                  key={label}
+                  key={stepKey}
                   className={`flex items-center gap-3 rounded-lg px-4 py-2 text-sm transition-all ${
                     isActive ? 'bg-cyan-900/10 text-cyan-300' : isDone ? 'text-zinc-500' : 'text-zinc-700'
                   }`}
@@ -200,7 +203,7 @@ export function BenchmarkPage() {
                   ) : (
                     <div className="h-4 w-4 shrink-0 rounded-full border-2 border-zinc-700" />
                   )}
-                  <span>{isActive ? progress.detail : label}</span>
+                  <span>{isActive ? progress.detail : t(stepKey)}</span>
                 </div>
               )
             })}
@@ -210,7 +213,7 @@ export function BenchmarkPage() {
                 onClick={cancel}
                 className="rounded-lg border border-red-800 px-4 py-2 text-sm text-red-400 hover:bg-red-900/10"
               >
-                Cancelar
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -259,7 +262,7 @@ export function BenchmarkPage() {
               style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
             >
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-zinc-300">Score Total</span>
+                <span className="text-sm font-medium text-zinc-300">{t('totalScore')}</span>
                 <span className="text-lg font-bold" style={{ color: SCORE_COLORS[result.scoreClass] }}>
                   {result.score}/100
                 </span>

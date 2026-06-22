@@ -393,11 +393,24 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 - `vitest.config.ts` coverage exclude list updated: added `src/**/coverage/**` (covered report JS files inflating totals), `src/**/constants.ts`, `src/renderer/src/i18n.ts`, and other data-only files — without these, total branches jumped from 9043→9705 (V8 tracking uncovered files under `src/`)
 
-## Session Summary (2026-06-21f)
+## Session Summary (2026-06-21g)
 
 ### Done
 
-- **Coverage expansion for 5 renderer stores** (targeting uncovered branches from coverage report):
+- **CLI refactoring — extracted router and command handlers from monolithic cli.ts**:
+  - Created `src/main/cli/index.ts` with barrel re-exports from `cli.ts`
+  - Created `src/main/cli/router.ts` that maps command names to handler functions
+  - Extracted **13 command handlers** into individual files under `src/main/cli/commands/`:
+    - `programs.ts`, `services.ts`, `leftovers.ts`, `network.ts`, `startup.ts`, `registry.ts`, `debloat.ts`, `privacy.ts`, `malware.ts`, `drivers.ts`, `updates.ts`, `disk.ts`, `metrics.ts`, `cve.ts`, `history.ts`, `config.ts`, `perf.ts`
+  - Moved legacy scan/clean functions (`scanSystem`, `scanApp`, `scanGaming`, `scanRecycleBin`, `cleanRecycleBin`, `getChromiumProfiles`, `scanBrowserCli`, `runLegacyScanClean`, etc.) and utility functions (`formatBytes`, `cliLog`, `cliVerbose`, `cliOut`, `cliUsage`, `cliNotFound`, `showProgress`, `printHelp`, `log`) into `src/main/cli/commands/legacy.ts`
+  - Created `src/main/cli/types.ts` and `src/main/cli/utils.ts` for shared CLI types and utilities
+  - Router (`router.ts`) loads command handlers via lazy dynamic imports (with `await import(...)`) for fast startup
+  - All relative paths fixed to resolve correctly from `src/main/cli/commands/` subdirectory (e.g., `../../../shared/enums` → `src/shared/enums`)
+  - **No runtime behavior changes** — all 244 cli tests pass
+
+### Next Steps
+
+1. Continue pushing branch coverage toward 80% target
   - **debloater-store.test.ts**: Added `setScanning` and `setRemoving` tests (2 previously uncovered functions). Branch coverage: 6/6 → **100%** ✅
   - **driver-store.test.ts**: Added `scan progress callback` and `update progress callback` tests — exercises callback inline via `onDriverProgress`/`onDriverUpdateProgress` mock.calls[0][0]. Branch coverage: 16/16 → **100%** ✅
   - **registry-store.test.ts**: Added `toggleEntry` persistent tweak branch (calls `registrySetTweakIgnored` for `vulnerability`/`privacy`/`performance`/`network`/`service`/`task` types), error handling for `registrySetTweakIgnored` failure, and `toggleCardAll` persistent tweak branch. Branch coverage: 16/16 → **100%** (+1, was 15/16 = 93.75%) ✅
@@ -415,8 +428,45 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
   | registry-store.ts | 98.33% | **100%** | 96.66% | 97.95% |
   | scan-store.ts | 99.09% | **95.45%** | 100% | 100% |
 
+## Session Summary (2026-06-21i)
+
+### Done
+
+- **Build error fix**: `export { AllowlistEntry, ... }` → `export type { ... }` para interfaces TS que o Rollup não conseguia resolver (AllowlistEntry, RegistryPersistenceResult, LOLBinPattern, QuarantineEntry)
+- **"Página fantasma" nas transições**: Suspense fallback skeleton removido (`fallback={null}`) — o `PageTransition` (fade+slide 0.2s) já faz a transição visual sem flash de esqueleto
+- **P4**: 3 dead barrel `index.ts` removidos (malware-scanner/index.ts, privacy-shield/scanners/index.ts, privacy-shield/fixes/index.ts)
+
+- **Full suite**: **5159 tests**, 173 files — **0 failures**
+- **Build**: `electron-vite build` — OK (main + preload + renderer)
+
 ### Key Decisions
 
-- Used `useScanStore.setState({ excludedSubcategories: new Set() })` in scan-store tests because `reset()` does not clear `excludedSubcategories`
-- Wrapped `vi.fn(() => vi.fn())` pattern for progress callbacks, accessed via `.mock.calls[0][0]` to exercise callback bodies
-- Persistent tweak types sourced from `@shared/registry-tweaks.ts`: `vulnerability`, `privacy`, `performance`, `network`, `service`, `task`
+- Suspense fallback removido porque cada rota já tem `PageTransition` com `initial={{ opacity: 0, y: 12 }}` — não precisa de skeleton intermediário
+
+## Session Summary (2026-06-21h)
+  - **F1-C1**: `FALLBACK_TOKEN` mantido com `logger.warning` quando usado como fallback — remote auth preservado
+  - **F1-A2**: `resolveBackupPath()` com validação anti-path-traversal + 7 testes
+  - **F1-A3**: `overwriteFile` atômico (tmp + rename) + 4 testes
+  - **A1**: exec-utf8 tool validation com regex `/^(reg|netsh|pnputil|schtasks|ipconfig)(\.exe)?$/i`
+  - **B2**: `whoami.exe` resolvido via `process.env.SystemRoot`
+  - **B3**: Rota `/hardening` removida do App.tsx; ResultBanner navega direto para `/privacy`
+  - **F3-M1**: EmptyState compartilhado em 4 páginas (EmptyFolderCleanerPage, DuplicateFinderPage, LargeFileFinderPage, FileShredderPage)
+  - **F3-B1**: 3 casts `as any` → `SortField`/`SeverityFilter` com exports de store
+  - **F3-B5-B7**: `sharp` e `png-to-ico` removidos do package.json
+  - **F3-M4**: 8 chaves `gameMode` adicionadas em EN e ES
+  - **M1**: 29 `console.error` substituídos por IPC logger (`RENDERER_LOG` channel + preload `log()` + renderer-logger.ts)
+  - **F2-A7**: `registry-cleaner.service.ts` 1792L → 3 módulos (service.ts, utils.ts, backup.ts)
+  - **A3**: 10 grandes arquivos modularizados (malware-scanner.service.ts, privacy-shield.service.ts, software-updater.ts, windows-tweaks.ipc.ts, registry-cleaner.ipc.ts, startup-manager.ipc.ts, system-cleaner.ipc.ts, malware-store.ts, cli.ts, debloater.ipc.ts)
+  - **F4**: Suspense fallback spinner → full-page skeleton; MiniGaugeSkeleton → shared Skeleton
+  - **S7**: CSP header `connect-src 'self' https:` adicionado em ambos index.html
+  - **P4**: 3 dead barrel `index.ts` removidos (malware-scanner/index.ts, privacy-shield/scanners/index.ts, privacy-shield/fixes/index.ts)
+
+- **Full suite**: **5159 tests**, 173 files — **0 failures**
+- **Coverage**: Branches **80.85%**, Statements **91.74%**, Functions **93.65%**, Lines **93.56%**
+
+### Key Decisions
+
+- `FALLBACK_TOKEN` mantido como fallback com warning em vez de removido, para preservar remote auth sem `LICENSE_API_TOKEN`
+- Arquivos grandes quebrados extraindo helpers puros, mantendo o arquivo orquestrador como re-export fino para compatibilidade de imports de teste
+- Renderer logging usa canal IPC `RENDERER_LOG` em vez de importar `getLogger()` (main-process only)
+- UX4/UX5/P2/P3 avaliados e mantidos como estão (ErrorBoundary router-level já mitiga, framer-motion é decorativo, better-sqlite3 é esperado em Electron)

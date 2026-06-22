@@ -15,6 +15,7 @@ import type { OneClickPhase, OneClickResult } from '@/components/dashboard/types
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
+import { Skeleton } from '@/components/shared/Skeleton'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { StatCard } from '@/components/shared/StatCard'
 import { usePlatform } from '@/hooks/usePlatform'
@@ -689,13 +690,9 @@ export function DashboardPage() {
 function MiniGaugeSkeleton() {
   return (
     <div className="glass-card flex flex-col items-center gap-2 rounded-xl px-3 py-4">
-      <div
-        className="h-10 w-10 animate-pulse rounded-lg"
-        style={{ background: 'var(--bg-subtle-2)' }}
-        aria-hidden="true"
-      />
-      <div className="h-4 w-14 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} aria-hidden="true" />
-      <div className="h-3 w-20 animate-pulse rounded" style={{ background: 'var(--bg-subtle-2)' }} aria-hidden="true" />
+      <Skeleton className="h-10 w-10 rounded-lg" />
+      <Skeleton className="h-4 w-14" />
+      <Skeleton className="h-3 w-20" />
     </div>
   )
 }

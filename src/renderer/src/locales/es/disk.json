@@ -31,6 +31,8 @@
   "fileTypeTableHeaderFiles": "Archivos",
   "fileTypeTableHeaderSize": "Tamaño",
   "fileTypeTableHeaderShare": "Proporción",
+  "repairWindowsOnly": "Solo Windows",
+  "repairWindowsOnlyDesc": "Las herramientas de reparación de disco solo están disponibles en Windows.",
   "repairTitle": "Reparación del sistema Windows",
   "repairDescription": "Use estas herramientas integradas de Windows para analizar y reparar archivos del sistema dañados.",
   "repairRunOrder": "Ejecute primero {{dism}} para reparar el almacén de componentes y luego {{sfc}} para corregir los archivos del sistema.",
@@ -104,5 +106,6 @@
   "trimFailedToast_one": "TRIM falló en {{count}} unidad",
   "trimFailedToast_other": "TRIM falló en {{count}} unidades",
   "trimBatchFailed": "No se pudo ejecutar TRIM",
-  "trimListFailed": "No se pudo mostrar la lista de unidades"
+  "trimListFailed": "No se pudo mostrar la lista de unidades",
+  "encryptedAria": "Cifrado"
 }

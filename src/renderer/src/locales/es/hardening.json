@@ -270,5 +270,7 @@
     "statusStartPending": "Inicio pendiente",
     "statusStopPending": "Detención pendiente",
     "statusUnknown": "Desconocido"
-  }
+  },
+  "expandAria": "Expandir",
+  "scoreGaugeAria": "Medidor de privacidad"
 }

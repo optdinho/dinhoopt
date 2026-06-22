@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import * as si from 'systeminformation'
-import { getLogger } from './logger.service'
 import { psUtf8 } from './exec-utf8'
+import { getLogger } from './logger.service'
 
 export interface MemoryInfo {
   totalBytes: number

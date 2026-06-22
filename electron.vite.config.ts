@@ -1,61 +1,61 @@
 import 'dotenv/config'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
-import react from '@vitejs/plugin-react'
+import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
-import { resolve } from 'path'
+import react from '@vitejs/plugin-react'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import pkg from './package.json'
 
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
-        rollupOptions: {
-          input: {
-            index: resolve(__dirname, 'src/main/index.ts')
-          },
-          external: ['better-sqlite3', 'bindings'],
-          onwarn(warning, warn) {
-            if (warning.code === 'MIXED_DYNAMIC_AND_STATIC_IMPORTS') return
-            warn(warning)
-          }
-        }
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+        },
+        external: ['better-sqlite3', 'bindings'],
+        onwarn(warning, warn) {
+          if (warning.code === 'MIXED_DYNAMIC_AND_STATIC_IMPORTS') return
+          warn(warning)
+        },
+      },
     },
     define: {
       'process.env.LICENSE_API_URL': JSON.stringify(process.env.LICENSE_API_URL),
-      'process.env.LICENSE_API_TOKEN': JSON.stringify(process.env.LICENSE_API_TOKEN)
+      'process.env.LICENSE_API_TOKEN': JSON.stringify(process.env.LICENSE_API_TOKEN),
     },
     resolve: {
       alias: {
-        '@shared': resolve(__dirname, 'src/shared')
-      }
-    }
+        '@shared': resolve(__dirname, 'src/shared'),
+      },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/preload/index.ts')
-        }
-      }
+          index: resolve(__dirname, 'src/preload/index.ts'),
+        },
+      },
     },
     resolve: {
       alias: {
-        '@shared': resolve(__dirname, 'src/shared')
-      }
-    }
+        '@shared': resolve(__dirname, 'src/shared'),
+      },
+    },
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
-        }
-      }
+          index: resolve(__dirname, 'src/renderer/index.html'),
+        },
+      },
     },
     define: {
-      __APP_VERSION__: JSON.stringify(pkg.version)
+      __APP_VERSION__: JSON.stringify(pkg.version),
     },
     plugins: [
       react(),
@@ -67,18 +67,15 @@ export default defineConfig({
         name: 'dinho-strip-csp-in-dev',
         apply: 'serve',
         transformIndexHtml(html: string): string {
-          return html.replace(
-            /<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>\s*/i,
-            ''
-          )
-        }
-      }
+          return html.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>\s*/i, '')
+        },
+      },
     ],
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src'),
-        '@shared': resolve(__dirname, 'src/shared')
-      }
-    }
-  }
+        '@shared': resolve(__dirname, 'src/shared'),
+      },
+    },
+  },
 })

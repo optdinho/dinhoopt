@@ -96,5 +96,6 @@
     "hoursAgo": "Hace {{count}} h",
     "daysAgo": "Hace {{count}} d"
   },
-  "copyNameSuffix": "(copia)"
+  "copyNameSuffix": "(copia)",
+  "checkedAria": "Seleccionado"
 }

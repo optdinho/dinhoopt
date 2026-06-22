@@ -388,10 +388,7 @@ describe('WINSXS_CLEAN handler', () => {
 
     // 50% progress send + 100% from close handler = 2 calls
     expect(mockSend).toHaveBeenCalledTimes(2)
-    expect(mockSend).toHaveBeenCalledWith(
-      'scan:progress',
-      expect.objectContaining({ progress: 50 }),
-    )
+    expect(mockSend).toHaveBeenCalledWith('scan:progress', expect.objectContaining({ progress: 50 }))
   })
 
   it('handles spawn error gracefully', async () => {

@@ -73,5 +73,6 @@
 
   "groupHeading": "{{source}} — {{count}}",
   "elevationPrompt": "Some selected entries require administrator privileges. Relaunch as admin?",
-  "elevationRelaunch": "Relaunch as admin"
+  "elevationRelaunch": "Relaunch as admin",
+  "ariaToggleAll": "Toggle all"
 }

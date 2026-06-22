@@ -1,6 +1,9 @@
+import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileSyncMock = vi.fn()
+const systemRoot = process.env.SystemRoot || 'C:\\Windows'
+const expectedWhoami = path.join(systemRoot, 'System32', 'whoami.exe')
 
 vi.mock('child_process', () => ({
   execFileSync: execFileSyncMock,
@@ -20,7 +23,7 @@ describe('win32 elevation', () => {
     const result = elevation.isAdmin()
 
     expect(result).toBe(true)
-    expect(execFileSyncMock).toHaveBeenCalledWith('whoami', ['/groups'], {
+    expect(execFileSyncMock).toHaveBeenCalledWith(expectedWhoami, ['/groups'], {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 5000,

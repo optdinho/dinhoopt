@@ -5,25 +5,25 @@
  * This avoids shell execution assumptions while still giving precise guidance.
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin/tool"
-import * as path from "path"
-import * as fs from "fs"
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { type ToolDefinition, tool } from '@opencode-ai/plugin/tool'
 
-type Formatter = "biome" | "prettier" | "black" | "gofmt" | "rustfmt"
+type Formatter = 'biome' | 'prettier' | 'black' | 'gofmt' | 'rustfmt'
 
 const formatCodeTool: ToolDefinition = tool({
   description:
-    "Detect formatter for a file and return the exact command to run (Biome, Prettier, Black, gofmt, rustfmt).",
+    'Detect formatter for a file and return the exact command to run (Biome, Prettier, Black, gofmt, rustfmt).',
   args: {
-    filePath: tool.schema.string().describe("Path to the file to format"),
+    filePath: tool.schema.string().describe('Path to the file to format'),
     formatter: tool.schema
-      .enum(["biome", "prettier", "black", "gofmt", "rustfmt"])
+      .enum(['biome', 'prettier', 'black', 'gofmt', 'rustfmt'])
       .optional()
-      .describe("Optional formatter override"),
+      .describe('Optional formatter override'),
   },
   async execute(args, context) {
     const cwd = context.worktree || context.directory
-    const ext = args.filePath.split(".").pop()?.toLowerCase() || ""
+    const ext = args.filePath.split('.').pop()?.toLowerCase() || ''
     const detected = args.formatter || detectFormatter(cwd, ext)
 
     if (!detected) {
@@ -46,15 +46,15 @@ const formatCodeTool: ToolDefinition = tool({
 export default formatCodeTool
 
 function detectFormatter(cwd: string, ext: string): Formatter | null {
-  if (["ts", "tsx", "js", "jsx", "json", "css", "scss", "md", "yaml", "yml"].includes(ext)) {
-    if (fs.existsSync(path.join(cwd, "biome.json")) || fs.existsSync(path.join(cwd, "biome.jsonc"))) {
-      return "biome"
+  if (['ts', 'tsx', 'js', 'jsx', 'json', 'css', 'scss', 'md', 'yaml', 'yml'].includes(ext)) {
+    if (fs.existsSync(path.join(cwd, 'biome.json')) || fs.existsSync(path.join(cwd, 'biome.jsonc'))) {
+      return 'biome'
     }
-    return "prettier"
+    return 'prettier'
   }
-  if (["py", "pyi"].includes(ext)) return "black"
-  if (ext === "go") return "gofmt"
-  if (ext === "rs") return "rustfmt"
+  if (['py', 'pyi'].includes(ext)) return 'black'
+  if (ext === 'go') return 'gofmt'
+  if (ext === 'rs') return 'rustfmt'
   return null
 }
 

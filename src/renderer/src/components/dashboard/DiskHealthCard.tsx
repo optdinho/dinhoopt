@@ -38,10 +38,11 @@ const DISK_POLL_INTERVAL = 60_000
 export function DiskHealthCard() {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
-  const { data: disks, error, loading } = usePolling<DiskSmartInfo[]>(
-    () => window.dinho?.perfGetDiskHealth?.() ?? Promise.resolve([]),
-    DISK_POLL_INTERVAL,
-  )
+  const {
+    data: disks,
+    error,
+    loading,
+  } = usePolling<DiskSmartInfo[]>(() => window.dinho?.perfGetDiskHealth?.() ?? Promise.resolve([]), DISK_POLL_INTERVAL)
 
   const disk = disks?.[0] ?? null
   const animatedLife = Math.round(useAnimatedCounter(disk?.remainingLife ?? 100))

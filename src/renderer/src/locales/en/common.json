@@ -20,6 +20,8 @@
   "minimizeWindow": "Minimize window",
   "maximizeWindow": "Maximize window",
   "closeWindow": "Close window",
+  "dismissError": "Dismiss error",
+  "windowControls": "Window controls",
   "errorTitle": "Something went wrong",
   "errorTryAgain": "Try again"
 }

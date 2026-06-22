@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { net, app } from 'electron'
 import { generateHwid } from './hwid'
 import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'
+import { getLogger } from './logger.service'
 
 const NETWORK_TIMEOUT = 20_000
 const MAX_RETRIES = 2
@@ -20,10 +21,12 @@ function getLicenseConfig(): { url: string; token: string } {
       }
     }
   } catch {}
-  return {
-    url: process.env.LICENSE_API_URL || FALLBACK_URL,
-    token: process.env.LICENSE_API_TOKEN || FALLBACK_TOKEN,
+  const url = process.env.LICENSE_API_URL || FALLBACK_URL
+  const token = process.env.LICENSE_API_TOKEN || FALLBACK_TOKEN
+  if (!process.env.LICENSE_API_TOKEN) {
+    getLogger().warning('license', 'Using hardcoded fallback token — set LICENSE_API_TOKEN env var for production')
   }
+  return { url, token }
 }
 
 let initialized = false

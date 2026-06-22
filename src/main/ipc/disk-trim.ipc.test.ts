@@ -52,12 +52,7 @@ vi.mock('../services/exec-utf8', async () => {
 
 import { EventEmitter } from 'node:events'
 import type { TrimDriveInfo } from '@shared/types'
-import {
-  computeStatus,
-  listTrimDrives,
-  registerDiskTrimIpc,
-  runTrimForDrive,
-} from './disk-trim.ipc'
+import { computeStatus, listTrimDrives, registerDiskTrimIpc, runTrimForDrive } from './disk-trim.ipc'
 
 // ── Helpers ──
 
@@ -681,8 +676,6 @@ describe('listTrimDrives — Windows enumeration', () => {
   })
 })
 
-
-
 describe('runTrimForDrive — missing letter/mountpoint', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -714,8 +707,6 @@ describe('runTrimForDrive — missing letter/mountpoint', () => {
     expect(result.success).toBe(false)
     expect(result.summary).toMatch(/Missing drive letter/i)
   })
-
-
 })
 
 describe('sendProgress edge cases', () => {

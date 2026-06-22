@@ -215,9 +215,7 @@ describe('SYSTEM_SCAN handler', () => {
 
   it('skips single file target with empty items', async () => {
     mockSystemCleanTargets.mockReturnValue([])
-    mockSingleFileCleanTargets.mockReturnValue([
-      { path: '/tmp/empty.dmp', subcategory: 'Empty', needsAdmin: false },
-    ])
+    mockSingleFileCleanTargets.mockReturnValue([{ path: '/tmp/empty.dmp', subcategory: 'Empty', needsAdmin: false }])
     mockScanFile.mockResolvedValue({
       category: 'system',
       subcategory: 'Empty',
@@ -273,7 +271,7 @@ describe('SYSTEM_SCAN handler', () => {
 
     registerSystemCleanerIpc(() => null)
     const handler = getHandler('cleaner:system:scan')
-    const results = await handler() as Array<{ items: Array<{ path: string }>; totalSize: number; itemCount: number }>
+    const results = (await handler()) as Array<{ items: Array<{ path: string }>; totalSize: number; itemCount: number }>
     expect(results).toHaveLength(1)
     expect(results[0]!.items).toHaveLength(2)
     expect(results[0]!.items.some((i) => i.path.includes('normal.evtx'))).toBe(true)

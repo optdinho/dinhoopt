@@ -1,8 +1,8 @@
 import type { UpdatableApp, UpdateProgress, UpdateResult } from '@shared/types'
 import { create } from 'zustand'
 
-type SortField = 'name' | 'severity' | 'source'
-type SeverityFilter = 'all' | 'major' | 'minor' | 'patch' | 'uptodate'
+export type SortField = 'name' | 'severity' | 'source'
+export type SeverityFilter = 'all' | 'major' | 'minor' | 'patch' | 'uptodate'
 
 interface SoftwareUpdaterState {
   apps: UpdatableApp[]

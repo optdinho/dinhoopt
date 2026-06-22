@@ -1,9 +1,11 @@
 import { CleanSummary } from '@/components/cleaner/CleanSummary'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { usePlatform } from '@/hooks/usePlatform'
+import logger from '@/lib/renderer-logger'
 import { cn, formatBytes, formatNumber } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
@@ -258,7 +260,7 @@ export function CleanerPage() {
               })
             }
           } catch (err) {
-            console.error(`Clean failed for category ${cat.type}:`, err)
+            logger.error('CleanerPage', `Clean failed for category ${cat.type}`, err)
           }
           activeIndex++
         } else if (catItemsAll.length > 0) {
@@ -702,7 +704,7 @@ export function CleanerPage() {
                                   const checked = store.selectedItems.has(item.id)
                                   const pathLabel = item.path.split(/[/\\]/).slice(-2).join('/') || item.path
                                   return (
-                                    <label
+                                    <div
                                       key={item.id}
                                       className="flex items-center gap-3 px-4 py-2 pl-14 cursor-pointer transition-colors"
                                       style={{ background: checked ? 'rgba(245,158,11,0.03)' : 'transparent' }}
@@ -717,32 +719,11 @@ export function CleanerPage() {
                                           : 'transparent'
                                       }}
                                     >
-                                      <input
-                                        type="checkbox"
+                                      <Checkbox
                                         checked={checked}
                                         onChange={() => store.toggleItem(item.id)}
-                                        className="sr-only peer"
+                                        size="sm"
                                       />
-                                      <div
-                                        className="flex h-[16px] w-[16px] items-center justify-center rounded-[4px] shrink-0"
-                                        style={{
-                                          background: checked ? 'var(--accent)' : 'var(--bg-hover-2)',
-                                          border: checked ? 'none' : '1.5px solid var(--border-stronger)',
-                                        }}
-                                      >
-                                        {checked && (
-                                          <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-                                            <title>Checked</title>
-                                            <path
-                                              d="M2.5 6l2.5 2.5 4.5-5"
-                                              stroke="var(--text-on-accent)"
-                                              strokeWidth="2"
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                            />
-                                          </svg>
-                                        )}
-                                      </div>
                                       <span
                                         className="flex-1 min-w-0 truncate text-[12px] font-mono"
                                         style={{ color: 'var(--text-secondary)' }}
@@ -769,7 +750,7 @@ export function CleanerPage() {
                                           <FolderOpen className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
                                         </button>
                                       )}
-                                    </label>
+                                    </div>
                                   )
                                 })}
                                 {result.items.length > 50 && (

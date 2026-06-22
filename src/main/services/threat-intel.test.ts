@@ -47,9 +47,9 @@ describe('ThreatIntelService', () => {
     vi.clearAllMocks()
     mockExistsSync.mockReturnValue(false)
     service = new ThreatIntelService()
-    service.getFeeds().forEach((f) => {
+    for (const f of service.getFeeds()) {
       f.enabled = false
-    })
+    }
   })
 
   it('addEntry stores by type:value key', () => {

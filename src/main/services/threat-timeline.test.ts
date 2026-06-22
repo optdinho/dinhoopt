@@ -33,7 +33,7 @@ vi.mock('./logger.service', () => ({
   }),
 }))
 
-import { getThreatTimelineService, ThreatTimelineService } from './threat-timeline.service'
+import { ThreatTimelineService, getThreatTimelineService } from './threat-timeline.service'
 
 describe('ThreatTimelineService', () => {
   let service: ThreatTimelineService
@@ -139,7 +139,15 @@ describe('ThreatTimelineService', () => {
 
   it('loads entries from file when it exists', () => {
     const data = JSON.stringify([
-      { id: '1', threatName: 'Saved Threat', severity: 'high', filePath: 'C:/saved.exe', detectedAt: '2025-01-01', action: 'quarantined', scanId: 'scan-1' },
+      {
+        id: '1',
+        threatName: 'Saved Threat',
+        severity: 'high',
+        filePath: 'C:/saved.exe',
+        detectedAt: '2025-01-01',
+        action: 'quarantined',
+        scanId: 'scan-1',
+      },
     ])
     mockExistsSync.mockReturnValue(true)
     mockReadFileSync.mockReturnValue(data)
@@ -162,14 +170,18 @@ describe('ThreatTimelineService', () => {
   })
 
   it('handles error during save gracefully', () => {
-    mockWriteFileSync.mockImplementation(() => { throw new Error('disk full') })
+    mockWriteFileSync.mockImplementation(() => {
+      throw new Error('disk full')
+    })
     service.addEntry({ name: 'Bad', severity: 'high', filePath: 'C:\\bad.exe' }, 'quarantined', 'scan-1')
     // Should not throw — error is caught and logged
     expect(service.getEntries()).toHaveLength(1)
   })
 
   it('handles non-Error throw during save gracefully', () => {
-    mockWriteFileSync.mockImplementation(() => { throw 'string error' })
+    mockWriteFileSync.mockImplementation(() => {
+      throw 'string error'
+    })
     service.addEntry({ name: 'Bad', severity: 'high', filePath: 'C:\\bad.exe' }, 'quarantined', 'scan-1')
     expect(service.getEntries()).toHaveLength(1)
   })

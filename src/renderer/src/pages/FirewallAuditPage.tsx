@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -30,19 +31,13 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 const RISK_COLORS: Record<FirewallRiskLevel, { dot: string; bg: string; border: string; text: string }> = {
   high: { dot: '#ef4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.20)', text: '#ef4444' },
   medium: { dot: '#f59e0b', bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.20)', text: '#f59e0b' },
   low: { dot: '#22c55e', bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.20)', text: '#22c55e' },
-}
-
-const ISSUE_LABEL: Record<FirewallIssue, string> = {
-  stale: 'Program missing',
-  unsigned: 'Unsigned binary',
-  'broad-scope': 'Public + Any port + Any IP',
-  'any-remote': 'Any remote IP',
 }
 
 const ISSUE_ICON: Record<FirewallIssue, typeof FileX> = {
@@ -65,6 +60,7 @@ export function FirewallAuditPage() {
   const programFilter = useFirewallStore((s) => s.programFilter)
   const showBuiltin = useFirewallStore((s) => s.showBuiltin)
 
+  const { t } = useTranslation('firewall')
   const [pendingAction, setPendingAction] = useState<FirewallAction | null>(null)
   const isBusy = scanning || applying
 
@@ -88,7 +84,7 @@ export function FirewallAuditPage() {
       s.setHasScanned(true)
     },
     onError: (err) => {
-      useFirewallStore.getState().setError(err instanceof Error ? err.message : 'Scan failed')
+      useFirewallStore.getState().setError(err instanceof Error ? err.message : t('scanFailed'))
     },
   })
 
@@ -119,9 +115,14 @@ export function FirewallAuditPage() {
       if (!payload) return
       const { result, selected, action } = payload
       useFirewallStore.getState().setApplyResult(result)
-      const verb = action === 'delete' ? 'deleted' : 'disabled'
-      if (result.succeeded > 0) toast.success(`${result.succeeded} rule${result.succeeded === 1 ? '' : 's'} ${verb}`)
-      if (result.failed > 0) toast.error(`${result.failed} rule${result.failed === 1 ? '' : 's'} failed`)
+      if (result.succeeded > 0) {
+        toast.success(
+          action === 'delete'
+            ? t('rulesDeleted', { count: result.succeeded })
+            : t('rulesDisabled', { count: result.succeeded }),
+        )
+      }
+      if (result.failed > 0) toast.error(t('rulesFailed', { count: result.failed }))
       const failedNames = new Set(result.errors.map((e: { name: string }) => e.name).filter(Boolean))
       const requestedNames = new Set(selected.map((r) => r.name))
       useFirewallStore
@@ -131,8 +132,8 @@ export function FirewallAuditPage() {
         )
     },
     onError: (err) => {
-      toast.error('Failed to update firewall rules')
-      useFirewallStore.getState().setError(err instanceof Error ? err.message : 'Apply failed')
+      toast.error(t('updateFailed'))
+      useFirewallStore.getState().setError(err instanceof Error ? err.message : t('applyFailed'))
     },
   })
 
@@ -175,19 +176,16 @@ export function FirewallAuditPage() {
 
   const riskGroups = useMemo(() => {
     const groups: { key: FirewallRiskLevel; label: string; rules: FirewallRule[] }[] = [
-      { key: 'high', label: 'High risk', rules: filteredRules.filter((r) => r.risk === 'high') },
-      { key: 'medium', label: 'Medium risk', rules: filteredRules.filter((r) => r.risk === 'medium') },
-      { key: 'low', label: 'Low risk', rules: filteredRules.filter((r) => r.risk === 'low') },
+      { key: 'high', label: t('riskHigh'), rules: filteredRules.filter((r) => r.risk === 'high') },
+      { key: 'medium', label: t('riskMedium'), rules: filteredRules.filter((r) => r.risk === 'medium') },
+      { key: 'low', label: t('riskLow'), rules: filteredRules.filter((r) => r.risk === 'low') },
     ]
     return groups.filter((g) => g.rules.length > 0)
-  }, [filteredRules])
+  }, [filteredRules, t])
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-8">
-      <PageHeader
-        title="Firewall Audit"
-        description="Review inbound Windows Firewall rules. Disable or delete entries with broad scope, missing programs, or unsigned binaries."
-      />
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       {/* Action bar */}
       <div className="mb-5 flex items-center gap-3">
@@ -199,7 +197,7 @@ export function FirewallAuditPage() {
           style={{ background: isBusy ? '#27272a' : 'var(--accent)', opacity: isBusy ? 0.5 : 1 }}
         >
           {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" strokeWidth={2} />}
-          {scanning ? 'Scanning…' : 'Rescan'}
+          {scanning ? t('scanningButton') : t('scanButton')}
         </button>
 
         {hasScanned && (
@@ -217,7 +215,7 @@ export function FirewallAuditPage() {
               }}
             >
               <Sparkles className="h-4 w-4" strokeWidth={2} />
-              Select stale ({staleCount})
+              {t('selectStale', { count: staleCount })}
             </button>
 
             <button
@@ -235,7 +233,7 @@ export function FirewallAuditPage() {
               ) : (
                 <ShieldOff className="h-4 w-4" strokeWidth={2} />
               )}
-              Disable selected ({selectedCount})
+              {t('disableSelected', { count: selectedCount })}
             </button>
 
             <button
@@ -249,7 +247,7 @@ export function FirewallAuditPage() {
               }}
             >
               <Trash2 className="h-4 w-4" strokeWidth={2} />
-              Delete selected
+              {t('deleteSelected')}
             </button>
           </>
         )}
@@ -258,10 +256,10 @@ export function FirewallAuditPage() {
       {/* Stats banner */}
       {hasScanned && rules.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatBox label="Total inbound" value={rules.length} icon={Inbox} color="var(--text-muted)" />
-          <StatBox label="Stale program" value={staleCount} icon={FileX} color="#ef4444" />
-          <StatBox label="Unsigned" value={unsignedCount} icon={FileWarning} color="#f59e0b" />
-          <StatBox label="Broad scope" value={broadScopeCount} icon={Globe} color="#ef4444" />
+          <StatBox label={t('statTotalInbound')} value={rules.length} icon={Inbox} color="var(--text-muted)" />
+          <StatBox label={t('statStaleProgram')} value={staleCount} icon={FileX} color="#ef4444" />
+          <StatBox label={t('statUnsigned')} value={unsignedCount} icon={FileWarning} color="#f59e0b" />
+          <StatBox label={t('statBroadScope')} value={broadScopeCount} icon={Globe} color="#ef4444" />
         </div>
       )}
 
@@ -277,10 +275,10 @@ export function FirewallAuditPage() {
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[12.5px] font-medium" style={{ color: 'var(--text-secondary)' }}>
               {scanProgress.phase === 'enumerating'
-                ? 'Enumerating rules…'
+                ? t('scanPhaseEnumerating')
                 : scanProgress.phase === 'classifying'
-                  ? 'Classifying rules…'
-                  : 'Verifying signatures…'}
+                  ? t('scanPhaseClassifying')
+                  : t('scanPhaseVerifying')}
             </span>
             {scanProgress.total > 0 && (
               <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
@@ -320,14 +318,18 @@ export function FirewallAuditPage() {
               <CheckCircle2 className="h-4 w-4" style={{ color: '#22c55e' }} />
             )}
             <span className="text-[13px] font-medium text-white">
-              {applyResult.succeeded} succeeded
-              {applyResult.failed > 0 && `, ${applyResult.failed} failed`}
+              {t('resultSucceeded', { count: applyResult.succeeded })}
+              {applyResult.failed > 0 && t('resultFailed', { count: applyResult.failed })}
             </span>
           </div>
           {applyResult.errors.length > 0 && (
             <div className="mt-2 space-y-1">
               {applyResult.errors.map((e, i) => (
-                <div key={`${e.name || e.displayName}-${i}`} className="text-[11.5px]" style={{ color: 'var(--text-secondary)' }}>
+                <div
+                  key={`${e.name || e.displayName}-${i}`}
+                  className="text-[11.5px]"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   {e.displayName || e.name}: {e.reason}
                 </div>
               ))}
@@ -339,8 +341,8 @@ export function FirewallAuditPage() {
       {!hasScanned && !scanning && (
         <EmptyState
           icon={ShieldAlert}
-          title="No scan yet"
-          description="Scan to review inbound firewall rules and flag anything suspicious."
+          title={t('emptyStateTitle')}
+          description={t('emptyStateDescription')}
           action={
             <button
               type="button"
@@ -352,7 +354,7 @@ export function FirewallAuditPage() {
               }}
             >
               <RefreshCw className="h-4 w-4" strokeWidth={1.8} />
-              Scan firewall rules
+              {t('emptyStateAction')}
             </button>
           }
         />
@@ -371,7 +373,7 @@ export function FirewallAuditPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => useFirewallStore.getState().setSearchQuery(e.target.value)}
-                placeholder="Search rules, programs, groups…"
+                placeholder={t('searchPlaceholder')}
                 className="w-full rounded-lg border-0 px-3 py-2 pl-9 text-[13px] outline-none"
                 style={{
                   background: 'var(--card-bg)',
@@ -384,10 +386,10 @@ export function FirewallAuditPage() {
               value={riskFilter}
               onChange={(v) => useFirewallStore.getState().setRiskFilter(v as 'all' | FirewallRiskLevel)}
               options={[
-                { value: 'all', label: 'All risk levels' },
-                { value: 'high', label: 'High risk' },
-                { value: 'medium', label: 'Medium risk' },
-                { value: 'low', label: 'Low risk' },
+                { value: 'all', label: t('filterAllRisk') },
+                { value: 'high', label: t('filterHighRisk') },
+                { value: 'medium', label: t('filterMediumRisk') },
+                { value: 'low', label: t('filterLowRisk') },
               ]}
             />
             <FilterSelect
@@ -396,39 +398,46 @@ export function FirewallAuditPage() {
                 useFirewallStore.getState().setProgramFilter(v as 'all' | 'with-program' | 'no-program' | 'stale')
               }
               options={[
-                { value: 'all', label: 'All rules' },
-                { value: 'with-program', label: 'With program' },
-                { value: 'no-program', label: 'Port-only' },
-                { value: 'stale', label: 'Stale only' },
+                { value: 'all', label: t('filterAllRules') },
+                { value: 'with-program', label: t('filterWithProgram') },
+                { value: 'no-program', label: t('filterNoProgram') },
+                { value: 'stale', label: t('filterStale') },
               ]}
             />
             {builtinCount > 0 && (
-              <label
+              <div
                 className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-[13px]"
                 style={{
                   background: 'var(--card-bg)',
                   border: '1px solid var(--border-medium)',
                   color: 'var(--text-secondary)',
                 }}
-                title={`${builtinCount} Microsoft / system / packaged-app rule${builtinCount === 1 ? '' : 's'} hidden by default — these ship with Windows and shouldn't be removed.`}
+                title={t('builtinTitle', { count: builtinCount })}
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={showBuiltin}
-                  onChange={(e) => useFirewallStore.getState().setShowBuiltin(e.target.checked)}
-                  className="h-3.5 w-3.5 cursor-pointer accent-amber-500"
+                  onChange={() => useFirewallStore.getState().setShowBuiltin(!showBuiltin)}
+                  size="sm"
                 />
-                Show built-in ({builtinCount})
-              </label>
+                <span
+                  onClick={() => useFirewallStore.getState().setShowBuiltin(!showBuiltin)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      useFirewallStore.getState().setShowBuiltin(!showBuiltin)
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {t('showBuiltin', { count: builtinCount })}
+                </span>
+              </div>
             )}
           </div>
 
           {filteredRules.length === 0 ? (
-            <EmptyState
-              icon={Search}
-              title="No rules match"
-              description="Try adjusting your filters or search query."
-            />
+            <EmptyState icon={Search} title={t('noRulesTitle')} description={t('noRulesDescription')} />
           ) : (
             <div className="space-y-6">
               {riskGroups.map((group) => (
@@ -451,7 +460,7 @@ export function FirewallAuditPage() {
                   </div>
                   <div className="space-y-1.5">
                     {group.rules.map((r) => (
-                      <RuleRow key={r.name} rule={r} />
+                      <RuleRow key={r.name} rule={r} t={t} />
                     ))}
                   </div>
                 </div>
@@ -465,36 +474,36 @@ export function FirewallAuditPage() {
         open={pendingAction !== null}
         onConfirm={() => pendingAction && handleApply(pendingAction)}
         onCancel={() => setPendingAction(null)}
-        title={pendingAction === 'delete' ? 'Delete firewall rules?' : 'Disable firewall rules?'}
+        title={pendingAction === 'delete' ? t('confirmDeleteTitle') : t('confirmDisableTitle')}
         description={
           pendingAction === 'delete'
-            ? `Permanently delete ${selectedCount} firewall rule${selectedCount === 1 ? '' : 's'}. This cannot be undone.`
-            : `Disable ${selectedCount} firewall rule${selectedCount === 1 ? '' : 's'}. You can re-enable them later from Windows Firewall settings.`
+            ? t('confirmDeleteDescription', { count: selectedCount })
+            : t('confirmDisableDescription', { count: selectedCount })
         }
         variant={pendingAction === 'delete' ? 'danger' : 'warning'}
-        confirmLabel={pendingAction === 'delete' ? 'Delete' : 'Disable'}
+        confirmLabel={pendingAction === 'delete' ? t('confirmDeleteLabel') : t('confirmDisableLabel')}
       />
     </div>
   )
 }
 
-function RuleRow({ rule }: { rule: FirewallRule }) {
+function RuleRow({ rule, t }: { rule: FirewallRule; t: (key: string, options?: Record<string, unknown>) => string }) {
   const colors = RISK_COLORS[rule.risk]
   return (
-    <label
+    <div
       className="flex cursor-pointer items-start gap-3 rounded-xl px-4 py-3 transition-colors"
       style={{
         background: rule.selected ? colors.bg : 'var(--card-bg)',
         border: `1px solid ${rule.selected ? colors.border : 'var(--border-medium)'}`,
       }}
     >
-      <input
-        type="checkbox"
-        checked={rule.selected}
-        onChange={() => useFirewallStore.getState().toggleRule(rule.name)}
-        className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-amber-500"
-        aria-label={`Select rule ${rule.displayName}`}
-      />
+      <div className="mt-1">
+        <Checkbox
+          checked={rule.selected}
+          onChange={() => useFirewallStore.getState().toggleRule(rule.name)}
+          aria-label={t('ariaSelectRule', { name: rule.displayName })}
+        />
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-[13px] font-medium text-white">{rule.displayName}</span>
@@ -509,7 +518,8 @@ function RuleRow({ rule }: { rule: FirewallRule }) {
         </div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px]" style={{ color: 'var(--text-muted)' }}>
           <span>
-            Profiles: <span className="text-zinc-300">{rule.profiles.length ? rule.profiles.join(', ') : 'Any'}</span>
+            Profiles:{' '}
+            <span className="text-zinc-300">{rule.profiles.length ? rule.profiles.join(', ') : t('profileAny')}</span>
           </span>
           <span>
             {rule.protocol} {rule.localPort !== 'Any' && `· port ${rule.localPort}`}
@@ -538,14 +548,16 @@ function RuleRow({ rule }: { rule: FirewallRule }) {
                   style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}
                 >
                   <Icon className="h-3 w-3" strokeWidth={2} />
-                  {ISSUE_LABEL[issue]}
+                  {t(
+                    `issue${issue === 'stale' ? 'ProgramMissing' : issue === 'unsigned' ? 'UnsignedBinary' : issue === 'broad-scope' ? 'PublicAnyPort' : 'AnyRemoteIp'}`,
+                  )}
                 </span>
               )
             })}
           </div>
         )}
       </div>
-    </label>
+    </div>
   )
 }
 

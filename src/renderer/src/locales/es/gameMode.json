@@ -100,5 +100,27 @@
   "profilesSave": "Guardar",
   "profilesCancel": "Cancelar",
   "profilesEdit": "Editar",
-  "profilesEmpty": "Aún no hay perfiles — haga clic en Agregar Perfil para crear uno"
+  "profilesEmpty": "Aún no hay perfiles — haga clic en Agregar Perfil para crear uno",
+
+  "auditTitle": "Auditoría",
+  "auditDesc": "Verificar que las optimizaciones del Modo Juego se aplican de forma segura",
+  "auditButton": "Ejecutar Auditoría",
+  "auditRunning": "Auditando…",
+  "auditDetails": "Ver detalles",
+  "auditModalTitle": "Informe de Auditoría",
+  "auditRemediation": "Corrección",
+  "auditNoChecks": "No se realizaron verificaciones",
+
+  "toastAllFailed": "Todas las optimizaciones fallaron",
+  "toastSomeFailed_one": "{{count}} optimización falló",
+  "toastSomeFailed_other": "{{count}} optimizaciones fallaron",
+  "toastActivationFailed": "Activación falló",
+  "toastRestoreFailed_one": "{{count}} ajuste no pudo restaurarse — use el banner de limpieza debajo para reintentar cuando se resuelva la causa",
+  "toastRestoreFailed_other": "{{count}} ajustes no pudieron restaurarse — use el banner de limpieza debajo para reintentar cuando se resuelva la causa",
+  "toastDeactivationFailed": "Desactivación falló",
+  "validationProcessName": "El nombre del proceso solo puede contener letras, números, puntos, guiones, guiones bajos y espacios",
+  "pendingRestoreMessage": "Algunos ajustes de la última sesión no pudieron restaurarse automáticamente. Reintente una vez que se resuelva la causa (p. ej., derechos de administrador).",
+  "retryCleanup": "Reintentar limpieza",
+  "retrying": "Reintentando\u2026",
+  "ariaHexGrid": "Fondo de cuadrícula hexagonal"
 }

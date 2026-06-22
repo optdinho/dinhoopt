@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { RECOMMENDATION_PACKS } from '@/lib/hosts-recommendations'
 import { useHostsEditorStore } from '@/stores/hosts-editor-store'
@@ -369,40 +370,7 @@ export function HostsEditorPage() {
               }}
             >
               {/* Enabled checkbox */}
-              <label className="flex items-center cursor-pointer shrink-0">
-                <input
-                  type="checkbox"
-                  checked={entry.enabled}
-                  onChange={() => useHostsEditorStore.getState().toggleEntry(entry.id)}
-                  className="sr-only peer"
-                />
-                <div
-                  className="h-[18px] w-[18px] rounded-[5px] transition-colors"
-                  style={{
-                    background: entry.enabled ? 'var(--accent)' : 'var(--bg-hover-2)',
-                    border: entry.enabled ? 'none' : '1.5px solid var(--border-stronger)',
-                  }}
-                >
-                  {entry.enabled && (
-                    <svg
-                      className="h-full w-full p-0.5"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      role="img"
-                      aria-label="Enabled"
-                    >
-                      <title>Enabled</title>
-                      <path
-                        d="M2.5 6l2.5 2.5 4.5-5"
-                        stroke="var(--text-on-accent)"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </div>
-              </label>
+              <Checkbox checked={entry.enabled} onChange={() => useHostsEditorStore.getState().toggleEntry(entry.id)} />
 
               {/* IP */}
               <input

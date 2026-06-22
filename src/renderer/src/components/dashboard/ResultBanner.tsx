@@ -115,7 +115,7 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
                   <StaggerItem key="privacy">
                     <button
                       type="button"
-                      onClick={() => navigate('/hardening')}
+                      onClick={() => navigate('/privacy')}
                       className="text-[12px] hover:underline transition-all hover:translate-x-0.5"
                       style={{ color: '#3b82f6' }}
                     >

@@ -13,9 +13,23 @@
   "temperature": "Temperature",
   "tweakBonus": "Tweak Bonus",
   "powerBonus": "Power Plan",
+  "totalScore": "Total Score",
+  "scoreRingAriaLabel": "Benchmark score ring",
   "classS": "≥ 90",
   "classA": "≥ 80",
   "classB": "≥ 70",
   "classC": "≥ 50",
-  "classD": "< 50"
+  "classD": "< 50",
+  "steps": {
+    "init": "Initializing sensors...",
+    "cpuBaseline": "Measuring CPU (baseline)",
+    "ramAvailable": "Measuring available RAM",
+    "networkLatency": "Measuring network latency",
+    "dpcLatency": "Measuring DPC latency",
+    "temperatures": "Measuring temperatures",
+    "tweaksCheck": "Checking applied tweaks",
+    "powerPlan": "Checking power plan",
+    "scoreCalc": "Calculating competitive score",
+    "recommendations": "Generating recommendations"
+  }
 }

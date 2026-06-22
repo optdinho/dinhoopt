@@ -13,7 +13,8 @@ export function usePolling<T>(
 
   const fetchData = useCallback(() => {
     mountedRef.current = true
-    fetcherRef.current()
+    fetcherRef
+      .current()
       .then((result) => {
         if (!mountedRef.current) return
         setData(result)

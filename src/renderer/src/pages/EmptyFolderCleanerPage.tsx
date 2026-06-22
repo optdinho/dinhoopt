@@ -1,4 +1,6 @@
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { cn, formatDuration } from '@/lib/utils'
 import { useEmptyFolderStore } from '@/stores/empty-folder-store'
 import {
@@ -371,11 +373,10 @@ export function EmptyFolderCleanerPage() {
                     className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.02]"
                     style={idx > 0 ? { borderTop: '1px solid var(--bg-subtle)' } : undefined}
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={store.selectedPaths.has(folder.path)}
                       onChange={() => store.togglePath(folder.path)}
-                      className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded accent-amber-500"
+                      size="sm"
                     />
                     <FolderX className="h-4 w-4 shrink-0" style={{ color: 'var(--text-muted)' }} strokeWidth={1.5} />
                     <span
@@ -401,14 +402,14 @@ export function EmptyFolderCleanerPage() {
               </div>
             </>
           ) : (
-            <EmptyState title={t('emptyTitle')} description={t('emptyDescription')} />
+            <EmptyState icon={FolderX} title={t('emptyTitle')} description={t('emptyDescription')} />
           )}
         </>
       )}
 
       {/* Idle state */}
       {store.status === 'idle' && !store.result && (
-        <EmptyState title={t('idleTitle')} description={t('idleDescription')} />
+        <EmptyState icon={FolderX} title={t('idleTitle')} description={t('idleDescription')} />
       )}
 
       {/* Deleting overlay */}
@@ -463,18 +464,6 @@ function StatMini({ label, value }: { label: string; value: string }) {
         {label}:{' '}
       </span>
       <span className="text-[12px] font-medium text-white">{value}</span>
-    </div>
-  )
-}
-
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
-      <FolderX className="mb-4 h-12 w-12" style={{ color: 'var(--text-faint)' }} strokeWidth={1.2} />
-      <h3 className="text-[15px] font-semibold text-white">{title}</h3>
-      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
-        {description}
-      </p>
     </div>
   )
 }

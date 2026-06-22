@@ -12,7 +12,11 @@ const PRIVACY_POLL_INTERVAL = 120_000
 export function PrivacyShieldCard() {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
-  const { data: state, error, loading } = usePolling<PrivacyShieldState>(
+  const {
+    data: state,
+    error,
+    loading,
+  } = usePolling<PrivacyShieldState>(
     () => window.dinho?.privacyScan?.() ?? Promise.resolve({ score: 0, protected: 0, total: 0 }),
     PRIVACY_POLL_INTERVAL,
   )

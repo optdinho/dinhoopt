@@ -13,7 +13,17 @@ export function SoftwareUpdatesCard() {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
   const { data, error, loading } = usePolling<UpdateCheckResult>(
-    () => window.dinho?.softwareUpdateCheck?.() ?? Promise.resolve({ totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0, apps: [], packageManagerAvailable: false, packageManagerName: null }),
+    () =>
+      window.dinho?.softwareUpdateCheck?.() ??
+      Promise.resolve({
+        totalCount: 0,
+        majorCount: 0,
+        minorCount: 0,
+        patchCount: 0,
+        apps: [],
+        packageManagerAvailable: false,
+        packageManagerName: null,
+      }),
     UPDATES_POLL_INTERVAL,
   )
 

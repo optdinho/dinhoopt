@@ -3,9 +3,9 @@
 // Creates new cleaner rule entries by prompting for app details.
 // Run: npm run new-rule
 
-const { createInterface } = require('readline')
-const { readFileSync, writeFileSync } = require('fs')
-const path = require('path')
+const { createInterface } = require('node:readline')
+const { readFileSync, writeFileSync } = require('node:fs')
+const path = require('node:path')
 
 const RULES_DIR = path.resolve(__dirname, '..', 'rules')
 
@@ -62,35 +62,28 @@ function insertSorted(apps, newApp) {
 }
 
 async function main() {
-  console.log('\n🧹 Kudu — New Cleaner Rule Generator\n')
 
   // App name
   const name = await ask('App display name (e.g. "Notion")')
   if (!name) {
-    console.log('App name is required.')
     process.exit(1)
   }
 
   // App ID
   const suggestedId = toId(name)
   const id = await ask('App ID (lowercase-with-hyphens)', suggestedId)
-
-  // Category
-  console.log('\nCategories: apps, gaming, gpu-cache')
   const category = await ask('Category', 'apps')
   if (!CATEGORIES[category]) {
-    console.log(`Unknown category "${category}". Use: ${Object.keys(CATEGORIES).join(', ')}`)
     process.exit(1)
   }
   const targetFile = CATEGORIES[category]
-
-  // Platforms
-  console.log('\nWhich platforms? (comma-separated: win32, darwin, linux)')
   const platformInput = await ask('Platforms', 'win32,darwin,linux')
-  const platforms = platformInput.split(',').map((p) => p.trim()).filter((p) => PLATFORM_VARS[p])
+  const platforms = platformInput
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => PLATFORM_VARS[p])
 
   if (platforms.length === 0) {
-    console.log('At least one valid platform is required.')
     process.exit(1)
   }
 
@@ -100,19 +93,14 @@ async function main() {
   // Collect paths per platform
   const platformPaths = {}
   for (const platform of platforms) {
-    console.log(`\n── ${platform} ──`)
-    console.log(`Available variables: ${PLATFORM_VARS[platform].join(', ')}`)
 
     if (isElectron) {
       const basePath = await ask('Base path to app data (e.g. ${APPDATA}/Notion)')
       if (!basePath) {
-        console.log('Base path is required for Electron apps.')
         process.exit(1)
       }
       platformPaths[platform] = CHROMIUM_SUBDIRS.map((sub) => `${basePath}/${sub}`)
-      console.log('  Generated paths:')
       for (const p of platformPaths[platform]) {
-        console.log(`    ${p}`)
       }
       const extraPaths = await ask('Additional paths? (comma-separated, or Enter to skip)')
       if (extraPaths) {
@@ -121,7 +109,6 @@ async function main() {
     } else {
       const paths = await ask('Cache paths (comma-separated)')
       if (!paths) {
-        console.log('At least one path is required.')
         process.exit(1)
       }
       platformPaths[platform] = paths.split(',').map((p) => p.trim())
@@ -132,26 +119,16 @@ async function main() {
   const childSubdir = await ask('\nchildSubdir? (leave empty if not needed)')
 
   // Optional description
-  const description = await ask('Description (what gets cleaned and why it\'s safe)')
-
-  // Confirm
-  console.log('\n── Summary ──')
-  console.log(`  Name:     ${name}`)
-  console.log(`  ID:       ${id}`)
-  console.log(`  Category: ${category}`)
-  console.log(`  File:     ${targetFile}`)
+  const description = await ask("Description (what gets cleaned and why it's safe)")
   for (const platform of platforms) {
-    console.log(`  ${platform}:`)
     for (const p of platformPaths[platform]) {
-      console.log(`    - ${p}`)
     }
   }
-  if (childSubdir) console.log(`  childSubdir: ${childSubdir}`)
-  if (description) console.log(`  Description: ${description}`)
+  if (childSubdir) 
+  if (description) 
 
   const confirmed = await askYesNo('\nWrite these entries?')
   if (!confirmed) {
-    console.log('Aborted.')
     process.exit(0)
   }
 
@@ -163,7 +140,6 @@ async function main() {
 
     // Check for duplicate ID
     if (data.apps.some((a) => a.id === id)) {
-      console.log(`  ⚠ ${platform}/${targetFile} already has "${id}" — skipping`)
       continue
     }
 
@@ -172,17 +148,11 @@ async function main() {
     if (description) entry.description = description
 
     insertSorted(data.apps, entry)
-    writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n')
-    console.log(`  ✓ Added "${name}" to ${platform}/${targetFile}`)
+    writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`)
     filesModified++
   }
 
   if (filesModified > 0) {
-    console.log(`\nDone! ${filesModified} file(s) updated.`)
-    console.log('Next steps:')
-    console.log('  1. npm run validate:rules   — check your changes')
-    console.log('  2. npm test                 — run the test suite')
-    console.log('  3. Submit a PR!')
   }
 
   rl.close()

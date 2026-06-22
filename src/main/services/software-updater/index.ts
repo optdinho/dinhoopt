@@ -1,0 +1,5 @@
+export { cleanOutput, computeSeverity, stripTrailingVersion } from './utils'
+export { parseWingetUpgradeOutput, parseWingetListOutput } from './checkers/winget'
+export { parseChocoOutdatedOutput, parseChocoListOutput } from './checkers/choco'
+export { parseScoopStatusOutput, parseScoopListOutput } from './checkers/scoop'
+export { checkForUpdates, runUpdates, isValidAppId } from './handlers'

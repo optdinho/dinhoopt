@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function WindowControls() {
   const { t } = useTranslation('common')
   return (
-    <div className="no-drag fixed right-0 top-0 z-50 flex" role="toolbar" aria-label="Window controls">
+    <div className="no-drag fixed right-0 top-0 z-50 flex" role="toolbar" aria-label={t('windowControls')}>
       <button
         type="button"
         onClick={() => window.dinho.windowMinimize()}

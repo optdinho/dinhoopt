@@ -1,4 +1,6 @@
+import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { formatBytes, formatDuration } from '@/lib/utils'
 import { useFileShredderStore } from '@/stores/file-shredder-store'
 import { ExternalLink, File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, X } from 'lucide-react'
@@ -66,13 +68,7 @@ export function FileShredderPage() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto px-8 py-7">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-[24px] font-bold tracking-tight text-white">{t('pageTitle')}</h1>
-        <p className="mt-1.5 text-[13px] animate-fade-in" style={{ color: 'var(--text-muted)' }}>
-          {t('pageDescription')}
-        </p>
-      </div>
+      <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       {/* Action buttons */}
       {store.status !== 'complete' && (
@@ -275,7 +271,7 @@ export function FileShredderPage() {
 
       {/* Empty state */}
       {store.status === 'idle' && store.entries.length === 0 && (
-        <EmptyState title={t('emptyTitle')} description={t('emptyDescription')} />
+        <EmptyState icon={ShieldAlert} title={t('emptyTitle')} description={t('emptyDescription')} />
       )}
 
       {/* Clear confirm dialog */}
@@ -331,18 +327,6 @@ function StatMini({ label, value }: { label: string; value: string }) {
         {label}:{' '}
       </span>
       <span className="text-[12px] font-medium text-white">{value}</span>
-    </div>
-  )
-}
-
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
-      <ShieldAlert className="mb-4 h-12 w-12" style={{ color: 'var(--text-faint)' }} strokeWidth={1.2} />
-      <h3 className="text-[15px] font-semibold text-white">{title}</h3>
-      <p className="mt-1.5 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
-        {description}
-      </p>
     </div>
   )
 }

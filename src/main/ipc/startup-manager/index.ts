@@ -1,0 +1,5 @@
+export { getBootTrace } from './boot-trace'
+export { deleteStartupItem } from './delete'
+export { registerStartupManagerIpc } from './ipc'
+export { listStartupItems } from './list'
+export { toggleStartupItem } from './toggle'

@@ -10,6 +10,7 @@ vi.mock('fs/promises', () => ({
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
+  renameSync: vi.fn(),
 }))
 
 vi.mock('crypto', () => ({
@@ -32,13 +33,15 @@ vi.mock('./scan-cache', () => ({
 }))
 
 import { existsSync } from 'node:fs'
-import { open, readdir, rm, stat } from 'node:fs/promises'
+import { renameSync } from 'node:fs'
+import { open, readdir, rm, stat, writeFile } from 'node:fs/promises'
 
 import { CleanerType } from '../../shared/enums'
 import {
   cleanItems,
   getDirectorySize,
   isExcluded,
+  overwriteFile,
   resolveChildSubdirs,
   safeDelete,
   scanDirectoriesAsItems,
@@ -55,6 +58,8 @@ const mockedStat = vi.mocked(stat)
 const mockedReaddir = vi.mocked(readdir)
 const mockedOpen = vi.mocked(open)
 const mockedExistsSync = vi.mocked(existsSync)
+const mockedRenameSync = vi.mocked(renameSync)
+const mockedWriteFile = vi.mocked(writeFile)
 const mockedGetSettings = vi.mocked(getSettings)
 const mockedGetCachedItems = vi.mocked(getCachedItems)
 
@@ -139,6 +144,41 @@ describe('isExcluded', () => {
   })
   it('extension pattern requires dot', () => {
     expect(isExcluded('C:\\temp\\catalog', ['*.log'])).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────
+// overwriteFile
+// ─────────────────────────────────────────────
+describe('overwriteFile', () => {
+  it('writes content to tmp file then renames atomically', async () => {
+    await overwriteFile('C:\\data\\config.json', '{"key":"value"}')
+
+    expect(mockedWriteFile).toHaveBeenCalledWith('C:\\data\\config.json.tmp', '{"key":"value"}', 'utf-8')
+    expect(mockedRenameSync).toHaveBeenCalledWith('C:\\data\\config.json.tmp', 'C:\\data\\config.json')
+  })
+
+  it('supports Buffer content', async () => {
+    const buf = Buffer.from('binary data')
+    await overwriteFile('C:\\data\\file.bin', buf)
+
+    expect(mockedWriteFile).toHaveBeenCalledWith('C:\\data\\file.bin.tmp', buf, 'utf-8')
+    expect(mockedRenameSync).toHaveBeenCalledWith('C:\\data\\file.bin.tmp', 'C:\\data\\file.bin')
+  })
+
+  it('propagates writeFile errors', async () => {
+    mockedWriteFile.mockRejectedValueOnce(new Error('disk full'))
+
+    await expect(overwriteFile('C:\\data\\config.json', 'data')).rejects.toThrow('disk full')
+    expect(mockedRenameSync).not.toHaveBeenCalled()
+  })
+
+  it('propagates renameSync errors', async () => {
+    mockedRenameSync.mockImplementationOnce(() => {
+      throw new Error('access denied')
+    })
+
+    await expect(overwriteFile('C:\\data\\config.json', 'data')).rejects.toThrow('access denied')
   })
 })
 

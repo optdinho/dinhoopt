@@ -256,8 +256,8 @@ describe('yaraMatchToThreatFields', () => {
   })
 
   it('clamps invalid severity', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     expect(
+      // biome-ignore lint/suspicious/noExplicitAny: test
       yaraMatchToThreatFields({ ruleName: 'T', metadata: { severity: 'info' as any }, matchedStrings: [] }).severity,
     ).toBe('high')
   })

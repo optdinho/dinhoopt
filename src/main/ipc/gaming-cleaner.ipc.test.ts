@@ -370,9 +370,7 @@ describe('GAMING_SCAN handler', () => {
     mockExistsSync.mockReturnValue(true)
 
     // readdir returns both a manifest file and a non-manifest file, then shader dir
-    mockReaddir
-      .mockResolvedValueOnce(['appmanifest_12345.acf', 'some_other_file.txt'])
-      .mockResolvedValueOnce([])
+    mockReaddir.mockResolvedValueOnce(['appmanifest_12345.acf', 'some_other_file.txt']).mockResolvedValueOnce([])
 
     mockReadFile.mockResolvedValueOnce('"appid"\t\t"12345"\n"name"\t\t"Test Game"\n')
 
@@ -392,9 +390,7 @@ describe('GAMING_SCAN handler', () => {
     mockReadFile.mockRejectedValueOnce(new Error('VDF not found'))
     mockExistsSync.mockReturnValue(true)
 
-    mockReaddir
-      .mockResolvedValueOnce(['appmanifest_99999.acf'])
-      .mockResolvedValueOnce([])
+    mockReaddir.mockResolvedValueOnce(['appmanifest_99999.acf']).mockResolvedValueOnce([])
 
     // Manifest file without appid or name fields
     mockReadFile.mockResolvedValueOnce('"SomeField"\t\t"SomeValue"\n')
@@ -417,9 +413,7 @@ describe('GAMING_SCAN handler', () => {
 
     // buildAppIdMap: empty steamAppsDir
     // shader cache: returns a file (non-directory) and a directory
-    mockReaddir
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ name: 'readme.txt', isDirectory: () => false }])
+    mockReaddir.mockResolvedValueOnce([]).mockResolvedValueOnce([{ name: 'readme.txt', isDirectory: () => false }])
 
     registerGamingCleanerIpc(() => null)
     const handler = getHandler('cleaner:gaming:scan')
@@ -437,9 +431,7 @@ describe('GAMING_SCAN handler', () => {
     mockReadFile.mockRejectedValueOnce(new Error('VDF not found'))
     mockExistsSync.mockReturnValue(true)
 
-    mockReaddir
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ name: '12345', isDirectory: () => true }])
+    mockReaddir.mockResolvedValueOnce([]).mockResolvedValueOnce([{ name: '12345', isDirectory: () => true }])
 
     mockGetDirectorySize.mockResolvedValue(512)
 

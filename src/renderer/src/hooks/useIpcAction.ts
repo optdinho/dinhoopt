@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import logger from '../lib/renderer-logger'
 
 export function useIpcAction<TArgs extends unknown[], TResult>({
   actionFn,
@@ -67,7 +68,7 @@ export function useIpcAction<TArgs extends unknown[], TResult>({
       }
       return result
     } catch (err: unknown) {
-      console.error('IPC action failed:', err)
+      logger.error('useIpcAction', 'IPC action failed', err)
       onErrorRef.current?.(err)
       if (errorKeyRef.current && tRef.current) {
         toast.error(tRef.current(`${errorKeyRef.current}.actionFailedToast`), {

@@ -100,9 +100,11 @@ vi.mock('./services/settings-store', () => ({
 }))
 
 vi.mock('./services/program-uninstaller', () => ({
-  getInstalledProgramsFull: vi.fn().mockResolvedValue([
-    { displayName: 'Test App', displayVersion: '1.0.0', publisher: 'Test Corp', estimatedSize: 1024 },
-  ]),
+  getInstalledProgramsFull: vi
+    .fn()
+    .mockResolvedValue([
+      { displayName: 'Test App', displayVersion: '1.0.0', publisher: 'Test Corp', estimatedSize: 1024 },
+    ]),
 }))
 
 vi.mock('./ipc/service-manager.ipc', () => ({
@@ -122,8 +124,24 @@ vi.mock('./services/uninstall-leftovers', () => ({
       itemCount: 2,
       totalSize: 2048,
       items: [
-        { id: 'leftover1', path: 'C:\\leftover\\file1', size: 1024, category: 'uninstallLeftovers', subcategory: 'Test Leftover', lastModified: Date.now(), selected: true },
-        { id: 'leftover2', path: 'C:\\leftover\\file2', size: 1024, category: 'uninstallLeftovers', subcategory: 'Test Leftover', lastModified: Date.now(), selected: true },
+        {
+          id: 'leftover1',
+          path: 'C:\\leftover\\file1',
+          size: 1024,
+          category: 'uninstallLeftovers',
+          subcategory: 'Test Leftover',
+          lastModified: Date.now(),
+          selected: true,
+        },
+        {
+          id: 'leftover2',
+          path: 'C:\\leftover\\file2',
+          size: 1024,
+          category: 'uninstallLeftovers',
+          subcategory: 'Test Leftover',
+          lastModified: Date.now(),
+          selected: true,
+        },
       ],
     },
   ]),
@@ -139,8 +157,24 @@ vi.mock('./ipc/network-cleanup.ipc', () => ({
 
 vi.mock('./ipc/startup-manager.ipc', () => ({
   listStartupItems: vi.fn().mockResolvedValue([
-    { name: 'TestStartup', displayName: 'Test Startup', enabled: true, impact: 'Medium', location: 'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', command: 'test.exe', source: 'registry' },
-    { name: 'DisabledStartup', displayName: 'Disabled Startup', enabled: false, impact: 'Low', location: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', command: 'disabled.exe', source: 'registry' },
+    {
+      name: 'TestStartup',
+      displayName: 'Test Startup',
+      enabled: true,
+      impact: 'Medium',
+      location: 'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+      command: 'test.exe',
+      source: 'registry',
+    },
+    {
+      name: 'DisabledStartup',
+      displayName: 'Disabled Startup',
+      enabled: false,
+      impact: 'Low',
+      location: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+      command: 'disabled.exe',
+      source: 'registry',
+    },
   ]),
   toggleStartupItem: vi.fn().mockResolvedValue({ success: true, name: 'TestStartup', enabled: true }),
   deleteStartupItem: vi.fn().mockResolvedValue({ success: true, name: 'TestStartup' }),
@@ -156,9 +190,11 @@ vi.mock('./ipc/registry-cleaner.ipc', () => ({
 }))
 
 vi.mock('./ipc/debloater.ipc', () => ({
-  scanBloatware: vi.fn().mockResolvedValue([
-    { name: 'Crapware', packageName: 'CrapwareInc.Crapware', size: '50 MB', description: 'Useless app' },
-  ]),
+  scanBloatware: vi
+    .fn()
+    .mockResolvedValue([
+      { name: 'Crapware', packageName: 'CrapwareInc.Crapware', size: '50 MB', description: 'Useless app' },
+    ]),
   removeBloatware: vi.fn().mockResolvedValue({ removed: 1, failed: 0, errors: [] }),
 }))
 
@@ -174,15 +210,11 @@ vi.mock('./ipc/privacy-shield.ipc', () => ({
 
 vi.mock('./ipc/driver-manager.ipc', () => ({
   scanDrivers: vi.fn().mockResolvedValue({
-    packages: [
-      { publishedName: 'oem0.inf', className: 'System', version: '10.0.1' },
-    ],
+    packages: [{ publishedName: 'oem0.inf', className: 'System', version: '10.0.1' }],
   }),
   cleanDrivers: vi.fn().mockResolvedValue({ cleaned: 1, failed: 0, errors: [] }),
   scanDriverUpdates: vi.fn().mockResolvedValue({
-    updates: [
-      { updateId: 'driver1', updateTitle: 'Intel Graphics Driver' },
-    ],
+    updates: [{ updateId: 'driver1', updateTitle: 'Intel Graphics Driver' }],
   }),
   installDriverUpdates: vi.fn().mockResolvedValue({ installed: 1, failed: 0, errors: [] }),
 }))
@@ -192,8 +224,22 @@ vi.mock('./services/software-updater', () => ({
     packageManagerAvailable: true,
     packageManagerName: 'winget',
     apps: [
-      { id: 'app1', name: 'Test App', currentVersion: '1.0', availableVersion: '2.0', severity: 'major', isUpToDate: false },
-      { id: 'app2', name: 'Up-to-Date App', currentVersion: '2.0', availableVersion: '2.0', severity: 'none', isUpToDate: true },
+      {
+        id: 'app1',
+        name: 'Test App',
+        currentVersion: '1.0',
+        availableVersion: '2.0',
+        severity: 'major',
+        isUpToDate: false,
+      },
+      {
+        id: 'app2',
+        name: 'Up-to-Date App',
+        currentVersion: '2.0',
+        availableVersion: '2.0',
+        severity: 'none',
+        isUpToDate: true,
+      },
     ],
   }),
   runUpdates: vi.fn().mockResolvedValue({ updated: 1, failed: 0, errors: [] }),
@@ -205,7 +251,9 @@ vi.mock('./ipc/disk-analyzer.ipc', () => ({
     { letter: 'D', label: 'Data', usedSpace: 200000000000, totalSize: 500000000000 },
   ]),
   analyzeDisk: vi.fn().mockResolvedValue({
-    name: 'C:', size: 1000000000000, children: [
+    name: 'C:',
+    size: 1000000000000,
+    children: [
       { name: 'Windows', size: 30000000000, children: [] },
       { name: 'Users', size: 50000000000, children: [] },
     ],
@@ -217,17 +265,17 @@ vi.mock('./ipc/disk-analyzer.ipc', () => ({
 }))
 
 vi.mock('./services/metrics', () => ({
-  collectMetrics: vi.fn().mockResolvedValue([
-    { name: 'dinho_cleanups_total', help: 'Total cleanups', type: 'counter', value: 10, labels: {} },
-  ]),
+  collectMetrics: vi
+    .fn()
+    .mockResolvedValue([
+      { name: 'dinho_cleanups_total', help: 'Total cleanups', type: 'counter', value: 10, labels: {} },
+    ]),
   formatPrometheus: vi.fn().mockReturnValue('# HELP dinho_cleanups_total Total cleanups\ndinho_cleanups_total 10\n'),
 }))
 
 vi.mock('./ipc/malware-scanner.ipc', () => ({
   scanMalware: vi.fn().mockResolvedValue({
-    threats: [
-      { severity: 'high', fileName: 'virus.exe', path: 'C:\\malware\\virus.exe' },
-    ],
+    threats: [{ severity: 'high', fileName: 'virus.exe', path: 'C:\\malware\\virus.exe' }],
     filesScanned: 100,
     duration: 5000,
     engines: ['test'],
@@ -1151,7 +1199,13 @@ describe('handler: leftovers', () => {
 
   it('cleans leftovers', async () => {
     const { cleanItems } = await import('./services/file-utils')
-    ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({ totalCleaned: 2048, filesDeleted: 2, filesSkipped: 0, errors: [], needsElevation: false })
+    ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
+      totalCleaned: 2048,
+      filesDeleted: 2,
+      filesSkipped: 0,
+      errors: [],
+      needsElevation: false,
+    })
 
     process.argv = ['node.exe', 'script.js', '--cli', 'leftovers', 'clean']
     const { runCli } = await import('./cli')
@@ -1533,9 +1587,7 @@ describe('handler: privacy', () => {
   it('shows nothing to apply when all settings enabled', async () => {
     const { scanPrivacy } = await import('./ipc/privacy-shield.ipc')
     ;(scanPrivacy as ReturnType<typeof vi.fn>).mockResolvedValue({
-      settings: [
-        { id: 'setting1', label: 'Telemetry', description: 'Send telemetry', enabled: true },
-      ],
+      settings: [{ id: 'setting1', label: 'Telemetry', description: 'Send telemetry', enabled: true }],
     })
 
     process.argv = ['node.exe', 'script.js', '--cli', 'privacy', 'apply']
@@ -1585,7 +1637,11 @@ describe('handler: malware', () => {
   it('shows no threats for clean scan', async () => {
     const { scanMalware } = await import('./ipc/malware-scanner.ipc')
     ;(scanMalware as ReturnType<typeof vi.fn>).mockResolvedValue({
-      threats: [], filesScanned: 100, duration: 5000, engines: ['test'], scanId: 'scan1',
+      threats: [],
+      filesScanned: 100,
+      duration: 5000,
+      engines: ['test'],
+      scanId: 'scan1',
     })
 
     process.argv = ['node.exe', 'script.js', '--cli', 'malware', 'scan']
@@ -1649,9 +1705,7 @@ describe('handler: drivers', () => {
     // Reset driver mocks to prevent mutation leakage
     const { scanDriverUpdates } = await import('./ipc/driver-manager.ipc')
     ;(scanDriverUpdates as ReturnType<typeof vi.fn>).mockResolvedValue({
-      updates: [
-        { updateId: 'driver1', updateTitle: 'Intel Graphics Driver' },
-      ],
+      updates: [{ updateId: 'driver1', updateTitle: 'Intel Graphics Driver' }],
     })
   })
 
@@ -1741,9 +1795,7 @@ describe('handler: drivers', () => {
   it('shows usage for update without ids and without --all', async () => {
     const { scanDriverUpdates } = await import('./ipc/driver-manager.ipc')
     ;(scanDriverUpdates as ReturnType<typeof vi.fn>).mockResolvedValue({
-      updates: [
-        { updateId: 'driver1', updateTitle: 'Intel Graphics Driver' },
-      ],
+      updates: [{ updateId: 'driver1', updateTitle: 'Intel Graphics Driver' }],
     })
 
     process.argv = ['node.exe', 'script.js', '--cli', 'drivers', 'update']
@@ -1776,8 +1828,22 @@ describe('handler: updates', () => {
       packageManagerAvailable: true,
       packageManagerName: 'winget',
       apps: [
-        { id: 'app1', name: 'Test App', currentVersion: '1.0', availableVersion: '2.0', severity: 'major', isUpToDate: false },
-        { id: 'app2', name: 'Up-to-Date App', currentVersion: '2.0', availableVersion: '2.0', severity: 'none', isUpToDate: true },
+        {
+          id: 'app1',
+          name: 'Test App',
+          currentVersion: '1.0',
+          availableVersion: '2.0',
+          severity: 'major',
+          isUpToDate: false,
+        },
+        {
+          id: 'app2',
+          name: 'Up-to-Date App',
+          currentVersion: '2.0',
+          availableVersion: '2.0',
+          severity: 'none',
+          isUpToDate: true,
+        },
       ],
     })
   })
@@ -2071,14 +2137,10 @@ describe('legacy scan functions', () => {
       const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
         }),
       )
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp'),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--system']
       const { runCli } = await import('./cli')
@@ -2094,17 +2156,11 @@ describe('legacy scan functions', () => {
       const { resolveChildSubdirs, scanMultipleDirectories } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: '*.log' },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: '*.log' }],
         }),
       )
-      ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockResolvedValue([
-        'C:\\Windows\\Temp\\child1',
-      ])
-      ;(scanMultipleDirectories as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp'),
-      )
+      ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockResolvedValue(['C:\\Windows\\Temp\\child1'])
+      ;(scanMultipleDirectories as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--system']
       const { runCli } = await import('./cli')
@@ -2120,21 +2176,13 @@ describe('legacy scan functions', () => {
       const { scanFile } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
-          singleFileCleanTargets: () => [
-            { path: 'C:\\Windows\\dump.log', subcategory: 'Dump Files' },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+          singleFileCleanTargets: () => [{ path: 'C:\\Windows\\dump.log', subcategory: 'Dump Files' }],
         }),
       )
       const { scanDirectory } = await import('./services/file-utils')
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp'),
-      )
-      ;(scanFile as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Dump Files'),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp'))
+      ;(scanFile as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Dump Files'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--system']
       const { runCli } = await import('./cli')
@@ -2150,9 +2198,7 @@ describe('legacy scan functions', () => {
       const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\EventLogs', subcategory: 'Event Log Archives', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\EventLogs', subcategory: 'Event Log Archives', childSubdir: false }],
           protectedEventLogs: () => ['sec.old.evtx'],
         }),
       )
@@ -2160,8 +2206,24 @@ describe('legacy scan functions', () => {
         category: 'system',
         subcategory: 'Event Log Archives',
         items: [
-          { id: 'log1', path: 'C:\\EventLogs\\sec.old.evtx', size: 5000, category: 'system', subcategory: 'Event Log Archives', lastModified: Date.now(), selected: true },
-          { id: 'log2', path: 'C:\\EventLogs\\sys.old.evtx', size: 3000, category: 'system', subcategory: 'Event Log Archives', lastModified: Date.now(), selected: true },
+          {
+            id: 'log1',
+            path: 'C:\\EventLogs\\sec.old.evtx',
+            size: 5000,
+            category: 'system',
+            subcategory: 'Event Log Archives',
+            lastModified: Date.now(),
+            selected: true,
+          },
+          {
+            id: 'log2',
+            path: 'C:\\EventLogs\\sys.old.evtx',
+            size: 3000,
+            category: 'system',
+            subcategory: 'Event Log Archives',
+            lastModified: Date.now(),
+            selected: true,
+          },
         ],
         totalSize: 8000,
         itemCount: 2,
@@ -2182,9 +2244,7 @@ describe('legacy scan functions', () => {
       const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
         }),
       )
       ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -2208,9 +2268,7 @@ describe('legacy scan functions', () => {
       const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
         }),
       )
       ;(scanDirectory as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Access denied'))
@@ -2231,17 +2289,11 @@ describe('legacy scan functions', () => {
       const { resolveChildSubdirs, scanMultipleDirectories } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          appPaths: () => [
-            { paths: ['C:\\AppData\\Discord'], childSubdir: 'Cache', name: 'Discord' },
-          ],
+          appPaths: () => [{ paths: ['C:\\AppData\\Discord'], childSubdir: 'Cache', name: 'Discord' }],
         }),
       )
-      ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockResolvedValue([
-        'C:\\AppData\\Discord\\Cache',
-      ])
-      ;(scanMultipleDirectories as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('app', 'Discord'),
-      )
+      ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockResolvedValue(['C:\\AppData\\Discord\\Cache'])
+      ;(scanMultipleDirectories as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('app', 'Discord'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--app']
       const { runCli } = await import('./cli')
@@ -2258,9 +2310,7 @@ describe('legacy scan functions', () => {
       const { resolveChildSubdirs } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          appPaths: () => [
-            { paths: ['C:\\AppData\\Discord'], childSubdir: 'Cache', name: 'Discord' },
-          ],
+          appPaths: () => [{ paths: ['C:\\AppData\\Discord'], childSubdir: 'Cache', name: 'Discord' }],
         }),
       )
       ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Not found'))
@@ -2281,25 +2331,16 @@ describe('legacy scan functions', () => {
       const { scanDirectoriesAsItems } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          gamingPaths: () => [
-            { paths: ['C:\\Steam\\cache'], name: 'Steam' },
-          ],
+          gamingPaths: () => [{ paths: ['C:\\Steam\\cache'], name: 'Steam' }],
         }),
       )
-      ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('gaming', 'Steam'),
-      )
+      ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('gaming', 'Steam'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--gaming']
       const { runCli } = await import('./cli')
       await runCli()
 
-      expect(scanDirectoriesAsItems).toHaveBeenCalledWith(
-        ['C:\\Steam\\cache'],
-        'gaming',
-        'Steam',
-        'Launcher Caches',
-      )
+      expect(scanDirectoriesAsItems).toHaveBeenCalledWith(['C:\\Steam\\cache'], 'gaming', 'Steam', 'Launcher Caches')
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Steam'))
       expect(appExitMock).toHaveBeenCalledWith(0)
     })
@@ -2310,14 +2351,10 @@ describe('legacy scan functions', () => {
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
           gamingPaths: () => [],
-          gpuCachePaths: () => [
-            { paths: ['C:\\NVIDIA\\GLCache'], name: 'NVIDIA' },
-          ],
+          gpuCachePaths: () => [{ paths: ['C:\\NVIDIA\\GLCache'], name: 'NVIDIA' }],
         }),
       )
-      ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('gaming', 'NVIDIA'),
-      )
+      ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('gaming', 'NVIDIA'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--gaming']
       const { runCli } = await import('./cli')
@@ -2338,9 +2375,7 @@ describe('legacy scan functions', () => {
       const { scanDirectoriesAsItems } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          gamingPaths: () => [
-            { paths: ['C:\\Steam\\cache'], name: 'Steam' },
-          ],
+          gamingPaths: () => [{ paths: ['C:\\Steam\\cache'], name: 'Steam' }],
         }),
       )
       ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Access denied'))
@@ -2359,9 +2394,7 @@ describe('legacy scan functions', () => {
     it('returns results via COM (Windows) path', async () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
-      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
-        makePlatform({ trashPath: () => null }),
-      )
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
       ;(execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
         (_file: string, _args: string[], _opts: unknown, cb: (err: unknown, result: unknown) => void) => {
           cb(null, { stdout: '5|10240' })
@@ -2380,9 +2413,7 @@ describe('legacy scan functions', () => {
     it('returns empty when COM returns zero items', async () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
-      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
-        makePlatform({ trashPath: () => null }),
-      )
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
       ;(execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
         (_file: string, _args: string[], _opts: unknown, cb: (err: unknown, result: unknown) => void) => {
           cb(null, { stdout: '0|0' })
@@ -2400,15 +2431,11 @@ describe('legacy scan functions', () => {
     it('handles COM execFile error gracefully', async () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
-      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
-        makePlatform({ trashPath: () => null }),
-      )
-      ;(execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-        (...args: unknown[]) => {
-          const cb = args.find((a): a is (err: unknown) => void => typeof a === 'function')
-          if (cb) cb(new Error('COM access denied'))
-        },
-      )
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
+      ;(execFile as unknown as ReturnType<typeof vi.fn>).mockImplementation((...args: unknown[]) => {
+        const cb = args.find((a): a is (err: unknown) => void => typeof a === 'function')
+        if (cb) cb(new Error('COM access denied'))
+      })
 
       process.argv = ['node.exe', 'script.js', '--cli', '--recycle-bin']
       const { runCli } = await import('./cli')
@@ -2425,20 +2452,13 @@ describe('legacy scan functions', () => {
         makePlatform({ trashPath: () => '/Users/test/.Trash' }),
       )
       ;(scanDirectory as ReturnType<typeof vi.fn>).mockClear()
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('recycleBin', 'Trash', 2048, 2),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('recycleBin', 'Trash', 2048, 2))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--recycle-bin']
       const { runCli } = await import('./cli')
       await runCli()
 
-      expect(scanDirectory).toHaveBeenLastCalledWith(
-        '/Users/test/.Trash',
-        'recycleBin',
-        'Trash',
-        0,
-      )
+      expect(scanDirectory).toHaveBeenLastCalledWith('/Users/test/.Trash', 'recycleBin', 'Trash', 0)
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Trash'))
       expect(appExitMock).toHaveBeenCalledWith(0)
     })
@@ -2451,9 +2471,7 @@ describe('legacy scan functions', () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
       const { scanDirectory } = await import('./services/file-utils')
-      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
-        makePlatform({ trashPath: () => null }),
-      )
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
       // Need both scan and clean to happen: scan must return items, clean must succeed
       ;(execFile as unknown as ReturnType<typeof vi.fn>)
         // First call (scanRecycleBin): returns items
@@ -2480,9 +2498,7 @@ describe('legacy scan functions', () => {
     it('handles COM execFile error during clean', async () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
-      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
-        makePlatform({ trashPath: () => null }),
-      )
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
       ;(execFile as unknown as ReturnType<typeof vi.fn>)
         // scanRecycleBin succeeds
         .mockImplementationOnce(
@@ -2491,12 +2507,10 @@ describe('legacy scan functions', () => {
           },
         )
         // cleanRecycleBin fails
-        .mockImplementationOnce(
-          (...args: unknown[]) => {
-            const cb = args.find((a): a is (err: unknown) => void => typeof a === 'function')
-            if (cb) cb(new Error('COM access denied'))
-          },
-        )
+        .mockImplementationOnce((...args: unknown[]) => {
+          const cb = args.find((a): a is (err: unknown) => void => typeof a === 'function')
+          if (cb) cb(new Error('COM access denied'))
+        })
 
       process.argv = ['node.exe', 'script.js', '--cli', '--recycle-bin', '--clean']
       const { runCli } = await import('./cli')
@@ -2518,19 +2532,97 @@ describe('legacy scan functions', () => {
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
           browserPaths: () => ({
-            chrome: { base: 'C:\\Chrome', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            edge: { base: 'C:\\Edge', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            brave: { base: 'C:\\Brave', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            vivaldi: { base: 'C:\\Vivaldi', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            opera: { base: 'C:\\Opera', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            operaGX: { base: 'C:\\OperaGX', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            arc: { base: 'C:\\Arc', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            chromium: { base: 'C:\\Chromium', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            thorium: { base: 'C:\\Thorium', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            supermium: { base: 'C:\\Supermium', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            helium: { base: 'C:\\Helium', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            cromite: { base: 'C:\\Cromite', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
-            catsxp: { base: 'C:\\CatsXP', cache: 'Cache', codeCache: 'Code Cache', gpuCache: 'GPU Cache', serviceWorker: 'Service Worker' },
+            chrome: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            edge: {
+              base: 'C:\\Edge',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            brave: {
+              base: 'C:\\Brave',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            vivaldi: {
+              base: 'C:\\Vivaldi',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            opera: {
+              base: 'C:\\Opera',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            operaGX: {
+              base: 'C:\\OperaGX',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            arc: {
+              base: 'C:\\Arc',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            chromium: {
+              base: 'C:\\Chromium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            thorium: {
+              base: 'C:\\Thorium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            supermium: {
+              base: 'C:\\Supermium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            helium: {
+              base: 'C:\\Helium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            cromite: {
+              base: 'C:\\Cromite',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            catsxp: {
+              base: 'C:\\CatsXP',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
             firefox: { cache: 'C:\\Firefox\\cache' },
             librewolf: { cache: 'C:\\LibreWolf\\cache' },
             waterfox: { cache: 'C:\\Waterfox\\cache' },
@@ -2599,9 +2691,7 @@ describe('legacy scan functions', () => {
         }),
       )
       ;(scanDirectory as ReturnType<typeof vi.fn>).mockClear()
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('browser', 'Safari - Cache'),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('browser', 'Safari - Cache'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--browser']
       const { runCli } = await import('./cli')
@@ -2623,33 +2713,20 @@ describe('legacy scan functions', () => {
   describe('multi-category scan', () => {
     it('scans system + app + gaming with --all', async () => {
       const { getPlatform } = await import('./platform')
-      const { scanDirectory, scanDirectoriesAsItems, scanMultipleDirectories, resolveChildSubdirs } =
-        await import('./services/file-utils')
+      const { scanDirectory, scanDirectoriesAsItems, scanMultipleDirectories, resolveChildSubdirs } = await import(
+        './services/file-utils'
+      )
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
-          appPaths: () => [
-            { paths: ['C:\\AppData\\Discord'], childSubdir: 'Cache', name: 'Discord' },
-          ],
-          gamingPaths: () => [
-            { paths: ['C:\\Steam\\cache'], name: 'Steam' },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+          appPaths: () => [{ paths: ['C:\\AppData\\Discord'], childSubdir: 'Cache', name: 'Discord' }],
+          gamingPaths: () => [{ paths: ['C:\\Steam\\cache'], name: 'Steam' }],
         }),
       )
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp'),
-      )
-      ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockResolvedValue([
-        'C:\\AppData\\Discord\\Cache',
-      ])
-      ;(scanMultipleDirectories as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('app', 'Discord'),
-      )
-      ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('gaming', 'Steam'),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp'))
+      ;(resolveChildSubdirs as ReturnType<typeof vi.fn>).mockResolvedValue(['C:\\AppData\\Discord\\Cache'])
+      ;(scanMultipleDirectories as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('app', 'Discord'))
+      ;(scanDirectoriesAsItems as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('gaming', 'Steam'))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--all']
       const { runCli } = await import('./cli')
@@ -2671,14 +2748,10 @@ describe('legacy scan functions', () => {
       const { cleanItems } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
         }),
       )
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp', 1024, 3),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 3))
       ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
         totalCleaned: 3072,
         filesDeleted: 3,
@@ -2701,14 +2774,10 @@ describe('legacy scan functions', () => {
       const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
         }),
       )
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp', 1024, 2),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 2))
 
       process.argv = ['node.exe', 'script.js', '--cli', '--system', '--json']
       const { runCli } = await import('./cli')
@@ -2725,14 +2794,10 @@ describe('legacy scan functions', () => {
       const { cleanItems } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
         makePlatform({
-          systemCleanTargets: () => [
-            { path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false },
-          ],
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
         }),
       )
-      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
-        makeScanResult('system', 'Windows Temp', 1024, 3),
-      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 3))
       ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
         totalCleaned: 1024,
         filesDeleted: 1,
@@ -2765,12 +2830,12 @@ describe('utility: formatBytes', () => {
 
   it('returns 0 B for Infinity', async () => {
     const { formatBytes } = await import('./cli')
-    expect(formatBytes(Infinity)).toBe('0 B')
+    expect(formatBytes(Number.POSITIVE_INFINITY)).toBe('0 B')
   })
 
   it('returns 0 B for NaN', async () => {
     const { formatBytes } = await import('./cli')
-    expect(formatBytes(NaN)).toBe('0 B')
+    expect(formatBytes(Number.NaN)).toBe('0 B')
   })
 
   it('formats plain bytes', async () => {
@@ -2875,19 +2940,19 @@ describe('utility: cliOut', () => {
   it('outputs JSON for object in json mode', async () => {
     const { cliOut } = await import('./cli')
     cliOut({ json: true, verbosity: 'normal' }, { key: 'value', num: 42 })
-    expect(stdoutWrite).toHaveBeenCalledWith(JSON.stringify({ key: 'value', num: 42 }, null, 2) + '\n')
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify({ key: 'value', num: 42 }, null, 2)}\n`)
   })
 
   it('outputs JSON for array in json mode', async () => {
     const { cliOut } = await import('./cli')
     cliOut({ json: true, verbosity: 'normal' }, ['a', 'b'])
-    expect(stdoutWrite).toHaveBeenCalledWith(JSON.stringify(['a', 'b'], null, 2) + '\n')
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(['a', 'b'], null, 2)}\n`)
   })
 
   it('outputs JSON for string in json mode', async () => {
     const { cliOut } = await import('./cli')
     cliOut({ json: true, verbosity: 'normal' }, 'hello')
-    expect(stdoutWrite).toHaveBeenCalledWith(JSON.stringify('hello', null, 2) + '\n')
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify('hello', null, 2)}\n`)
   })
 
   it('does nothing in quiet text mode', async () => {

@@ -4,9 +4,9 @@
 // apps with cache dirs that Kudu doesn't already cover.
 // Run: npm run find-cache
 
-const { readdirSync, statSync, readFileSync, existsSync } = require('fs')
-const { homedir, tmpdir, platform } = require('os')
-const path = require('path')
+const { readdirSync, statSync, readFileSync, existsSync } = require('node:fs')
+const { homedir, tmpdir, platform } = require('node:os')
+const path = require('node:path')
 
 const RULES_DIR = path.resolve(__dirname, '..', 'rules')
 const currentPlatform = platform()
@@ -81,9 +81,15 @@ function getDirsIn(dir) {
     return readdirSync(dir)
       .map((name) => ({ name, full: path.join(dir, name) }))
       .filter(({ full }) => {
-        try { return statSync(full).isDirectory() } catch { return false }
+        try {
+          return statSync(full).isDirectory()
+        } catch {
+          return false
+        }
       })
-  } catch { return [] }
+  } catch {
+    return []
+  }
 }
 
 function hasCacheIndicators(dirPath) {
@@ -112,36 +118,28 @@ function getDirSize(dir) {
         const stat = statSync(full)
         if (stat.isFile()) total += stat.size
         else if (stat.isDirectory()) total += getDirSize(full)
-      } catch { /* skip inaccessible */ }
+      } catch {
+        /* skip inaccessible */
+      }
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
   return total
 }
 
 function main() {
-  console.log(`\n🔍 Kudu — Cache Path Discovery (${currentPlatform})\n`)
-  console.log('Scanning for uncovered cache directories...\n')
-
   const knownPaths = loadKnownPaths()
   const vars = resolveVars()
 
   // Directories to scan for app data
   const scanDirs = []
   if (currentPlatform === 'win32') {
-    scanDirs.push(
-      { dir: vars.APPDATA, varName: '${APPDATA}' },
-      { dir: vars.LOCALAPPDATA, varName: '${LOCALAPPDATA}' },
-    )
+    scanDirs.push({ dir: vars.APPDATA, varName: '${APPDATA}' }, { dir: vars.LOCALAPPDATA, varName: '${LOCALAPPDATA}' })
   } else if (currentPlatform === 'darwin') {
-    scanDirs.push(
-      { dir: vars.CACHES, varName: '${CACHES}' },
-      { dir: vars.APP_SUPPORT, varName: '${APP_SUPPORT}' },
-    )
+    scanDirs.push({ dir: vars.CACHES, varName: '${CACHES}' }, { dir: vars.APP_SUPPORT, varName: '${APP_SUPPORT}' })
   } else {
-    scanDirs.push(
-      { dir: vars.CACHE, varName: '${CACHE}' },
-      { dir: vars.CONFIG, varName: '${CONFIG}' },
-    )
+    scanDirs.push({ dir: vars.CACHE, varName: '${CACHE}' }, { dir: vars.CONFIG, varName: '${CONFIG}' })
   }
 
   const discoveries = []
@@ -180,23 +178,13 @@ function main() {
   discoveries.sort((a, b) => b.totalSize - a.totalSize)
 
   if (discoveries.length === 0) {
-    console.log('✓ No uncovered cache directories found — great coverage!')
     return
   }
 
-  console.log(`Found ${discoveries.length} uncovered app(s) with cache directories:\n`)
-
   for (const { name, cachePaths, totalSize } of discoveries) {
-    console.log(`  ${name}  (${formatSize(totalSize)})`)
     for (const { template, size } of cachePaths) {
-      console.log(`    ${template}  (${formatSize(size)})`)
     }
-    console.log()
   }
-
-  console.log('─'.repeat(60))
-  console.log('To add a rule for any of these, run: npm run new-rule')
-  console.log('Or manually edit the JSON files in rules/' + currentPlatform + '/')
 }
 
 main()

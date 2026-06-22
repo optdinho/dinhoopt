@@ -13,9 +13,23 @@
   "temperature": "Temperatura",
   "tweakBonus": "Bono Tweaks",
   "powerBonus": "Plan de Energía",
+  "totalScore": "Puntuación Total",
+  "scoreRingAriaLabel": "Benchmark score ring",
   "classS": "≥ 90",
   "classA": "≥ 80",
   "classB": "≥ 70",
   "classC": "≥ 50",
-  "classD": "< 50"
+  "classD": "< 50",
+  "steps": {
+    "init": "Inicializando sensores...",
+    "cpuBaseline": "Midiendo CPU (base)",
+    "ramAvailable": "Midiendo RAM disponible",
+    "networkLatency": "Midiendo latencia de red",
+    "dpcLatency": "Midiendo latencia DPC",
+    "temperatures": "Midiendo temperaturas",
+    "tweaksCheck": "Verificando tweaks aplicados",
+    "powerPlan": "Verificando plan de energía",
+    "scoreCalc": "Calculando puntuación competitiva",
+    "recommendations": "Generando recomendaciones"
+  }
 }

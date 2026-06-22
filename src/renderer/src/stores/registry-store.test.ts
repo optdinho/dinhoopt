@@ -179,11 +179,15 @@ describe('registry-store', () => {
 
   it('toggleEntry calls registrySetTweakIgnored for persistent tweak types', () => {
     const kudu = mockKudu()
-    useRegistryStore
-      .getState()
-      .setEntries([
-        makeEntry({ id: '1', type: 'performance', keyPath: 'HKLM\\Software\\Test', valueName: 'Enable', selected: false }),
-      ])
+    useRegistryStore.getState().setEntries([
+      makeEntry({
+        id: '1',
+        type: 'performance',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Enable',
+        selected: false,
+      }),
+    ])
 
     useRegistryStore.getState().toggleEntry('1')
 
@@ -193,11 +197,15 @@ describe('registry-store', () => {
   it('toggleEntry registrySetTweakIgnored error is silently caught', () => {
     const kudu = mockKudu()
     kudu.registrySetTweakIgnored.mockRejectedValue(new Error('network'))
-    useRegistryStore
-      .getState()
-      .setEntries([
-        makeEntry({ id: '1', type: 'performance', keyPath: 'HKLM\\Software\\Test', valueName: 'Enable', selected: true }),
-      ])
+    useRegistryStore.getState().setEntries([
+      makeEntry({
+        id: '1',
+        type: 'performance',
+        keyPath: 'HKLM\\Software\\Test',
+        valueName: 'Enable',
+        selected: true,
+      }),
+    ])
 
     useRegistryStore.getState().toggleEntry('1')
 

@@ -42,7 +42,7 @@ export function ProgressBanner({
                 className="h-full rounded-full transition-all duration-500 ease-out animate-shimmer"
                 style={{
                   width: `${(stepProgress.current / stepProgress.total) * 100}%`,
-                  backgroundImage: `linear-gradient(90deg, #f59e0b, #fbbf24, #d97706)`,
+                  backgroundImage: 'linear-gradient(90deg, #f59e0b, #fbbf24, #d97706)',
                   backgroundSize: '200% 100%',
                   boxShadow: '0 0 8px rgba(245,158,11,0.3)',
                 }}

@@ -1,6 +1,7 @@
 import { useContextMenuStore } from '@/stores/context-menu-store'
 import type { ContextMenuAction, ContextMenuEntry } from '@shared/types'
 import { ChevronDown, MousePointerClick } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { EntryRow } from './EntryRow'
 import { colorForBinary } from './constants'
 
@@ -11,6 +12,7 @@ interface EntryGroupCardProps {
 }
 
 export function EntryGroupCard({ group, applying, onEntryAction }: EntryGroupCardProps) {
+  const { t } = useTranslation('contextMenu')
   const expanded = useContextMenuStore((s) => s.expandedGroups)
   const entries = useContextMenuStore((s) => s.entries)
 
@@ -50,7 +52,7 @@ export function EntryGroupCard({ group, applying, onEntryAction }: EntryGroupCar
             onClick={() => useContextMenuStore.getState().toggleAllVisible(eligibleIds, !allSelected)}
             className="relative h-6 w-11 rounded-full transition-colors"
             style={{ background: allSelected ? pill.text : 'var(--bg-active)' }}
-            aria-label="toggle all"
+            aria-label={t('ariaToggleAll')}
           >
             <div
               className="absolute top-0.5 h-5 w-5 rounded-full transition-all"

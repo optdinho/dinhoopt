@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { open, readdir, rm, stat } from 'node:fs/promises'
+import { existsSync, renameSync } from 'node:fs'
+import { open, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CleanerType } from '@shared/enums'
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
@@ -95,6 +95,17 @@ async function secureOverwrite(filePath: string): Promise<void> {
   } finally {
     await fh.close()
   }
+}
+
+/**
+ * Atomically overwrite a file with new content using a temporary file + rename.
+ * Writes content to {filePath}.tmp then renames it over the original.
+ * This prevents partial writes and race conditions from concurrent readers.
+ */
+export async function overwriteFile(filePath: string, content: string | Buffer): Promise<void> {
+  const tmpPath = `${filePath}.tmp`
+  await writeFile(tmpPath, content, 'utf-8')
+  renameSync(tmpPath, filePath)
 }
 
 export async function safeDelete(filePath: string): Promise<DeleteResult> {

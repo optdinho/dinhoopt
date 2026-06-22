@@ -2,6 +2,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { withTranslation } from 'react-i18next'
 import type { WithTranslation } from 'react-i18next'
+import logger from '../../lib/renderer-logger'
 
 interface ErrorBoundaryProps extends WithTranslation {
   children: ReactNode
@@ -21,7 +22,7 @@ class ErrorBoundaryInternal extends Component<ErrorBoundaryProps, ErrorBoundaryS
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('ErrorBoundary caught:', error, info)
+    logger.error('ErrorBoundary', `Caught: ${error.message}`, info)
   }
 
   handleReset = (): void => {

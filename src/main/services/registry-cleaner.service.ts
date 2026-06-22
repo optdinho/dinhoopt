@@ -1,145 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RegistryEntry } from '@shared/types'
 import { getBackupDir } from './backup-dir'
 import { execFileAsync, execNativeUtf8, execTracked, psUtf8 } from './exec-utf8'
+import {
+  collectBackupTargets,
+  createFullBackup,
+  createTargetedBackup,
+  pruneOldBackups,
+} from './registry-cleaner/backup'
+import {
+  clsidExists,
+  execReg,
+  expandEnvVars,
+  extractExePath,
+  findMissingClsidDll,
+  splitTaskPath,
+} from './registry-cleaner/utils'
 import { getSettings } from './settings-store'
 
-/** Run reg.exe with UTF-8 code page so accented characters decode correctly */
-async function execReg(
-  args: string[],
-  opts?: { timeout?: number; signal?: AbortSignal },
-): Promise<{ stdout: string; stderr: string }> {
-  return execNativeUtf8('reg', args, opts)
-}
-
-/** Validate that a task path contains only safe characters */
-const SAFE_TASK_PATH_RE = /^[\\\p{L}\p{N}\s\-._(){},]+$/u
-
-/** Split a full task path like "\\Folder\\Sub\\TaskName" into { path, name } for PowerShell */
-function splitTaskPath(fullPath: string): { path: string; name: string } | null {
-  const normalized = fullPath.replace(/\//g, '\\')
-  if (!SAFE_TASK_PATH_RE.test(normalized)) return null
-  const lastSlash = normalized.lastIndexOf('\\')
-  if (lastSlash >= 0) {
-    return {
-      path: normalized.substring(0, lastSlash + 1),
-      name: normalized.substring(lastSlash + 1),
-    }
-  }
-  return { path: '\\', name: normalized }
-}
-
-/** Expand common Windows environment variables in a registry path. */
-function expandEnvVars(path: string): string {
-  return path
-    .replace(/%SystemRoot%/gi, process.env.WINDIR || 'C:\\Windows')
-    .replace(/%ProgramFiles%/gi, process.env.PROGRAMFILES || 'C:\\Program Files')
-    .replace(/%ProgramFiles\(x86\)%/gi, process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)')
-    .replace(/%ProgramData%/gi, process.env.PROGRAMDATA || 'C:\\ProgramData')
-    .replace(/%CommonProgramFiles%/gi, process.env.COMMONPROGRAMFILES || 'C:\\Program Files\\Common Files')
-    .replace(/%USERPROFILE%/gi, process.env.USERPROFILE || '')
-    .replace(/%LOCALAPPDATA%/gi, process.env.LOCALAPPDATA || '')
-    .replace(/%APPDATA%/gi, process.env.APPDATA || '')
-}
-
-/**
- * Extract the executable path from a command-line string, correctly
- * handling quoted paths with spaces and ignoring trailing arguments.
- */
-function extractExePath(raw: string): string | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  const quotedMatch = trimmed.match(/^"([^"]+)"/)
-  if (quotedMatch) return quotedMatch[1]?.trim() ?? ''
-  if (!trimmed.includes(' ')) return trimmed
-  const splitPoints: number[] = []
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === ' ') splitPoints.push(i)
-  }
-  splitPoints.push(trimmed.length)
-  for (const pos of splitPoints) {
-    const candidate = trimmed.substring(0, pos)
-    if (candidate) {
-      try {
-        const s = statSync(candidate)
-        if (s.isFile()) return candidate
-      } catch {
-        /* doesn't exist or inaccessible */
-      }
-    }
-  }
-  const exeExtRe = /\.(exe|dll|sys|cmd|bat|com|msc|cpl|scr)$/i
-  for (let i = splitPoints.length - 1; i >= 0; i--) {
-    const candidate = trimmed.substring(0, splitPoints[i])
-    if (exeExtRe.test(candidate)) return candidate
-  }
-  return trimmed.substring(0, splitPoints[0])
-}
-
-async function clsidExists(clsid: string, signal?: AbortSignal): Promise<boolean> {
-  try {
-    await execReg(['query', `HKCR\\CLSID\\${clsid}`], { timeout: 5000, ...(signal ? { signal } : {}) })
-    return true
-  } catch {
-    /* not in native view */
-  }
-  try {
-    await execReg(['query', `HKCR\\WOW6432Node\\CLSID\\${clsid}`], { timeout: 5000, ...(signal ? { signal } : {}) })
-    return true
-  } catch {
-    /* not in WOW64 view either */
-  }
-  return false
-}
-
-async function findMissingClsidDll(clsid: string, signal?: AbortSignal): Promise<string | 'no-inproc' | null> {
-  const prefixes = [`HKCR\\CLSID\\${clsid}`, `HKCR\\WOW6432Node\\CLSID\\${clsid}`]
-  let foundAnyServer = false
-  let firstMissingDll: string | null = null
-  for (const prefix of prefixes) {
-    try {
-      const { stdout } = await execReg(['query', `${prefix}\\InprocServer32`], {
-        timeout: 5000,
-        ...(signal ? { signal } : {}),
-      })
-      foundAnyServer = true
-      const dllMatch = stdout.match(/\(Default\)\s+REG_SZ\s+(.+)/i)
-      if (dllMatch) {
-        const dllPath = (dllMatch[1] ?? '').trim().replace(/"/g, '')
-        if (dllPath?.includes('\\') && !dllPath.startsWith('%')) {
-          if (existsSync(dllPath)) return null
-          if (!firstMissingDll) firstMissingDll = dllPath
-        }
-      } else {
-        return null
-      }
-    } catch {
-      /* No InprocServer32 in this view */
-    }
-    try {
-      await execReg(['query', `${prefix}\\LocalServer32`], { timeout: 5000, ...(signal ? { signal } : {}) })
-      return null
-    } catch {
-      /* No LocalServer32 in this view either */
-    }
-  }
-  if (firstMissingDll) return firstMissingDll
-  if (!foundAnyServer) return 'no-inproc'
-  return null
-}
+export { collectBackupTargets }
 
 export async function scanRegistry(signal?: AbortSignal): Promise<RegistryEntry[]> {
   const entries: RegistryEntry[] = []
@@ -1532,161 +1413,6 @@ export async function scanRegistry(signal?: AbortSignal): Promise<RegistryEntry[
   }
 
   return entries
-}
-
-function pruneOldBackups(backupDir: string, keep: number): void {
-  try {
-    const tsCapture = /(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)/
-    const regRe = new RegExp(`^registry-backup-.*?${tsCapture.source}\\.reg$`)
-    const taskDirRe = new RegExp(`^registry-backup-tasks-${tsCapture.source}$`)
-    const groups = new Map<string, string[]>()
-    for (const f of readdirSync(backupDir)) {
-      const m = f.match(regRe) || f.match(taskDirRe)
-      if (!m) continue
-      const ts = m[1]!
-      const list = groups.get(ts) ?? []
-      list.push(f)
-      groups.set(ts, list)
-    }
-    const stale = [...groups.keys()].sort().reverse().slice(keep)
-    for (const ts of stale) {
-      for (const f of groups.get(ts)!) {
-        const full = join(backupDir, f)
-        try {
-          if (taskDirRe.test(f)) rmSync(full, { recursive: true, force: true })
-          else unlinkSync(full)
-        } catch {
-          /* skip */
-        }
-      }
-    }
-  } catch {
-    /* skip */
-  }
-}
-
-async function createFullBackup(backupDir: string, timestamp: string, signal?: AbortSignal): Promise<void> {
-  const backupPath = join(backupDir, `registry-backup-${timestamp}.reg`)
-  await execReg(['export', 'HKLM\\SOFTWARE', backupPath, '/y'], { timeout: 30000, ...(signal ? { signal } : {}) })
-  const hkcuBackupPath = join(backupDir, `registry-backup-HKCU-${timestamp}.reg`)
-  await execReg(['export', 'HKCU\\SOFTWARE', hkcuBackupPath, '/y'], {
-    timeout: 30000,
-    ...(signal ? { signal } : {}),
-  }).catch(() => {})
-  const systemBackupPath = join(backupDir, `registry-backup-SYSTEM-${timestamp}.reg`)
-  await execReg(['export', 'HKLM\\SYSTEM\\CurrentControlSet\\Services', systemBackupPath, '/y'], {
-    timeout: 60000,
-    ...(signal ? { signal } : {}),
-  }).catch(() => {})
-  const hkcrClsidPath = join(backupDir, `registry-backup-HKCR-CLSID-${timestamp}.reg`)
-  await execReg(['export', 'HKCR\\CLSID', hkcrClsidPath, '/y'], {
-    timeout: 60000,
-    ...(signal ? { signal } : {}),
-  }).catch(() => {})
-  const hkcrIfacePath = join(backupDir, `registry-backup-HKCR-Interface-${timestamp}.reg`)
-  await execReg(['export', 'HKCR\\Interface', hkcrIfacePath, '/y'], {
-    timeout: 60000,
-    ...(signal ? { signal } : {}),
-  }).catch(() => {})
-  const hkcrMimePath = join(backupDir, `registry-backup-HKCR-MIME-${timestamp}.reg`)
-  await execReg(['export', 'HKCR\\MIME', hkcrMimePath, '/y'], { timeout: 30000, ...(signal ? { signal } : {}) }).catch(
-    () => {},
-  )
-  const shellRoots = [
-    { key: '*', file: 'AllFileTypes' },
-    { key: 'Directory', file: 'Directory' },
-    { key: 'Folder', file: 'Folder' },
-  ]
-  for (const { key, file } of shellRoots) {
-    const shellPath = join(backupDir, `registry-backup-HKCR-${file}-shellex-${timestamp}.reg`)
-    await execReg(['export', `HKCR\\${key}\\shellex`, shellPath, '/y'], {
-      timeout: 30000,
-      ...(signal ? { signal } : {}),
-    }).catch(() => {})
-  }
-}
-
-export function collectBackupTargets(entries: RegistryEntry[]): { keys: string[]; tasks: string[] } {
-  const keys = new Set<string>()
-  const tasks = new Set<string>()
-  for (const entry of entries) {
-    if (!entry.fix) continue
-    const key = entry.fix.key || entry.keyPath
-    switch (entry.fix.op) {
-      case 'delete-value':
-      case 'set-value':
-      case 'delete-key':
-        if (key) keys.add(key)
-        break
-      case 'disable-task':
-      case 'delete-task':
-        if (entry.keyPath) tasks.add(entry.keyPath)
-        break
-    }
-  }
-  return { keys: [...keys], tasks: [...tasks] }
-}
-
-function stripRegHeader(content: string): string {
-  return content.replace(/^﻿?Windows Registry Editor Version 5\.00\r?\n\r?\n/, '')
-}
-
-async function createTargetedBackup(
-  entries: RegistryEntry[],
-  backupDir: string,
-  timestamp: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  const { keys, tasks } = collectBackupTargets(entries)
-  if (keys.length === 0 && tasks.length === 0) return
-  const tempDir = mkdtempSync(join(tmpdir(), 'dinho-reg-backup-'))
-  try {
-    const bodies: string[] = []
-    let idx = 0
-    for (const key of keys) {
-      if (signal?.aborted) break
-      const tempPath = join(tempDir, `part-${idx++}.reg`)
-      try {
-        await execReg(['export', key, tempPath, '/y'], { timeout: 30000, ...(signal ? { signal } : {}) })
-        bodies.push(stripRegHeader(readFileSync(tempPath, 'utf16le')))
-      } catch {
-        /* Key may have been removed */
-      }
-    }
-    if (bodies.length > 0) {
-      const consolidatedPath = join(backupDir, `registry-backup-targeted-${timestamp}.reg`)
-      const finalText = `Windows Registry Editor Version 5.00\r\n\r\n${bodies.join('')}`
-      const bom = Buffer.from([0xff, 0xfe])
-      const body = Buffer.from(finalText, 'utf16le')
-      writeFileSync(consolidatedPath, Buffer.concat([bom, body]))
-    }
-    if (tasks.length > 0) {
-      const taskDir = join(backupDir, `registry-backup-tasks-${timestamp}`)
-      mkdirSync(taskDir, { recursive: true })
-      for (const taskPath of tasks) {
-        if (signal?.aborted) break
-        const parts = splitTaskPath(taskPath)
-        if (!parts) continue
-        const fullName = (parts.path + parts.name).replace(/\\+/g, '\\')
-        const safeName = parts.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 100) || 'task'
-        try {
-          const { stdout } = await execNativeUtf8('schtasks', ['/query', '/xml', '/tn', fullName], {
-            timeout: 10000,
-            ...(signal ? { signal } : {}),
-          })
-          writeFileSync(join(taskDir, `${safeName}.xml`), stdout, 'utf-8')
-        } catch {
-          /* Task may already be gone */
-        }
-      }
-    }
-  } finally {
-    try {
-      rmSync(tempDir, { recursive: true, force: true })
-    } catch {
-      /* ignore */
-    }
-  }
 }
 
 export async function fixRegistryEntries(

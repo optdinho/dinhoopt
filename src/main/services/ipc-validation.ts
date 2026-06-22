@@ -12,11 +12,24 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   const obj = input as Record<string, unknown>
 
   const allowedTopKeys = new Set([
-    'theme', 'language', 'minimizeToTray', 'showNotificationOnComplete',
-    'showThreatNotifications', 'runAtStartup', 'autoUpdate', 'autoRestart',
-    'updateCheckIntervalHours', 'cleaner', 'exclusions', 'ignoredSoftwareUpdates',
-    'backupPath', 'windowsPackageManager', 'schedule', 'schedules',
-    'gameMode', 'registryIgnoredTweaks',
+    'theme',
+    'language',
+    'minimizeToTray',
+    'showNotificationOnComplete',
+    'showThreatNotifications',
+    'runAtStartup',
+    'autoUpdate',
+    'autoRestart',
+    'updateCheckIntervalHours',
+    'cleaner',
+    'exclusions',
+    'ignoredSoftwareUpdates',
+    'backupPath',
+    'windowsPackageManager',
+    'schedule',
+    'schedules',
+    'gameMode',
+    'registryIgnoredTweaks',
   ])
 
   for (const key of Object.keys(obj)) {
@@ -58,7 +71,14 @@ function validateLanguage(obj: Record<string, unknown>): null | undefined {
 }
 
 function validateBoolFields(obj: Record<string, unknown>): null | undefined {
-  const boolKeys = ['minimizeToTray', 'showNotificationOnComplete', 'showThreatNotifications', 'runAtStartup', 'autoUpdate', 'autoRestart'] as const
+  const boolKeys = [
+    'minimizeToTray',
+    'showNotificationOnComplete',
+    'showThreatNotifications',
+    'runAtStartup',
+    'autoUpdate',
+    'autoRestart',
+  ] as const
   for (const bk of boolKeys) {
     if (bk in obj && obj[bk] !== undefined && typeof obj[bk] !== 'boolean') return null
   }
@@ -66,7 +86,11 @@ function validateBoolFields(obj: Record<string, unknown>): null | undefined {
 
 function validateUpdateInterval(obj: Record<string, unknown>): null | undefined {
   if ('updateCheckIntervalHours' in obj && obj.updateCheckIntervalHours !== undefined) {
-    if (typeof obj.updateCheckIntervalHours !== 'number' || obj.updateCheckIntervalHours < 1 || obj.updateCheckIntervalHours > 168)
+    if (
+      typeof obj.updateCheckIntervalHours !== 'number' ||
+      obj.updateCheckIntervalHours < 1 ||
+      obj.updateCheckIntervalHours > 168
+    )
       return null
   }
 }
@@ -124,7 +148,17 @@ function validateSchedulesArray(obj: Record<string, unknown>): null | undefined 
   if ('schedules' in obj && obj.schedules !== undefined) {
     if (!Array.isArray(obj.schedules)) return null
     if (obj.schedules.length > 10) return null
-    const validTaskTypes = new Set(['cleaner:system', 'cleaner:browsers', 'cleaner:apps', 'cleaner:gaming', 'cleaner:recycleBin', 'cleaner:databases', 'registry', 'drivers', 'software-update'])
+    const validTaskTypes = new Set([
+      'cleaner:system',
+      'cleaner:browsers',
+      'cleaner:apps',
+      'cleaner:gaming',
+      'cleaner:recycleBin',
+      'cleaner:databases',
+      'registry',
+      'drivers',
+      'software-update',
+    ])
     const validFrequencies = new Set(['daily', 'weekly', 'monthly'])
     const validStatuses = new Set(['success', 'partial', 'failed', 'never'])
     for (const entry of obj.schedules) {
@@ -155,7 +189,10 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
     for (const key of Object.keys(c)) {
       if (!allowedCleanerKeys.has(key)) return null
     }
-    if ('skipRecentMinutes' in c && (typeof c.skipRecentMinutes !== 'number' || c.skipRecentMinutes < 0 || c.skipRecentMinutes > 525600))
+    if (
+      'skipRecentMinutes' in c &&
+      (typeof c.skipRecentMinutes !== 'number' || c.skipRecentMinutes < 0 || c.skipRecentMinutes > 525600)
+    )
       return null
     if ('secureDelete' in c && typeof c.secureDelete !== 'boolean') return null
     if ('closeBrowsersBeforeClean' in c && typeof c.closeBrowsersBeforeClean !== 'boolean') return null
@@ -175,21 +212,53 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
   if ('gameMode' in obj && obj.gameMode !== undefined) {
     const g = obj.gameMode as Record<string, unknown>
     if (typeof g !== 'object' || g === null || Array.isArray(g)) return null
-    const allowedGameModeKeys = new Set(['enabledOptimizations', 'customProcessKillList', 'autoDetect', 'autoDeactivate', 'customGameProcesses', 'gameProfiles'])
+    const allowedGameModeKeys = new Set([
+      'enabledOptimizations',
+      'customProcessKillList',
+      'autoDetect',
+      'autoDeactivate',
+      'customGameProcesses',
+      'gameProfiles',
+    ])
     for (const key of Object.keys(g)) {
       if (!allowedGameModeKeys.has(key)) return null
     }
     if ('enabledOptimizations' in g) {
       if (!Array.isArray(g.enabledOptimizations)) return null
       if (g.enabledOptimizations.length > 30) return null
-      const validOptIds = new Set(['svc-wsearch', 'svc-sysmain', 'svc-wuauserv', 'svc-spooler', 'svc-diagtrack', 'proc-kill-browsers', 'proc-kill-chat', 'proc-kill-updaters', 'proc-kill-custom', 'mem-clear-standby', 'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep', 'sys-disable-game-bar', 'sys-disable-fse-opt', 'sys-disable-transparency', 'sys-timer-resolution', 'cpu-game-priority', 'net-flush-dns', 'net-disable-nagle'])
+      const validOptIds = new Set([
+        'svc-wsearch',
+        'svc-sysmain',
+        'svc-wuauserv',
+        'svc-spooler',
+        'svc-diagtrack',
+        'proc-kill-browsers',
+        'proc-kill-chat',
+        'proc-kill-updaters',
+        'proc-kill-custom',
+        'mem-clear-standby',
+        'sys-focus-assist',
+        'sys-power-plan',
+        'sys-prevent-sleep',
+        'sys-disable-game-bar',
+        'sys-disable-fse-opt',
+        'sys-disable-transparency',
+        'sys-timer-resolution',
+        'cpu-game-priority',
+        'net-flush-dns',
+        'net-disable-nagle',
+      ])
       if (!g.enabledOptimizations.every((v: unknown) => typeof v === 'string' && validOptIds.has(v as string)))
         return null
     }
     if ('customProcessKillList' in g) {
       if (!Array.isArray(g.customProcessKillList)) return null
       if (g.customProcessKillList.length > 50) return null
-      if (!g.customProcessKillList.every((v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && /^[A-Za-z0-9._\- ]+$/.test(v)))
+      if (
+        !g.customProcessKillList.every(
+          (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && /^[A-Za-z0-9._\- ]+$/.test(v),
+        )
+      )
         return null
     }
     if ('autoDetect' in g && typeof g.autoDetect !== 'boolean') return null
@@ -197,14 +266,39 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
     if ('customGameProcesses' in g) {
       if (!Array.isArray(g.customGameProcesses)) return null
       if (g.customGameProcesses.length > 50) return null
-      if (!g.customGameProcesses.every((v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && /^[A-Za-z0-9._\- ]+$/.test(v)))
+      if (
+        !g.customGameProcesses.every(
+          (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100 && /^[A-Za-z0-9._\- ]+$/.test(v),
+        )
+      )
         return null
     }
     if ('gameProfiles' in g) {
       if (typeof g.gameProfiles !== 'object' || g.gameProfiles === null || Array.isArray(g.gameProfiles)) return null
       const profileKeys = Object.keys(g.gameProfiles as Record<string, unknown>)
       if (profileKeys.length > 30) return null
-      const validOptIds = new Set(['svc-wsearch', 'svc-sysmain', 'svc-wuauserv', 'svc-spooler', 'svc-diagtrack', 'proc-kill-browsers', 'proc-kill-chat', 'proc-kill-updaters', 'proc-kill-custom', 'mem-clear-standby', 'sys-focus-assist', 'sys-power-plan', 'sys-prevent-sleep', 'sys-disable-game-bar', 'sys-disable-fse-opt', 'sys-disable-transparency', 'sys-timer-resolution', 'cpu-game-priority', 'net-flush-dns', 'net-disable-nagle'])
+      const validOptIds = new Set([
+        'svc-wsearch',
+        'svc-sysmain',
+        'svc-wuauserv',
+        'svc-spooler',
+        'svc-diagtrack',
+        'proc-kill-browsers',
+        'proc-kill-chat',
+        'proc-kill-updaters',
+        'proc-kill-custom',
+        'mem-clear-standby',
+        'sys-focus-assist',
+        'sys-power-plan',
+        'sys-prevent-sleep',
+        'sys-disable-game-bar',
+        'sys-disable-fse-opt',
+        'sys-disable-transparency',
+        'sys-timer-resolution',
+        'cpu-game-priority',
+        'net-flush-dns',
+        'net-disable-nagle',
+      ])
       const PROCESS_NAME_RE = /^[A-Za-z0-9._\- ]+$/
       for (const key of profileKeys) {
         if (!PROCESS_NAME_RE.test(key)) return null

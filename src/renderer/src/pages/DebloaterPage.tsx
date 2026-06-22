@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -307,17 +308,13 @@ export function DebloaterPage({ embedded }: { embedded?: boolean }) {
             className="flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
             style={{ color: 'var(--text-muted)' }}
           >
-            <div className="w-6">
-              <input
-                type="checkbox"
-                checked={filtered.every((a) => a.selected)}
-                onChange={() => {
-                  const allSelected = filtered.every((a) => a.selected)
-                  store.getState().selectFiltered(filter, !allSelected)
-                }}
-                className="accent-amber-500"
-              />
-            </div>
+            <Checkbox
+              checked={filtered.every((a) => a.selected)}
+              onChange={() => {
+                const allSelected = filtered.every((a) => a.selected)
+                store.getState().selectFiltered(filter, !allSelected)
+              }}
+            />
             <span>
               {t(filtered.length !== 1 ? 'debloater.appsFoundPlural' : 'debloater.appsFound', {
                 count: filtered.length,
@@ -335,20 +332,7 @@ export function DebloaterPage({ embedded }: { embedded?: boolean }) {
               }}
             >
               {/* Checkbox */}
-              <div
-                className="w-6"
-                onClick={() => store.getState().toggleApp(app.id)}
-                onKeyDown={() => store.getState().toggleApp(app.id)}
-                role="button"
-                tabIndex={0}
-              >
-                <input
-                  type="checkbox"
-                  checked={app.selected}
-                  readOnly
-                  className="pointer-events-none accent-amber-500 cursor-pointer"
-                />
-              </div>
+              <Checkbox checked={app.selected} onChange={() => store.getState().toggleApp(app.id)} />
 
               {/* Icon */}
               <div

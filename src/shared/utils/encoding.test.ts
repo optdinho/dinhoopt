@@ -2,7 +2,15 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { decodeText, detectEncoding, detectByNullHeuristic, hasBom, isValidUtf8, readTextFile, swap16 } from './encoding'
+import {
+  decodeText,
+  detectByNullHeuristic,
+  detectEncoding,
+  hasBom,
+  isValidUtf8,
+  readTextFile,
+  swap16,
+} from './encoding'
 
 function b(...bytes: number[]): Buffer {
   return Buffer.from(bytes)

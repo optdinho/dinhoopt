@@ -182,13 +182,7 @@ export function App() {
         <LicenseGate>
           <AppShell>
             <ErrorBoundary>
-              <Suspense
-                fallback={
-                  <div className="flex h-full w-full items-center justify-center">
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-amber-500" />
-                  </div>
-                }
-              >
+              <Suspense fallback={null}>
                 <AnimatedRoutes />
               </Suspense>
             </ErrorBoundary>
@@ -270,6 +264,7 @@ function AnimatedRoutes() {
         <Route path="/history" element={wrap(<HistoryPage />)} />
         <Route path="/settings" element={wrap(<SettingsPage />)} />
         <Route path="/about" element={wrap(<AboutPage />)} />
+        <Route path="/hardening" element={<Navigate to="/privacy" replace />} />
         <Route path="/privacy" element={wrap(<PrivacyShieldPage />)} />
         <Route path="/services" element={wrap(<ServiceManagerPage />)} />
         <Route path="/compliance" element={wrap(<CompliancePage />)} />
@@ -280,7 +275,6 @@ function AnimatedRoutes() {
         <Route path="/updates" element={wrap(<SoftwareUpdaterPage />)} />
         <Route path="/schedules" element={wrap(<SchedulesPage />)} />
         <Route path="/activation" element={wrap(<LicensePage />)} />
-        <Route path="/hardening" element={<Navigate to="/privacy" replace />} />
         <Route path="/updater" element={<Navigate to="/updates" replace />} />
         <Route path="/drivers" element={wrap(<DriverManagerPage />)} />
         <Route path="*" element={<Navigate to="/" replace />} />

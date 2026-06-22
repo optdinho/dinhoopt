@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { Gamepad2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { formatElapsed } from './constants'
 
 const CYAN = '#06b6d4'
@@ -39,13 +40,14 @@ function OrbitRing({
 }
 
 function HexGrid({ active }: { active: boolean }) {
+  const { t } = useTranslation('gameMode')
   return (
     <div
       className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
       style={{ opacity: active ? 0.6 : 0.2 }}
     >
-      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hex grid background">
-        <title>Hex grid background</title>
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={t('ariaHexGrid')}>
+        <title>{t('ariaHexGrid')}</title>
         <defs>
           <pattern id="hex-grid" width="56" height="100" patternUnits="userSpaceOnUse" patternTransform="scale(0.5)">
             <path

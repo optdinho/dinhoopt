@@ -20,6 +20,8 @@
   "minimizeWindow": "Minimizar ventana",
   "maximizeWindow": "Maximizar ventana",
   "closeWindow": "Cerrar ventana",
+  "dismissError": "Descartar error",
+  "windowControls": "Controles de ventana",
   "errorTitle": "Algo salió mal",
   "errorTryAgain": "Intentar de nuevo"
 }

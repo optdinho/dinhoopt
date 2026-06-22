@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { usePlatform } from '@/hooks/usePlatform'
+import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
 import { useDiskStore } from '@/stores/disk-store'
 import type { DiskNode } from '@shared/types'
@@ -155,7 +156,7 @@ export function DiskAnalyzerPage() {
         ?.diskDrives?.()
         .then(store.setDrives)
         .catch((err) => {
-          console.error('Failed to load drives:', err)
+          logger.error('DiskAnalyzerPage', 'Failed to load drives', err)
         })
     }
   }, [drives, store])
@@ -171,7 +172,7 @@ export function DiskAnalyzerPage() {
       store.setData(result)
       store.setBreadcrumb([result])
     } catch (err) {
-      console.error('Disk analysis failed:', err)
+      logger.error('DiskAnalyzerPage', 'Disk analysis failed', err)
       toast.error(
         isWin
           ? t('failedToAnalyzeToastWindows', { drive: selectedDrive })
@@ -194,7 +195,7 @@ export function DiskAnalyzerPage() {
       const result = await window.dinho.diskFileTypes(selectedDrive)
       store.setFileTypes(result)
     } catch (err) {
-      console.error('File type scan failed:', err)
+      logger.error('DiskAnalyzerPage', 'File type scan failed', err)
       store.setError(
         isWin
           ? t('failedToScanFileTypesWindows', { drive: selectedDrive })

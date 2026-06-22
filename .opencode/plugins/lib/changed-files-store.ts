@@ -1,20 +1,20 @@
-import * as path from "path"
+import * as path from 'node:path'
 
-export type ChangeType = "added" | "modified" | "deleted"
+export type ChangeType = 'added' | 'modified' | 'deleted'
 
 const changes = new Map<string, ChangeType>()
-let worktreeRoot = ""
+let worktreeRoot = ''
 
 export function initStore(worktree: string): void {
   worktreeRoot = worktree || process.cwd()
 }
 
 function toRelative(p: string): string {
-  if (!p) return ""
+  if (!p) return ''
   const normalized = path.normalize(p)
   if (path.isAbsolute(normalized) && worktreeRoot) {
     const rel = path.relative(worktreeRoot, normalized)
-    return rel.startsWith("..") ? normalized : rel
+    return rel.startsWith('..') ? normalized : rel
   }
   return normalized
 }
@@ -73,12 +73,14 @@ export function buildTree(filter?: ChangeType): TreeNode[] {
   }
 
   function sortNodes(nodes: TreeNode[]): TreeNode[] {
-    return [...nodes].sort((a, b) => {
-      const aIsFile = a.changeType !== undefined
-      const bIsFile = b.changeType !== undefined
-      if (aIsFile !== bIsFile) return aIsFile ? 1 : -1
-      return a.name.localeCompare(b.name)
-    }).map((n) => ({ ...n, children: sortNodes(n.children) }))
+    return [...nodes]
+      .sort((a, b) => {
+        const aIsFile = a.changeType !== undefined
+        const bIsFile = b.changeType !== undefined
+        if (aIsFile !== bIsFile) return aIsFile ? 1 : -1
+        return a.name.localeCompare(b.name)
+      })
+      .map((n) => ({ ...n, children: sortNodes(n.children) }))
   }
   return sortNodes(root)
 }

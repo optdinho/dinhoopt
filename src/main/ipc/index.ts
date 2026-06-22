@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { IPC } from '@shared/channels'
+import { IPC, RENDERER_LOG } from '@shared/channels'
 import { type BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { psUtf8 } from '../services/exec-utf8'
 import { registerAppCleanerIpc } from './app-cleaner.ipc'
@@ -47,6 +47,7 @@ import { getBackupDir } from '../services/backup-dir'
 import { isAdmin } from '../services/elevation'
 import { addHistoryEntry, clearHistory, getHistory } from '../services/history-store'
 import { validateHistoryEntry, validateSettingsPartial } from '../services/ipc-validation'
+import { getLogger } from '../services/logger.service'
 import { getMemoryInfo, getMemoryProcesses, optimizeMemory } from '../services/memory-optimizer'
 import type { MemoryOptimizeProgress } from '../services/memory-optimizer'
 import {
@@ -113,6 +114,11 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerHostsEditorIpc(getWindow)
   registerWinSxSCleanerIpc(getWindow)
 
+  // Renderer-side log relay
+  ipcMain.on(RENDERER_LOG, (_event, level: string, message: string) => {
+    getLogger().log(level, 'Renderer', message)
+  })
+
   ipcMain.handle(IPC.CLEANER_OPEN_LOCATION, (_event, filePath: unknown) => {
     if (typeof filePath !== 'string') return
     if (!isAbsolute(filePath)) return
@@ -170,8 +176,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       properties: ['openDirectory', 'createDirectory'],
       defaultPath: getBackupDir(),
     }
-    const result =
-      !win ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
+    const result = !win ? await dialog.showOpenDialog(opts) : await dialog.showOpenDialog(win, opts)
     if (result.canceled || !result.filePaths.length) return null
     return result.filePaths[0]
   })

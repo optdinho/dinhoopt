@@ -20,7 +20,7 @@ describe('FileWatcherService', () => {
     const listener = vi.fn()
     service.on('file-changed', listener)
 
-    const cbCallback: ((event: string, filename: string) => void) = vi.fn()
+    const cbCallback: (event: string, filename: string) => void = vi.fn()
     mockWatch.mockImplementation((_dir: string, cb: (_event: string, _filename: string) => void) => {
       cbCallback.mockImplementation(cb)
       return { close: vi.fn() } as ReturnType<typeof watch>

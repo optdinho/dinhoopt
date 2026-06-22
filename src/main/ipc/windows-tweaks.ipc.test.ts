@@ -51,12 +51,12 @@ import {
 } from './windows-tweaks.ipc'
 
 const CATEGORY_EXPECTED_COUNTS: Record<WindowsTweakCategory, number> = {
-  mouse: 7,
-  keyboard: 3,
+  mouse: 4,
+  keyboard: 0,
   accessibility: 4,
   network: 17,
-  gpu: 9,
-  system: 22,
+  gpu: 7,
+  system: 21,
   gaming: 12,
   privacy: 6,
   mmcss: 8,
@@ -430,7 +430,7 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
     registerWindowsTweaksIpc(() => null)
     const handler = getHandler('windows-tweaks:apply')
 
-    const result = (await handler({}, ['mouse-queue-size'])) as {
+    const result = (await handler({}, ['hags-on'])) as {
       succeeded: number
       failed: number
       errors: Array<{ id: string; reason: string }>
@@ -741,7 +741,7 @@ describe('WINDOWS_TWEAKS_REVERT handler', () => {
     registerWindowsTweaksIpc(() => null)
     const handler = getHandler('windows-tweaks:revert')
 
-    const result = (await handler({}, ['mouse-queue-size'])) as { failed: number; errors: Array<{ reason: string }> }
+    const result = (await handler({}, ['hags-on'])) as { failed: number; errors: Array<{ reason: string }> }
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toContain('Acesso negado')
   })

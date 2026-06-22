@@ -3,6 +3,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { usePlatform } from '@/hooks/usePlatform'
+import logger from '@/lib/renderer-logger'
 import { useContextMenuStore } from '@/stores/context-menu-store'
 import type { ContextMenuAction, ContextMenuApplyRequest, ContextMenuScope, ContextMenuSource } from '@shared/types'
 import { Filter, MousePointerClick, RotateCcw, Search } from 'lucide-react'
@@ -88,7 +89,7 @@ function ContextMenuCleanerPageContent() {
       useContextMenuStore.getState().setEntries(sorted)
       useContextMenuStore.getState().setScanned(true)
     } catch (err) {
-      console.error('Context-menu scan failed:', err)
+      logger.error('ContextMenuCleanerPage', 'Context-menu scan failed', err)
       toast.error(t('toastScanFailed'), { description: t('toastScanFailedDescription') })
       useContextMenuStore.getState().setError(t('toastScanFailedDescription'))
     }
@@ -169,7 +170,7 @@ function ContextMenuCleanerPageContent() {
           if (succeededIds.length > 0) s.removeEntries(succeededIds)
         }
       } catch (err) {
-        console.error('Context-menu apply failed:', err)
+        logger.error('ContextMenuCleanerPage', 'Context-menu apply failed', err)
         toast.error(t('toastApplyFailed'), { description: t('toastApplyFailedDescription') })
         useContextMenuStore.getState().setError(t('toastApplyFailedDescription'))
       }

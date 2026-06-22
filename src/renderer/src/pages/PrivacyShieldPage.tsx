@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
+import logger from '@/lib/renderer-logger'
 import { cn } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePrivacyStore } from '@/stores/privacy-store'
@@ -143,6 +144,7 @@ const categories: CategoryDef[] = [
 ]
 
 function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
+  const { t } = useTranslation('hardening')
   const r = (size - 6) / 2
   const circumference = 2 * Math.PI * r
   const offset = circumference - (score / 100) * circumference
@@ -150,8 +152,8 @@ function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90" role="img" aria-label="Privacy score gauge">
-        <title>Privacy score gauge</title>
+      <svg width={size} height={size} className="-rotate-90" role="img" aria-label={t('scoreGaugeAria')}>
+        <title>{t('scoreGaugeAria')}</title>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--gauge-track)" strokeWidth={4} />
         <circle
           cx={size / 2}
@@ -275,7 +277,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
         errorCount: result.failed,
       })
     } catch (err) {
-      console.error('Privacy apply failed:', err)
+      logger.error('PrivacyShieldPage', 'Privacy apply failed', err)
       usePrivacyStore.getState().setApplyResult({
         succeeded: 0,
         failed: unprotectedIds.length,
@@ -327,7 +329,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
           errorCount: result.failed,
         })
       } catch (err) {
-        console.error('Privacy apply failed:', err)
+        logger.error('PrivacyShieldPage', 'Privacy apply failed', err)
         toast.error(t('privacy.applyFailed'), { description: t('privacy.applyFailedDescription') })
         usePrivacyStore.getState().setApplyResult({
           succeeded: 0,
@@ -743,8 +745,8 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
                       className={cn('h-5 w-5 transition-transform', isExpanded ? 'rotate-180' : 'rotate-0')}
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      <svg viewBox="0 0 20 20" fill="currentColor" role="img" aria-label="Expand">
-                        <title>Expand</title>
+                      <svg viewBox="0 0 20 20" fill="currentColor" role="img" aria-label={t('expandAria')}>
+                        <title>{t('expandAria')}</title>
                         <path
                           fillRule="evenodd"
                           d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
