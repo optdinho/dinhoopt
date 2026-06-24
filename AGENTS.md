@@ -791,3 +791,17 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - **Engine compilado e publicado** (`dotnet build` + `dotnet publish -c Release --self-contained false`) — 0 erros.
 
 - **267 testes passam** (24 clips IPC + 243 preload + 5 clips-config-store).
+
+## Session Summary (2026-06-24c)
+
+### Done
+
+- **Thumbnail PATH resolution fix**: `scanFfmpeg()` em `thumbnail-generator.ts` só procurava `ffmpeg.exe` em 9 diretórios fixos — nunca em `%PATH%`. C# engine funciona via `Process.Start("ffmpeg", ...)` (resolve PATH), mas Electron não. Adicionado `where.exe ffmpeg` como fallback + `where.exe ffprobe` separadamente (caso estejam em diretórios diferentes). 3 novos testes (PATH resolve, dir scan fallback, false when not found). **10 testes** no arquivo.
+
+- **Beta badge na sidebar**: Adicionado `badgeLabel?: string` em `NavItemDef`/`SubItemDef` + `NavItem` renderiza badge de texto "Beta" no item Game Clips. Visível apenas com sidebar expandida.
+
+- **Commit**: `35c7817` — 90 arquivos, 16139 inserções. Inclui todo o sistema de clips (C# engine, IPC, UI, testes), game mode, e correções de thumbnail.
+
+### Full Suite
+
+- **5258 testes**, 179 arquivos — **0 quebras**
