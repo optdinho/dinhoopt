@@ -6,6 +6,7 @@ export interface SubItemDef {
   labelKey?: string
   path: string
   badge?: boolean
+  badgeLabel?: string
 }
 
 export interface NavItemDef {
@@ -14,6 +15,7 @@ export interface NavItemDef {
   labelKey?: string
   path: string
   children?: SubItemDef[]
+  badgeLabel?: string
 }
 
 export interface NavGroup {

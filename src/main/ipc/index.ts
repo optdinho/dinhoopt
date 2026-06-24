@@ -58,6 +58,7 @@ import {
   setSettings,
 } from '../services/settings-store'
 import { registerBenchmarkIpc } from './benchmark.ipc'
+import { registerClipsIpc } from './clips.ipc'
 import { registerEmptyFolderCleanerIpc } from './empty-folder-cleaner.ipc'
 import { registerFileShredderIpc } from './file-shredder.ipc'
 import { refreshGameDetector, registerGameModeIpc } from './game-mode.ipc'
@@ -113,6 +114,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerLoggerIpc()
   registerHostsEditorIpc(getWindow)
   registerWinSxSCleanerIpc(getWindow)
+  registerClipsIpc()
 
   // Renderer-side log relay
   ipcMain.on(RENDERER_LOG, (_event, level: string, message: string) => {
@@ -141,6 +143,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
       contextMenu: isWin,
       windowsTweaks: isWin,
       benchmark: isWin,
+      clips: isWin,
     },
   }))
 

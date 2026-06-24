@@ -702,4 +702,31 @@ describe('preload API bridge', () => {
       })
     }
   })
+
+  describe('clips', () => {
+    const methods = [
+      'clipsGetStatus',
+      'clipsStartEngine',
+      'clipsStopEngine',
+      'clipsStartCapture',
+      'clipsStopCapture',
+      'clipsSaveClip',
+      'clipsList',
+      'clipsDelete',
+      'clipsOpen',
+      'clipsGetConfig',
+      'clipsSetConfig',
+  'clipsSelectOutputDir',
+  'clipsGetThumbnail',
+  'clipsGetAudioSessions',
+  'clipsSetAudioSessions',
+    ]
+    for (const m of methods) {
+      it(`${m} calls invoke`, async () => {
+        mockIpc.invoke.mockResolvedValueOnce(null)
+        await (api[m] as (...a: unknown[]) => Promise<unknown>)()
+        expect(mockIpc.invoke).toHaveBeenCalled()
+      })
+    }
+  })
 })

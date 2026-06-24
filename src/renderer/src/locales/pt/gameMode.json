@@ -84,6 +84,9 @@
   "autoDetectDesc": "Ativa automaticamente o Modo de Jogo quando um jogo é iniciado",
   "autoDeactivateLabel": "Desativar automaticamente ao sair",
   "autoDeactivateDesc": "Restaura as definições do sistema quando o jogo é encerrado",
+  "autoStartCapture": "Iniciar captura ao detectar jogo",
+  "autoStartCaptureDesc": "Quando um jogo for detectado, inicia automaticamente a gravação dos clipes",
+
   "customGameProcessesLabel": "Processos de jogo personalizados",
   "customGameProcessesDesc": "Adicione nomes executáveis de jogos que não estejam na lista integrada",
   "customGamePlaceholder": "Executável do jogo (ex.: mygame.exe)",

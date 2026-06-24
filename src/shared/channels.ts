@@ -350,4 +350,25 @@ export const IPC = {
 
   // Feature F: Behavioral Sandbox
   MALWARE_SANDBOX_ANALYZE: 'malware:sandbox-analyze',
+
+  // ─── Clips / Game Capture ────────────────────────────────
+  CLIPS_GET_STATUS: 'clips:get-status',
+  CLIPS_START_ENGINE: 'clips:start-engine',
+  CLIPS_STOP_ENGINE: 'clips:stop-engine',
+  CLIPS_START_CAPTURE: 'clips:start-capture',
+  CLIPS_STOP_CAPTURE: 'clips:stop-capture',
+  CLIPS_SAVE_CLIP: 'clips:save-clip',
+  CLIPS_LIST_CLIPS: 'clips:list-clips',
+  CLIPS_DELETE_CLIP: 'clips:delete-clip',
+  CLIPS_OPEN_CLIP: 'clips:open-clip',
+  CLIPS_SET_CONFIG: 'clips:set-config',
+  CLIPS_GET_CONFIG: 'clips:get-config',
+  CLIPS_SELECT_OUTPUT_DIR: 'clips:select-output-dir',
+  CLIPS_GET_AUDIO_SESSIONS: 'clips:get-audio-sessions',
+  CLIPS_SET_AUDIO_SESSIONS: 'clips:set-audio-sessions',
+  CLIPS_GET_THUMBNAIL: 'clips:get-thumbnail',
+  CLIPS_ENGINE_STATUS: 'clips:engine-status',
+  CLIPS_GET_MIC_DEVICES: 'clips:get-mic-devices',
+  CLIPS_SET_MIC_DEVICE: 'clips:set-mic-device',
+  CLIPS_GET_RUNNING_PROCESSES: 'clips:get-running-processes',
 } as const

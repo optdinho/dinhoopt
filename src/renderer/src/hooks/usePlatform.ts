@@ -13,6 +13,7 @@ const defaultInfo: PlatformInfo = {
     contextMenu: true,
     windowsTweaks: true,
     benchmark: true,
+    clips: true,
     compliance: true,
     vulnerability: true,
   },

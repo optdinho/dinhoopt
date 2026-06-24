@@ -63,6 +63,7 @@ const WindowsTweaksPage = lazy(() =>
   import('./pages/WindowsTweaksPage').then((m) => ({ default: m.WindowsTweaksPage })),
 )
 const BenchmarkPage = lazy(() => import('./pages/BenchmarkPage').then((m) => ({ default: m.BenchmarkPage })))
+const ClipsPage = lazy(() => import('./pages/ClipsPage').then((m) => ({ default: m.ClipsPage })))
 const MemoryOptimizerPage = lazy(() =>
   import('./pages/MemoryOptimizerPage').then((m) => ({ default: m.MemoryOptimizerPage })),
 )
@@ -258,6 +259,7 @@ function AnimatedRoutes() {
         <Route path="/game-mode" element={wrap(<GameModePage />)} />
         <Route path="/windows-tweaks" element={wrap(<WindowsTweaksPage />)} />
         <Route path="/benchmark" element={wrap(<BenchmarkPage />)} />
+        <Route path="/clips" element={wrap(<ClipsPage />)} />
         <Route path="/memory" element={wrap(<MemoryOptimizerPage />)} />
         <Route path="/performance" element={wrap(<PerformanceMonitorPage />)} />
         <Route path="/uninstaller" element={wrap(<UninstallerPage />)} />
@@ -306,6 +308,7 @@ const ROUTE_TITLES: Record<string, { key: string; ns?: string } | string> = {
   '/game-mode': { key: 'gameMode' },
   '/windows-tweaks': 'Windows Tweaks',
   '/benchmark': 'Benchmark',
+  '/clips': { key: 'clips' },
   '/memory': 'Memory Optimizer',
   '/performance': { key: 'performance' },
   '/uninstaller': 'Uninstaller',

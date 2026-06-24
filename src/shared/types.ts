@@ -14,6 +14,7 @@ export interface PlatformInfo {
     benchmark: boolean
     compliance: boolean
     vulnerability: boolean
+    clips: boolean
   }
 }
 
@@ -1654,4 +1655,87 @@ export interface ExploitScanResult {
 
 export interface LogConfig {
   retentionDays: number
+}
+
+// ─── Clips / Game Capture ────────────────────────────────
+
+export type HotkeyAction = 'saveClip' | 'toggleCapture' | 'toggleMic' | 'pushToTalk'
+export type HotkeyModifier = 'Ctrl' | 'Shift' | 'Alt'
+export type PushToTalkMode = 'off' | 'hold' | 'toggle'
+
+export interface HotkeyBinding {
+  id: string
+  vk: number
+  modifiers: HotkeyModifier[]
+  action: HotkeyAction
+  replayDurationSeconds?: number
+  enabled: boolean
+}
+
+export interface AudioSessionInfo {
+  processId: number
+  processName: string
+  displayName: string
+  isSelected: boolean
+}
+
+export interface ClipsEngineStatus {
+  running: boolean
+  capturing: boolean
+  uptime: number
+  fps: number
+  replayTimeSeconds: number
+  captureBackend?: string
+  encoder?: string
+  estimatedRamMB?: number
+  diskSpaceOk?: boolean
+  currentGame?: string
+  customGameProcess?: string
+  lastCrashRecovered?: boolean
+  audioLoopback?: boolean
+  audioFallback?: boolean
+}
+
+export interface ClipInfo {
+  name: string
+  path: string
+  size: number
+  createdAt: string
+  duration: number
+}
+
+export interface MicDeviceInfo {
+  id: string
+  name: string
+  isDefault: boolean
+  channels: number
+  sampleRate: number
+}
+
+export interface ClipsConfig {
+  replayTimeSeconds: number
+  micEnabled: boolean
+  audioLoopback: boolean
+  fps: number
+  width: number
+  height: number
+  bitrateKbps: number
+  outputDirectory: string
+  forceSoftware: boolean
+  hotkeys: HotkeyBinding[]
+  pushToTalk: PushToTalkMode
+  pushToTalkKeys: number[]
+  gameDetection: boolean
+  gameAudioOnly: boolean
+  customGameProcess?: string
+  micDeviceId?: string
+  autoStartCapture?: boolean
+  /** Volume do áudio do jogo no clip (0.0 a 2.0, default 1.0) */
+  gameVolume?: number
+  /** Volume do microfone no clip (0.0 a 2.0, default 1.0) */
+  micVolume?: number
+  pushToTalkKey?: number
+  selectedAudioSessions: number[]
+  useExcludeMode: boolean
+  excludeProcessId: number
 }

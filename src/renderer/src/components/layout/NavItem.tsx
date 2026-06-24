@@ -11,6 +11,7 @@ export const NavItem = memo(function NavItem({
   badge,
   badgeCount,
   badgeCounts,
+  badgeLabel,
   isActive: isActiveProp,
   submenuOpen,
   onToggleSubmenu,
@@ -21,6 +22,7 @@ export const NavItem = memo(function NavItem({
   badge?: boolean
   badgeCount?: number
   badgeCounts?: Record<string, number>
+  badgeLabel?: string
   isActive?: boolean
   submenuOpen?: boolean
   openSubmenu?: string | null
@@ -114,6 +116,17 @@ export const NavItem = memo(function NavItem({
             aria-label={`${badgeCount ?? 1}`}
           >
             {badgeCount ?? 1}
+          </span>
+        )}
+        {!collapsed && badgeLabel && (
+          <span
+            className="flex h-[15px] items-center rounded-[3px] px-[5px] text-[8px] font-bold leading-none uppercase tracking-wider"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              color: '#0a0600',
+            }}
+          >
+            {badgeLabel}
           </span>
         )}
         {!collapsed && hasChildren && (

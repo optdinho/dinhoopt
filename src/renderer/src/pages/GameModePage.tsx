@@ -28,6 +28,7 @@ export function GameModePage() {
   const auditPhase = useGameModeStore((s) => s.auditPhase)
 
   const [elapsed, setElapsed] = useState(0)
+  const [autoStartCapture, setAutoStartCapture] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [gameInput, setGameInput] = useState('')
   const [showAuditModal, setShowAuditModal] = useState(false)
@@ -42,6 +43,20 @@ export function GameModePage() {
       progressCleanupRef.current?.()
     }
   }, [])
+
+  useEffect(() => {
+    window.dinho?.clipsGetConfig?.().then((cfg) => {
+      if (cfg && typeof cfg.autoStartCapture === 'boolean') {
+        setAutoStartCapture(cfg.autoStartCapture)
+      }
+    }).catch(() => {})
+  }, [])
+
+  const handleToggleAutoStartCapture = useCallback(() => {
+    const next = !autoStartCapture
+    setAutoStartCapture(next)
+    window.dinho?.clipsSetConfig?.({ autoStartCapture: next }).catch(() => {})
+  }, [autoStartCapture])
 
   useEffect(() => {
     if (!active || !activatedAt) {
@@ -355,10 +370,12 @@ export function GameModePage() {
         <GameModeAutoDetect
           autoDetect={config.autoDetect}
           autoDeactivate={config.autoDeactivate}
+          autoStartCapture={autoStartCapture}
           customGameProcesses={config.customGameProcesses ?? []}
           gameInput={gameInput}
           onToggleAutoDetect={() => store.getState().setAutoDetect(!config.autoDetect)}
           onToggleAutoDeactivate={() => store.getState().setAutoDeactivate(!config.autoDeactivate)}
+          onToggleAutoStartCapture={handleToggleAutoStartCapture}
           onAddGameProcess={handleAddGameProcess}
           onRemoveGameProcess={handleRemoveGameProcess}
           onGameInputChange={setGameInput}

@@ -1,14 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Plus, Radar, X } from 'lucide-react'
+import { Plus, Radar, Video, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface GameModeAutoDetectProps {
   autoDetect: boolean
   autoDeactivate: boolean
+  autoStartCapture: boolean
   customGameProcesses: string[]
   gameInput: string
   onToggleAutoDetect: () => void
   onToggleAutoDeactivate: () => void
+  onToggleAutoStartCapture: () => void
   onAddGameProcess: () => void
   onRemoveGameProcess: (name: string) => void
   onGameInputChange: (value: string) => void
@@ -17,10 +19,12 @@ interface GameModeAutoDetectProps {
 export function GameModeAutoDetect({
   autoDetect,
   autoDeactivate,
+  autoStartCapture,
   customGameProcesses,
   gameInput,
   onToggleAutoDetect,
   onToggleAutoDeactivate,
+  onToggleAutoStartCapture,
   onAddGameProcess,
   onRemoveGameProcess,
   onGameInputChange,
@@ -87,6 +91,28 @@ export function GameModeAutoDetect({
                 <motion.div
                   className="absolute top-0.5 h-5 w-5 rounded-full"
                   animate={{ left: autoDeactivate ? 22 : 2, background: autoDeactivate ? '#fff' : 'var(--text-muted)' }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4 px-5 py-3.5" style={{ borderBottom: '1px solid var(--bg-subtle)' }}>
+              <div className="flex items-center gap-2">
+                <Video className="h-4 w-4" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+              </div>
+              <div className="flex-1">
+                <span className="text-[13px] font-medium text-zinc-300">{t('autoStartCapture')}</span>
+                <p className="mt-0.5 text-[11px] text-zinc-500">{t('autoStartCaptureDesc')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={onToggleAutoStartCapture}
+                className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                style={{ background: autoStartCapture ? '#22c55e' : 'var(--bg-active)' }}
+              >
+                <motion.div
+                  className="absolute top-0.5 h-5 w-5 rounded-full"
+                  animate={{ left: autoStartCapture ? 22 : 2, background: autoStartCapture ? '#fff' : 'var(--text-muted)' }}
                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                 />
               </button>

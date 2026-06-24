@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+.DS_Store
+Thumbs.db

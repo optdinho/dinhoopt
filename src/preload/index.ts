@@ -1,6 +1,6 @@
 import { IPC, RENDERER_LOG } from '@shared/channels'
 import type { AgentEvaluationResult } from '@shared/driver-agent-types'
-import type { LicenseResult } from '@shared/types'
+import type { AudioSessionInfo, ClipInfo, ClipsConfig, ClipsEngineStatus, HotkeyBinding, LicenseResult, MicDeviceInfo } from '@shared/types'
 import type {
   BenchmarkProgress,
   BenchmarkResult,
@@ -575,6 +575,29 @@ const api = {
     filePath: string,
   ): Promise<import('../main/services/behavioral-sandbox.service').SandboxResult | null> =>
     ipcRenderer.invoke(IPC.MALWARE_SANDBOX_ANALYZE, filePath),
+
+  // ─── Clips / Game Capture ──────────────────────────────────
+  clipsGetStatus: (): Promise<ClipsEngineStatus> => ipcRenderer.invoke(IPC.CLIPS_GET_STATUS),
+  clipsStartEngine: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_START_ENGINE),
+  clipsStopEngine: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_STOP_ENGINE),
+  clipsStartCapture: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_START_CAPTURE),
+  clipsStopCapture: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_STOP_CAPTURE),
+  clipsSaveClip: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_SAVE_CLIP),
+  clipsList: (): Promise<ClipInfo[]> => ipcRenderer.invoke(IPC.CLIPS_LIST_CLIPS),
+  clipsDelete: (name: string): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_DELETE_CLIP, name),
+  clipsOpen: (path: string): Promise<void> => ipcRenderer.invoke(IPC.CLIPS_OPEN_CLIP, path),
+  clipsGetConfig: (): Promise<ClipsConfig> => ipcRenderer.invoke(IPC.CLIPS_GET_CONFIG),
+  clipsSetConfig: (config: Partial<ClipsConfig>): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_SET_CONFIG, config),
+  clipsSelectOutputDir: (): Promise<string | null> => ipcRenderer.invoke(IPC.CLIPS_SELECT_OUTPUT_DIR),
+  clipsGetThumbnail: (clipName: string): Promise<string | null> => ipcRenderer.invoke(IPC.CLIPS_GET_THUMBNAIL, clipName),
+  clipsGetAudioSessions: (): Promise<AudioSessionInfo[]> => ipcRenderer.invoke(IPC.CLIPS_GET_AUDIO_SESSIONS),
+  clipsSetAudioSessions: (sessionPids: number[]): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_SET_AUDIO_SESSIONS, sessionPids),
+  clipsGetMicDevices: (): Promise<MicDeviceInfo[]> => ipcRenderer.invoke(IPC.CLIPS_GET_MIC_DEVICES),
+  clipsSetMicDevice: (deviceId: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_SET_MIC_DEVICE, deviceId),
+  clipsGetRunningProcesses: (): Promise<Array<{ name: string; pid: number }>> => ipcRenderer.invoke(IPC.CLIPS_GET_RUNNING_PROCESSES),
 }
 
 export type DiNhoAPI = typeof api

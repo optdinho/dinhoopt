@@ -470,3 +470,324 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - Arquivos grandes quebrados extraindo helpers puros, mantendo o arquivo orquestrador como re-export fino para compatibilidade de imports de teste
 - Renderer logging usa canal IPC `RENDERER_LOG` em vez de importar `getLogger()` (main-process only)
 - UX4/UX5/P2/P3 avaliados e mantidos como estão (ErrorBoundary router-level já mitiga, framer-motion é decorativo, better-sqlite3 é esperado em Electron)
+
+## Session Summary (2026-06-22)
+
+### Done
+
+- **Per-App Audio Filtering — conexão Electron → Engine**:
+  - Engine C# (`DiNho.Capture.Poc.exe`) já tinha suporte completo (`getAudioSessions`, `setAudioSessions`, `MultiSourceLoopback` com `ProcessAudioSource`/`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS`, fallback `WasapiLoopbackSource`) — faltava conectar do Electron
+  - `AudioSessionInfo` type em `src/shared/types.ts`
+  - `CLIPS_GET_AUDIO_SESSIONS` / `CLIPS_SET_AUDIO_SESSIONS` channels + IPC handlers + preload methods
+  - UI em `ClipsPage.tsx`: seção "Áudio por Aplicativo" com refresh, toggle "Todos os Aplicativos", lista scrollável de apps
+  - Locales pt/en/es com 7 chaves novas
+
+- **"Só Jogo + Microfone" (`gameAudioOnly`)**:
+  - Novo campo `gameAudioOnly: boolean` no `ClipsConfig` (default `false`)
+  - Toggle na sidebar que ao ativar força `micEnabled: true` + `audioLoopback: true`
+  - `useEffect` watch: quando `gameAudioOnly` está ON e o jogo detectado muda, auto-filtra as sessões de áudio para só o PID do jogo
+  - Polling automático de sessões a cada 5s enquanto `gameAudioOnly` estiver ativo
+  - Badge verde com nome do jogo ao lado do toggle
+
+- **Persistência das configs de clipes**:
+  - Criado `src/main/services/clips-config-store.ts` usando `createJsonStore` (mesmo padrão do settings-store)
+  - Salva em `<userData>/DiNho-Dev/clips-config.json`
+  - `loadPersistedClipsConfig()` chamado na inicialização do módulo (`clips.ipc.ts`), carrega valores salvos nas variáveis de estado
+  - `persistClipsConfig()` chamado após todo `CLIPS_SET_CONFIG` e ao receber atualizações de status do engine (FPS, resolução, bitrate)
+  - 5 novos testes para o store (load defaults, load saved, corrupt JSON fallback, partial update, reset)
+  - Teste IPC existente atualizado: mock do `electron` agora inclui `app` (necessário pelo store-base)
+
+- **Full suite**: **5228 tests**, 177 files — **0 failures**
+- **Testes adicionados**: +5 store, +3 IPC, +2 preload, +1 config assertion
+
+## Session Summary (2026-06-22b)
+
+### Done
+
+- **Root cause das falhas de game detection/captura encontrada no NamedPipeServer**:
+  - `HandleClientAsync` só escrevia respostas a comandos do Electron, **nunca enviava status broadcasts** para o pipe
+  - O timer de 2s disparava `OnStatusBroadcast`, mas o handler `BroadcastStatus` em `EngineCoordinator` só invocava `OnStatusChanged` (evento local) — **ninguém escrevia no pipe**
+  - Resultado: `engineCurrentGame` sempre vazio no Electron, `engineFps`/`engineCaptureBackend`/`engineEncoder`/`engineDiskSpaceOk` nunca atualizados
+
+- **FIX: Status broadcasts agora são escritos no pipe**:
+  - `HandleClientAsync` usa `ConcurrentQueue<string>` para coletar broadcasts do timer
+  - Loop principal faz `Task.WhenAny(readTask, Task.Delay(500))` para polling de comandos + broadcasts
+  - A cada 500ms (ou após cada comando), drena a fila e escreve todos os broadcasts pendentes no pipe
+  - `finally { OnStatusBroadcast -= onStatus }` para limpeza ao desconectar
+
+- **Logs de diagnóstico adicionados no Electron**:
+  - `CLIPS_START_CAPTURE`: loga `targetGame`, `configCustomGameProcess`, `engineCurrentGame`, payload enviado, resultado
+  - `CLIPS_SET_CONFIG` com `customGameProcess`: loga valor recebido e resultado do envio ao engine
+  - `sendPipeCommand`: loga cmd + payload enviados
+  - `handlePipeMessage`: loga status recebido do engine (game, recording, fps, backend) e responses de comandos
+  - Config sync: loga "pipe not connected, skipping" quando não conectado
+
+- **Engine C# compilado e publicado**: `dotnet build` + `dotnet publish` — 0 erros
+- **Testes**: 267 testes passam (52 clips + 215 preload), 0 falhas
+- **Game fallback `_lastDetectedGame` implementado** (EngineCoordinator.cs): quando Electron rouba o foco, engine busca o último jogo detectado por nome do processo e obtém HWND atual — evita capturar a própria janela do Electron
+
+### Key Decisions
+
+- **`Task.WhenAny` com 500ms polling**: evita thread-safety issues do StreamWriter, responsivo o suficiente para status broadcasts de 2s
+- **`ConcurrentQueue<string>`**: thread-safe, produtor (timer) e consumidor (loop) não bloqueiam
+- **`_lastDetectedGame` + `ResolveProcessByName()`**: fallback em 3 níveis — custom game → foreground atual → último jogo detectado
+
+### Next Steps
+
+1. ~~Testar manualmente com `npm run dev`~~ (feito — game fallback funcionou)
+2. Testar fluxo completo: Start Capture → jogar → Save Clip
+
+## Session Summary (2026-06-22c)
+
+### Done
+
+- **Crash root cause identified**: `HotkeyManager.KeyboardHookCallback` (native Windows hook callback) sem try-catch — exceção do `ToggleCapture` → `StopCapture` → `_pipelineTask.Wait(2000)` crashava o processo inteiro
+  - Antigo crash log encontrado em `%LOCALAPPDATA%\DiNhoClips\crash\crash_*.txt`: `AggregateException: A task was canceled` (do standalone em `Downloads\dinhoclipes\`)
+- **`KeyboardHookCallback` protegido**: `try-catch` envolvendo todo o corpo — exceções de hotkeys não crasham mais
+- **`CLIPS_SAVE_CLIP` com retry automático**: se pipe estiver desconectado, espera até 5s pela reconexão antes de retornar erro
+- **Engine compilado e publicado** (`dotnet publish -c Release --self-contained false`) — 0 erros, só warnings CsWinRT pré-existentes
+
+### Key Decisions
+
+- **try-catch no native callback**: essencial porque Windows low-level keyboard hooks rodam no message loop nativo — exceções não tratadas crasham o processo .NET sem chance de recovery
+- **Retry no Electron em vez de no C#**: mais simples e não requer mudança no protocolo pipe; o pipe já tem reconnect automático a cada 3s
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Hotkeys/HotkeyManager.cs`: `KeyboardHookCallback` wrapped in try-catch
+- `src/main/ipc/clips.ipc.ts`: `CLIPS_SAVE_CLIP` handler with 5s reconnect wait
+
+## Session Summary (2026-06-23)
+
+### Done
+
+- **Root cause analysis — WGC per-window não produz frames no sistema RTX 5050 / FiveM**:
+  - 10 agentes paralelos investigaram `WgcCaptureSource.cs`, `EngineCoordinator.cs`, e `Program.cs`
+  - **Agent 7**: `WS_EX_NOREDIRECTIONBITMAP` (0x00200000) na janela alvo impede WGC per-window de receber frames do DWM
+  - **Agent 8**: Falta `VideoSupport` na flag de criação do D3D11 device — necessário para WGC se conectar ao pipeline DWM
+  - **Agent 9**: Diferença de message pump — standalone roda na thread de hotkey (com pump), Electron usa ThreadPool (sem pump)
+  - **Agent 10**: Timeout de 16ms no `TryCaptureFrame` insuficiente para primeira frame WGC (leva 50-200ms para aquecer)
+
+- **4 correções aplicadas no C# engine**:
+  1. `VideoSupport` adicionado ao `DeviceCreationFlags` em `StartCapture()` (`EngineCoordinator.cs:203`) e `ReinitializePipelineAsync()` (`EngineCoordinator.cs:278`)
+  2. `WS_EX_NOREDIRECTIONBITMAP` verificado via `GetWindowLongW()` antes de tentar WGC per-window — se presente, pula silenciosamente para WGC desktop
+  3. Cadeia de fallback reordenada: WGC per-window → **WGC desktop** → DXGI → Hybrid (WGC desktop promovido para antes do DXGI)
+  4. Cold-start timeout: `_hasReceivedFrame` flag + `effectiveTimeout = max(timeoutMs, 500)` nas primeiras chamadas do `TryCaptureFrame`
+  5. `VideoSupport` também adicionado ao `WgcCaptureSource.Initialize()` (device próprio)
+
+- **Engine compilado e publicado** (`dotnet build` + `dotnet publish -c Release --self-contained false`) — 0 erros
+
+### Key Decisions
+
+- **WGC desktop antes do DXGI**: WGC desktop captura o monitor inteiro via DWM, funciona mesmo se per-window falhar por `WS_EX_NOREDIRECTIONBITMAP` — e tem qualidade superior ao DXGI Desktop Duplication
+- **Cold-start timeout de 500ms**: valor empírico; WGC pode levar 50-200ms para primeira frame (enumeração DWM, criação de buffers). 500ms cobre folga sem atrasar perceptivelmente o início da captura
+- **Verificação de `WS_EX_NOREDIRECTIONBITMAP`**: BattlEye pode injetar esse estilo em janelas de jogos FiveM para proteção anti-screenshot; checagem evita tentativa fútil de WGC per-window sem perder tempo com catch exception
+
+### Next Steps (Pending)
+
+- Testar fluxo completo com FiveM: `npm run dev` → Start Capture → verificar se WGC desktop produz frames (log `engineCaptureBackend` = "WGC")
+- Se WGC desktop funcionar mas per-window não, documentar que per-window é bloqueado por BattlEye/DWM e que desktop é alternativa WGC completa
+- Confirmar se a janela FiveM (`GTA5.exe` / `grcWindow`) tem `WS_EX_NOREDIRECTIONBITMAP` — log já mostra se pulou (`Janela '...' tem WS_EX_NOREDIRECTIONBITMAP`)
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: `SelectCaptureSource()` — `HasNoRedirectionBitmap`, reordenamento fallback, `VideoSupport` em 2 locais, `WindowsMessagePump` class
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: `VideoSupport` no device creation, `_hasReceivedFrame`, cold-start timeout de 500ms
+
+## Session Summary (2026-06-23b)
+
+### Done (antes)
+- 4 correções no C# engine (VideoSupport, WS_EX_NOREDIRECTIONBITMAP, fallback chain, cold-start timeout)
+
+### Teste com FiveM (RTX 5050)
+
+**Log observado:**
+1. WGC per-window inicializou mas **não produziu frames** (7/7 dropped, `NoFrame`)
+2. WGC desktop no reinit falhou com `COMException`
+3. DXGI assumiu e funcionou **estável** (`Success=True texture=ok`)
+
+**Root cause confirmada: Message Pump (Agent 9)**
+- WGC `FrameArrived` WinRT event precisa que a thread que criou a sessão tenha um **Windows message pump** para o DWM entregar frames
+- `HotkeyManager` já cria uma thread STA com pump (`GetMessage`/`DispatchMessage`), mas WGC `StartCapture()` rodava no ThreadPool do pipe handler
+- Sem pump, o DWM nunca chama `OnFrameArrived` → pipeline morre de fome
+
+### Fix: WindowsMessagePump dedicado
+- `EngineCoordinator.WindowsMessagePump` — thread STA com `PeekMessage`/`DispatchMessage` + fila de `Action` para marshalling
+- `SelectCaptureSource()` marshalla WGC `Initialize()` via `_wgcPump.Invoke()` — roda no pump thread
+- Pump thread continua rodando em background, processando mensagens DWM → `OnFrameArrived` dispara normalmente
+- `_pumpThread.Join(2000)` no `Dispose()`
+- **Engine compilado e publicado** (`dotnet build` + `dotnet publish -c Release`) — 0 erros
+
+### Resultado do Teste com FiveM
+
+- **WGC funcionou** com o `WindowsMessagePump` dedicado — o engine logou `engineCaptureBackend = "WGC"` com frames estáveis
+- Confirmação: "ta resolvido"
+- WGC agora é o backend padrão (qualidade superior ao DXGI)
+
+## Session Summary (2026-06-23b)
+
+### Done
+
+- **Root cause encontrada e corrigida — WGC sem Message Pump**:
+  - 4 fixes iniciais (VideoSupport, WS_EX_NOREDIRECTIONBITMAP, fallback chain, cold-start timeout) não resolveram — WGC ainda dropava todas as frames
+  - **Root cause real**: `FrameArrived` WinRT event precisa de Windows message pump na thread que criou a WGC session — o handler do pipe rodava no ThreadPool, sem pump
+  - Solução: `WindowsMessagePump` — thread STA dedicada com `PeekMessage`/`DispatchMessage` + fila de `Action` para marshalling
+  - `SelectCaptureSource()` marshalla WGC `Initialize()` via `_wgcPump.Invoke()`
+  - `Dispose()` faz `_pumpThread.Join(2000)` para limpeza ordenada
+  - WGC agora produz frames consistentemente com FiveM na RTX 5050
+
+- **Suporte a hotkeys Mouse4 e Mouse5**:
+  - `ClipsPage.tsx`: adicionados `Mouse4` e `Mouse5` como opções nos dropdowns de hotkey (Start/Stop Recording, Save Clip, Toggle Mic, Push-to-Talk)
+  - `HotkeyManager.cs`: mapeamento de `XButton1`/`XButton2` para `Keys.XButton1`/`Keys.XButton2`
+  - Engine compilado e publicado (`dotnet publish -c Release --self-contained false`) — 0 erros
+
+### Relevant Files Changed
+- `src/renderer/src/pages/ClipsPage.tsx`: opções Mouse4/Mouse5 nos dropdowns de hotkey
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Hotkeys/HotkeyManager.cs`: mapeamento XButton1/XButton2
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: WindowsMessagePump class, `SelectCaptureSource()` marshalling
+
+## Session Summary (2026-06-23c)
+
+### Done
+
+- **Áudio do jogo FUNCIONA nos clips!**
+  - Removido `-shortest` do ffmpeg — sem essa flag, o mux inclui ambas as streams (H264 + AAC) corretamente
+  - Clip MP4 ~2477 KB vs H264 temp ~2213 KB = ~264 KB de áudio AAC (proporção correta para 731 packets a 128kbps)
+  - Adicionado `-map 0:v:0 -map 1:a:0`, `-c:a aac -b:a 128k`, `-fflags +genpts`
+
+- **NaN no AAC encoder corrigido**
+  - `new WaveFormat(48000, 32, N)` produzia NaN porque PCM 32-bit era interpretado como IEEE_FLOAT via `Buffer.BlockCopy`
+  - Mudado para `WaveFormat.CreateIeeeFloatWaveFormat(48000, N)` em `WasapiLoopbackSource.cs` e `WasapiMicSource.cs`
+  - AAC encoder agora produz frames estáveis: `ReaderLoop: read=321 bytes framesInChunk=1 totalFrames=1798+`
+
+- **Alt+1 (ToggleCapture) funcionando**
+  - `MapToGenericVk()` mapeia VK_LMENU (0xA4) → VK_MENU (0x12) — Alt detectado corretamente
+  - Key repeat suppression via `_keysDown` HashSet — só primeiro WM_KEYDOWN dispara; WM_KEYUP limpa
+  - `_userStoppedProcess` flag — após parada manual com Alt+1, auto-restart não dispara para o mesmo jogo até o foreground mudar para outro processo
+  - `OnGameChanged()` suprime auto-start se `_userStoppedProcess` contém o mesmo process name
+
+- **AudioMixer corrigido**
+  - `TryMix()` mudou de `Peek()` (sem consumir) para `Dequeue()` — buffers velhos do mic não bloqueiam mais os novos
+  - Sync window aumentada de 10ms → 50ms
+
+- **WH_MOUSE_LL hook corrigido — Mouse4/Mouse5 funcionam para PTT**
+  - MouseHookCallback só tratava `WM_XBUTTONDOWN` — **nunca disparava evento UP**
+  - Adicionado `WM_XBUTTONUP` e `WM_NCXBUTTONUP` — PTT Hold mode agora desativa mic ao soltar o botão
+  - Repeat suppression via `_keysDown` para mouse buttons (igual ao teclado)
+  - Mouse4 (0x05 = XButton1) agora dispara `OnRawKeyEvent(0x05, true/false)` corretamente
+
+- **PTT.Off mode adicionado**
+  - `PushToTalkManager` agora ignora teclas PTT quando `Mode == PttMode.Off`
+  - `EngineCoordinator` mapeia `pushToTalk: 'off'` da Electron para `PttMode.Off`
+  - Engine não responde mais a teclas PTT quando PTT está desligado no frontend
+
+### Diagnóstico do PTT
+
+- Config do frontend mostra `pushToTalkKeys: [5, 20]` = **Mouse4** (0x05) + **CapsLock** (0x14)
+- Electron envia esses valores corretamente para o engine via SET_CONFIG
+- Engine recebe `pttKeys=[5,20]` — propagação do config está funcionando
+- Mouse4 não era detectado porque MouseHookCallback só tratava DOWN, não UP
+- Agora ambos os botões funcionam: Mouse4 via WH_MOUSE_LL, CapsLock via WH_KEYBOARD_LL
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Hotkeys/HotkeyManager.cs`: MouseHookCallback com UP events + repeat suppression; `WM_XBUTTONUP`/`WM_NCXBUTTONUP` constants
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Hotkeys/PushToTalkManager.cs`: `PttMode.Off` adicionado; Early return quando Off
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: `PttMode.Off` handling; `_userStoppedProcess` flag; logging AAC
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/WasapiLoopbackSource.cs`: `WaveFormat.CreateIeeeFloatWaveFormat`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/WasapiMicSource.cs`: `WaveFormat.CreateIeeeFloatWaveFormat`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/AudioMixer.cs`: `Dequeue()` instead of `Peek()`; 50ms sync window
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `-map` streams, `-c:a aac`, `-fflags +genpts`, `-shortest` removido
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegAacEncoder.cs`: `BeginErrorReadLine()`; logging AAC frames
+
+## Session Summary (2026-06-23d)
+
+### Done
+
+- **PTT + microfone funcionando nos clips!**
+  - Fila do mic limpa ao ativar PTT (`_micQueue.Clear()`) — buffers velhos descartados
+  - `AudioMixer.TryMix()` com `Dequeue()` (não `Peek()`) — sem bloqueio por buffers antigos
+  - PTT Hold mode desativa mic ao soltar o botão (Mouse4 ou CapsLock)
+  - Clip final com áudio do jogo + microfone mixado confirmado funcional
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/AudioMixer.cs`: `MicEnabled` setter com `_micQueue.Clear()` ao ativar
+
+## Session Summary (2026-06-23e)
+
+### Done
+
+- **Session muting implemented — `AudioSessionMuteManager.cs`**:
+  - Uses NAudio's `MMDevice.AudioSessionManager.Sessions` + `SimpleAudioVolume.Mute`
+  - `MuteAllExcept(HashSet<int> targetPids)` — mutes all non-target sessions
+  - `Restore()` — restores original mute states
+  - Saves/restores previous mute state for each session (non-destructive)
+
+- **`EngineCoordinator.cs` — MultiSourceLoopback replaced with session muting**:
+  - Removed dead `MultiSourceLoopback` path (VAD per-process, `0x80030057` on this Windows)
+  - New path when `SelectedAudioSessions` has items: mute non-game sessions + `WasapiLoopbackSource`
+  - No 2s fallback delay — loopback produces frames immediately
+  - `_sessionMuteManager` field with cleanup in `StopCapture()` and `CheckAudioFallbackAfterDelayAsync()`
+
+- **Build**: `dotnet build` + `dotnet publish -c Release` — 0 errors
+- **Tests**: 24/24 clip IPC, 238/238 preload — 0 failures
+
+### Next Steps
+- Test with FiveM: `npm run dev` → select game sessions → Start Capture → verify clip has only game + mic audio (no Discord/browser)
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/AudioSessionMuteManager.cs` (new)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: field + CreateAudioMixer + StopCapture cleanup
+
+## Session Summary (2026-06-24)
+
+### Done
+
+- **Per-process audio via C++ DLL (`qH0sT/ApplicationLoopback`)**: Session muting rejected (usuario rejeitou). `CppLoopbackSource.cs` criado — P/Invoke wrapper que chama `ApplicationLoopback.dll` via `SetAudioCallback`/`StartCaptureAsync`/`StopCaptureAsync`. EngineCoordinator.CreateAudioMixer refatorado para usar `CppLoopbackSource` no lugar de `ProcessAudioSource`/`MultiSourceLoopback`/`SingleExcludeSource`. `CheckAudioFallbackAfterDelayAsync()` removido — sem delay de 2s. VAD INCLUDE mode captura apenas o PID alvo + filhos. Engine build + publish OK.
+
+- **Microfone (2 bugs corrigidos)**:
+  1. `ConfigManager.cs:51` — `PttMode` sem `[JsonPropertyName("pushToTalk")]`. Electron enviava `pushToTalk: "off"` mas C# recebia sempre `"Hold"` (default). Com PTT="Hold", `MicEnabled` iniciava sempre `false`.
+  2. `EngineCoordinator.cs:1348-1354` — Config updates em runtime não propagavam `_audioMixer.MicEnabled` (só gains). Adicionado `_audioMixer.MicEnabled = _config.Config.MicEnabled`.
+
+- **Frontend integration**: `clips.ipc.ts` — nova variável `configSelectedAudioSessions`, persistida em `CLIPS_SET_AUDIO_SESSIONS`, incluída no `buildEngineConfig()`. Engine `config` handler agora também aplica `SelectedAudioSessions`.
+
+- **Logs confirmam**: `kind=Mixed` com `loopbackLen=960 micLen=480` — microfone mixado com áudio do jogo. `EmitPacket #16000 kind=Mixed` — ~16k pacotes Mixed em ~164s.
+
+### Key Decisions
+
+- **C++ DLL P/Invoke** sobre NAudio wrapper (COM nativo VAD falhou: `E_NOTIMPL` no vtable slot 14)
+- `Thread.Interrupt()` usado para desbloquear `Sleep(4294967295)` interno do DLL — capture thread `IsBackground=true`
+- Só o primeiro PID de `SelectedAudioSessions` é usado em INCLUDE mode; `includeProcessTree=true` captura filhos automaticamente (FiveM → GTA5.exe)
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/CppLoopbackSource.cs` (new)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/ApplicationLoopback.dll` (pre-built C++ DLL)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: CreateAudioMixer usa CppLoopbackSource; CheckAudioFallbackAfterDelayAsync removido; config handler inclui SelectedAudioSessions e MicEnabled
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Config/ConfigManager.cs`: `[JsonPropertyName("pushToTalk")]` em PttMode
+- `src/main/ipc/clips.ipc.ts`: `configSelectedAudioSessions` var + `buildEngineConfig()` inclui selectedAudioSessions
+
+### Dead Code (keep for reference)
+- `ProcessAudioSource.cs`, `MultiSourceLoopback.cs`, `SingleExcludeSource.cs` — todas as tentativas C# VAD falharam
+
+## Session Summary (2026-06-24b)
+
+### Done
+
+- **Volume sliders fix**: `getCurrentConfigPayload()` estava faltando `gameVolume`, `micVolume`, `selectedAudioSessions`, `useExcludeMode`, `excludeProcessId`. Quando o frontend chamava `refreshConfig()` após mudar o volume, o `setConfig()` sobrescrevia o estado local com o payload incompleto, fazendo o slider voltar pra `100%` (`?? 1`).
+
+- **Pipe connect sync**: Quando o pipe conecta (`sock.on('connect', ...)`), agora sincroniza `configMicDeviceId` com o engine via `sendWithFallback('setMicDevice', ...)` — antes só sincronizava quando o usuário mexia no dropdown.
+
+- **Mic discovery retry**: `loadMicDevices()` no frontend aumentado de 3 tentativas (600ms) para 8 tentativas (800ms) — mais chance do pipe conectar antes de desistir.
+
+- **PTT mode fix**: `EngineCoordinator.cs:1355` — o handler `config` setava `_audioMixer.MicEnabled = _config.Config.MicEnabled` (sempre `true`) ignorando o PTT mode. Agora respeita `pttMode`: `MicEnabled = false` quando PTT é "Hold" ou "Toggle".
+
+- **Soft-knee limiter**: `AudioMixer.SoftClip()` substituiu `Math.Clamp` (hard clip que distorcia) por soft-knee cúbico — comprime suavemente sinais acima de `0.333` sem corte brusco.
+
+- **AAC bitrate 128k → 192k**: Encoder inicial (`FfmpegAacEncoder.Initialize`) e re-encode no mux aumentados para 192kbps.
+
+- **`-c:a copy` no mux AAC**: Quando o áudio já é AAC (nosso encoder), o ffmpeg copia direto sem re-codificar, evitando dupla codificação que degradava qualidade.
+
+- **`-fflags +genpts` restaurado** no `ClipExporter.MuxWithFfmpeg()` — essencial para mux de H.264 raw + AAC.
+
+- **Mic boost 2x → 4x** no `AudioMixer.Mix()` + `MicGain` clamp 2.0 → 4.0.
+
+- **Engine compilado e publicado** (`dotnet build` + `dotnet publish -c Release --self-contained false`) — 0 erros.
+
+- **267 testes passam** (24 clips IPC + 243 preload + 5 clips-config-store).

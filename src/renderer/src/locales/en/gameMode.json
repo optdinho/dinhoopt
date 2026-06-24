@@ -94,6 +94,9 @@
   "autoDetectDesc": "Automatically activate Game Mode when a game is launched",
   "autoDeactivateLabel": "Auto-deactivate on exit",
   "autoDeactivateDesc": "Restore system settings when the game exits",
+  "autoStartCapture": "Auto-start capture on game",
+  "autoStartCaptureDesc": "When a game is detected, automatically start recording clips",
+
   "customGameProcessesLabel": "Custom game processes",
   "customGameProcessesDesc": "Add executable names of games not in the built-in list",
   "customGamePlaceholder": "Game executable (e.g. mygame.exe)",

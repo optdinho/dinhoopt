@@ -10,6 +10,7 @@ import {
   Bug,
   CalendarClock,
   ClipboardCheck,
+  Clapperboard,
   CopyCheck,
   Cpu,
   Database,
@@ -106,6 +107,7 @@ const navGroups: NavGroup[] = [
     headingKey: 'toolsHeading',
     items: [
       { icon: Gamepad2, labelKey: 'gameMode', path: '/game-mode' },
+      { icon: Clapperboard, labelKey: 'clips', path: '/clips', badgeLabel: 'Beta' },
       { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
       { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
@@ -159,6 +161,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
           .filter((item) => {
             if (item.path === '/registry' && !features.registry) return false
             if (item.path === '/game-mode' && !features.gameMode) return false
+            if (item.path === '/clips' && !features.clips) return false
             if (item.path === '/windows-tweaks' && !features.windowsTweaks) return false
             if (item.path === '/benchmark' && !features.benchmark) return false
             return true
@@ -260,6 +263,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
                   item={item}
                   badgeCount={effectiveBadgeCounts[item.path] ?? 0}
                   badgeCounts={effectiveBadgeCounts}
+                  badgeLabel={item.badgeLabel}
                   isActive={isPathActive(item)}
                   submenuOpen={openSubmenu === item.path}
                   collapsed={collapsed}

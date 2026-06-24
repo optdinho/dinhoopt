@@ -1,0 +1,11 @@
+=== DiNho Clips Engine v1.0.0 ===
+
+  GPU: NVIDIA GeForce RTX 5050 (driver v32.0.16.1062, 6-11-2026)
+
+[EngineCoordinator] Iniciando...
+[NamedPipeServer] Pipe: \\.\pipe\dinho-clips-engine (protocolo envelope v1)
+[NamedPipeServer) Envelope: { "v": 1, "cmd": "...", "payload": {...} }
+[EngineCoordinator] Pronto. Aguardando hotkeys...
+  F8=Salvar clip  F9=Iniciar/Parar captura  F10=Mutar microfone
+  Pipe: \\.\pipe\dinho-clips-engine
+Pressione Ctrl+C para parar.
