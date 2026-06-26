@@ -1,0 +1,618 @@
+
+ RUN  v4.1.8 C:/Users/Administrator/Desktop/001
+
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > accepts a valid bundle 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > returns correct fields 2ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects null 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects arrays 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects non-objects 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects missing version 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects empty version 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects missing updatedAt 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects missing sha256 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects empty rules array 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects non-array rules 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects rules without .yar extension 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects rules with empty content 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects path traversal in filename 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > rejects rules exceeding content size limit 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > validateRuleBundle > accepts rules at the content size limit 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > computeBundleHash > produces consistent hashes for the same content 1ms
+ ✓ src/main/services/yara-rules-store.test.ts > computeBundleHash > sorts by filename before hashing (order-independent) 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > computeBundleHash > produces different hashes for different content 1ms
+ ✓ src/main/services/yara-rules-store.test.ts > computeBundleHash > returns a valid SHA-256 hex string 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > bundle integrity verification > validates correctly when sha256 matches computed hash 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > bundle integrity verification > detects tampered content via hash mismatch 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > metadata validation > accepts valid metadata 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > metadata validation > rejects null 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > metadata validation > rejects missing version 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > metadata validation > rejects empty version 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > metadata validation > rejects negative rulesCount 0ms
+ ✓ src/main/services/yara-rules-store.test.ts > metadata validation > rejects non-number rulesCount 0ms
+ ✓ src/main/services/game-detector.test.ts > findGame > returns null when no known games are running 3ms
+ ✓ src/main/services/game-detector.test.ts > findGame > detects a known game process 1ms
+ ✓ src/main/services/game-detector.test.ts > findGame > matches custom game processes 0ms
+ ✓ src/main/services/game-detector.test.ts > findGame > is case-insensitive for custom processes 0ms
+ ✓ src/main/services/game-detector.test.ts > findGame > prioritizes known games over custom 0ms
+ ✓ src/main/services/game-detector.test.ts > startGameDetector / stopGameDetector > starts polling and detects a game 103ms
+ ✓ src/main/services/game-detector.test.ts > startGameDetector / stopGameDetector > stops polling and clears state 1ms
+ ✓ src/main/services/game-detector.test.ts > suppressCurrentGame > suppresses without crashing when no game is detected 2ms
+ ✓ src/main/services/yara-engine.test.ts > ReadWriteLock > allows concurrent readers 54ms
+ ✓ src/main/services/yara-engine.test.ts > ReadWriteLock > blocks writers during read 51ms
+ ✓ src/main/services/yara-engine.test.ts > ReadWriteLock > queues writers and ensures exclusive access 54ms
+ ✓ src/main/services/yara-engine.test.ts > ReadWriteLock > allows readers after writers complete 1ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > cleanupStagingDirs > removes orphaned .staging-* dirs 136ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > cleanupStagingDirs > does not remove non-staging dirs 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > rollbackUpdate > restores previous version from backup 29ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > rollbackUpdate > fails when no backup exists 3ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > rollbackUpdate > re-compiles old rules after rollback 18ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > rollbackUpdate > handles rollback when old rules dir does not exist 14ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > rollbackUpdate > logs warning when rollback re-compilation fails 10ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > rollbackUpdate > handles rollback when compileRuleDir has empty file list 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > downloads to staging, compiles, then swaps atomically 21ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > removes old backup before rotating to new backup 19ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > preserves old rules intact if crash during phase 1 6ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > rejects corrupt download via SHA-256 mismatch 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > returns 304 when server responds with 304 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > downloads in chunks and validates SHA-256 18ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > rejects download that exceeds size limit mid-stream 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > cleans up staging dir on compilation failure 10ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > returns error on HTTP 500 response 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > rejects download when content-length exceeds 50 MB 7ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > returns error when response body is not readable 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > returns error on JSON parse failure 6ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > returns error on bundle validation failure 8ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > rejects bundle with version exceeding 100 chars 6ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > rejects bundle with updatedAt exceeding 100 chars 6ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > rejects bundle with sha256 exceeding 128 chars 7ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > skips If-None-Match when stored etag is empty string 3ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > handles corrupt etag.json gracefully 21ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > fetchAndCacheRules — 3-phase update > sends If-None-Match header when ETag is stored 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getCachedRulePaths > returns .yar files in the cached rules directory 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getCachedRulePaths > returns empty array when dir does not exist 2ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getCachedRulePaths > returns empty array when no .yar files exist 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getAllRulePaths > returns same as getCachedRulePaths 3ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns parsed metadata when metadata.json exists and is valid 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when metadata.json does not exist 2ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when metadata.json contains invalid JSON 3ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when metadata has invalid structure (missing version) 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when metadata version is empty string 3ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when version exceeds max length 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when metadata.json is a JSON array 3ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > getRulesMetadata > returns null when metadata.json is a primitive string 4ms
+ ✓ src/main/services/license-store.test.ts > license-store > encrypt produces binary blob; decrypt recovers same plaintext 109ms
+ ✓ src/main/services/license-store.test.ts > license-store > decrypt returns null on tampered payload 166ms
+ ✓ src/main/services/license-store.test.ts > license-store > legacy plaintext key file is still readable 3ms
+ ✓ src/main/services/game-detector.test.ts > suppressCurrentGame > suppresses the currently detected game 102ms
+ ✓ src/main/services/game-detector.test.ts > getDetectedGame > returns null when no game is detected 1ms
+ ✓ src/main/services/game-detector.test.ts > isDetectorRunning > returns false when not started 0ms
+ ✓ src/main/services/game-detector.test.ts > isDetectorRunning > returns true after start and false after stop 1ms
+ ✓ src/main/services/game-detector.test.ts > error handling > handles execFileAsync errors gracefully (caught by getRunningProcessNames) 1ms
+ ✓ src/main/services/yara-engine.test.ts > ReadWriteLock > does not starve writers when readers keep coming 56ms
+ ✓ src/main/services/yara-engine.test.ts > yaraLock singleton > is a ReadWriteLock instance 1ms
+ ✓ src/main/services/yara-engine.test.ts > ScanCancelledError > has the correct name 1ms
+ ✓ src/main/services/yara-engine.test.ts > ScanCancelledError > has the correct message 0ms
+ ✓ src/main/services/yara-engine.test.ts > ScanCancelledError > is an instance of Error 0ms
+ ✓ src/main/services/yara-engine.test.ts > checkCancelled > throws ScanCancelledError when signal is aborted 1ms
+ ✓ src/main/services/yara-engine.test.ts > checkCancelled > does nothing when signal is not aborted 1ms
+ ✓ src/main/services/yara-engine.test.ts > checkCancelled > does nothing when no signal 0ms
+ ✓ src/main/services/yara-engine.test.ts > checkCancelled > does nothing when undefined 0ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > uses metadata fields when available 1ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > falls back to rule name 0ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > converts underscores to dots 0ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > defaults severity to high 0ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > defaults details 0ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > handles all severity levels 0ms
+ ✓ src/main/services/yara-engine.test.ts > yaraMatchToThreatFields > clamps invalid severity 0ms
+ ✓ src/main/services/yara-engine.test.ts > engine factory and active engine > createYaraEngine returns a YaraEngine instance 0ms
+ ✓ src/main/services/yara-engine.test.ts > engine factory and active engine > setActiveEngine / getActiveEngine round-trip 0ms
+ ✓ src/main/services/yara-engine.test.ts > engine factory and active engine > getActiveEngine returns null initially 0ms
+ ✓ src/main/services/yara-engine.test.ts > engine factory and active engine > setActiveEngine accepts null to clear 0ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > initialize > creates scanner and sets ready state 14ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > isReady > returns false before initialize 0ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > isReady > returns true after initialize 11ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > isReady > returns false after dispose 11ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > rulesLoaded > returns 0 by default 0ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > rulesLoaded > returns count after loadRules 20ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > returns error if not initialized 0ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > loads extra source rules 18ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > reads files and loads rules 23ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > startPeriodicRuleChecks > sets up interval and calls fetch 26ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > startPeriodicRuleChecks > calls onUpdated when fetch succeeds 22ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > startPeriodicRuleChecks > handles fetch errors gracefully without crashing 5ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > startPeriodicRuleChecks > stops previous checks before starting new ones 6ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > stopPeriodicRuleChecks > stops periodic checks and clears state 4ms
+ ✓ src/main/services/yara-rules-store.test.ts > yara-rules-store integration > stopPeriodicRuleChecks > can be called multiple times without error 3ms
+ ✓ src/main/services/history-store.test.ts > getHistory > returns empty array when file does not exist 6ms
+ ✓ src/main/services/history-store.test.ts > getHistory > returns parsed history when file exists 2ms
+ ✓ src/main/services/history-store.test.ts > getHistory > returns empty array on parse error 1ms
+ ✓ src/main/services/history-store.test.ts > getHistory > returns empty array for non-array data 1ms
+ ✓ src/main/services/history-store.test.ts > addHistoryEntry > prepends entry to history and sends IPC 53ms
+ ✓ src/main/services/game-detector.test.ts > error handling > handles onGameDetected callback error gracefully 101ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > handles file read errors 11ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > skips windows rules on linux 8ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > falls back when bulk compile fails with invalid rule 27ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > loadRules > calls onProgress callback 21ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > scanBuffer > returns empty if scanner is null 0ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > scanBuffer > matches strings against loaded rules 21ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > scanBuffer > returns empty for clean data 16ms
+ ✓ src/main/services/license-store.test.ts > license-store > round-trip via disk with encrypted key 107ms
+ ✓ src/main/services/license-store.test.ts > license-store > encrypt/decrypt roundtrip with empty string 98ms
+ ✓ src/main/services/history-store.test.ts > addHistoryEntry > limits history to 100 entries 51ms
+ ✓ src/main/services/history-store.test.ts > addHistoryEntry > handles missing window gracefully 51ms
+ ✓ src/main/services/history-store.test.ts > clearHistory > writes empty array 1ms
+ ✓ src/main/services/game-detector.test.ts > suppression across restart > preserves suppressedGame when restarting the detector 102ms
+ ✓ src/main/ipc/benchmark.ipc.test.ts > registerBenchmarkIpc > registers both IPC handlers 6ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > scanBuffer > matches multiple rules 21ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > scanFile > returns empty if scanner is null 0ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > scanFile > scans a real file from disk 18ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > _convertMatch (via scanBuffer) > populates all metadata fields 23ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > dispose > clears ready state 11ms
+ ✓ src/main/services/yara-engine.test.ts > YaraEngine > dispose > resets rulesLoaded 23ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getSystemInfo > returns system info from si.cpu, si.osInfo, and si.mem 5ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getSystemInfo > caches the result and does not call si functions again 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > startMonitoring > collects initial snapshot and process list immediately 57ms
+ ✓ src/main/services/game-detector.test.ts > end-to-end: detection lifecycle > calls onGameDetected then onGameExited as processes change 101ms
+ ✓ src/main/services/license-store.test.ts > license-store > readSavedKey returns null for non-existent file 3ms
+ ✓ src/main/services/license-store.test.ts > license-store > deleteSavedKey does not throw on non-existent file 4ms
+ ✓ src/main/services/license-store.test.ts > license-store > readSavedKey returns null for binary garbage (non-legacy) 3ms
+ ✓ src/main/services/yara-engine.test.ts > scanFileWithLock > scans file using active engine with read lock 20ms
+ ✓ src/main/services/yara-engine.test.ts > scanFileWithLock > returns empty when no active engine 0ms
+ ✓ src/main/services/yara-engine.test.ts > scanFileWithLock > throws ScanCancelledError when aborted 2ms
+ ✓ src/main/services/yara-engine.test.ts > scanFileWithLock > releases read lock after scan 12ms
+ ✓ src/main/services/yara-engine.test.ts > scanBufferWithLock > scans buffer using active engine with read lock 28ms
+ ✓ src/main/services/yara-engine.test.ts > scanBufferWithLock > returns empty when no active engine 0ms
+ ✓ src/main/services/yara-engine.test.ts > scanBufferWithLock > throws ScanCancelledError when aborted 0ms
+ ✓ src/main/services/yara-engine.test.ts > scanBufferWithLock > releases read lock after scan 11ms
+ ✓ src/main/services/yara-engine.test.ts > compileRulesWithLock > compiles rules with write lock 24ms
+ ✓ src/main/services/yara-engine.test.ts > compileRulesWithLock > throws ScanCancelledError when aborted 0ms
+ ✓ src/main/services/yara-engine.test.ts > compileRulesWithLock > releases write lock after compilation 23ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > startMonitoring > updates sender without throwing when already running 53ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > startMonitoring > correlates startup items with process list 53ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > startMonitoring > does not fail when getStartupItems callback throws 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > stopMonitoring > can be called when not running (no-op) 2ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > stopMonitoring > stops sending data after stop 5ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getProcessName > returns the process name for a valid PID 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getProcessName > returns null for an unknown PID 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getProcessName > returns null when si.processes() fails 0ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > killProcess > succeeds via process.kill 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > killProcess > falls back to execFileAsync on Windows when process.kill fails 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > killProcess > falls back to execFileAsync on non-Windows when process.kill fails 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > killProcess > returns requiresAdmin error on access denied 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > killProcess > returns generic error on other fallback failures 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > killProcess > handles non-Error throw from fallback 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getDiskHealth > returns disk health info from si.diskLayout and powershell reliability 2ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getDiskHealth > maps unknown smartStatus and interfaceType correctly 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getDiskHealth > returns empty array when si.diskLayout fails 1ms
+ ✓ src/main/services/perf-monitor.test.ts > PerfMonitorService > getDiskHealth > handles missing reliability data gracefully 1ms
+ ✓ src/main/services/yara-engine.test.ts > compileRulesWithLock > releases write lock on error 10ms
+ ✓ src/main/services/yara-engine.test.ts > compileRulesWithLock > passes extra sources and progress through 22ms
+ ✓ src/main/services/remote-license.test.ts > remote-license > checkLicense > blocks when no key is saved 7ms
+ ✓ src/main/services/remote-license.test.ts > remote-license > checkLicense > returns expired when API reports expired 6ms
+ ✓ src/main/services/remote-license.test.ts > remote-license > checkLicense > returns valid when API confirms license 4ms
+ ✓ src/main/services/remote-license.test.ts > remote-license > checkLicense > returns valid with subscription type and expiry date 7ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > collects keys for delete-value operations 5ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > collects keys for set-value operations 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > collects keys for delete-key operations 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > collects tasks for disable-task operations 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > collects tasks for delete-task operations 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > skips entries without a fix 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > uses fix.key when provided 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > deduplicates keys 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > collectBackupTargets > returns empty for no entries 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry > returns empty array when no registry issues found 10ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry > handles errors from reg queries gracefully 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry > detects missing App Paths 5ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry > marks App Paths pointing to missing files 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry > respects abort signal 3ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > fixes entries with delete-value operation 5ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > fixes entries with delete-key operation 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > fixes entries with set-value operation 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > fixes entries with disable-task operation 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > fixes entries with delete-task operation 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > counts failures when reg delete fails with access denied 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > counts failures when key not found 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles entries without fix data 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > calls onProgress during execution 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > respects abort signal during fixing 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles mixed success and failure 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > creates backup with targeted mode before fixing 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > creates backup with full mode when configured 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > classifies network error in fix failures 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles unknown error message 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles error with stderr property 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles set-value without regType or data gracefully 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles full backup mode with export failures 3ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles targeted backup with task entries 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > fixRegistryEntries > handles targeted backup with task entries backup 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > expandEnvVars (via scanRegistry) > resolves %SystemRoot% paths via AppCompat HKLM scan 3ms
+ ✓ src/main/services/registry-cleaner.test.ts > expandEnvVars (via scanRegistry) > resolves %ProgramFiles% via AppCompat HKCU scan 3ms
+ ✓ src/main/services/registry-cleaner.test.ts > extractExePath (via scanRegistry) > handles quoted executable path in Run keys 3ms
+ ✓ src/main/services/registry-cleaner.test.ts > extractExePath (via scanRegistry) > handles simple executable without spaces in Run keys 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans SharedDLLs and detects missing DLLs 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans MuiCache and detects missing programs 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans FirewallRules and detects missing programs 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans Fonts and detects missing font files 4ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans CLSID InprocServer32 and detects missing DLLs 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans TypeLib and detects missing files 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans services and detects missing executables 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects disabled UAC 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects disabled Windows Defender realtime monitoring 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects disabled Windows Defender antispyware 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects AutoRun not fully disabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects SMB1 enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects PowerShell unrestricted policy 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects disabled firewall profiles 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects Remote Registry service enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects SysMain on HDD (not selected) 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects LLMNR enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects WPAD enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects Fax service enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for NoDriveTypeAutoRun (catch branch) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for LLMNR (catch branch) 1ms
+ ✓ src/main/services/game-detector.test.ts > custom game process detection via public API > detects a custom game process 202ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > caches and retrieves a single item by id 5ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > returns undefined for unknown id 1ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > caches multiple items and retrieves a subset 2ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > skips unknown ids in getCachedItems 1ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > clearCache removes all items 0ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > overwrites items with the same id 0ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > setMaxCacheSize reduces the effective cache limit 1ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > setMaxCacheSize with 0 is clamped to 1 0ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > setMaxCacheSize with negative is clamped to 1 0ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > evicts cache when exceeding max size 227ms
+ ✓ src/renderer/src/stores/stats-store.test.ts > stats-store > starts with default stats and loaded=false 4ms
+ ✓ src/renderer/src/stores/stats-store.test.ts > stats-store > recompute with empty history returns defaults 1ms
+ ✓ src/renderer/src/stores/stats-store.test.ts > stats-store > recompute aggregates totals from history entries 1ms
+ ✓ src/renderer/src/stores/stats-store.test.ts > stats-store > recompute sets lastScanDate from most recent entry 1ms
+ ✓ src/renderer/src/stores/stats-store.test.ts > stats-store > recompute creates recentActivity with mapped types 2ms
+ ✓ src/renderer/src/stores/stats-store.test.ts > stats-store > recompute caps recentActivity at 20 entries 1ms
+ ✓ src/main/services/game-detector.test.ts > game exited callback > calls onGameExited when detected game exits 4ms
+ ✓ src/main/services/game-detector.test.ts > game exited callback > handles onGameExited callback error gracefully 2ms
+ ✓ src/main/services/game-detector.test.ts > poll concurrency guard > skips poll when pollRunning is true (re-entrant guard) 1ms
+ ✓ src/main/services/game-detector.test.ts > suppressed game re-detection guard > does not re-detect a suppressed game that is still running 1ms
+ ✓ src/main/services/game-detector.test.ts > CSV parsing edge cases > gracefully handles malformed tasklist lines 1ms
+ ✓ src/main/services/game-detector.test.ts > suppressed game exit > clears suppressedGame when the suppressed game exits 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for WPAD (catch branch) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for AppCompatLM query 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for services query 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for FileExts OpenWithList query 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error path for scheduled tasks scan 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans Browser Helper Objects with missing CLSID 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans clients with missing executables 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans FileExts UserChoice for missing ProgID 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans MIME types for missing CLSID handler 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans EventLog for missing message files 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans RDP with NLA check (RDP enabled, NLA disabled) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > scans uninstall entries and detects orphaned programs 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > detects SysMain on SSD (selected) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles extractExePath with unquoted space path via Run keys 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles splitTaskPath with forward slashes via fix task 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles pruneOldBackups via fixRegistryEntries with stale backups 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles pruneOldBackups with task directory entries 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles pruneOldBackups with non-matching filenames 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles error without message property 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles full backup mode with second export failure (catch branch) 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles targeted backup with key export failure (catch) 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles targeted backup with schtasks failure (catch) 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > creates targeted backup with fix.key override 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry additional scan paths > handles backup failure and continues fixing 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > clsidExists (via shell extensions) > finds CLSID in native view (first query succeeds) 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > clsidExists (via shell extensions) > finds CLSID in WOW64 view (second query succeeds) 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > findMissingClsidDll (via shell extensions) > detects missing DLL as broken context menu handler 6ms
+ ✓ src/main/services/registry-cleaner.test.ts > findMissingClsidDll (via shell extensions) > detects no-inproc (COM object has neither server type) 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > findMissingClsidDll (via shell extensions) > detects InprocServer32 exists with DLL path starting with % env var 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > findMissingClsidDll (via shell extensions) > detects InprocServer32 exists with LocalServer32 (returns null) 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry Interface scan (ProxyStubClsid32) > detects interface with missing proxy stub CLSID 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry Interface scan (ProxyStubClsid32) > detects interface with existing stub but missing DLL 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry Interface scan (ProxyStubClsid32) > skips known good proxy CLSIDs 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry AutoPlay handlers > detects AutoPlay handler with missing ProgID 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry AutoPlay handlers > skips AutoPlay handler when key equals base key 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry BHO with existing CLSID > detects BHO with existing CLSID but missing DLL (no-inproc) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry BHO with existing CLSID > detects BHO with existing CLSID but missing specific DLL 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry BHO with existing CLSID > skips BHO with existing CLSID and valid DLL 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > scanRegistry third-party scheduled tasks > detects third-party update task for uninstalled software 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > extractExePath edge cases (via Run keys) > handles unquoted path with fallback to extension match 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > extractExePath edge cases (via Run keys) > handles command with no executable extension matching 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > expandEnvVars additional variables > resolves %ProgramData% paths via installer scan 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > expandEnvVars additional variables > resolves %LOCALAPPDATA% paths via shared DLLs scan 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > expandEnvVars additional variables > resolves %APPDATA% paths via Run keys 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > expandEnvVars additional variables > resolves %USERPROFILE% paths via MuiCache scan 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag UAC when enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag Defender realtime monitoring when enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag Defender antispyware when enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag AutoRun when fully disabled (0xff) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag PowerShell when RemoteSigned 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag SMB1 when disabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag firewall when enabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag RemoteRegistry when disabled (Start=4) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag RDP when disabled 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > negative vulnerability tests (no entries) > does not flag SysMain when disabled (Start=4) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles extractExePath with empty trimmed command 2ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles MIME CLSID that exists (no entry) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles EventLog with PrimaryModule (no entry) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles EventLog with % prefixed paths (skip via startsWith) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles Run key with entry that has no exec path (just a DLL) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles splitTaskPath with invalid characters (returns null) 0ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles AutoPlay handler with empty ProgID (skips) 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles clients with missing shell command to skip 1ms
+ ✓ src/main/services/registry-cleaner.test.ts > additional edge cases > handles FileExts OpenWithList with path that does not include \ 1ms
+ ✓ src/main/services/license-store.test.ts > license-store > writeSavedKey overwrites existing key 175ms
+ ✓ src/main/services/license-store.test.ts > license-store > legacy plaintext key with leading/trailing whitespace is trimmed 5ms
+ ✓ src/main/services/license-store.test.ts > license-store > decrypt returns null for empty payload 2ms
+ ✓ src/main/services/license-store.test.ts > license-store > decrypt returns null for short payload (< 36 bytes) 2ms
+ ✓ src/main/services/license-store.test.ts > license-store > decrypt falls back to legacy machine ID when current machine ID fails 183ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > truncates input exceeding MAX_CACHE_SIZE to 200000 items 173ms
+ ✓ src/main/services/software-updater.async.test.ts > checkForUpdates (win32) > returns winget updates when winget is available 602ms
+ ✓ src/test/path-safety.test.ts > getAllUserProfiles > returns an array of user profile paths from C:\Users 649ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > addEntry creates a new entry 8ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > getEntries returns entries newest first 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > getEntries respects limit 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > getBySeverity returns filtered results 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > getByDateRange returns entries in range 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > getStats returns correct counts 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > clear removes all entries 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > MAX_ENTRIES is respected (adding 1001 keeps 1000) 495ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > Entry has unique ID 2ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > empty timeline returns empty array 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > addEntry with empty name still works 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > loads entries from file when it exists 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > creates directory during save when it does not exist 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > does not create directory during save when it already exists 0ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > handles error during save gracefully 1ms
+ ✓ src/main/services/threat-timeline.test.ts > ThreatTimelineService > handles non-Error throw during save gracefully 1ms
+ ✓ src/main/services/threat-timeline.test.ts > getThreatTimelineService > creates a new instance on first call and returns same on second 2ms
+ ✓ src/main/services/software-updater.async.test.ts > checkForUpdates (win32) > returns empty when winget not available 3ms
+ ✓ src/main/services/software-updater.async.test.ts > checkForUpdates (win32) > handles winget non-zero exit with stdout 3ms
+ ✓ src/main/services/software-updater.async.test.ts > checkForUpdates (win32) > returns empty apps when winget has no stdout on error 2ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (win32) > upgrades apps via winget 3ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (win32) > collects errors for failed upgrades 4ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (win32) > truncates error messages longer than 200 chars 4ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (win32) > routes to choco when source is specified 4ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (win32) > routes to winget when source is specified 3ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (win32) > returns all failed when no manager available 3ms
+ ✓ src/main/services/software-updater.async.test.ts > checkForUpdates (unknown) > returns empty result 4ms
+ ✓ src/main/services/software-updater.async.test.ts > runUpdates (unknown) > returns empty result 3ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > contains 18 persistence keys 3ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes original Run keys 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes RunOnceEx 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes Wow6432Node keys 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes Active Setup keys 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes BootExecute key 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes Windows Load/Run keys 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes Image File Execution Options keys 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes SilentProcessExit key 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > PERSISTENCE_KEYS > includes AppInit_DLLs keys 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > contains 15 LOLBin patterns 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > includes all expected LOLBins 2ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > each pattern has name, pattern, and description properties 5ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > MsBuild matches msbuild.exe 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > InstallUtil matches installutil.exe 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > PowerShell matches powershell.exe paths 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > Regsvr32 matches regsvr32.exe paths 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > rundll32 matches rundll32.exe paths 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > CertUtil matches certutil.exe 3ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > Mshta matches mshta.exe paths 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > LOLBIN_PATTERNS > pattern matching > does not match dissimilar strings 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > returns threats for temp directory entries 3ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > returns empty for no registry entries 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > handles reg query failure gracefully 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > detects encoded PowerShell commands 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > detects LOLBin usage in autostart entries 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > calls reg query with /reg:64 for standard keys 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > calls reg query with /reg:32 for Wow6432Node keys 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > parses localized reg query output with different spacing 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > handles very long registry values 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > handles Unicode characters in registry values 1ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > skips trusted paths 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > returns empty array when not on win32 0ms
+ ✓ src/main/services/malware-scanner-persistence.test.ts > scanRegistryPersistence > detects hidden directory entries 1ms
+ ✓ src/test/path-safety.test.ts > getAllUserProfiles > does not include Public or Default system accounts 3ms
+ ✓ src/test/path-safety.test.ts > getMalwareScanDirs > accepts userProfile parameter and returns correct paths 1ms
+ ✓ src/test/path-safety.test.ts > getMalwareScanDirs > falls back to USERPROFILE env when no param given 1ms
+ ✓ src/test/path-safety.test.ts > getMalwareScanDirs > includes AppData\LocalLow in scan dirs 1ms
+ ✓ src/test/path-safety.test.ts > getMalwareScanDirs > throws when userProfile is empty string and USERPROFILE not set 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > PERSISTENCE_KEYS > has 18 entries 5ms
+ ✓ src/main/services/malware-scanner.service.test.ts > PERSISTENCE_KEYS > includes common autostart keys 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > LOLBIN_PATTERNS > has 15 entries 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > LOLBIN_PATTERNS > includes PowerShell 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > SKIP_DIRS_SET > excludes system and known directories 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > cancelScan > returns false for unknown scan id 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > cancelAllScans > does not throw when no scans active 3ms
+ ✓ src/main/services/malware-scanner.service.test.ts > getYaraRulesInfo > returns object with expected shape 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > resetYaraEngine > clears engine state without throwing 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > computeSha256 > returns sha256 hex digest of file contents 5ms
+ ✓ src/main/services/malware-scanner.service.test.ts > computeSha256 > propagates read errors 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > verifyQuarantinedFile > returns true when hashes match 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > verifyQuarantinedFile > is case-insensitive 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > verifyQuarantinedFile > returns false on mismatch 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > verifyQuarantinedFile > returns false when file cannot be read 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizePath > prefixes paths > 240 chars 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizePath > does not prefix short paths 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizePath > does not double-prefix 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > shouldSkipDir > skips Windows dir 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > shouldSkipDir > skips Program Files 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > shouldSkipDir > skips Program Files (x86) 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > shouldSkipDir > skips known directories 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > shouldSkipDir > does not skip user directories 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > moveFileToQuarantine > renames file on same device 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > moveFileToQuarantine > copies+deletes on EXDEV 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > moveFileToQuarantine > fails when EXDEV copy verification mismatches 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > moveFileToQuarantine > returns false on non-EXDEV error 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > appendQuarantineEntry > appends to existing manifest 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > appendQuarantineEntry > starts fresh on ENOENT 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > appendQuarantineEntry > starts fresh on invalid JSON 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > matches by sha256 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > matches by path 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > matches by filename 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > matches by name 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > false on no match 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > false on unknown type 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > case-insensitive sha256 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isThreatAllowlisted > graceful missing sha256 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > ignoreMalware > returns null when path not in allowed dirs 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > ignoreMalware > returns null for ADS detection 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > ignoreMalware > adds allowlist entry for valid file 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > quarantineMalware > quarantines valid path 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > quarantineMalware > filters out-of-scope paths 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > quarantineMalware > handles non-array input 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > quarantineMalware > reports move failure 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > deleteMalware > deletes valid paths 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > deleteMalware > filters out-of-scope paths 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > deleteMalware > handles rm rejection 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > listQuarantinedFiles > returns empty when dir inaccessible 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > listQuarantinedFiles > returns items from manifest 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > listQuarantinedFiles > sorts by quarantinedAt desc 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > listQuarantinedFiles > handles missing manifest entries 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > restoreMalware > returns false for non-string 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > restoreMalware > rejects path outside quarantine 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > restoreMalware > restores file when hash matches 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > restoreMalware > rejects on sha256 mismatch in manifest 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > returns empty on non-Windows 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > detects temp directory entries 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > returns empty for empty reg output 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > handles reg query failure 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > detects LOLBin in autostart 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > skips trusted paths 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanRegistryPersistence > detects hidden directories 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > returns result shape on empty scan 43ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > uses provided scanId 2ms
+ ✓ src/main/services/auto-updater.test.ts > getUpdateStatus > returns initial idle state 7ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > registers event handlers on autoUpdater 4ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > checks for updates on startup 1ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > does nothing when app is not packaged 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > sets autoDownload from daemon mode 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > sets autoDownload from settings 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts checking state 1ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts available state 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts not-available state 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts download progress 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts downloaded state and auto-installs in daemon mode 2ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts downloaded state and auto-restarts in GUI mode with setting 1ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts downloaded state without restart in GUI mode when setting disabled 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > broadcasts error state 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > handles error with null message 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > handles error with undefined error 0ms
+ ✓ src/main/services/auto-updater.test.ts > initAutoUpdater > logs error when startup check fails 52ms
+ ✓ src/main/services/auto-updater.test.ts > broadcast in GUI mode > sends status to all windows 2ms
+ ✓ src/main/services/auto-updater.test.ts > broadcast in GUI mode > skips destroyed windows 1ms
+ ✓ src/main/services/auto-updater.test.ts > broadcast in GUI mode > handles disposed webContents gracefully 2ms
+ ✓ src/main/services/auto-updater.test.ts > broadcast in GUI mode > writes to stdout in daemon mode instead of sending to windows 1ms
+ ✓ src/main/services/auto-updater.test.ts > checkForUpdates > calls autoUpdater.checkForUpdates 0ms
+ ✓ src/main/services/auto-updater.test.ts > checkForUpdates > rejects when check fails (no .catch in exported function) 2ms
+ ✓ src/main/services/auto-updater.test.ts > checkForUpdates > resolves immediately when app is not packaged 1ms
+ ✓ src/main/services/auto-updater.test.ts > downloadUpdate > calls autoUpdater.downloadUpdate 0ms
+ ✓ src/main/services/auto-updater.test.ts > downloadUpdate > resolves immediately when app is not packaged 1ms
+ ✓ src/main/services/auto-updater.test.ts > installUpdate > calls quitAndInstall 0ms
+ ✓ src/main/services/auto-updater.test.ts > installUpdate > does nothing when app is not packaged 0ms
+ ✓ src/main/services/auto-updater.test.ts > setAutoDownload > sets autoDownload on packaged build 0ms
+ ✓ src/main/services/auto-updater.test.ts > setAutoDownload > does nothing when app is not packaged 0ms
+ ✓ src/main/services/auto-updater.test.ts > updateCheckInterval > restarts periodic checks with new interval 4ms
+ ✓ src/main/services/auto-updater.test.ts > updateCheckInterval > does nothing when app is not packaged 1ms
+ ✓ src/main/services/auto-updater.test.ts > startPeriodicChecks > does not set interval when hours is zero 0ms
+ ✓ src/main/services/auto-updater.test.ts > startPeriodicChecks > does not set interval when hours is negative 0ms
+ ✓ src/main/services/auto-updater.test.ts > startPeriodicChecks > clears previous interval when restarted 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects suspicious filenames 4ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects double extensions 3ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects LNK threats 3ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects exploit patterns 3ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects behavioral threats 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects script threats 3ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > detects hosts tampering 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > filters allowlisted threats 4ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > handles abort signal 9ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanMalware > calls onProgress 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > calculateEntropy > returns 0 for empty buffer 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > calculateEntropy > returns 0 for single-byte buffer 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > calculateEntropy > returns high entropy for random-like buffer 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hasDoubleExtension > returns false when parts < 3 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hasDoubleExtension > returns true for exec extension with bait second-to-last 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hasDoubleExtension > returns false when last extension is not exec 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hasDoubleExtension > returns false when second-to-last extension is not bait 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hasDoubleExtension > is case-insensitive 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPEFile > returns false for buffer smaller than 64 bytes 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPEFile > returns true for buffer starting with MZ 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPEFile > returns false for buffer without MZ header 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > findSuspiciousImports > returns empty array when parsePeImports returns none 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > findSuspiciousImports > finds matching SUSPICIOUS_IMPORTS 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > findSuspiciousImports > deduplicates repeated suspicious imports 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > findSuspiciousImports > handles multiple import descriptors 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > returns null for non-PE buffer 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > returns default result when PE offset is beyond buffer 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > returns default result when PE signature is missing 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > detects writable+executable section 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > detects packed section via entropy 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > detects packed section via virtualSize > rawSize * 10 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzePE > includes suspicious imports in result 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizeScriptContent > removes line continuation (backslash + newline) 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizeScriptContent > removes backtick before word character 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizeScriptContent > removes comments starting with # 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizeScriptContent > decodes hex encoded characters (%XX) 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > normalizeScriptContent > normalizes whitespace (tabs and multiple spaces) 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > returns null with fewer than 2 indicators 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects backtick obfuscation and download-execute in .ps1 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects AMSI bypass with another indicator in .ps1 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects reflective assembly loading in .ps1 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects credential dumping in .ps1 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects certutil abuse and bitsadmin download in .bat 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects mshta and registry persistence in .cmd 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects shell+network and drops executable in .vbs 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects heavy chr obfuscation in .js 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects HTA with download and execution 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > detects base64-encoded PE in any script type 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeScriptContent > returns null for unknown extension 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > returns empty for buffer < 76 bytes 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > returns empty for buffer without LNK magic 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > detects PowerShell encoded command 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > detects PowerShell download cradle 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > detects hidden PowerShell window 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > detects LOLBin via cmd.exe 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > detects mshta with script/URL 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > analyzeLnkContent > returns multiple indicators for a complex LNK 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > checkHostsFile > returns empty when read fails 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > checkHostsFile > skips safe IPs 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > checkHostsFile > skips empty and comment lines 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > checkHostsFile > skips single-word lines 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > checkHostsFile > detects protected domain redirection 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > checkHostsFile > handles inline comments in hosts file 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPathInAllowedDirs > returns true when path starts with allowed dir 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPathInAllowedDirs > returns true when path equals allowed dir 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPathInAllowedDirs > returns false when path does not match 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > isPathInAllowedDirs > is case-insensitive 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hashFileSha256 > computes sha256 from stream 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > hashFileSha256 > rejects on stream error 2ms
+ ✓ src/main/services/malware-scanner.service.test.ts > filterAllowlistedThreats > returns all threats when allowlist is empty 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > filterAllowlistedThreats > suppresses threat matching sha256 allowlist 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > filterAllowlistedThreats > keeps threat when sha256 does not match 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > filterAllowlistedThreats > handles hash computation failure gracefully 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > filterAllowlistedThreats > skips hash computation for ADS detection 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > returns immediately when maxDepth <= 0 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > returns immediately when files.length >= maxFiles 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > collects files with scannable extensions 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > collects files with double extensions 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > skips excluded paths 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > handles inaccessible directories gracefully 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > collectFiles > recurses into subdirectories 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > returns empty on non-Windows 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > detects temp directory execution in scheduled task 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > detects encoded PowerShell in scheduled task 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > detects mshta in scheduled task 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > detects certutil download in scheduled task 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > skips trusted paths in scheduled task 1ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > skips Microsoft and MicrosoftEdge subdirectories 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > handles inaccessible task directory 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanScheduledTasks > skips task file without Command tag 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanAlternateDataStreamsBatch > returns empty on non-Windows 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanAlternateDataStreamsBatch > returns empty for empty file list 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanAlternateDataStreamsBatch > parses PowerShell output with ||| separator 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > scanAlternateDataStreamsBatch > handles exec failure gracefully 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > moveFileToQuarantine edge cases > handles EXDEV with copy failure and cleanup 0ms
+ ✓ src/main/services/malware-scanner.service.test.ts > moveFileToQuarantine edge cases > handles EXDEV with copy failure and cleanup failure 0ms
+ ✓ src/main/services/auto-updater.test.ts > startPeriodicChecks > logs error when periodic check fails 51ms
+ ✓ src/main/services/auto-updater.test.ts > startPeriodicChecks > respects daemon autoDownload in periodic checks 1ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > bulk-clears cache partially when toRemove exceeds three-quarters of MAX_CACHE_SIZE 388ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > handles undefined keys in incremental removal (defensive guard on line 46) 1ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > caches if originalItems length equals limit exactly 0ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > handles empty items array 1ms
+ ✓ src/main/services/scan-cache.test.ts > scan-cache > returns all matching items with getCachedItems 1ms
+ ✓ src/main/ipc/compliance-auditor.ipc.test.ts > registerComplianceAuditorIpc > registers all three COMPLIANCE handlers 369ms

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using DiNho.Capture.Poc.Encoders;
 
@@ -15,7 +16,7 @@ public sealed class ClipExporter : IDisposable
             Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
             "DiNhoClips");
         Directory.CreateDirectory(directory);
-        return Path.Combine(directory, $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.mp4");
+        return Path.Combine(directory, $"DiNho Optimizer {DateTime.Now:yyyy-MM-dd_HH-mm-ss}.mp4");
     }
 
     public string ExportToMp4(
@@ -30,7 +31,7 @@ public sealed class ClipExporter : IDisposable
             throw new InvalidOperationException("No video packets to export");
 
         if (!Monitor.TryEnter(_exportLock))
-            throw new InvalidOperationException("Export já em andamento");
+            throw new InvalidOperationException("Export ja em andamento");
 
         try
         {
@@ -38,15 +39,89 @@ public sealed class ClipExporter : IDisposable
             var drive = new DriveInfo(outputDir);
             if (drive.AvailableFreeSpace < 100_000_000)
                 throw new InvalidOperationException(
-                    $"Espaço insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
+                    $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
             var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.h264");
 
             try
             {
+                // Build video PTS intervals (continuous segments, excluding gaps from alt-tab)
+                var gapsRemoved = 0;
+                if (videoPackets.Count > 0 && audioPackets.Count > 0)
+                {
+                    var vFirst = videoPackets[0].Pts;
+                    var vLast = videoPackets[^1].Pts;
+                    var aFirst = audioPackets[0].Pts;
+                    var aLast = audioPackets[^1].Pts;
+                    Console.Error.WriteLine($"[PTS] Pre-sync — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({videoPackets.Count} frames)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({audioPackets.Count} packets)");
+
+                    // Identify contiguous video PTS intervals (gap tolerance: 50ms)
+                    var intervals = new List<(TimeSpan start, TimeSpan end)>();
+                    foreach (var pkt in videoPackets)
+                    {
+                        var s = pkt.Pts;
+                        var e = s + pkt.Duration;
+                        if (intervals.Count == 0 || s - intervals[^1].end > TimeSpan.FromMilliseconds(50))
+                            intervals.Add((s, e));
+                        else
+                            intervals[^1] = (intervals[^1].start, e);
+                    }
+
+                    // Filter audio packets to only those within video intervals
+                    int intervalIdx = 0;
+                    var syncedAudio = new List<EncodedPacket>(audioPackets.Count);
+                    foreach (var pkt in audioPackets)
+                    {
+                        while (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].end)
+                            intervalIdx++;
+                        if (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].start)
+                            syncedAudio.Add(pkt);
+                    }
+                    gapsRemoved = audioPackets.Count - syncedAudio.Count;
+                    audioPackets = syncedAudio;
+
+                    // Compute true video duration (sum of frame durations, ignoring alt-tab gaps)
+                    double trueVidDuration = 0;
+                    int framesWithDur = 0;
+                    foreach (var pkt in videoPackets)
+                        if (pkt.Duration.Ticks > 0)
+                        {
+                            trueVidDuration += pkt.Duration.TotalSeconds;
+                            framesWithDur++;
+                        }
+
+                    // Trim audio end to match video true duration exactly
+                    if (audioPackets.Count > 0)
+                    {
+                        double audioAccum = 0;
+                        int trimAt = audioPackets.Count;
+                        for (int i = 0; i < audioPackets.Count; i++)
+                        {
+                            double next = audioAccum + audioPackets[i].Duration.TotalSeconds;
+                            if (next >= trueVidDuration)
+                            {
+                                trimAt = i + 1;
+                                break;
+                            }
+                            audioAccum = next;
+                        }
+                        if (trimAt < audioPackets.Count)
+                            audioPackets = audioPackets.GetRange(0, trimAt);
+                    }
+
+                    Console.Error.WriteLine($"[PTS] Post-sync — Video: trueDuration={trueVidDuration:F2}s frames={framesWithDur}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved}");
+                }
+
                 WriteH264File(h264Temp, videoPackets);
                 Console.Error.WriteLine($"[Exporter] H264 temp: {h264Temp} ({new FileInfo(h264Temp).Length / 1024} KB)");
-                MuxWithFfmpeg(outputPath, h264Temp, audioPackets, frameRate);
+
+                double totalRealSec = videoPackets.Count >= 2
+                    ? (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds
+                    : (double)videoPackets.Count / frameRate;
+                double accurateFps = totalRealSec > 0 ? videoPackets.Count / totalRealSec : frameRate;
+                Console.Error.WriteLine($"[Exporter] nominalFps={frameRate} accurateFps={accurateFps:F3} totalRealSec={totalRealSec:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved}");
+
+                MuxWithFfmpegStreaming(outputPath, h264Temp, audioPackets, accurateFps);
             }
             finally
             {
@@ -61,6 +136,34 @@ public sealed class ClipExporter : IDisposable
         }
     }
 
+    internal static double CalculateEffectiveFps(List<EncodedPacket> videoPackets, int nominalFps)
+    {
+        if (videoPackets.Count < 2)
+            return nominalFps;
+
+        // Average inter-frame interval from non-gap consecutive frames
+        double totalInterval = 0;
+        int intervalCount = 0;
+        for (int i = 0; i < videoPackets.Count - 1; i++)
+        {
+            var interval = (videoPackets[i + 1].Pts - videoPackets[i].Pts).TotalSeconds;
+            if (interval > 0.050) continue; // alt-tab gap, skip
+            totalInterval += interval;
+            intervalCount++;
+        }
+
+        if (intervalCount == 0)
+            return nominalFps;
+
+        double avgInterval = totalInterval / intervalCount;
+        double fps = 1.0 / avgInterval;
+
+        if (fps < 1 || fps > nominalFps * 3)
+            return nominalFps;
+
+        return fps;
+    }
+
     private static void WriteH264File(string path, List<EncodedPacket> packets)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
@@ -69,83 +172,45 @@ public sealed class ClipExporter : IDisposable
         foreach (var pkt in packets)
         {
             if (pkt.Type != MediaType.Video) continue;
-            fs.Write(pkt.Data, 0, pkt.Data.Length);
+            fs.Write(pkt.Data, 0, pkt.DataLength);
         }
     }
 
-    private void MuxWithFfmpeg(
+    private static void MuxWithFfmpegStreaming(
         string outputPath,
         string h264Path,
         List<EncodedPacket> audioPackets,
-        int frameRate)
+        double frameRate)
     {
         bool hasAudio = audioPackets.Count > 0;
         bool isAac = hasAudio && IsAdts(audioPackets[0]);
 
         var args = $"-y -loglevel warning " +
-                   $"-f h264 -framerate {frameRate} -i \"{h264Path}\"";
+                   $"-f h264 -framerate {frameRate.ToString("F3", CultureInfo.InvariantCulture)} -i \"{h264Path}\"";
 
-        string? audioTemp = null;
-        string audioInput = "";
+        // Audio goes to ffmpeg's stdin (pipe:0 is video file, we use audio as second input via pipe)
+        // ffmpeg maps video file as input 0 and stdin as input 1
+        args += hasAudio
+            ? (isAac ? " -f aac -i pipe:0" : " -f s16le -ar 48000 -ac 2 -i pipe:0")
+            : "";
 
-        if (hasAudio)
-        {
-            if (isAac)
-            {
-                audioTemp = Path.Combine(Path.GetTempPath(), $"dhn_audio_{Guid.NewGuid():N}.aac");
-                using var fs = new FileStream(audioTemp, FileMode.Create, FileAccess.Write,
-                    FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
-                foreach (var pkt in audioPackets)
-                    fs.Write(pkt.Data, 0, pkt.Data.Length);
-                audioInput = $" -i \"{audioTemp}\"";
-
-                // Diagnóstico: verificar se o AAC temp é válido
-                using var probe = new Process
-                {
-                    StartInfo = new ProcessStartInfo("ffprobe")
-                    {
-                        Arguments = $"-v error -show_entries format=duration,size -of default=noprint_wrappers=1 \"{audioTemp}\"",
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-                probe.Start();
-                var probeOut = probe.StandardOutput.ReadToEnd();
-                probe.WaitForExit(2000);
-                Console.Error.WriteLine($"[Exporter] ffprobe aac: exit={probe.ExitCode} {probeOut.Trim().Replace("\n", " ")}");
-            }
-            else
-            {
-                var pcmData = ConvertAudioToS16Le(audioPackets);
-                if (pcmData != null)
-                {
-                    audioTemp = Path.Combine(Path.GetTempPath(), $"dhn_audio_{Guid.NewGuid():N}.raw");
-                    File.WriteAllBytes(audioTemp, pcmData);
-                    audioInput = $" -f s16le -ar 48000 -ac 2 -i \"{audioTemp}\"";
-                }
-            }
-        }
-
-        args += audioInput +
-                $" -map 0:v:0" +
+        args += $" -map 0:v:0" +
                 (hasAudio ? " -map 1:a:0" : "") +
                 $" -c:v copy" +
                 (hasAudio ? (isAac ? " -c:a copy" : " -c:a aac -b:a 192k") : "") +
                 $" -fflags +genpts -movflags +faststart \"{outputPath}\"";
 
-        Console.Error.WriteLine($"[Exporter] ffmpeg mux: {args.Replace("\"", "'")} " +
-            (audioTemp != null ? $"audioTemp={new FileInfo(audioTemp).Length / 1024}KB" : "sem-audio"));
+        Console.Error.WriteLine($"[Exporter] ffmpeg mux: {args.Replace("\"", "'")}");
 
         using var proc = new Process
         {
             StartInfo = new ProcessStartInfo("ffmpeg")
             {
                 Arguments = args,
+                RedirectStandardInput = hasAudio,
+                RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true
+                CreateNoWindow = true
             }
         };
 
@@ -160,72 +225,114 @@ public sealed class ClipExporter : IDisposable
         try { proc.PriorityClass = ProcessPriorityClass.Idle; } catch { }
         proc.BeginErrorReadLine();
 
+        if (hasAudio)
+        {
+            try
+            {
+                var stdin = proc.StandardInput.BaseStream;
+                if (isAac)
+                {
+                    foreach (var pkt in audioPackets)
+                    {
+                        if (pkt.Type != MediaType.Audio) continue;
+                        stdin.Write(pkt.Data, 0, pkt.DataLength);
+                    }
+                }
+                else
+                {
+                    StreamPcmAsS16Le(audioPackets, stdin);
+                }
+                stdin.Flush();
+                stdin.Dispose();
+            }
+            catch (IOException ex)
+            {
+                proc.WaitForExit(5000);
+                string stderrText;
+                lock (stderr) { stderrText = stderr.ToString(); }
+                throw new InvalidOperationException(
+                    $"ffmpeg mux failed: {ex.Message}. stderr: {stderrText.Trim()}");
+            }
+        }
+
         if (!proc.WaitForExit(300_000))
         {
             proc.Kill();
             throw new InvalidOperationException(
-                $"ffmpeg não terminou em 5min");
+                $"ffmpeg nao terminou em 5min");
         }
 
-        string stderrText;
-        lock (stderr) { stderrText = stderr.ToString(); }
+        string finalStderr;
+        lock (stderr) { finalStderr = stderr.ToString(); }
 
         if (proc.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"ffmpeg exit code {proc.ExitCode}: {stderrText.Trim()}");
+                $"ffmpeg exit code {proc.ExitCode}: {finalStderr.Trim()}");
         }
 
-        if (!string.IsNullOrWhiteSpace(stderrText))
-            Console.Error.WriteLine($"[Exporter] ffmpeg stderr: {stderrText.Trim()}");
+        if (!string.IsNullOrWhiteSpace(finalStderr))
+            Console.Error.WriteLine($"[Exporter] ffmpeg stderr: {finalStderr.Trim()}");
     }
 
-    private static byte[]? ConvertAudioToS16Le(List<EncodedPacket> packets)
+    private static void StreamPcmAsS16Le(List<EncodedPacket> packets, Stream output)
     {
-        int totalBytes = 0;
-        foreach (var pkt in packets)
-        {
-            if (pkt.Type != MediaType.Audio) continue;
-            totalBytes += pkt.Data.Length;
-        }
-
-        if (totalBytes == 0) return null;
-
-        int sampleCount = totalBytes / 4;
-        var result = new byte[sampleCount * 2];
-
-        int dstOffset = 0;
+        var buf = new byte[65536];
         foreach (var pkt in packets)
         {
             if (pkt.Type != MediaType.Audio) continue;
 
-            unsafe
+            if (pkt.PcmSamples is { } pcmSamples)
             {
-                fixed (byte* src = pkt.Data)
-                fixed (byte* dst = result)
-                {
-                    var fSrc = (float*)src;
-                    var sDst = (short*)(dst + dstOffset);
-                    int len = pkt.Data.Length / 4;
+                int byteLen = pcmSamples.Length * 2;
+                var conversionBuf = buf;
+                if (byteLen > conversionBuf.Length)
+                    conversionBuf = new byte[byteLen * 2];
 
-                    for (int i = 0; i < len; i++)
+                unsafe
+                {
+                    fixed (float* src = pcmSamples)
+                    fixed (byte* dst = conversionBuf)
                     {
-                        float f = Math.Clamp(fSrc[i], -1f, 1f);
-                        sDst[i] = (short)(f * 32767f);
+                        var sDst = (short*)dst;
+                        for (int i = 0; i < pcmSamples.Length; i++)
+                        {
+                            float f = Math.Clamp(src[i], -1f, 1f);
+                            sDst[i] = (short)(f * 32767f);
+                        }
                     }
                 }
+                output.Write(conversionBuf, 0, byteLen);
             }
+            else
+            {
+                int len = pkt.DataLength / 4;
+                var conversionBuf = buf;
+                if (len * 2 > conversionBuf.Length)
+                    conversionBuf = new byte[len * 2];
 
-            dstOffset += pkt.Data.Length / 2;
+                unsafe
+                {
+                    fixed (byte* src = pkt.Data)
+                    fixed (byte* dst = conversionBuf)
+                    {
+                        var fSrc = (float*)src;
+                        var sDst = (short*)dst;
+                        for (int i = 0; i < len; i++)
+                        {
+                            float f = Math.Clamp(fSrc[i], -1f, 1f);
+                            sDst[i] = (short)(f * 32767f);
+                        }
+                    }
+                }
+                output.Write(conversionBuf, 0, pkt.DataLength / 2);
+            }
         }
-
-        return result;
     }
 
-    /// <summary>
-    /// Creates MP4 from raw NV12 frames by encoding through ffmpeg.
-    /// No MF dependency.
-    /// </summary>
+    internal static bool IsAdts(EncodedPacket pkt) =>
+        pkt.Data.Length >= 2 && pkt.Data[0] == 0xFF && (pkt.Data[1] & 0xF0) == 0xF0;
+
     public static string EncodeRawNv12ToMp4(
         string outputPath,
         int width, int height, int frameRate,
@@ -290,7 +397,7 @@ public sealed class ClipExporter : IDisposable
         {
             proc.Kill();
             throw new InvalidOperationException(
-                $"ffmpeg não terminou em 5min");
+                $"ffmpeg nao terminou em 5min");
         }
 
         if (proc.ExitCode != 0)
@@ -302,9 +409,6 @@ public sealed class ClipExporter : IDisposable
 
         return outputPath;
     }
-
-    private static bool IsAdts(EncodedPacket pkt) =>
-        pkt.Data.Length >= 2 && pkt.Data[0] == 0xFF && (pkt.Data[1] & 0xF0) == 0xF0;
 
     private static string DetectFastestCodec()
     {

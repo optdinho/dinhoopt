@@ -1,10 +1,13 @@
+using System.Buffers;
+
 namespace DiNho.Capture.Poc.Encoders;
 
 public enum MediaType { Video, Audio }
 
 public sealed class EncodedPacket
 {
-    public byte[] Data { get; }
+    public byte[] Data { get; private set; }
+    public float[]? PcmSamples { get; }
     public MediaType Type { get; }
     public TimeSpan Pts { get; }
     public TimeSpan Duration { get; }
@@ -12,6 +15,8 @@ public sealed class EncodedPacket
     public int Width { get; }
     public int Height { get; }
     public bool IsFavorite { get; set; }
+    public bool IsPooled { get; }
+    public int DataLength { get; private set; }
 
     public EncodedPacket(
         byte[] data,
@@ -23,11 +28,61 @@ public sealed class EncodedPacket
         int height = 0)
     {
         Data = data;
+        DataLength = data.Length;
         Type = type;
         Pts = pts;
         Duration = duration;
         IsKeyFrame = isKeyFrame;
         Width = width;
         Height = height;
+        IsPooled = false;
+    }
+
+    public EncodedPacket(
+        byte[] data,
+        MediaType type,
+        TimeSpan pts,
+        TimeSpan duration,
+        bool isKeyFrame,
+        bool isPooled,
+        int width = 0,
+        int height = 0,
+        int dataLength = 0)
+    {
+        Data = data;
+        DataLength = dataLength > 0 ? dataLength : data.Length;
+        Type = type;
+        Pts = pts;
+        Duration = duration;
+        IsKeyFrame = isKeyFrame;
+        Width = width;
+        Height = height;
+        IsPooled = isPooled;
+    }
+
+    public EncodedPacket(
+        float[] pcmSamples,
+        MediaType type,
+        TimeSpan pts,
+        TimeSpan duration)
+    {
+        PcmSamples = pcmSamples;
+        Data = [];
+        Type = type;
+        Pts = pts;
+        Duration = duration;
+        IsKeyFrame = false;
+        IsPooled = false;
+        DataLength = 0;
+    }
+
+    public void Release()
+    {
+        if (IsPooled && DataLength > 0)
+        {
+            ArrayPool<byte>.Shared.Return(Data);
+            Data = [];
+            DataLength = 0;
+        }
     }
 }

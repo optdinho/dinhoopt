@@ -4,16 +4,23 @@ namespace DiNho.Capture.Poc.GameDetection;
 
 public class GameEntry
 {
+    [System.Text.Json.Serialization.JsonPropertyName("processName")]
     public string ProcessName { get; set; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("windowClass")]
     public string WindowClass { get; set; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("displayName")]
     public string DisplayName { get; set; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("aliases")]
     public List<string> Aliases { get; set; } = [];
+    [System.Text.Json.Serialization.JsonPropertyName("backends")]
     public List<string> Backends { get; set; } = [];
 }
 
 public class GameDatabase
 {
+    [System.Text.Json.Serialization.JsonPropertyName("version")]
     public int Version { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("games")]
     public List<GameEntry> Games { get; set; } = [];
 
     private Dictionary<string, GameEntry> _byWindowClass = new(StringComparer.OrdinalIgnoreCase);

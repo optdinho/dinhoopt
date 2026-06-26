@@ -8,15 +8,17 @@ public sealed class WasapiMicSource : IAudioSource
     private WasapiCapture? _capture;
     private readonly MMDevice _device;
     private bool _running;
+    private readonly int _sampleRate;
 
-    public int SampleRate { get; private set; } = 48000;
+    public int SampleRate => _sampleRate;
     public int Channels { get; private set; } = 1;
     public string DeviceId { get; }
 
     public event Action<AudioBuffer>? OnAudioData;
 
-    public WasapiMicSource(string? deviceId = null)
+    public WasapiMicSource(int sampleRate = 48000, string? deviceId = null)
     {
+        _sampleRate = sampleRate;
         using var enumerator = new MMDeviceEnumerator();
         if (!string.IsNullOrEmpty(deviceId))
         {
@@ -35,7 +37,7 @@ public sealed class WasapiMicSource : IAudioSource
         if (_running) return;
         _running = true;
         _capture = new WasapiCapture(_device, true);
-        _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 1);
+        _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(_sampleRate, 1);
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += (s, e) => _running = false;
         _capture.StartRecording();

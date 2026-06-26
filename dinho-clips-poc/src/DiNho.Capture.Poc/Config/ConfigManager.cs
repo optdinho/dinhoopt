@@ -24,6 +24,9 @@ public sealed class AppConfig
     };
 
     // Sessões de áudio selecionadas (PID -> nome)
+    // Nota: Electron pode enviar como number[] (ex: [1234, 5678]) em vez de Dictionary<int,string>
+    // O JsonConverter abaixo trata ambos os formatos silenciosamente
+    [JsonConverter(typeof(IntStringDictionaryConverter))]
     public Dictionary<int, string> SelectedAudioSessions { get; set; } = new();
 
     // PTT keys (lista de VK codes)
@@ -44,6 +47,17 @@ public sealed class AppConfig
     public int Height { get; set; } = 1080;
     public int BitrateKbps { get; set; } = 20000;
 
+    // CRF+VBV quality params (usados por NVENC/AV1)
+    public int Cq { get; set; } = 24;
+    public int MaxrateKbps { get; set; } = 50000;
+    public int BufsizeKbps { get; set; } = 100000;
+    public int Bframes { get; set; } = 2;
+    public int Lookahead { get; set; } = 4;
+    public string EncoderPreset { get; set; } = "p4";
+    public string Codec { get; set; } = "auto";
+    /// <summary>GPU adapter index for multi-GPU systems (-1 = auto).</summary>
+    public int AdapterIndex { get; set; } = -1;
+
     // Paths
     public string OutputDirectory { get; set; } = "";
 
@@ -53,6 +67,9 @@ public sealed class AppConfig
 
     // Forçar encoder software (útil para testes sem GPU / WARP)
     public bool ForceSoftware { get; set; } = false;
+
+    // RNNoise/anlmdn noise suppression on microphone
+    public bool NoiseSuppressionEnabled { get; set; } = false;
 
     // Dispositivo de microfone selecionado (vazio = padrão)
     public string MicDeviceId { get; set; } = "";
@@ -65,6 +82,24 @@ public sealed class AppConfig
 
     // PID a excluir no EXCLUDE mode (ex: PID do Electron)
     public int ExcludeProcessId { get; set; } = 0;
+
+    // Game Audio Only: captura apenas áudio do jogo detectado + microfone
+    public bool GameAudioOnly { get; set; } = false;
+
+    // Audio Loopback: captura áudio do sistema (true) ou apenas microfone (false)
+    public bool AudioLoopback { get; set; } = true;
+
+    // PID do processo Electron (para ignorar foreground changes quando o Electron rouba o foco)
+    public int ElectronPid { get; set; }
+
+    // Game Detection: detecta jogos em foreground (true) ou desliga o detector (false)
+    public bool GameDetection { get; set; } = true;
+
+    // AutoCleanup: remove clips antigos quando o disco está cheio
+    public bool AutoCleanupEnabled { get; set; } = true;
+
+    // Percentual de ocupação do disco que dispara o cleanup (ex: 90 = limpa quando >90% cheio)
+    public int AutoCleanupThresholdPercent { get; set; } = 90;
 
     /// <summary>
     /// Retorna a maior duração de replay necessária com base
@@ -181,11 +216,30 @@ public sealed class ConfigManager : IDisposable
             if (config.BitrateKbps < 500 || config.BitrateKbps > 200_000)
                 config.BitrateKbps = _defaults.BitrateKbps;
 
+            // Valida parâmetros CRF+VBV
+            if (config.Cq < 0 || config.Cq > 51)
+                config.Cq = _defaults.Cq;
+            if (config.MaxrateKbps < 1000 || config.MaxrateKbps > 500_000)
+                config.MaxrateKbps = _defaults.MaxrateKbps;
+            if (config.BufsizeKbps < 2000 || config.BufsizeKbps > 1_000_000)
+                config.BufsizeKbps = _defaults.BufsizeKbps;
+            if (config.Bframes < 0 || config.Bframes > 16)
+                config.Bframes = _defaults.Bframes;
+            if (config.Lookahead < 0 || config.Lookahead > 256)
+                config.Lookahead = _defaults.Lookahead;
+            if (string.IsNullOrWhiteSpace(config.EncoderPreset))
+                config.EncoderPreset = _defaults.EncoderPreset;
+
             if (config.MicVolume < 0f || config.MicVolume > 2f)
                 config.MicVolume = _defaults.MicVolume;
 
-            if (config.PttMode is not ("Hold" or "Toggle"))
-                config.PttMode = _defaults.PttMode;
+            config.PttMode = config.PttMode?.ToLowerInvariant() switch
+            {
+                "hold" => "Hold",
+                "toggle" => "Toggle",
+                "off" => "Off",
+                _ => _defaults.PttMode,
+            };
 
             // Valida diretório de saída
             if (!string.IsNullOrEmpty(config.OutputDirectory))
@@ -283,5 +337,62 @@ public sealed class ConfigManager : IDisposable
 
     public void Dispose()
     {
+    }
+}
+
+/// <summary>
+/// Custom JSON converter para Dictionary&lt;int, string&gt; que também aceita arrays number[] (do Electron).
+/// Electron envia selectedAudioSessions como [1234, 5678] em vez de {"1234": "FiveM.exe", ...}.
+/// </summary>
+internal sealed class IntStringDictionaryConverter : JsonConverter<Dictionary<int, string>>
+{
+    public override Dictionary<int, string> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+            return new Dictionary<int, string>();
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            var result = new Dictionary<int, string>();
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndArray)
+                    return result;
+
+                if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var pid))
+                {
+                    // Use PID como chave, nome fica vazio — será populado via setAudioSessions IPC
+                    result[pid] = $"PID:{pid}";
+                }
+            }
+            return result;
+        }
+
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            var result = new Dictionary<int, string>();
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                    return result;
+
+                if (reader.TokenType == JsonTokenType.PropertyName)
+                {
+                    var keyStr = reader.GetString();
+                    reader.Read();
+                    var value = reader.GetString() ?? string.Empty;
+                    if (int.TryParse(keyStr, out var key))
+                        result[key] = value;
+                }
+            }
+            return result;
+        }
+
+        return new Dictionary<int, string>();
+    }
+
+    public override void Write(Utf8JsonWriter writer, Dictionary<int, string> value, JsonSerializerOptions options)
+    {
+        JsonSerializer.Serialize(writer, value, options);
     }
 }

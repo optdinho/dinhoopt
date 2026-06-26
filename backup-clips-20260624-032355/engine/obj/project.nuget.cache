@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "dgSpecHash": "vLVhoCnMvM4=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Administrator\\Desktop\\001\\backup-clips-20260624-032355\\engine\\DiNho.Capture.Poc.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.netcore.platforms\\3.1.0\\microsoft.netcore.platforms.3.1.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.win32.registry\\4.7.0\\microsoft.win32.registry.4.7.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.windows.cswinrt\\2.2.0\\microsoft.windows.cswinrt.2.2.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio\\2.2.1\\naudio.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio.asio\\2.2.1\\naudio.asio.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio.core\\2.2.1\\naudio.core.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio.midi\\2.2.1\\naudio.midi.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio.wasapi\\2.2.1\\naudio.wasapi.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio.winforms\\2.2.1\\naudio.winforms.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\naudio.winmm\\2.2.1\\naudio.winmm.2.2.1.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\sharpgen.runtime\\2.1.2-beta\\sharpgen.runtime.2.1.2-beta.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\sharpgen.runtime.com\\2.1.2-beta\\sharpgen.runtime.com.2.1.2-beta.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\system.security.accesscontrol\\4.7.0\\system.security.accesscontrol.4.7.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\system.security.principal.windows\\4.7.0\\system.security.principal.windows.4.7.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\vortice.d3dcompiler\\3.5.0\\vortice.d3dcompiler.3.5.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\vortice.direct3d11\\3.5.0\\vortice.direct3d11.3.5.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\vortice.directx\\3.5.0\\vortice.directx.3.5.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\vortice.dxgi\\3.5.0\\vortice.dxgi.3.5.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\vortice.mathematics\\1.7.8\\vortice.mathematics.1.7.8.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\vortice.mediafoundation\\3.5.0\\vortice.mediafoundation.3.5.0.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.windows.sdk.net.ref\\10.0.26100.57\\microsoft.windows.sdk.net.ref.10.0.26100.57.nupkg.sha512"
+  ],
+  "logs": []
+}

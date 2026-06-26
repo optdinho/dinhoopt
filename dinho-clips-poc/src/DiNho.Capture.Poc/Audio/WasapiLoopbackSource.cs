@@ -8,14 +8,16 @@ public sealed class WasapiLoopbackSource : IAudioSource
     private WasapiLoopbackCapture? _capture;
     private readonly MMDevice _device;
     private bool _running;
+    private readonly int _sampleRate;
 
-    public int SampleRate { get; private set; }
+    public int SampleRate => _sampleRate;
     public int Channels { get; private set; }
 
     public event Action<AudioBuffer>? OnAudioData;
 
-    public WasapiLoopbackSource()
+    public WasapiLoopbackSource(int sampleRate = 48000)
     {
+        _sampleRate = sampleRate;
         using var enumerator = new MMDeviceEnumerator();
         _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
     }
@@ -26,9 +28,8 @@ public sealed class WasapiLoopbackSource : IAudioSource
         _running = true;
 
         _capture = new WasapiLoopbackCapture(_device);
-        _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
+        _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(_sampleRate, 2);
         Console.WriteLine($"[WasapiLoopbackSource] Format set: {_capture.WaveFormat.Encoding} SR={_capture.WaveFormat.SampleRate} Ch={_capture.WaveFormat.Channels} Bps={_capture.WaveFormat.BitsPerSample}");
-        SampleRate = 48000;
         Channels = 2;
 
         _capture.DataAvailable += OnDataAvailable;

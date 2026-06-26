@@ -8,38 +8,105 @@ namespace DiNho.Capture.Poc.Capture
 {
     [ComImport]
     [Guid("1EB64011-96F5-463A-A87B-4B1E9BFAE9F9")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IGraphicsCaptureItemInterop
     {
+        // IInspectable vtable padding (3 methods) — slots [3], [4], [5]
+        // Necessário porque IGraphicsCaptureItemInterop herda de IInspectable.
+        // InterfaceIsIUnknown + padding evita o crash do CLR ao tentar validar
+        // projeção WinRT no Marshal.GetTypedObjectForIUnknown.
+        [PreserveSig] int GetIids(out int iidCount, out IntPtr iids);
+        [PreserveSig] int GetRuntimeClassName(out IntPtr className);
+        [PreserveSig] int GetTrustLevel(out int trustLevel);
+        // Método real em vtable[6]
         void CreateForMonitor(nint monitor, ref Guid riid, out nint result);
     }
 
     internal static class GraphicsCaptureItemHelper
     {
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetDesktopWindow();
+        [DllImport("combase.dll", PreserveSig = false)]
+        private static extern void RoGetActivationFactory(IntPtr activatableClassId, ref Guid iid, out IntPtr factory);
 
-        public static GraphicsCaptureItem CreateForPrimaryMonitor()
+        [DllImport("combase.dll", PreserveSig = true)]
+        private static extern int WindowsCreateString([MarshalAs(UnmanagedType.LPWStr)] string sourceString, int length, out IntPtr hstring);
+
+        [DllImport("combase.dll", PreserveSig = true)]
+        private static extern int WindowsDeleteString(IntPtr hstring);
+
+        private const string RuntimeClassName = "Windows.Graphics.Capture.GraphicsCaptureItem";
+        private static readonly Guid IGraphicsCaptureItemInteropGuid = new("1EB64011-96F5-463A-A87B-4B1E9BFAE9F9");
+
+        private static IntPtr CreateHString(string s)
         {
+            var hr = WindowsCreateString(s, s.Length, out var hstr);
+            if (hr != 0)
+                throw new InvalidOperationException($"WindowsCreateString falhou: HRESULT=0x{hr:X8}");
+            return hstr;
+        }
+
+        private static IGraphicsCaptureItemInterop GetActivationFactoryInterop()
+        {
+            var hstr = CreateHString(RuntimeClassName);
             try
             {
-                // Usa a janela da área de trabalho (Desktop) que cobre o monitor primário.
-                // TryCreateFromWindowId não precisa do ActivationFactory.Get — vai direto
-                // pela projeção CsWinRT, que resolve o activation factory internamente.
-                var desktopHwnd = GetDesktopWindow();
-                var windowId = new global::Windows.UI.WindowId { Value = (ulong)desktopHwnd };
-                var item = GraphicsCaptureItem.TryCreateFromWindowId(windowId);
-                if (item is null)
-                    throw new InvalidOperationException(
-                        "TryCreateFromWindowId(desktop) retornou null — WGC pode não estar disponível.");
-                return item;
+                var iid = IGraphicsCaptureItemInteropGuid;
+                RoGetActivationFactory(hstr, ref iid, out var factoryPtr);
+                try
+                {
+                    return (IGraphicsCaptureItemInterop)Marshal.GetTypedObjectForIUnknown(factoryPtr, typeof(IGraphicsCaptureItemInterop));
+                }
+                finally
+                {
+                    Marshal.Release(factoryPtr);
+                }
+            }
+            finally
+            {
+                WindowsDeleteString(hstr);
+            }
+        }
+
+        public static GraphicsCaptureItem CreateForMonitor(IntPtr hMonitor)
+        {
+            IGraphicsCaptureItemInterop interop;
+            try
+            {
+                interop = GetActivationFactoryInterop();
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException(
-                    "WGC não disponível (" + ex.GetType().Name + "). " +
-                    "Verifique se o sistema suporta Windows.Graphics.Capture (Windows 10 1903+).", ex);
+                Console.Error.WriteLine($"[WGC-DIAG] GetActivationFactoryInterop() falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
             }
+
+            var guid = typeof(GraphicsCaptureItem).GUID;
+            IntPtr itemPtr;
+            try
+            {
+                interop.CreateForMonitor(hMonitor, ref guid, out itemPtr);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] interop.CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+
+            try
+            {
+                return MarshalInterface<GraphicsCaptureItem>.FromAbi(itemPtr);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] MarshalInterface<GraphicsCaptureItem>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+        }
+
+        public static GraphicsCaptureItem CreateForPrimaryMonitor()
+        {
+            var hMonitor = MonitorHelper.GetPrimaryMonitorHandle();
+            Console.Error.WriteLine($"[WGC-DIAG] CreateForPrimaryMonitor: hMonitor=0x{hMonitor:X8}");
+            return CreateForMonitor(hMonitor);
         }
 
         public static GraphicsCaptureItem? CreateForWindow(IntPtr hwnd)
@@ -64,9 +131,37 @@ namespace DiNho.Capture.Poc.Capture
 
         public static IDirect3DDevice CreateDirect3DDeviceFromDxgiDevice(IDXGIDevice dxgiDevice)
         {
-            var dxgiPtr = dxgiDevice.NativePointer;
-            var winrtPtr = CreateDirect3D11DeviceFromDXGIDevice(dxgiPtr);
-            return MarshalInterface<IDirect3DDevice>.FromAbi(winrtPtr);
+            IntPtr dxgiPtr;
+            try
+            {
+                dxgiPtr = dxgiDevice.NativePointer;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] dxgiDevice.NativePointer falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+
+            IntPtr winrtPtr;
+            try
+            {
+                winrtPtr = CreateDirect3D11DeviceFromDXGIDevice(dxgiPtr);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] d3d11!CreateDirect3D11DeviceFromDXGIDevice falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+
+            try
+            {
+                return MarshalInterface<IDirect3DDevice>.FromAbi(winrtPtr);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] MarshalInterface<IDirect3DDevice>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
         }
     }
 

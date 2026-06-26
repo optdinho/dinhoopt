@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { IPC } from '@shared/channels'
 
 vi.mock('electron', () => ({
   ipcRenderer: {
@@ -716,10 +717,17 @@ describe('preload API bridge', () => {
       'clipsOpen',
       'clipsGetConfig',
       'clipsSetConfig',
-  'clipsSelectOutputDir',
-  'clipsGetThumbnail',
-  'clipsGetAudioSessions',
-  'clipsSetAudioSessions',
+      'clipsSelectOutputDir',
+      'clipsGetThumbnail',
+      'clipsGetAudioSessions',
+      'clipsSetAudioSessions',
+      'clipsSetFavorite',
+      'clipsGetMicDevices',
+      'clipsSetMicDevice',
+      'clipsGetGpus',
+      'clipsGetRunningProcesses',
+      'clipsTrimClip',
+      'clipsMergeClips',
     ]
     for (const m of methods) {
       it(`${m} calls invoke`, async () => {
@@ -728,5 +736,25 @@ describe('preload API bridge', () => {
         expect(mockIpc.invoke).toHaveBeenCalled()
       })
     }
+
+    it('clipsOnEngineStatus registers listener and returns unsubscribe', () => {
+      const cb = vi.fn()
+      const unsub = api.clipsOnEngineStatus(cb)
+      expect(mockIpc.on).toHaveBeenCalledWith(IPC.CLIPS_ENGINE_STATUS, expect.any(Function))
+      unsub()
+      expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_ENGINE_STATUS, expect.any(Function))
+    })
+
+    it('clipsGetVideoUrl returns clip-video:// URL for Windows path', () => {
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe('clip-video://file?path=C%3A%5CUsers%5Ctest%5Cclip.mp4')
+    })
+
+    it('clipsGetVideoUrl handles already normalized path', () => {
+      expect(api.clipsGetVideoUrl('D:/games/clip.mp4')).toBe('clip-video://file?path=D%3A%2Fgames%2Fclip.mp4')
+    })
+
+    it('clipsGetVideoUrl handles spaces in path', () => {
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe('clip-video://file?path=C%3A%5CUsers%5Ctest%5Cmy%20clip.mp4')
+    })
   })
 })

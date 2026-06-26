@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using DiNho.Capture.Poc.Logging;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Vortice.MediaFoundation;
@@ -27,7 +28,7 @@ public sealed class FfmpegEncoder : IEncoder
     private Thread? _stderrThread;
     private CancellationTokenSource? _stderrCts;
     private string? _processFailedCause;
-    private static readonly string[] FallbackCodecs = ["h264_nvenc", "h264_amf", "h264_qsv", "libx264"];
+    private static readonly string[] FallbackCodecs = ["h264_nvenc", "av1_nvenc", "h264_amf", "h264_qsv", "libx264"];
     private string _codec = "libx264";
     private readonly bool _useHardware;
     private int _bitrateKbps = 2000;
@@ -46,6 +47,18 @@ public sealed class FfmpegEncoder : IEncoder
     private long _lastRestartTicks;
     private int _gpuConvertFails;
 
+    // CRF+VBV quality params (NVENC/AV1)
+    private int _cq = 24;
+    private int _maxrateKbps = 50000;
+    private int _bufsizeKbps = 100000;
+    private int _bframes = 2;
+    private int _lookahead = 4;
+    private string _nvencPreset = "p4";
+
+    // Real PTS tracking — lock-protected queue because Enqueue (pipeline thread) and Dequeue (reader thread) are different threads
+    private readonly Queue<TimeSpan> _inputPtsQueue = new();
+    private readonly object _ptsQueueLock = new();
+
     // H.264 parser state
     private byte[]? _pendingBuf;
     private int _pendingLen;
@@ -60,13 +73,31 @@ public sealed class FfmpegEncoder : IEncoder
         _cropX = x; _cropY = y; _cropW = w; _cropH = h;
     }
 
+    /// <summary>
+    /// Define parâmetros de qualidade CRF+VBV para NVENC/AV1.
+    /// bitrateKbps ainda é usado como fallback para AMF/QSV/libx264.
+    /// </summary>
+    public void SetQualityParams(int cq, int maxrateKbps, int bufsizeKbps, int bframes = 2, int lookahead = 4, string preset = "p4", string? codec = null)
+    {
+        _cq = cq;
+        _maxrateKbps = maxrateKbps;
+        _bufsizeKbps = bufsizeKbps;
+        _bframes = bframes;
+        _lookahead = lookahead;
+        _nvencPreset = preset;
+        if (!string.IsNullOrEmpty(codec) && codec != "auto")
+            _codec = ResolveCodec(codec);
+    }
+
     public void Initialize(int width, int height, int frameRate, int bitrateKbps = 2000)
     {
         _width = width;
         _height = height;
         _frameRate = frameRate;
         _bitrateKbps = bitrateKbps;
-        _codec = DetectBestCodec();
+        if (_codec == null)
+            _codec = DetectBestCodec();
+        Log.I("FfmpegEncoder", $"codec={_codec} bitrate={_bitrateKbps}Kbps cq={_cq} maxrate={_maxrateKbps}Kbps bufsize={_bufsizeKbps}Kbps res={width}x{height}@{frameRate}fps preset={_nvencPreset}");
         StartFfmpeg();
 
         _readerCts = new CancellationTokenSource();
@@ -78,29 +109,85 @@ public sealed class FfmpegEncoder : IEncoder
         _readerThread.Start();
         _initialized = true;
 
-        Console.Error.WriteLine($"[FfmpegEncoder] initialized (codec={_codec})");
+        Log.I("FfmpegEncoder", $"initialized (codec={_codec})");
     }
 
-    // ── ffmpeg detection ─────────────────────────────────────────────
+    // ── ffmpeg detection (cached) ────────────────────────────────────
+
+    private static readonly Dictionary<string, bool> _encoderCache = new();
+    private static string? _bestCodecCache;
+    private static readonly object _cacheLock = new();
 
     private string DetectBestCodec()
     {
         if (!_useHardware) return "libx264";
+        lock (_cacheLock)
+        {
+            if (_bestCodecCache != null) return _bestCodecCache;
+        }
 
         // Vendor-aware detection: try GPU vendor's codec first
         var vendorId = EncoderManager.DetectGpuVendorId();
         var vendorCodec = EncoderManager.GetPreferredCodec(vendorId);
-        if (!string.IsNullOrEmpty(vendorCodec) && CheckFfmpegEncoder(vendorCodec))
+        if (!string.IsNullOrEmpty(vendorCodec) && CheckFfmpegEncoderCached(vendorCodec))
+        {
+            CacheBest(vendorCodec);
             return vendorCodec;
+        }
 
         // Fallback chain (NVENC → AMF → QSV → libx264)
         foreach (var c in FallbackCodecs)
-            if (c == "libx264" || CheckFfmpegEncoder(c)) return c;
+        {
+            if (c == "libx264" || CheckFfmpegEncoderCached(c))
+            {
+                CacheBest(c);
+                return c;
+            }
+        }
+        CacheBest("libx264");
         return "libx264";
     }
 
-    private static bool CheckFfmpegEncoder(string enc)
+    /// <summary>Resolve user-facing codec name to concrete ffmpeg encoder.</summary>
+    private string ResolveCodec(string preferred)
     {
+        if (!_useHardware) return preferred switch
+        {
+            "libx265" => "libx265",
+            _ => "libx264"
+        };
+
+        // Map user preference to vendor-aware encoder name
+        var vendorId = EncoderManager.DetectGpuVendorId();
+        var result = EncoderManager.MapUserCodec(preferred, vendorId);
+
+        if (result != null && CheckFfmpegEncoderCached(result))
+            return result;
+
+        // If preferred codec not available, fall back to DetectBestCodec
+        return DetectBestCodec();
+    }
+
+    private static void CacheBest(string codec)
+    {
+        lock (_cacheLock) { _bestCodecCache ??= codec; }
+    }
+
+    private static bool CheckFfmpegEncoderCached(string enc)
+    {
+        lock (_cacheLock)
+        {
+            if (_encoderCache.TryGetValue(enc, out var cached)) return cached;
+        }
+        var result = CheckFfmpegEncoder(enc);
+        lock (_cacheLock) { _encoderCache[enc] = result; }
+        return result;
+    }
+
+    internal static bool CheckFfmpegEncoder(string enc)
+    {
+        if (string.IsNullOrWhiteSpace(enc))
+            return false;
         try
         {
             using var p = new Process
@@ -123,44 +210,33 @@ public sealed class FfmpegEncoder : IEncoder
 
     // ── ffmpeg process ───────────────────────────────────────────────
 
-    private int BitrateToQp()
-    {
-        return _bitrateKbps switch
-        {
-            >= 40000 => 17,
-            >= 20000 => 18,
-            >= 12000 => 19,
-            >= 8000  => 20,
-            >= 5000  => 22,
-            >= 3000  => 25,
-            _        => 28
-        };
-    }
-
     private void StartFfmpeg()
     {
-        var qp = BitrateToQp();
+        /* NVENC/AV1: CRF+VBV — sem -b:v, CQ guia qualidade, maxrate/bufsize como segurança VBV.
+           AMF/QSV/libx264: fallback com bitrateKbps alvo (esses codecs não têm CRF+VBV bom). */
+        var bframesArg = _bframes > 0 ? $"-bf {_bframes}" : "-bf 0";
+        var lookaheadArg = $"-rc-lookahead {_lookahead}";
         var tune = _codec switch
         {
             "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
-            "h264_nvenc" => $"-preset p4 -tune hq -rc constqp -qp {qp}",
-            "h264_amf" => $"-quality quality -rc cqp -qp_i {qp} -qp_p {qp}",
-            "h264_qsv" => $"-preset medium -global_quality {qp}",
+            "libx265" => "-preset ultrafast -tune zerolatency -x265-params no-open-gop=1:bframes=0:keyint=60:min-keyint=60",
+            "h264_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 60 -sc_threshold 0",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 60 -sc_threshold 0",
+            "av1_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 60 -sc_threshold 0",
+            "h264_amf" => $"-quality quality -rc cqp -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)}",
+            "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)}",
             _ => "-preset ultrafast -tune zerolatency -threads 1"
         };
 
-        var aud = _codec switch
+        int cw = _cropW, ch = _cropH;
+        if (cw > 0 && ch > 0)
         {
-            "libx264" => "-flags +aud",
-            _ => ""
-        };
-
-        if (_cropW > 0 && _cropH > 0)
-        {
-            Console.WriteLine($"[FfmpegEncoder] crop={_cropW}:{_cropH}:{_cropX}:{_cropY} src={_width}x{_height}");
+            cw = Math.Max(cw, 320);
+            ch = Math.Max(ch, 240);
+            Log.I("FfmpegEncoder", $"crop={cw}:{ch}:{_cropX}:{_cropY} src={_width}x{_height}");
         }
-        var cropFilter = _cropW > 0 && _cropH > 0
-            ? $" -vf \"crop={_cropW}:{_cropH}:{_cropX}:{_cropY}\""
+        var cropFilter = cw > 0 && ch > 0
+            ? $" -vf \"crop={cw}:{ch}:{_cropX}:{_cropY}\""
             : "";
 
         _process = new Process
@@ -171,7 +247,7 @@ public sealed class FfmpegEncoder : IEncoder
                             $"-f rawvideo -pix_fmt nv12 -s {_width}x{_height} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"{cropFilter} -c:v {_codec} {tune} " +
-                            $"{aud} -f h264 pipe:1",
+                            $"-f h264 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -198,7 +274,7 @@ public sealed class FfmpegEncoder : IEncoder
                 {
                     var line = stderrStream.ReadLine();
                     if (line == null) break;
-                    Console.Error.WriteLine($"[ffmpeg-stderr] {line}");
+                    Log.D("ffmpeg", $"{line}");
                 }
             }
             catch (OperationCanceledException) { }
@@ -236,7 +312,7 @@ public sealed class FfmpegEncoder : IEncoder
         {
             _processFailed = true;
             _processFailedCause = "reader:stdout_io_error";
-            Console.Error.WriteLine($"[FfmpegEncoder] stdout: {ex.Message}");
+            Log.E("FfmpegEncoder", $"stdout: {ex.Message}");
         }
         finally
         {
@@ -348,17 +424,21 @@ public sealed class FfmpegEncoder : IEncoder
     {
         if (_pendingLen == 0 || !_hadSlice || _pendingBuf == null) return;
 
-        var data = new byte[_pendingLen];
+        byte[] data = ArrayPool<byte>.Shared.Rent(_pendingLen);
         System.Buffer.BlockCopy(_pendingBuf, 0, data, 0, _pendingLen);
 
         long dur = 10_000_000L / _frameRate;
-        long pts = _outputFrameIndex * dur;
+        // Use real PTS from input queue (pipeline clock) instead of fake CFR _outputFrameIndex * dur
+        bool gotRealPts;
+        TimeSpan realPts;
+        lock (_ptsQueueLock) { gotRealPts = _inputPtsQueue.TryDequeue(out realPts); }
+        long pts = gotRealPts ? realPts.Ticks : _outputFrameIndex * dur;
         bool key = CheckKeyFrame(data);
 
         _outputChannel.Writer.TryWrite(new EncodedPacket(
             data, MediaType.Video,
             TimeSpan.FromTicks(pts), TimeSpan.FromTicks(dur),
-            key, _width, _height));
+            key, isPooled: true, dataLength: _pendingLen, width: _width, height: _height));
 
         _outputFrameIndex++;
         _pendingLen = 0;
@@ -394,6 +474,9 @@ public sealed class FfmpegEncoder : IEncoder
         var nv12 = ConvertGpuNv12(texture);
         if (nv12 == null) return null;
 
+        // Enfileira o PTS real antes de escrever — EmitPacket() vai desenfileirar
+        lock (_ptsQueueLock) { _inputPtsQueue.Enqueue(pts); }
+
         try
         {
             _stdin!.Write(nv12);
@@ -405,7 +488,7 @@ public sealed class FfmpegEncoder : IEncoder
         {
             _processFailed = true;
             _processFailedCause = "encoder:stdin_io_error";
-            Console.Error.WriteLine($"[FfmpegEncoder] stdin: {ex.Message}");
+            Log.E("FfmpegEncoder", $"stdin: {ex.Message}");
             LogProcessExit();
             return null;
         }
@@ -426,7 +509,7 @@ public sealed class FfmpegEncoder : IEncoder
         if (idx < 0 || idx >= FallbackCodecs.Length - 1) return false;
         _codec = FallbackCodecs[idx + 1];
         _restartAttempts = 0;
-        Console.Error.WriteLine($"[FfmpegEncoder] falling back to codec={_codec}");
+        Log.W("FfmpegEncoder", $"falling back to codec={_codec}");
         return true;
     }
 
@@ -450,13 +533,13 @@ public sealed class FfmpegEncoder : IEncoder
         {
             if (!TryFallbackCodec())
             {
-                Console.Error.WriteLine("[FfmpegEncoder] max restart attempts reached, no codec fallback");
+                Log.E("FfmpegEncoder", "max restart attempts reached, no codec fallback");
                 return false;
             }
         }
 
         _restartAttempts++;
-        Console.Error.WriteLine($"[FfmpegEncoder] restarting ffmpeg (attempt {_restartAttempts}, cause={_processFailedCause ?? "unknown"}, gpuFails={_gpuConvertFails})");
+        Log.W("FfmpegEncoder", $"restarting ffmpeg (attempt {_restartAttempts}, cause={_processFailedCause ?? "unknown"}, gpuFails={_gpuConvertFails})");
         StopFfmpeg();
         ResetState();
 
@@ -472,12 +555,12 @@ public sealed class FfmpegEncoder : IEncoder
             _readerThread.Start();
             _processFailed = false;
             _lastRestartTicks = Stopwatch.GetTimestamp();
-            Console.Error.WriteLine("[FfmpegEncoder] restart OK");
+            Log.I("FfmpegEncoder", "restart OK");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[FfmpegEncoder] restart failed: {ex.Message}");
+            Log.E("FfmpegEncoder", $"restart failed: {ex.Message}");
             return false;
         }
     }
@@ -519,6 +602,7 @@ public sealed class FfmpegEncoder : IEncoder
         _hadSlice = false;
         _pendingLen = 0;
         _pendingOutputs.Clear();
+        lock (_ptsQueueLock) { _inputPtsQueue.Clear(); }
 
         while (_outputChannel.Reader.TryRead(out _)) { }
 
@@ -535,6 +619,25 @@ public sealed class FfmpegEncoder : IEncoder
 
     private unsafe byte[]? ConvertGpuNv12(ID3D11Texture2D texture)
     {
+        // Crop muito pequeno: GpuVideoConverter falha com E_INVALIDARG + ffmpeg output vazio
+        if ((_cropW > 0 && _cropW < 320) || (_cropH > 0 && _cropH < 240))
+        {
+            _gpuConvertFails++; // evita restart loop
+            return null;
+        }
+
+        // Guard DIM MISMATCH: textura com dimensão diferente do esperado pelo encoder.
+        // O WgcCaptureSource já faz partial copy para o ContentSize correto,
+        // mas este guard previne E_OUTOFMEMORY no GpuVideoConverter se alguma
+        // textura com dimensão errada chegar aqui.
+        var texDesc = texture.Description;
+        if (texDesc.Width != _width || texDesc.Height != _height)
+        {
+            _gpuConvertFails++;
+            Log.W("FfmpegEncoder", $"DIM MISMATCH guard: tex={texDesc.Width}x{texDesc.Height} esperado={_width}x{_height} — frame pulado");
+            return null;
+        }
+
         var device = texture.Device;
         var ctx = device.ImmediateContext;
 
@@ -545,7 +648,7 @@ public sealed class FfmpegEncoder : IEncoder
         catch (Exception ex)
         {
             _gpuConvertFails++;
-            Console.Error.WriteLine($"[FfmpegEncoder] GpuVideoConverter constructor fail #{_gpuConvertFails}: {ex.Message}");
+            Log.E("FfmpegEncoder", $"GpuVideoConverter constructor fail #{_gpuConvertFails}: {ex.Message}");
             return null;
         }
 
@@ -572,7 +675,7 @@ public sealed class FfmpegEncoder : IEncoder
         catch (Exception ex)
         {
             _gpuConvertFails++;
-            Console.Error.WriteLine($"[FfmpegEncoder] GPU convert fail #{_gpuConvertFails}: {ex.GetType().Name}: {ex.Message}");
+            Log.E("FfmpegEncoder", $"GPU convert fail #{_gpuConvertFails}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -648,7 +751,7 @@ public sealed class FfmpegEncoder : IEncoder
         try
         {
             if (_process.HasExited)
-                Console.Error.WriteLine($"[FfmpegEncoder] ffmpeg exited code={_process.ExitCode}");
+                Log.W("FfmpegEncoder", $"ffmpeg exited code={_process.ExitCode}");
         }
         catch { }
     }

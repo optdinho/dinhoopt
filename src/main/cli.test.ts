@@ -1108,6 +1108,24 @@ describe('handler: programs', () => {
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Usage'))
     expect(appExitMock).toHaveBeenCalledWith(2)
   })
+
+  it('handles missing fields in program list', async () => {
+    const { getInstalledProgramsFull } = await import('./services/program-uninstaller')
+    vi.mocked(getInstalledProgramsFull).mockResolvedValueOnce([
+      { displayName: 'NoVersion', publisher: 'Some Pub', estimatedSize: 100 },
+      { displayName: 'NoPub', displayVersion: '2.0', estimatedSize: 200 },
+      { displayName: 'NoSize', displayVersion: '3.0', publisher: 'Pub' },
+    ])
+    process.argv = ['node.exe', 'script.js', '--cli', 'programs', 'list']
+    const { runCli } = await import('./cli')
+    await runCli()
+
+    const output = stdoutWrite.mock.calls.map((c: string[]) => c[0]).join('')
+    expect(output).toContain('NoVersion')
+    expect(output).toContain('NoPub')
+    expect(output).toContain('NoSize')
+    expect(appExitMock).toHaveBeenCalledWith(0)
+  })
 })
 
 describe('handler: services', () => {
@@ -3125,3 +3143,5 @@ describe('utility: printHelp', () => {
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Exit Codes'))
   })
 })
+
+

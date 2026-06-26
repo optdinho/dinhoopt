@@ -32,5 +32,8 @@ remaining_errors.txt
 test_output.txt
 tmp_lint.json
 
+# Build artifacts
+resources/clips-engine-staging/
+
 # Generated docs
 docs/

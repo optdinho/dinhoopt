@@ -1,68 +1,102 @@
-import { cn } from '@/lib/utils'
-import { Gamepad2 } from 'lucide-react'
+import { Loader2, Gamepad2, Square, Play } from 'lucide-react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { formatGmElapsed } from './constants'
+import { useGameModeStore } from '@/stores/game-mode-store'
 
 export function GameModeCard({
   gameModeActive,
-  gameModeActivatedAt,
-  gmElapsed,
 }: {
   gameModeActive: boolean
-  gameModeActivatedAt: string | null
-  gmElapsed: number
 }) {
   const { t } = useTranslation('dashboard')
-  const navigate = useNavigate()
+  const storeConfig = useGameModeStore((s) => s.config)
+  const [toggling, setToggling] = useState(false)
+
+  const handleToggle = useCallback(async () => {
+    if (toggling) return
+    setToggling(true)
+    try {
+      if (gameModeActive) {
+        await window.dinho?.gameModeDeactivate?.()
+        useGameModeStore.getState().setActive(false, null)
+      } else {
+        await window.dinho?.gameModeActivate?.(storeConfig)
+        const status = await window.dinho?.gameModeStatus?.()
+        if (status) {
+          useGameModeStore.getState().setActive(status.active, status.activatedAt)
+        }
+      }
+    } catch {
+      // silent
+    } finally {
+      setToggling(false)
+    }
+  }, [toggling, gameModeActive, storeConfig])
+
+  const glowColor = gameModeActive ? '#06b6d4' : 'transparent'
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate('/game-mode')}
-      className={cn(
-        'glass-card glass-card-hover depth-emphasis group relative flex flex-col items-center justify-center rounded-2xl px-4 py-5 sm:px-6 sm:py-6 text-center transition-all duration-500',
-      )}
+    <div
+      className="glass-card depth-mid group relative flex flex-col items-center justify-center overflow-hidden rounded-2xl px-4 py-5 text-center transition-all duration-500"
       style={{
         background: gameModeActive
           ? 'linear-gradient(180deg, rgba(6,182,212,0.08) 0%, rgba(139,92,246,0.04) 100%)'
           : 'var(--card-bg)',
         borderColor: gameModeActive ? 'rgba(6,182,212,0.2)' : 'var(--border-default)',
         animation: gameModeActive ? 'game-mode-pulse 2.5s ease-in-out infinite' : undefined,
-        transition: 'background 0.5s ease, border-color 0.5s ease',
       }}
-      aria-label={gameModeActive ? t('gameModeActive') : t('gameModeReady')}
     >
+      {gameModeActive && (
+        <div
+          className="pointer-events-none absolute rounded-full opacity-15 blur-3xl"
+          style={{
+            width: 200,
+            height: 200,
+            backgroundColor: glowColor,
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      )}
+
       <div
-        className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full transition-all duration-500"
+        className="mb-4 flex h-12 w-12 items-center justify-center rounded-full"
         style={{
           background: gameModeActive ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)' : 'var(--bg-hover)',
           border: `2px solid ${gameModeActive ? '#06b6d4' : 'var(--border-strong)'}`,
-          transition: 'background 0.5s ease, border-color 0.5s ease',
         }}
       >
-        <Gamepad2
-          className="h-6 w-6"
-          style={{ color: gameModeActive ? '#fff' : 'var(--text-muted)' }}
-          strokeWidth={2}
-        />
+        <Gamepad2 className="h-6 w-6" style={{ color: gameModeActive ? '#fff' : 'var(--text-muted)' }} strokeWidth={2} />
       </div>
+
       <span
-        className="mt-3 text-[11px] font-bold tracking-[0.2em]"
+        className="mb-1 text-sm font-bold tracking-[0.2em]"
         style={{ color: gameModeActive ? '#06b6d4' : 'var(--text-muted)' }}
       >
-        {gameModeActive ? t('gameModeActive') : t('gameModeReady')}
+        GAME MODE
       </span>
-      {gameModeActive && gameModeActivatedAt && (
-        <span className="mt-1 font-mono text-lg font-semibold tabular-nums" style={{ color: '#06b6d4' }}>
-          {formatGmElapsed(gmElapsed)}
-        </span>
-      )}
-      {!gameModeActive && (
-        <span className="mt-1 text-[11px] text-zinc-600 group-hover:text-zinc-400 transition-colors">
-          {t('gameModeClickToOpen')}
-        </span>
-      )}
-    </button>
+
+      <button
+        type="button"
+        onClick={handleToggle}
+        disabled={toggling}
+        className="mt-2 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
+        style={{
+          background: gameModeActive ? 'rgba(239,68,68,0.15)' : 'rgba(6,182,212,0.15)',
+          color: gameModeActive ? '#ef4444' : '#06b6d4',
+          border: `1px solid ${gameModeActive ? 'rgba(239,68,68,0.3)' : 'rgba(6,182,212,0.3)'}`,
+        }}
+      >
+        {toggling ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : gameModeActive ? (
+          <Square className="h-3.5 w-3.5" />
+        ) : (
+          <Play className="h-3.5 w-3.5" />
+        )}
+        {gameModeActive ? t('gameModeStop', 'Parar') : t('gameModeStart', 'Iniciar')}
+      </button>
+    </div>
   )
 }

@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using DiNho.Capture.Poc.Config;

@@ -1,15 +1,10 @@
 import { ActionButtons } from '@/components/dashboard/ActionButtons'
-import { DiskHealthCard } from '@/components/dashboard/DiskHealthCard'
+import { GameClipsCard } from '@/components/dashboard/GameClipsCard'
 import { GameModeCard } from '@/components/dashboard/GameModeCard'
 import { HealthCard } from '@/components/dashboard/HealthCard'
-import { MalwareStatusCard } from '@/components/dashboard/MalwareStatusCard'
-import { MemoryStatusCard } from '@/components/dashboard/MemoryStatusCard'
 import { MiniGauge } from '@/components/dashboard/MiniGauge'
-import { PrivacyShieldCard } from '@/components/dashboard/PrivacyShieldCard'
 import { ProgressBanner } from '@/components/dashboard/ProgressBanner'
 import { ResultBanner } from '@/components/dashboard/ResultBanner'
-import { SoftwareUpdatesCard } from '@/components/dashboard/SoftwareUpdatesCard'
-import { StatusBlock } from '@/components/dashboard/StatusBlock'
 import { StorageOverview } from '@/components/dashboard/StorageOverview'
 import type { OneClickPhase, OneClickResult } from '@/components/dashboard/types'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -17,7 +12,6 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { Skeleton } from '@/components/shared/Skeleton'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
-import { StatCard } from '@/components/shared/StatCard'
 import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
 import { useGameModeStore } from '@/stores/game-mode-store'
@@ -31,11 +25,9 @@ import { useUpdaterStore } from '@/stores/updater-store'
 import { CleanerType } from '@shared/enums'
 import type { CleanResult, DriveInfo, PerfQuickStats, ScanResult } from '@shared/types'
 import {
-  BarChart3,
   Cpu,
   Database,
   Download,
-  FileStack,
   HardDrive,
   MemoryStick,
   Search,
@@ -99,7 +91,7 @@ export function DashboardPage() {
   const serviceHasScanned = useServiceStore((s) => s.hasScanned)
   const startupCount = useStartupStore((s) => s.items.length)
   const gameModeActive = useGameModeStore((s) => s.active)
-  const gameModeActivatedAt = useGameModeStore((s) => s.activatedAt)
+
   const cleanStartRef = useRef<number>(0)
   const [drives, setDrives] = useState<DriveInfo[]>([])
   const [phase, setPhase] = useState<OneClickPhase>('idle')
@@ -132,22 +124,6 @@ export function DashboardPage() {
       clearTimeout(initial)
     }
   }, [])
-
-  // ── Game Mode elapsed timer (pauses when page hidden) ──────
-  const [gmElapsed, setGmElapsed] = useState(0)
-  useEffect(() => {
-    if (!gameModeActive || !gameModeActivatedAt) {
-      setGmElapsed(0)
-      return
-    }
-    const start = new Date(gameModeActivatedAt).getTime()
-    const tick = () => setGmElapsed(Date.now() - start)
-    tick()
-    const iv = setInterval(() => {
-      if (document.visibilityState === 'visible') tick()
-    }, 1000)
-    return () => clearInterval(iv)
-  }, [gameModeActive, gameModeActivatedAt])
 
   const refreshDrives = useCallback(() => {
     window.dinho
@@ -519,11 +495,11 @@ export function DashboardPage() {
       <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       <StaggerContainer className="flex-1 space-y-4 px-0 pb-8">
-        {/* ── Row 1: MiniGauges ─────────────────────────────── */}
+        {/* ── Row 1: MiniGauges (PC State) ──────────────────── */}
         <StaggerItem>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
+              Array.from({ length: 3 }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder
                 <MiniGaugeSkeleton key={i} />
               ))
@@ -547,89 +523,40 @@ export function DashboardPage() {
                   percent={diskPct}
                   detail={`${diskPct}% ${t('gaugeDiskUsed')}`}
                 />
-                <MiniGauge
-                  icon={BarChart3}
-                  label={t('gaugeScans')}
-                  percent={Math.min(100, stats.totalScans * 10)}
-                  detail={`${stats.totalScans} ${t('gaugeScansRun')}`}
-                />
               </>
             )}
           </div>
         </StaggerItem>
 
-        {/* ── Row 2: Health + Security ────────────────────────── */}
+        {/* ── Row 2: PC State + Game Mode + Clips ────────────── */}
         <StaggerItem>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div className="md:col-span-2">
               <ErrorBoundary>
-                <HealthCard healthScore={healthScore} toolCoverage={toolCoverage} />
-              </ErrorBoundary>
-            </div>
-            <ErrorBoundary>
-              <MalwareStatusCard />
-            </ErrorBoundary>
-            <ErrorBoundary>
-              <PrivacyShieldCard />
-            </ErrorBoundary>
-          </div>
-        </StaggerItem>
-
-        {/* ── Row 3: System Deep Dive ─────────────────────────── */}
-        <StaggerItem>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <ErrorBoundary>
-              <MemoryStatusCard
-                memPercent={Math.round(ramPct)}
-                memUsedBytes={perf?.memUsedBytes ?? 0}
-                memTotalBytes={perf?.memTotalBytes ?? 0}
-              />
-            </ErrorBoundary>
-            <ErrorBoundary>
-              <DiskHealthCard />
-            </ErrorBoundary>
-            <ErrorBoundary>
-              <SoftwareUpdatesCard />
-            </ErrorBoundary>
-            {features.gameMode ? (
-              <ErrorBoundary>
-                <GameModeCard
-                  gameModeActive={gameModeActive}
-                  gameModeActivatedAt={gameModeActivatedAt}
-                  gmElapsed={gmElapsed}
+                <HealthCard
+                  healthScore={healthScore}
+                  toolCoverage={toolCoverage}
+                  memPercent={Math.round(ramPct)}
+                  totalSpaceSaved={stats.totalSpaceSaved}
+                  totalFilesCleaned={stats.totalFilesCleaned}
+                  totalScans={stats.totalScans}
                 />
               </ErrorBoundary>
-            ) : (
+            </div>
+            {features.gameMode && (
               <ErrorBoundary>
-                <StatusBlock stats={stats} />
+                <GameModeCard gameModeActive={gameModeActive} />
+              </ErrorBoundary>
+            )}
+            {features.clips && (
+              <ErrorBoundary>
+                <GameClipsCard />
               </ErrorBoundary>
             )}
           </div>
         </StaggerItem>
 
-        {/* ── Row 4: Cumulative Stats ─────────────────────────── */}
-        <StaggerItem>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard
-              icon={HardDrive}
-              label={t('statSpaceRecovered')}
-              value={stats.totalSpaceSaved}
-              displayValue={formatBytes(stats.totalSpaceSaved)}
-              variant="accent"
-              loading={!statsLoaded}
-            />
-            <StatCard
-              icon={FileStack}
-              label={t('statFilesCleaned')}
-              value={stats.totalFilesCleaned}
-              variant="success"
-              loading={!statsLoaded}
-            />
-            <StatCard icon={BarChart3} label={t('statTotalScans')} value={stats.totalScans} loading={!statsLoaded} />
-          </div>
-        </StaggerItem>
-
-        {/* ── Row 5: Action Center ────────────────────────────── */}
+        {/* ── Row 3: Action Center ────────────────────────────── */}
         <StaggerItem>
           <ActionButtons
             onQuickClean={() => setShowQuickConfirm(true)}

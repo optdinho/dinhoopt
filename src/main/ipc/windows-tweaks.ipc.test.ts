@@ -400,6 +400,123 @@ describe('WINDOWS_TWEAKS_LIST handler', () => {
   })
 })
 
+// ── checkTweakApplied reg query parsing (branch coverage) ──
+
+describe('checkTweakApplied reg query parsing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('parses reg DWord match as applied=true', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
+      const cmdName = args[0] as string
+      const cmdArgs = args[1] as string[]
+      if (cmdName === 'reg.exe' && cmdArgs[0] === 'query' && cmdArgs.some((a) => a.includes('StartupDelayInMSec'))) {
+        callback(null, {
+          stdout: [
+            '',
+            'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize',
+            '    StartupDelayInMSec    REG_DWORD    0x0',
+            '',
+          ].join('\n'),
+        })
+      } else {
+        callback(null, { stdout: '' })
+      }
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:list')
+    const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
+
+    const t = result.find((r) => r.tweak.id === 'explorer-delay')
+    expect(t).toBeDefined()
+    expect(t!.applied).toBe(true)
+  })
+
+  it('parses reg DWord mismatch as applied=false', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
+      const cmdName = args[0] as string
+      const cmdArgs = args[1] as string[]
+      if (cmdName === 'reg.exe' && cmdArgs[0] === 'query' && cmdArgs.some((a) => a.includes('StartupDelayInMSec'))) {
+        callback(null, {
+          stdout: [
+            '',
+            'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize',
+            '    StartupDelayInMSec    REG_DWORD    0xfa0',
+            '',
+          ].join('\n'),
+        })
+      } else {
+        callback(null, { stdout: '' })
+      }
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:list')
+    const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
+
+    const t = result.find((r) => r.tweak.id === 'explorer-delay')
+    expect(t).toBeDefined()
+    expect(t!.applied).toBe(false)
+  })
+
+  it('parses reg String match as applied=true', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
+      const cmdName = args[0] as string
+      const cmdArgs = args[1] as string[]
+      if (cmdName === 'reg.exe' && cmdArgs[0] === 'query' && cmdArgs.some((a) => a.includes('MouseSpeed'))) {
+        callback(null, {
+          stdout: [
+            '',
+            'HKEY_CURRENT_USER\\Control Panel\\Mouse',
+            '    MouseSpeed    REG_SZ    0',
+            '',
+          ].join('\n'),
+        })
+      } else {
+        callback(null, { stdout: '' })
+      }
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:list')
+    const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
+
+    const t = result.find((r) => r.tweak.id === 'mouse-speed')
+    expect(t).toBeDefined()
+    expect(t!.applied).toBe(true)
+  })
+})
+
+// ── checkInterfaceTweakApplied returns true (branch coverage) ──
+
+describe('checkInterfaceTweakApplied returns true', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('detects interface tweak as applied when PowerShell returns OK', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
+      const cmdName = args[0] as string
+      const cmdArgs = args[1] as string[]
+      if (cmdName === 'powershell.exe' && cmdArgs.some((a) => a.includes('Write-Output "OK"'))) {
+        callback(null, { stdout: 'OK' })
+      } else {
+        callback(null, { stdout: '' })
+      }
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:list')
+    const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
+
+    const t = result.find((r) => r.tweak.id === 'tcp-ack-freq')
+    expect(t).toBeDefined()
+    expect(t!.applied).toBe(true)
+  })
+})
+
 // ── APPLY handler ──
 
 describe('WINDOWS_TWEAKS_APPLY handler', () => {
@@ -833,8 +950,47 @@ describe('WINDOWS_TWEAKS_NETSH_TCP handler', () => {
   })
 })
 
-// ── mapRegError edge cases ──
-// mapRegError is internal; tested indirectly via WINDOWS_TWEAKS_APPLY handler below
+// ── mapRegError edge cases (branch coverage) ──
+
+describe('mapRegError with null and undefined', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('handles null thrown value via apply handler', async () => {
+    mockExecFile.mockImplementation(() => {
+      throw null
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:apply')
+
+    const result = (await handler({}, ['mouse-speed'])) as {
+      succeeded: number
+      failed: number
+      errors: Array<{ reason: string }>
+    }
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]!.reason).toBe('Falha ao escrever no registro.')
+  })
+
+  it('handles undefined thrown value via apply handler', async () => {
+    mockExecFile.mockImplementation(() => {
+      throw undefined
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:apply')
+
+    const result = (await handler({}, ['mouse-speed'])) as {
+      succeeded: number
+      failed: number
+      errors: Array<{ reason: string }>
+    }
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]!.reason).toBe('Falha ao escrever no registro.')
+  })
+})
 
 // ── applyRegistryTweak with ntfs-last-access-off ──
 

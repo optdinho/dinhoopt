@@ -21,7 +21,7 @@ vi.mock('./logger.service', () => ({
 }))
 
 import { execFile, execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 
 const execFileAsync = vi.mocked(execFile)
 const execFileSyncMock = vi.mocked(execFileSync)
@@ -110,5 +110,242 @@ describe('thumbnail-generator', () => {
       expect(result).toBe('data:image/jpeg;base64,Y2FjaGVkLWRhdGE=')
       expect(execFile).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('generateThumbnail full flow', () => {
+  const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(existsSync).mockReturnValue(false)
+  })
+
+  it('generates thumbnail when ffmpeg and video exist', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 1000 })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as Function
+      ffmpegRan = true
+      cb(null, { stdout: '', stderr: '' })
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test.mp4')
+    expect(result).toBe('C:\\clips\\.thumbnails\\test.jpg')
+    expect(execFile).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(execFile).mock.calls[0][0]).toContain('ffmpeg')
+    expect(mkdirSync).toHaveBeenCalledWith('C:\\clips\\.thumbnails', { recursive: true })
+  })
+
+  it('uses ffprobe duration to calculate seek position', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 1000 })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cmd = args[0] as string
+      const cb = args[args.length - 1] as Function
+      if (cmd.includes('ffprobe')) {
+        cb(null, { stdout: '100.0\n', stderr: '' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test.mp4')
+    expect(result).toBe('C:\\clips\\.thumbnails\\test.jpg')
+    expect(execFile).toHaveBeenCalledTimes(2)
+    const ffmpegArgs = vi.mocked(execFile).mock.calls[1][1] as string[]
+    expect(ffmpegArgs).toContain('25')
+  })
+
+  it('caps ffprobe seek at 60 seconds for long videos', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test_long.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test_long.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 1000 })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cmd = args[0] as string
+      const cb = args[args.length - 1] as Function
+      if (cmd.includes('ffprobe')) {
+        cb(null, { stdout: '300.0\n', stderr: '' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test_long.mp4')
+    expect(result).toBe('C:\\clips\\.thumbnails\\test_long.jpg')
+    const ffmpegArgs = vi.mocked(execFile).mock.calls[1][1] as string[]
+    expect(ffmpegArgs).toContain('60')
+  })
+
+  it('falls back to default seek when ffprobe returns NaN', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 1000 })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cmd = args[0] as string
+      const cb = args[args.length - 1] as Function
+      if (cmd.includes('ffprobe')) {
+        cb(null, { stdout: 'not-a-number\n', stderr: '' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test.mp4')
+    expect(result).toBe('C:\\clips\\.thumbnails\\test.jpg')
+    const ffmpegArgs = vi.mocked(execFile).mock.calls[1][1] as string[]
+    expect(ffmpegArgs).toContain('5')
+  })
+
+  it('falls back to default seek when ffprobe returns 0 duration', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 1000 })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cmd = args[0] as string
+      const cb = args[args.length - 1] as Function
+      if (cmd.includes('ffprobe')) {
+        cb(null, { stdout: '0\n', stderr: '' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test.mp4')
+    expect(result).toBe('C:\\clips\\.thumbnails\\test.jpg')
+    const ffmpegArgs = vi.mocked(execFile).mock.calls[1][1] as string[]
+    expect(ffmpegArgs).toContain('5')
+  })
+
+  it('returns null when thumbnail output file is empty', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 0 })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as Function
+      ffmpegRan = true
+      cb(null, { stdout: '', stderr: '' })
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test.mp4')
+    expect(result).toBeNull()
+    expect(execFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns null when ffmpeg execFile fails (catch block)', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      throw new Error('not found')
+    })
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      return false
+    })
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as Function
+      cb(new Error('ffmpeg crashed'))
+    })
+    const { generateThumbnail } = await import('./thumbnail-generator')
+    const result = await generateThumbnail('C:\\clips', 'test.mp4')
+    expect(result).toBeNull()
+  })
+})
+
+describe('getThumbnailDataUrl full flow', () => {
+  const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(existsSync).mockReturnValue(false)
+  })
+
+  it('generates thumbnail and returns data URL when no cache exists', async () => {
+    vi.resetModules()
+    execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
+      throw new Error('not found')
+    })
+    let ffmpegRan = false
+    vi.mocked(existsSync).mockImplementation((p: string) => {
+      if (p === 'C:\\clips\\test.mp4') return true
+      if (p.includes('.thumbnails') && p.includes('test.jpg')) return ffmpegRan
+      return false
+    })
+    vi.mocked(statSync).mockReturnValue({ size: 1000 })
+    vi.mocked(readFileSync).mockReturnValue(Buffer.from('thumbnail-data'))
+    execFileMock.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as Function
+      ffmpegRan = true
+      cb(null, { stdout: '', stderr: '' })
+    })
+    const { getThumbnailDataUrl } = await import('./thumbnail-generator')
+    const result = await getThumbnailDataUrl('C:\\clips', 'test.mp4')
+    expect(result).toBe('data:image/jpeg;base64,dGh1bWJuYWlsLWRhdGE=')
+    expect(execFile).toHaveBeenCalledTimes(1)
   })
 })

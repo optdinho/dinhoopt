@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.IO.Pipes;
+using DiNho.Capture.Poc.Logging;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -102,6 +104,39 @@ public sealed class EngineStatusValue
 
     [JsonPropertyName("audioFallback")]
     public bool AudioFallback { get; set; } = false;
+
+    [JsonPropertyName("lastFrameMs")]
+    public double LastFrameMs { get; set; } = 0;
+
+    [JsonPropertyName("lastClipSize")]
+    public long LastClipSize { get; set; } = 0;
+
+    [JsonPropertyName("activePipelines")]
+    public int ActivePipelines { get; set; } = 0;
+
+    [JsonPropertyName("watchdogOk")]
+    public bool WatchdogOk { get; set; } = true;
+
+    [JsonPropertyName("memoryMB")]
+    public int MemoryMB { get; set; } = 0;
+
+    [JsonPropertyName("replayBufferBytes")]
+    public long ReplayBufferBytes { get; set; } = 0;
+
+    [JsonPropertyName("replayBufferVideoFrames")]
+    public int ReplayBufferVideoFrames { get; set; } = 0;
+
+    [JsonPropertyName("replayBufferVideoBytes")]
+    public long ReplayBufferVideoBytes { get; set; } = 0;
+
+    [JsonPropertyName("replayBufferAudioPackets")]
+    public int ReplayBufferAudioPackets { get; set; } = 0;
+
+    [JsonPropertyName("replayBufferAudioBytes")]
+    public long ReplayBufferAudioBytes { get; set; } = 0;
+
+    [JsonPropertyName("outputDirectory")]
+    public string OutputDirectory { get; set; } = "";
 }
 
 public sealed class NamedPipeServer : IDisposable

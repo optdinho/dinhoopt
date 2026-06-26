@@ -111,5 +111,20 @@
   "privacyCardAria": "View privacy details",
   "privacyCardScore": "score",
   "privacyCardProtected": "{{protected}}/{{total}} protected",
-  "privacyCardUnavailable": "Unable to load privacy status"
+  "privacyCardUnavailable": "Unable to load privacy status",
+  "gameClipsCardTitle": "Game Clips",
+  "gameClipsCardRecording": "Recording",
+  "gameClipsCardReady": "Ready",
+  "gameClipsCardOffline": "Offline",
+  "gameClipsCardRecordingAria": "Game clips recording",
+  "gameClipsCardIdleAria": "View game clips",
+  "gameClipsCardStart": "Start",
+  "gameClipsCardStartTitle": "Start recording",
+  "gameClipsCardStop": "Stop",
+  "gameClipsCardStopTitle": "Stop recording",
+  "gameClipsCardSave": "Save",
+  "gameClipsCardSaveTitle": "Save current clip",
+  "gameClipsCardGame": "Capturing {{game}}",
+  "gameClipsCardClickToOpen": "Click to open",
+  "gameClipsCardUnavailable": "Unable to load clips status"
 }

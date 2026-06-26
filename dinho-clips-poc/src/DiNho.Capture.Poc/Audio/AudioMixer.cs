@@ -16,6 +16,7 @@ public sealed class AudioMixer : IDisposable
     private bool _micEnabled;
     private int _sampleRate;
     private int _channels;
+    private RnnoiseFilter? _noiseFilter;
     private float _gameGain = 1.0f;
     private float _micGain = 1.0f;
 
@@ -38,15 +39,37 @@ public sealed class AudioMixer : IDisposable
         get => _micEnabled;
         set
         {
-            if (value && !_micEnabled)
-            {
-                lock (_lock)
-                    _micQueue.Clear();
-                Console.WriteLine($"[AudioMixer] Mic ativado, fila limpa");
-            }
+            if (value == _micEnabled) return;
             _micEnabled = value;
+            lock (_lock)
+            {
+                _micQueue.Clear();
+                _loopbackQueue.Clear();
+            }
+            Console.WriteLine($"[AudioMixer] Mic {(value ? "ativado" : "desativado")}, filas limpas");
         }
     }
+    public bool NoiseSuppressionEnabled
+    {
+        get => _noiseFilter?.Active == true;
+        set
+        {
+            if (value == (_noiseFilter?.Active == true)) return;
+            if (value)
+            {
+                _noiseFilter?.Dispose();
+                _noiseFilter = new RnnoiseFilter(_sampleRate > 0 ? _sampleRate : 48000, _channels > 0 ? _channels : 2);
+                Console.WriteLine($"[AudioMixer] NoiseSuppression ON");
+            }
+            else
+            {
+                _noiseFilter?.Dispose();
+                _noiseFilter = null;
+                Console.WriteLine($"[AudioMixer] NoiseSuppression OFF");
+            }
+        }
+    }
+
     public int SampleRate => _sampleRate;
     public int Channels => _channels;
 
@@ -81,10 +104,15 @@ public sealed class AudioMixer : IDisposable
         }
     }
 
+    private const int MaxLoopbackQueue = 1024;
+    private const int MaxMicQueue = 256;
+
     private void OnLoopbackData(AudioBuffer buf)
     {
         lock (_lock)
         {
+            if (_loopbackQueue.Count >= MaxLoopbackQueue)
+                _loopbackQueue.Dequeue();
             _loopbackQueue.Enqueue((buf, _clock.Now));
         }
         TryMix();
@@ -92,9 +120,20 @@ public sealed class AudioMixer : IDisposable
 
     private void OnMicData(AudioBuffer buf)
     {
+        if (!_micEnabled) return;
+
+        AudioBuffer filtered = buf;
+        if (_noiseFilter?.Active == true)
+        {
+            var denoised = _noiseFilter.Process(buf.Samples);
+            filtered = new AudioBuffer(denoised, buf.SampleRate, buf.Channels);
+        }
+
         lock (_lock)
         {
-            _micQueue.Enqueue((buf, _clock.Now));
+            if (_micQueue.Count >= MaxMicQueue)
+                _micQueue.Dequeue();
+            _micQueue.Enqueue((filtered, _clock.Now));
         }
         TryMix();
 
@@ -120,9 +159,20 @@ public sealed class AudioMixer : IDisposable
             if (_micEnabled && _micQueue.Count > 0)
             {
                 var combined = new List<float>(loopbackItem.Buffer.Samples.Length);
+                TimeSpan? firstMicTs = null;
+                TimeSpan? lastMicTs = null;
+                int micPackets = 0;
                 while (_micQueue.Count > 0)
-                    combined.AddRange(_micQueue.Dequeue().Buffer.Samples);
+                {
+                    var (buf, ts) = _micQueue.Dequeue();
+                    firstMicTs ??= ts;
+                    lastMicTs = ts;
+                    micPackets++;
+                    combined.AddRange(buf.Samples);
+                }
                 micSamples = [.. combined];
+                var drift = lastMicTs.Value - loopbackItem.Timestamp;
+                Console.WriteLine($"[Sync] loopbackTs={loopbackItem.Timestamp.TotalSeconds:F3} firstMicTs={firstMicTs.Value.TotalSeconds:F3} lastMicTs={lastMicTs.Value.TotalSeconds:F3} driftMs={drift.TotalMilliseconds:F1} micPackets={micPackets}");
             }
         }
 
@@ -173,11 +223,8 @@ public sealed class AudioMixer : IDisposable
     private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind)
     {
         _emittedPackets++;
-        var byteLen = samples.Length * 4;
-        var bytes = new byte[byteLen];
-        System.Buffer.BlockCopy(samples, 0, bytes, 0, byteLen);
         var duration = TimeSpan.FromSeconds((double)samples.Length / (_sampleRate * _channels));
-        var packet = new EncodedPacket(bytes, MediaType.Audio, pts, duration, false);
+        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration);
 
         if (_emittedPackets <= 3 || _emittedPackets % 200 == 0)
             Console.WriteLine($"[AudioMixer] EmitPacket #{_emittedPackets} kind={kind} samples={samples.Length} dur={duration.TotalSeconds:F4}s");
@@ -192,5 +239,14 @@ public sealed class AudioMixer : IDisposable
 
     public void Dispose()
     {
+        Stop();
+        _loopbackSource.OnAudioData -= OnLoopbackData;
+        _micSource.OnAudioData -= OnMicData;
+        if (_loopbackSource is IDisposable loopbackDisposable)
+            loopbackDisposable.Dispose();
+        if (_micSource is IDisposable micDisposable)
+            micDisposable.Dispose();
+        _noiseFilter?.Dispose();
+        _noiseFilter = null;
     }
 }

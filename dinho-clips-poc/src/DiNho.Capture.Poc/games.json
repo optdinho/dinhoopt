@@ -1,390 +1,199 @@
 {
-  "version": 1,
+  "version": 2,
   "games": [
-    {
-      "processName": "FiveM_GTAProcess",
-      "windowClass": "grcWindow",
-      "displayName": "FiveM (GTA V)",
-      "aliases": ["FiveM", "GTAProcess"],
-      "backends": ["wgc", "dxgi", "hybrid"]
-    },
-    {
-      "processName": "GTA5",
-      "windowClass": "grcWindow",
-      "displayName": "Grand Theft Auto V",
-      "aliases": ["GTA V", "GTAV"],
-      "backends": ["wgc", "dxgi", "hybrid"]
-    },
-    {
-      "processName": "RDR2",
-      "windowClass": "sgaWindow",
-      "displayName": "Red Dead Redemption 2",
-      "aliases": ["RDR 2", "Red Dead Redemption 2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "cs2",
-      "windowClass": "SDL_app",
-      "displayName": "Counter-Strike 2",
-      "aliases": ["CS2", "Counter-Strike", "CSGO"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "dota2",
-      "windowClass": "SDL_app",
-      "displayName": "Dota 2",
-      "aliases": ["Dota 2", "DotA"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "hl2",
-      "windowClass": "Valve001",
-      "displayName": "Source Engine Game",
-      "aliases": ["Source Engine", "GoldSource"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "portal2",
-      "windowClass": "Valve001",
-      "displayName": "Portal 2",
-      "aliases": ["Portal 2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "left4dead2",
-      "windowClass": "Valve001",
-      "displayName": "Left 4 Dead 2",
-      "aliases": ["L4D2", "Left 4 Dead 2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "tf_linux",
-      "windowClass": "Valve001",
-      "displayName": "Team Fortress 2",
-      "aliases": ["TF2", "Team Fortress 2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "VALORANT-Win64-Shipping",
-      "windowClass": "CEF-OSC-WIDGET",
-      "displayName": "Valorant",
-      "aliases": ["VALORANT"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "FortniteClient-Win64-Shipping",
-      "windowClass": "FORTNITE",
-      "displayName": "Fortnite",
-      "aliases": ["Fortnite", "FN"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "RobloxPlayerBeta",
-      "windowClass": "WINDOW",
-      "displayName": "Roblox",
-      "aliases": ["Roblox", "RBX"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Minecraft.Windows",
-      "windowClass": "ApplicationFrameWindow",
-      "displayName": "Minecraft (Bedrock)",
-      "aliases": ["Minecraft", "Minecraft Bedrock"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "javaw",
-      "windowClass": "NetherWnd",
-      "displayName": "Minecraft (Java)",
-      "aliases": ["Minecraft Java", "MC Java"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "r5apex",
-      "windowClass": "Respawn001",
-      "displayName": "Apex Legends",
-      "aliases": ["Apex", "Apex Legends"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Overwatch",
-      "windowClass": "OverwatchClass",
-      "displayName": "Overwatch 2",
-      "aliases": ["Overwatch 2", "OW2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "LeagueClient",
-      "windowClass": "RiotWindowClass",
-      "displayName": "League of Legends",
-      "aliases": ["LoL", "League of Legends"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "TslGame",
-      "windowClass": "UnrealWindow",
-      "displayName": "PUBG: Battlegrounds",
-      "aliases": ["PUBG", "PlayerUnknown", "Battlegrounds"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "RocketLeague",
-      "windowClass": "RocketLeagueWindow",
-      "displayName": "Rocket League",
-      "aliases": ["Rocket League", "RL"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Wow",
-      "windowClass": "GxWindowClass",
-      "displayName": "World of Warcraft",
-      "aliases": ["WoW", "World of Warcraft"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "destiny2",
-      "windowClass": "TigerTopLevelWindow",
-      "displayName": "Destiny 2",
-      "aliases": ["Destiny 2", "D2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "RainbowSix",
-      "windowClass": "RainboxSixWindowClass",
-      "displayName": "Rainbow Six Siege",
-      "aliases": ["R6", "R6S", "Rainbow Six"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "eldenring",
-      "windowClass": "EldenRingWindow",
-      "displayName": "Elden Ring",
-      "aliases": ["Elden Ring", "ER"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Cyberpunk2077",
-      "windowClass": "REDEngineWindow",
-      "displayName": "Cyberpunk 2077",
-      "aliases": ["Cyberpunk", "CP2077"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "PathOfExile",
-      "windowClass": "POEWindowClass",
-      "displayName": "Path of Exile",
-      "aliases": ["PoE", "Path of Exile"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Warframe.x64",
-      "windowClass": "WarframeWindowClass",
-      "displayName": "Warframe",
-      "aliases": ["Warframe"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "GenshinImpact",
-      "windowClass": "UnityWndClass",
-      "displayName": "Genshin Impact",
-      "aliases": ["Genshin", "GI"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "StarRail",
-      "windowClass": "UnityWndClass",
-      "displayName": "Honkai: Star Rail",
-      "aliases": ["HSR", "Honkai Star Rail"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "FallGuys_client",
-      "windowClass": "UnityWndClass",
-      "displayName": "Fall Guys",
-      "aliases": ["Fall Guys"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "RustClient",
-      "windowClass": "UnityWndClass",
-      "displayName": "Rust",
-      "aliases": ["Rust"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "EscapeFromTarkov",
-      "windowClass": "UnityWndClass",
-      "displayName": "Escape from Tarkov",
-      "aliases": ["EFT", "Tarkov", "Escape from Tarkov"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "HuntGame",
-      "windowClass": "UnityWndClass",
-      "displayName": "Hunt: Showdown",
-      "aliases": ["Hunt", "Showdown", "Hunt Showdown"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Cities",
-      "windowClass": "UnityWndClass",
-      "displayName": "Cities: Skylines",
-      "aliases": ["Cities Skylines", "Skylines"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "KSP_x64",
-      "windowClass": "UnityWndClass",
-      "displayName": "Kerbal Space Program",
-      "aliases": ["KSP", "Kerbal Space Program"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Terraria",
-      "windowClass": "TerrariaWindowClass",
-      "displayName": "Terraria",
-      "aliases": ["Terraria"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Stardew Valley",
-      "windowClass": "StardewValley",
-      "displayName": "Stardew Valley",
-      "aliases": ["Stardew", "SDV"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "TS4",
-      "windowClass": "Sims4WindowClass",
-      "displayName": "The Sims 4",
-      "aliases": ["Sims 4", "The Sims 4"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "WorldOfTanks",
-      "windowClass": "WoTWindowClass",
-      "displayName": "World of Tanks",
-      "aliases": ["WoT", "World of Tanks"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "aces",
-      "windowClass": "WarThunderWindowClass",
-      "displayName": "War Thunder",
-      "aliases": ["War Thunder", "WT"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "ffxiv_dx11",
-      "windowClass": "FFXIVGameWindow",
-      "displayName": "Final Fantasy XIV",
-      "aliases": ["FFXIV", "FF14", "Final Fantasy 14"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "cod",
-      "windowClass": "CODWindow",
-      "displayName": "Call of Duty",
-      "aliases": ["CoD", "Call of Duty", "Warzone"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "HaloInfinite",
-      "windowClass": "HaloInfiniteWindow",
-      "displayName": "Halo Infinite",
-      "aliases": ["Halo Infinite", "Halo"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "DeadByDaylight",
-      "windowClass": "DeadByDaylightWindow",
-      "displayName": "Dead by Daylight",
-      "aliases": ["DbD", "Dead by Daylight"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "FSD",
-      "windowClass": "UnrealWindow",
-      "displayName": "Deep Rock Galactic",
-      "aliases": ["DRG", "Deep Rock Galactic"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "SquadGame",
-      "windowClass": "UnrealWindow",
-      "displayName": "Squad",
-      "aliases": ["Squad"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "HLL-Win64-Shipping",
-      "windowClass": "UnrealWindow",
-      "displayName": "Hell Let Loose",
-      "aliases": ["HLL", "Hell Let Loose"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "arma3_x64",
-      "windowClass": "UnrealWindow",
-      "displayName": "ARMA 3",
-      "aliases": ["ARMA 3", "Arma"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "factorio",
-      "windowClass": "factorio",
-      "displayName": "Factorio",
-      "aliases": ["Factorio"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "eurotrucks2",
-      "windowClass": "EuroTruckWindow",
-      "displayName": "Euro Truck Simulator 2",
-      "aliases": ["ETS2", "Euro Truck Simulator 2"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "amtrucks",
-      "windowClass": "EuroTruckWindow",
-      "displayName": "American Truck Simulator",
-      "aliases": ["ATS", "American Truck Simulator"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Among Us",
-      "windowClass": "AmongUsClass",
-      "displayName": "Among Us",
-      "aliases": ["Among Us"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Diablo IV",
-      "windowClass": "DiabloIVWindow",
-      "displayName": "Diablo IV",
-      "aliases": ["D4", "Diablo 4"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "Borderlands3",
-      "windowClass": "Borderlands3Window",
-      "displayName": "Borderlands 3",
-      "aliases": ["BL3", "Borderlands 3"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "bg3",
-      "windowClass": "BG3Window",
-      "displayName": "Baldur's Gate 3",
-      "aliases": ["Baldur's Gate 3", "BG3"],
-      "backends": ["wgc", "dxgi"]
-    },
-    {
-      "processName": "helldivers2",
-      "windowClass": "UnrealWindow",
-      "displayName": "Helldivers 2",
-      "aliases": ["Helldivers 2", "Helldivers"],
-      "backends": ["wgc", "dxgi"]
-    }
+    {"processName": "FiveM_GTAProcess", "windowClass": "grcWindow", "displayName": "FiveM (GTA V)", "aliases": ["FiveM", "GTAProcess"], "backends": ["wgc", "dxgi", "hybrid"]},
+    {"processName": "GTA5", "windowClass": "grcWindow", "displayName": "Grand Theft Auto V", "aliases": ["GTA V", "GTAV"], "backends": ["wgc", "dxgi", "hybrid"]},
+    {"processName": "GTAIV", "windowClass": "grcWindow", "displayName": "Grand Theft Auto IV", "aliases": ["GTA IV", "GTA4"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RDR2", "windowClass": "sgaWindow", "displayName": "Red Dead Redemption 2", "aliases": ["RDR 2", "Red Dead Redemption 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RDR", "windowClass": "sgaWindow", "displayName": "Red Dead Redemption", "aliases": ["RDR", "Red Dead Redemption"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "cs2", "windowClass": "SDL_app", "displayName": "Counter-Strike 2", "aliases": ["CS2", "Counter-Strike"], "backends": ["wgc", "dxgi"]},
+    {"processName": "csgo", "windowClass": "SDL_app", "displayName": "Counter-Strike: Global Offensive", "aliases": ["CSGO", "Counter-Strike GO"], "backends": ["wgc", "dxgi"]},
+    {"processName": "dota2", "windowClass": "SDL_app", "displayName": "Dota 2", "aliases": ["Dota 2", "DotA"], "backends": ["wgc", "dxgi"]},
+    {"processName": "hl2", "windowClass": "Valve001", "displayName": "Source Engine Game", "aliases": ["Source Engine", "GoldSource"], "backends": ["wgc", "dxgi"]},
+    {"processName": "portal2", "windowClass": "Valve001", "displayName": "Portal 2", "aliases": ["Portal 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "left4dead2", "windowClass": "Valve001", "displayName": "Left 4 Dead 2", "aliases": ["L4D2", "Left 4 Dead 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "tf_linux", "windowClass": "Valve001", "displayName": "Team Fortress 2", "aliases": ["TF2", "Team Fortress 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "half-life_linux", "windowClass": "Valve001", "displayName": "Half-Life", "aliases": ["Half-Life", "HL"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "VALORANT-Win64-Shipping", "windowClass": "CEF-OSC-WIDGET", "displayName": "Valorant", "aliases": ["VALORANT"], "backends": ["wgc", "dxgi"]},
+    {"processName": "FortniteClient-Win64-Shipping", "windowClass": "FORTNITE", "displayName": "Fortnite", "aliases": ["Fortnite", "FN"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RobloxPlayerBeta", "windowClass": "WINDOW", "displayName": "Roblox", "aliases": ["Roblox", "RBX"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Minecraft.Windows", "windowClass": "ApplicationFrameWindow", "displayName": "Minecraft (Bedrock)", "aliases": ["Minecraft", "Minecraft Bedrock"], "backends": ["wgc", "dxgi"]},
+    {"processName": "javaw", "windowClass": "NetherWnd", "displayName": "Minecraft (Java)", "aliases": ["Minecraft Java", "MC Java"], "backends": ["wgc", "dxgi"]},
+    {"processName": "r5apex", "windowClass": "Respawn001", "displayName": "Apex Legends", "aliases": ["Apex", "Apex Legends"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Overwatch", "windowClass": "OverwatchClass", "displayName": "Overwatch 2", "aliases": ["Overwatch 2", "OW2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Overwatch1", "windowClass": "OverwatchClass", "displayName": "Overwatch", "aliases": ["OW"], "backends": ["wgc", "dxgi"]},
+    {"processName": "LeagueClient", "windowClass": "RiotWindowClass", "displayName": "League of Legends", "aliases": ["LoL", "League of Legends"], "backends": ["wgc", "dxgi"]},
+    {"processName": "LeagueClientUx", "windowClass": "RiotWindowClass", "displayName": "League of Legends (Client)", "aliases": ["LoL Client", "League Client"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "TslGame", "windowClass": "UnrealWindow", "displayName": "PUBG: Battlegrounds", "aliases": ["PUBG", "PlayerUnknown", "Battlegrounds"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RocketLeague", "windowClass": "RocketLeagueWindow", "displayName": "Rocket League", "aliases": ["Rocket League", "RL"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Wow", "windowClass": "GxWindowClass", "displayName": "World of Warcraft", "aliases": ["WoW", "World of Warcraft"], "backends": ["wgc", "dxgi"]},
+    {"processName": "WowClassic", "windowClass": "GxWindowClass", "displayName": "World of Warcraft Classic", "aliases": ["WoW Classic", "Classic"], "backends": ["wgc", "dxgi"]},
+    {"processName": "destiny2", "windowClass": "TigerTopLevelWindow", "displayName": "Destiny 2", "aliases": ["Destiny 2", "D2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RainbowSix", "windowClass": "RainboxSixWindowClass", "displayName": "Rainbow Six Siege", "aliases": ["R6", "R6S", "Rainbow Six", "RainbowSix_BE"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "eldenring", "windowClass": "EldenRingWindow", "displayName": "Elden Ring", "aliases": ["Elden Ring", "ER"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Cyberpunk2077", "windowClass": "REDEngineWindow", "displayName": "Cyberpunk 2077", "aliases": ["Cyberpunk", "CP2077"], "backends": ["wgc", "dxgi"]},
+    {"processName": "PathOfExile_x64", "windowClass": "POEWindowClass", "displayName": "Path of Exile", "aliases": ["PoE", "Path of Exile", "PathOfExile"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Warframe.x64", "windowClass": "WarframeWindowClass", "displayName": "Warframe", "aliases": ["Warframe"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "GenshinImpact", "windowClass": "UnityWndClass", "displayName": "Genshin Impact", "aliases": ["Genshin", "GI"], "backends": ["wgc", "dxgi"]},
+    {"processName": "StarRail", "windowClass": "UnityWndClass", "displayName": "Honkai: Star Rail", "aliases": ["HSR", "Honkai Star Rail"], "backends": ["wgc", "dxgi"]},
+    {"processName": "HonkaiImpact3rd", "windowClass": "UnityWndClass", "displayName": "Honkai Impact 3rd", "aliases": ["HI3", "Honkai Impact 3rd"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ZenlessZoneZero", "windowClass": "UnityWndClass", "displayName": "Zenless Zone Zero", "aliases": ["ZZZ", "Zenless"], "backends": ["wgc", "dxgi"]},
+    {"processName": "WutheringWaves", "windowClass": "UnityWndClass", "displayName": "Wuthering Waves", "aliases": ["WuWa", "Wuthering Waves"], "backends": ["wgc", "dxgi"]},
+    {"processName": "FallGuys_client", "windowClass": "UnityWndClass", "displayName": "Fall Guys", "aliases": ["Fall Guys"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RustClient", "windowClass": "UnityWndClass", "displayName": "Rust", "aliases": ["Rust"], "backends": ["wgc", "dxgi"]},
+    {"processName": "EscapeFromTarkov", "windowClass": "UnityWndClass", "displayName": "Escape from Tarkov", "aliases": ["EFT", "Tarkov", "Escape from Tarkov"], "backends": ["wgc", "dxgi"]},
+    {"processName": "HuntGame", "windowClass": "UnityWndClass", "displayName": "Hunt: Showdown", "aliases": ["Hunt", "Showdown", "Hunt Showdown"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Cities", "windowClass": "UnityWndClass", "displayName": "Cities: Skylines", "aliases": ["Cities Skylines", "Skylines"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Cities2", "windowClass": "UnityWndClass", "displayName": "Cities: Skylines II", "aliases": ["Cities Skylines 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "KSP_x64", "windowClass": "UnityWndClass", "displayName": "Kerbal Space Program", "aliases": ["KSP", "Kerbal Space Program"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Subnautica", "windowClass": "UnityWndClass", "displayName": "Subnautica", "aliases": ["Subnautica"], "backends": ["wgc", "dxgi"]},
+    {"processName": "SubnauticaZero", "windowClass": "UnityWndClass", "displayName": "Subnautica: Below Zero", "aliases": ["Below Zero", "Subnautica Zero"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Valheim", "windowClass": "UnityWndClass", "displayName": "Valheim", "aliases": ["Valheim"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Hollow Knight", "windowClass": "UnityWndClass", "displayName": "Hollow Knight", "aliases": ["Hollow Knight"], "backends": ["wgc", "dxgi"]},
+    {"processName": "V Rising", "windowClass": "UnityWndClass", "displayName": "V Rising", "aliases": ["V Rising", "VRising"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Palworld", "windowClass": "UnityWndClass", "displayName": "Palworld", "aliases": ["Palworld"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Enshrouded", "windowClass": "UnityWndClass", "displayName": "Enshrouded", "aliases": ["Enshrouded"], "backends": ["wgc", "dxgi"]},
+    {"processName": "CoreKeeper", "windowClass": "UnityWndClass", "displayName": "Core Keeper", "aliases": ["Core Keeper"], "backends": ["wgc", "dxgi"]},
+    {"processName": "VampireSurvivors", "windowClass": "UnityWndClass", "displayName": "Vampire Survivors", "aliases": ["Vampire Survivors"], "backends": ["wgc", "dxgi"]},
+    {"processName": "OuterWilds", "windowClass": "UnityWndClass", "displayName": "Outer Wilds", "aliases": ["Outer Wilds"], "backends": ["wgc", "dxgi"]},
+    {"processName": "SlayTheSpire", "windowClass": "UnityWndClass", "displayName": "Slay the Spire", "aliases": ["Slay the Spire", "STS"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DeadCells", "windowClass": "UnityWndClass", "displayName": "Dead Cells", "aliases": ["Dead Cells"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Cuphead", "windowClass": "UnityWndClass", "displayName": "Cuphead", "aliases": ["Cuphead"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Hades", "windowClass": "UnityWndClass", "displayName": "Hades", "aliases": ["Hades"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Hades2", "windowClass": "UnityWndClass", "displayName": "Hades II", "aliases": ["Hades 2", "Hades II"], "backends": ["wgc", "dxgi"]},
+    {"processName": "OriWotW", "windowClass": "UnityWndClass", "displayName": "Ori and the Will of the Wisps", "aliases": ["Ori WotW"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Grounded", "windowClass": "UnityWndClass", "displayName": "Grounded", "aliases": ["Grounded"], "backends": ["wgc", "dxgi"]},
+    {"processName": "SonsOfTheForest", "windowClass": "UnityWndClass", "displayName": "Sons of the Forest", "aliases": ["Sons of the Forest", "SOTF"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Raft", "windowClass": "UnityWndClass", "displayName": "Raft", "aliases": ["Raft"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Phasmophobia", "windowClass": "UnityWndClass", "displayName": "Phasmophobia", "aliases": ["Phasmophobia"], "backends": ["wgc", "dxgi"]},
+    {"processName": "LethalCompany", "windowClass": "UnityWndClass", "displayName": "Lethal Company", "aliases": ["Lethal Company"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ContentWarning", "windowClass": "UnityWndClass", "displayName": "Content Warning", "aliases": ["Content Warning"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Terraria", "windowClass": "TerrariaWindowClass", "displayName": "Terraria", "aliases": ["Terraria"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Stardew Valley", "windowClass": "StardewValley", "displayName": "Stardew Valley", "aliases": ["Stardew", "SDV"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "TS4", "windowClass": "Sims4WindowClass", "displayName": "The Sims 4", "aliases": ["Sims 4", "The Sims 4"], "backends": ["wgc", "dxgi"]},
+    {"processName": "WorldOfTanks", "windowClass": "WoTWindowClass", "displayName": "World of Tanks", "aliases": ["WoT", "World of Tanks"], "backends": ["wgc", "dxgi"]},
+    {"processName": "WorldOfWarships", "windowClass": "WoWsWindowClass", "displayName": "World of Warships", "aliases": ["WoWs", "World of Warships"], "backends": ["wgc", "dxgi"]},
+    {"processName": "aces", "windowClass": "WarThunderWindowClass", "displayName": "War Thunder", "aliases": ["War Thunder", "WT"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ffxiv_dx11", "windowClass": "FFXIVGameWindow", "displayName": "Final Fantasy XIV", "aliases": ["FFXIV", "FF14", "Final Fantasy 14"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "cod", "windowClass": "CODWindow", "displayName": "Call of Duty", "aliases": ["CoD", "Call of Duty", "Warzone"], "backends": ["wgc", "dxgi"]},
+    {"processName": "HaloInfinite", "windowClass": "HaloInfiniteWindow", "displayName": "Halo Infinite", "aliases": ["Halo Infinite", "Halo"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DeadByDaylight", "windowClass": "DeadByDaylightWindow", "displayName": "Dead by Daylight", "aliases": ["DbD", "Dead by Daylight"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "SquadGame", "windowClass": "UnrealWindow", "displayName": "Squad", "aliases": ["Squad"], "backends": ["wgc", "dxgi"]},
+    {"processName": "HLL-Win64-Shipping", "windowClass": "UnrealWindow", "displayName": "Hell Let Loose", "aliases": ["HLL", "Hell Let Loose", "HellishQuart"], "backends": ["wgc", "dxgi"]},
+    {"processName": "arma3_x64", "windowClass": "UnrealWindow", "displayName": "ARMA 3", "aliases": ["ARMA 3", "Arma"], "backends": ["wgc", "dxgi"]},
+    {"processName": "FSD", "windowClass": "UnrealWindow", "displayName": "Deep Rock Galactic", "aliases": ["DRG", "Deep Rock Galactic"], "backends": ["wgc", "dxgi"]},
+    {"processName": "helldivers2", "windowClass": "UnrealWindow", "displayName": "Helldivers 2", "aliases": ["Helldivers 2", "Helldivers"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Satisfactory", "windowClass": "UnrealWindow", "displayName": "Satisfactory", "aliases": ["Satisfactory"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ReadyOrNot", "windowClass": "UnrealWindow", "displayName": "Ready or Not", "aliases": ["Ready or Not", "RoN"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Insurgency", "windowClass": "UnrealWindow", "displayName": "Insurgency: Sandstorm", "aliases": ["Insurgency", "Sandstorm"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DayZ", "windowClass": "UnrealWindow", "displayName": "DayZ", "aliases": ["DayZ"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Remnant2", "windowClass": "UnrealWindow", "displayName": "Remnant 2", "aliases": ["Remnant 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "LiesOfP", "windowClass": "UnrealWindow", "displayName": "Lies of P", "aliases": ["Lies of P"], "backends": ["wgc", "dxgi"]},
+    {"processName": "BlackMythWukong", "windowClass": "UnrealWindow", "displayName": "Black Myth: Wukong", "aliases": ["Black Myth Wukong", "Wukong"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Stalker2", "windowClass": "UnrealWindow", "displayName": "S.T.A.L.K.E.R. 2", "aliases": ["Stalker 2", "S.T.A.L.K.E.R. 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Paladins", "windowClass": "UnrealWindow", "displayName": "Paladins", "aliases": ["Paladins"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Smite", "windowClass": "UnrealWindow", "displayName": "SMITE", "aliases": ["SMITE"], "backends": ["wgc", "dxgi"]},
+    {"processName": "MultiVersus", "windowClass": "UnrealWindow", "displayName": "MultiVersus", "aliases": ["MultiVersus", "MVS"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Payday2", "windowClass": "UnrealWindow", "displayName": "PAYDAY 2", "aliases": ["Payday 2", "PD2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Payday3", "windowClass": "UnrealWindow", "displayName": "PAYDAY 3", "aliases": ["Payday 3", "PD3"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Darktide", "windowClass": "UnrealWindow", "displayName": "Warhammer 40k: Darktide", "aliases": ["Darktide", "Warhammer 40k"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Vermintide2", "windowClass": "UnrealWindow", "displayName": "Warhammer: Vermintide 2", "aliases": ["Vermintide 2", "VT2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Bannerlord", "windowClass": "UnrealWindow", "displayName": "Mount & Blade II: Bannerlord", "aliases": ["Bannerlord", "Mount & Blade 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Chivalry2", "windowClass": "UnrealWindow", "displayName": "Chivalry 2", "aliases": ["Chivalry 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Mordhau", "windowClass": "UnrealWindow", "displayName": "Mordhau", "aliases": ["Mordhau"], "backends": ["wgc", "dxgi"]},
+    {"processName": "WW1", "windowClass": "UnrealWindow", "displayName": "Tannenberg", "aliases": ["Tannenberg", "WW1"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "hogwartslegacy", "windowClass": "HogwartsWindow", "displayName": "Hogwarts Legacy", "aliases": ["Hogwarts Legacy", "Hogwarts"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Starfield", "windowClass": "StarfieldWindow", "displayName": "Starfield", "aliases": ["Starfield"], "backends": ["wgc", "dxgi"]},
+    {"processName": "bg3", "windowClass": "BG3Window", "displayName": "Baldur's Gate 3", "aliases": ["Baldur's Gate 3", "BG3"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DivinityOriginalSin2", "windowClass": "DivinityWindowClass", "displayName": "Divinity: Original Sin 2", "aliases": ["DOS2", "Divinity Original Sin 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "witcher3", "windowClass": "Witcher3WindowClass", "displayName": "The Witcher 3", "aliases": ["The Witcher 3", "Witcher 3", "TW3"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "factorio", "windowClass": "factorio", "displayName": "Factorio", "aliases": ["Factorio"], "backends": ["wgc", "dxgi"]},
+    {"processName": "eurotrucks2", "windowClass": "EuroTruckWindow", "displayName": "Euro Truck Simulator 2", "aliases": ["ETS2", "Euro Truck Simulator 2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "amtrucks", "windowClass": "EuroTruckWindow", "displayName": "American Truck Simulator", "aliases": ["ATS", "American Truck Simulator"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Among Us", "windowClass": "AmongUsClass", "displayName": "Among Us", "aliases": ["Among Us"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Diablo IV", "windowClass": "DiabloIVWindow", "displayName": "Diablo IV", "aliases": ["D4", "Diablo 4"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Diablo III", "windowClass": "DiabloIIIWindow", "displayName": "Diablo III", "aliases": ["D3", "Diablo 3"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Borderlands3", "windowClass": "Borderlands3Window", "displayName": "Borderlands 3", "aliases": ["BL3", "Borderlands 3"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Borderlands2", "windowClass": "Borderlands2Window", "displayName": "Borderlands 2", "aliases": ["BL2", "Borderlands 2"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "ForzaHorizon5", "windowClass": "ForzaWindow", "displayName": "Forza Horizon 5", "aliases": ["Forza Horizon 5", "FH5"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ForzaMotorsport", "windowClass": "ForzaWindow", "displayName": "Forza Motorsport", "aliases": ["Forza Motorsport"], "backends": ["wgc", "dxgi"]},
+    {"processName": "AC2", "windowClass": "AssassinClass", "displayName": "Assetto Corsa", "aliases": ["Assetto Corsa"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ACC", "windowClass": "UE4Window", "displayName": "Assetto Corsa Competizione", "aliases": ["Assetto Corsa Competizione", "ACC"], "backends": ["wgc", "dxgi"]},
+    {"processName": "BeamNG.drive", "windowClass": "BeamNGWindow", "displayName": "BeamNG.drive", "aliases": ["BeamNG"], "backends": ["wgc", "dxgi"]},
+    {"processName": "SnowRunner", "windowClass": "UE4Window", "displayName": "SnowRunner", "aliases": ["SnowRunner"], "backends": ["wgc", "dxgi"]},
+    {"processName": "FarmingSimulator", "windowClass": "FarmingSimWindow", "displayName": "Farming Simulator", "aliases": ["Farming Simulator", "FS22"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RimWorld", "windowClass": "RimWorldClass", "displayName": "RimWorld", "aliases": ["RimWorld"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "KCD2", "windowClass": "KCDWindow", "displayName": "Kingdom Come: Deliverance II", "aliases": ["Kingdom Come 2", "KCD2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "KCD", "windowClass": "KCDWindow", "displayName": "Kingdom Come: Deliverance", "aliases": ["Kingdom Come", "KCD"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DragonAge", "windowClass": "DAWindow", "displayName": "Dragon Age: The Veilguard", "aliases": ["Dragon Age", "Veilguard"], "backends": ["wgc", "dxgi"]},
+    {"processName": "GodOfWar", "windowClass": "GodOfWarWindow", "displayName": "God of War", "aliases": ["God of War 2018", "GoW"], "backends": ["wgc", "dxgi"]},
+    {"processName": "HorizonZeroDawn", "windowClass": "HorizonWindow", "displayName": "Horizon Zero Dawn", "aliases": ["Horizon Zero Dawn", "HZD"], "backends": ["wgc", "dxgi"]},
+    {"processName": "LastOfUs", "windowClass": "LastOfUsWindow", "displayName": "The Last of Us Part I", "aliases": ["The Last of Us", "TLOU"], "backends": ["wgc", "dxgi"]},
+    {"processName": "GhostOfTsushima", "windowClass": "GhostWindowClass", "displayName": "Ghost of Tsushima", "aliases": ["Ghost of Tsushima", "GoT"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Spiderman", "windowClass": "MarvelWindow", "displayName": "Marvel's Spider-Man", "aliases": ["Spider-Man", "Spiderman"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DeathStranding", "windowClass": "DSWindow", "displayName": "Death Stranding", "aliases": ["Death Stranding", "DS"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Control", "windowClass": "ControlWindow", "displayName": "Control", "aliases": ["Control"], "backends": ["wgc", "dxgi"]},
+    {"processName": "AlanWake2", "windowClass": "AlanWakeWindow", "displayName": "Alan Wake 2", "aliases": ["Alan Wake 2", "AW2"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "FF7Remake", "windowClass": "FF7Window", "displayName": "Final Fantasy VII Remake", "aliases": ["FF7 Remake", "FFVII"], "backends": ["wgc", "dxgi"]},
+    {"processName": "FF7Rebirth", "windowClass": "FF7Window", "displayName": "Final Fantasy VII Rebirth", "aliases": ["FF7 Rebirth", "FFVII Rebirth"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Persona5", "windowClass": "PersonaWindow", "displayName": "Persona 5 Royal", "aliases": ["Persona 5", "P5R"], "backends": ["wgc", "dxgi"]},
+    {"processName": "LikeADragon8", "windowClass": "YakuzaWindow", "displayName": "Like a Dragon: Infinite Wealth", "aliases": ["Yakuza 8", "Infinite Wealth"], "backends": ["wgc", "dxgi"]},
+    {"processName": "NierAutomata", "windowClass": "NierWindow", "displayName": "Nier: Automata", "aliases": ["Nier", "Nier Automata"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ArmoredCore6", "windowClass": "AC6Window", "displayName": "Armored Core VI", "aliases": ["Armored Core 6", "AC6", "ACVI"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Sekiro", "windowClass": "SekiroWindow", "displayName": "Sekiro: Shadows Die Twice", "aliases": ["Sekiro"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DarkSouls3", "windowClass": "DarkSoulsWindow", "displayName": "Dark Souls III", "aliases": ["Dark Souls 3", "DS3"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "Tekken8", "windowClass": "TekkenWindow", "displayName": "Tekken 8", "aliases": ["Tekken 8", "T8"], "backends": ["wgc", "dxgi"]},
+    {"processName": "StreetFighter6", "windowClass": "SF6Window", "displayName": "Street Fighter 6", "aliases": ["Street Fighter 6", "SF6"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DragonBallSparking", "windowClass": "UE5Window", "displayName": "Dragon Ball: Sparking! Zero", "aliases": ["Sparking Zero", "BT4"], "backends": ["wgc", "dxgi"]},
+    {"processName": "GranblueRelink", "windowClass": "GranblueWindow", "displayName": "Granblue Fantasy: Relink", "aliases": ["Granblue Relink", "GBFR"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "HeroesOfTheStorm", "windowClass": "HeroesWindow", "displayName": "Heroes of the Storm", "aliases": ["HotS", "Heroes of the Storm"], "backends": ["wgc", "dxgi"]},
+    {"processName": "SC2", "windowClass": "SC2Window", "displayName": "StarCraft II", "aliases": ["StarCraft 2", "SC2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Warcraft3", "windowClass": "WC3Window", "displayName": "Warcraft III: Reforged", "aliases": ["Warcraft III", "WC3"], "backends": ["wgc", "dxgi"]},
+    {"processName": "AoE2DE", "windowClass": "AoEWindow", "displayName": "Age of Empires II: DE", "aliases": ["Age of Empires 2", "AoE2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "AoE4", "windowClass": "AoEWindow", "displayName": "Age of Empires IV", "aliases": ["Age of Empires 4", "AoE4"], "backends": ["wgc", "dxgi"]},
+    {"processName": "TotalWar", "windowClass": "TotalWarWindow", "displayName": "Total War", "aliases": ["Total War"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Civ6", "windowClass": "CivWindow", "displayName": "Sid Meier's Civilization VI", "aliases": ["Civilization 6", "Civ 6", "Civ VI"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Stellaris", "windowClass": "StellarisWindow", "displayName": "Stellaris", "aliases": ["Stellaris"], "backends": ["wgc", "dxgi"]},
+    {"processName": "CK3", "windowClass": "CKWindow", "displayName": "Crusader Kings III", "aliases": ["Crusader Kings 3", "CK3"], "backends": ["wgc", "dxgi"]},
+    {"processName": "EU4", "windowClass": "EU4Window", "displayName": "Europa Universalis IV", "aliases": ["Europa Universalis 4", "EU4"], "backends": ["wgc", "dxgi"]},
+    {"processName": "HOI4", "windowClass": "HOIWindow", "displayName": "Hearts of Iron IV", "aliases": ["Hearts of Iron 4", "HOI4"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "NoMansSky", "windowClass": "NMSWindow", "displayName": "No Man's Sky", "aliases": ["No Man's Sky", "NMS"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DysonSphere", "windowClass": "UnityWndClass", "displayName": "Dyson Sphere Program", "aliases": ["Dyson Sphere Program", "DSP"], "backends": ["wgc", "dxgi"]},
+    {"processName": "NeonWhite", "windowClass": "UnityWndClass", "displayName": "Neon White", "aliases": ["Neon White"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ItTakesTwo", "windowClass": "ItTakesTwoWindow", "displayName": "It Takes Two", "aliases": ["It Takes Two"], "backends": ["wgc", "dxgi"]},
+    {"processName": "AWayOut", "windowClass": "AWayOutWindow", "displayName": "A Way Out", "aliases": ["A Way Out"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "ProjectZomboid", "windowClass": "ProjectZomboidWindow", "displayName": "Project Zomboid", "aliases": ["Project Zomboid", "PZ"], "backends": ["wgc", "dxgi"]},
+    {"processName": "7DaysToDie", "windowClass": "UnityWndClass", "displayName": "7 Days to Die", "aliases": ["7 Days to Die", "7DTD"], "backends": ["wgc", "dxgi"]},
+    {"processName": "SCPSecretLab", "windowClass": "UnityWndClass", "displayName": "SCP: Secret Laboratory", "aliases": ["SCP SL", "Secret Lab"], "backends": ["wgc", "dxgi"]},
+    {"processName": "TheForest", "windowClass": "UnityWndClass", "displayName": "The Forest", "aliases": ["The Forest"], "backends": ["wgc", "dxgi"]},
+    {"processName": "GreenHell", "windowClass": "UnityWndClass", "displayName": "Green Hell", "aliases": ["Green Hell"], "backends": ["wgc", "dxgi"]},
+    {"processName": "TheLongDark", "windowClass": "UnityWndClass", "displayName": "The Long Dark", "aliases": ["The Long Dark", "TLD"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ConanExiles", "windowClass": "ConanWindow", "displayName": "Conan Exiles", "aliases": ["Conan Exiles"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ARK", "windowClass": "ArkWindow", "displayName": "ARK: Survival Evolved", "aliases": ["ARK", "ARK Survival Evolved"], "backends": ["wgc", "dxgi"]},
+    {"processName": "ASA", "windowClass": "UE5Window", "displayName": "ARK: Survival Ascended", "aliases": ["ARK SA", "Survival Ascended"], "backends": ["wgc", "dxgi"]},
+
+    {"processName": "Trackmania", "windowClass": "TrackmaniaWindow", "displayName": "Trackmania", "aliases": ["Trackmania"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Celeste", "windowClass": "CelesteWindow", "displayName": "Celeste", "aliases": ["Celeste"], "backends": ["wgc", "dxgi"]},
+    {"processName": "RiskOfRain2", "windowClass": "UnityWndClass", "displayName": "Risk of Rain 2", "aliases": ["Risk of Rain 2", "RoR2"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Balatro", "windowClass": "BalatroWindow", "displayName": "Balatro", "aliases": ["Balatro"], "backends": ["wgc", "dxgi"]},
+    {"processName": "DiscoElysium", "windowClass": "UnityWndClass", "displayName": "Disco Elysium", "aliases": ["Disco Elysium"], "backends": ["wgc", "dxgi"]},
+    {"processName": "Stray", "windowClass": "StrayWindow", "displayName": "Stray", "aliases": ["Stray"], "backends": ["wgc", "dxgi"]}
   ]
 }

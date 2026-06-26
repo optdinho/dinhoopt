@@ -14,10 +14,17 @@ extraResources:
     to: icon.ico
   - from: resources/icon.png
     to: icon.png
+  - from: resources/clips-engine-staging
+    to: clips-engine
+    filter:
+      - "**/*"
 
 win:
   target:
     - target: nsis
+      arch:
+        - x64
+    - target: portable
       arch:
         - x64
   icon: resources/icon.ico

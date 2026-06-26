@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ClipEditorModal } from '@/components/clips/ClipEditorModal'
 import type {
-  AudioSessionInfo,
   ClipInfo,
   ClipsConfig,
   ClipsEngineStatus,
@@ -13,12 +13,14 @@ import {
   ChevronDown,
   CircleStop,
   Clapperboard,
+  Combine,
   Cpu,
   Download,
   Film,
   FolderOpen,
   Gamepad2,
   HardDrive,
+  Loader2,
   Mic,
   Microscope,
   Plus,
@@ -30,133 +32,156 @@ import {
   Video,
   X,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+const InfoTip = ({ text }: { text: string }) => (
+  <span
+    title={text}
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 14,
+      height: 14,
+      borderRadius: '50%',
+      fontSize: 8,
+      fontWeight: 700,
+      cursor: 'help',
+      marginLeft: 4,
+      verticalAlign: 'middle',
+      background: 'rgba(113,113,122,0.15)',
+      color: 'var(--text-dim)',
+    }}
+  >
+    ?
+  </span>
+)
+
 const VK_MAP: Record<number, string> = {
-  0x05: 'Mouse4',
-  0x06: 'Mouse5',
-  0x08: 'Backspace',
-  0x09: 'Tab',
-  0x0c: 'Clear',
-  0x0d: 'Enter',
-  0x13: 'Pause',
-  0x14: 'CapsLock',
-  0x1b: 'Esc',
-  0x20: 'Space',
-  0x21: 'PageUp',
-  0x22: 'PageDown',
-  0x23: 'End',
-  0x24: 'Home',
-  0x25: '←',
-  0x26: '↑',
-  0x27: '→',
-  0x28: '↓',
-  0x2c: 'PrintScreen',
-  0x2d: 'Insert',
-  0x2e: 'Delete',
-  0x30: '0',
-  0x31: '1',
-  0x32: '2',
-  0x33: '3',
-  0x34: '4',
-  0x35: '5',
-  0x36: '6',
-  0x37: '7',
-  0x38: '8',
-  0x39: '9',
-  0x41: 'A',
-  0x42: 'B',
-  0x43: 'C',
-  0x44: 'D',
-  0x45: 'E',
-  0x46: 'F',
-  0x47: 'G',
-  0x48: 'H',
-  0x49: 'I',
-  0x4a: 'J',
-  0x4b: 'K',
-  0x4c: 'L',
-  0x4d: 'M',
-  0x4e: 'N',
-  0x4f: 'O',
-  0x50: 'P',
-  0x51: 'Q',
-  0x52: 'R',
-  0x53: 'S',
-  0x54: 'T',
-  0x55: 'U',
-  0x56: 'V',
-  0x57: 'W',
-  0x58: 'X',
-  0x59: 'Y',
-  0x5a: 'Z',
-  0x5b: 'Win',
-  0x5c: 'Win',
-  0x5d: 'Menu',
-  0x60: 'Num0',
-  0x61: 'Num1',
-  0x62: 'Num2',
-  0x63: 'Num3',
-  0x64: 'Num4',
-  0x65: 'Num5',
-  0x66: 'Num6',
-  0x67: 'Num7',
-  0x68: 'Num8',
-  0x69: 'Num9',
-  0x6a: 'Num*',
-  0x6b: 'Num+',
-  0x6d: 'Num-',
-  0x6e: 'Num.',
-  0x6f: 'Num/',
-  0x70: 'F1',
-  0x71: 'F2',
-  0x72: 'F3',
-  0x73: 'F4',
-  0x74: 'F5',
-  0x75: 'F6',
-  0x76: 'F7',
-  0x77: 'F8',
-  0x78: 'F9',
-  0x79: 'F10',
-  0x7a: 'F11',
-  0x7b: 'F12',
-  0x7c: 'F13',
-  0x7d: 'F14',
-  0x7e: 'F15',
-  0x7f: 'F16',
-  0x80: 'F17',
-  0x81: 'F18',
-  0x82: 'F19',
-  0x83: 'F20',
-  0x84: 'F21',
-  0x85: 'F22',
-  0x86: 'F23',
-  0x87: 'F24',
-  0x90: 'NumLock',
-  0x91: 'ScrollLock',
-  0xa0: 'LShift',
-  0xa1: 'RShift',
-  0xa2: 'LCtrl',
-  0xa3: 'RCtrl',
-  0xa4: 'LAlt',
-  0xa5: 'RAlt',
-  0xba: ';',
-  0xbb: '=',
-  0xbc: ',',
-  0xbd: '-',
-  0xbe: '.',
-  0xbf: '/',
-  0xc0: '`',
-  0xdb: '[',
-  0xdc: '\\',
-  0xdd: ']',
-  0xde: "'",
-  0xe2: '\\',
+  5: 'Mouse4',
+  6: 'Mouse5',
+  8: 'Backspace',
+  9: 'Tab',
+  12: 'Clear',
+  13: 'Enter',
+  19: 'Pause',
+  20: 'CapsLock',
+  27: 'Esc',
+  32: 'Space',
+  33: 'PageUp',
+  34: 'PageDown',
+  35: 'End',
+  36: 'Home',
+  37: '←',
+  38: '↑',
+  39: '→',
+  40: '↓',
+  44: 'PrintScreen',
+  45: 'Insert',
+  46: 'Delete',
+  48: '0',
+  49: '1',
+  50: '2',
+  51: '3',
+  52: '4',
+  53: '5',
+  54: '6',
+  55: '7',
+  56: '8',
+  57: '9',
+  65: 'A',
+  66: 'B',
+  67: 'C',
+  68: 'D',
+  69: 'E',
+  70: 'F',
+  71: 'G',
+  72: 'H',
+  73: 'I',
+  74: 'J',
+  75: 'K',
+  76: 'L',
+  77: 'M',
+  78: 'N',
+  79: 'O',
+  80: 'P',
+  81: 'Q',
+  82: 'R',
+  83: 'S',
+  84: 'T',
+  85: 'U',
+  86: 'V',
+  87: 'W',
+  88: 'X',
+  89: 'Y',
+  90: 'Z',
+  91: 'Win',
+  92: 'Win',
+  93: 'Menu',
+  96: 'Num0',
+  97: 'Num1',
+  98: 'Num2',
+  99: 'Num3',
+  100: 'Num4',
+  101: 'Num5',
+  102: 'Num6',
+  103: 'Num7',
+  104: 'Num8',
+  105: 'Num9',
+  106: 'Num*',
+  107: 'Num+',
+  109: 'Num-',
+  110: 'Num.',
+  111: 'Num/',
+  112: 'F1',
+  113: 'F2',
+  114: 'F3',
+  115: 'F4',
+  116: 'F5',
+  117: 'F6',
+  118: 'F7',
+  119: 'F8',
+  120: 'F9',
+  121: 'F10',
+  122: 'F11',
+  123: 'F12',
+  124: 'F13',
+  125: 'F14',
+  126: 'F15',
+  127: 'F16',
+  128: 'F17',
+  129: 'F18',
+  130: 'F19',
+  131: 'F20',
+  132: 'F21',
+  133: 'F22',
+  134: 'F23',
+  135: 'F24',
+  144: 'NumLock',
+  145: 'ScrollLock',
+  160: 'LShift',
+  161: 'RShift',
+  162: 'LCtrl',
+  163: 'RCtrl',
+  164: 'LAlt',
+  165: 'RAlt',
+  186: ';',
+  187: '=',
+  188: ',',
+  189: '-',
+  190: '.',
+  191: '/',
+  192: '`',
+  219: '[',
+  220: '\\',
+  221: ']',
+  222: "'",
+  226: '\\',
 }
 const MODIFIER_KEYS = new Set([0x11, 0x10, 0x12]) // Ctrl, Shift, Alt
-const MODIFIER_MAP: Record<number, 'Ctrl' | 'Shift' | 'Alt'> = { 0x11: 'Ctrl', 0x10: 'Shift', 0x12: 'Alt' }
+const MODIFIER_MAP: Record<number, 'Ctrl' | 'Shift' | 'Alt'> = { 17: 'Ctrl', 16: 'Shift', 18: 'Alt' }
 const REPLAY_DURATIONS = [30, 60, 120, 300, 600] // 30s, 1min, 2min, 5min, 10min
 
 function formatUptime(seconds: number): string {
@@ -193,7 +218,6 @@ export function ClipsPage() {
   const [rebindingId, setRebindingId] = useState<string | null>(null)
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [audioSessions, setAudioSessions] = useState<AudioSessionInfo[]>([])
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({})
   const [refreshing, setRefreshing] = useState(false)
   const [showProcPicker, setShowProcPicker] = useState(false)
@@ -201,6 +225,7 @@ export function ClipsPage() {
   const [processes, setProcesses] = useState<Array<{ name: string; pid: number }>>([])
   const [micDevices, setMicDevices] = useState<MicDeviceInfo[]>([])
   const [loadingMicDevices, setLoadingMicDevices] = useState(false)
+  const [gpuList, setGpuList] = useState<Array<{ index: number; name: string; vendorId: number }>>([])
   const [showConfig, setShowConfig] = useState(false)
   const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set())
   const [favorites, setFavorites] = useState<Set<string>>(() => {
@@ -211,6 +236,32 @@ export function ClipsPage() {
       return new Set()
     }
   })
+  const [activeTip, setActiveTip] = useState<string | null>(null)
+  const [editingClip, setEditingClip] = useState<ClipInfo | null>(null)
+  const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
+
+  const tooltipContent: Record<string, string> = useMemo(() => ({
+    quality: 'Define a qualidade do vídeo. Maior qualidade = arquivos maiores. CQ controla a compressão (menor = melhor).',
+    codec: 'Codec de vídeo. Auto detecta o melhor disponível. H.264/HEVC/AV1 usam aceleração gráfica. Software usa CPU.',
+    gpu: 'Placa de vídeo usada para gravar. Selecione caso tenha mais de uma GPU no sistema.',
+    resolution: 'Tamanho do vídeo gravado. Maior resolução = mais qualidade e mais espaço em disco.',
+    fps: 'Quadros por segundo. 60 FPS é ideal para jogos. 30 FPS economiza espaço. 120+ requer monitor de alta taxa.',
+    replay: 'Quanto tempo de jogo é mantido em memória para salvar o clipe. Mais tempo usa mais RAM.',
+    'force-software': t('forceSoftwareTooltip'),
+    mic: 'Grava o áudio do microfone junto com o vídeo do jogo.',
+    loopback: 'Grava o áudio do sistema (jogo, Discord, navegador) junto com o vídeo.',
+    ptt: t('pushToTalkTooltip'),
+    'sample-rate': 'Taxa de amostragem do áudio. 48kHz é o padrão para vídeos. 96kHz para áudio de alta qualidade.',
+    'game-audio': 'Grava apenas o áudio do jogo e do microfone, silenciando outros aplicativos (Discord, navegador, etc).',
+    'noise-suppression': 'Reduz ruído de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Útil para eliminar barulhos de teclado, ventoinha ou ambiente.',
+  }), [t])
+
+  useEffect(() => {
+    if (!activeTip) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setActiveTip(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [activeTip])
 
   useEffect(() => {
     localStorage.setItem('clips-favorites', JSON.stringify([...favorites]))
@@ -317,13 +368,21 @@ export function ClipsPage() {
         /* ignore */
       }
     }
-    console.log(`[clips-mic] all ${maxAttempts} attempts failed — no mic devices`)
     setLoadingMicDevices(false)
   }, [])
 
   useEffect(() => {
     if (status.running) loadMicDevices()
   }, [status.running, loadMicDevices])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const gpus = await window.dinho?.clipsGetGpus()
+        if (gpus && gpus.length > 0) setGpuList(gpus)
+      } catch { /* ignore */ }
+    })()
+  }, [status.running])
 
   const loadThumbnail = useCallback(async (clipName: string) => {
     try {
@@ -354,6 +413,11 @@ export function ClipsPage() {
     const timer = setInterval(refreshStatus, 3000)
     return () => clearInterval(timer)
   }, [refreshStatus])
+
+  useEffect(() => {
+    const unsub = window.dinho?.clipsOnEngineStatus?.((s) => setStatus(s))
+    return () => unsub?.()
+  }, [])
 
   const handleStartRecording = async () => {
     setStarting(true)
@@ -461,71 +525,15 @@ export function ClipsPage() {
     }
   }
 
-  const refreshAudioSessions = useCallback(async () => {
-    try {
-      const sessions = await window.dinho?.clipsGetAudioSessions()
-      if (!sessions) return
-      // Se retornou vazio mas já temos dados, ignora (pipe desconectou transitoriamente)
-      if (sessions.length === 0) return
-      setAudioSessions((prev) => {
-        const updated = sessions.map((s) => ({
-          ...s,
-          isSelected: prev.find((p) => p.processId === s.processId)?.isSelected ?? s.isSelected,
-        }))
-        if (
-          prev.length === updated.length &&
-          prev.every(
-            (s, i) =>
-              s.processId === updated[i].processId &&
-              s.processName === updated[i].processName &&
-              s.displayName === updated[i].displayName &&
-              s.isSelected === updated[i].isSelected,
-          )
-        )
-          return prev
-        return updated
-      })
-    } catch {
-      toast.error(t('audioSessionRefreshError'))
-    }
-  }, [t])
-
-  const handleToggleAudioSession = async (pid: number) => {
-    const current = audioSessions.find((s) => s.processId === pid)
-    if (!current) return
-    const updated = audioSessions.map((s) => (s.processId === pid ? { ...s, isSelected: !s.isSelected } : s))
-    setAudioSessions(updated)
-    const selectedPids = updated.filter((s) => s.isSelected).map((s) => s.processId)
-    const result = await window.dinho?.clipsSetAudioSessions(selectedPids)
-    if (result?.success) {
-      toast.success(t('audioSessionsUpdated'))
-    }
-  }
-
-  const handleSelectAllAudioSessions = async () => {
-    const noneSelected = audioSessions.every((s) => !s.isSelected)
-    if (noneSelected) {
-      // All-apps mode → select all (custom mode)
-      const updated = audioSessions.map((s) => ({ ...s, isSelected: true }))
-      setAudioSessions(updated)
-      const result = await window.dinho?.clipsSetAudioSessions(updated.map((s) => s.processId))
-      if (result?.success) toast.success(t('audioSessionsUpdated'))
-    } else {
-      // Custom mode → all-apps mode (deselect all)
-      const updated = audioSessions.map((s) => ({ ...s, isSelected: false }))
-      setAudioSessions(updated)
-      const result = await window.dinho?.clipsSetAudioSessions([])
-      if (result?.success) toast.success(t('audioSessionsUpdated'))
-    }
-  }
-
   const toggleFavorite = (name: string) => {
+    const isFavorite = favorites.has(name)
     setFavorites((prev) => {
       const next = new Set(prev)
       if (next.has(name)) next.delete(name)
       else next.add(name)
       return next
     })
+    window.dinho?.clipsSetFavorite(name, !isFavorite).catch(() => {})
   }
 
   const formatSize = (bytes: number): string => {
@@ -541,6 +549,12 @@ export function ClipsPage() {
     } catch {
       return iso
     }
+  }
+
+  const formatSeconds = (s: number): string => {
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
   const filteredClips = useMemo(() => {
@@ -574,38 +588,6 @@ export function ClipsPage() {
     return maxDuration
   }, [config?.hotkeys])
 
-  // Auto-filter audio sessions when gameAudioOnly is on and game changes
-  const lastGameRef = useRef('')
-  useEffect(() => {
-    if (!config?.gameAudioOnly || !status.currentGame) return
-    if (lastGameRef.current === status.currentGame) return
-    lastGameRef.current = status.currentGame
-    const gameProcessName = status.currentGame.toLowerCase().endsWith('.exe')
-      ? status.currentGame
-      : `${status.currentGame.toLowerCase()}.exe`
-    // Busca sessions atualizadas do engine
-    window.dinho?.clipsGetAudioSessions().then((sessions) => {
-      if (!sessions) return
-      const matching = sessions.filter((s) => s.processName.toLowerCase() === gameProcessName)
-      if (matching.length > 0) {
-        const selectedPids = matching.map((s) => s.processId)
-        setAudioSessions(sessions.map((s) => ({ ...s, isSelected: selectedPids.includes(s.processId) })))
-        window.dinho?.clipsSetAudioSessions(selectedPids)
-      } else {
-        // Nenhum processo do jogo encontrado nas sessions atuais
-        setAudioSessions(sessions.map((s) => ({ ...s, isSelected: false })))
-        window.dinho?.clipsSetAudioSessions([])
-      }
-    })
-  }, [config?.gameAudioOnly, status.currentGame])
-
-  // Carrega sessions ao montar e faz refresh periódico
-  useEffect(() => {
-    refreshAudioSessions()
-    const interval = setInterval(refreshAudioSessions, config?.gameAudioOnly ? 5000 : 30000)
-    return () => clearInterval(interval)
-  }, [config?.gameAudioOnly, refreshAudioSessions])
-
   // Auto-increase buffer when a hotkey needs more than current, but never decrease (user's manual selection takes priority)
   useEffect(() => {
     if (!config || config.replayTimeSeconds >= autoReplayTime) return
@@ -617,7 +599,8 @@ export function ClipsPage() {
 
   const estimatedRamMB = useMemo(() => {
     if (!config) return 0
-    return Math.round(((config.bitrateKbps * (config.replayTimeSeconds || status.replayTimeSeconds)) / 8 / 1024) * 1.05)
+    const rate = config.maxrateKbps || 50000
+    return Math.round(((rate * (config.replayTimeSeconds || status.replayTimeSeconds)) / 8 / 1024) * 1.05)
   }, [config, status.replayTimeSeconds])
 
   const addHotkey = () => {
@@ -656,7 +639,7 @@ export function ClipsPage() {
   ]
 
   return (
-    <div className="flex h-full flex-col p-6">
+    <><div className="flex h-full flex-col p-6">
       <div className="flex items-start justify-between gap-4">
         <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
         <motion.button
@@ -729,6 +712,12 @@ export function ClipsPage() {
                   <span>
                     {t('replayTime')}: {Math.floor(status.replayTimeSeconds / 60)}min
                   </span>
+                  {status.uptime > 0 && (
+                    <>
+                      <span className="mx-1">·</span>
+                      <span>{formatUptime(status.uptime)}</span>
+                    </>
+                  )}
                 </div>
               )}
               {status.running && status.captureBackend && (
@@ -755,13 +744,17 @@ export function ClipsPage() {
                   <span>{status.currentGame}</span>
                 </div>
               )}
-              {status.running && status.estimatedRamMB && status.estimatedRamMB > 0 && (
+              {status.running && (status.replayBufferBytes || estimatedRamMB > 0) && (
                 <div
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
                   style={{ background: 'rgba(113,113,122,0.08)', color: 'var(--text-dim)' }}
                 >
                   <HardDrive className="h-3 w-3" />
-                  <span>~{status.estimatedRamMB}MB</span>
+                  <span>
+                    {status.replayBufferBytes
+                      ? `${Math.round(status.replayBufferBytes / 1024 / 1024)}MB`
+                      : `~${estimatedRamMB}MB`}
+                  </span>
                 </div>
               )}
               {status.lastCrashRecovered && (
@@ -780,6 +773,15 @@ export function ClipsPage() {
                 >
                   <AlertTriangle className="h-3 w-3" />
                   <span title={t('audioFallbackDesc')}>{t('audioFallbackWarning')}</span>
+                </div>
+              )}
+              {status.diskSpaceOk === false && (
+                <div
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+                  style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}
+                >
+                  <HardDrive className="h-3 w-3" />
+                  <span>{t('diskSpaceLow')}</span>
                 </div>
               )}
             </div>
@@ -804,7 +806,7 @@ export function ClipsPage() {
                     style={{ background: 'var(--accent)', color: '#fff' }}
                   >
                     <Download className="h-4 w-4" />
-                    {loading ? '...' : t('saveClip')}
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('saveClip')}
                   </button>
                 </>
               ) : (
@@ -816,7 +818,7 @@ export function ClipsPage() {
                   style={{ background: 'var(--accent)', color: '#fff' }}
                 >
                   <Video className="h-4 w-4" />
-                  {starting ? '...' : t('startRecording')}
+                  {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : t('startRecording')}
                 </button>
               )}
             </div>
@@ -901,6 +903,21 @@ export function ClipsPage() {
                   </span>
                 </label>
                 {selectedClips.size > 0 && (
+                  <>
+                  {selectedClips.size >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const paths = filteredClips.filter((c) => selectedClips.has(c.name)).map((c) => c.path)
+                        setMergeModePaths(paths)
+                      }}
+                      className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-all hover:bg-blue-500/15"
+                      style={{ color: '#3b82f6' }}
+                    >
+                      <Combine className="h-3 w-3" />
+                      {t('merge')}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleDeleteSelected}
@@ -910,6 +927,7 @@ export function ClipsPage() {
                     <Trash2 className="h-3 w-3" />
                     {t('deleteSelected')}
                   </button>
+                  </>
                 )}
               </div>
             )}
@@ -971,7 +989,7 @@ export function ClipsPage() {
                           {clip.name}
                         </p>
                         <p className="mt-0.5 text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                          {formatDate(clip.createdAt)} · {formatSize(clip.size)}
+                           {formatSeconds(clip.duration)} · {formatDate(clip.createdAt)} · {formatSize(clip.size)}
                         </p>
                       </div>
 
@@ -1002,6 +1020,15 @@ export function ClipsPage() {
                         >
                           <FolderOpen className="h-3 w-3" />
                           {t('open')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingClip(clip)}
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10"
+                          style={{ color: 'var(--text-dim)' }}
+                        >
+                          <Film className="h-3 w-3" />
+                          {t('edit')}
                         </button>
                         <button
                           type="button"
@@ -1069,10 +1096,271 @@ export function ClipsPage() {
                   {
                     id: 'quality',
                     icon: Video,
-                    label: t('recordingQuality'),
+                    label: (
+                      <span className="flex items-center gap-1">
+                        {t('recordingQuality')}
+                        <span className="relative inline-flex" data-tip="quality">
+                          <span
+                            className="inline-flex h-3 w-3 cursor-pointer items-center justify-center rounded-full text-[8px] font-bold"
+                            style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                            onClick={() => setActiveTip(activeTip === 'quality' ? null : 'quality')}
+                          >
+                            ?
+                          </span>
+                        </span>
+                      </span>
+                    ),
                     defaultOpen: true,
                     content: (
-                      <div className="space-y-3">
+                  <div className="space-y-3">
+                    {/* ── Quick Preset ── */}
+                    <div className="flex gap-1.5">
+                      {[
+                        {
+                          id: 'muito-alta',
+                          label: 'Muito Alta',
+                          sub: 'CQ 16 · 1440p',
+                          icon: '●●●',
+                          config: {
+                            cq: 16, maxrateKbps: 80000, bufsizeKbps: 160000,
+                            encoderPreset: 'p5', bframes: 0, lookahead: 4,
+                            bitrateKbps: 50000,
+                            width: 2560, height: 1440,
+                          },
+                        },
+                        {
+                          id: 'alta',
+                          label: 'Alta',
+                          sub: 'CQ 18 · 1080p',
+                          icon: '●●○',
+                          config: {
+                            cq: 18, maxrateKbps: 50000, bufsizeKbps: 100000,
+                            encoderPreset: 'p4', bframes: 0, lookahead: 4,
+                            bitrateKbps: 50000,
+                            width: 1920, height: 1080,
+                          },
+                        },
+                        {
+                          id: 'boa',
+                          label: 'Boa',
+                          sub: 'CQ 20 · 720p',
+                          icon: '●○○',
+                          config: {
+                            cq: 20, maxrateKbps: 30000, bufsizeKbps: 60000,
+                            encoderPreset: 'p4', bframes: 0, lookahead: 2,
+                            bitrateKbps: 30000,
+                            width: 1280, height: 720,
+                          },
+                        },
+                      ].map((p) => {
+                        const active =
+                          config.cq === p.config.cq &&
+                          config.maxrateKbps === p.config.maxrateKbps
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => handleConfigUpdate(p.config)}
+                                className={`group relative flex-1 rounded-xl border px-2.5 py-2 text-left transition-all ${
+                                  active
+                                    ? 'border-transparent'
+                                    : 'hover:border-white/10'
+                                }`}
+                                style={{
+                                  background: active
+                                    ? 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(99,102,241,0.1))'
+                                    : 'rgba(113,113,122,0.06)',
+                                  borderColor: active ? 'rgba(59,130,246,0.4)' : 'rgba(113,113,122,0.1)',
+                                  boxShadow: active ? '0 0 12px rgba(59,130,246,0.15)' : 'none',
+                                }}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span
+                                    className="text-[11px] font-semibold"
+                                    style={{
+                                      color: active ? 'var(--accent)' : 'var(--text-primary)',
+                                    }}
+                                  >
+                                    {p.label}
+                                  </span>
+                                  <span
+                                    className="text-[9px] tracking-wider"
+                                    style={{ color: active ? 'var(--accent)' : 'var(--text-dim)', opacity: 0.5 }}
+                                  >
+                                    {p.icon}
+                                  </span>
+                                </div>
+                                <div
+                                  className="mt-0.5 text-[9px]"
+                                  style={{ color: active ? 'var(--accent)' : 'var(--text-dim)', opacity: 0.6 }}
+                                >
+                                  {p.sub}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {/* Codec selector */}
+                        <div>
+                          <p
+                            className="mb-1 text-[10px] font-medium tracking-wide uppercase"
+                            style={{ color: 'var(--text-dim)' }}
+                          >
+                            Codec
+                            <span className="relative inline-flex ml-1" data-tip="codec">
+                              <span
+                                className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                onClick={() => setActiveTip(activeTip === 'codec' ? null : 'codec')}
+                              >
+                                ?
+                              </span>
+                            </span>
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {[
+                              { id: 'auto', label: 'Auto' },
+                              { id: 'h264', label: 'H.264' },
+                              { id: 'hevc', label: 'HEVC' },
+                              { id: 'av1', label: 'AV1' },
+                              { id: 'libx264', label: 'Software' },
+                            ].map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => handleConfigUpdate({ codec: c.id })}
+                                className="rounded-lg py-1 px-2 text-[10px] font-medium transition-all"
+                                style={{
+                                  background: (config.codec ?? 'auto') === c.id
+                                    ? 'var(--accent)'
+                                    : 'rgba(113,113,122,0.08)',
+                                  color: (config.codec ?? 'auto') === c.id ? '#fff' : 'var(--text-primary)',
+                                }}
+                              >
+                                {c.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* GPU selector */}
+                        {gpuList.length > 0 && (
+                          <div>
+                            <p
+                              className="mb-1 text-[10px] font-medium tracking-wide uppercase"
+                              style={{ color: 'var(--text-dim)' }}
+                            >
+                              GPU
+                              <span className="relative inline-flex ml-1" data-tip="gpu">
+                                <span
+                                  className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                  style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                  onClick={() => setActiveTip(activeTip === 'gpu' ? null : 'gpu')}
+                                >
+                                  ?
+                                </span>
+                              </span>
+                            </p>
+                            <select
+                              value={config.adapterIndex ?? -1}
+                              onChange={(e) =>
+                                handleConfigUpdate({ adapterIndex: Number(e.target.value) })
+                              }
+                              className="w-full rounded-lg px-2 py-1.5 text-[11px] transition-all"
+                              style={{
+                                background: 'rgba(113,113,122,0.08)',
+                                color: 'var(--text-primary)',
+                                border: '1px solid rgba(113,113,122,0.15)',
+                              }}
+                            >
+                              <option value={-1}>Auto</option>
+                              {gpuList.map((gpu) => (
+                                <option key={gpu.index} value={gpu.index}>
+                                  {gpu.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Resolution + FPS side by side */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p
+                              className="mb-1 text-[10px] font-medium tracking-wide uppercase"
+                              style={{ color: 'var(--text-dim)' }}
+                            >
+                              {t('resolution')}
+                              <span className="relative inline-flex ml-1" data-tip="resolution">
+                                <span
+                                  className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                  style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                  onClick={() => setActiveTip(activeTip === 'resolution' ? null : 'resolution')}
+                                >
+                                  ?
+                                </span>
+                              </span>
+                            </p>
+                            <div className="flex gap-1">
+                              {[
+                                { w: 640, h: 360, l: '360p' },
+                                { w: 1280, h: 720, l: '720p' },
+                                { w: 1920, h: 1080, l: '1080p' },
+                                { w: 2560, h: 1440, l: '1440p' },
+                              ].map((r) => (
+                                <button
+                                  key={r.l}
+                                  type="button"
+                                  onClick={() => handleConfigUpdate({ width: r.w, height: r.h })}
+                                  className="flex-1 rounded-lg py-1 text-[11px] font-medium transition-all"
+                                  style={{
+                                    background: r.w === config.width
+                                      ? 'var(--accent)'
+                                      : 'rgba(113,113,122,0.08)',
+                                    color: r.w === config.width ? '#fff' : 'var(--text-primary)',
+                                  }}
+                                >
+                                  {r.l}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p
+                              className="mb-1 text-[10px] font-medium tracking-wide uppercase"
+                              style={{ color: 'var(--text-dim)' }}
+                            >
+                              FPS
+                              <span className="relative inline-flex ml-1" data-tip="fps">
+                                <span
+                                  className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                  style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                  onClick={() => setActiveTip(activeTip === 'fps' ? null : 'fps')}
+                                >
+                                  ?
+                                </span>
+                              </span>
+                            </p>
+                            <div className="flex gap-1">
+                              {[30, 60, 75, 120, 144].map((f) => (
+                                <button
+                                  key={f}
+                                  type="button"
+                                  onClick={() => handleConfigUpdate({ fps: f })}
+                                  className="flex-1 rounded-lg py-1 text-[11px] font-medium transition-all"
+                                  style={{
+                                    background: f === config.fps ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
+                                    color: f === config.fps ? '#fff' : 'var(--text-primary)',
+                                  }}
+                                >
+                                  {f}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
                         {/* Replay Time */}
                         <div>
                           <p
@@ -1080,6 +1368,15 @@ export function ClipsPage() {
                             style={{ color: 'var(--text-dim)' }}
                           >
                             {t('replayTime')}
+                            <span className="relative inline-flex ml-1" data-tip="replay">
+                              <span
+                                className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                onClick={() => setActiveTip(activeTip === 'replay' ? null : 'replay')}
+                              >
+                                ?
+                              </span>
+                            </span>
                           </p>
                           <div className="flex gap-1">
                             {[60, 180, 300, 600].map((s) => (
@@ -1099,85 +1396,7 @@ export function ClipsPage() {
                             ))}
                           </div>
                         </div>
-                        {/* FPS */}
-                        <div>
-                          <p
-                            className="mb-1 text-[10px] font-medium tracking-wide uppercase"
-                            style={{ color: 'var(--text-dim)' }}
-                          >
-                            FPS
-                          </p>
-                          <div className="flex gap-1">
-                            {[30, 60, 75, 120].map((f) => (
-                              <button
-                                key={f}
-                                type="button"
-                                onClick={() => handleConfigUpdate({ fps: f })}
-                                className="flex-1 rounded-lg py-1 text-[11px] font-medium transition-all"
-                                style={{
-                                  background: f === config.fps ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
-                                  color: f === config.fps ? '#fff' : 'var(--text-primary)',
-                                }}
-                              >
-                                {f}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        {/* Resolution + Bitrate side by side */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <p
-                              className="mb-1 text-[10px] font-medium tracking-wide uppercase"
-                              style={{ color: 'var(--text-dim)' }}
-                            >
-                              {t('resolution')}
-                            </p>
-                            <div className="flex gap-1">
-                              {[
-                                { w: 1280, h: 720, l: '720p' },
-                                { w: 1920, h: 1080, l: '1080p' },
-                              ].map((r) => (
-                                <button
-                                  key={r.l}
-                                  type="button"
-                                  onClick={() => handleConfigUpdate({ width: r.w, height: r.h })}
-                                  className="flex-1 rounded-lg py-1 text-[11px] font-medium transition-all"
-                                  style={{
-                                    background: r.w === config.width ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
-                                    color: r.w === config.width ? '#fff' : 'var(--text-primary)',
-                                  }}
-                                >
-                                  {r.l}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <p
-                              className="mb-1 text-[10px] font-medium tracking-wide uppercase"
-                              style={{ color: 'var(--text-dim)' }}
-                            >
-                              {t('bitrate')}
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {[10000, 20000, 30000, 50000].map((b) => (
-                                <button
-                                  key={b}
-                                  type="button"
-                                  onClick={() => handleConfigUpdate({ bitrateKbps: b })}
-                                  className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
-                                  style={{
-                                    background: b === config.bitrateKbps ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
-                                    color: b === config.bitrateKbps ? '#fff' : 'var(--text-primary)',
-                                  }}
-                                >
-                                  {b >= 1000 ? `${(b / 1000).toFixed(0)}M` : `${b}K`}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+
                         {/* Force Software Encoding */}
                         <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
                           <div className="flex items-center justify-between">
@@ -1185,18 +1404,13 @@ export function ClipsPage() {
                               <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
                                 {t('forceSoftware')}
                               </span>
-                              <span className="group relative inline-flex">
+                              <span className="relative inline-flex" data-tip="force-software">
                                 <span
-                                  className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold"
+                                  className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
                                   style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                  onClick={() => setActiveTip(activeTip === 'force-software' ? null : 'force-software')}
                                 >
                                   ?
-                                </span>
-                                <span
-                                  className="absolute left-1/2 z-20 mt-1 w-44 -translate-x-1/2 rounded-md border bg-[#1a1a2e] p-1.5 text-[9px] leading-tight opacity-0 shadow-lg transition-opacity group-hover:opacity-100 top-full"
-                                  style={{ borderColor: 'var(--border-medium)', color: 'var(--text-muted)' }}
-                                >
-                                  {t('forceSoftwareTooltip')}
                                 </span>
                               </span>
                             </div>
@@ -1208,13 +1422,15 @@ export function ClipsPage() {
                           </div>
                         </div>
 
-                        {/* RAM Estimate */}
+                        {/* Buffer Usage */}
                         {estimatedRamMB > 0 && (
                           <div>
                             <div className="mb-1 flex justify-between text-[10px]">
                               <span style={{ color: 'var(--text-dim)' }}>RAM {t('clips')}</span>
                               <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                                ~{estimatedRamMB} MB
+                                {status.replayBufferBytes
+                                  ? `${Math.round(status.replayBufferBytes / 1024 / 1024)} MB`
+                                  : `~${estimatedRamMB} MB`}
                               </span>
                             </div>
                             <div
@@ -1224,7 +1440,11 @@ export function ClipsPage() {
                               <div
                                 className="h-full rounded-full transition-all"
                                 style={{
-                                  width: `${Math.min((estimatedRamMB / 6000) * 100, 100)}%`,
+                                  width: `${
+                                    status.replayBufferBytes
+                                      ? Math.min((status.replayBufferBytes / 1024 / 1024 / estimatedRamMB) * 100, 100)
+                                      : 0
+                                  }%`,
                                   background:
                                     estimatedRamMB > 3000 ? '#ef4444' : estimatedRamMB > 1500 ? '#f59e0b' : '#3b82f6',
                                 }}
@@ -1233,116 +1453,6 @@ export function ClipsPage() {
                           </div>
                         )}
 
-                        {/* Hotkeys */}
-                        <CollapsibleMini label={t('hotkeys')} defaultOpen={false}>
-                          <div className="space-y-1.5">
-                            {config.hotkeys.map((hk) => (
-                              <div
-                                key={hk.id}
-                                className="rounded-lg px-2 py-1.5"
-                                style={{
-                                  background: 'rgba(113,113,122,0.06)',
-                                  opacity: hk.enabled ? 1 : 0.4,
-                                }}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setRebindingId(hk.id)}
-                                    disabled={!!rebindingId}
-                                    className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium transition-all disabled:opacity-60"
-                                    style={{
-                                      borderColor: rebindingId === hk.id ? 'var(--accent)' : 'var(--border-medium)',
-                                      color: rebindingId === hk.id ? 'var(--accent)' : 'var(--text-primary)',
-                                    }}
-                                  >
-                                    {rebindingId === hk.id ? '...' : formatKey(hk.vk, hk.modifiers)}
-                                  </button>
-                                  <select
-                                    value={hk.action}
-                                    onChange={(e) =>
-                                      updateHotkey(hk.id, { action: e.target.value as HotkeyBinding['action'] })
-                                    }
-                                    className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
-                                    style={{
-                                      borderColor: 'var(--border-medium)',
-                                      color: 'var(--text-primary)',
-                                      colorScheme: 'dark',
-                                    }}
-                                  >
-                                    <option value="saveClip">Replay</option>
-                                    <option value="toggleCapture">Captura</option>
-                                    <option value="toggleMic">Microfone</option>
-                                    <option value="pushToTalk">PTT</option>
-                                  </select>
-                                  {hk.action === 'saveClip' && (
-                                    <select
-                                      value={hk.replayDurationSeconds || 60}
-                                      onChange={(e) =>
-                                        updateHotkey(hk.id, { replayDurationSeconds: Number(e.target.value) })
-                                      }
-                                      className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
-                                      style={{
-                                        borderColor: 'var(--border-medium)',
-                                        color: 'var(--text-primary)',
-                                        colorScheme: 'dark',
-                                      }}
-                                    >
-                                      {REPLAY_DURATIONS.map((d) => (
-                                        <option key={d} value={d}>
-                                          {d < 60 ? `${d}s` : `${d / 60}min`}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  )}
-                                  <div className="ml-auto flex items-center gap-0.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => updateHotkey(hk.id, { enabled: !hk.enabled })}
-                                      className={`rounded-full px-1.5 py-0.5 text-[8px] font-medium ${
-                                        hk.enabled ? 'bg-green-500/15 text-green-500' : 'bg-zinc-500/15 text-zinc-500'
-                                      }`}
-                                    >
-                                      {hk.enabled ? 'ON' : 'OFF'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => removeHotkey(hk.id)}
-                                      className="rounded p-0.5 transition-colors hover:bg-red-500/10"
-                                    >
-                                      <X className="h-2.5 w-2.5" style={{ color: '#ef4444' }} />
-                                    </button>
-                                  </div>
-                                </div>
-                                {/* Action description */}
-                                <p
-                                  className="mt-1 px-0.5 text-[9px] leading-tight"
-                                  style={{ color: 'var(--text-dim)', opacity: 0.7 }}
-                                >
-                                  {hk.action === 'saveClip' && t('saveClipDesc')}
-                                  {hk.action === 'toggleCapture' && t('toggleCaptureDesc')}
-                                  {hk.action === 'toggleMic' && t('toggleMicDesc')}
-                                  {hk.action === 'pushToTalk' && t('pushToTalkDesc')}
-                                </p>
-                              </div>
-                            ))}
-                            <div className="flex items-center justify-between pt-1">
-                              <button
-                                type="button"
-                                onClick={addHotkey}
-                                className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all"
-                                style={{ background: 'var(--accent)', color: '#fff' }}
-                              >
-                                <Plus className="h-3 w-3" />
-                                {t('addHotkey')}
-                              </button>
-                              <span className="text-[9px]" style={{ color: 'var(--text-dim)' }}>
-                                Buffer: {autoReplayTime < 60 ? `${autoReplayTime}s` : `${autoReplayTime / 60}min`} (
-                                {t('autoBuffer')})
-                              </span>
-                            </div>
-                          </div>
-                        </CollapsibleMini>
                       </div>
                     ),
                   },
@@ -1356,16 +1466,71 @@ export function ClipsPage() {
                         {/* Mic + Loopback side by side */}
                         <div className="grid grid-cols-2 gap-2">
                           <ToggleItem
-                            label={t('micEnabled')}
+                            label={
+                              <span className="flex items-center gap-1">
+                                {t('micEnabled')}
+                                <span className="relative inline-flex" data-tip="mic">
+                                  <span
+                                    className="inline-flex h-3 w-3 cursor-pointer items-center justify-center rounded-full text-[8px] font-bold"
+                                    style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                    onClick={() => setActiveTip(activeTip === 'mic' ? null : 'mic')}
+                                  >
+                                    ?
+                                  </span>
+                                </span>
+                              </span>
+                            }
                             enabled={config.micEnabled}
                             accent="green"
                             onToggle={() => handleConfigUpdate({ micEnabled: !config.micEnabled })}
                           />
                           <ToggleItem
-                            label={t('audioLoopback')}
+                            label={
+                              <span className="flex items-center gap-1">
+                                {t('audioLoopback')}
+                                <span className="relative inline-flex" data-tip="loopback">
+                                  <span
+                                    className="inline-flex h-3 w-3 cursor-pointer items-center justify-center rounded-full text-[8px] font-bold"
+                                    style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                    onClick={() => setActiveTip(activeTip === 'loopback' ? null : 'loopback')}
+                                  >
+                                    ?
+                                  </span>
+                                </span>
+                              </span>
+                            }
                             enabled={config.audioLoopback}
                             accent="green"
-                            onToggle={() => handleConfigUpdate({ audioLoopback: !config.audioLoopback })}
+                            onToggle={() => {
+                              const newVal = !config.audioLoopback
+                              handleConfigUpdate({
+                                audioLoopback: newVal,
+                                ...(newVal ? { gameAudioOnly: false } : {}),
+                              })
+                            }}
+                          />
+                        </div>
+
+                        {/* Noise Suppression */}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
+                              {t('noiseSuppression')}
+                            </span>
+                            <span className="relative inline-flex" data-tip="noise-suppression">
+                              <span
+                                className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                onClick={() => setActiveTip(activeTip === 'noise-suppression' ? null : 'noise-suppression')}
+                              >
+                                ?
+                              </span>
+                            </span>
+                          </div>
+                          <TogglePill
+                            enabled={config.noiseSuppression ?? false}
+                            accent="green"
+                            onToggle={() => handleConfigUpdate({ noiseSuppression: !(config.noiseSuppression ?? false) })}
                           />
                         </div>
 
@@ -1374,18 +1539,13 @@ export function ClipsPage() {
                           label={
                             <span className="flex items-center gap-1.5">
                               {t('pushToTalk')}
-                              <span className="group relative inline-flex">
+                              <span className="relative inline-flex" data-tip="ptt">
                                 <span
-                                  className="inline-flex h-3 w-3 cursor-help items-center justify-center rounded-full text-[8px] font-bold"
+                                  className="inline-flex h-3 w-3 cursor-pointer items-center justify-center rounded-full text-[8px] font-bold"
                                   style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                  onClick={() => setActiveTip(activeTip === 'ptt' ? null : 'ptt')}
                                 >
                                   ?
-                                </span>
-                                <span
-                                  className="absolute bottom-full left-1/2 z-20 mb-1 w-48 -translate-x-1/2 rounded-md border bg-[#1a1a2e] p-1.5 text-[9px] leading-tight opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
-                                  style={{ borderColor: 'var(--border-medium)', color: 'var(--text-muted)' }}
-                                >
-                                  {t('pushToTalkTooltip')}
                                 </span>
                               </span>
                             </span>
@@ -1447,7 +1607,7 @@ export function ClipsPage() {
                                     color: rebindingId === 'hk-ptt' ? 'var(--accent)' : 'var(--text-dim)',
                                   }}
                                 >
-                                  {rebindingId === 'hk-ptt' ? '...' : '+ ' + t('pttKey')}
+                                  {rebindingId === 'hk-ptt' ? '...' : `+ ${t('pttKey')}`}
                                 </button>
                               </div>
                             )}
@@ -1468,65 +1628,55 @@ export function ClipsPage() {
                           />
                         </div>
 
-                        {/* Per-App Audio */}
-                        <CollapsibleMini label={t('appAudio')} defaultOpen={false}>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={refreshAudioSessions}
-                                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-white/10"
-                                style={{ color: 'var(--text-dim)' }}
+                        {/* Sample Rate */}
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-medium" style={{ color: 'var(--text-dim)' }}>
+                            {t('audioSampleRate')}
+                            <span className="relative inline-flex ml-1" data-tip="sample-rate">
+                              <span
+                                className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                onClick={() => setActiveTip(activeTip === 'sample-rate' ? null : 'sample-rate')}
                               >
-                                <RefreshCw className="h-3 w-3" />
-                                {t('refreshAudioSessions')}
-                              </button>
+                                ?
+                              </span>
+                              </span>
+                          </span>
+                          <div className="flex gap-1">
+                            {[44100, 48000, 96000].map((rate) => (
                               <button
+                                key={rate}
                                 type="button"
-                                onClick={handleSelectAllAudioSessions}
-                                className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition-all ${
-                                  audioSessions.length > 0 && !audioSessions.some((s) => s.isSelected)
-                                    ? 'bg-blue-500/15 text-blue-500'
-                                    : 'bg-zinc-500/15 text-zinc-500'
-                                }`}
+                                onClick={() => handleConfigUpdate({ audioSampleRate: rate })}
+                                className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
+                                style={{
+                                  background:
+                                    (config.audioSampleRate ?? 48000) === rate
+                                      ? 'var(--accent)'
+                                      : 'rgba(113,113,122,0.08)',
+                                  color: (config.audioSampleRate ?? 48000) === rate ? '#fff' : 'var(--text-primary)',
+                                }}
                               >
-                                {t('selectAllApps')}
+                                {rate / 1000}kHz
                               </button>
-                            </div>
-                            <div className="max-h-28 space-y-0.5 overflow-y-auto">
-                              {audioSessions.length === 0 ? (
-                                <p className="py-1 text-[10px]" style={{ color: 'var(--text-dim)', opacity: 0.6 }}>
-                                  {t('noAudioSessions')}
-                                </p>
-                              ) : (
-                                audioSessions.map((session) => (
-                                  <button
-                                    key={session.processId}
-                                    type="button"
-                                    onClick={() => handleToggleAudioSession(session.processId)}
-                                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-[10px] transition-all ${
-                                      session.isSelected ? 'bg-green-500/10' : 'hover:bg-white/5'
-                                    }`}
-                                    style={{ color: session.isSelected ? '#22c55e' : 'var(--text-primary)' }}
-                                  >
-                                    <span
-                                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                        session.isSelected ? 'bg-green-500' : 'bg-zinc-500'
-                                      }`}
-                                    />
-                                    <span className="truncate">{session.displayName || session.processName}</span>
-                                  </button>
-                                ))
-                              )}
-                            </div>
+                            ))}
                           </div>
-                        </CollapsibleMini>
+                        </div>
 
                         {/* Game Audio Only */}
                         <div className="flex items-center justify-between pt-1">
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
                               {t('gameAudioOnly')}
+                            </span>
+                            <span className="relative inline-flex" data-tip="game-audio">
+                              <span
+                                className="inline-flex h-3 w-3 cursor-pointer items-center justify-center rounded-full text-[8px] font-bold"
+                                style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                onClick={() => setActiveTip(activeTip === 'game-audio' ? null : 'game-audio')}
+                              >
+                                ?
+                              </span>
                             </span>
                             {status.currentGame && config.gameAudioOnly && (
                               <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[9px] font-medium text-green-500">
@@ -1541,10 +1691,51 @@ export function ClipsPage() {
                               const newVal = !config.gameAudioOnly
                               handleConfigUpdate({
                                 gameAudioOnly: newVal,
-                                ...(newVal ? { micEnabled: true, audioLoopback: true } : {}),
+                                ...(newVal ? { micEnabled: true, audioLoopback: false } : {}),
                               })
                             }}
                           />
+                        </div>
+
+                        {/* AutoCleanup */}
+                        <div className="space-y-1.5 border-t pt-2" style={{ borderColor: 'var(--border)' }}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                              {t('autoCleanup')}
+                            </span>
+                            <TogglePill
+                              enabled={config.autoCleanupEnabled ?? true}
+                              accent="cyan"
+                              onToggle={() =>
+                                handleConfigUpdate({
+                                  autoCleanupEnabled: !(config.autoCleanupEnabled ?? true),
+                                })
+                              }
+                            />
+                          </div>
+                          {(config.autoCleanupEnabled ?? true) && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-dim)' }}>
+                                {t('autoCleanupThreshold')}
+                              </span>
+                              <input
+                                type="range"
+                                min={50}
+                                max={99}
+                                value={config.autoCleanupThresholdPercent ?? 90}
+                                onChange={(e) =>
+                                  handleConfigUpdate({
+                                    autoCleanupThresholdPercent: Number.parseInt(e.target.value, 10),
+                                  })
+                                }
+                                className="flex-1 h-1 rounded-full accent-cyan-500"
+                                style={{ accentColor: '#06b6d4' }}
+                              />
+                              <span className="text-[10px] font-mono min-w-[2rem] text-right" style={{ color: 'var(--text-dim)' }}>
+                                {config.autoCleanupThresholdPercent ?? 90}%
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Microphone Device Selector */}
@@ -1654,6 +1845,116 @@ export function ClipsPage() {
                             }}
                           />
                         </div>
+
+                        {/* Hotkeys */}
+                        <CollapsibleMini label={t('hotkeys')} defaultOpen={false}>
+                          <div className="space-y-1.5">
+                            {config.hotkeys.map((hk) => (
+                              <div
+                                key={hk.id}
+                                className="rounded-lg px-2 py-1.5"
+                                style={{
+                                  background: 'rgba(113,113,122,0.06)',
+                                  opacity: hk.enabled ? 1 : 0.4,
+                                }}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setRebindingId(hk.id)}
+                                    disabled={!!rebindingId}
+                                    className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium transition-all disabled:opacity-60"
+                                    style={{
+                                      borderColor: rebindingId === hk.id ? 'var(--accent)' : 'var(--border-medium)',
+                                      color: rebindingId === hk.id ? 'var(--accent)' : 'var(--text-primary)',
+                                    }}
+                                  >
+                                    {rebindingId === hk.id ? '...' : formatKey(hk.vk, hk.modifiers)}
+                                  </button>
+                                  <select
+                                    value={hk.action}
+                                    onChange={(e) =>
+                                      updateHotkey(hk.id, { action: e.target.value as HotkeyBinding['action'] })
+                                    }
+                                    className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
+                                    style={{
+                                      borderColor: 'var(--border-medium)',
+                                      color: 'var(--text-primary)',
+                                      colorScheme: 'dark',
+                                    }}
+                                  >
+                                    <option value="saveClip">Replay</option>
+                                    <option value="toggleCapture">Captura</option>
+                                    <option value="toggleMic">Microfone</option>
+                                    <option value="pushToTalk">PTT</option>
+                                  </select>
+                                  {hk.action === 'saveClip' && (
+                                    <select
+                                      value={hk.replayDurationSeconds || 60}
+                                      onChange={(e) =>
+                                        updateHotkey(hk.id, { replayDurationSeconds: Number(e.target.value) })
+                                      }
+                                      className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
+                                      style={{
+                                        borderColor: 'var(--border-medium)',
+                                        color: 'var(--text-primary)',
+                                        colorScheme: 'dark',
+                                      }}
+                                    >
+                                      {REPLAY_DURATIONS.map((d) => (
+                                        <option key={d} value={d}>
+                                          {d < 60 ? `${d}s` : `${d / 60}min`}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  <div className="ml-auto flex items-center gap-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => updateHotkey(hk.id, { enabled: !hk.enabled })}
+                                      className={`rounded-full px-1.5 py-0.5 text-[8px] font-medium ${
+                                        hk.enabled ? 'bg-green-500/15 text-green-500' : 'bg-zinc-500/15 text-zinc-500'
+                                      }`}
+                                    >
+                                      {hk.enabled ? 'ON' : 'OFF'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeHotkey(hk.id)}
+                                      className="rounded p-0.5 transition-colors hover:bg-red-500/10"
+                                    >
+                                      <X className="h-2.5 w-2.5" style={{ color: '#ef4444' }} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p
+                                  className="mt-1 px-0.5 text-[9px] leading-tight"
+                                  style={{ color: 'var(--text-dim)', opacity: 0.7 }}
+                                >
+                                  {hk.action === 'saveClip' && t('saveClipDesc')}
+                                  {hk.action === 'toggleCapture' && t('toggleCaptureDesc')}
+                                  {hk.action === 'toggleMic' && t('toggleMicDesc')}
+                                  {hk.action === 'pushToTalk' && t('pushToTalkDesc')}
+                                </p>
+                              </div>
+                            ))}
+                            <div className="flex items-center justify-between pt-1">
+                              <button
+                                type="button"
+                                onClick={addHotkey}
+                                className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all"
+                                style={{ background: 'var(--accent)', color: '#fff' }}
+                              >
+                                <Plus className="h-3 w-3" />
+                                {t('addHotkey')}
+                              </button>
+                              <span className="text-[9px]" style={{ color: 'var(--text-dim)' }}>
+                                Buffer: {autoReplayTime < 60 ? `${autoReplayTime}s` : `${autoReplayTime / 60}min`} (
+                                {t('autoBuffer')})
+                              </span>
+                            </div>
+                          </div>
+                        </CollapsibleMini>
                       </div>
                     ),
                   },
@@ -1670,7 +1971,7 @@ export function ClipsPage() {
                     <div
                       className="w-80 max-h-96 rounded-xl border p-4 shadow-xl"
                       style={{
-                        background: 'var(--bg-card)',
+                        background: 'var(--card-bg)',
                         borderColor: 'var(--border-subtle)',
                       }}
                       onClick={(e) => e.stopPropagation()}
@@ -1693,7 +1994,6 @@ export function ClipsPage() {
                             color: 'var(--text-primary)',
                           }}
                           placeholder={t('searchProcess')}
-                          autoFocus
                         />
                       </div>
                       <div className="max-h-60 overflow-y-auto space-y-0.5">
@@ -1728,6 +2028,41 @@ export function ClipsPage() {
         </AnimatePresence>
       </div>
     </div>
+
+      {/* ── Centered Tooltip Overlay ── */}
+      {activeTip && tooltipContent[activeTip] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setActiveTip(null)}>
+          <div
+            className="max-w-xs rounded-xl border bg-[#1a1a2e] p-5 text-sm leading-relaxed shadow-2xl"
+            style={{ borderColor: 'var(--border-medium)', color: 'var(--text-muted)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {tooltipContent[activeTip]}
+          </div>
+        </div>
+      )}
+
+      {mergeModePaths && (
+        <ClipEditorModal
+          initialMergePaths={mergeModePaths}
+          onClose={() => setMergeModePaths(null)}
+          onSave={() => {
+            setMergeModePaths(null)
+            refreshClips()
+          }}
+        />
+      )}
+      {editingClip && !mergeModePaths && (
+        <ClipEditorModal
+          clip={editingClip}
+          onClose={() => setEditingClip(null)}
+          onSave={() => {
+            setEditingClip(null)
+            refreshClips()
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -1740,7 +2075,7 @@ function ConfigSection({
   content,
 }: {
   icon: React.ElementType
-  label: string
+  label: React.ReactNode
   defaultOpen: boolean
   content: React.ReactNode
 }) {
@@ -1812,7 +2147,7 @@ function ToggleItem({
   accent,
   onToggle,
 }: {
-  label: string
+  label: React.ReactNode
   enabled: boolean
   accent: 'green' | 'amber' | 'blue'
   onToggle: () => void

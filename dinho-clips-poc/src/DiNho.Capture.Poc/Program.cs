@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -123,6 +124,7 @@ internal static class Program
         Console.WriteLine();
 
         SetupGlobalExceptionHandler();
+        SetAppUserModelId();
         CheckGpuDriver();
 
         if (_forceSoftware)
@@ -272,7 +274,7 @@ internal static class Program
                 return;
             }
 
-            var creationFlags = DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport;
+            var creationFlags = DeviceCreationFlags.BgraSupport;
             D3D11.D3D11CreateDevice(
                 best, DriverType.Unknown, creationFlags,
                 new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0 },
@@ -521,6 +523,33 @@ internal static class Program
             return null;
         }
     }
+
+    /// <summary>
+    /// Define o AppUserModelId para o processo.
+    /// Necessário para Windows.Graphics.Capture (WGC) funcionar em processos
+    /// não-APPX (modo installed/packaged).
+    /// Sem este ID, WGC pode falhar com ArgumentException "Parâmetro incorreto"
+    /// porque o WinRT não consegue ativar o GraphicsCaptureItem corretamente.
+    /// </summary>
+    private static void SetAppUserModelId()
+    {
+        try
+        {
+            const string appId = "DiNho.ClipsEngine";
+            var hr = SetCurrentProcessExplicitAppUserModelID(appId);
+            if (hr == 0)
+                Console.WriteLine($"[Program] AppUserModelId set to '{appId}'");
+            else
+                Console.Error.WriteLine($"[Program] SetCurrentProcessExplicitAppUserModelID falhou: HRESULT=0x{hr:X8}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Program] SetAppUserModelId exceção: {ex.Message}");
+        }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
     private static void SetupGlobalExceptionHandler()
     {

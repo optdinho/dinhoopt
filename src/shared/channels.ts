@@ -370,5 +370,9 @@ export const IPC = {
   CLIPS_ENGINE_STATUS: 'clips:engine-status',
   CLIPS_GET_MIC_DEVICES: 'clips:get-mic-devices',
   CLIPS_SET_MIC_DEVICE: 'clips:set-mic-device',
+  CLIPS_GET_GPUS: 'clips:get-gpus',
   CLIPS_GET_RUNNING_PROCESSES: 'clips:get-running-processes',
+  CLIPS_SET_FAVORITE: 'clips:set-favorite',
+  CLIPS_TRIM_CLIP: 'clips:trim-clip',
+  CLIPS_MERGE_CLIPS: 'clips:merge-clips',
 } as const

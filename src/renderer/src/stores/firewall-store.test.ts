@@ -126,6 +126,14 @@ describe('firewall-store', () => {
     expect(useFirewallStore.getState().rules[0]!.selected).toBe(false)
   })
 
+  it('toggleRule only toggles the matching rule', () => {
+    useFirewallStore.getState().setRules([makeRule('A'), makeRule('B', { selected: true })])
+    useFirewallStore.getState().toggleRule('A')
+    const rules = useFirewallStore.getState().rules
+    expect(rules[0]!.selected).toBe(true)
+    expect(rules[1]!.selected).toBe(true)
+  })
+
   it('selectRecommended selects only stale rules', () => {
     useFirewallStore.getState().setRules([makeRule('Stale', { issues: ['stale'] }), makeRule('Normal')])
     useFirewallStore.getState().selectRecommended()

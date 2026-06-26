@@ -141,4 +141,31 @@ describe('CustomYaraService', () => {
     const rules = service.getCustomRules()
     expect(rules.some((r) => r.name === 'noext.yar')).toBe(true)
   })
+
+  it('addRule preserves .yara extension', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    const result = service.addRule('custom.yara', 'rule YaraExt { condition: true }')
+    expect(result).toBe(true)
+
+    const rules = service.getCustomRules()
+    expect(rules.some((r) => r.name === 'custom.yara')).toBe(true)
+  })
+
+  it('getCustomRules includes .yara files', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    service.addRule('dot-yara.yara', 'rule DotYara { condition: true }')
+    service.addRule('dot-yar.yar', 'rule DotYar { condition: true }')
+
+    const rules = service.getCustomRules()
+    expect(rules).toHaveLength(2)
+    const names = rules.map((r) => r.name).sort()
+    expect(names).toEqual(['dot-yar.yar', 'dot-yara.yara'])
+  })
+
+  it('getRuleCount includes .yara files', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    service.addRule('a.yar', 'rule A { condition: true }')
+    service.addRule('b.yara', 'rule B { condition: true }')
+    expect(service.getRuleCount()).toBe(2)
+  })
 })

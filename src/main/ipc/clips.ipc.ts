@@ -1,19 +1,21 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process'
-import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
-import { join } from 'node:path'
-import { connect as netConnect, type Socket } from 'node:net'
+import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { type Socket, connect as netConnect } from 'node:net'
+import { basename, join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type {
   AudioSessionInfo,
   ClipInfo,
+  ClipMergeResult,
   ClipsConfig,
   ClipsEngineStatus,
+  ClipTrimResult,
   HotkeyBinding,
   MicDeviceInfo,
 } from '@shared/types'
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { getLogger } from '../services/logger.service'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { loadClipsConfig, saveClipsConfig } from '../services/clips-config-store'
+import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
 
 const ENGINE_PIPE = '\\\\.\\pipe\\dinho-clips-engine'
@@ -55,6 +57,14 @@ function buildEngineConfig(): Record<string, unknown> {
     width: configWidth,
     height: configHeight,
     bitrateKbps: configBitrateKbps,
+    cq: configCq,
+    maxrateKbps: configMaxrateKbps,
+    bufsizeKbps: configBufsizeKbps,
+    bframes: configBframes,
+    lookahead: configLookahead,
+    encoderPreset: configEncoderPreset,
+    codec: configCodec,
+    adapterIndex: configAdapterIndex,
     outputDirectory: getDefaultOutputDir(),
     forceSoftware: configForceSoftware,
     Hotkeys: hks.map((hk) => ({
@@ -76,6 +86,11 @@ function buildEngineConfig(): Record<string, unknown> {
     gameVolume: configGameVolume,
     micVolume: configMicVolume,
     pushToTalkKey: configPushToTalkKeys[0],
+    audioSampleRate: configAudioSampleRate,
+    autoCleanupEnabled: configAutoCleanupEnabled,
+    autoCleanupThresholdPercent: configAutoCleanupThresholdPercent,
+    noiseSuppression: configNoiseSuppression,
+    electronPid: process.pid,
   }
 }
 
@@ -87,36 +102,78 @@ let engineRunning = false
 let engineCapturing = false
 let engineStartTime = 0
 let engineFps = 60
-let engineReplayTimeSeconds = 60
+let engineReplayTimeSeconds = 300
 let engineCaptureBackend = ''
 let engineEncoder = ''
+let engineReplayBufferBytes = 0
 let engineEstimatedRamMB = 0
 let engineDiskSpaceOk = true
 let engineCurrentGame = ''
 let engineLastCrashRecovered = false
 let engineAudioLoopback = false
 let engineAudioFallback = false
+let engineReplayBufferVideoFrames = 0
+let engineReplayBufferVideoBytes = 0
+let engineReplayBufferAudioPackets = 0
+let engineReplayBufferAudioBytes = 0
 let configWidth = 1920
 let configHeight = 1080
-let configBitrateKbps = 20000
+let configBitrateKbps = 50000
+let configCq = 18
+let configMaxrateKbps = 50000
+let configBufsizeKbps = 100000
+let configBframes = 2
+let configLookahead = 4
+let configEncoderPreset = 'p4'
+let configCodec = 'auto'
+let configAdapterIndex = -1
 let configMicEnabled = true
 let configAudioLoopback = false
 let configForceSoftware = false
-let configPushToTalk: 'off' | 'hold' | 'toggle' = 'off'
-let configPushToTalkKeys: number[] = [0x7a]
-let configGameDetection = false
-let configGameAudioOnly = false
-let configCustomGameProcess = ''
-let configMicDeviceId = ''
-let configAutoStartCapture = false
+let configPushToTalk: 'off' | 'hold' | 'toggle' = 'hold'
+let configPushToTalkKeys: number[] = [5, 20]
+let configGameDetection = true
+let configGameAudioOnly = true
+let configCustomGameProcess = 'FiveM_GTAProcess.exe'
+let configMicDeviceId = '{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}'
+let configAutoStartCapture = true
 let configUseExcludeMode = false
 let configExcludeProcessId = 0
-let configHotkeys: HotkeyBinding[] = []
+let configHotkeys: HotkeyBinding[] = [
+  {
+    id: 'hk-save-8',
+    vk: 123,
+    modifiers: [],
+    action: 'saveClip',
+    replayDurationSeconds: 300,
+    enabled: true,
+  },
+  {
+    id: 'hk-1782208376874',
+    vk: 122,
+    modifiers: [],
+    action: 'saveClip',
+    replayDurationSeconds: 120,
+    enabled: true,
+  },
+  {
+    id: 'hk-1782222941097',
+    vk: 49,
+    modifiers: ['Alt'],
+    action: 'toggleCapture',
+    replayDurationSeconds: 60,
+    enabled: true,
+  },
+]
 let configOutputDirectory = ''
 let configGameVolume = 1.0
 let configMicVolume = 1.0
 let configSelectedAudioSessions: number[] = []
-let pendingRequests = new Map<string, PendingRequest>()
+let configNoiseSuppression = false
+let configAudioSampleRate = 48000
+let configAutoCleanupEnabled = true
+let configAutoCleanupThresholdPercent = 90
+const pendingRequests = new Map<string, PendingRequest>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 function loadPersistedClipsConfig(): void {
@@ -124,6 +181,14 @@ function loadPersistedClipsConfig(): void {
   configWidth = saved.width
   configHeight = saved.height
   configBitrateKbps = saved.bitrateKbps
+  configCq = saved.cq ?? 24
+  configMaxrateKbps = saved.maxrateKbps ?? 50000
+  configBufsizeKbps = saved.bufsizeKbps ?? 100000
+  configBframes = saved.bframes ?? 2
+  configLookahead = saved.lookahead ?? 4
+  configEncoderPreset = saved.encoderPreset ?? 'p4'
+  configCodec = saved.codec ?? 'auto'
+  configAdapterIndex = saved.adapterIndex ?? -1
   configMicEnabled = saved.micEnabled
   configAudioLoopback = saved.audioLoopback
   configForceSoftware = saved.forceSoftware
@@ -139,6 +204,10 @@ function loadPersistedClipsConfig(): void {
   configGameVolume = saved.gameVolume ?? 1.0
   configMicVolume = saved.micVolume ?? 1.0
   configSelectedAudioSessions = saved.selectedAudioSessions ?? []
+  configNoiseSuppression = saved.noiseSuppression ?? false
+  configAudioSampleRate = saved.audioSampleRate ?? 48000
+  configAutoCleanupEnabled = saved.autoCleanupEnabled ?? true
+  configAutoCleanupThresholdPercent = saved.autoCleanupThresholdPercent ?? 90
   configHotkeys = saved.hotkeys
   configOutputDirectory = saved.outputDirectory
   engineReplayTimeSeconds = saved.replayTimeSeconds
@@ -150,6 +219,14 @@ function persistClipsConfig(): void {
     width: configWidth,
     height: configHeight,
     bitrateKbps: configBitrateKbps,
+    cq: configCq,
+    maxrateKbps: configMaxrateKbps,
+    bufsizeKbps: configBufsizeKbps,
+    bframes: configBframes,
+    lookahead: configLookahead,
+    encoderPreset: configEncoderPreset,
+    codec: configCodec,
+    adapterIndex: configAdapterIndex,
     micEnabled: configMicEnabled,
     audioLoopback: configAudioLoopback,
     forceSoftware: configForceSoftware,
@@ -165,10 +242,14 @@ function persistClipsConfig(): void {
     gameVolume: configGameVolume,
     micVolume: configMicVolume,
     selectedAudioSessions: configSelectedAudioSessions,
+    noiseSuppression: configNoiseSuppression,
+    audioSampleRate: configAudioSampleRate,
+    autoCleanupEnabled: configAutoCleanupEnabled,
+    autoCleanupThresholdPercent: configAutoCleanupThresholdPercent,
     hotkeys: configHotkeys,
-    outputDirectory: configOutputDirectory,
-    replayTimeSeconds: engineReplayTimeSeconds,
-    fps: engineFps,
+      outputDirectory: getDefaultOutputDir(),
+      replayTimeSeconds: engineReplayTimeSeconds,
+      fps: engineFps,
   })
 }
 
@@ -179,14 +260,14 @@ function getEnginePath(): string {
     return process.env.DINHO_CLIPS_ENGINE_PATH
   }
   const desktop = process.env.USERPROFILE ? join(process.env.USERPROFILE, 'Desktop') : ''
+  const isDev = !app.isPackaged
   const engineSubpath = join(
     'src',
     'DiNho.Capture.Poc',
     'bin',
-    'Release',
+    isDev ? 'Debug' : 'Release',
     'net9.0-windows10.0.26100.0',
-    'publish',
-    ENGINE_EXE,
+    isDev ? ENGINE_EXE : join('publish', ENGINE_EXE),
   )
   const candidates = [
     // env var fallback on desktop
@@ -197,6 +278,8 @@ function getEnginePath(): string {
     join(__dirname, '..', '..', 'clips-engine', ENGINE_EXE),
     // packaged app
     join(process.resourcesPath || '', 'clips-engine', ENGINE_EXE),
+    // process.cwd() fallback (npm run dev/build from project root)
+    join(process.cwd(), 'dinho-clips-poc', engineSubpath),
   ]
   for (const p of candidates) {
     if (p && existsSync(p)) return p
@@ -208,6 +291,21 @@ function getEnginePath(): string {
 function getDefaultOutputDir(): string {
   if (configOutputDirectory) return configOutputDirectory
   return join(process.env.USERPROFILE || 'C:\\Users\\Administrator', 'Desktop', 'DiNhoClips')
+}
+
+function getVideoDuration(filePath: string): number {
+  try {
+    const stdout = execFileSync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'csv=p=0',
+      filePath,
+    ], { encoding: 'utf-8', timeout: 5000, windowsHide: true })
+    const dur = Number.parseFloat(stdout.trim())
+    return Number.isFinite(dur) ? Math.round(dur) : 0
+  } catch {
+    return 0
+  }
 }
 
 function readClipsFromDisk(): ClipInfo[] {
@@ -225,7 +323,7 @@ function readClipsFromDisk(): ClipInfo[] {
             path: fullPath,
             size: stat.size,
             createdAt: stat.birthtime.toISOString(),
-            duration: 0,
+            duration: getVideoDuration(fullPath),
           }
         } catch {
           return null
@@ -255,6 +353,12 @@ function getCurrentStatus(): ClipsEngineStatus {
     lastCrashRecovered: engineLastCrashRecovered || undefined,
     audioLoopback: engineAudioLoopback || undefined,
     audioFallback: engineAudioFallback || undefined,
+    audioSampleRate: configAudioSampleRate,
+    replayBufferBytes: engineReplayBufferBytes || undefined,
+    replayBufferVideoFrames: engineReplayBufferVideoFrames || undefined,
+    replayBufferVideoBytes: engineReplayBufferVideoBytes || undefined,
+    replayBufferAudioPackets: engineReplayBufferAudioPackets || undefined,
+    replayBufferAudioBytes: engineReplayBufferAudioBytes || undefined,
   }
 }
 
@@ -272,7 +376,7 @@ function sendPipeCommand(cmd: string, payload?: Record<string, unknown>): Promis
     }
 
     const envelope: PipeEnvelope = { v: 1, cmd, ...(payload !== undefined ? { payload } : {}) }
-    const line = JSON.stringify(envelope) + '\n'
+    const line = `${JSON.stringify(envelope)}\n`
     getLogger().info('clips-pipe', `Sending: cmd=${cmd} payload=${JSON.stringify(payload ?? null)}`)
 
     const timer = setTimeout(() => {
@@ -341,7 +445,23 @@ function handlePipeMessage(msg: PipeMessage): void {
     if (typeof src.width === 'number') configWidth = src.width
     if (typeof src.height === 'number') configHeight = src.height
     if (typeof src.bitrateKbps === 'number') configBitrateKbps = src.bitrateKbps
+    if (typeof src.audioSampleRate === 'number') configAudioSampleRate = src.audioSampleRate
+    if (typeof src.replayBufferBytes === 'number') engineReplayBufferBytes = src.replayBufferBytes
+    if (typeof src.replayBufferVideoFrames === 'number') engineReplayBufferVideoFrames = src.replayBufferVideoFrames
+    if (typeof src.replayBufferVideoBytes === 'number') engineReplayBufferVideoBytes = src.replayBufferVideoBytes
+    if (typeof src.replayBufferAudioPackets === 'number') engineReplayBufferAudioPackets = src.replayBufferAudioPackets
+    if (typeof src.replayBufferAudioBytes === 'number') engineReplayBufferAudioBytes = src.replayBufferAudioBytes
+    if (typeof src.outputDirectory === 'string' && src.outputDirectory) {
+      const engineDir = src.outputDirectory as string
+      if (configOutputDirectory && configOutputDirectory !== engineDir) {
+        getLogger().warning('clips', `Output directory mismatch: frontend="${configOutputDirectory}" engine="${engineDir}"`)
+      }
+    }
     persistClipsConfig()
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (win) {
+      win.webContents.send(IPC.CLIPS_ENGINE_STATUS, getCurrentStatus())
+    }
     return
   }
 
@@ -375,9 +495,7 @@ function connectPipe(): void {
   sock.on('connect', () => {
     pipeConnected = true
     getLogger().info('clips-pipe', 'Connected to engine pipe')
-    if (configMicDeviceId) {
-      sendWithFallback('setMicDevice', { deviceId: configMicDeviceId }).catch(() => {})
-    }
+    syncConfigOnConnect()
   })
 
   sock.on('data', onPipeData)
@@ -453,6 +571,16 @@ async function waitForPipeConnection(timeoutMs: number): Promise<boolean> {
   return pipeConnected
 }
 
+async function syncConfigOnConnect(): Promise<void> {
+  try {
+    const engineConfig = buildEngineConfig()
+    await sendWithFallback('config', engineConfig)
+    getLogger().info('clips-pipe', 'Full config synced to engine on connect')
+  } catch {
+    getLogger().warning('clips-pipe', 'Config sync on connect failed (will retry on next config update)')
+  }
+}
+
 async function sendWithFallback(
   cmd: string,
   payload?: Record<string, unknown>,
@@ -468,6 +596,53 @@ async function sendWithFallback(
     return { success: true }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+async function startClipCapture(): Promise<{ success: boolean; error?: string }> {
+  if (!engineRunning) {
+    return { success: false, error: 'Engine not running' }
+  }
+  if (engineCapturing) {
+    return { success: true }
+  }
+  const rawProcessName = (engineCurrentGame || '').replace(/ \(.*?\) \[.*?\]$/, '').trim()
+  const targetGame = configCustomGameProcess || rawProcessName || ''
+  getLogger().info(
+    'clips',
+    `startClipCapture: targetGame="${targetGame}" configCustomGameProcess="${configCustomGameProcess}" engineCurrentGame="${engineCurrentGame}"`,
+  )
+  const payload = targetGame ? { gameProcess: targetGame } : undefined
+  const result = await sendWithFallback('startCapture', payload)
+  if (result.success) {
+    engineCapturing = true
+  }
+  return result
+}
+
+export { startClipCapture }
+
+export function stopEngineProcess(): void {
+  if (!engineProcess) return
+  try {
+    if (pipeConnected) {
+      sendPipeCommand('stopEngine').catch(() => {})
+    }
+  } catch {
+    /* ignore pipe errors during shutdown */
+  }
+  disconnectPipe()
+  try {
+    engineProcess.kill('SIGTERM')
+    setTimeout(() => {
+      if (engineProcess && !engineProcess.killed) {
+        engineProcess.kill('SIGKILL')
+      }
+    }, ENGINE_GRACE_PERIOD)
+  } finally {
+    engineRunning = false
+    engineCapturing = false
+    engineProcess = null
   }
 }
 
@@ -540,12 +715,14 @@ export function registerClipsIpc(): void {
 
       getLogger().info('clips', `Engine started from: ${exePath}, PID: ${engineProcess.pid}`)
 
-      // Abrir DevTools automaticamente para logs do engine
-      try {
-        const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
-        if (win) win.webContents.openDevTools()
-      } catch {
-        /* OK */
+      // Abrir DevTools para logs do engine (apenas dev)
+      if (!app.isPackaged) {
+        try {
+          const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+          if (win) win.webContents.openDevTools()
+        } catch {
+          /* OK */
+        }
       }
 
       connectPipe()
@@ -568,6 +745,13 @@ export function registerClipsIpc(): void {
         getLogger().warning('clips', 'Initial config sync to engine failed')
       })
 
+      // Sync per-app audio sessions on startup
+      if (configSelectedAudioSessions.length > 0) {
+        sendPipeCommand('setAudioSessions', { pids: configSelectedAudioSessions }).catch(() => {
+          getLogger().warning('clips', 'Initial audio session sync to engine failed')
+        })
+      }
+
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -577,57 +761,12 @@ export function registerClipsIpc(): void {
     }
   })
 
-  ipcMain.handle(IPC.CLIPS_STOP_ENGINE, async (): Promise<{ success: boolean; error?: string }> => {
-    if (!engineProcess) return { success: true }
-    try {
-      if (pipeConnected) {
-        await sendPipeCommand('stopEngine')
-      }
-    } catch {
-      /* ignore pipe errors during shutdown */
-    }
-
-    disconnectPipe()
-
-    try {
-      engineProcess.kill('SIGTERM')
-      setTimeout(() => {
-        if (engineProcess && !engineProcess.killed) {
-          engineProcess.kill('SIGKILL')
-        }
-      }, ENGINE_GRACE_PERIOD)
-    } finally {
-      engineRunning = false
-      engineCapturing = false
-      engineProcess = null
-    }
+  ipcMain.handle(IPC.CLIPS_STOP_ENGINE, async (): Promise<{ success: boolean }> => {
+    stopEngineProcess()
     return { success: true }
   })
 
-  ipcMain.handle(IPC.CLIPS_START_CAPTURE, async (): Promise<{ success: boolean; error?: string }> => {
-    if (!engineRunning) {
-      return { success: false, error: 'Engine not running' }
-    }
-    if (engineCapturing) {
-      return { success: true }
-    }
-    // Send the current game process so engine captures the right window
-    // Strip KnownGame tag "(FiveM)" and display mode "[FSO]" → raw process name
-    const rawProcessName = (engineCurrentGame || '').replace(/ \(.*?\) \[.*?\]$/, '').trim()
-    const targetGame = configCustomGameProcess || rawProcessName || ''
-    getLogger().info(
-      'clips',
-      `CLIPS_START_CAPTURE: targetGame="${targetGame}" configCustomGameProcess="${configCustomGameProcess}" engineCurrentGame="${engineCurrentGame}"`,
-    )
-    const payload = targetGame ? { gameProcess: targetGame } : undefined
-    getLogger().info('clips', `CLIPS_START_CAPTURE: sending startCapture payload=${JSON.stringify(payload)}`)
-    const result = await sendWithFallback('startCapture', payload)
-    getLogger().info('clips', `CLIPS_START_CAPTURE: result success=${result.success} error=${result.error}`)
-    if (result.success) {
-      engineCapturing = true
-    }
-    return result
-  })
+  ipcMain.handle(IPC.CLIPS_START_CAPTURE, startClipCapture)
 
   ipcMain.handle(IPC.CLIPS_STOP_CAPTURE, async (): Promise<{ success: boolean; error?: string }> => {
     if (!engineRunning) {
@@ -652,6 +791,11 @@ export function registerClipsIpc(): void {
         if (pipeConnected) break
         if (!engineRunning) return { success: false, error: 'Engine not running' }
       }
+    }
+    // Force-sync config so engine uses correct output directory
+    if (pipeConnected) {
+      const engineConfig = buildEngineConfig()
+      await sendWithFallback('config', engineConfig)
     }
     return await sendWithFallback('saveClip')
   })
@@ -728,6 +872,34 @@ export function registerClipsIpc(): void {
     })
   })
 
+  ipcMain.handle(
+    IPC.CLIPS_SET_FAVORITE,
+    async (_event, clipName: unknown, favorite: unknown): Promise<{ success: boolean; error?: string }> => {
+      if (typeof clipName !== 'string' || !clipName) {
+        return { success: false, error: 'Invalid clip name' }
+      }
+      if (typeof favorite !== 'boolean') {
+        return { success: false, error: 'Invalid favorite value' }
+      }
+      const dir = getDefaultOutputDir()
+      const markerPath = join(dir, `.${clipName}.favorite`)
+      try {
+        if (favorite) {
+          writeFileSync(markerPath, '', 'utf-8')
+        } else {
+          if (existsSync(markerPath)) {
+            unlinkSync(markerPath)
+          }
+        }
+        return { success: true }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        getLogger().error('clips', `Failed to set favorite: ${msg}`)
+        return { success: false, error: msg }
+      }
+    },
+  )
+
   function getCurrentConfigPayload(): Record<string, unknown> {
     return {
       replayTimeSeconds: engineReplayTimeSeconds,
@@ -737,6 +909,14 @@ export function registerClipsIpc(): void {
       width: configWidth,
       height: configHeight,
       bitrateKbps: configBitrateKbps,
+      cq: configCq,
+      maxrateKbps: configMaxrateKbps,
+      bufsizeKbps: configBufsizeKbps,
+      bframes: configBframes,
+      lookahead: configLookahead,
+      encoderPreset: configEncoderPreset,
+      codec: configCodec,
+      adapterIndex: configAdapterIndex,
       outputDirectory: getDefaultOutputDir(),
       forceSoftware: configForceSoftware,
       hotkeys: configHotkeys.length > 0 ? configHotkeys : defaultHotkeys(),
@@ -753,6 +933,10 @@ export function registerClipsIpc(): void {
       selectedAudioSessions: configSelectedAudioSessions,
       useExcludeMode: configUseExcludeMode,
       excludeProcessId: configExcludeProcessId,
+      noiseSuppression: configNoiseSuppression,
+      audioSampleRate: configAudioSampleRate,
+      autoCleanupEnabled: configAutoCleanupEnabled,
+      autoCleanupThresholdPercent: configAutoCleanupThresholdPercent,
     }
   }
 
@@ -769,6 +953,14 @@ export function registerClipsIpc(): void {
         if (typeof c.width === 'number') configWidth = c.width
         if (typeof c.height === 'number') configHeight = c.height
         if (typeof c.bitrateKbps === 'number') configBitrateKbps = c.bitrateKbps
+        if (typeof c.cq === 'number') configCq = Math.max(0, Math.min(51, c.cq))
+        if (typeof c.maxrateKbps === 'number') configMaxrateKbps = Math.max(1000, c.maxrateKbps)
+        if (typeof c.bufsizeKbps === 'number') configBufsizeKbps = Math.max(2000, c.bufsizeKbps)
+        if (typeof c.bframes === 'number') configBframes = Math.max(0, Math.min(16, c.bframes))
+        if (typeof c.lookahead === 'number') configLookahead = Math.max(0, Math.min(256, c.lookahead))
+        if (typeof c.encoderPreset === 'string') configEncoderPreset = c.encoderPreset
+        if (typeof c.codec === 'string') configCodec = c.codec
+        if (typeof c.adapterIndex === 'number') configAdapterIndex = c.adapterIndex
         if (typeof c.micEnabled === 'boolean') configMicEnabled = c.micEnabled
         if (typeof c.audioLoopback === 'boolean') configAudioLoopback = c.audioLoopback
         if (typeof c.forceSoftware === 'boolean') configForceSoftware = c.forceSoftware
@@ -811,6 +1003,11 @@ export function registerClipsIpc(): void {
         }
         if (Array.isArray(c.hotkeys)) configHotkeys = c.hotkeys as HotkeyBinding[]
         if (typeof c.outputDirectory === 'string') configOutputDirectory = c.outputDirectory
+        if (typeof c.noiseSuppression === 'boolean') configNoiseSuppression = c.noiseSuppression
+        if (typeof c.audioSampleRate === 'number') configAudioSampleRate = c.audioSampleRate
+        if (typeof c.autoCleanupEnabled === 'boolean') configAutoCleanupEnabled = c.autoCleanupEnabled
+        if (typeof c.autoCleanupThresholdPercent === 'number')
+          configAutoCleanupThresholdPercent = Math.max(50, Math.min(99, c.autoCleanupThresholdPercent))
       }
       persistClipsConfig()
       if (pipeConnected) {
@@ -923,6 +1120,106 @@ export function registerClipsIpc(): void {
         await sendPipeCommand('setMicDevice', { deviceId })
         return { success: true }
       } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
+
+  interface GpuInfo {
+    index: number
+    name: string
+    vendorId: number
+  }
+
+  ipcMain.handle(IPC.CLIPS_GET_GPUS, async (): Promise<GpuInfo[]> => {
+    if (!pipeConnected) return []
+    try {
+      const resp = await sendPipeCommand('getGpus')
+      if (Array.isArray(resp.payload)) {
+        return resp.payload as GpuInfo[]
+      }
+      return []
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle(
+    IPC.CLIPS_TRIM_CLIP,
+    async (_event, clipPath: string, startSeconds: number, endSeconds: number): Promise<ClipTrimResult> => {
+      if (!clipPath || !existsSync(clipPath)) {
+        return { success: false, error: 'Clip file not found' }
+      }
+      if (typeof startSeconds !== 'number' || typeof endSeconds !== 'number' || endSeconds <= startSeconds || startSeconds < 0) {
+        return { success: false, error: 'Invalid trim range' }
+      }
+      const outDir = join(getDefaultOutputDir(), 'trimmed')
+      if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
+      const baseName = basename(clipPath, '.mp4')
+      const outPath = join(outDir, `${baseName}_trimmed_${Date.now()}.mp4`)
+      return new Promise((resolve) => {
+        const args = [
+          '-y', '-loglevel', 'error',
+          '-ss', String(startSeconds),
+          '-to', String(endSeconds),
+          '-i', clipPath,
+          '-c', 'copy',
+          outPath,
+        ]
+        const proc = execFile('ffmpeg', args, { timeout: 120_000 }, (err) => {
+          if (err) {
+            resolve({ success: false, error: err.message })
+          } else {
+            resolve({ success: true, path: outPath })
+          }
+        })
+        proc.on('error', (e) => resolve({ success: false, error: e.message }))
+      })
+    },
+  )
+
+  ipcMain.handle(
+    IPC.CLIPS_MERGE_CLIPS,
+    async (_event, clipPaths: string[]): Promise<ClipMergeResult> => {
+      if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
+        return { success: false, error: 'At least 2 clips required' }
+      }
+      for (const p of clipPaths) {
+        if (!p || !existsSync(p)) {
+          return { success: false, error: `Clip not found: ${p}` }
+        }
+      }
+      const outDir = join(getDefaultOutputDir(), 'merged')
+      if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
+      const concatFile = join(outDir, `concat_${Date.now()}.txt`)
+      const outPath = join(outDir, `merged_${Date.now()}.mp4`)
+      try {
+        const lines = clipPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
+        writeFileSync(concatFile, lines.join('\n'), 'utf-8')
+        return await new Promise((resolve) => {
+          const args = [
+            '-y', '-loglevel', 'error',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', concatFile,
+            '-c', 'copy',
+            outPath,
+          ]
+          const proc = execFile('ffmpeg', args, { timeout: 120_000 }, (err) => {
+            try { unlinkSync(concatFile) } catch { }
+            if (err) {
+              resolve({ success: false, error: err.message })
+            } else {
+              resolve({ success: true, path: outPath })
+            }
+          })
+          proc.on('error', (e) => {
+            try { unlinkSync(concatFile) } catch { }
+            resolve({ success: false, error: e.message })
+          })
+        })
+      } catch (err) {
+        try { unlinkSync(concatFile) } catch { }
         return { success: false, error: err instanceof Error ? err.message : String(err) }
       }
     },

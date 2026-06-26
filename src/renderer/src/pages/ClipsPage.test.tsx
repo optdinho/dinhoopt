@@ -70,6 +70,8 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
+const mockOnEngineStatus = vi.fn(() => vi.fn())
+
 window.dinho = {
   clipsGetStatus: mockGetStatus,
   clipsGetConfig: mockGetConfig,
@@ -82,6 +84,8 @@ window.dinho = {
   clipsSaveClip: mockSaveClip,
   clipsDelete: mockDeleteClip,
   clipsOpen: mockOpenClip,
+  clipsOnEngineStatus: mockOnEngineStatus,
+  clipsGetVideoUrl: (path: string) => `clip-video://file?path=${encodeURIComponent(path)}`,
 } as Record<string, unknown> as typeof window.dinho
 
 import { ClipsPage } from './ClipsPage'
@@ -103,7 +107,13 @@ describe('ClipsPage', () => {
       fps: 60,
       width: 1920,
       height: 1080,
-      bitrateKbps: 20000,
+      bitrateKbps: 50000,
+      cq: 24,
+      maxrateKbps: 50000,
+      bufsizeKbps: 100000,
+      bframes: 2,
+      lookahead: 4,
+      encoderPreset: 'p4',
       outputDirectory: 'C:\\Users\\Test\\Desktop\\DiNhoClips',
       forceSoftware: false,
       pushToTalk: 'off',
@@ -217,7 +227,7 @@ describe('ClipsPage', () => {
       replayTimeSeconds: 60,
       captureBackend: 'nvenc',
       encoder: 'h264',
-      estimatedRamMB: 512,
+      replayBufferBytes: 536870912,
       diskSpaceOk: true,
       currentGame: 'Cyberpunk 2077',
       lastCrashRecovered: true,
@@ -225,7 +235,7 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     expect(await screen.findByText('nvenc')).toBeTruthy()
     expect(screen.getByText('h264')).toBeTruthy()
-    expect(screen.getByText('~512MB')).toBeTruthy()
+    expect(screen.getByText('512MB')).toBeTruthy()
     expect(screen.getByText('Cyberpunk 2077')).toBeTruthy()
     expect(screen.getByText('crashRecovered')).toBeTruthy()
   })
@@ -285,7 +295,7 @@ describe('ClipsPage', () => {
     await screen.findByText('recordingQuality')
     const alToggle = screen.getByText('audioLoopback')
     alToggle.click()
-    expect(mockSetConfig).toHaveBeenCalledWith({ audioLoopback: true })
+    expect(mockSetConfig).toHaveBeenCalledWith({ audioLoopback: true, gameAudioOnly: false })
   })
 
   it('renders game detection toggle', async () => {
@@ -303,7 +313,13 @@ describe('ClipsPage', () => {
       fps: 60,
       width: 1920,
       height: 1080,
-      bitrateKbps: 20000,
+      bitrateKbps: 50000,
+      cq: 24,
+      maxrateKbps: 50000,
+      bufsizeKbps: 100000,
+      bframes: 2,
+      lookahead: 4,
+      encoderPreset: 'p4',
       outputDirectory: 'C:\\Users\\Test\\Desktop\\DiNhoClips',
       forceSoftware: false,
       pushToTalk: 'off',
@@ -318,22 +334,23 @@ describe('ClipsPage', () => {
     expect(await screen.findByText('PTT')).toBeTruthy()
   })
 
-  it('renders bitrate presets', async () => {
+  it('renders quality presets', async () => {
     render(<ClipsPage />)
     showSettings()
-    expect(await screen.findByText('bitrate')).toBeTruthy()
-    expect(screen.getByText('10M')).toBeTruthy()
-    expect(screen.getByText('20M')).toBeTruthy()
-    expect(screen.getByText('30M')).toBeTruthy()
-    expect(screen.getByText('50M')).toBeTruthy()
+    expect(await screen.findByText('recordingQuality')).toBeTruthy()
+    expect(screen.getByText('Muito Alta')).toBeTruthy()
+    expect(screen.getByText('Alta')).toBeTruthy()
+    expect(screen.getByText('Boa')).toBeTruthy()
   })
 
-  it('calls setConfig when bitrate preset is clicked', async () => {
+  it('calls setConfig when quality preset is clicked', async () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('30M').click()
-    expect(mockSetConfig).toHaveBeenCalledWith({ bitrateKbps: 30000 })
+    screen.getByText('Alta').click()
+    expect(mockSetConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ cq: 18, maxrateKbps: 50000 })
+    )
   })
 
   it('renders force software toggle', async () => {

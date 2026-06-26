@@ -28,9 +28,9 @@ public sealed class CppLoopbackSource : IAudioSource
 {
     private readonly int _processId;
     private readonly bool _includeTree;
+    private readonly int _sampleRate;
     private Thread? _captureThread;
     private volatile bool _running;
-    private int _sampleRate = 48000;
     private int _channels = 2;
     private GCHandle _callbackHandle;
     private AudioCallback? _managedCallback;
@@ -43,10 +43,11 @@ public sealed class CppLoopbackSource : IAudioSource
 
     public event Action<AudioBuffer>? OnAudioData;
 
-    public CppLoopbackSource(int processId, bool includeTree = true)
+    public CppLoopbackSource(int processId, bool includeTree = true, int sampleRate = 48000)
     {
         _processId = processId;
         _includeTree = includeTree;
+        _sampleRate = sampleRate;
     }
 
     public void Start()
@@ -99,6 +100,8 @@ public sealed class CppLoopbackSource : IAudioSource
         }
     }
 
+    private const int MaxPendingBuffers = 512;
+
     private void OnAudioCallback(IntPtr data, int length)
     {
         if (!_running || OnAudioData == null || data == IntPtr.Zero || length <= 0)
@@ -115,6 +118,8 @@ public sealed class CppLoopbackSource : IAudioSource
         var buffer = new AudioBuffer(samples, _sampleRate, _channels);
         lock (_lock)
         {
+            if (_pendingBuffers.Count >= MaxPendingBuffers)
+                _pendingBuffers.Dequeue();
             _pendingBuffers.Enqueue(buffer);
             Monitor.Pulse(_lock);
         }

@@ -1694,6 +1694,17 @@ export interface ClipsEngineStatus {
   lastCrashRecovered?: boolean
   audioLoopback?: boolean
   audioFallback?: boolean
+  audioSampleRate?: number
+  lastFrameMs?: number
+  lastClipSize?: number
+  activePipelines?: number
+  watchdogOk?: boolean
+  memoryMB?: number
+  replayBufferBytes?: number
+  replayBufferVideoFrames?: number
+  replayBufferVideoBytes?: number
+  replayBufferAudioPackets?: number
+  replayBufferAudioBytes?: number
 }
 
 export interface ClipInfo {
@@ -1720,6 +1731,22 @@ export interface ClipsConfig {
   width: number
   height: number
   bitrateKbps: number
+  /** CRF value for NVENC/AV1 (0-51, lower = better, default 24) */
+  cq: number
+  /** VBV max bitrate in Kbps (default 50000 = 50Mbps) */
+  maxrateKbps: number
+  /** VBV buffer size in Kbps (default 100000 = 100Mbps) */
+  bufsizeKbps: number
+  /** Number of B-frames (0-16, default 2) */
+  bframes: number
+  /** RC lookahead frames (0-256, default 4) */
+  lookahead: number
+  /** NVENC preset (p4, p5, etc., default p4) */
+  encoderPreset: string
+  /** Codec preference: auto | h264 | hevc | av1 | libx264 | libx265 */
+  codec?: string
+  /** GPU adapter index for multi-GPU systems (-1 = auto) */
+  adapterIndex?: number
   outputDirectory: string
   forceSoftware: boolean
   hotkeys: HotkeyBinding[]
@@ -1738,4 +1765,24 @@ export interface ClipsConfig {
   selectedAudioSessions: number[]
   useExcludeMode: boolean
   excludeProcessId: number
+  /** Sample rate de áudio: 44100, 48000, 96000 (default 48000) */
+  audioSampleRate?: number
+  /** AutoCleanup: remove clips antigos quando o disco está cheio */
+  autoCleanupEnabled: boolean
+  /** Percentual de ocupação do disco que dispara o cleanup (default 90) */
+  autoCleanupThresholdPercent: number
+  /** RNNoise/anlmdn noise suppression on microphone */
+  noiseSuppression?: boolean
+}
+
+export interface ClipTrimResult {
+  success: boolean
+  path?: string
+  error?: string
+}
+
+export interface ClipMergeResult {
+  success: boolean
+  path?: string
+  error?: string
 }

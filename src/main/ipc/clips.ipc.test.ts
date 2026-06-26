@@ -3,10 +3,22 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(),
   execFile: vi.fn(),
+  execFileSync: vi.fn(),
 }))
 
+const mockSocket = {
+  on: vi.fn((_event: string, cb: () => void) => {
+    if (_event === 'connect') cb()
+    return mockSocket
+  }),
+  destroy: vi.fn(),
+  write: vi.fn(),
+  end: vi.fn(),
+  setTimeout: vi.fn(),
+  removeAllListeners: vi.fn(),
+}
 vi.mock('node:net', () => ({
-  connect: vi.fn(),
+  connect: vi.fn(() => mockSocket),
 }))
 
 vi.mock('node:fs', () => ({
@@ -23,7 +35,10 @@ vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
   shell: { openPath: vi.fn() },
   dialog: { showOpenDialog: vi.fn() },
-  BrowserWindow: { getFocusedWindow: vi.fn() },
+  BrowserWindow: {
+    getFocusedWindow: vi.fn(),
+    getAllWindows: vi.fn(() => []),
+  },
   app: {
     isPackaged: false,
     getPath: vi.fn(() => '/mock/user-data'),
@@ -38,10 +53,12 @@ vi.mock('../services/logger.service', () => ({
   }),
 }))
 
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { connect } from 'node:net'
 import { ipcMain, shell } from 'electron'
 import { IPC } from '@shared/channels'
-import { registerClipsIpc } from './clips.ipc'
+import { registerClipsIpc, stopEngineProcess } from './clips.ipc'
 
 function captureHandlers(): Map<string, (...args: unknown[]) => unknown> {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -88,11 +105,15 @@ describe('registerClipsIpc', () => {
       IPC.CLIPS_GET_RUNNING_PROCESSES,
       IPC.CLIPS_GET_MIC_DEVICES,
       IPC.CLIPS_SET_MIC_DEVICE,
+      IPC.CLIPS_SET_FAVORITE,
+      IPC.CLIPS_GET_GPUS,
+      IPC.CLIPS_TRIM_CLIP,
+      IPC.CLIPS_MERGE_CLIPS,
     ]
     for (const ch of expectedChannels) {
       expect(handlers.has(ch)).toBe(true)
     }
-    expect(handlers.size).toBe(18)
+    expect(handlers.size).toBe(22)
   })
 })
 
@@ -108,12 +129,12 @@ describe('CLIPS_GET_STATUS', () => {
     expect(status.capturing).toBe(false)
     expect(status.uptime).toBe(0)
     expect(status.fps).toBe(60)
-    expect(status.replayTimeSeconds).toBe(60)
+    expect(status.replayTimeSeconds).toBe(300)
     expect(status.captureBackend).toBeUndefined()
     expect(status.encoder).toBeUndefined()
     expect(status.estimatedRamMB).toBeUndefined()
     expect(status.diskSpaceOk).toBe(true)
-    expect(status.currentGame).toBeUndefined()
+    expect(status.currentGame).toBe('FiveM_GTAProcess.exe')
     expect(status.lastCrashRecovered).toBeUndefined()
   })
 })
@@ -133,6 +154,7 @@ describe('CLIPS_LIST_CLIPS', () => {
   it('returns sorted clips from disk', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['clip2.mp4', 'clip1.mp4'])
+    vi.mocked(execFileSync).mockReturnValue('150.0\n')
 
     const statMock = vi.mocked(statSync)
     statMock.mockReturnValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z') } as ReturnType<typeof statSync>)
@@ -152,6 +174,7 @@ describe('CLIPS_LIST_CLIPS', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['clip.mp4', 'notes.txt', 'image.png'])
     vi.mocked(statSync).mockReturnValue({ size: 50, birthtime: new Date() } as ReturnType<typeof statSync>)
+    vi.mocked(execFileSync).mockReturnValue('60.0\n')
 
     const handlers = captureHandlers()
     const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string }>
@@ -162,6 +185,7 @@ describe('CLIPS_LIST_CLIPS', () => {
   it('skips files that fail to stat', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['good.mp4', 'bad.mp4'])
+    vi.mocked(execFileSync).mockReturnValue('30.0\n')
     vi.mocked(statSync)
       .mockReturnValueOnce({ size: 50, birthtime: new Date() } as ReturnType<typeof statSync>)
       .mockImplementationOnce(() => { throw new Error('permission denied') })
@@ -170,6 +194,30 @@ describe('CLIPS_LIST_CLIPS', () => {
     const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string }>
     expect(list).toHaveLength(1)
     expect(list[0]!.name).toBe('good.mp4')
+  })
+
+  it('populates duration from ffprobe', () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(readdirSync).mockReturnValue(['clip.mp4'])
+    vi.mocked(statSync).mockReturnValue({ size: 100, birthtime: new Date() } as ReturnType<typeof statSync>)
+    vi.mocked(execFileSync).mockReturnValue('90.5\n')
+
+    const handlers = captureHandlers()
+    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string; duration: number }>
+    expect(list).toHaveLength(1)
+    expect(list[0]!.duration).toBe(91)
+  })
+
+  it('returns 0 duration when ffprobe fails', () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(readdirSync).mockReturnValue(['clip.mp4'])
+    vi.mocked(statSync).mockReturnValue({ size: 100, birthtime: new Date() } as ReturnType<typeof statSync>)
+    vi.mocked(execFileSync).mockImplementation(() => { throw new Error('ffprobe not found') })
+
+    const handlers = captureHandlers()
+    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string; duration: number }>
+    expect(list).toHaveLength(1)
+    expect(list[0]!.duration).toBe(0)
   })
 })
 
@@ -248,24 +296,30 @@ describe('CLIPS_GET_CONFIG', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     const handlers = captureHandlers()
     const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
-    expect(cfg.replayTimeSeconds).toBe(60)
+    expect(cfg.replayTimeSeconds).toBe(300)
     expect(cfg.micEnabled).toBe(true)
     expect(cfg.audioLoopback).toBe(false)
     expect(cfg.fps).toBe(60)
     expect(cfg.width).toBe(1920)
     expect(cfg.height).toBe(1080)
-    expect(cfg.bitrateKbps).toBe(20000)
+    expect(cfg.bitrateKbps).toBe(50000)
+    expect(cfg.cq).toBe(18)
+    expect(cfg.maxrateKbps).toBe(50000)
+    expect(cfg.bufsizeKbps).toBe(100000)
+    expect(cfg.bframes).toBe(0)
+    expect(cfg.lookahead).toBe(4)
+    expect(cfg.encoderPreset).toBe('p4')
     expect(cfg.outputDirectory).toContain('DiNhoClips')
     expect(cfg.forceSoftware).toBe(false)
-    expect(cfg.pushToTalk).toBe('off')
-    expect(cfg.pushToTalkKeys).toEqual([0x7a])
-    expect(cfg.gameDetection).toBe(false)
-    expect(cfg.gameAudioOnly).toBe(false)
+    expect(cfg.pushToTalk).toBe('hold')
+    expect(cfg.pushToTalkKeys).toEqual([5, 20])
+    expect(cfg.gameDetection).toBe(true)
+    expect(cfg.gameAudioOnly).toBe(true)
     const hk = cfg.hotkeys as Array<Record<string, unknown>>
     expect(hk).toHaveLength(3)
-    expect(hk[0]).toMatchObject({ vk: 0x77, action: 'saveClip', modifiers: [], enabled: true })
-    expect(hk[1]).toMatchObject({ vk: 0x78, action: 'toggleCapture', modifiers: [], enabled: true })
-    expect(hk[2]).toMatchObject({ vk: 0x79, action: 'toggleMic', modifiers: [], enabled: true })
+    expect(hk[0]).toMatchObject({ vk: 123, action: 'saveClip', modifiers: [], enabled: true, replayDurationSeconds: 300 })
+    expect(hk[1]).toMatchObject({ vk: 122, action: 'saveClip', modifiers: [], enabled: true, replayDurationSeconds: 120 })
+    expect(hk[2]).toMatchObject({ vk: 49, modifiers: ['Alt'], action: 'toggleCapture', enabled: true, replayDurationSeconds: 60 })
   })
 })
 
@@ -281,6 +335,73 @@ describe('CLIPS_START_ENGINE', () => {
     const result = await handler() as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toContain('not found')
+  })
+})
+
+describe('CLIPS_START_ENGINE success + stopEngineProcess', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function startEngine() {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_START_ENGINE)
+    return { handlers, handler }
+  }
+
+  function makeMockChild() {
+    return {
+      pid: 42,
+      kill: vi.fn(),
+      killed: false,
+      removeAllListeners: vi.fn(),
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn(),
+    }
+  }
+
+  function startEngineAndVerifySuccess() {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    return child
+  }
+
+  it('starts engine successfully', async () => {
+    const child = startEngineAndVerifySuccess()
+    const { handler } = startEngine()
+    const result = await handler() as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(spawn).toHaveBeenCalled()
+    // cleanup so next test has fresh state
+    stopEngineProcess()
+    expect(child.kill).toHaveBeenCalled()
+  })
+
+  it('stopEngineProcess kills the engine process', async () => {
+    const child = startEngineAndVerifySuccess()
+    const { handler } = startEngine()
+    await handler()
+
+    stopEngineProcess()
+
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+  })
+
+  it('stopEngineProcess is no-op when engine not running', () => {
+    expect(() => stopEngineProcess()).not.toThrow()
+  })
+
+  it('CLIPS_STOP_ENGINE handler delegates to stopEngineProcess', async () => {
+    const child = startEngineAndVerifySuccess()
+    const { handlers, handler } = startEngine()
+    await handler()
+
+    const stopHandler = getAsyncHandler(handlers, IPC.CLIPS_STOP_ENGINE)
+    const result = await stopHandler() as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
   })
 })
 

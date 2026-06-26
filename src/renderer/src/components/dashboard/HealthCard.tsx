@@ -1,19 +1,67 @@
 import { HealthScore } from '@/components/shared/HealthScore'
-import { Check } from 'lucide-react'
+import { usePolling } from '@/hooks/usePolling'
+import { Check, HardDrive, MemoryStick, FileStack, BarChart3 } from 'lucide-react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { formatBytes } from '@/lib/utils'
 import { toolRoutes } from './constants'
 import type { ToolCoverageItem } from './types'
+import type { DiskSmartInfo } from '@shared/types'
+
+const STATS_POLL_INTERVAL = 60_000
 
 export function HealthCard({
   healthScore,
   toolCoverage,
+  memPercent,
+  totalSpaceSaved,
+  totalFilesCleaned,
+  totalScans,
 }: {
   healthScore: number
   toolCoverage: ToolCoverageItem[]
+  memPercent: number
+  totalSpaceSaved: number
+  totalFilesCleaned: number
+  totalScans: number
 }) {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
+  const { data: disks } = usePolling<DiskSmartInfo[]>(
+    () => window.dinho?.perfGetDiskHealth?.() ?? Promise.resolve([]),
+    STATS_POLL_INTERVAL,
+  )
+  const disk = disks?.[0] ?? null
+  const memColor = memPercent >= 85 ? '#ef4444' : memPercent >= 60 ? '#f59e0b' : '#06b6d4'
+
+  const diskLabel = useMemo(() => {
+    if (!disk) return '—'
+    switch (disk.healthStatus) {
+      case 'Healthy': return 'Saudável'
+      case 'Caution': return 'Atenção'
+      case 'Bad': return 'Crítico'
+      default: return '—'
+    }
+  }, [disk])
+
+  const diskColor = useMemo(() => {
+    if (!disk) return '#6b7280'
+    switch (disk.healthStatus) {
+      case 'Healthy': return '#22c55e'
+      case 'Caution': return '#f59e0b'
+      case 'Bad': return '#ef4444'
+      default: return '#6b7280'
+    }
+  }, [disk])
+
+  const stats = useMemo(() => [
+    { icon: MemoryStick, label: t('gaugeRam'), value: `${memPercent}%`, color: memColor },
+    { icon: HardDrive, label: t('diskCardTitle'), value: diskLabel, color: diskColor },
+    { icon: BarChart3, label: t('statSpaceRecovered'), value: formatBytes(totalSpaceSaved), color: '#06b6d4' },
+    { icon: FileStack, label: t('statFilesCleaned'), value: String(totalFilesCleaned), color: '#22c55e' },
+    { icon: BarChart3, label: t('statTotalScans'), value: String(totalScans), color: '#a855f7' },
+  ], [memPercent, diskLabel, diskColor, totalSpaceSaved, totalFilesCleaned, totalScans, t])
 
   return (
     <div
@@ -64,6 +112,21 @@ export function HealthCard({
             </div>
           )
         })}
+      </div>
+
+      <div
+        className="mt-4 flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-1 border-t pt-3"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
+        {stats.map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <div className="h-1.5 w-1.5 rounded-full" style={{ background: s.color }} />
+            <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              {s.label}
+            </span>
+            <span className="text-[11px] font-semibold text-white">{s.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   )

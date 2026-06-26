@@ -1,5 +1,7 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using DiNho.Capture.Poc.Logging;
 using System.Threading;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -45,7 +47,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         }
         else
         {
-            var creationFlags = DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport;
+            var creationFlags = DeviceCreationFlags.BgraSupport;
 
             var result = D3D11.D3D11CreateDevice(
                 null,
@@ -70,19 +72,62 @@ public sealed class WgcCaptureSource : ICaptureSource
             _ownsDevice = true;
         }
 
-        using var dxgiDevice = _device.QueryInterface<IDXGIDevice>();
-        _winrtDevice = Direct3D11Helper.CreateDirect3DDeviceFromDxgiDevice(dxgiDevice);
+        IDXGIDevice dxgiDevice = null!;
+        try
+        {
+            try
+            {
+                dxgiDevice = _device.QueryInterface<IDXGIDevice>();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] QueryInterface<IDXGIDevice> falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+
+            _winrtDevice = Direct3D11Helper.CreateDirect3DDeviceFromDxgiDevice(dxgiDevice);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[WGC-DIAG] CreateDirect3DDeviceFromDxgiDevice falhou: {ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+        finally
+        {
+            dxgiDevice?.Dispose();
+        }
 
         if (_targetHwnd != IntPtr.Zero)
         {
-            var item = GraphicsCaptureItemHelper.CreateForWindow(_targetHwnd);
+            GraphicsCaptureItem? item;
+            try
+            {
+                item = GraphicsCaptureItemHelper.CreateForWindow(_targetHwnd);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] CreateForWindow falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
             if (item is null)
                 throw new InvalidOperationException("WGC CreateForWindow: TryCreateFromWindowId retornou null.");
             _captureItem = item;
         }
         else
         {
-            _captureItem = GraphicsCaptureItemHelper.CreateForPrimaryMonitor();
+            GraphicsCaptureItem? item;
+            try
+            {
+                item = GraphicsCaptureItemHelper.CreateForPrimaryMonitor();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WGC-DIAG] CreateForPrimaryMonitor falhou: {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+            if (item is null)
+                throw new InvalidOperationException("WGC CreateForPrimaryMonitor retornou null — WGC pode não estar disponível.");
+            _captureItem = item;
         }
 
         _framePool = Direct3D11CaptureFramePool.Create(
@@ -231,7 +276,8 @@ public sealed class WgcCaptureSource : ICaptureSource
                 var desc = sourceTexture.Description;
                 if (desc.Width != size.Width || desc.Height != size.Height)
                 {
-                    Console.Error.WriteLine($"[WGC] DIM MISMATCH: tex={desc.Width}x{desc.Height} fmt={desc.Format} vs content={size.Width}x{size.Height}");
+                    Console.Error.WriteLine($"[WGC] DIM MISMATCH: tex={desc.Width}x{desc.Height} fmt={desc.Format} vs content={size.Width}x{size.Height} — frame pulado para evitar E_OUTOFMEMORY no GpuVideoConverter");
+                    return new CapturedFrame(startTicks, endTicks, 0, 0, success: false, waitEndTicks: waitEndTicks);
                 }
 
                 var copyDesc = new Texture2DDescription

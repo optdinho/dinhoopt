@@ -12,6 +12,8 @@ import { runGameModeAudit } from '../../services/game-mode-audit'
 import { getLogger } from '../../services/logger.service'
 import { getSettings } from '../../services/settings-store'
 import type { WindowGetter } from '../index'
+import { loadClipsConfig } from '../../services/clips-config-store'
+import { startClipCapture } from '../clips.ipc'
 import { activateGameMode } from './activate'
 import { deactivateGameMode } from './deactivate'
 import { readSnapshot } from './snapshot'
@@ -129,6 +131,11 @@ export function initGameDetector(
 
         autoActivated = true
         await activateGameMode(activeCfg, sendProgress)
+        const clipsCfg = loadClipsConfig()
+        if (clipsCfg.autoStartCapture) {
+          getLogger().info('game-mode', 'autoStartCapture enabled — starting clip capture')
+          await startClipCapture()
+        }
         sendAutoEvent({ type: 'game-detected', processName })
       },
       onGameExited: async () => {

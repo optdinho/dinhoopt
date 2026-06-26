@@ -805,3 +805,447 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 ### Full Suite
 
 - **5258 testes**, 179 arquivos — **0 quebras**
+
+## Session Summary (2026-06-24d)
+
+### Done
+
+- **AutoCleanup + favorites mismatch corrigido**: Engine busca `.favorite` marker files no disco, frontend usava `localStorage`. Adicionado `CLIPS_SET_FAVORITE` IPC handler (`clips.ipc.ts:745`) que cria/remove `.${clipName}.favorite` na pasta de saída. `toggleFavorite()` em `ClipsPage.tsx` agora também chama `clipsSetFavorite()` via IPC. Marcador persistido em disco → engine pode ler no AutoCleanup.
+
+- **`audioSampleRate` config adicionado**: Campo `audioSampleRate` em `ClipsConfig` TS type, `ClipsPersistedConfig` store, state var `configAudioSampleRate` no IPC, `buildEngineConfig()`, `CLIPS_SET_CONFIG` handler. UI em `ClipsPage.tsx` com dropdown 44.1kHz / 48kHz / 96kHz na seção Audio. Default 48000.
+
+- **`uptimeSeconds` exibido na status bar**: Status bar já parseava `uptime` via `getCurrentStatus()` mas não renderizava. Adicionado `formatUptime(status.uptime)` após o "replayTime" badge.
+
+- **`diskSpaceOk` warning no frontend**: Badge vermelho com `t('diskSpaceLow')` quando `status.diskSpaceOk === false`, usando ícone HardDrive — mesma precedência que o alerta de `audioFallback`.
+
+- **`EngineStatusValue` estendido com 6 campos diagnósticos**: `lastFrameMs`, `lastClipSize`, `activePipelines`, `watchdogOk`, `memoryMB`, `replayBufferBytes` adicionados a `ClipsEngineStatus` type. Engine já parseia e transmite estes campos via pipe (`handlePipeMessage`).
+
+- **IP handler count bump**: 18 → 19 handlers (adicionado `CLIPS_SET_FAVORITE`).
+
+- **Full suite**: **268 tests**, 3 files across preload (239), clips IPC (24), clips-config-store (5) — 0 quebras
+
+## Session Summary (2026-06-24e)
+
+### Done
+
+- **Fix PTT sobrescrito pelo config handler** (`EngineCoordinator.cs:1465`): handler `config` salvava `oldPttMode` antes do update e só alterava `_audioMixer.MicEnabled` se o modo PTT transicionou (Off→Hold ou Hold→Off). Config updates contínuos (ex: slider de volume) não sobrescrevem mais o estado do PTT.
+
+- **Fix sincronia A/V — PTS AAC corrigido** (`EngineCoordinator.cs:808-845`): `OnAudioPacket()` agora enfileira o PTS real (`_clock.Now`) de cada pacote PCM vindo do `AudioMixer`. Quando um frame AAC emerge, `ConsumePcmPts()` mapeia os samples PCM consumidos para o PTS correto, em vez de usar `_outputFrameIndex * 1024/48000` (que ignora delay de encoding e lags do ffmpeg).
+
+- **Fix consumo parcial no ConsumePcmPts**: corrigido `take` vs `samples` no avanço do PTS ao re-enfileirar parcela restante.
+
+- **Dashboard — Cards removidos**: Scans MiniGauge, MalwareStatusCard, PrivacyShieldCard, SoftwareUpdatesCard, MemoryStatusCard, DiskHealthCard, e 3 StatCards (Espaço Recuperado, Ficheiros Limpos, Total de Verificações).
+
+- **Dashboard — HealthCard com stats row horizontal**: MEMÓRIA (X%) | SAÚDE DO DISCO (Saudável/Atenção/Crítico) | ESPAÇO RECUPERADO | FICHEIROS LIMPOS | TOTAL DE VERIFICAÇÕES — todos em uma única linha horizontal com bullets coloridos.
+
+- **Dashboard — GameModeCard simplificado**: quando ativo mostra apenas "GAME MODE" (sem timer elapsed) + glow cyan (`#06b6d4`).
+
+- **Dashboard — GameClipsCard com glow**: fundo com blur-3xl vermelho (`#ef4444`) quando capturando, verde (`#22c55e`) quando engine running.
+
+- **Layout dashboard**: Row 1 (3 MiniGauges), Row 2 (HealthCard col-span-2 + GameModeCard + GameClipsCard), Row 3 (Action Center + StorageOverview).
+
+### Relevant Files Changed
+
+- `src/DiNho.Capture.Poc/EngineCoordinator.cs`: PTT fix (config handler lines 1397-1477), `ConsumePcmPts()` queue, `OnAudioPacket()` PCM timestamp enfileiramento
+- `src/renderer/src/components/dashboard/HealthCard.tsx`: stats row com 5 métricas + polling disk health
+- `src/renderer/src/components/dashboard/GameModeCard.tsx`: timer removido, glow adicionado
+- `src/renderer/src/components/dashboard/GameClipsCard.tsx`: glow adicionado
+- `src/renderer/src/pages/DashboardPage.tsx`: remoção de 6 componentes, novos props no HealthCard
+
+### Full Suite
+
+- **5259 testes**, 179 arquivos — **0 quebras**
+
+## Session Summary (2026-06-24f)
+
+### Done
+
+- **metrics-server test isolado**: Movido `metrics` bloco de `cli.test.ts` para `cli/commands/metrics.test.ts` — 5 testes com mock hoisting correto do `node:http`; cobre `/metrics`, `/health`, 404, server error
+- **Reescrita `malware-scanner-script.test.ts`**: agora importa `analyzeScriptContent`, `analyzeLnkContent`, `normalizeScriptContent` dos módulos reais (`analysis/script.ts`, `utils.ts`) em vez de duplicar padrões e funções; cobertura agora conta nos arquivos fonte
+- **Fix 10 testes quebrados**: cada teste agora combina ≥2 indicadores no mesmo conteúdo (ex: certutil + bitsadmin, mshta + download) para atingir o threshold do `analyzeScriptContent`
+- **Fix regex multiline**: `Scripting.FileSystemObject.*CreateTextFile` requer ambos na mesma linha (regex sem flag `s`)
+- **40 testes**: `malware-scanner-script.test.ts` — 38 passam (5 normalize + 27 analyze + 6 Lnk), + `handlers.test.ts` — 3 passam
+
+### Coverage impact (target files)
+
+| File | Stmts | Branch | Funcs | Lines |
+|------|-------|--------|-------|-------|
+| `analysis/script.ts` | **100%** | **100%** | **100%** | **100%** |
+| `privacy-shield/handlers.ts` | **100%** | **100%** | **100%** | **100%** |
+
+### Full Suite
+
+- **5318 tests**, 181 files — **0 failures**
+- **Coverage**: Statements ~90.34%, Branches ~79.67%, Functions ~92.52%, Lines ~92.11%
+
+## Session Summary (2026-06-24g)
+
+### Done
+
+- **Engine not found fix**: Engine executable wasn't included in packaged app because `extraResources` in `electron-builder.yml` had wrong path. Fixed by pointing to `bin/Release/net9.0-windows10.0.26100.0/publish` as `clips-engine/` resource.
+- **`getEnginePath()` fallback**: Added `process.cwd()` as 5th candidate path candidate for engine discovery (the portable version's working directory is where it runs from).
+- **Engine published as `--self-contained true`**: Previously `--self-contained false` required .NET 9 Desktop Runtime; engine launched silently but crashed before capturing any frames. Self-contained publish includes all .NET runtime DLLs (~248 files, 15MB `System.Private.CoreLib.dll`).
+- **Packages rebuilt**: `npm run package` — installer (`DiNho-Optimizer-Setup-1.0.7.exe`) and portable (`DiNho Optimizer 1.0.7.exe`) both built sucessfully.
+- **Engine path candidates** (in order): env var → Desktop dev → `__dirname/../../` dev → `resourcesPath/clips-engine/` (packaged) → `process.cwd()` fallback
+
+### Relevant Files Changed
+- `electron-builder.yml`: engine resource path corrected to `bin/Release/net9.0-windows10.0.26100.0/publish`
+- `src/main/ipc/clips.ipc.ts`: `getEnginePath()` with `process.cwd()` fallback
+
+### Next Steps
+- Test installed version: confirm DiNho UI não é mais detectada como jogo
+- Test if game detection now correctly identifies known games (Fortnite, CS2, Valorant, etc.)
+- If WGC still fails in installed mode, investigate `DispatcherQueueController` alternativo
+
+## Session Summary (2026-06-25)
+
+### Done
+
+- **ClipsPage badge fix**: Changed from showing `estimatedRamMB` (static number in plugin config, never sent by engine) to `replayBufferBytes` (actual buffer fill level sent by engine every 2s via named pipe). Badge now hides when both are falsy. ClipsPage test mock updated: `estimatedRamMB: 512` → `replayBufferBytes: 536870912`, expects `512MB`.
+
+- **Orphan engine on exit fixed**: Exported `stopEngineProcess()` from `clips.ipc.ts` — sends pipe `stopEngine` (fire-and-forget), disconnects pipe, kills SIGTERM then SIGKILL after 5s grace. Called from `before-quit` in `index.ts`. Refactored `CLIPS_STOP_ENGINE` handler to use it.
+
+- **Hardcoded .NET framework path fixed**: Created `scripts/copy-engine.js` that dynamically finds `bin/Release/*/publish/` containing `DiNho.Capture.Poc.exe`. `electron-builder.yml` now references `resources/clips-engine-staging/` (populated by `npm run copy-engine`). Added `copy-engine` npm script, runs before `package`/`publish`. Staging dir added to `.gitignore`.
+
+- **Clip IPC test bugs fixed (root cause: 2 issues)**:
+  1. `netConnect(ENGINE_PIPE)` called with 1 positional argument (no callback) — mock expected 2 args and called `cb()` on `undefined` → `'cb is not a function'`
+  2. Module state (`engineRunning`, `engineProcess`) leaked across tests — test 2+ found `engineRunning === true` from test 1, exited early without spawning
+  - **Fixes**: `mockSocket.on` fires `'connect'` callback immediately; `mockSocket` has `setTimeout`/`removeAllListeners` to match real socket API; each test cleans up with `stopEngineProcess()` for isolation; removed 4 `vi.useFakeTimers` tests (hung on `setTimeout(500)` inside handler — real delay acceptable at 502ms/test)
+  - **+4 tests**: 28 total (was 24, +4)
+
+### Relevant Files Changed
+- `src/main/ipc/clips.ipc.ts`: exported `stopEngineProcess()`, refactored `CLIPS_STOP_ENGINE`
+- `src/main/index.ts`: imports `stopEngineProcess`, calls in `before-quit`
+- `scripts/copy-engine.js`: new file — finds publish dir dynamically
+- `electron-builder.yml`: path changed to `resources/clips-engine-staging`
+- `package.json`: added `copy-engine` script, updated `package`/`publish`
+- `.gitignore`: added `resources/clips-engine-staging/`
+- `src/renderer/src/pages/ClipsPage.tsx`: badge condition fixed
+- `src/renderer/src/pages/ClipsPage.test.tsx`: mock uses `replayBufferBytes`
+- `src/main/ipc/clips.ipc.test.ts`: mockSocket fix, cross-test isolation, 4 new tests
+
+## Session Summary (2026-06-25)
+
+### Done
+
+- **Root cause diagnosed for engine crash in packaged app**: Two issues:
+  1. ffmpeg.exe and ffprobe.exe were **not included** in staging directory (`resources/clips-engine-staging/`) — engine calls `Process.Start("ffmpeg", ...)` at runtime, which fails silently when ffmpeg is not in PATH/cwd
+  2. `copy-engine.js` had a symlink bug: MS Store/WinGet installs of ffmpeg create a symlink in `%LocalAppData%\Microsoft\WinGet\...` — `cpSync` on a symlink copies the symlink (0 bytes) instead of the actual file content
+
+- **Fixed copy-engine.js**: Added `lstatSync().isSymbolicLink()` detection + `readlinkSync()` resolution + `copyFileSync` for resolved real path before `cpSync` on the resolved target directory
+
+- **Bundled ffmpeg/ffprobe**: Staging now contains ffmpeg.exe (217MB) + ffprobe.exe (217MB) — 289 files total
+
+- **Engine published as self-contained**: `dotnet publish -c Release --self-contained true -r win-x64` — no .NET Desktop Runtime required; all runtime DLLs bundled (~248 files)
+
+- **Engine verified from unpacked portable dir** (`dist/win-unpacked/resources/clips-engine/`): Ran for 3+ seconds with PID=19492, killed cleanly. h264_nvenc, ffmpeg, AAC encoder all initialized OK.
+
+- **Packages rebuilt** (portable 272MB compressed, installer 125MB): Both `DiNho-Optimizer-Setup-1.0.7.exe` and `DiNho Optimizer 1.0.7.exe` built successfully
+
+### Relevant Files Changed
+- `scripts/copy-engine.js`: symlink resolution (lstatSync + readlinkSync), ffmpeg/ffprobe copy, 289 files now
+
+### Full Suite
+- **5322 tests**, 181 files — **0 failures**
+
+## Session Summary (2026-06-25b)
+
+### Done
+
+- **Fix save-clip fire-and-forget no engine C#**: O handler `saveClip` no `EngineCoordinator.cs` usava `_ = SaveClipAsync()` (fire-and-forget) e retornava `"ok"` imediatamente, antes do ffmpeg terminar de salvar o clipe. Erros de export eram engolidos pelo `catch` interno.
+  - `OnIpcMessage` convertido de síncrono (`Task<IpcMessage?>`) para `async Task<IpcMessage?>` — permite `await` no case `saveClip`
+  - `SaveClipAsync` sem catch (só `finally` pra limpar `_exportInProgress`), exceções propagam pro caller
+  - Novo método `SaveClipAndRespondAsync()` com try/catch que chama `SaveClipAsync()` e retorna `{ Action: "ok" }` ou `{ Action: "error", value: { error: ... } }` conforme o resultado
+  - `sendWithFallback('saveClip')` no Electron agora recebe `{ Action: "error" }` → retorna `{ success: false, error: "Export failed: ..." }` pro frontend
+  - Frontend mostra toast de erro se o save falhar
+  - Engine compilado e publicado sem erros (`dotnet build` + `dotnet publish -c Release --self-contained true -r win-x64`)
+
+- **Instalador NSIS rebuildado**: `npm run copy-engine` (289 files, ffmpeg 217MB + ffprobe 217MB) → `npm run package`
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: `OnIpcMessage` async, `SaveClipAndRespondAsync()` novo, `SaveClipAsync` sem catch
+- `AGENTS.md`: session summary adicionado
+
+## Session Summary (2026-06-25c)
+
+### Done
+
+- **NVENC quality evaluation + improvements**: Pipeline completo mapeado (`WgcCaptureSource` → `FfmpegEncoder` → `ClipExporter` mux sem re-encode) e 3 melhorias aplicadas:
+
+  1. **NVENC params enriquecidos** (`FfmpegEncoder.cs:148`): Adicionados `-rc-lookahead 32 -temporal-aq 1 -spatial-aq 1 -g 120 -bf 3 -b_strategy 1` — sem esses parâmetros, cenas de alto movimento sofriam macrobloqueio mesmo com bitrate adequado, pois NVENC não tinha lookahead para distribuir bits entre frames nem adaptive quantization temporal para regiões em movimento.
+
+  2. **BitrateToQp ajustado** (`FfmpegEncoder.cs:127-139`): QP reduzido em 1 ponto para faixas de 5-40 Mbps (18→25Mbps, 20→18Mbps, 22→12Mbps, 25→8Mbps, 27→5Mbps) — combinado com rc-lookahead + temporal-aq, QPs mais baixos produzem quadros mais nítidos em alta-movimento sem penalidade perceptível de bitrate.
+
+  3. **"Bom" preset 15→20 Mbps** (`ClipsPage.tsx:1020`, `clips-config-store.ts:39`): 15 Mbps para 1080p60 era insuficiente para jogos modernos (especialmente FiveM com vegetação, partículas e movimento em alta velocidade). Alterado para 20 Mbps, que com QP 22 e os novos parâmetros NVENC entrega qualidade próxima ao "Muito Bom" (50 Mbps).
+
+- **Export pipeline confirmado limpo**: `ClipExporter.MuxWithFfmpeg` usa `-c:v copy` — preserva a qualidade exata do encoder sem re-encode. Áudio é AAC 192k com `-c:a copy` quando já AAC (nosso encoder) ou re-encode PCM→AAC.
+
+- **GpuVideoConverter E_INVALIDARG diagnóstico**: Erro ocorre em `VideoProcessorBlt` quando crop é muito pequeno (ex: 293×143). Não afeta captura full-size (1920×1080). Acontece durante crops de janelas minimizadas ou overlay. Inofensivo para qualidade.
+
+- **Engine compilado + publicado**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK, `npm run copy-engine` (289 files).
+
+- **Full suite**: **5322 tests**, 181 files — **0 quebras**
+
+### Key Decisions
+
+- `-rc-lookahead 32` adiciona ~0.53s de latência a 60fps — aceitável para replay buffer de 5min+
+- `-bf 3` melhora eficiência de compressão em ~15% vs 0 B-frames, com latência de decode desprezível para clips salvos
+- `-temporal-aq 1` é o parâmetro individual mais impactante para qualidade em movimento — sem ele, NVENC distribui bits igualmente entre regiões estáticas e em movimento
+- Bitrate do preset "Bom" subiu de 15→20 Mbps porque 15 Mbps em 1080p60 está abaixo da recomendação NVIDIA para gaming capture (20-30 Mbps para 1080p60)
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: NVENC params com rc-lookahead, temporal-aq, gop, bframes; BitrateToQp ajustado
+- `src/renderer/src/pages/ClipsPage.tsx`: preset "Bom" 15000→20000 Kbps
+- `src/main/services/clips-config-store.ts`: default bitrateKbps 15000→20000
+- `src/main/services/clips-config-store.test.ts`: expect 20000
+- `src/main/ipc/clips.ipc.test.ts`: expect 20000
+
+## Session Summary (2026-06-25)
+
+### Done
+
+- **CRF+VBV encoding**: Substituído QP-based encoding por CRF+VBV approach para NVENC/AV1:
+  - Removido `-b:v` (target bitrate), `-b_strategy 1`, `-spatial-aq 1`, `-temporal-aq 1`, `-bf 3`
+  - Adicionado `-sc_threshold 0`, `-keyint_min 60`, `-g 60`
+  - Mudado `-preset p7` → `p5`/`p4` por preset
+  - Mudado `-bf 3` → `2` (ou `0` para preset Boa)
+
+- **3 presets CQ+VBV** (em vez de 4 com target bitrate):
+  - **Muito Alta**: CQ 18, maxrate 80Mbps, bufsize 160Mbps, p5, bf 2
+  - **Alta** (default): CQ 24, maxrate 50Mbps, bufsize 100Mbps, p4, bf 2
+  - **Boa**: CQ 28, maxrate 30Mbps, bufsize 60Mbps, p4, bf 0
+
+- **Resolução independente**: Dropdown 360p/720p/1080p/1440p separado do preset de qualidade (antes resolução era fixa por preset)
+
+- **`SetQualityParams()` no C#**: Novo método que recebe cq, maxrateKbps, bufsizeKbps, bframes, lookahead, preset — monta args ffmpeg corretos para NVENC/AV1 (CRF+VBV) e fallback AMF/QSV/libx264 (CQ-4 + VBV)
+
+- **`BitrateToQp` removido**: Método eliminado, NVENC/AV1 usa CRF+VBV diretamente
+
+- **6 novos campos**: `cq`, `maxrateKbps`, `bufsizeKbps`, `bframes`, `lookahead`, `encoderPreset` adicionados a AppConfig, ClipsPersistedConfig, ClipsConfig, IPC state vars, buildEngineConfig(), persistência
+
+- **Frontend**: Seção "Bitrate" removida (redundante com presets CQ+VBV), seção "Gravando qualidade" agora controla presets completos
+
+- **Bugs corrigidos**: `forceSoftware` duplicado em `clips-config-store.ts` DEFAULTS
+
+- **Full suite**: **5322 tests**, 181 files — **0 quebras**
+- **C# unit tests**: **73 passed** — 0 falhas (+19 de 54)
+- **C# build**: `dotnet build` + `dotnet publish -c Release --self-contained true -r win-x64` — 0 erros
+
+## Session Summary (2026-06-25)
+
+### Done
+
+- **DiNho UI detection fix**: Usuário reportou que o instalador detectava a própria UI (`%LocalAppData%\Programs\dinho-optimizer\DiNho Optimizer.exe`) como jogo:
+  - `"DiNho Optimizer"` e `"dinho-optimizer"` adicionados ao `NonGameProcesses`
+  - `%LocalAppData%\Programs\` adicionado ao `IsSystemExecutablePath()`
+
+- **NonGameProcesses expandido**: ~50 → ~240 entradas (sistema, navegadores, dev, media, office, comunicação, antivírus, launchers)
+
+- **games.json expandido**: 47 → **182 jogos** v2 — Rockstar, Valve, Riot, Unity (~40), Unreal (~20), Blizzard, EA, Capcom, Square Enix, Bandai Namco, Bethesda, Paradox, indies
+
+- **Bug fix: GameDatabase JSON nunca carregava** — `System.Text.Json` case-sensitive, games.json tem `"games"` (lowercase) mas C# tinha `Games` (uppercase). Adicionado `[JsonPropertyName("...")]` em todas as propriedades. Antes do fix, `Load()` sempre caía no `HardcodedMap`.
+
+- **73 testes C#** (+7 de 66): `NonGameProcessesTests` (70+ assertions), `GameDatabaseTests` (7 testes). games.json copiado para output via `<CopyToOutputDirectory>`.
+
+## Future: Clip Editor (registered 2026-06-25)
+
+### Opção A — Editor básico (trim + merge textual)
+- **Esforço:** ~2-3 dias (backend 1d, front 1-2d)
+- **Backend:** `CLIPS_TRIM_CLIP` (ffmpeg -ss -to -c copy) + `CLIPS_MERGE_CLIPS` (concat demuxer) + preload + testes
+- **Front:** Modal com inputs start/end + seleção múltipla + reorder + botões de ação
+- **Já temos:** ffmpeg.exe no bundle, IPC pipeline, ClipExporter.ExportToMp4()
+
+### Opção B — Editor visual com timeline + preview
+- **Esforço:** ~2-3 semanas
+- Timeline scrubber + drag handles + slow-mo + texto overlay via ffmpeg filter graph
+
+### Opção C — Editor completo (estilo Medal)
+- **Esforço:** ~1-2 meses
+- Opção B + transições, efeitos, multi-track, legendas automáticas
+
+## Session Summary (2026-06-25)
+
+### Done
+
+- **WGC funcionando com FiveM!** (RTX 5050) — `frame.Success=True texture=ok capture=WgcCaptureSource encoder=FfmpegEncoder`. WGC desktop via `IGraphicsCaptureItemInterop.CreateForMonitor` produz frames estáveis com o `WindowsMessagePump` dedicado.
+
+- **Infinite restart loop FIXED** — Root cause: `StartCapture()` resetava `_appliedGameAudioOnly = false`, então `OnGameChanged` disparava novamente o restart após cada ciclo. Removido o reset de `_appliedGameAudioOnly`/`_appliedGameAudioPid` de `StartCapture()` — a guarda em `ApplyGameAudioOnly()` (linha 1476) e `OnGameChanged()` (linha 1389) agora persiste entre restarts, eliminando o loop.
+  - **Segundo bug**: `OnGameChanged()` no FiveM chamava `ApplyAudioSessionsInternal` sem setar `_appliedGameAudioOnly`, então o guard da `ApplyGameAudioOnly()` falhava quando o Electron reenviava config mid-capture. Fix: `OnGameChanged` agora seta `_appliedGameAudioOnly = true` e `_appliedGameAudioPid = game.ProcessId` antes de chamar `ApplyAudioSessionsInternal`.
+  - **Bug de build**: `dotnet publish -c Release --self-contained true -r win-x64` publicava para `win-x64/publish/`, mas `getEnginePath()` procura `publish/` (sem `win-x64`). Fix: usar `-o bin/Release/.../publish` para forçar diretório correto.
+
+- **D3D11 E_INVALIDARG** — `DeviceCreationFlags.VideoSupport` (0x800) causava `-2147024809` no self-contained publish. Removido dos 4 locais (`EngineCoordinator.cs` ×2, `WgcCaptureSource.cs`, `Program.cs`). O `VideoSupport` era desnecessário — WGC funciona apenas com `BgraSupport` + `WindowsMessagePump`.
+
+- **Engine build + publish**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK, `npm run copy-engine` (289 files). **73 C# tests** passed. **28 clip IPC tests** passed.
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: lines 254-255 removed (`_appliedGameAudioOnly = false; _appliedGameAudioPid = 0;`) — `StartCapture()` não reset mais o guard de restart loop
+
+## Session Summary (2026-06-25 — H264 corruption fix + docs/package)
+
+### Done
+
+- **Root cause da corrupção H264 identificada e corrigida**: `ArrayPool<byte>.Shared.Rent(n)` retorna arrays ≥ n bytes com lixo do pool. `EncodedPacket.Data.Length` (capacidade) era usado em vez do comprimento real. Garbage bytes no mux corrompiam NALUs → `pps_id 3199971767 out of range`.
+  - `EncodedPacket.cs`: Adicionado `DataLength` (com `private set`). Construtor pooled aceita `int dataLength = 0` (0 = `data.Length`). `Release()` usa `DataLength` no reset.
+  - `FfmpegEncoder.cs:EmitPacket()`: Passa `dataLength: _pendingLen`.
+  - `ClipExporter.cs:107` (`WriteH264File()`): `pkt.Data.Length` → `pkt.DataLength`.
+  - `ReplayBuffer.cs:44,78,169-170`: `pkt.Data.Length` → `pkt.DataLength`.
+- **Engine build + publish**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK. **73/73 C# tests**. **5327/5327 TS tests**.
+- **Packages rebuilt**: `DiNho-Optimizer-Setup-1.0.7.exe` + `DiNho Optimizer 1.0.7.exe` — ambos com engine + ffmpeg atualizados. `copy-engine` staged 289 files.
+
+### Key Decisions
+- `DataLength` em vez de `new byte[n]`: manter `ArrayPool` para evitar GC pressure com `Process.Start` e encapsulamento de arrays, mas rastrear comprimento real dos dados.
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/EncodedPacket.cs`: `DataLength` propriedade
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `dataLength: _pendingLen`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `pkt.DataLength`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `pkt.DataLength`
+- `AGENTS.md`: session summary
+
+## Session Summary (2026-06-25 — Audio sync fix: PTS gap filtering)
+
+### Done
+
+- **"AUDIO NAO SINCRONIZADO" root cause identificada e corrigida**:
+  - `ComputeActualFps` usava o range PTS do vídeo (`lastVideo.Pts - firstVideo.Pts`) que **incluía os gaps de alt-tab** onde WGC pausava
+  - Isso fazia `actualFps` ficar mais baixo que o real (ex: 40fps em vez de 60fps), distorcendo a duração do vídeo
+  - Áudio continuava gravando durante o alt-tab → durações diferentes → dessincronia
+
+- **FIX no ClipExporter.ExportToMp4**:
+  - Identifica **intervalos PTS contíguos** do vídeo (separados por gaps >50ms de alt-tab)
+  - Filtra pacotes de áudio para **só manter os que caem dentro desses intervalos** — remove áudio gravado durante alt-tab
+  - Trunca o final do áudio para bater exatamente com `trueVideoDuration` (soma das durações reais dos frames, não o range PTS)
+  - Usa `effectiveFps ≈ nominalFps` (calculado pela soma das durações) em vez de `actualFps` (que incluía gaps)
+  
+- **Logs novos no export**:
+  - `[PTS] Pre-sync` — mostra ranges PTS antes do filtro
+  - `[PTS] Post-sync` — mostra `trueDuration`, `framesWithDur`, `gapsRemoved`
+
+- **Engine build + publish**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **copy-engine**: 289 files staged
+- **TS tests**: 30/30 clip IPC tests pass
+
+## Session Summary (2026-06-25 — Tooltip position fix)
+
+### Done
+
+- **Tooltip position adjusted**: Todos os 12 tooltips `?` no ClipsPage mudados de `fixed bottom-4 left-4` (canto inferior esquerdo, aparecia na sidebar) para `absolute bottom-full left-full` (acima e à direita do `?`):
+  - `bottom-full` = tooltip fica ACIMA do `?`
+  - `left-full` = tooltip fica À DIREITA do `?`
+  - Posição perto do `?` original, sem sobrepor botões/config abaixo
+  - `z-20` (não `z-50`) para não flutuar sobre outros elementos
+  - 23/23 ClipsPage tests passam
+
+### Relevant Files Changed
+- `src/renderer/src/pages/ClipsPage.tsx`: 12 tooltips com classe `absolute bottom-full left-full z-20 mb-1 ml-1`
+
+## Session Summary (2026-06-25 — RNNoise + Clip Editor + Video Preview)
+
+### Done
+
+- **RNNoise speech denoising**: Created `RnnoiseFilter.cs` wrapping ffmpeg `-af anlmdn` via stdin/stdout f32le piping. Integrated into `AudioMixer` — `NoiseSuppressionEnabled` property filters mic PCM before queueing. Added to C# `AppConfig`, IPC sync via `buildEngineConfig()`, TS `ClipsConfig` + `ClipsPersistedConfig`. Toggle UI with `TogglePill` green accent. `Dispose()` cleanup on toggle-off.
+
+- **Clip trim/merge editor**: `CLIPS_TRIM_CLIP` and `CLIPS_MERGE_CLIPS` IPC handlers in `clips.ipc.ts` using `ffmpeg -ss -to -c copy` (trim, no re-encode) and concat demuxer (merge, `-c copy`). `ClipEditorModal` React component dual-mode: trim (clip prop with range sliders) or merge-only (`initialMergePaths` prop). Multi-select merge button in clips toolbar when `selectedClips.size >= 2`.
+
+- **In-app video preview**: Custom `clip-video://` protocol registered via `protocol.handle` in `src/main/index.ts` — reads file via `readFile` buffer, returns `new Response(buffer, { contentType: 'video/mp4' })`. Preload `clipsGetVideoUrl()` sync string method with URL encoding for spaces. `<video>` element in `ClipEditorModal` with play/pause, current time, seek sync on slider change.
+
+- **Fixes during implementation**:
+  - `protocol.registerSchemasAsPrivileged` removed (not available in Electron 28+) — just use `protocol.handle`
+  - `net.fetch` doesn't support `file://` in Electron — switched to `readFile` buffer + `Response`
+  - URL encoding in preload for paths with spaces (`%20`)
+  - 3 new preload tests for `clipsGetVideoUrl` (normal, spaces, falsy)
+
+- **Full suite**: **5327 TS tests**, 181 files — **0 quebras**. **73 C# tests** — all pass.
+- **Build**: `npm run dev` — main + preload + renderer build OK
+
+### Key Decisions
+- `anlmdn` over `arnndn`: built into ffmpeg, no external `.nn` model required; `arnndn` supported as opt-in upgrade
+- Per-packet filtering inside `AudioMixer.OnMicData` (before `_micQueue`) — toggleable at runtime without restart
+- `-c copy` for trim/merge: instant because source clips are already compressed H.264/AAC
+- Custom `clip-video://` protocol instead of `file://` (blocked by `net.fetch`) or base64 (memory for large clips)
+- `ClipEditorModal` dual-mode: single prop (`clip`) for trim, no prop + `initialMergePaths` for merge-only
+
+### Relevant Files Changed
+- `src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs` (new)
+- `src/DiNho.Capture.Poc/Audio/AudioMixer.cs`: NoiseSuppressionEnabled, OnMicData filtering
+- `src/DiNho.Capture.Poc/Export/ClipExporter.cs`: PTS debug logging
+- `src/DiNho.Capture.Poc/EngineCoordinator.cs`: noiseSuppression config sync
+- `src/DiNho.Capture.Poc/Config/ConfigManager.cs`: NoiseSuppressionEnabled field
+- `src/shared/channels.ts`: CLIPS_TRIM_CLIP, CLIPS_MERGE_CLIPS
+- `src/shared/types.ts`: noiseSuppression, ClipTrimResult, ClipMergeResult
+- `src/main/index.ts`: clip-video:// protocol registration
+- `src/main/ipc/clips.ipc.ts`: trim/merge handlers, noiseSuppression engine payload
+- `src/main/ipc/clips.ipc.test.ts`: handler count 20→22
+- `src/main/services/clips-config-store.ts`: noiseSuppression persisted
+- `src/preload/index.ts`: clipsTrimClip, clipsMergeClips, clipsGetVideoUrl
+- `src/preload/index.test.ts`: 3 new clipsGetVideoUrl tests
+- `src/renderer/src/pages/ClipsPage.tsx`: Edit button, noiseSuppression toggle, merge toolbar
+- `src/renderer/src/components/clips/ClipEditorModal.tsx` (new): trim sliders, merge list, video preview
+- `src/renderer/src/locales/{en,pt,es}/clips.json`: trim/merge/noiseSuppression chaves
+
+## Session Summary (2026-06-25 — Video preview fixes + merge UX)
+
+### Done
+
+- **Video timer fix**: `clip.duration` vinha como `0` do dado do clip, fazendo o timer sempre mostrar `/ 1:00`. Adicionado `onLoadedMetadata` no `<video>` que atualiza `realDuration` com `videoRef.current.duration` — timer agora mostra duração real do arquivo.
+  - Variável `effectiveDuration = realDuration || clip?.duration || 60` usada em todos os places, atualizada dinamicamente quando o vídeo carrega.
+
+- **Video URL encoding fix**: `clipsGetVideoUrl` fazia encoding manual parcial (só ` `, `#`, `?`), deixando caracteres como `[`, `]`, `%`, `&`, `+` sem proteção — quebrava URL de alguns clips.
+  - Mudado para **base64**: `clip-video://file?path=<base64>` — zero problemas de URL encoding
+  - Protocol handler decodifica com `Buffer.from(b64, 'base64').toString('utf8')`
+  - 3 testes de preload atualizados
+
+- **Overlay fullscreen fix**: Mudado de `absolute bottom-0` para `fixed bottom-0` — controles agora sempre na parte inferior da tela em fullscreen (não no meio). Ícones maiores (h-6/w-6), trim section com `pb-24` pra não ficar atrás do overlay.
+
+- **Build & tests**: **5332 tests**, 181 files — **0 quebras**
+
+### Relevant Files Changed
+- `src/main/index.ts`: protocol handler com base64 decoding
+- `src/preload/index.ts`: clipsGetVideoUrl usa base64
+- `src/preload/index.test.ts`: 3 testes de base64 URL
+- `src/renderer/src/pages/ClipsPage.test.tsx`: mock clipsGetVideoUrl com base64
+- `src/renderer/src/components/clips/ClipEditorModal.tsx`: effectiveDuration, onLoadedMetadata, overlay fixed bottom-0, pb-24 trim
+
+## Session Summary (2026-06-25 — Video preview CSP fix + Trim UI overhaul)
+
+### Done
+
+- **"Failed to load video preview" root cause identified**: CSP `default-src 'self'` blocked `<video>` from loading custom `clip-video://` scheme and `blob:` URLs.
+  - Fix: Switch to `file://` URL with `media-src 'self' file:` in CSP + `allowFileAccessFromFiles: true` in `BrowserWindow webPreferences`.
+  - Removed `protocol.registerSchemasAsPrivileged` (doesn't exist in Electron 42).
+  - Preload `clipsGetVideoUrl()` now returns `file:///` + path with `%20` encoding.
+
+- **DevTools opening in production fix**: `openDevTools()` chamado sem guarda `!app.isPackaged` no handler `CLIPS_START_CAPTURE` — adicionado `if (!app.isPackaged)` guard.
+
+- **Trim UI overhaul** (`ClipEditorModal.tsx`):
+  - Substituído dois `input[type=range]` separados por **timeline visual única** com `TrimTimeline` component:
+    - Track horizontal com região selecionada destacada (accent color)
+    - Duas alças redondas arrastáveis via mouse (start/end)
+    - Indicador de posição atual (linha branca vertical)
+    - Smart click: perto de alça → arrasta, qualquer lugar → seek
+  - **Preview da duração** do corte em tempo real (`fmt(trimDuration)`)
+  - **I/O hotkeys**: `I` marca início, `O` marca fim na posição atual do seek
+  - Overlay fullscreen mantido com `fixed bottom-0` e transição de opacidade
+  - Lint: 4 issues fixados (onKeyDown handlers, array key `i`→`p`)
+
+- **Full suite**: **5332 tests**, 181 files — **0 quebras**
+- **Lint**: 0 errors
+
+### Relevant Files Changed
+- `src/renderer/src/components/clips/ClipEditorModal.tsx`: TrimTimeline component, I/O hotkeys, lint fixes, fullscreen overlay
+- `src/main/index.ts`: `clip-video://` protocol handler removido, `allowFileAccessFromFiles: true`, CSP `media-src 'self' file:`
+- `src/preload/index.ts`: `clipsGetVideoUrl` retorna `file:///` (não base64)
+- `index.html` + `src/renderer/index.html`: CSP com `media-src 'self' file:`
+- `src/main/ipc/clips.ipc.ts`: `openDevTools()` com `if (!app.isPackaged)`
+
+## Future: Clip Editor (registered 2026-06-25)
+
+### Opção A — Editor básico (trim + merge textual)
+- AI auto-clipping (event detection) — prioridade futura
+- Voice clip ("clip that")
+- Full session recording + bookmarks
+- Multi-track audio separado (game/mic/Discord)
+- Compilação automática de highlights
+- Compartilhamento / links instantâneos
+- Cloud storage
+- Mobile app

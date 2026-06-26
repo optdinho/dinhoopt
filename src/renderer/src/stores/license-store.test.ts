@@ -60,6 +60,15 @@ describe('license-store', () => {
     expect(hwid).toBe('')
   })
 
+  it('getHwid falls back when method is undefined', async () => {
+    mockKudu()
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    delete (window as any).dinho.licenseGetHwid
+    const hwid = await useLicenseStore.getState().getHwid()
+    expect(hwid).toBe('')
+    expect(useLicenseStore.getState().hwid).toBe('')
+  })
+
   it('activate sets isActivating and calls kudu.licenseActivate', async () => {
     const kudu = mockKudu()
     const result = makeLicenseResult({ valid: true })
@@ -77,6 +86,33 @@ describe('license-store', () => {
     kudu.licenseActivate.mockResolvedValue(result)
     await useLicenseStore.getState().activate('KEY-BAD')
     expect(useLicenseStore.getState().error).toBe('Chave inválida')
+  })
+
+  it('activate sets error to reason even when reason is null', async () => {
+    const kudu = mockKudu()
+    const result = makeLicenseResult({ valid: false, reason: null as unknown as undefined })
+    kudu.licenseActivate.mockResolvedValue(result)
+    await useLicenseStore.getState().activate('KEY-NULL')
+    expect(useLicenseStore.getState().error).toBeNull()
+  })
+
+  it('activate falls back when method is undefined', async () => {
+    mockKudu()
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    delete (window as any).dinho.licenseActivate
+    const result = await useLicenseStore.getState().activate('KEY')
+    expect(result.valid).toBe(false)
+    expect(result.reason).toBe('Erro na ativação')
+    expect(useLicenseStore.getState().isActivating).toBe(false)
+  })
+
+  it('activate handles non-Error thrown to exercise ?. fallback', async () => {
+    const kudu = mockKudu()
+    kudu.licenseActivate.mockRejectedValue('string error' as unknown as never)
+    const result = await useLicenseStore.getState().activate('KEY-STR')
+    expect(result.valid).toBe(false)
+    expect(result.reason).toBe('Erro ao ativar')
+    expect(useLicenseStore.getState().error).toBe('Erro ao ativar')
   })
 
   it('activate handles error gracefully', async () => {

@@ -505,5 +505,91 @@ describe('PerfMonitorService', () => {
         }),
       )
     })
+
+    it('handles single-object PowerShell output (not array)', async () => {
+      mockedDiskLayout.mockResolvedValue([
+        {
+          device: '\\\\.\\PHYSICALDRIVE0',
+          name: 'Samsung SSD 970 EVO',
+          type: 'SSD',
+          interfaceType: 'NVMe',
+          size: 512110190592,
+          smartStatus: 'Ok',
+          temperature: 35,
+        },
+      ])
+      mockedExecFileAsync.mockResolvedValue({
+        stdout: JSON.stringify({
+          DeviceId: 0,
+          Temperature: 35,
+          PowerOnHours: 12345,
+          ReadErrorsTotal: 0,
+          WriteErrorsTotal: 0,
+          Wear: 5,
+        }),
+      })
+
+      const result = await service.getDiskHealth()
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          device: '\\\\.\\PHYSICALDRIVE0',
+          temperature: 35,
+          powerOnHours: 12345,
+          remainingLife: 95,
+        }),
+      )
+    })
+
+    it('handles device path with no digits', async () => {
+      mockedDiskLayout.mockResolvedValue([
+        {
+          device: '\\\\.\\C:',
+          name: 'Local Disk',
+          type: 'SSD',
+          interfaceType: 'SATA',
+          size: 512110190592,
+          smartStatus: 'Ok',
+          temperature: 35,
+        },
+      ])
+      mockedExecFileAsync.mockResolvedValue({ stdout: '[]' })
+
+      const result = await service.getDiskHealth()
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          device: '\\\\.\\C:',
+          temperature: 35,
+          powerOnHours: null,
+          remainingLife: null,
+        }),
+      )
+    })
+  })
+
+  describe('cached network stats', () => {
+    it('uses cached network stats within the 5s window', async () => {
+      vi.useFakeTimers()
+
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 20, cpus: [{ load: 20 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 512, wIO_sec: 1024 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 100000, tx_sec: 50000 }])
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+      mockedProcesses.mockResolvedValue({ all: 1, running: 1, blocked: 0, sleeping: 0, list: [] })
+
+      await service.startMonitoring(mockSender)
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(mockedNetworkStats).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(mockedNetworkStats).toHaveBeenCalledTimes(1)
+
+      vi.useRealTimers()
+    })
   })
 })

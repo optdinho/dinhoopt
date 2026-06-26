@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -64,6 +65,7 @@ public sealed class GameDetector : IDisposable
     private IntPtr _lastForegroundHwnd;
     private Timer? _fallbackTimer;
     private WinEventDelegate? _winEventDelegate; // Mantido como field para evitar GC
+    private int _electronPid;
 
     // Eventos
     public event Action<GameInfo>? OnGameChanged;
@@ -78,6 +80,11 @@ public sealed class GameDetector : IDisposable
     public GameDetector()
     {
         CurrentGame = new GameInfo();
+    }
+
+    public void SetElectronPid(int pid)
+    {
+        _electronPid = pid;
     }
 
     public void Start()
@@ -183,6 +190,14 @@ public sealed class GameDetector : IDisposable
             return;
         }
 
+        // Ignora foreground changes do próprio Electron (que rouba foco indevidamente)
+        if (_electronPid > 0)
+        {
+            GetWindowThreadProcessId(hwnd, out var foregroundPid);
+            if (foregroundPid == _electronPid)
+                return;
+        }
+
         var gameInfo = DetectGame(hwnd);
         CurrentGame = gameInfo;
         OnGameChanged?.Invoke(gameInfo);
@@ -201,6 +216,13 @@ public sealed class GameDetector : IDisposable
         {
             CurrentGame = new GameInfo();
             return;
+        }
+
+        if (_electronPid > 0)
+        {
+            GetWindowThreadProcessId(hwnd, out var foregroundPid);
+            if (foregroundPid == _electronPid)
+                return;
         }
 
         var gameInfo = DetectGame(hwnd);

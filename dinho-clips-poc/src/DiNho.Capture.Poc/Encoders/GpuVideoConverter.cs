@@ -16,6 +16,8 @@ internal sealed class GpuVideoConverter : IDisposable
 
     public GpuVideoConverter(ID3D11Device device, int width, int height)
     {
+        if (width < 64 || height < 64)
+            throw new ArgumentException($"GpuVideoConverter: dimensão ({width}x{height}) abaixo do mínimo 64x64 — crop muito pequeno causa E_INVALIDARG no VideoProcessorBlt");
         _width = width;
         _height = height;
 

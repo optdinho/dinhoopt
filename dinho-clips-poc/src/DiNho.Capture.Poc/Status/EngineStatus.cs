@@ -17,7 +17,12 @@ public sealed class EngineStatusSnapshot
     public bool WatchdogOk { get; set; } = true;
     public int MemoryMB { get; set; } = 0;
     public long ReplayBufferBytes { get; set; } = 0;
+    public int ReplayBufferVideoFrames { get; set; } = 0;
+    public long ReplayBufferVideoBytes { get; set; } = 0;
+    public int ReplayBufferAudioPackets { get; set; } = 0;
+    public long ReplayBufferAudioBytes { get; set; } = 0;
     public bool AudioFallback { get; set; } = false;
+    public string OutputDirectory { get; set; } = "";
 }
 
 public sealed class EngineStatus : IDisposable
@@ -72,7 +77,12 @@ public sealed class EngineStatus : IDisposable
                 WatchdogOk = _current.WatchdogOk,
                 MemoryMB = _current.MemoryMB,
                 ReplayBufferBytes = _current.ReplayBufferBytes,
+                ReplayBufferVideoFrames = _current.ReplayBufferVideoFrames,
+                ReplayBufferVideoBytes = _current.ReplayBufferVideoBytes,
+                ReplayBufferAudioPackets = _current.ReplayBufferAudioPackets,
+                ReplayBufferAudioBytes = _current.ReplayBufferAudioBytes,
                 AudioFallback = _current.AudioFallback,
+                OutputDirectory = _current.OutputDirectory,
             };
             OnStatusUpdate?.Invoke(snapshot);
             Heartbeat();

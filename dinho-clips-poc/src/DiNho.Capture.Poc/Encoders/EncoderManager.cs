@@ -8,11 +8,28 @@ public enum EncoderType { Ffmpeg, FfmpegHw, None }
 
 public sealed class EncoderManager : IDisposable
 {
+    /// <summary>Vendor → H264 encoder map.</summary>
     public static readonly Dictionary<int, string> VendorCodecs = new()
     {
         [0x10DE] = "h264_nvenc", // NVIDIA
         [0x1002] = "h264_amf",   // AMD
         [0x8086] = "h264_qsv",   // Intel
+    };
+
+    /// <summary>Vendor → HEVC encoder map.</summary>
+    public static readonly Dictionary<int, string> VendorHevcCodecs = new()
+    {
+        [0x10DE] = "hevc_nvenc",
+        [0x1002] = "hevc_amf",
+        [0x8086] = "hevc_qsv",
+    };
+
+    /// <summary>Vendor → AV1 encoder map (NVENC only, others fall back to libsvtav1).</summary>
+    public static readonly Dictionary<int, string> VendorAv1Codecs = new()
+    {
+        [0x10DE] = "av1_nvenc",
+        [0x1002] = "av1_amf",
+        [0x8086] = "libsvtav1",
     };
 
     public static int DetectGpuVendorId()
@@ -34,10 +51,48 @@ public sealed class EncoderManager : IDisposable
         return 0;
     }
 
+    /// <summary>Return list of GPU adapter names and vendor IDs for the UI dropdown.</summary>
+    public static List<(int Index, string Name, int VendorId)> GetGpuList()
+    {
+        var list = new List<(int, string, int)>();
+        try
+        {
+            using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+            for (int i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            {
+                using (adapter)
+                {
+                    var desc = adapter.Description1;
+                    list.Add((i, desc.Description.TrimEnd('\0'), desc.VendorId));
+                }
+            }
+        }
+        catch { }
+        return list;
+    }
+
     public static string GetPreferredCodec(int vendorId)
     {
         if (vendorId == 0) return "";
         return VendorCodecs.TryGetValue(vendorId, out var codec) ? codec : "";
+    }
+
+    /// <summary>Map user-facing codec name (auto/h264/hevc/av1/libx264/libx265) to a concrete
+    /// ffmpeg encoder name using the detected GPU vendor. Returns null if the mapping fails
+    /// (caller should fall back to DetectBestCodec).</summary>
+    public static string? MapUserCodec(string userCodec, int vendorId)
+    {
+        return userCodec.ToLowerInvariant() switch
+        {
+            "h264" => GetPreferredCodec(vendorId),
+            "hevc" => vendorId == 0 ? "libx265" :
+                      VendorHevcCodecs.TryGetValue(vendorId, out var h) ? h : "libx265",
+            "av1"  => vendorId == 0 ? "libsvtav1" :
+                      VendorAv1Codecs.TryGetValue(vendorId, out var a) ? a : "libsvtav1",
+            "libx264" => "libx264",
+            "libx265" => "libx265",
+            _ => null, // "auto" → caller uses DetectBestCodec
+        };
     }
 
     public static List<EncoderType> DetectAvailableEncoders()

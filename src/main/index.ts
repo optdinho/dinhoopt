@@ -2,7 +2,13 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import dotenv from 'dotenv'
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell } from 'electron'
+import { open, readFile, stat } from 'node:fs/promises'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, screen, shell, Tray } from 'electron'
+
+// Register custom privileged schemes BEFORE app.whenReady()
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'clip-video', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+])
 
 // Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
 if (!app.isPackaged) {
@@ -26,6 +32,7 @@ import { runCli } from './cli'
 import { runDaemon } from './daemon'
 import { t } from './i18n'
 import { registerCleanerIpc } from './ipc'
+import { stopEngineProcess } from './ipc/clips.ipc'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
 import { initAutoUpdater } from './services/auto-updater'
 import { isAdmin } from './services/elevation'
@@ -327,6 +334,7 @@ function initGui(): void {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
         nodeIntegration: false,
+        allowFileAccessFromFiles: true,
         // Chromium's renderer sandbox uses Linux namespaces that fail
         // when running as root (e.g. after pkexec relaunch).  The
         // --no-sandbox switch only covers the browser/GPU processes;
@@ -422,6 +430,7 @@ function initGui(): void {
       'app',
       `App starting — v${app.getVersion()}, platform: ${process.platform}, elevated: ${isAdmin()}`,
     )
+
     // Ensure an Edit menu exists so clipboard shortcuts (Cmd+C/V/X on macOS,
     // Ctrl+C/V/X elsewhere) work in the frameless window.  On macOS Cmd+V
     // relies on an Edit menu with the paste role — without an explicit menu
@@ -457,6 +466,47 @@ function initGui(): void {
     }
 
     createWindow()
+
+    // Register clip-video:// protocol for in-app video preview
+    protocol.handle('clip-video', async (request) => {
+      try {
+        const url = new URL(request.url)
+        const path = url.searchParams.get('path')
+        if (!path) {
+          getLogger().warning('clip-video', `Missing path param in ${request.url}`)
+          return new Response('Missing path', { status: 400 })
+        }
+        const fileStat = await stat(path)
+        const fileSize = fileStat.size
+        const rangeHeader = request.headers.get('range')
+        const headers: Record<string, string> = {
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+        }
+
+        if (rangeHeader) {
+          const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
+          if (match) {
+            const start = Number.parseInt(match[1]!, 10)
+            const end = match[2] ? Number.parseInt(match[2], 10) : fileSize - 1
+            const chunkSize = end - start + 1
+            const fd = await open(path, 'r')
+            const buf = Buffer.alloc(chunkSize)
+            await fd.read(buf, 0, chunkSize, start)
+            await fd.close()
+            headers['Content-Range'] = `bytes ${start}-${end}/${fileSize}`
+            headers['Content-Length'] = String(chunkSize)
+            return new Response(buf, { status: 206, headers })
+          }
+        }
+        const buffer = await readFile(path)
+        headers['Content-Length'] = String(fileSize)
+        return new Response(buffer, { status: 200, headers })
+      } catch (err) {
+        getLogger().error('clip-video', `Failed to load ${request.url}: ${(err as Error).message}`)
+        return new Response('Not found', { status: 404 })
+      }
+    })
 
     // Initialize auto-updater
     initAutoUpdater()
@@ -524,6 +574,7 @@ function initGui(): void {
   app.on('before-quit', () => {
     getLogger().info('app', 'App shutting down')
     stopScheduler()
+    stopEngineProcess()
     // Kill any active child processes (reg.exe, cmd.exe, etc.) to prevent orphans
     killAllChildren()
   })

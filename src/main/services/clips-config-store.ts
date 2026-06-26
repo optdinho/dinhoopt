@@ -4,11 +4,20 @@ import { createJsonStore } from './store-base'
 interface ClipsPersistedConfig {
   replayTimeSeconds: number
   micEnabled: boolean
+  noiseSuppression: boolean
   audioLoopback: boolean
   fps: number
   width: number
   height: number
   bitrateKbps: number
+  cq: number
+  maxrateKbps: number
+  bufsizeKbps: number
+  bframes: number
+  lookahead: number
+  encoderPreset: string
+  codec: string
+  adapterIndex: number
   outputDirectory: string
   forceSoftware: boolean
   hotkeys: HotkeyBinding[]
@@ -24,31 +33,71 @@ interface ClipsPersistedConfig {
   gameVolume: number
   micVolume: number
   selectedAudioSessions: number[]
+  audioSampleRate: number
+  autoCleanupEnabled: boolean
+  autoCleanupThresholdPercent: number
 }
 
 const DEFAULTS: ClipsPersistedConfig = {
-  replayTimeSeconds: 60,
+  replayTimeSeconds: 300,
   micEnabled: true,
+  noiseSuppression: false,
   audioLoopback: false,
   fps: 60,
   width: 1920,
   height: 1080,
-  bitrateKbps: 20000,
+  bitrateKbps: 50000,
+  cq: 18,
+  maxrateKbps: 50000,
+  bufsizeKbps: 100000,
+  bframes: 0,
+  lookahead: 4,
+  encoderPreset: 'p4',
+  codec: 'auto',
+  adapterIndex: -1,
   outputDirectory: '',
   forceSoftware: false,
-  hotkeys: [],
-  pushToTalk: 'off',
-  pushToTalkKeys: [0x7a],
-  gameDetection: false,
-  gameAudioOnly: false,
-  customGameProcess: '',
-  micDeviceId: '',
-  autoStartCapture: false,
+  hotkeys: [
+    {
+      id: 'hk-save-8',
+      vk: 123,
+      modifiers: [],
+      action: 'saveClip',
+      replayDurationSeconds: 300,
+      enabled: true,
+    },
+    {
+      id: 'hk-1782208376874',
+      vk: 122,
+      modifiers: [],
+      action: 'saveClip',
+      replayDurationSeconds: 120,
+      enabled: true,
+    },
+    {
+      id: 'hk-1782222941097',
+      vk: 49,
+      modifiers: ['Alt'],
+      action: 'toggleCapture',
+      replayDurationSeconds: 60,
+      enabled: true,
+    },
+  ],
+  pushToTalk: 'hold',
+  pushToTalkKeys: [5, 20],
+  gameDetection: true,
+  gameAudioOnly: true,
+  customGameProcess: 'FiveM_GTAProcess.exe',
+  micDeviceId: '{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}',
+  autoStartCapture: true,
   useExcludeMode: false,
   excludeProcessId: 0,
   gameVolume: 1.0,
   micVolume: 1.0,
   selectedAudioSessions: [],
+  audioSampleRate: 48000,
+  autoCleanupEnabled: true,
+  autoCleanupThresholdPercent: 90,
 }
 
 const store = createJsonStore<ClipsPersistedConfig>({

@@ -111,5 +111,20 @@
   "privacyCardAria": "Ver detalles de privacidad",
   "privacyCardScore": "puntuación",
   "privacyCardProtected": "{{protected}}/{{total}} protegidas",
-  "privacyCardUnavailable": "No se pudo cargar el estado de privacidad"
+  "privacyCardUnavailable": "No se pudo cargar el estado de privacidad",
+  "gameClipsCardTitle": "Clips de Juego",
+  "gameClipsCardRecording": "Grabando",
+  "gameClipsCardReady": "Listo",
+  "gameClipsCardOffline": "Desconectado",
+  "gameClipsCardRecordingAria": "Grabación de clips de juego",
+  "gameClipsCardIdleAria": "Ver clips de juego",
+  "gameClipsCardStart": "Iniciar",
+  "gameClipsCardStartTitle": "Iniciar grabación",
+  "gameClipsCardStop": "Detener",
+  "gameClipsCardStopTitle": "Detener grabación",
+  "gameClipsCardSave": "Guardar",
+  "gameClipsCardSaveTitle": "Guardar clip actual",
+  "gameClipsCardGame": "Capturando {{game}}",
+  "gameClipsCardClickToOpen": "Haga clic para abrir",
+  "gameClipsCardUnavailable": "No se pudo cargar estado de clips"
 }

@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Threading.Channels;
 
@@ -19,6 +20,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private Thread? _readerThread;
     private CancellationTokenSource? _readerCts;
     private long _outputFrameIndex;
+    private byte[]? _pcmBuf;
 
     public void Initialize(int sampleRate, int channels, int bitrate = 128000)
     {
@@ -64,10 +66,14 @@ public sealed class FfmpegAacEncoder : IDisposable
         _initialized = true;
     }
 
-    public void EncodeAudio(byte[] pcmData)
+    public void EncodeAudio(float[] pcmSamples)
     {
         if (!_initialized || _disposed) return;
-        try { _stdin!.Write(pcmData); _stdin.Flush(); } catch { }
+        int byteLen = pcmSamples.Length * 4;
+        if (_pcmBuf == null || _pcmBuf.Length < byteLen)
+            _pcmBuf = new byte[byteLen * 2];
+        System.Buffer.BlockCopy(pcmSamples, 0, _pcmBuf, 0, byteLen);
+        try { _stdin!.Write(_pcmBuf, 0, byteLen); _stdin.Flush(); } catch { }
     }
 
     public EncodedPacket? TryReadPacket()
