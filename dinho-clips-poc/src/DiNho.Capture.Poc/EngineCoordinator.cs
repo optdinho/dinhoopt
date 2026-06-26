@@ -70,6 +70,10 @@ public sealed class EngineCoordinator : IDisposable
     private IMFDXGIDeviceManager? _dxgiManager;
     private bool _mfStarted;
 
+    // Cache getAudioSessions (~2s TTL)
+    private string? _cachedAudioSessionsJson;
+    private long _audioSessionsCacheTicks;
+
     // Message pump para WGC (STA thread que processa mensagens DWM)
     private WindowsMessagePump? _wgcPump;
 
@@ -94,6 +98,13 @@ public sealed class EngineCoordinator : IDisposable
     // True quando o jogo está em background (alt-tab) e a pipeline está
     // esperando o retorno em vez de fazer reinit.
     private bool _gameBackgrounded;
+
+    // Debounce de foreground/background — evitam oscilação quando WGC
+    // tem drops transitórios com o jogo ainda em foreground.
+    private const int BG_DEBOUNCE_DROPS = 30; // ~500ms a 60fps
+    private const int FG_DEBOUNCE_FRAMES = 15; // ~250ms a 60fps
+    private int _bgDropCount;
+    private int _fgGoodCount;
 
     // Jogo que o usuário parou manualmente com ToggleCapture (Alt+1)
     // Enquanto este jogo estiver em foreground, auto-start não dispara.
@@ -268,6 +279,8 @@ public sealed class EngineCoordinator : IDisposable
 
             _reinitCount = 0;
             _gameBackgrounded = false;
+            _bgDropCount = 0;
+            _fgGoodCount = 0;
 
             // Salva o alvo da captura ANTES de SelectCaptureSource.
             // Durante a gravação, ResolveTargetGame() sempre retorna este mesmo alvo,
@@ -832,6 +845,8 @@ public sealed class EngineCoordinator : IDisposable
             _captureTargetGame = new GameInfo();
             _captureTargetHwnd = IntPtr.Zero;
             _gameBackgrounded = false;
+            _bgDropCount = 0;
+            _fgGoodCount = 0;
 
             _pipelineCts?.Cancel();
             try
@@ -916,7 +931,7 @@ public sealed class EngineCoordinator : IDisposable
             var beforeCapture = Stopwatch.GetTimestamp();
             try
             {
-                int captureTimeout = Math.Max(1, Math.Min(33, 1000 / _config.Config.Fps));
+                int captureTimeout = Math.Max(1, Math.Min(100, 1000 / _config.Config.Fps));
                 using var frame = cap.TryCaptureFrame(captureTimeout);
                 if (++diagFrames % 60 == 1)
                 {
@@ -930,9 +945,19 @@ public sealed class EngineCoordinator : IDisposable
                     {
                         if (_gameBackgrounded && frame.Texture != null)
                         {
-                            _gameBackgrounded = false;
-                            Console.WriteLine("[Pipeline] Jogo retornou ao foreground — frames retomados");
+                            _fgGoodCount++;
+                            if (_fgGoodCount >= FG_DEBOUNCE_FRAMES)
+                            {
+                                _gameBackgrounded = false;
+                                _fgGoodCount = 0;
+                                Console.WriteLine("[Pipeline] Jogo retornou ao foreground — frames retomados");
+                            }
                         }
+                        else
+                        {
+                            _fgGoodCount = 0;
+                        }
+                        _bgDropCount = 0;
                         _starvationStart = default;
                         var encoded = enc.EncodeFrame(frame.Texture, _clock.Now);
                         if (encoded != null)
@@ -971,13 +996,17 @@ public sealed class EngineCoordinator : IDisposable
                     if (_capture is WgcCaptureSource && _captureTargetGame.IsValid &&
                         IsProcessAlive(_captureTargetGame.ProcessName))
                     {
-                        if (!_gameBackgrounded)
+                        _bgDropCount++;
+                        if (_bgDropCount >= BG_DEBOUNCE_DROPS)
                         {
-                            _gameBackgrounded = true;
-                            Console.WriteLine("[Pipeline] Jogo em background (alt-tab) — WGC pausou frames. Aguardando retorno...");
+                            if (!_gameBackgrounded)
+                            {
+                                _gameBackgrounded = true;
+                                Console.WriteLine("[Pipeline] Jogo em background (alt-tab) — frames ausentes. Aguardando retorno...");
+                            }
+                            _starvationStart = default;
+                            _watchdog.Reset();
                         }
-                        _starvationStart = default;
-                        _watchdog.Reset();
                     }
                     else if (_watchdog.ShouldReinit()
                         || (_starvationStart != default && (DateTime.UtcNow - _starvationStart).TotalSeconds > 8))
@@ -1804,11 +1833,10 @@ public sealed class EngineCoordinator : IDisposable
             case "saveClip":
             {
                 var stats = _buffer.Stats();
-                var (video, _) = _buffer.GetSegments(TimeSpan.FromSeconds(_config.Config.ReplayTimeSeconds));
-                Console.WriteLine($"[EngineCoordinator] saveClip: video={video.Count} audio={stats.audioCount} " +
+                Console.WriteLine($"[EngineCoordinator] saveClip: video={stats.videoCount} audio={stats.audioCount} " +
                     $"dur={stats.duration.TotalSeconds:F1}s bytes={stats.bytes} " +
                     $"recording={_recording} captureActive={_captureActive}");
-                if (video.Count == 0)
+                if (stats.videoCount == 0)
                 {
                     return new IpcMessage
                     {
@@ -1828,6 +1856,18 @@ public sealed class EngineCoordinator : IDisposable
 
             case "getAudioSessions":
             {
+                // Cache de 2s — Electron pode chamar em rapid succession
+                long now = Stopwatch.GetTimestamp();
+                if (_cachedAudioSessionsJson != null &&
+                    (now - _audioSessionsCacheTicks) / Stopwatch.Frequency < 2)
+                {
+                    return new IpcMessage
+                    {
+                        Action = "audioSessions",
+                        Value = JsonSerializer.Deserialize<JsonElement>(_cachedAudioSessionsJson)
+                    };
+                }
+
                 var sessions = _audioSessions.EnumerateSessions();
                 var sessionPids = new HashSet<int>(sessions.Select(s => s.ProcessId));
                 var selectedPids = _config.Config.SelectedAudioSessions;
@@ -1896,10 +1936,14 @@ public sealed class EngineCoordinator : IDisposable
                 }
                 catch { }
 
+                var rawJson = JsonSerializer.Serialize(new { sessions = list });
+                _cachedAudioSessionsJson = rawJson;
+                _audioSessionsCacheTicks = Stopwatch.GetTimestamp();
+
                 return new IpcMessage
                 {
                     Action = "audioSessions",
-                    Value = JsonSerializer.SerializeToElement(new { sessions = list })
+                    Value = JsonSerializer.Deserialize<JsonElement>(rawJson)
                 };
             }
 

@@ -25,7 +25,8 @@ public sealed class ClipExporter : IDisposable
         List<EncodedPacket> audioPackets,
         int width,
         int height,
-        int frameRate)
+        int frameRate,
+        string rawFormat = "h264")
     {
         if (videoPackets.Count == 0)
             throw new InvalidOperationException("No video packets to export");
@@ -41,7 +42,8 @@ public sealed class ClipExporter : IDisposable
                 throw new InvalidOperationException(
                     $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
-            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.h264");
+            var vidExt = rawFormat switch { "hevc" => "hevc", "av1" => "av1", _ => "h264" };
+            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.{vidExt}");
 
             try
             {
@@ -57,10 +59,11 @@ public sealed class ClipExporter : IDisposable
 
                     // Identify contiguous video PTS intervals (gap tolerance: 50ms)
                     var intervals = new List<(TimeSpan start, TimeSpan end)>();
-                    foreach (var pkt in videoPackets)
+                    for (int vi = 0; vi < videoPackets.Count; vi++)
                     {
+                        var pkt = videoPackets[vi];
                         var s = pkt.Pts;
-                        var e = s + pkt.Duration;
+                        var e = (vi + 1 < videoPackets.Count) ? videoPackets[vi + 1].Pts : s + pkt.Duration;
                         if (intervals.Count == 0 || s - intervals[^1].end > TimeSpan.FromMilliseconds(50))
                             intervals.Add((s, e));
                         else
@@ -80,15 +83,11 @@ public sealed class ClipExporter : IDisposable
                     gapsRemoved = audioPackets.Count - syncedAudio.Count;
                     audioPackets = syncedAudio;
 
-                    // Compute true video duration (sum of frame durations, ignoring alt-tab gaps)
+                    // Compute true video duration (actual wall-clock PTS range, ignoring alt-tab gaps)
                     double trueVidDuration = 0;
-                    int framesWithDur = 0;
-                    foreach (var pkt in videoPackets)
-                        if (pkt.Duration.Ticks > 0)
-                        {
-                            trueVidDuration += pkt.Duration.TotalSeconds;
-                            framesWithDur++;
-                        }
+                    int framesWithDur = videoPackets.Count;
+                    if (videoPackets.Count >= 2)
+                        trueVidDuration = (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds;
 
                     // Trim audio end to match video true duration exactly
                     if (audioPackets.Count > 0)
@@ -121,7 +120,7 @@ public sealed class ClipExporter : IDisposable
                 double accurateFps = totalRealSec > 0 ? videoPackets.Count / totalRealSec : frameRate;
                 Console.Error.WriteLine($"[Exporter] nominalFps={frameRate} accurateFps={accurateFps:F3} totalRealSec={totalRealSec:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved}");
 
-                MuxWithFfmpegStreaming(outputPath, h264Temp, audioPackets, accurateFps);
+                MuxWithFfmpegStreaming(outputPath, h264Temp, audioPackets, accurateFps, rawFormat);
             }
             finally
             {
@@ -180,13 +179,15 @@ public sealed class ClipExporter : IDisposable
         string outputPath,
         string h264Path,
         List<EncodedPacket> audioPackets,
-        double frameRate)
+        double frameRate,
+        string rawFormat = "h264")
     {
         bool hasAudio = audioPackets.Count > 0;
         bool isAac = hasAudio && IsAdts(audioPackets[0]);
 
+        var fmtFlag = rawFormat switch { "hevc" => "hevc", "av1" => "av1", _ => "h264" };
         var args = $"-y -loglevel warning " +
-                   $"-f h264 -framerate {frameRate.ToString("F3", CultureInfo.InvariantCulture)} -i \"{h264Path}\"";
+                   $"-f {fmtFlag} -framerate {frameRate.ToString("F3", CultureInfo.InvariantCulture)} -i \"{h264Path}\"";
 
         // Audio goes to ffmpeg's stdin (pipe:0 is video file, we use audio as second input via pipe)
         // ffmpeg maps video file as input 0 and stdin as input 1

@@ -32,6 +32,9 @@ public sealed class WgcCaptureSource : ICaptureSource
     private long _latestFrameTicks;
     private readonly AutoResetEvent _frameSignal = new(false);
     private bool _hasReceivedFrame;
+    private ID3D11Texture2D? _copyTexture;
+    private int _copyTexW, _copyTexH;
+    private Format _copyTexFormat;
 
     public void Initialize(ID3D11Device? sharedDevice = null) =>
         Initialize(sharedDevice, IntPtr.Zero);
@@ -280,26 +283,18 @@ public sealed class WgcCaptureSource : ICaptureSource
                     return new CapturedFrame(startTicks, endTicks, 0, 0, success: false, waitEndTicks: waitEndTicks);
                 }
 
-                var copyDesc = new Texture2DDescription
-                {
-                    Width = desc.Width,
-                    Height = desc.Height,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    Format = desc.Format,
-                    SampleDescription = new SampleDescription(1, 0),
-                    Usage = ResourceUsage.Default,
-                    BindFlags = BindFlags.None,
-                    CPUAccessFlags = CpuAccessFlags.None,
-                };
-
-                var copy = _device.CreateTexture2D(copyDesc);
+                EnsureCopyTexture(desc.Width, desc.Height, desc.Format);
                 var ctx = _device.ImmediateContext;
-                ctx.CopyResource(copy, sourceTexture);
+                ctx.CopyResource(_copyTexture, sourceTexture);
                 ctx.Flush();
 
+                // Clone the shared texture so CapturedFrame.Dispose() doesn't destroy _copyTexture
+                var frameDesc = _copyTexture.Description;
+                var frameTexture = _device.CreateTexture2D(frameDesc);
+                ctx.CopyResource(frameTexture, _copyTexture);
+
                 var copyEndTicks = Stopwatch.GetTimestamp();
-                return new CapturedFrame(startTicks, copyEndTicks, size.Width, size.Height, success: true, copy, _device,
+                return new CapturedFrame(startTicks, copyEndTicks, size.Width, size.Height, success: true, frameTexture, _device,
                     waitEndTicks, copyEndTicks);
             }
             finally
@@ -314,6 +309,28 @@ public sealed class WgcCaptureSource : ICaptureSource
         }
     }
 
+    private void EnsureCopyTexture(int width, int height, Format format)
+    {
+        if (_copyTexture != null && _copyTexW == width && _copyTexH == height && _copyTexFormat == format)
+            return;
+        _copyTexture?.Dispose();
+        _copyTexture = _device!.CreateTexture2D(new Texture2DDescription
+        {
+            Width = width,
+            Height = height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = format,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.None,
+            CPUAccessFlags = CpuAccessFlags.None,
+        });
+        _copyTexW = width;
+        _copyTexH = height;
+        _copyTexFormat = format;
+    }
+
     public void Dispose()
     {
         _frameSignal.Dispose();
@@ -324,6 +341,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             _framePool.Dispose();
         }
         _latestFrame?.Dispose();
+        _copyTexture?.Dispose();
         _winrtDevice?.Dispose();
         if (_ownsDevice) _device?.Dispose();
     }

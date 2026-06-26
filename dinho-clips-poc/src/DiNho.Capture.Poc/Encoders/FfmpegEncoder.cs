@@ -55,6 +55,9 @@ public sealed class FfmpegEncoder : IEncoder
     private int _lookahead = 4;
     private string _nvencPreset = "p4";
 
+    // Reusable NV12 scratch buffer — elimina alocação de 3.1MB no LOH a cada frame
+    private byte[]? _nv12Scratch;
+
     // Real PTS tracking — lock-protected queue because Enqueue (pipeline thread) and Dequeue (reader thread) are different threads
     private readonly Queue<TimeSpan> _inputPtsQueue = new();
     private readonly object _ptsQueueLock = new();
@@ -220,9 +223,9 @@ public sealed class FfmpegEncoder : IEncoder
         {
             "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
             "libx265" => "-preset ultrafast -tune zerolatency -x265-params no-open-gop=1:bframes=0:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 60 -sc_threshold 0",
-            "hevc_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 60 -sc_threshold 0",
-            "av1_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 60 -sc_threshold 0",
+            "h264_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 120 -keyint_min 120 -sc_threshold 0",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 120 -keyint_min 120 -sc_threshold 0",
+            "av1_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 120 -keyint_min 120 -sc_threshold 0",
             "h264_amf" => $"-quality quality -rc cqp -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)}",
             "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)}",
             _ => "-preset ultrafast -tune zerolatency -threads 1"
@@ -239,6 +242,19 @@ public sealed class FfmpegEncoder : IEncoder
             ? $" -vf \"crop={cw}:{ch}:{_cropX}:{_cropY}\""
             : "";
 
+        var rawFmt = _codec switch
+        {
+            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265" => "hevc",
+            "av1_nvenc" or "libsvtav1" => "av1",
+            _ => "h264"
+        };
+        var bsf = rawFmt switch
+        {
+            "hevc" => "-bsf:v hevc_mp4toannexb",
+            "h264" => "-bsf:v h264_mp4toannexb",
+            _ => ""
+        };
+
         _process = new Process
         {
             StartInfo = new ProcessStartInfo("ffmpeg")
@@ -247,7 +263,7 @@ public sealed class FfmpegEncoder : IEncoder
                             $"-f rawvideo -pix_fmt nv12 -s {_width}x{_height} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"{cropFilter} -c:v {_codec} {tune} " +
-                            $"-f h264 pipe:1",
+                            $"{bsf} -f {rawFmt} pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -480,7 +496,6 @@ public sealed class FfmpegEncoder : IEncoder
         try
         {
             _stdin!.Write(nv12);
-            _stdin.Flush();
             _frameCount++;
             _restartAttempts = 0;
         }
@@ -494,7 +509,12 @@ public sealed class FfmpegEncoder : IEncoder
         }
 
         while (_outputChannel.Reader.TryRead(out var pkt))
-            _pendingOutputs.Enqueue(pkt);
+        {
+            if (_pendingOutputs.Count < 32)
+                _pendingOutputs.Enqueue(pkt);
+            else
+                pkt.Release();
+        }
 
         if (_pendingOutputs.Count > 0)
             return _pendingOutputs.Dequeue();
@@ -600,6 +620,11 @@ public sealed class FfmpegEncoder : IEncoder
         _frameCount = 0;
         _outputFrameIndex = 0;
         _hadSlice = false;
+        if (_pendingBuf != null)
+        {
+            ArrayPool<byte>.Shared.Return(_pendingBuf);
+            _pendingBuf = null;
+        }
         _pendingLen = 0;
         _pendingOutputs.Clear();
         lock (_ptsQueueLock) { _inputPtsQueue.Clear(); }
@@ -613,6 +638,7 @@ public sealed class FfmpegEncoder : IEncoder
         _nv12Staging = null;
         _inputCopy?.Dispose();
         _inputCopy = null;
+        _nv12Scratch = null;
     }
 
     // ── GPU NV12 conversion only (no CPU fallback) ───────────────────
@@ -724,23 +750,27 @@ public sealed class FfmpegEncoder : IEncoder
     {
         int srcPitch = map.RowPitch;
         int ySize = _height * _width;
-        var result = new byte[ySize + _height / 2 * _width];
+        int totalSize = ySize + _height / 2 * _width;
+
+        if (_nv12Scratch?.Length != totalSize)
+            _nv12Scratch = new byte[totalSize];
+
         var src = (byte*)map.DataPointer.ToPointer();
 
         for (int y = 0; y < _height; y++)
             Unsafe.CopyBlockUnaligned(
-                ref result[y * _width],
+                ref _nv12Scratch[y * _width],
                 ref src[y * srcPitch],
                 (uint)_width);
 
         int uvSrcBase = srcPitch * _height;
         for (int y = 0; y < _height / 2; y++)
             Unsafe.CopyBlockUnaligned(
-                ref result[ySize + y * _width],
+                ref _nv12Scratch[ySize + y * _width],
                 ref src[uvSrcBase + y * srcPitch],
                 (uint)_width);
 
-        return result;
+        return _nv12Scratch;
     }
 
     // ── Cleanup ──────────────────────────────────────────────────────
@@ -809,5 +839,6 @@ public sealed class FfmpegEncoder : IEncoder
         _gpuConverter?.Dispose();
         _nv12Staging?.Dispose();
         _inputCopy?.Dispose();
+        _nv12Scratch = null;
     }
 }

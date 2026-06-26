@@ -12,6 +12,9 @@ internal sealed class GpuVideoConverter : IDisposable
     private readonly int _width;
     private readonly int _height;
     private ID3D11Texture2D? _cachedOutput;
+    private ID3D11VideoProcessorInputView? _cachedInputView;
+    private ID3D11VideoProcessorOutputView? _cachedOutputView;
+    private ID3D11Texture2D? _cachedInputViewTexture;
     private bool _disposed;
 
     public GpuVideoConverter(ID3D11Device device, int width, int height)
@@ -57,16 +60,21 @@ internal sealed class GpuVideoConverter : IDisposable
 
     public ID3D11Texture2D Convert(ID3D11Texture2D inputBgra)
     {
-        var inputViewDesc = new VideoProcessorInputViewDescription
+        if (_cachedInputView == null || _cachedInputViewTexture != inputBgra)
         {
-            ViewDimension = VideoProcessorInputViewDimension.Texture2D,
-            FourCC = 0,
-            Texture2D = new Texture2DVideoProcessorInputView { MipSlice = 0, ArraySlice = 0 }
-        };
-        _videoDevice.CreateVideoProcessorInputView(
-            inputBgra, _enumerator, inputViewDesc, out var inputView).CheckError();
+            _cachedInputView?.Dispose();
+            var inputViewDesc = new VideoProcessorInputViewDescription
+            {
+                ViewDimension = VideoProcessorInputViewDimension.Texture2D,
+                FourCC = 0,
+                Texture2D = new Texture2DVideoProcessorInputView { MipSlice = 0, ArraySlice = 0 }
+            };
+            _videoDevice.CreateVideoProcessorInputView(
+                inputBgra, _enumerator, inputViewDesc, out _cachedInputView).CheckError();
+            _cachedInputViewTexture = inputBgra;
+        }
 
-        using (inputView)
+        if (_cachedOutputView == null)
         {
             var outputViewDesc = new VideoProcessorOutputViewDescription
             {
@@ -74,28 +82,25 @@ internal sealed class GpuVideoConverter : IDisposable
                 Texture2D = new Texture2DVideoProcessorOutputView { MipSlice = 0 }
             };
             _videoDevice.CreateVideoProcessorOutputView(
-                _cachedOutput, _enumerator, outputViewDesc, out var outputView).CheckError();
-
-            using (outputView)
-            {
-                var stream = new VideoProcessorStream
-                {
-                    Enable = true,
-                    OutputIndex = 0,
-                    InputFrameOrField = 0,
-                    PastFrames = 0,
-                    FutureFrames = 0,
-                    InputSurface = inputView
-                };
-
-                _videoContext.VideoProcessorBlt(
-                    _videoProcessor,
-                    outputView,
-                    0,
-                    1,
-                    new[] { stream });
-            }
+                _cachedOutput, _enumerator, outputViewDesc, out _cachedOutputView).CheckError();
         }
+
+        var stream = new VideoProcessorStream
+        {
+            Enable = true,
+            OutputIndex = 0,
+            InputFrameOrField = 0,
+            PastFrames = 0,
+            FutureFrames = 0,
+            InputSurface = _cachedInputView
+        };
+
+        _videoContext.VideoProcessorBlt(
+            _videoProcessor,
+            _cachedOutputView,
+            0,
+            1,
+            new[] { stream });
 
         return _cachedOutput;
     }
@@ -105,6 +110,8 @@ internal sealed class GpuVideoConverter : IDisposable
         if (_disposed) return;
         _disposed = true;
         _cachedOutput?.Dispose();
+        _cachedInputView?.Dispose();
+        _cachedOutputView?.Dispose();
         _videoProcessor.Dispose();
         _enumerator.Dispose();
         _videoContext.Dispose();

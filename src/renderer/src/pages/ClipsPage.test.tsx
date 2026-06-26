@@ -349,7 +349,7 @@ describe('ClipsPage', () => {
     await screen.findByText('recordingQuality')
     screen.getByText('Alta').click()
     expect(mockSetConfig).toHaveBeenCalledWith(
-      expect.objectContaining({ cq: 18, maxrateKbps: 50000 })
+      expect.objectContaining({ cq: 20, maxrateKbps: 40000 })
     )
   })
 

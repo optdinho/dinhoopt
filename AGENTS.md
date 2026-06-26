@@ -1238,9 +1238,54 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - `index.html` + `src/renderer/index.html`: CSP com `media-src 'self' file:`
 - `src/main/ipc/clips.ipc.ts`: `openDevTools()` com `if (!app.isPackaged)`
 
+## Session Summary (2026-06-26 — H264 corruption root cause + NVENC bitstream filter fix)
+
+### Done
+
+- **Root cause da corrupção H264 identificada**: NVENC RTX 5050 gera `avcc` (length-prefixed NALUs), não AnnexB (startcode). O mux `-c:v copy` em `.mp4` espera AnnexB, resultando em `pps_id out of range`.
+  - **Fix**: `-bsf:v h264_mp4toannexb` no ffmpeg encoder pipeline converte avcc→AnnexB inline
+  - SPS (`00 00 01 67`) e PPS (`00 00 01 68`) confirmados no início do stream após o fix
+  - Diagnóstico hex dump em `WriteH264File` removido após confirmação
+
+- **NVENC GOP 60→120**: GOP duplicado de 60 para 120 frames (~2s a 60fps) — melhor compressão sem impacto perceptível em replay buffer de 5min+
+
+- **Reusable NV12 scratch buffer**: `_nv12Scratch` byte array reutilizado em vez de alocar 3.1MB no LOH a cada frame — elimina GC pressure de 186MB/min a 60fps
+
+- **Output queue limit**: `_pendingOutputs` limitado a 32 pacotes — descarta pacotes antigos se o reader thread não consumir rápido o suficiente, evitando OOM
+
+- **`_stdin.Flush()` removido**: redundante — `Write()` já não bufferiza após threshold interno do pipe
+
+- **ClipExporter PTS gap filtering refinado**: Detecção de intervalos PTS contíguos agora usa PTS do próximo pacote em vez de `s + Duration` — mais preciso para gaps de alt-tab. Duração real do vídeo calculada por `last.Pts - first.Pts + last.Duration`
+
+- **Dynamic raw format + bitstream filter**: HEVC/AV1 também têm `*_mp4toannexb` suportado — `rawFormat` é inferido do codec e propagado do encoder ao mux
+
+- **EngineCoordinator improvements**:
+  - Audio sessions cache com 2s TTL — evita re-enumeração desnecessária no `getAudioSessions`
+  - Background/foreground debounce (30 drops ~500ms BG, 15 frames ~250ms FG) — evita oscilação com drops transitórios do WGC
+  - Capture timeout aumentado de 33ms para 100ms — mais tolerante a frames lentos do WGC
+
+- **Default quality preset tweaked**: CQ 18→20, maxrate/bufsize 50/100→40/80 Mbps — melhor equilíbrio tamanho/qualidade para 1080p60. Preset "Muito Alta" CQ 16→18
+
+- **Full suite**: **30/30 TS clip IPC tests**, **74/74 C# tests** — 0 quebras
+- **Engine**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK
+
+### Key Decisions
+- `-bsf:v h264_mp4toannexb` é obrigatório para NVENC H264 (avcc→AnnexB) — sem isso o mp4 fica corrompido
+- GOP 120 vs 60: buffer de 5min+ significa que keyframe intervalos maiores são aceitáveis e melhoram compressão em ~10-15%
+- Debounce de 500ms/250ms para foreground/background: WGC pode ter drops transitórios de 1-5 frames sem indicar perda de foreground real
+- Output queue limit de 32 pacotes: ~533ms de buffer a 60fps — suficiente para absorver picos sem consumir memória ilimitada
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `_nv12Scratch`, GOP 120, `-bsf:v h264_mp4toannexb`, output queue limit, sem Flush
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: dynamic ext, PTS interval fix, duration calc, rawFormat propagation
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: audio sessions cache, BG/FG debounce, capture timeout 100ms
+- `src/main/ipc/clips.ipc.ts`, `clips-config-store.ts`: default CQ 20 / maxrate 40Mbps
+- `src/main/ipc/clips.ipc.test.ts`, `clips-config-store.test.ts`, `ClipsPage.test.tsx`: test expectations updated
+
 ## Future: Clip Editor (registered 2026-06-25)
 
 ### Opção A — Editor básico (trim + merge textual)
+### Opção B (futuro)
 - AI auto-clipping (event detection) — prioridade futura
 - Voice clip ("clip that")
 - Full session recording + bookmarks

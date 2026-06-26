@@ -7,7 +7,7 @@ public enum MediaType { Video, Audio }
 public sealed class EncodedPacket
 {
     public byte[] Data { get; private set; }
-    public float[]? PcmSamples { get; }
+    public float[]? PcmSamples { get; private set; }
     public MediaType Type { get; }
     public TimeSpan Pts { get; }
     public TimeSpan Duration { get; }
@@ -17,6 +17,7 @@ public sealed class EncodedPacket
     public bool IsFavorite { get; set; }
     public bool IsPooled { get; }
     public int DataLength { get; private set; }
+    public bool IsPooledPcm { get; }
 
     public EncodedPacket(
         byte[] data,
@@ -64,7 +65,8 @@ public sealed class EncodedPacket
         float[] pcmSamples,
         MediaType type,
         TimeSpan pts,
-        TimeSpan duration)
+        TimeSpan duration,
+        bool isPooled = false)
     {
         PcmSamples = pcmSamples;
         Data = [];
@@ -74,6 +76,7 @@ public sealed class EncodedPacket
         IsKeyFrame = false;
         IsPooled = false;
         DataLength = 0;
+        IsPooledPcm = isPooled;
     }
 
     public void Release()
@@ -83,6 +86,11 @@ public sealed class EncodedPacket
             ArrayPool<byte>.Shared.Return(Data);
             Data = [];
             DataLength = 0;
+        }
+        if (IsPooledPcm && PcmSamples != null)
+        {
+            ArrayPool<float>.Shared.Return(PcmSamples);
+            PcmSamples = null;
         }
     }
 }

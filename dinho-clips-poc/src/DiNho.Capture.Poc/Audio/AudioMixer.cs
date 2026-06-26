@@ -220,14 +220,14 @@ public sealed class AudioMixer : IDisposable
     }
 
     private int _emittedPackets;
-    private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind)
+    private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind, bool isPooled = false)
     {
         _emittedPackets++;
         var duration = TimeSpan.FromSeconds((double)samples.Length / (_sampleRate * _channels));
-        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration);
+        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration, isPooled);
 
         if (_emittedPackets <= 3 || _emittedPackets % 200 == 0)
-            Console.WriteLine($"[AudioMixer] EmitPacket #{_emittedPackets} kind={kind} samples={samples.Length} dur={duration.TotalSeconds:F4}s");
+            Console.WriteLine($"[AudioMixer] EmitPacket #{_emittedPackets} kind={kind} samples={samples.Length} dur={duration.TotalSeconds:F4}s isPooled={isPooled}");
 
         OnMixedAudio?.Invoke(packet);
     }
