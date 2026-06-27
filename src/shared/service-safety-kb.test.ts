@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SERVICE_SAFETY_KB, lookupServiceSafety } from './service-safety-kb'
+import { SERVICE_SAFETY_KB, isGameCompatible, lookupServiceSafety } from './service-safety-kb'
 
 describe('lookupServiceSafety', () => {
   it('finds a known safe service', () => {
@@ -56,5 +56,19 @@ describe('lookupServiceSafety', () => {
     for (const [key, entry] of Object.entries(SERVICE_SAFETY_KB)) {
       expect(entry.note, `${key} should have a note`).toBeTruthy()
     }
+  })
+})
+
+describe('isGameCompatible', () => {
+  it('returns true when service has no incompatibleGames list', () => {
+    expect(isGameCompatible('dmwappushservice', 'fortnite')).toBe(true)
+  })
+
+  it('returns true when game is not in the incompatibility list', () => {
+    expect(isGameCompatible('diagtrack', 'fortnite')).toBe(true)
+  })
+
+  it('returns false when game is in the incompatibility list', () => {
+    expect(isGameCompatible('diagtrack', 'fivem')).toBe(false)
   })
 })

@@ -45,11 +45,14 @@ export function GameModePage() {
   }, [])
 
   useEffect(() => {
-    window.dinho?.clipsGetConfig?.().then((cfg) => {
-      if (cfg && typeof cfg.autoStartCapture === 'boolean') {
-        setAutoStartCapture(cfg.autoStartCapture)
-      }
-    }).catch(() => {})
+    window.dinho
+      ?.clipsGetConfig?.()
+      .then((cfg) => {
+        if (cfg && typeof cfg.autoStartCapture === 'boolean') {
+          setAutoStartCapture(cfg.autoStartCapture)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const handleToggleAutoStartCapture = useCallback(() => {

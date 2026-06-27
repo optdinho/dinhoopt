@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using DiNho.Capture.Poc.Encoders;
+using DiNho.Capture.Poc.Logging;
 using DiNho.Capture.Poc.Sync;
 
 namespace DiNho.Capture.Poc.Audio;
@@ -46,7 +48,7 @@ public sealed class AudioMixer : IDisposable
                 _micQueue.Clear();
                 _loopbackQueue.Clear();
             }
-            Console.WriteLine($"[AudioMixer] Mic {(value ? "ativado" : "desativado")}, filas limpas");
+            Log.I("AudioMixer", $"Mic {(value ? "ativado" : "desativado")}, filas limpas");
         }
     }
     public bool NoiseSuppressionEnabled
@@ -59,13 +61,13 @@ public sealed class AudioMixer : IDisposable
             {
                 _noiseFilter?.Dispose();
                 _noiseFilter = new RnnoiseFilter(_sampleRate > 0 ? _sampleRate : 48000, _channels > 0 ? _channels : 2);
-                Console.WriteLine($"[AudioMixer] NoiseSuppression ON");
+                Log.I("AudioMixer", "NoiseSuppression ON");
             }
             else
             {
                 _noiseFilter?.Dispose();
                 _noiseFilter = null;
-                Console.WriteLine($"[AudioMixer] NoiseSuppression OFF");
+                Log.I("AudioMixer", "NoiseSuppression OFF");
             }
         }
     }
@@ -89,7 +91,7 @@ public sealed class AudioMixer : IDisposable
         _micSource.Start();
         _sampleRate = _loopbackSource.SampleRate;
         _channels = _loopbackSource.Channels;
-        Console.WriteLine($"[AudioMixer] Started: SR={_sampleRate} Ch={_channels} loopback={_loopbackSource.GetType().Name} mic={_micSource.GetType().Name}");
+        Log.I("AudioMixer", $"Started: SR={_sampleRate} Ch={_channels} loopback={_loopbackSource.GetType().Name} mic={_micSource.GetType().Name}");
     }
 
     public void Stop()
@@ -172,20 +174,30 @@ public sealed class AudioMixer : IDisposable
                 }
                 micSamples = [.. combined];
                 var drift = lastMicTs.Value - loopbackItem.Timestamp;
-                Console.WriteLine($"[Sync] loopbackTs={loopbackItem.Timestamp.TotalSeconds:F3} firstMicTs={firstMicTs.Value.TotalSeconds:F3} lastMicTs={lastMicTs.Value.TotalSeconds:F3} driftMs={drift.TotalMilliseconds:F1} micPackets={micPackets}");
+                var n = Stopwatch.GetTimestamp();
+                if (n - _lastLogTicks >= LogThrottleTicks)
+                {
+                    _lastLogTicks = n;
+                    Log.D("Sync", $"loopbackTs={loopbackItem.Timestamp.TotalSeconds:F3} firstMicTs={firstMicTs.Value.TotalSeconds:F3} lastMicTs={lastMicTs.Value.TotalSeconds:F3} driftMs={drift.TotalMilliseconds:F1} micPackets={micPackets}");
+                }
             }
         }
 
         if (micSamples != null)
         {
             var mixed = Mix(loopbackItem.Buffer.Samples, loopbackItem.Buffer.Channels, micSamples, _gameGain, _micGain);
-            Console.WriteLine($"[AudioMixer] Mic mixed: loopbackLen={loopbackItem.Buffer.Samples.Length} micLen={micSamples.Length}");
+            var n = Stopwatch.GetTimestamp();
+            if (n - _lastLogTicks >= LogThrottleTicks)
+            {
+                _lastLogTicks = n;
+                Log.D("AudioMixer", $"Mic mixed: loopbackLen={loopbackItem.Buffer.Samples.Length} micLen={micSamples.Length}");
+            }
             EmitPacket(mixed, loopbackItem.Timestamp, AudioStreamKind.Mixed);
         }
         else
         {
             if (_micEnabled)
-                Console.WriteLine($"[AudioMixer] Mic enabled but queue empty (loopback={_loopbackQueue.Count} mic={_micQueue.Count})");
+                Log.W("AudioMixer", $"Mic enabled but queue empty (loopback={_loopbackQueue.Count} mic={_micQueue.Count})");
             EmitPacket(loopbackItem.Buffer.Samples, loopbackItem.Timestamp, AudioStreamKind.Game);
         }
     }
@@ -220,14 +232,20 @@ public sealed class AudioMixer : IDisposable
     }
 
     private int _emittedPackets;
+    private long _lastLogTicks;
+    private const long LogThrottleTicks = 5_000_000; // 500ms
     private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind, bool isPooled = false)
     {
         _emittedPackets++;
         var duration = TimeSpan.FromSeconds((double)samples.Length / (_sampleRate * _channels));
         var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration, isPooled);
 
-        if (_emittedPackets <= 3 || _emittedPackets % 200 == 0)
-            Console.WriteLine($"[AudioMixer] EmitPacket #{_emittedPackets} kind={kind} samples={samples.Length} dur={duration.TotalSeconds:F4}s isPooled={isPooled}");
+        var now = Stopwatch.GetTimestamp();
+        if (_emittedPackets <= 3 || now - _lastLogTicks >= LogThrottleTicks)
+        {
+            _lastLogTicks = now;
+            Log.D("AudioMixer", $"EmitPacket #{_emittedPackets} kind={kind} samples={samples.Length} dur={duration.TotalSeconds:F4}s isPooled={isPooled}");
+        }
 
         OnMixedAudio?.Invoke(packet);
     }

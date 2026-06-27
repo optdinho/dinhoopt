@@ -43,9 +43,9 @@ vi.mock('framer-motion', () => ({
         () =>
         // biome-ignore lint/suspicious/noExplicitAny: test
         ({ children, ...props }: any) => <div {...props}>{children}</div>,
-      },
+    },
     // biome-ignore lint/suspicious/noExplicitAny: test
-    ) as any,
+  ) as any,
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))
 

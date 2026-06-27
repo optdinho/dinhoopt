@@ -2678,9 +2678,7 @@ describe('validateGameModeConfig (real)', () => {
   })
 
   it('returns null when enabledOptimizations contains non-string', () => {
-    expect(
-      realValidateGameModeConfig({ enabledOptimizations: [123], customProcessKillList: [] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ enabledOptimizations: [123], customProcessKillList: [] })).toBeNull()
   })
 
   it('returns null when enabledOptimizations contains invalid ID', () => {
@@ -2690,9 +2688,7 @@ describe('validateGameModeConfig (real)', () => {
   })
 
   it('returns null when customProcessKillList is not an array', () => {
-    expect(
-      realValidateGameModeConfig({ enabledOptimizations: [], customProcessKillList: 'not-array' }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ enabledOptimizations: [], customProcessKillList: 'not-array' })).toBeNull()
   })
 
   it('returns null when customProcessKillList length > 50', () => {
@@ -2705,15 +2701,11 @@ describe('validateGameModeConfig (real)', () => {
   })
 
   it('returns null when process kill entry is non-string', () => {
-    expect(
-      realValidateGameModeConfig({ enabledOptimizations: [], customProcessKillList: [42] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ enabledOptimizations: [], customProcessKillList: [42] })).toBeNull()
   })
 
   it('returns null when process kill entry is empty string', () => {
-    expect(
-      realValidateGameModeConfig({ enabledOptimizations: [], customProcessKillList: [''] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ enabledOptimizations: [], customProcessKillList: [''] })).toBeNull()
   })
 
   it('returns null when process kill entry exceeds 100 chars', () => {
@@ -2729,71 +2721,49 @@ describe('validateGameModeConfig (real)', () => {
   })
 
   it('returns null when autoDetect is present but not boolean', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, autoDetect: 'yes' }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, autoDetect: 'yes' })).toBeNull()
   })
 
   it('returns null when autoDeactivate is present but not boolean', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, autoDeactivate: 'yes' }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, autoDeactivate: 'yes' })).toBeNull()
   })
 
   it('returns null when customGameProcesses is not an array', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, customGameProcesses: 'not-array' }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, customGameProcesses: 'not-array' })).toBeNull()
   })
 
   it('returns null when customGameProcesses length > 50', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, customGameProcesses: Array(51).fill('game.exe') }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, customGameProcesses: Array(51).fill('game.exe') })).toBeNull()
   })
 
   it('returns null when customGameProcesses has empty string', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, customGameProcesses: [''] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, customGameProcesses: [''] })).toBeNull()
   })
 
   it('returns null when customGameProcesses entry is non-string', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, customGameProcesses: [42] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, customGameProcesses: [42] })).toBeNull()
   })
 
   it('returns null when customGameProcesses entry has invalid chars', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, customGameProcesses: ['game<>.exe'] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, customGameProcesses: ['game<>.exe'] })).toBeNull()
   })
 
   it('returns null when gameProfiles is an array', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, gameProfiles: [] }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, gameProfiles: [] })).toBeNull()
   })
 
   it('returns null when gameProfiles is null', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, gameProfiles: null }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, gameProfiles: null })).toBeNull()
   })
 
   it('returns null when gameProfiles is a string', () => {
-    expect(
-      realValidateGameModeConfig({ ...validBase, gameProfiles: 'not-object' }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, gameProfiles: 'not-object' })).toBeNull()
   })
 
   it('returns null when gameProfiles has > 30 keys', () => {
     const profiles: Record<string, unknown> = {}
     for (let i = 0; i < 31; i++) profiles[`g${i}.exe`] = { gameName: `G${i}`, enabledOptimizations: [] }
-    expect(
-      realValidateGameModeConfig({ ...validBase, gameProfiles: profiles }),
-    ).toBeNull()
+    expect(realValidateGameModeConfig({ ...validBase, gameProfiles: profiles })).toBeNull()
   })
 
   it('returns null when gameProfiles key has invalid chars', () => {

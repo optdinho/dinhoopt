@@ -21,6 +21,7 @@ vi.mock('../services/logger.service', () => ({
 }))
 
 import {
+  cancelBenchmark,
   classifyScore,
   registerBenchmarkIpc,
   scoreCpu,
@@ -159,6 +160,140 @@ describe('registerBenchmarkIpc', () => {
       expect(result.scoreClass).toBe('D')
       expect(result.score).toBeLessThan(50)
     }, 30000)
+  })
+
+  describe('BENCHMARK_RUN handler — edge cases (real timers)', () => {
+    it('handles NaN CPU reading by skipping the value', async () => {
+      const cpuReadings = ['10', 'not-a-number', '10', '10', '10', '10', '10', '10', '10', '10']
+      for (const r of cpuReadings) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: r })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 8192, Total: 16384 }) })
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '4' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Balanced' })
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+      const result = (await handler()) as { details: Record<string, unknown> }
+      const cpu = result.details.cpu as { score: number; detail: string }
+      expect(cpu.detail).toMatch(/Uso médio/)
+    }, 30000)
+
+    it('handles non-numeric tweaks count gracefully', async () => {
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '10' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 4096, Total: 16384 }) })
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'invalid-value' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Balanced' })
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+      const result = (await handler()) as { details: Record<string, unknown> }
+      const tweaks = result.details.tweakBonus as { score: number; applied: number }
+      expect(tweaks.applied).toBe(0)
+      expect(tweaks.score).toBe(0)
+    }, 30000)
+
+    it('detects high performance power plan', async () => {
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '10' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 4096, Total: 16384 }) })
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'High Performance (8c5e7fda-e8bf-4a96-9a05-a4e062abba23)' })
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+      const result = (await handler()) as { details: Record<string, unknown> }
+      const power = result.details.powerBonus as { plan: string; score: number }
+      expect(power.plan).toBe('High Performance')
+      expect(power.score).toBe(3)
+    }, 30000)
+
+    it('returns 0 jitter for single successful ping sample', async () => {
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '10' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 4096, Total: 16384 }) })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      for (let i = 0; i < 9; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Request timed out' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Balanced' })
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+      const result = (await handler()) as { details: Record<string, unknown> }
+      const net = result.details.network as { score: number; jitter: number; detail: string }
+      expect(net.jitter).toBe(0)
+      expect(net.detail).toMatch(/Ping médio/)
+    }, 30000)
+  })
+
+  describe('BENCHMARK_RUN handler — cancelled mid-cycle', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('cancelled mid-CPU measurement uses early return value', async () => {
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '5' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 8192, Total: 16384 }) })
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Balanced' })
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+
+      const promise = handler()
+      await vi.advanceTimersByTimeAsync(500)
+
+      cancelBenchmark()
+      await vi.advanceTimersByTimeAsync(30000)
+
+      const result = (await promise) as { details: Record<string, unknown> }
+      const cpu = result.details.cpu as { score: number }
+      expect(cpu.score).toBe(4)
+    })
   })
 
   describe('BENCHMARK_CANCEL handler', () => {

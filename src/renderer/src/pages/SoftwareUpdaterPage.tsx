@@ -107,73 +107,76 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
   }
 
   // ─── Run updates ────────────────────────────────────────────
-  const handleUpdate = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) return
-    const store = useUpdaterStore.getState()
-    store.setUpdating(true)
-    store.setUpdateResult(null)
-    store.setError(null)
-    store.setProgress(null)
+  const handleUpdate = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return
+      const store = useUpdaterStore.getState()
+      store.setUpdating(true)
+      store.setUpdateResult(null)
+      store.setError(null)
+      store.setProgress(null)
 
-    const startTime = Date.now()
-    const appsToUpdate = store.apps.filter((a) => ids.includes(a.id))
+      const startTime = Date.now()
+      const appsToUpdate = store.apps.filter((a) => ids.includes(a.id))
 
-    try {
-      const result = await window.dinho.softwareUpdateRun(ids, store.packageManagerName ?? undefined)
-      const s = useUpdaterStore.getState()
-      s.setUpdateResult(result)
-      s.setProgress(null)
+      try {
+        const result = await window.dinho.softwareUpdateRun(ids, store.packageManagerName ?? undefined)
+        const s = useUpdaterStore.getState()
+        s.setUpdateResult(result)
+        s.setProgress(null)
 
-      if (result.succeeded > 0) {
-        const failedIds = new Set(result.errors.map((e) => e.appId))
-        const succeededIds = ids.filter((id) => !failedIds.has(id))
-        s.removeApps(succeededIds)
-        toast.success(
-          result.succeeded !== 1
-            ? t('softwareUpdater.toastUpdateSuccessPlural', { count: result.succeeded })
-            : t('softwareUpdater.toastUpdateSuccess', { count: result.succeeded }),
-        )
+        if (result.succeeded > 0) {
+          const failedIds = new Set(result.errors.map((e) => e.appId))
+          const succeededIds = ids.filter((id) => !failedIds.has(id))
+          s.removeApps(succeededIds)
+          toast.success(
+            result.succeeded !== 1
+              ? t('softwareUpdater.toastUpdateSuccessPlural', { count: result.succeeded })
+              : t('softwareUpdater.toastUpdateSuccess', { count: result.succeeded }),
+          )
+        }
+        if (result.failed > 0) {
+          toast.error(
+            result.failed !== 1
+              ? t('softwareUpdater.toastUpdateFailedPlural', { count: result.failed })
+              : t('softwareUpdater.toastUpdateFailed', { count: result.failed }),
+          )
+        }
+
+        const bySeverity: Record<string, { found: number; updated: number }> = {}
+        const failedAppIds = new Set(result.errors.map((e) => e.appId))
+        for (const app of appsToUpdate) {
+          const sev = app.severity
+          if (!bySeverity[sev]) bySeverity[sev] = { found: 0, updated: 0 }
+          bySeverity[sev].found++
+          if (!failedAppIds.has(app.id)) bySeverity[sev].updated++
+        }
+        await useHistoryStore.getState().addEntry({
+          id: Date.now().toString(),
+          type: 'software-update',
+          timestamp: new Date().toISOString(),
+          duration: Date.now() - startTime,
+          totalItemsFound: ids.length,
+          totalItemsCleaned: result.succeeded,
+          totalItemsSkipped: 0,
+          totalSpaceSaved: 0,
+          categories: Object.entries(bySeverity).map(([name, d]) => ({
+            name: `${name} updates`,
+            itemsFound: d.found,
+            itemsCleaned: d.updated,
+            spaceSaved: 0,
+          })),
+          errorCount: result.failed,
+        })
+      } catch (err) {
+        logger.error('SoftwareUpdaterPage', 'Update failed', err)
+        useUpdaterStore.getState().setError(t('softwareUpdater.errorUpdateFailed'))
+      } finally {
+        useUpdaterStore.getState().setUpdating(false)
       }
-      if (result.failed > 0) {
-        toast.error(
-          result.failed !== 1
-            ? t('softwareUpdater.toastUpdateFailedPlural', { count: result.failed })
-            : t('softwareUpdater.toastUpdateFailed', { count: result.failed }),
-        )
-      }
-
-      const bySeverity: Record<string, { found: number; updated: number }> = {}
-      const failedAppIds = new Set(result.errors.map((e) => e.appId))
-      for (const app of appsToUpdate) {
-        const sev = app.severity
-        if (!bySeverity[sev]) bySeverity[sev] = { found: 0, updated: 0 }
-        bySeverity[sev].found++
-        if (!failedAppIds.has(app.id)) bySeverity[sev].updated++
-      }
-      await useHistoryStore.getState().addEntry({
-        id: Date.now().toString(),
-        type: 'software-update',
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-        totalItemsFound: ids.length,
-        totalItemsCleaned: result.succeeded,
-        totalItemsSkipped: 0,
-        totalSpaceSaved: 0,
-        categories: Object.entries(bySeverity).map(([name, d]) => ({
-          name: `${name} updates`,
-          itemsFound: d.found,
-          itemsCleaned: d.updated,
-          spaceSaved: 0,
-        })),
-        errorCount: result.failed,
-      })
-    } catch (err) {
-      logger.error('SoftwareUpdaterPage', 'Update failed', err)
-      useUpdaterStore.getState().setError(t('softwareUpdater.errorUpdateFailed'))
-    } finally {
-      useUpdaterStore.getState().setUpdating(false)
-    }
-  }, [t])
+    },
+    [t],
+  )
 
   const handleUpdateSelected = useCallback(() => {
     const selectedIds = useUpdaterStore
@@ -199,7 +202,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
             color: 'var(--text-on-accent)',
           }}
-         type="button">
+          type="button"
+        >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
           ) : (
@@ -258,7 +262,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         {/* Severity filter */}
         {hasChecked && apps.length > 0 && (
           <OutsideClickHandler isOpen={showFilterMenu} onClose={() => setShowFilterMenu(false)} className="relative">
-            <button type="button"
+            <button
+              type="button"
               onClick={() => setShowFilterMenu(!showFilterMenu)}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-all"
               style={{
@@ -280,7 +285,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 }}
               >
                 {Object.entries(FILTER_LABEL_KEYS).map(([key, labelKey]) => (
-                  <button type="button"
+                  <button
+                    type="button"
                     key={key}
                     onClick={() => {
                       useUpdaterStore.getState().setSeverityFilter(key as SeverityFilter)
@@ -302,7 +308,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         {/* Sort */}
         {hasChecked && apps.length > 0 && (
           <OutsideClickHandler isOpen={showSortMenu} onClose={() => setShowSortMenu(false)} className="relative">
-            <button type="button"
+            <button
+              type="button"
               onClick={() => setShowSortMenu(!showSortMenu)}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-all"
               style={{
@@ -324,7 +331,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 }}
               >
                 {Object.entries(SORT_LABEL_KEYS).map(([field, labelKey]) => (
-                  <button type="button"
+                  <button
+                    type="button"
                     key={field}
                     onClick={() => {
                       const store = useUpdaterStore.getState()
@@ -543,7 +551,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Selection controls + Update button */}
       {hasChecked && apps.length > 0 && !loading && (
         <div className="mb-4 flex items-center gap-3">
-          <button type="button"
+          <button
+            type="button"
             onClick={() => {
               const store = useUpdaterStore.getState()
               allSelected ? store.deselectAll() : store.selectAll()
@@ -573,7 +582,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
 
           <div className="flex-1" />
 
-          <button type="button"
+          <button
+            type="button"
             onClick={handleUpdateSelected}
             disabled={selectedCount === 0 || updating}
             className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
@@ -604,7 +614,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: 'var(--text-on-accent)',
               }}
-             type="button">
+              type="button"
+            >
               <RefreshCw className="h-4 w-4" strokeWidth={2} />
               {t('softwareUpdater.checkForUpdatesButton')}
             </button>
@@ -661,7 +672,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Ignored apps */}
       {hasChecked && !loading && ignoredApps.length > 0 && (
         <div className="mb-6">
-          <button type="button"
+          <button
+            type="button"
             onClick={() => setShowIgnored(!showIgnored)}
             className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
           >
@@ -687,7 +699,8 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Up to date apps */}
       {hasChecked && !loading && packageManagerAvailable && upToDate.length > 0 && (
         <div className="mb-6">
-          <button type="button"
+          <button
+            type="button"
             onClick={() => setShowUpToDate(!showUpToDate)}
             className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
           >
@@ -807,7 +820,8 @@ function AppRow({
         title={t('softwareUpdater.ignoreButton')}
         className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-500 transition-all hover:bg-white/5 hover:text-zinc-300 disabled:opacity-30 shrink-0"
         style={{ border: '1px solid var(--border-medium)' }}
-       type="button">
+        type="button"
+      >
         <EyeOff className="h-3.5 w-3.5" strokeWidth={1.8} />
       </button>
 
@@ -817,7 +831,8 @@ function AppRow({
         disabled={updating}
         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-green-400 transition-all hover:bg-green-500/10 disabled:opacity-30 shrink-0"
         style={{ border: '1px solid rgba(34,197,94,0.15)' }}
-       type="button">
+        type="button"
+      >
         <Download className="h-3.5 w-3.5" strokeWidth={1.8} />
         {t('softwareUpdater.updateButton')}
       </button>
@@ -860,7 +875,8 @@ function IgnoredRow({ app, onUnignore }: { app: UpdatableApp; onUnignore: () => 
         onClick={onUnignore}
         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-zinc-400 transition-all hover:bg-white/5 hover:text-zinc-200 shrink-0"
         style={{ border: '1px solid var(--border-medium)' }}
-       type="button">
+        type="button"
+      >
         <Eye className="h-3.5 w-3.5" strokeWidth={1.8} />
         {t('softwareUpdater.unignoreButton')}
       </button>

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mock state (dynamic per-test) ────────────────────────────────────
 const mockVars = vi.hoisted(() => {
@@ -310,6 +310,100 @@ describe('remote-license', () => {
       expect(payload.action).toBe('validate')
       expect(payload.key).toBe('MY-KEY')
       expect(payload.hwid).toBe('test-hwid-12345')
+    })
+  })
+
+  // ── getLicenseConfig branches ─────────────────────────────────────
+  describe('getLicenseConfig (via config file)', () => {
+    it('reads custom url and token from license-config.json', async () => {
+      const config = { url: 'https://custom-license.api/verify', token: 'custom-token-abc' }
+      fs.writeFileSync(path.join(testRoot, 'license-config.json'), JSON.stringify(config), 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+
+      const result = await activateLicense('MY-KEY')
+      expect(result.valid).toBe(true)
+    })
+
+    it('falls through when license-config.json has no token field', async () => {
+      fs.writeFileSync(
+        path.join(testRoot, 'license-config.json'),
+        JSON.stringify({ url: 'https://custom.url' }),
+        'utf-8',
+      )
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+
+      const result = await activateLicense('MY-KEY')
+      expect(result.valid).toBe(true)
+    })
+
+    it('falls through when license-config.json has invalid JSON', async () => {
+      fs.writeFileSync(path.join(testRoot, 'license-config.json'), '{bad json}', 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+
+      const result = await activateLicense('MY-KEY')
+      expect(result.valid).toBe(true)
+    })
+  })
+
+  // ── API response edge cases ──────────────────────────────────────
+  describe('API response branches', () => {
+    it('handles non-JSON API response', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setSequence([
+        { status: 200, body: 'just a string' },
+        { status: 200, body: 'just a string' },
+      ])
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Sem validação offline disponível')
+    })
+
+    it('converts empty expires_at string to null', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'subscription', expires_at: '' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+      expect(result.expires_at).toBeNull()
+    })
+  })
+
+  // ── Cache read branches ──────────────────────────────────────────
+  describe('cache read branches', () => {
+    it('returns null when cache file has no timestamp field', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify({ valid: true }), 'utf-8')
+      mockNet.setError('connection refused')
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Sem validação offline disponível')
+    })
+
+    it('handles corrupt cache JSON gracefully', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), 'not valid json at all', 'utf-8')
+      mockNet.setError('connection refused')
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Sem validação offline disponível')
+    })
+  })
+
+  // ── E2E bypass ───────────────────────────────────────────────────
+  describe('DINHO_E2E bypass', () => {
+    afterEach(() => {
+      delete process.env.DINHO_E2E
+    })
+
+    it('returns valid test license when DINHO_E2E is set', async () => {
+      process.env.DINHO_E2E = '1'
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+      expect(result.type).toBe('test')
     })
   })
 })

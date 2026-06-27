@@ -25,7 +25,7 @@ using Vortice.MediaFoundation;
 
 namespace DiNho.Capture.Poc;
 
-public sealed class EngineCoordinator : IDisposable
+public sealed partial class EngineCoordinator : IDisposable
 {
     // Módulos
     private readonly ConfigManager _config;
@@ -183,12 +183,15 @@ public sealed class EngineCoordinator : IDisposable
 
     public Task StartAsync()
     {
-        Console.WriteLine("[EngineCoordinator] Iniciando...");
+        Log.I("EngineCoordinator", "Iniciando...");
 
         // Load game database from games.json (falls back to hardcoded if not found)
         GameDetection.GameDatabase.Instance.Load();
         var gameCount = GameDetection.GameDatabase.Instance.GameCount;
-        Console.WriteLine($"[EngineCoordinator] Game database: {(gameCount > 0 ? $"loaded {gameCount} games" : "using hardcoded fallback")}");
+        Log.I("EngineCoordinator", $"Game database: {(gameCount > 0 ? $"loaded {gameCount} games" : "using hardcoded fallback")}");
+
+        // Fire-and-forget update check (doesn't block startup)
+        _ = GameDetection.GameDatabaseUpdater.Instance.CheckForUpdateAsync();
 
         // MFStartup singleton (performance: evita restart do MF a cada encoder/export)
         MediaFactory.MFStartup(false);
@@ -199,7 +202,7 @@ public sealed class EngineCoordinator : IDisposable
         if (_config.Config.AutoCleanupEnabled)
             _cleanupTimer = new Timer(_ => RunAutoCleanup(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
         else
-            Console.WriteLine("[EngineCoordinator] AutoCleanup disabled");
+            Log.I("EngineCoordinator", "AutoCleanup disabled");
 
         if (_config.Config.GameDetection)
         {
@@ -207,22 +210,22 @@ public sealed class EngineCoordinator : IDisposable
             _gameDetector.Start();
         }
         else
-            Console.WriteLine("[EngineCoordinator] GameDetection OFF — detector não iniciado");
+            Log.I("EngineCoordinator", "GameDetection OFF — detector não iniciado");
         _hotkeys.Start();
         _pipeServer.Start();
 
         _status.Update(s => { s.UptimeSeconds = 0; });
 
-        Console.WriteLine("[EngineCoordinator] Pronto. Aguardando hotkeys...");
-        Console.WriteLine("  F8=Salvar clip  F9=Iniciar/Parar captura  F10=Mutar microfone");
-        Console.WriteLine("  Pipe: \\\\.\\pipe\\dinho-clips-engine");
+        Log.I("EngineCoordinator", "Pronto. Aguardando hotkeys...");
+        Log.I("EngineCoordinator", "  F8=Salvar clip  F9=Iniciar/Parar captura  F10=Mutar microfone");
+        Log.I("EngineCoordinator", "  Pipe: \\\\.\\pipe\\dinho-clips-engine");
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync()
     {
-        Console.WriteLine("[EngineCoordinator] Parando...");
+        Log.I("EngineCoordinator", "Parando...");
         _cleanupTimer?.Dispose();
         _cleanupTimer = null;
         _pttDiagTimer?.Dispose();
@@ -286,7 +289,7 @@ public sealed class EngineCoordinator : IDisposable
             // Durante a gravação, ResolveTargetGame() sempre retorna este mesmo alvo,
             // mesmo que o usuário alt-tab para outra janela.
             _captureTargetGame = ResolveTargetGame();
-            Console.WriteLine($"[EngineCoordinator] Buffer maxDuration={_config.Config.EffectiveReplaySeconds}s (ReplayTimeSeconds={_config.Config.ReplayTimeSeconds}s)");
+            Log.I("EngineCoordinator", $"Buffer maxDuration={_config.Config.EffectiveReplaySeconds}s (ReplayTimeSeconds={_config.Config.ReplayTimeSeconds}s)");
             _captureActive = true;
 
             try
@@ -351,16 +354,18 @@ public sealed class EngineCoordinator : IDisposable
                 // Se PTT está Off, usa o valor do config (sempre ligado/desligado)
                 var pttMode = NormalizePttMode(_config.Config.PttMode);
                 _audioMixer.MicEnabled = pttMode is "Hold" or "Toggle" ? false : _config.Config.MicEnabled;
-                Console.WriteLine($"[EngineCoordinator] [initMic] MicEnabled={_audioMixer.MicEnabled} (pttMode={pttMode})");
+                Log.I("EngineCoordinator", $"[initMic] MicEnabled={_audioMixer.MicEnabled} (pttMode={pttMode})");
                 _audioMixer.GameGain = _config.Config.GameVolume;
                 _audioMixer.MicGain = _config.Config.MicVolume;
-                Console.WriteLine($"[EngineCoordinator] Gains iniciais: game={_config.Config.GameVolume:F2} mic={_config.Config.MicVolume:F2}");
+                Log.I("EngineCoordinator", $"Gains iniciais: game={_config.Config.GameVolume:F2} mic={_config.Config.MicVolume:F2}");
                 _audioMixer.OnMixedAudio += OnAudioPacket;
                 _audioMixer.Start();
+                Log.I("SYNC-STARTUP", $"_audioMixer.Start() at uptime={_clock.Now.TotalSeconds:F3}s");
 
                 _aacEncoder?.Dispose();
                 _aacEncoder = new FfmpegAacEncoder();
                 _aacEncoder.Initialize(_audioMixer.SampleRate, 2, 192000);
+                Log.I("SYNC-STARTUP", $"_aacEncoder.Initialize() done at uptime={_clock.Now.TotalSeconds:F3}s");
 
                 _pipelineCts = new CancellationTokenSource();
                 _pipelineTask = Task.Run(() => PipelineLoop(_pipelineCts.Token));
@@ -374,14 +379,14 @@ public sealed class EngineCoordinator : IDisposable
                     var pttMode = _config.Config.PttMode ?? "(null)";
                     var pttKeys = string.Join(",", _config.Config.PushToTalkKeys.Select(v => $"0x{v:X2}"));
                     var mixerInfo = _audioMixer != null ? $"micEnabled={_audioMixer.MicEnabled}" : "mixer=null";
-                    Console.WriteLine($"[PTT-DIAG] mode={pttMode} _ptt.Mode={_ptt.Mode} _ptt.MicActive={_ptt.MicActive} pttKeys=[{pttKeys}] {mixerInfo}");
+                    Log.I("PTT-DIAG", $"mode={pttMode} _ptt.Mode={_ptt.Mode} _ptt.MicActive={_ptt.MicActive} pttKeys=[{pttKeys}] {mixerInfo}");
                 }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
 
-                Console.WriteLine($"[EngineCoordinator] Gravação iniciada ({_capture!.Name}, {_captureWidth}x{_captureHeight})");
+                Log.I("EngineCoordinator", $"Gravação iniciada ({_capture!.Name}, {_captureWidth}x{_captureHeight})");
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[EngineCoordinator] Falha ao iniciar captura: {ex.Message}");
+                Log.E("EngineCoordinator", $"Falha ao iniciar captura: {ex.Message}");
                 _captureActive = false;
                 StopCapture();
             }
@@ -399,7 +404,7 @@ public sealed class EngineCoordinator : IDisposable
             if (resolved.IsValid)
             {
                 // Processo vivo com HWND válido — retorna
-                Console.WriteLine($"[EngineCoordinator] Target game '{_captureTargetGame.ProcessName}' → HWND 0x{resolved.Hwnd:X8}");
+                Log.I("EngineCoordinator", $"Target game '{_captureTargetGame.ProcessName}' → HWND 0x{resolved.Hwnd:X8}");
                 return resolved;
             }
 
@@ -407,7 +412,7 @@ public sealed class EngineCoordinator : IDisposable
             // Usa o HWND salvo original como fallback
             if (_captureTargetHwnd != IntPtr.Zero && IsProcessAlive(_captureTargetGame.ProcessName))
             {
-                Console.WriteLine($"[EngineCoordinator] Target game '{_captureTargetGame.ProcessName}' vivo mas sem HWND — usando HWND salvo 0x{_captureTargetHwnd:X8}");
+                Log.I("EngineCoordinator", $"Target game '{_captureTargetGame.ProcessName}' vivo mas sem HWND — usando HWND salvo 0x{_captureTargetHwnd:X8}");
                 return new GameInfo(
                     processName: _captureTargetGame.ProcessName,
                     executablePath: "",
@@ -420,7 +425,7 @@ public sealed class EngineCoordinator : IDisposable
             }
 
             // Processo morreu — limpa e cai na lógica normal
-            Console.WriteLine($"[EngineCoordinator] Target game '{_captureTargetGame.ProcessName}' morreu — resolvendo novo alvo");
+            Log.I("EngineCoordinator", $"Target game '{_captureTargetGame.ProcessName}' morreu — resolvendo novo alvo");
             _captureTargetGame = new GameInfo();
             _captureTargetHwnd = IntPtr.Zero;
         }
@@ -432,7 +437,7 @@ public sealed class EngineCoordinator : IDisposable
             _pendingGameProcess = ""; // descarta após tentativa
             if (result.IsValid)
             {
-                Console.WriteLine($"[EngineCoordinator] Pending game '{result.ProcessName}' → HWND 0x{result.Hwnd:X8}");
+                Log.I("EngineCoordinator", $"Pending game '{result.ProcessName}' → HWND 0x{result.Hwnd:X8}");
                 return result;
             }
         }
@@ -443,7 +448,7 @@ public sealed class EngineCoordinator : IDisposable
             var result = ResolveProcessByName(_customGameProcess);
             if (result.IsValid)
             {
-                Console.WriteLine($"[EngineCoordinator] Custom game '{_customGameProcess}' → HWND 0x{result.Hwnd:X8}");
+                Log.I("EngineCoordinator", $"Custom game '{_customGameProcess}' → HWND 0x{result.Hwnd:X8}");
                 return result;
             }
         }
@@ -459,7 +464,7 @@ public sealed class EngineCoordinator : IDisposable
             var fallback = ResolveProcessByName(_lastDetectedGame.ProcessName);
             if (fallback.IsValid)
             {
-                Console.WriteLine($"[EngineCoordinator] Fallback para último jogo '{_lastDetectedGame.ProcessName}' → HWND 0x{fallback.Hwnd:X8}");
+                Log.I("EngineCoordinator", $"Fallback para último jogo '{_lastDetectedGame.ProcessName}' → HWND 0x{fallback.Hwnd:X8}");
                 return fallback;
             }
         }
@@ -662,7 +667,7 @@ public sealed class EngineCoordinator : IDisposable
         // Desktop window pseudo-HWND (0x00010010) não funciona com WGC per-window
         if (hwnd == GetDesktopWindow())
         {
-            Console.WriteLine("[EngineCoordinator] Desktop window — WGC per-window não funcionará, pulando para desktop capture");
+            Log.I("EngineCoordinator", "Desktop window — WGC per-window não funcionará, pulando para desktop capture");
             return false;
         }
         if (!IsWindowVisible(hwnd)) return false;
@@ -670,7 +675,7 @@ public sealed class EngineCoordinator : IDisposable
         var exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
         if ((exStyle & WS_EX_NOREDIRECTIONBITMAP) != 0)
         {
-            Console.WriteLine($"[EngineCoordinator] Janela 0x{hwnd:X8} tem WS_EX_NOREDIRECTIONBITMAP — WGC per-window não funcionará");
+            Log.I("EngineCoordinator", $"Janela 0x{hwnd:X8} tem WS_EX_NOREDIRECTIONBITMAP — WGC per-window não funcionará");
             return false;
         }
         return true;
@@ -704,19 +709,19 @@ public sealed class EngineCoordinator : IDisposable
  					});
  					_capture = wgc;
  					_status.Update(s => s.CaptureBackend = $"WGC:{game.ProcessName}");
- 					Console.WriteLine($"[EngineCoordinator] Captura: janela '{game.ProcessName}' ({gameHwnd})");
+ 					Log.I("EngineCoordinator", $"Captura: janela '{game.ProcessName}' ({gameHwnd})");
  					goto multiMonitor;
  				}
  				catch (Exception ex) when (attempt < maxRetries)
  				{
  					var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
- 					Console.Error.WriteLine($"[EngineCoordinator] WGC window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{innerMsg}, retry em {retryDelayMs}ms...");
+ 					Log.E("EngineCoordinator", $"WGC window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{innerMsg}, retry em {retryDelayMs}ms...");
  					Thread.Sleep(retryDelayMs);
  				}
  				catch (Exception ex)
  				{
  					var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
- 					Console.Error.WriteLine($"[EngineCoordinator] WGC window tentativa {maxRetries}/{maxRetries} falhou: {ex.Message}{innerMsg}, fallback...");
+ 					Log.E("EngineCoordinator", $"WGC window tentativa {maxRetries}/{maxRetries} falhou: {ex.Message}{innerMsg}, fallback...");
  				}
  			}
  		}
@@ -732,13 +737,13 @@ public sealed class EngineCoordinator : IDisposable
             });
             _capture = wgc;
             _status.Update(s => s.CaptureBackend = "WGC");
-            Console.WriteLine("[EngineCoordinator] Captura: Windows Graphics Capture (desktop)");
+            Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
             goto multiMonitor;
         }
         catch (Exception wgcEx)
         {
             var innerMsg = wgcEx.InnerException != null ? $" → {wgcEx.InnerException.GetType().Name}: {wgcEx.InnerException.Message}" : "";
-            Console.Error.WriteLine($"[EngineCoordinator] WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{innerMsg}");
+            Log.E("EngineCoordinator", $"WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{innerMsg}");
         }
 
         // 3) DXGI Desktop Duplication (full monitor, funciona sempre)
@@ -748,12 +753,12 @@ public sealed class EngineCoordinator : IDisposable
             dxgi.Initialize(_sharedDevice, gameHwnd);
             _capture = dxgi;
             _status.Update(s => s.CaptureBackend = "DXGI");
-            Console.WriteLine("[EngineCoordinator] Captura: DXGI Desktop Duplication");
+            Log.I("EngineCoordinator", "Captura: DXGI Desktop Duplication");
             goto multiMonitor;
         }
         catch (Exception dxgiEx)
         {
-            Console.Error.WriteLine($"[EngineCoordinator] DXGI falhou: {dxgiEx.GetType().Name}: {dxgiEx.Message}");
+            Log.E("EngineCoordinator", $"DXGI falhou: {dxgiEx.GetType().Name}: {dxgiEx.Message}");
         }
 
         // 4) Hybrid (DXGI + PrintWindow) — fallback para janela em background
@@ -763,12 +768,12 @@ public sealed class EngineCoordinator : IDisposable
             hybrid.Initialize(_sharedDevice, gameHwnd);
             _capture = hybrid;
             _status.Update(s => s.CaptureBackend = _capture.Name);
-            Console.WriteLine($"[EngineCoordinator] Captura híbrida: HWND=0x{gameHwnd:X8}");
+            Log.I("EngineCoordinator", $"Captura híbrida: HWND=0x{gameHwnd:X8}");
             goto multiMonitor;
         }
         catch (Exception hybridEx)
         {
-            Console.Error.WriteLine($"[EngineCoordinator] Hybrid falhou: {hybridEx.GetType().Name}: {hybridEx.Message}");
+            Log.E("EngineCoordinator", $"Hybrid falhou: {hybridEx.GetType().Name}: {hybridEx.Message}");
         }
 
         multiMonitor:
@@ -777,7 +782,7 @@ public sealed class EngineCoordinator : IDisposable
         if (monitorCount > 1 && game.IsValid)
         {
             var gameMonitor = MonitorHelper.GetMonitorFromWindow(game.Hwnd);
-            Console.WriteLine($"[EngineCoordinator] Multi-monitor: {monitorCount} telas, jogo no monitor {gameMonitor}");
+            Log.I("EngineCoordinator", $"Multi-monitor: {monitorCount} telas, jogo no monitor {gameMonitor}");
         }
     }
 
@@ -793,7 +798,7 @@ public sealed class EngineCoordinator : IDisposable
 
         if (cfg.UseExcludeMode && cfg.ExcludeProcessId > 0)
         {
-            Console.WriteLine($"[EngineCoordinator] Áudio: EXCLUDE mode (C++ DLL) — excluindo PID {cfg.ExcludeProcessId} (e filhos), capturando TODO o resto");
+            Log.I("EngineCoordinator", $"Áudio: EXCLUDE mode (C++ DLL) — excluindo PID {cfg.ExcludeProcessId} (e filhos), capturando TODO o resto");
             _loopbackSource = new CppLoopbackSource(cfg.ExcludeProcessId, includeTree: false, sampleRate: sampleRate);
         }
         else
@@ -806,9 +811,9 @@ public sealed class EngineCoordinator : IDisposable
 
                 if (processes.Count > 0)
                 {
-                    Console.WriteLine($"[EngineCoordinator] Áudio: CppLoopbackSource INCLUDE para {processes.Count} processo(s)");
+                    Log.I("EngineCoordinator", $"Áudio: CppLoopbackSource INCLUDE para {processes.Count} processo(s)");
                     foreach (var (pid, name) in processes)
-                        Console.WriteLine($"[EngineCoordinator]   PID alvo {pid}: {name}");
+                        Log.I("EngineCoordinator", $"PID alvo {pid}: {name}");
 
                     // VAD INCLUDE mode captura o processo + filhos (includeTree=true)
                     // Para múltiplos PIDs, capturamos apenas o primeiro (includeTree já pega filhos)
@@ -819,14 +824,14 @@ public sealed class EngineCoordinator : IDisposable
                 }
                 else
                 {
-                    Console.WriteLine("[EngineCoordinator] Nenhum PID selecionado está vivo — usando loopback completo");
+                    Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
                     _loopbackSource = new WasapiLoopbackSource(sampleRate);
                 }
             }
             else
             {
                 _loopbackSource = new WasapiLoopbackSource(sampleRate);
-                Console.WriteLine("[EngineCoordinator] Áudio: captura completa (loopback) — NENHUM filtro ativo");
+                Log.I("EngineCoordinator", "Áudio: captura completa (loopback) — NENHUM filtro ativo");
             }
         }
 
@@ -888,6 +893,12 @@ public sealed class EngineCoordinator : IDisposable
                     var corrected = new EncodedPacket(pkt.Data, pkt.Type, correctedPts, pkt.Duration, pkt.IsKeyFrame);
                     _buffer.AddAudio(corrected);
                 }
+                int orphanSamples = _pcmPtsQueue.Count;
+                if (orphanSamples > 0)
+                {
+                    int orphanMs = orphanSamples * 1024 / _audioSampleRate;
+                    Log.I("SYNC-PCM-PTS", $"WARN: {orphanSamples} PCM entries orphaned after AAC flush (~{orphanMs}ms audio lost)");
+                }
                 _aacEncoder.Dispose();
                 _aacEncoder = null;
             }
@@ -908,7 +919,7 @@ public sealed class EngineCoordinator : IDisposable
             _dxgiManager = null;
 
             _status.Update(s => s.Recording = false);
-            Console.WriteLine("[EngineCoordinator] Captura parada.");
+            Log.I("EngineCoordinator", "Captura parada.");
         }
     }
 
@@ -936,7 +947,7 @@ public sealed class EngineCoordinator : IDisposable
                 if (++diagFrames % 60 == 1)
                 {
                     var captureType = _capture?.GetType().Name ?? "null";
-                    Console.WriteLine($"[PipelineDiag] frame.Success={frame.Success} texture={(frame.Texture != null ? "ok" : "null")} " +
+                    Log.I("PipelineDiag", $"frame.Success={frame.Success} texture={(frame.Texture != null ? "ok" : "null")} " +
                         $"capture={captureType} encoder={(_encoder?.GetType().Name ?? "null")}");
                 }
                 if (frame.Success)
@@ -950,7 +961,7 @@ public sealed class EngineCoordinator : IDisposable
                             {
                                 _gameBackgrounded = false;
                                 _fgGoodCount = 0;
-                                Console.WriteLine("[Pipeline] Jogo retornou ao foreground — frames retomados");
+                                Log.I("Pipeline", "Jogo retornou ao foreground — frames retomados");
                             }
                         }
                         else
@@ -1002,7 +1013,7 @@ public sealed class EngineCoordinator : IDisposable
                             if (!_gameBackgrounded)
                             {
                                 _gameBackgrounded = true;
-                                Console.WriteLine("[Pipeline] Jogo em background (alt-tab) — frames ausentes. Aguardando retorno...");
+                                Log.I("Pipeline", "Jogo em background (alt-tab) — frames ausentes. Aguardando retorno...");
                             }
                             _starvationStart = default;
                             _watchdog.Reset();
@@ -1016,7 +1027,7 @@ public sealed class EngineCoordinator : IDisposable
                         if (_gameBackgrounded && _captureTargetGame.IsValid &&
                                  !IsProcessAlive(_captureTargetGame.ProcessName))
                         {
-                            Console.WriteLine($"[Pipeline] Jogo '{_captureTargetGame.ProcessName}' fechou enquanto backgrounded — encerrando pipeline");
+                            Log.I("Pipeline", $"Jogo '{_captureTargetGame.ProcessName}' fechou enquanto backgrounded — encerrando pipeline");
                             _recording = false;
                             _captureActive = false;
                             _captureTargetGame = new GameInfo();
@@ -1026,7 +1037,7 @@ public sealed class EngineCoordinator : IDisposable
                         else
                         {
                             var health = _watchdog.GetHealth();
-                            Console.Error.WriteLine($"[Pipeline] Reinit acionado: watchdog={_watchdog.ShouldReinit()} starvation={_starvationStart != default} " +
+                            Log.E("Pipeline", $"Reinit acionado: watchdog={_watchdog.ShouldReinit()} starvation={_starvationStart != default} " +
                                 $"consecutiveGood={health.ConsecutiveGoodFrames} dropped={health.DroppedFrames}/{health.TotalFrames} " +
                                 $"lastIssue={health.LastIssue} reinitCount={_reinitCount}");
                             _needsReinit = true;
@@ -1065,7 +1076,7 @@ public sealed class EngineCoordinator : IDisposable
                     double videoMb = d.videoBytes / (1024.0 * 1024.0);
                     double audioMb = d.audioBytes / (1024.0 * 1024.0);
                     double totalMb = videoMb + audioMb;
-                    Console.WriteLine($"[RAM] video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s");
+                    Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s");
                 }
             }
             catch (Exception ex)
@@ -1074,10 +1085,10 @@ public sealed class EngineCoordinator : IDisposable
                 {
                     _deviceLost = true;
                     _needsReinit = true;
-                    Console.Error.WriteLine($"[Pipeline] Device D3D11 perdido! Recriando...");
+                    Log.E("Pipeline", $"Device D3D11 perdido! Recriando...");
                 }
                 _watchdog.ReportDroppedFrame(PipelineIssue.CaptureError);
-                Console.Error.WriteLine($"[Pipeline] Erro: {ex}");
+                Log.E("Pipeline", $"Erro: {ex}");
             }
 
             // Timing preciso (QPC-based): sleep para o bulk, spin para o residual
@@ -1102,7 +1113,7 @@ public sealed class EngineCoordinator : IDisposable
         var reason = ct.IsCancellationRequested ? "cancelamento" :
                      _capture == null ? "captura nula" :
                      _encoder == null ? "encoder nulo" : "desconhecido";
-        Console.Error.WriteLine($"[Pipeline] Loop encerrado: {reason}");
+        Log.E("Pipeline", $"Loop encerrado: {reason}");
     }
 
     private void SwitchCaptureApi()
@@ -1117,7 +1128,7 @@ public sealed class EngineCoordinator : IDisposable
     private async Task ReinitializePipelineAsync()
     {
         var reinitGame = _gameDetector.CurrentGame;
-        Console.WriteLine($"[EngineCoordinator] Reinicializando pipeline (watchdog)... foreground='{reinitGame.ProcessName}' hwnd=0x{reinitGame.Hwnd:X8} starvationSec={(_starvationStart != default ? (DateTime.UtcNow - _starvationStart).TotalSeconds.ToString("F1") : "N/A")}");
+        Log.I("EngineCoordinator", $"Reinicializando pipeline (watchdog)... foreground='{reinitGame.ProcessName}' hwnd=0x{reinitGame.Hwnd:X8} starvationSec={(_starvationStart != default ? (DateTime.UtcNow - _starvationStart).TotalSeconds.ToString("F1") : "N/A")}");
 
         if (!_captureActive)
         {
@@ -1153,7 +1164,7 @@ public sealed class EngineCoordinator : IDisposable
                 {
                     _dxgiManager = MediaFactory.MFCreateDXGIDeviceManager();
                     _dxgiManager.ResetDevice(_sharedDevice!).CheckError();
-                    Console.Error.WriteLine("[EngineCoordinator] Device D3D11 recriado após TDR/device lost.");
+                    Log.E("EngineCoordinator", "Device D3D11 recriado após TDR/device lost.");
                 }
 
                 _deviceLost = false;
@@ -1188,12 +1199,12 @@ public sealed class EngineCoordinator : IDisposable
                 _needsReinit = false;
                 if (_hasEverBeenHealthy)
                     _status.Update(snap => snap.LastCrashRecovered = true);
-                Console.WriteLine($"[EngineCoordinator] Pipeline reinicializado com sucesso ({_capture!.Name}, {_captureWidth}x{_captureHeight}).");
+                Log.I("EngineCoordinator", $"Pipeline reinicializado com sucesso ({_capture!.Name}, {_captureWidth}x{_captureHeight}).");
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[EngineCoordinator] Falha na reinicialização: {ex.Message}");
+            Log.E("EngineCoordinator", $"Falha na reinicialização: {ex.Message}");
             _recording = false;
             _captureActive = false;
         }
@@ -1234,7 +1245,15 @@ public sealed class EngineCoordinator : IDisposable
         }
 
         if (first) // Fila vazia — fallback para PTS estimado
+        {
             result = TimeSpan.FromTicks(_aacFramesProduced * 1024L * 10_000_000 / _audioSampleRate);
+            if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
+                Log.I("SYNC-PCM-PTS", $"FALLBACK frame#{_aacFramesProduced} estimatedPts={result.TotalSeconds:F4}s queueEmpty");
+        }
+        else if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
+        {
+            Log.I("SYNC-PCM-PTS", $"frame#{_aacFramesProduced} pts={result.TotalSeconds:F4}s queueRemaining={_pcmPtsQueue.Count}");
+        }
 
         return result;
     }
@@ -1246,7 +1265,7 @@ public sealed class EngineCoordinator : IDisposable
         _audioPacketCount++;
         int sampleCount = packet.PcmSamples?.Length ?? packet.Data.Length / 4;
         if (_audioPacketCount <= 5 || _audioPacketCount % 100 == 0)
-            Console.WriteLine($"[AudioDiag] packet #{_audioPacketCount} samples={sampleCount} ts={packet.Pts.TotalSeconds:F2}");
+            Log.I("AudioDiag", $"packet #{_audioPacketCount} samples={sampleCount} ts={packet.Pts.TotalSeconds:F2} pcmQueueDepth={_pcmPtsQueue.Count}");
 
         // Enfileira o PTS real do mixer (baseado em _clock.Now) + contagem de samples
         if (_pcmPtsQueue.Count >= MaxPcmPtsQueue)
@@ -1267,7 +1286,7 @@ public sealed class EngineCoordinator : IDisposable
             _aacFramesProduced++;
         }
         if ((_audioPacketCount <= 5 || _audioPacketCount % 100 == 0) && aacCount > 0)
-            Console.WriteLine($"[AudioDiag] packet #{_audioPacketCount}: AAC frames produced={aacCount}");
+            Log.I("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced={aacCount}");
     }
 
     private List<(int Pid, string Name)> ResolveAudioPids(Dictionary<int, string> selectedPids)
@@ -1289,7 +1308,7 @@ public sealed class EngineCoordinator : IDisposable
                     if (!resolved.ContainsKey(childPid))
                     {
                         resolved[childPid] = $"{name}>child#{childPid}";
-                        Console.WriteLine($"[EngineCoordinator] Subprocesso encontrado: PID {childPid} (filho de {name}/{pid})");
+                        Log.I("EngineCoordinator", $"Subprocesso encontrado: PID {childPid} (filho de {name}/{pid})");
                     }
                 }
             }
@@ -1299,7 +1318,7 @@ public sealed class EngineCoordinator : IDisposable
                 var found = matches.FirstOrDefault(p => !p.HasExited);
                 if (found != null)
                 {
-                    Console.WriteLine($"[EngineCoordinator] PID {pid} ({name}) morto na resolução — resolvido para PID {found.Id}");
+                    Log.I("EngineCoordinator", $"PID {pid} ({name}) morto na resolução — resolvido para PID {found.Id}");
                     resolved[found.Id] = name;
                     // Também inclui subprocessos do PID resolvido
                     var children = GetChildProcesses(found.Id);
@@ -1308,7 +1327,7 @@ public sealed class EngineCoordinator : IDisposable
                         if (!resolved.ContainsKey(childPid))
                         {
                             resolved[childPid] = $"{name}>child#{childPid}";
-                            Console.WriteLine($"[EngineCoordinator] Subprocesso {childPid} de {name} (resolvido)");
+                            Log.I("EngineCoordinator", $"Subprocesso {childPid} de {name} (resolvido)");
                         }
                     }
                 }
@@ -1354,7 +1373,7 @@ public sealed class EngineCoordinator : IDisposable
         {
             if (_exportInProgress)
             {
-                Console.WriteLine("[EngineCoordinator] Export já em andamento, ignorando duplicado");
+                Log.I("EngineCoordinator", "Export já em andamento, ignorando duplicado");
                 return;
             }
             _exportInProgress = true;
@@ -1365,26 +1384,39 @@ public sealed class EngineCoordinator : IDisposable
             var durationLabel = customDurationSeconds.HasValue
                 ? $"{customDurationSeconds}s (binding)"
                 : $"{_config.Config.ReplayTimeSeconds}s (padrão)";
-            Console.WriteLine($"[EngineCoordinator] Exportando clip ({durationLabel})...");
+            Log.I("EngineCoordinator", $"Exportando clip ({durationLabel})...");
 
             // Verifica espaço em disco (spec 14.1)
             var outputDir = GetOutputDirectory();
             var driveInfo = new DriveInfo(outputDir);
             if (driveInfo.AvailableFreeSpace < 100_000_000) // 100MB mínimo
             {
-                Console.Error.WriteLine("[EngineCoordinator] Espaço em disco insuficiente para export");
+                Log.E("EngineCoordinator", "Espaço em disco insuficiente para export");
                 return;
             }
+
+            // Diagnóstico do AAC encoder antes de congelar o buffer
+            _aacEncoder?.LogStats();
 
             // Freeze buffer (spec 5.1) — se bind tem duração custom, trunca
             var truncateTo = customDurationSeconds.HasValue
                 ? TimeSpan.FromSeconds(customDurationSeconds.Value)
                 : TimeSpan.FromSeconds(_config.Config.ReplayTimeSeconds);
             var (video, audio) = _buffer.GetSegments(truncateTo);
-            Console.WriteLine($"[AudioDiag] SaveClip: video={video.Count} frames, audio={audio.Count} packets");
+            Log.I("AudioDiag", $"SaveClip: video={video.Count} frames, audio={audio.Count} packets");
+            if (video.Count > 0 && audio.Count > 0)
+            {
+                var vFirst = video[0].Pts;
+                var vLast = video[^1].Pts + video[^1].Duration;
+                var aFirst = audio[0].Pts;
+                var aLast = audio[^1].Pts + audio[^1].Duration;
+                var startOffset = (aFirst - vFirst).TotalMilliseconds;
+                var endOffset = (aLast - vLast).TotalMilliseconds;
+                Log.I("SYNC-PROBE", $"Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({(vLast - vFirst).TotalSeconds:F2}s)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({(aLast - aFirst).TotalSeconds:F2}s)  StartOffset={startOffset:F1}ms  EndOffset={endOffset:F1}ms");
+            }
             if (video.Count == 0)
             {
-                Console.WriteLine("[EngineCoordinator] Nada para exportar (buffer vazio)");
+                Log.I("EngineCoordinator", "Nada para exportar (buffer vazio)");
                 return;
             }
 
@@ -1402,9 +1434,15 @@ public sealed class EngineCoordinator : IDisposable
                     _config.Config.Fps);
 
                 var fileInfo = new FileInfo(result);
-                Console.WriteLine($"[EngineCoordinator] Clip salvo: {result} ({fileInfo.Length / 1024} KB)");
+                Log.I("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");
                 _status.Update(s => s.LastClipSize = fileInfo.Length);
             });
+        }
+        catch (Exception ex)
+        {
+            Log.E("EngineCoordinator", $"Export FAILED: {ex.GetType().Name}: {ex.Message}");
+            if (ex.InnerException != null)
+                Log.E("EngineCoordinator", $"Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
         }
         finally
         {
@@ -1412,24 +1450,6 @@ public sealed class EngineCoordinator : IDisposable
             {
                 _exportInProgress = false;
             }
-        }
-    }
-
-    private async Task<IpcMessage?> SaveClipAndRespondAsync()
-    {
-        try
-        {
-            await SaveClipAsync();
-            return new IpcMessage { Action = "ok" };
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[EngineCoordinator] Export falhou: {ex.Message}");
-            return new IpcMessage
-            {
-                Action = "error",
-                Value = JsonSerializer.SerializeToElement(new { error = $"Export failed: {ex.Message}" })
-            };
         }
     }
 
@@ -1450,7 +1470,7 @@ public sealed class EngineCoordinator : IDisposable
         if (_audioMixer != null)
         {
             _audioMixer.MicEnabled = !_audioMixer.MicEnabled;
-            Console.WriteLine($"[EngineCoordinator] [toggleMic] Microfone: {(_audioMixer.MicEnabled ? "ATIVO" : "MUTO")}");
+            Log.I("EngineCoordinator", $"[toggleMic] Microfone: {(_audioMixer.MicEnabled ? "ATIVO" : "MUTO")}");
         }
     }
 
@@ -1576,7 +1596,7 @@ public sealed class EngineCoordinator : IDisposable
             if (_appliedGameAudioOnly && _appliedGameAudioPid == game.ProcessId)
                 return;
 
-            Console.WriteLine($"[EngineCoordinator] GameAudioOnly: jogo mudou para '{game.ProcessName}' PID={game.ProcessId} — atualizando filtro");
+            Log.I("EngineCoordinator", $"GameAudioOnly: jogo mudou para '{game.ProcessName}' PID={game.ProcessId} — atualizando filtro");
             _appliedGameAudioOnly = true;
             _appliedGameAudioPid = game.ProcessId;
             ApplyAudioSessionsInternal([game.ProcessId]);
@@ -1592,7 +1612,7 @@ public sealed class EngineCoordinator : IDisposable
                 var procs = Process.GetProcessesByName(_capturedGameProcess);
                 if (procs.Length == 0)
                 {
-                    Console.WriteLine($"[EngineCoordinator] Jogo '{_capturedGameProcess}' fechou — parando captura");
+                    Log.I("EngineCoordinator", $"Jogo '{_capturedGameProcess}' fechou — parando captura");
                     _capturedGameProcess = null;
                     StopCapture();
                 }
@@ -1628,7 +1648,7 @@ public sealed class EngineCoordinator : IDisposable
             if (_userStoppedProcess == game.ProcessName)
                 return;
 
-            Console.WriteLine($"[EngineCoordinator] Auto-start capture for game '{game}' (autoStartCapture=true)");
+            Log.I("EngineCoordinator", $"Auto-start capture for game '{game}' (autoStartCapture=true)");
             _capturedGameProcess = game.ProcessName;
             StartCapture();
         }
@@ -1638,7 +1658,7 @@ public sealed class EngineCoordinator : IDisposable
     {
         if (_audioMixer != null)
             _audioMixer.MicEnabled = active;
-        Console.WriteLine($"[EngineCoordinator] [pttEvent] Microfone (PTT): {(active ? "ATIVO" : "MUTO")}");
+        Log.I("EngineCoordinator", $"[pttEvent] Microfone (PTT): {(active ? "ATIVO" : "MUTO")}");
     }
 
     private static string NormalizePttMode(string mode)
@@ -1653,46 +1673,6 @@ public sealed class EngineCoordinator : IDisposable
 
     private bool _appliedGameAudioOnly;
     private int _appliedGameAudioPid;
-
-    private void ApplyGameAudioOnly()
-    {
-        if (_config.Config.GameAudioOnly)
-        {
-            var game = _lastDetectedGame.IsValid ? _lastDetectedGame : _gameDetector.CurrentGame;
-            if (game.IsValid && game.ProcessId > 0)
-            {
-                // Skip restart if already applied to the same PID
-                if (_appliedGameAudioOnly && _appliedGameAudioPid == game.ProcessId)
-                {
-                    Console.WriteLine($"[EngineCoordinator] GameAudioOnly já aplicado para PID {game.ProcessId} — sem restart");
-                    return;
-                }
-
-                Console.WriteLine($"[EngineCoordinator] GameAudioOnly ON — filtrando áudio para '{game.ProcessName}' PID={game.ProcessId}");
-                _appliedGameAudioOnly = true;
-                _appliedGameAudioPid = game.ProcessId;
-                ApplyAudioSessionsInternal([game.ProcessId]);
-            }
-            else
-            {
-                Console.WriteLine("[EngineCoordinator] GameAudioOnly ON mas nenhum jogo detectado — mantendo áudio atual");
-            }
-        }
-        else
-        {
-            // Skip restart if GameAudioOnly was already OFF
-            if (!_appliedGameAudioOnly)
-            {
-                Console.WriteLine("[EngineCoordinator] GameAudioOnly já estava OFF — sem restart");
-                return;
-            }
-
-            Console.WriteLine("[EngineCoordinator] GameAudioOnly OFF — restaurando áudio completo do sistema");
-            _appliedGameAudioOnly = false;
-            _appliedGameAudioPid = 0;
-            ApplyAudioSessionsInternal([]);
-        }
-    }
 
     private void ApplyAudioSessionsInternal(List<int> pids)
     {
@@ -1731,13 +1711,13 @@ public sealed class EngineCoordinator : IDisposable
         {
             if (_restartPending)
             {
-                Console.WriteLine($"[EngineCoordinator] Restart já pendente — ignorando ({reason})");
+                Log.I("EngineCoordinator", $"Restart já pendente — ignorando ({reason})");
                 return;
             }
             _restartPending = true;
         }
 
-        Console.WriteLine($"[EngineCoordinator] Reiniciando pipeline ({reason})...");
+        Log.I("EngineCoordinator", $"Reiniciando pipeline ({reason})...");
         _ = Task.Run(() =>
         {
             try
@@ -1753,448 +1733,7 @@ public sealed class EngineCoordinator : IDisposable
         });
     }
 
-    private async Task<IpcMessage?> OnIpcMessage(IpcMessage msg)
-    {
-        // Lida com mensagens do Electron (spec seção 16)
-        switch (msg.Action)
-        {
-            case "handshake":
-                return new IpcMessage
-                {
-                    Action = "handshake_ack",
-                    Value = JsonSerializer.SerializeToElement(new
-                    {
-                        engineVersion = "1.0.0",
-                        status = "ok"
-                    })
-                };
 
-            case "setReplayTime":
-                if (msg.Value.HasValue)
-                {
-                    var secs = msg.Value.Value.GetInt32();
-                    _config.Update(c => c.ReplayTimeSeconds = secs);
-                }
-                return new IpcMessage { Action = "ok" };
-
-            case "startEngine":
-                _ = StartAsync();
-                return new IpcMessage { Action = "ok" };
-
-            case "stopEngine":
-                _ = StopAsync();
-                return new IpcMessage { Action = "ok" };
-
-            case "setCustomGameProcess":
-                if (msg.Value.HasValue)
-                {
-                    try
-                    {
-                        var processName = msg.Value.Value.GetProperty("processName").GetString() ?? "";
-                        _customGameProcess = processName;
-                        Console.WriteLine($"[EngineCoordinator] Custom game process set to '{processName}'");
-                    }
-                    catch { /* ignore malformed */ }
-                }
-                return new IpcMessage { Action = "ok" };
-
-            case "startCapture":
-                if (_captureActive)
-                {
-                    Console.WriteLine("[EngineCoordinator] startCapture ignorado — captura já ativa");
-                    return new IpcMessage { Action = "ok" };
-                }
-                if (msg.Value.HasValue)
-                {
-                    try
-                    {
-                        var gameProcess = msg.Value.Value.GetProperty("gameProcess").GetString();
-                        if (!string.IsNullOrEmpty(gameProcess))
-                        {
-                            _pendingGameProcess = gameProcess;
-                            Console.WriteLine($"[EngineCoordinator] startCapture pending game process '{gameProcess}'");
-                        }
-                    }
-                    catch { /* gameProcess not provided */ }
-                }
-                StartCapture();
-                return new IpcMessage
-                {
-                    Action = _captureActive ? "ok" : "error",
-                    Value = _captureActive
-                        ? null
-                        : JsonSerializer.SerializeToElement(new { error = "Capture failed to start" })
-                };
-
-            case "stopCapture":
-                StopCapture();
-                return new IpcMessage { Action = "ok" };
-
-            case "saveClip":
-            {
-                var stats = _buffer.Stats();
-                Console.WriteLine($"[EngineCoordinator] saveClip: video={stats.videoCount} audio={stats.audioCount} " +
-                    $"dur={stats.duration.TotalSeconds:F1}s bytes={stats.bytes} " +
-                    $"recording={_recording} captureActive={_captureActive}");
-                if (stats.videoCount == 0)
-                {
-                    return new IpcMessage
-                    {
-                        Action = "error",
-                        Value = JsonSerializer.SerializeToElement(new { error = "Nothing to save (buffer empty)" })
-                    };
-                }
-                return await SaveClipAndRespondAsync();
-            }
-
-            case "getStatus":
-                return new IpcMessage
-                {
-                    Action = "status",
-                    Value = JsonSerializer.SerializeToElement(GetStatusMessage())
-                };
-
-            case "getAudioSessions":
-            {
-                // Cache de 2s — Electron pode chamar em rapid succession
-                long now = Stopwatch.GetTimestamp();
-                if (_cachedAudioSessionsJson != null &&
-                    (now - _audioSessionsCacheTicks) / Stopwatch.Frequency < 2)
-                {
-                    return new IpcMessage
-                    {
-                        Action = "audioSessions",
-                        Value = JsonSerializer.Deserialize<JsonElement>(_cachedAudioSessionsJson)
-                    };
-                }
-
-                var sessions = _audioSessions.EnumerateSessions();
-                var sessionPids = new HashSet<int>(sessions.Select(s => s.ProcessId));
-                var selectedPids = _config.Config.SelectedAudioSessions;
-
-                // 1. Sessions WASAPI ativas
-                var list = sessions.Select(s => new
-                {
-                    processId = s.ProcessId,
-                    processName = s.ProcessName,
-                    displayName = s.DisplayName,
-                    isSelected = selectedPids.Count == 0 || selectedPids.ContainsKey(s.ProcessId),
-                }).ToList();
-
-                // 2. PIDs selecionados que estão vivos mas sem session WASAPI ativa
-                if (selectedPids.Count > 0)
-                {
-                    foreach (var (pid, name) in selectedPids)
-                    {
-                        if (sessionPids.Contains(pid)) continue;
-                        try
-                        {
-                            using var proc = Process.GetProcessById(pid);
-                            if (!proc.HasExited)
-                            {
-                                sessionPids.Add(pid);
-                                list.Add(new
-                                {
-                                    processId = pid,
-                                    processName = proc.ProcessName,
-                                    displayName = proc.ProcessName,
-                                    isSelected = true,
-                                });
-                            }
-                        }
-                        catch { }
-                    }
-                }
-
-                // 3. Todos os processos GUI com janela (captura apps como Discord que
-                //    só criam sessão WASAPI quando em call de voz)
-                try
-                {
-                    foreach (var proc in Process.GetProcesses())
-                    {
-                        try
-                        {
-                            // Pula system idle, sistema, e processos sem janela
-                            if (proc.Id < 10) continue;
-                            if (proc.SessionId == 0) continue;
-                            if (!proc.Responding) continue;
-                            if (proc.MainWindowHandle == IntPtr.Zero) continue;
-                            if (string.IsNullOrEmpty(proc.ProcessName)) continue;
-                            if (sessionPids.Contains(proc.Id)) continue;
-
-                            sessionPids.Add(proc.Id);
-                            list.Add(new
-                            {
-                                processId = proc.Id,
-                                processName = proc.ProcessName,
-                                displayName = proc.ProcessName,
-                                isSelected = selectedPids.Count == 0 || selectedPids.ContainsKey(proc.Id),
-                            });
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-
-                var rawJson = JsonSerializer.Serialize(new { sessions = list });
-                _cachedAudioSessionsJson = rawJson;
-                _audioSessionsCacheTicks = Stopwatch.GetTimestamp();
-
-                return new IpcMessage
-                {
-                    Action = "audioSessions",
-                    Value = JsonSerializer.Deserialize<JsonElement>(rawJson)
-                };
-            }
-
-            case "setAudioSessions":
-            {
-                if (msg.Value.HasValue)
-                {
-                    // Electron sends { pids: [1234, 5678] }
-                    var raw = msg.Value.Value.GetRawText();
-                    var dict = JsonSerializer.Deserialize<Dictionary<string, List<int>>>(raw);
-                    if (dict != null && dict.TryGetValue("pids", out var pids))
-                    {
-                        // Expande PIDs para incluir processos filhos (ex: FiveM → GTA5.exe)
-                        // sem abrir handles nos filhos (anti-cheat como BattlEye detecta)
-                        var (expanded, childToParent) = ExpandWithChildProcesses(pids);
-
-                        // Resolve nomes apenas dos PIDs originais (já seguros, da UI)
-                        var selectedPids = new Dictionary<int, string>();
-                        foreach (var pid in pids)
-                        {
-                            try
-                            {
-                                var proc = Process.GetProcessById(pid);
-                                selectedPids[pid] = proc.ProcessName;
-                            }
-                            catch
-                            {
-                                selectedPids[pid] = $"PID:{pid}";
-                            }
-                        }
-
-                        // Processos filhos expandidos usam o nome do pai (sem abrir handle)
-                        foreach (var (child, parent) in childToParent)
-                        {
-                            if (selectedPids.TryGetValue(parent, out var parentName))
-                                selectedPids[child] = parentName;
-                            else
-                                selectedPids[child] = $"PID:{child}";
-                        }
-                        Console.WriteLine($"[EngineCoordinator] setAudioSessions: {selectedPids.Count} PIDs (expandido de {pids.Count}) — {string.Join(", ", selectedPids.Select(kv => $"{kv.Value}({kv.Key})"))}");
-                        _config.Update(c => c.SelectedAudioSessions = selectedPids);
-
-                        // Reinicia captura com novo filtro per-processo (PROCESS_LOOPBACK)
-                    if (_recording)
-                        TryScheduleRestart("setAudioSessions");
-                        else
-                        {
-                            Console.WriteLine("[EngineCoordinator] Filtro salvo, mas captura não está ativa — será aplicado no próximo StartCapture");
-                        }
-                    }
-                }
-                return new IpcMessage { Action = "ok" };
-            }
-
-            case "config":
-            {
-                try
-                {
-                    if (!msg.Value.HasValue)
-                        return new IpcMessage { Action = "ok" };
-
-                    var cfgEl = msg.Value.Value;
-                    // Electron envia { config: {...} } dentro do payload
-                    if (cfgEl.TryGetProperty("config", out var inner))
-                        cfgEl = inner;
-
-                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var incoming = JsonSerializer.Deserialize<AppConfig>(cfgEl.GetRawText(), opts);
-                    if (incoming != null)
-                    {
-                        var oldGameDetection = _config.Config.GameDetection;
-                        var oldPttMode = NormalizePttMode(_config.Config.PttMode);
-
-                        _config.Update(c =>
-                        {
-                            c.ReplayTimeSeconds = incoming.ReplayTimeSeconds;
-                            c.MicEnabled = incoming.MicEnabled;
-                            c.AudioSampleRate = incoming.AudioSampleRate;
-                            c.MicVolume = incoming.MicVolume;
-                            c.GameVolume = incoming.GameVolume;
-                            c.Fps = incoming.Fps;
-                            c.Width = incoming.Width;
-                            c.Height = incoming.Height;
-                            c.BitrateKbps = incoming.BitrateKbps;
-                            c.OutputDirectory = incoming.OutputDirectory;
-                            c.ForceSoftware = incoming.ForceSoftware;
-                            c.HotkeyBindings = incoming.HotkeyBindings;
-                            c.PushToTalkKeys = incoming.PushToTalkKeys;
-                            c.PttMode = incoming.PttMode;
-                            c.MicDeviceId = incoming.MicDeviceId;
-                            c.AutoStartCapture = incoming.AutoStartCapture;
-                            c.UseExcludeMode = incoming.UseExcludeMode;
-                            c.ExcludeProcessId = incoming.ExcludeProcessId;
-                            c.ElectronPid = incoming.ElectronPid;
-							c.AudioLoopback = incoming.AudioLoopback;
-							c.GameDetection = incoming.GameDetection;
-							// GameAudioOnly vem do Electron: o frontend garante que
-							// audioLoopback e gameAudioOnly são mutuamente exclusivos
-							c.GameAudioOnly = incoming.GameAudioOnly;
-                            c.NoiseSuppressionEnabled = incoming.NoiseSuppressionEnabled;
-                            c.AutoCleanupEnabled = incoming.AutoCleanupEnabled;
-                            c.AutoCleanupThresholdPercent = incoming.AutoCleanupThresholdPercent;
-                            if (incoming.SelectedAudioSessions.Count > 0)
-                                c.SelectedAudioSessions = incoming.SelectedAudioSessions;
-                        });
-
-                        // Aplica GameAudioOnly: auto-filtra áudio para só o jogo + mic
-                        // Quando GameAudioOnly=true, C++ DLL captura só o PID do jogo
-                        // Quando GameAudioOnly=false, pipeline reinicia com WasapiLoopbackSource
-                        ApplyGameAudioOnly();
-
-                        // Aplica GameDetection: liga/desliga o detector de jogos
-                        if (incoming.GameDetection && !oldGameDetection)
-                        {
-                            Console.WriteLine("[EngineCoordinator] GameDetection ON — iniciando detector");
-                            _gameDetector.Start();
-                        }
-                        else if (!incoming.GameDetection && oldGameDetection)
-                        {
-                            Console.WriteLine("[EngineCoordinator] GameDetection OFF — parando detector, limpando jogo atual");
-                            _gameDetector.Stop();
-                            _lastDetectedGame = new GameInfo();
-                            _status.Update(s => s.Game = null);
-                        }
-
-                        ApplyHotkeyBindings();
-
-                        // Aplica AutoCleanup: restart/stop timer
-                        _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-                        if (_config.Config.AutoCleanupEnabled)
-                            _cleanupTimer?.Change(TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
-
-                        // Reconfigura PTT
-                        _ptt.ClearKeys();
-                        foreach (var vk in _config.Config.PushToTalkKeys)
-                            _ptt.AddPttKey((VirtualKey)vk);
-                        _ptt.Mode = NormalizePttMode(_config.Config.PttMode) switch
-                        {
-                            "Toggle" => PttMode.Toggle,
-                            "Hold" => PttMode.Hold,
-                            _ => PttMode.Off,
-                        };
-
-                        // Aplica noise suppression + gains no mixer (NÃO toca MicEnabled — PTT controla)
-                        if (_audioMixer != null)
-                        {
-                            _audioMixer.NoiseSuppressionEnabled = _config.Config.NoiseSuppressionEnabled;
-                            _audioMixer.GameGain = _config.Config.GameVolume;
-                            _audioMixer.MicGain = _config.Config.MicVolume;
-                            var newPttMode = NormalizePttMode(_config.Config.PttMode);
-                            // Só muda MicEnabled se PTT mode foi desligado (Off) ou acabou de ser ligado
-                            if (newPttMode is "Off" && oldPttMode is not "Off")
-                            {
-                                _audioMixer.MicEnabled = _config.Config.MicEnabled;
-                                Console.WriteLine($"[EngineCoordinator] [cfgTrans→Off] MicEnabled={_audioMixer.MicEnabled}");
-                            }
-                            else if (newPttMode is not "Off" && oldPttMode is "Off")
-                            {
-                                _audioMixer.MicEnabled = false;
-                                Console.WriteLine($"[EngineCoordinator] [cfgTrans→PTT] MicEnabled=false");
-                            }
-                            // Se PTT já estava ativo ou já estava Off: não mexe (PTT sistema controla)
-                            Console.WriteLine($"[EngineCoordinator] Gains: game={_config.Config.GameVolume:F2} mic={_config.Config.MicVolume:F2} micEnabled={_audioMixer.MicEnabled} pttMode={newPttMode} (oldPtt={oldPttMode})");
-                        }
-
-                        // Propaga ElectronPid para o GameDetector (filtro de falsos foreground)
-                        _gameDetector.SetElectronPid(_config.Config.ElectronPid);
-
-                        Console.WriteLine("[EngineCoordinator] Config atualizada via pipe");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[EngineCoordinator] Erro ao aplicar config: {ex.Message}");
-                }
-                return new IpcMessage { Action = "ok" };
-            }
-
-            case "getMicDevices":
-            {
-                Console.WriteLine($"[EngineCoordinator] getMicDevices: enumerating...");
-                var list = EnumerateMicDevices();
-                Console.WriteLine($"[EngineCoordinator] getMicDevices: returning {list.Count} devices");
-                return new IpcMessage
-                {
-                    Action = "micDevices",
-                    Value = JsonSerializer.SerializeToElement(new { devices = list })
-                };
-            }
-
-            case "setMicDevice":
-            {
-                try
-                {
-                    if (msg.Value.HasValue)
-                    {
-                        var deviceId = msg.Value.Value.GetProperty("deviceId").GetString() ?? "";
-                        _config.Update(c => c.MicDeviceId = deviceId);
-
-                        // Se estiver capturando, recria o mic source com o novo device
-                        if (_recording)
-                        {
-                            _audioMixer?.Stop();
-                            _audioMixer?.Dispose();
-                            _audioMixer = null;
-
-                            if (_micSource != null)
-                            {
-                                _micSource.Stop();
-                                _micSource.Dispose();
-                                _micSource = null;
-                            }
-
-                            _audioMixer = CreateAudioMixer();
-                            _audioMixer.MicEnabled = NormalizePttMode(_config.Config.PttMode) is "Hold" or "Toggle" ? false : _config.Config.MicEnabled;
-                            Console.WriteLine($"[EngineCoordinator] [reinitMic] MicEnabled={_audioMixer.MicEnabled}");
-                            _audioMixer.GameGain = _config.Config.GameVolume;
-                            _audioMixer.MicGain = _config.Config.MicVolume;
-                            _audioMixer.OnMixedAudio += OnAudioPacket;
-                            _audioMixer.Start();
-                        }
-
-                        Console.WriteLine($"[EngineCoordinator] Mic device set to '{deviceId}'");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[EngineCoordinator] Erro ao setar mic device: {ex.Message}");
-                }
-                return new IpcMessage { Action = "ok" };
-            }
-
-            case "getGpus":
-            {
-                var gpus = EncoderManager.GetGpuList();
-                var items = gpus.Select(g => new { index = g.Index, name = g.Name, vendorId = g.VendorId }).ToList();
-                return new IpcMessage
-                {
-                    Action = "gpuList",
-                    Value = JsonSerializer.SerializeToElement(items)
-                };
-            }
-
-            default:
-                return new IpcMessage
-                {
-                    Action = "error",
-                    Value = JsonSerializer.SerializeToElement(new { error = $"Unknown action: {msg.Action}" })
-                };
-        }
-    }
 
     private EngineStatusMessage GetStatusMessage()
     {
@@ -2236,88 +1775,6 @@ public sealed class EngineCoordinator : IDisposable
         }
     }
 
-    /// <summary>
-    /// Enumerates microphone devices on an STA thread (required by NAudio/COM MMDeviceEnumerator).
-    /// If already on STA, runs inline; otherwise spawns a dedicated STA thread.
-    /// </summary>
-    private static List<object> EnumerateMicDevices()
-    {
-        // Need STA for NAudio COM MMDeviceEnumerator
-        try
-        {
-            if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
-                return EnumerateMicDevicesInner();
-        }
-        catch
-        {
-            // Unknown apartment state — run on dedicated STA thread
-        }
-
-        var result = new List<object>();
-        var thread = new Thread(() =>
-        {
-            result = EnumerateMicDevicesInner();
-        })
-        {
-            IsBackground = true,
-            Name = "MicEnumSTA"
-        };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        if (!thread.Join(5000))
-            Console.Error.WriteLine("[EngineCoordinator] MicEnumSTA thread timed out after 5s");
-        return result;
-    }
-
-    private static List<object> EnumerateMicDevicesInner()
-    {
-        var list = new List<object>();
-        try
-        {
-            using var enumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator();
-            Console.WriteLine($"[EngineCoordinator] EnumerateMicDevices: enumerator created (STA={Thread.CurrentThread.GetApartmentState()})");
-            var devices = enumerator.EnumerateAudioEndPoints(
-                NAudio.CoreAudioApi.DataFlow.Capture,
-                NAudio.CoreAudioApi.DeviceState.Active);
-            Console.WriteLine($"[EngineCoordinator] EnumerateMicDevices: found {devices.Count} devices");
-            string defaultId;
-            try
-            {
-                defaultId = enumerator.GetDefaultAudioEndpoint(
-                    NAudio.CoreAudioApi.DataFlow.Capture,
-                    NAudio.CoreAudioApi.Role.Communications)?.ID ?? "";
-                Console.WriteLine($"[EngineCoordinator] EnumerateMicDevices: defaultId='{defaultId}'");
-            }
-            catch (Exception exDef)
-            {
-                Console.Error.WriteLine($"[EngineCoordinator] GetDefaultAudioEndpoint failed: {exDef.Message}");
-                defaultId = "";
-            }
-
-            foreach (var dev in devices)
-            {
-                using (dev)
-                {
-                    Console.WriteLine($"[EngineCoordinator] EnumerateMicDevices: dev id='{dev.ID}' name='{dev.FriendlyName}'");
-                    list.Add(new
-                    {
-                        id = dev.ID,
-                        name = dev.FriendlyName,
-                        isDefault = dev.ID == defaultId,
-                        channels = 2,
-                        sampleRate = 48000,
-                    });
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[EngineCoordinator] Erro ao enumerar mics: {ex.Message}");
-        }
-        Console.WriteLine($"[EngineCoordinator] EnumerateMicDevices: returning {list.Count} devices");
-        return list;
-    }
-
     private void RunAutoCleanup()
     {
         try
@@ -2357,7 +1814,7 @@ public sealed class EngineCoordinator : IDisposable
             }
 
             if (deleted > 0)
-                Console.Error.WriteLine($"[Cleanup] Removidos {deleted / (1024 * 1024)} MB em clips antigos (threshold={_config.Config.AutoCleanupThresholdPercent}%)");
+                Log.E("Cleanup", $"Removidos {deleted / (1024 * 1024)} MB em clips antigos (threshold={_config.Config.AutoCleanupThresholdPercent}%)");
         }
         catch { }
     }
@@ -2391,13 +1848,13 @@ public sealed class EngineCoordinator : IDisposable
                 cropH = (clampedBottom - clampedTop) & ~1;
                 cropX = clampedLeft - mLeft;
                 cropY = clampedTop - mTop;
-                Console.WriteLine($"[UpdateDxgiCropRect] window={rect.Left}:{rect.Top}:{rect.Right}:{rect.Bottom} monitor={mLeft}:{mTop}:{mRight}:{mBottom} clamped={clampedLeft}:{clampedTop}:{clampedRight}:{clampedBottom} crop={cropX}:{cropY}:{cropW}:{cropH}");
+                Log.I("UpdateDxgiCropRect", $"window={rect.Left}:{rect.Top}:{rect.Right}:{rect.Bottom} monitor={mLeft}:{mTop}:{mRight}:{mBottom} clamped={clampedLeft}:{clampedTop}:{clampedRight}:{clampedBottom} crop={cropX}:{cropY}:{cropW}:{cropH}");
 
                 // Crop muito pequeno: GpuVideoConverter falha com E_INVALIDARG e ffmpeg produz output vazio.
                 // Ignora crop e usa quadro completo quando abaixo de 320x240.
                 if (cropW > 0 && (cropW < 320 || cropH < 240))
                 {
-                    Console.WriteLine($"[UpdateDxgiCropRect] Crop muito pequeno ({cropW}x{cropH}) — usando quadro completo");
+                    Log.I("UpdateDxgiCropRect", $"Crop muito pequeno ({cropW}x{cropH}) — usando quadro completo");
                     cropW = 0;
                     cropH = 0;
                 }
@@ -2412,12 +1869,12 @@ public sealed class EngineCoordinator : IDisposable
             bool isNoop = cropW == _captureWidth && cropH == _captureHeight && cropX == 0 && cropY == 0;
             if (!isNoop)
             {
-                Console.Error.WriteLine($"[UpdateDxgiCropRect] Crop real: {_lastCropX},{_lastCropY},{_lastCropW},{_lastCropH} → {cropX},{cropY},{cropW},{cropH}. Chamando Flush()...");
+                Log.E("UpdateDxgiCropRect", $"Crop real: {_lastCropX},{_lastCropY},{_lastCropW},{_lastCropH} → {cropX},{cropY},{cropW},{cropH}. Chamando Flush()...");
                 _encoder.Flush();
             }
             else
             {
-                Console.WriteLine($"[UpdateDxgiCropRect] Crop no-op (tela inteira) — Flush ignorado");
+                Log.I("UpdateDxgiCropRect", $"Crop no-op (tela inteira) — Flush ignorado");
             }
 
             _lastCropX = cropX; _lastCropY = cropY; _lastCropW = cropW; _lastCropH = cropH;
@@ -2450,55 +1907,7 @@ public sealed class EngineCoordinator : IDisposable
         public int Bottom;
     }
 
-    /// <summary>
-    /// Expande uma lista de PIDs incluindo processos filhos via Toolhelp32Snapshot.
-    /// Retorna (todos os PIDs, mapeamento child→parent para resolver nomes sem abrir handles).
-    /// </summary>
-    private static (HashSet<int>, Dictionary<int, int>) ExpandWithChildProcesses(IEnumerable<int> pids)
-    {
-        var result = new HashSet<int>(pids);
-        var childToParent = new Dictionary<int, int>();
-        try
-        {
-            var snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if (snapshot == INVALID_HANDLE_VALUE) return (result, childToParent);
 
-            try
-            {
-                var entry = new PROCESSENTRY32 { dwSize = Marshal.SizeOf<PROCESSENTRY32>() };
-                if (!Process32First(snapshot, ref entry))
-                    return (result, childToParent);
-
-                var parentMap = new Dictionary<int, int>();
-                do
-                {
-                    parentMap[entry.th32ProcessID] = entry.th32ParentProcessID;
-                }
-                while (Process32Next(snapshot, ref entry));
-
-                // BFS: para cada PID selecionado, adiciona todos os descendentes
-                var queue = new Queue<int>(result);
-                while (queue.Count > 0)
-                {
-                    var pid = queue.Dequeue();
-                    foreach (var (child, parent) in parentMap)
-                    {
-                        if (parent == pid && result.Add(child))
-                        {
-                            childToParent[child] = pid;
-                            queue.Enqueue(child);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                CloseHandle(snapshot);
-            }
-        }
-        catch { }
-        return (result, childToParent);
-    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PROCESSENTRY32
@@ -2627,7 +2036,7 @@ public sealed class EngineCoordinator : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[WgcMessagePump] Loop error: {ex.Message}");
+                        Log.E("WgcMessagePump", $"Loop error: {ex.Message}");
                     }
                     if (!_disposed)
                         Thread.Sleep(1);

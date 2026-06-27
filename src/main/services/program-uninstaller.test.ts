@@ -650,6 +650,28 @@ describe('runUninstaller', () => {
   })
 })
 
+// ─── parseUninstallCommand (edge: unclosed quote) ─────────
+
+describe('parseUninstallCommand (unclosed quote)', () => {
+  it('handles opening quote without closing quote (endQuote <= 1)', () => {
+    const p = makeProgram({
+      uninstallString: '"C:\\Program Files\\App\\uninstall.exe',
+    })
+    const result = parseUninstallCommand(p)
+    expect(result.command).toBe('"C:\\Program Files\\App\\uninstall.exe')
+    expect(result.args).toEqual([])
+  })
+
+  it('handles empty quoted string (endQuote === 1)', () => {
+    const p = makeProgram({
+      uninstallString: '""',
+    })
+    const result = parseUninstallCommand(p)
+    expect(result.command).toBe('""')
+    expect(result.args).toEqual([])
+  })
+})
+
 // ─── verifyUninstall ────────────────────────────────────────
 
 describe('verifyUninstall', () => {
@@ -1456,6 +1478,237 @@ describe('getInstalledProgramsFull', () => {
     expect(programs).toHaveLength(1)
     // getExeNames extracts "firefox" from InstallLocation basename → matches prefetch "FIREFOX" → lastUsed = 8000
     expect(programs[0]!.lastUsed).toBe(8000)
+  })
+})
+
+// ─── getInstalledProgramsFull (edge: prefetch branches) ──────
+
+describe('getInstalledProgramsFull (prefetch edge cases)', () => {
+  const originalPlatform = process.platform
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockReaddir.mockResolvedValue([])
+    mockStat.mockRejectedValue(new Error('ENOENT'))
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform })
+  })
+
+  it('skips prefetch files without dash (dashIdx <= 0)', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    // A .pf file with no dash → dashIdx = -1 → skipped
+    mockReaddir.mockResolvedValue(['readme.pf', 'CHROME-ABC.pf'])
+
+    let statCallCount = 0
+    mockStat.mockImplementation(() => {
+      statCallCount++
+      if (statCallCount === 1) return Promise.resolve({ mtimeMs: 7000 }) // CHROME-ABC.pf (readme.pf skipped by dashIdx)
+      return Promise.reject(new Error('ENOENT'))
+    })
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\Chrome\r\n' +
+      '    DisplayName    REG_SZ    Chrome\r\n' +
+      '    Publisher    REG_SZ    Google\r\n' +
+      '    UninstallString    REG_SZ    C:\\Chrome\\uninstall.exe\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // Only CHROME should match → lastUsed = 7000
+    expect(programs[0]!.lastUsed).toBe(7000)
+  })
+
+  it('handles stat failure for a single prefetch entry', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockReaddir.mockResolvedValue(['CHROME-ABC.pf', 'FIREFOX-DEF.pf'])
+
+    let statCallCount = 0
+    mockStat.mockImplementation(() => {
+      statCallCount++
+      if (statCallCount === 1) return Promise.reject(new Error('Access denied')) // CHROME stat fails
+      if (statCallCount === 2) return Promise.resolve({ mtimeMs: 8000 }) // FIREFOX succeeds
+      return Promise.reject(new Error('ENOENT'))
+    })
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\Chrome\r\n' +
+      '    DisplayName    REG_SZ    Chrome\r\n' +
+      '    Publisher    REG_SZ    Google\r\n' +
+      '    UninstallString    REG_SZ    C:\\Chrome\\uninstall.exe\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // Chrome stat failed, no prefetch match → lastUsed = 0
+    expect(programs[0]!.lastUsed).toBe(0)
+  })
+
+  it('sets lastUsed to -1 when prefetch map is empty (size === 0)', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockReaddir.mockResolvedValue([])
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\App\r\n' +
+      '    DisplayName    REG_SZ    Test App\r\n' +
+      '    Publisher    REG_SZ    Corp\r\n' +
+      '    UninstallString    REG_SZ    C:\\App\\uninstall.exe\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // prefetchMap is empty → lastUsed stays -1 (unknown)
+    expect(programs[0]!.lastUsed).toBe(-1)
+  })
+
+  it('handles DisplayIcon without .exe extension', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockReaddir.mockResolvedValue(['SOMEAPP-ABC.pf'])
+    mockStat.mockResolvedValue({ mtimeMs: 5000 })
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\App\r\n' +
+      '    DisplayName    REG_SZ    Some\r\n' +
+      '    Publisher    REG_SZ    Corp\r\n' +
+      '    UninstallString    REG_SZ    C:\\App\\uninstall.exe\r\n' +
+      '    DisplayIcon    REG_SZ    C:\\App\\icon.ico\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // icon.ico is not .exe, so no exe name from icon
+    // DisplayName 'Some' -> exeNames 'some' -> prefix match 'someapp' (from SOMEAPP-ABC.pf)
+    expect(programs[0]!.lastUsed).toBe(5000)
+  })
+
+  it('handles DisplayIcon with comma suffix stripped', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockReaddir.mockResolvedValue(['FIREFOX-ABC.pf'])
+    mockStat.mockResolvedValue({ mtimeMs: 9000 })
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\Firefox\r\n' +
+      '    DisplayName    REG_SZ    Mozilla Firefox\r\n' +
+      '    Publisher    REG_SZ    Mozilla\r\n' +
+      '    UninstallString    REG_SZ    C:\\Firefox\\uninstall.exe\r\n' +
+      '    DisplayIcon    REG_SZ    C:\\Program\\FIREFOX.EXE,0\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // DisplayIcon with comma suffix stripped → FIREFOX.EXE → 'firefox' → matches prefetch
+    expect(programs[0]!.lastUsed).toBe(9000)
+  })
+
+  it('handles install location basename too short (< 2 chars)', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockReaddir.mockResolvedValue(['X-ABC.pf'])
+    mockStat.mockResolvedValue({ mtimeMs: 3000 })
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\App\r\n' +
+      '    DisplayName    REG_SZ    YZ\r\n' +
+      '    Publisher    REG_SZ    X Corp\r\n' +
+      '    UninstallString    REG_SZ    C:\\App\\uninstall.exe\r\n' +
+      '    InstallLocation    REG_SZ    C:\\a\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // InstallLocation basename 'a' (< 2) not pushed
+    // DisplayName 'yz' (< 3) not pushed
+    // Publisher 'x corp' → 'x corp', 'x' (first word < 3) → just 'x corp'
+    // Prefetch 'X-ABC' → 'x' → no exact/prefix/suffix match with 'x corp'
+    expect(programs[0]!.lastUsed).toBe(0)
+  })
+
+  it('extracts exe name from DisplayName first word when >= 3 chars', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockReaddir.mockResolvedValue(['NOTEPAD-ABC.pf'])
+    mockStat.mockResolvedValue({ mtimeMs: 6000 })
+
+    const block =
+      'HKLM\\SOFTWARE\\Uninstall\\Notepad\r\n' +
+      '    DisplayName    REG_SZ    Notepad Plus Plus\r\n' +
+      '    Publisher    REG_SZ    NP\r\n' +
+      '    UninstallString    REG_SZ    C:\\Notepad\\uninstall.exe\r\n' +
+      '\r\n'
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(null, block, '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(1)
+    // DisplayName 'Notepad Plus Plus' → names: 'notepadplusplus', 'notepad'
+    // 'notepad' matches prefetch 'notepad' → lastUsed = 6000
+    expect(programs[0]!.lastUsed).toBe(6000)
+  })
+
+  it('hasRunningProcesses catches PowerShell failure silently', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        // For registry queries - succeed
+        if (_cmd === 'reg') {
+          cb(null, '', '')
+          return
+        }
+        // For PowerShell in hasRunningProcesses - fail
+        cb(new Error('PowerShell failed'), '', '')
+      },
+    )
+
+    const programs = await getInstalledProgramsFull()
+    expect(programs).toHaveLength(0)
   })
 })
 

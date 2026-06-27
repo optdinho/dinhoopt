@@ -1,13 +1,16 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { open, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import dotenv from 'dotenv'
-import { open, readFile, stat } from 'node:fs/promises'
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, screen, shell, Tray } from 'electron'
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, protocol, screen, shell } from 'electron'
 
 // Register custom privileged schemes BEFORE app.whenReady()
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'clip-video', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+  {
+    scheme: 'clip-video',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+  },
 ])
 
 // Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
@@ -32,7 +35,7 @@ import { runCli } from './cli'
 import { runDaemon } from './daemon'
 import { t } from './i18n'
 import { registerCleanerIpc } from './ipc'
-import { stopEngineProcess } from './ipc/clips.ipc'
+import { stopEngineProcess } from './ipc/clips-engine-connection'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
 import { initAutoUpdater } from './services/auto-updater'
 import { isAdmin } from './services/elevation'

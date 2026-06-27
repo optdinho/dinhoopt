@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Text.Json;
 
 namespace DiNho.Capture.Poc.GameDetection;
@@ -33,6 +34,12 @@ public class GameDatabase
     public bool IsLoaded => _loaded;
     public int GameCount => _loaded ? Games.Count : 0;
 
+    public void Reload(string jsonPath)
+    {
+        _loaded = false;
+        Load(jsonPath);
+    }
+
     public void Load(string? jsonPath = null)
     {
         if (_loaded) return;
@@ -64,18 +71,18 @@ public class GameDatabase
                         Version = db.Version;
                         BuildIndexes();
                         _loaded = true;
-                        Console.WriteLine($"[GameDatabase] Loaded {Games.Count} games from {candidate}");
+                        Log.I("GameDatabase", $"Loaded {Games.Count} games from {candidate}");
                         return;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[GameDatabase] Failed to load {candidate}: {ex.Message}");
+                Log.E("GameDatabase", $"Failed to load {candidate}: {ex.Message}");
             }
         }
 
-        Console.Error.WriteLine("[GameDatabase] No games.json found, using hardcoded fallback");
+        Log.W("GameDatabase", "No games.json found, using hardcoded fallback");
     }
 
     private void BuildIndexes()

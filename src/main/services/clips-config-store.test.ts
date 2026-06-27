@@ -15,7 +15,7 @@ vi.mock('node:fs', () => ({
 }))
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { loadClipsConfig, saveClipsConfig, resetClipsConfig } from './clips-config-store'
+import { loadClipsConfig, resetClipsConfig, saveClipsConfig } from './clips-config-store'
 
 describe('clips-config-store', () => {
   beforeEach(() => {
@@ -54,28 +54,30 @@ describe('clips-config-store', () => {
 
   it('loads saved config when file exists', () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-      replayTimeSeconds: 300,
-      micEnabled: false,
-      audioLoopback: true,
-      fps: 120,
-      width: 2560,
-      height: 1440,
-      bitrateKbps: 50000,
-      cq: 24,
-      maxrateKbps: 50000,
-      bufsizeKbps: 100000,
-      bframes: 0,
-      lookahead: 4,
-      encoderPreset: 'p4',
-      outputDirectory: 'D:\\Clips',
-      forceSoftware: true,
-      hotkeys: [],
-      pushToTalk: 'hold',
-      pushToTalkKeys: [0x7a, 0x7b],
-      gameDetection: true,
-      gameAudioOnly: true,
-    }))
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        replayTimeSeconds: 300,
+        micEnabled: false,
+        audioLoopback: true,
+        fps: 120,
+        width: 2560,
+        height: 1440,
+        bitrateKbps: 50000,
+        cq: 24,
+        maxrateKbps: 50000,
+        bufsizeKbps: 100000,
+        bframes: 0,
+        lookahead: 4,
+        encoderPreset: 'p4',
+        outputDirectory: 'D:\\Clips',
+        forceSoftware: true,
+        hotkeys: [],
+        pushToTalk: 'hold',
+        pushToTalkKeys: [0x7a, 0x7b],
+        gameDetection: true,
+        gameAudioOnly: true,
+      }),
+    )
     const cfg = loadClipsConfig()
     expect(cfg.replayTimeSeconds).toBe(300)
     expect(cfg.micEnabled).toBe(false)
@@ -118,7 +120,7 @@ describe('clips-config-store', () => {
     vi.mocked(existsSync).mockReturnValue(false)
     resetClipsConfig()
     expect(writeFileSync).toHaveBeenCalled()
-    const callArg = JSON.parse((vi.mocked(writeFileSync).mock.calls[0][1] as string))
+    const callArg = JSON.parse(vi.mocked(writeFileSync).mock.calls[0][1] as string)
     expect(callArg.gameDetection).toBe(true)
     expect(callArg.gameAudioOnly).toBe(true)
   })

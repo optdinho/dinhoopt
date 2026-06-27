@@ -1,3 +1,5 @@
+using DiNho.Capture.Poc.Logging;
+
 namespace DiNho.Capture.Poc.Audio;
 
 public sealed class SilentAudioSource : IAudioSource
@@ -9,12 +11,12 @@ public sealed class SilentAudioSource : IAudioSource
 
     public void Start()
     {
-        Console.WriteLine("[SilentAudioSource] Iniciado — sem áudio do sistema (loopback desligado)");
+        Log.I("SilentAudioSource", "Iniciado — sem áudio do sistema (loopback desligado)");
     }
 
     public void Stop()
     {
-        Console.WriteLine("[SilentAudioSource] Parado");
+        Log.I("SilentAudioSource", "Parado");
     }
 
     public void Dispose() { }

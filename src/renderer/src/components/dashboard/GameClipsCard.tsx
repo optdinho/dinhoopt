@@ -1,5 +1,5 @@
 import { usePolling } from '@/hooks/usePolling'
-import { Clapperboard, Loader2, Square, Play } from 'lucide-react'
+import { Clapperboard, Loader2, Play, Square } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 

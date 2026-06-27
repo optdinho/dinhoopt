@@ -1,13 +1,13 @@
 import { HealthScore } from '@/components/shared/HealthScore'
 import { usePolling } from '@/hooks/usePolling'
-import { Check, HardDrive, MemoryStick, FileStack, BarChart3 } from 'lucide-react'
+import { formatBytes } from '@/lib/utils'
+import type { DiskSmartInfo } from '@shared/types'
+import { BarChart3, Check, FileStack, HardDrive, MemoryStick } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { formatBytes } from '@/lib/utils'
 import { toolRoutes } from './constants'
 import type { ToolCoverageItem } from './types'
-import type { DiskSmartInfo } from '@shared/types'
 
 const STATS_POLL_INTERVAL = 60_000
 
@@ -38,30 +38,41 @@ export function HealthCard({
   const diskLabel = useMemo(() => {
     if (!disk) return '—'
     switch (disk.healthStatus) {
-      case 'Healthy': return 'Saudável'
-      case 'Caution': return 'Atenção'
-      case 'Bad': return 'Crítico'
-      default: return '—'
+      case 'Healthy':
+        return 'Saudável'
+      case 'Caution':
+        return 'Atenção'
+      case 'Bad':
+        return 'Crítico'
+      default:
+        return '—'
     }
   }, [disk])
 
   const diskColor = useMemo(() => {
     if (!disk) return '#6b7280'
     switch (disk.healthStatus) {
-      case 'Healthy': return '#22c55e'
-      case 'Caution': return '#f59e0b'
-      case 'Bad': return '#ef4444'
-      default: return '#6b7280'
+      case 'Healthy':
+        return '#22c55e'
+      case 'Caution':
+        return '#f59e0b'
+      case 'Bad':
+        return '#ef4444'
+      default:
+        return '#6b7280'
     }
   }, [disk])
 
-  const stats = useMemo(() => [
-    { icon: MemoryStick, label: t('gaugeRam'), value: `${memPercent}%`, color: memColor },
-    { icon: HardDrive, label: t('diskCardTitle'), value: diskLabel, color: diskColor },
-    { icon: BarChart3, label: t('statSpaceRecovered'), value: formatBytes(totalSpaceSaved), color: '#06b6d4' },
-    { icon: FileStack, label: t('statFilesCleaned'), value: String(totalFilesCleaned), color: '#22c55e' },
-    { icon: BarChart3, label: t('statTotalScans'), value: String(totalScans), color: '#a855f7' },
-  ], [memPercent, diskLabel, diskColor, totalSpaceSaved, totalFilesCleaned, totalScans, t])
+  const stats = useMemo(
+    () => [
+      { icon: MemoryStick, label: t('gaugeRam'), value: `${memPercent}%`, color: memColor },
+      { icon: HardDrive, label: t('diskCardTitle'), value: diskLabel, color: diskColor },
+      { icon: BarChart3, label: t('statSpaceRecovered'), value: formatBytes(totalSpaceSaved), color: '#06b6d4' },
+      { icon: FileStack, label: t('statFilesCleaned'), value: String(totalFilesCleaned), color: '#22c55e' },
+      { icon: BarChart3, label: t('statTotalScans'), value: String(totalScans), color: '#a855f7' },
+    ],
+    [memPercent, diskLabel, diskColor, totalSpaceSaved, totalFilesCleaned, totalScans, t],
+  )
 
   return (
     <div

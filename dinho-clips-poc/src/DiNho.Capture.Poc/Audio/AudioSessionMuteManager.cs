@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using NAudio.CoreAudioApi;
 
 namespace DiNho.Capture.Poc.Audio;
@@ -44,15 +45,15 @@ public sealed class AudioSessionMuteManager : IDisposable
                     PreviousMute = volume.Mute,
                 });
                 volume.Mute = true;
-                Console.WriteLine($"[SessionMuteManager] Muted pid={pid} (wasMuted={_saved[^1].PreviousMute})");
+                Log.D("SessionMuteManager", $"Muted pid={pid} (wasMuted={_saved[^1].PreviousMute})");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SessionMuteManager] Erro ao mutar sessão #{i}: {ex.GetType().Name}: {ex.Message}");
+                Log.E("SessionMuteManager", $"Erro ao mutar sessão #{i}: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
-        Console.WriteLine($"[SessionMuteManager] MuteAllExcept: {_saved.Count} sessões mutadas (targetPids=[{string.Join(",", targetPids)}])");
+        Log.I("SessionMuteManager", $"MuteAllExcept: {_saved.Count} sessões mutadas (targetPids=[{string.Join(",", targetPids)}])");
     }
 
     /// <summary>Restore all previously muted sessions to their original state.</summary>
@@ -71,11 +72,11 @@ public sealed class AudioSessionMuteManager : IDisposable
             catch (Exception ex)
             {
                 failed++;
-                Console.WriteLine($"[SessionMuteManager] Falha ao restaurar mute: {ex.GetType().Name}: {ex.Message}");
+                Log.E("SessionMuteManager", $"Falha ao restaurar mute: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
-        Console.WriteLine($"[SessionMuteManager] Restore: {restored} restaurados, {failed} falhas");
+        Log.I("SessionMuteManager", $"Restore: {restored} restaurados, {failed} falhas");
         _saved.Clear();
     }
 
@@ -83,11 +84,11 @@ public sealed class AudioSessionMuteManager : IDisposable
     {
         if (!_disposed)
         {
-            Console.WriteLine("[SessionMuteManager] Dispose() — restaurando sessões...");
+            Log.I("SessionMuteManager", "Dispose() — restaurando sessões...");
             Restore();
             _device.Dispose();
             _disposed = true;
-            Console.WriteLine("[SessionMuteManager] Dispose() OK");
+            Log.I("SessionMuteManager", "Dispose() OK");
         }
     }
 

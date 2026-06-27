@@ -4,9 +4,9 @@ import type {
   AudioSessionInfo,
   ClipInfo,
   ClipMergeResult,
+  ClipTrimResult,
   ClipsConfig,
   ClipsEngineStatus,
-  ClipTrimResult,
   HotkeyBinding,
   LicenseResult,
   MicDeviceInfo,
@@ -624,9 +624,7 @@ const api = {
     const encoded = encodeURIComponent(clipPath)
     return `clip-video://file?path=${encoded}`
   },
-  clipsOnEngineStatus: (
-    callback: (status: ClipsEngineStatus) => void,
-  ): (() => void) => {
+  clipsOnEngineStatus: (callback: (status: ClipsEngineStatus) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: ClipsEngineStatus) => callback(status)
     ipcRenderer.on(IPC.CLIPS_ENGINE_STATUS, handler)
     return () => {

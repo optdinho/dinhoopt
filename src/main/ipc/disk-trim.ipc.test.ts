@@ -104,11 +104,25 @@ describe('registerDiskTrimIpc', () => {
     vi.clearAllMocks()
   })
 
+  afterEach(resetPlatform)
+
   it('registers list and run handlers', () => {
     registerDiskTrimIpc(getWindow)
     const channels = mockHandle.mock.calls.map((c) => c[0])
     expect(channels).toContain('disk:trim:list')
     expect(channels).toContain('disk:trim:run')
+  })
+
+  it('DISK_TRIM_LIST handler returns an array result', async () => {
+    setPlatform('sunos')
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...args: unknown[]) => unknown
+      if (typeof cb === 'function') cb(null, JSON.stringify({ disks: [], volumes: [] }), '')
+    })
+    registerDiskTrimIpc(getWindow)
+    const handler = getHandler('disk:trim:list')
+    const result = await handler({})
+    expect(Array.isArray(result)).toBe(true)
   })
 })
 
@@ -385,6 +399,13 @@ describe('DISK_TRIM_RUN handler — input validation & mutex', () => {
     const results = await handler({}, [123, '', huge, 'Z'])
     expect(Array.isArray(results)).toBe(true)
     expect((results as unknown[]).length).toBe(1)
+  })
+
+  it('returns [] when all driveIds are filtered out', async () => {
+    registerDiskTrimIpc(getWindow)
+    const handler = getHandler('disk:trim:run')
+    const result = await handler({}, [123, '', 0, null])
+    expect(result).toEqual([])
   })
 })
 
@@ -674,6 +695,93 @@ describe('listTrimDrives — Windows enumeration', () => {
     const result = await listTrimDrives()
     expect(result[0]!.mediaType).toBe('NVMe')
   })
+
+  it('maps HDD MediaType to HDD media type', async () => {
+    setPlatform('win32')
+    stubPS(
+      JSON.stringify({
+        disks: [{ Number: 0, MediaType: '3', BusType: '0', FriendlyName: 'HDD Drive' }],
+        volumes: [
+          {
+            Letter: 'D',
+            Label: 'Data',
+            FS: 'NTFS',
+            Size: 1000000000,
+            Free: 500000000,
+            DiskNumber: 0,
+            DriveType: '3',
+          },
+        ],
+      }),
+    )
+    const result = await listTrimDrives()
+    expect(result[0]!.mediaType).toBe('HDD')
+  })
+
+  it('returns Unknown for unrecognized MediaType and BusType', async () => {
+    setPlatform('win32')
+    stubPS(
+      JSON.stringify({
+        disks: [{ Number: 0, MediaType: '99', BusType: '99', FriendlyName: 'Strange Drive' }],
+        volumes: [
+          {
+            Letter: 'E',
+            Label: 'Weird',
+            FS: 'NTFS',
+            Size: 1000000000,
+            Free: 500000000,
+            DiskNumber: 0,
+            DriveType: '3',
+          },
+        ],
+      }),
+    )
+    const result = await listTrimDrives()
+    expect(result[0]!.mediaType).toBe('Unknown')
+  })
+
+  it('handles events with no matching Volume/Drive in Msg (covers ternary false branch)', async () => {
+    setPlatform('win32')
+    let callCount = 0
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...args: unknown[]) => unknown
+      if (typeof cb === 'function') {
+        callCount++
+        if (callCount === 1) {
+          // First call: refreshWindowsLastTrim — returns events
+          cb(
+            null,
+            JSON.stringify([{ When: new Date().toISOString(), Msg: 'The system optimized something else.' }]),
+            '',
+          )
+        } else {
+          // Second call: listDrivesWindows — returns disks/volumes
+          cb(
+            null,
+            JSON.stringify({
+              disks: [{ Number: 0, MediaType: '4', BusType: '11', FriendlyName: 'Samsung SSD' }],
+              volumes: [
+                {
+                  Letter: 'C',
+                  Label: 'Windows',
+                  FS: 'NTFS',
+                  Size: 256000000000,
+                  Free: 128000000000,
+                  DiskNumber: 0,
+                  DriveType: '3',
+                },
+              ],
+            }),
+            '',
+          )
+        }
+      }
+    })
+    const result = await listTrimDrives()
+    expect(result).toHaveLength(1)
+    // No event matched drive C, so lastTrimAt should be null
+    expect(result[0]!.lastTrimAt).toBeNull()
+  })
 })
 
 describe('runTrimForDrive — missing letter/mountpoint', () => {
@@ -801,6 +909,46 @@ describe('DISK_TRIM_RUN handler — mutex and progress', () => {
     expect(results).toHaveLength(1)
     expect(results[0]!.success).toBe(true)
     expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ phase: 'starting' }))
+    expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ phase: 'done' }))
+  })
+
+  it('forwards stdout data as progress events', async () => {
+    setPlatform('win32')
+    mockSpawn.mockImplementation(() =>
+      makeFakeChild({ stdout: 'Operating on C:...\n', stderr: 'VERBOSE: Retrim succeeded\n', exitCode: 0 }),
+    )
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...args: unknown[]) => unknown
+      if (typeof cb === 'function')
+        cb(
+          null,
+          JSON.stringify({
+            disks: [{ Number: 0, MediaType: '4', BusType: '11' }],
+            volumes: [
+              {
+                Letter: 'C',
+                Label: 'Windows',
+                FS: 'NTFS',
+                Size: 1000000000,
+                Free: 500000000,
+                DiskNumber: 0,
+                DriveType: '3',
+              },
+            ],
+          }),
+          '',
+        )
+    })
+    registerDiskTrimIpc(getWindow)
+    const handler = getHandler('disk:trim:run')
+    const results = (await handler({}, ['C'])) as Array<{ success: boolean }>
+    expect(results).toHaveLength(1)
+    expect(results[0]!.success).toBe(true)
+    expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ phase: 'starting' }))
+    expect(mockSend).toHaveBeenCalledWith(
+      'disk:trim:progress',
+      expect.objectContaining({ phase: 'running', message: 'Operating on C:...' }),
+    )
     expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ phase: 'done' }))
   })
 })

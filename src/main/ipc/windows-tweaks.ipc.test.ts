@@ -468,12 +468,7 @@ describe('checkTweakApplied reg query parsing', () => {
       const cmdArgs = args[1] as string[]
       if (cmdName === 'reg.exe' && cmdArgs[0] === 'query' && cmdArgs.some((a) => a.includes('MouseSpeed'))) {
         callback(null, {
-          stdout: [
-            '',
-            'HKEY_CURRENT_USER\\Control Panel\\Mouse',
-            '    MouseSpeed    REG_SZ    0',
-            '',
-          ].join('\n'),
+          stdout: ['', 'HKEY_CURRENT_USER\\Control Panel\\Mouse', '    MouseSpeed    REG_SZ    0', ''].join('\n'),
         })
       } else {
         callback(null, { stdout: '' })

@@ -1,7 +1,7 @@
-import { Loader2, Gamepad2, Square, Play } from 'lucide-react'
+import { useGameModeStore } from '@/stores/game-mode-store'
+import { Gamepad2, Loader2, Play, Square } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useGameModeStore } from '@/stores/game-mode-store'
 
 export function GameModeCard({
   gameModeActive,
@@ -67,7 +67,11 @@ export function GameModeCard({
           border: `2px solid ${gameModeActive ? '#06b6d4' : 'var(--border-strong)'}`,
         }}
       >
-        <Gamepad2 className="h-6 w-6" style={{ color: gameModeActive ? '#fff' : 'var(--text-muted)' }} strokeWidth={2} />
+        <Gamepad2
+          className="h-6 w-6"
+          style={{ color: gameModeActive ? '#fff' : 'var(--text-muted)' }}
+          strokeWidth={2}
+        />
       </div>
 
       <span

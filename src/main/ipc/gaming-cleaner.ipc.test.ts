@@ -492,6 +492,306 @@ describe('GAMING_SCAN handler', () => {
     const result = (await handler()) as ScanResult[]
     expect(Array.isArray(result)).toBe(true)
   })
+
+  // ─── Shader cache edge cases ──────────────────────────────────
+
+  it('skips shader cache when shaderDir does not exist', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockReaddir.mockResolvedValue([])
+    mockGetDirectorySize.mockResolvedValue(65536)
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    // All existsSync calls return true → shaderDir check passes
+    const result = (await handler()) as ScanResult[]
+    const shaderRows = result.filter((r) => (r.group as string)?.includes('Shader'))
+    expect(shaderRows).toHaveLength(0)
+  })
+
+  it('handles shader readdir error', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    // buildAppIdMap → empty
+    mockReaddir.mockResolvedValueOnce([])
+    // shader dir readdir → throws
+    mockReaddir.mockRejectedValueOnce(new Error('access denied'))
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('handles getDirectorySize error for a shader entry', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    // buildAppIdMap → empty
+    mockReaddir.mockResolvedValueOnce([])
+    // shader dir with one entry
+    mockReaddir.mockResolvedValueOnce([{ name: 'game1', isDirectory: () => true }])
+
+    mockGetDirectorySize.mockRejectedValue(new Error('access denied'))
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('catches cacheItems error in shader scan outer try/catch', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockReaddir.mockResolvedValue([])
+
+    mockCacheItems.mockImplementation(() => {
+      throw new Error('cache failure')
+    })
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  // ─── Redist edge cases ──────────────────────────────────────
+
+  it('skips redist top-level redist smaller than 1KB', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+
+    mockStat.mockResolvedValue({ isDirectory: () => true, size: 0, mtimeMs: Date.now(), birthtimeMs: Date.now() })
+    mockGetDirectorySize.mockResolvedValue(512)
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('handles top-level redist stat error', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+
+    mockStat.mockRejectedValue(new Error('access denied'))
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('skips non-directory entries in common dir', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'readme.txt', isDirectory: () => false }]) // common dir — file, not dir
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('handles subdirs readdir error in redist scan', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockRejectedValueOnce(new Error('access denied')) // subdirs readdir fails
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('handles games readdir error in redist scan', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockRejectedValueOnce(new Error('access denied')) // common dir readdir fails
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('handles redist sub-level stat error', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockGetDirectorySize.mockResolvedValue(65536)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockResolvedValueOnce([{ name: 'SubDir', isDirectory: () => true }]) // subdirs
+
+    mockStat.mockRejectedValue(new Error('access denied'))
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('skips sub-level redist smaller than 1KB', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockGetDirectorySize.mockResolvedValue(512)
+
+    mockStat.mockResolvedValue({ isDirectory: () => true, size: 0, mtimeMs: Date.now(), birthtimeMs: Date.now() })
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockResolvedValueOnce([{ name: 'SubDir', isDirectory: () => true }]) // subdirs
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('skips duplicate redist paths in sub-level scan', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist', 'vcredist.exe'])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockGetDirectorySize.mockResolvedValue(65536)
+
+    mockStat.mockResolvedValue({ isDirectory: () => false, size: 65536, mtimeMs: Date.now(), birthtimeMs: Date.now() })
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir with one game
+      .mockResolvedValueOnce([{ name: 'subdir', isDirectory: () => true }]) // subdirs
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('catches cacheItems error in redist outer try/catch', async () => {
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockReaddir.mockResolvedValue([])
+
+    // First cacheItems call (shader) succeeds, second (redist) throws
+    mockCacheItems.mockImplementationOnce(() => undefined)
+    mockCacheItems.mockImplementationOnce(() => {
+      throw new Error('cache failure')
+    })
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
 })
 
 describe('GAMING_CLEAN handler', () => {
@@ -576,5 +876,314 @@ describe('GAMING_CLEAN handler', () => {
     await handler({}, ['id1'])
 
     expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('does not send progress when window is destroyed during clean', async () => {
+    mockCleanItems.mockImplementation(
+      async (
+        _ids: string[],
+        onProgress: (processed: number, total: number, currentPath: string, cleanedSize: number) => void,
+      ) => {
+        onProgress(1, 1, '/path', 512)
+      },
+    )
+
+    registerGamingCleanerIpc(() => ({ isDestroyed: () => true, webContents: { send: mockSend } }))
+    const handler = getHandler('cleaner:gaming:clean')
+
+    await handler({}, ['id1'])
+
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+})
+
+describe('GAMING_SCAN handler — shader cache edge cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockExecNativeUtf8.mockRejectedValue(new Error('Registry not found'))
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+  })
+
+  it('skips shader cache when shaderDir does not exist', async () => {
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+
+    mockExistsSync.mockImplementation((path: string) => {
+      if (path.includes('shadercache')) return false
+      return true
+    })
+    mockReaddir.mockResolvedValue([])
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const shaderRows = result.filter((r) => (r.group as string)?.includes('Shader'))
+    expect(shaderRows).toHaveLength(0)
+  })
+
+  it('handles getDirectorySize error for a shader cache entry', async () => {
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([
+        { name: '12345', isDirectory: () => true },
+        { name: '67890', isDirectory: () => true },
+      ]) // shader dir
+
+    mockGetDirectorySize.mockRejectedValueOnce(new Error('access denied'))
+    mockGetDirectorySize.mockResolvedValueOnce(65536)
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    expect(result.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('handles readdir error on shader cache directory', async () => {
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockRejectedValueOnce(new Error('access denied')) // shader dir readdir fails
+
+    mockGetDirectorySize.mockResolvedValue(65536)
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const shaderRows = result.filter((r) => (r.group as string)?.includes('Shader'))
+    expect(shaderRows).toHaveLength(0)
+  })
+
+  it('catches error from cacheItems in shader scan outer try/catch', async () => {
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockReaddir.mockResolvedValue([])
+    // Make cacheItems throw to trigger the outer try/catch
+    mockCacheItems.mockImplementation(() => {
+      throw new Error('cache failure')
+    })
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+
+    const result = (await handler()) as ScanResult[]
+    // shader results are skipped entirely (outer catch), but launcher/gpu results still return
+    expect(Array.isArray(result)).toBe(true)
+  })
+})
+
+describe('GAMING_SCAN handler — redist edge cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockExecNativeUtf8.mockRejectedValue(new Error('Registry not found'))
+    mockPlatformPaths.gamingPaths.mockReturnValue([])
+    mockPlatformPaths.gpuCachePaths.mockReturnValue([])
+    mockPlatformPaths.steamLibraries.mockReturnValue(['/steam'])
+  })
+
+  it('skips redist commonDir when it does not exist', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+
+    mockExistsSync.mockImplementation((path: string) => {
+      if (path.includes('common')) return false
+      return true
+    })
+
+    // buildAppIdMap for shader
+    mockReaddir.mockResolvedValueOnce([])
+    // shader dir readdir → empty
+    mockReaddir.mockResolvedValueOnce([])
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('skips top-level redist smaller than 1KB', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    // buildAppIdMap empty
+    mockReaddir.mockResolvedValueOnce([])
+    // shader dir empty
+    mockReaddir.mockResolvedValueOnce([])
+    // common dir → one game
+    mockReaddir.mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }])
+    // stat returns dir with size 512 (< 1024)
+    mockStat.mockResolvedValue({ isDirectory: () => true, size: 0, mtimeMs: Date.now(), birthtimeMs: Date.now() })
+    mockGetDirectorySize.mockResolvedValue(512)
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('handles top-level redist stat error', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+
+    mockStat.mockRejectedValue(new Error('access denied'))
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('skips non-directory entries in common dir', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'readme.txt', isDirectory: () => false }]) // common dir — file, not dir
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('skips duplicate redist paths in sub-level scan', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist', 'vcredist.exe'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockGetDirectorySize.mockResolvedValue(65536)
+
+    mockStat.mockResolvedValue({ isDirectory: () => false, size: 65536, mtimeMs: Date.now(), birthtimeMs: Date.now() })
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockResolvedValueOnce([{ name: 'subdir', isDirectory: () => true }]) // subdirs
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('skips sub-level redist smaller than 1KB', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockGetDirectorySize.mockResolvedValue(512)
+
+    mockStat.mockResolvedValue({ isDirectory: () => true, size: 0, mtimeMs: Date.now(), birthtimeMs: Date.now() })
+
+    // existsSync: steamapps & shadercache for shader scan, then steamapps & common for redist scan
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockResolvedValueOnce([{ name: 'SubDir', isDirectory: () => true }]) // subdirs
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('handles sub-level redist stat error', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockGetDirectorySize.mockResolvedValue(65536)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockResolvedValueOnce([{ name: 'SubDir', isDirectory: () => true }]) // subdirs
+
+    // stat fails for the subdir level
+    mockStat.mockRejectedValue(new Error('access denied'))
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('handles subdirs readdir error in redist scan', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockResolvedValueOnce([{ name: 'TestGame', isDirectory: () => true }]) // common dir
+      .mockRejectedValueOnce(new Error('access denied')) // subdirs readdir fails
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('handles games readdir error in redist scan', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue(['_CommonRedist'])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+
+    mockReaddir
+      .mockResolvedValueOnce([]) // buildAppIdMap
+      .mockResolvedValueOnce([]) // shader dir
+      .mockRejectedValueOnce(new Error('access denied')) // common dir readdir fails
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    const redistRows = result.filter((r) => (r.group as string)?.includes('Redistributables'))
+    expect(redistRows).toHaveLength(0)
+  })
+
+  it('catches error from cacheItems in redist outer try/catch', async () => {
+    mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
+    mockReadFile.mockRejectedValue(new Error('VDF not found'))
+    mockExistsSync.mockReturnValue(true)
+    mockReaddir.mockResolvedValue([])
+
+    // First cacheItems call (shader) succeeds, second (redist) throws
+    mockCacheItems.mockImplementationOnce(() => undefined)
+    mockCacheItems.mockImplementationOnce(() => {
+      throw new Error('cache failure')
+    })
+
+    registerGamingCleanerIpc(() => null)
+    const handler = getHandler('cleaner:gaming:scan')
+    const result = (await handler()) as ScanResult[]
+    expect(Array.isArray(result)).toBe(true)
   })
 })

@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Runtime.InteropServices;
 
 namespace DiNho.Capture.Poc.Audio;
@@ -74,7 +75,7 @@ public sealed class CppLoopbackSource : IAudioSource
         };
         _pumpThread.Start();
 
-        Console.WriteLine($"[CppLoopbackSource] PID={_processId} includeTree={_includeTree} — thread iniciada");
+        Log.I("CppLoopbackSource", $"PID={_processId} includeTree={_includeTree} — thread iniciada");
     }
 
     private void CaptureThreadProc()
@@ -88,15 +89,15 @@ public sealed class CppLoopbackSource : IAudioSource
                 (uint)_sampleRate,
                 16);
 
-            Console.WriteLine($"[CppLoopbackSource] StartCaptureAsync returned: HR=0x{hr:X8}");
+            Log.I("CppLoopbackSource", $"StartCaptureAsync returned: HR=0x{hr:X8}");
         }
         catch (ThreadInterruptedException)
         {
-            Console.WriteLine("[CppLoopbackSource] Capture thread interrupted (normal stop)");
+            Log.I("CppLoopbackSource", "Capture thread interrupted (normal stop)");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[CppLoopbackSource] Capture thread error: {ex.Message}");
+            Log.E("CppLoopbackSource", $"Capture thread error: {ex.Message}");
         }
     }
 
@@ -154,9 +155,9 @@ public sealed class CppLoopbackSource : IAudioSource
         lock (_lock)
             Monitor.Pulse(_lock);
 
-        Console.WriteLine("[CppLoopbackSource] Parando captura...");
+        Log.I("CppLoopbackSource", "Parando captura...");
         int hr = NativeMethods.StopCaptureAsync();
-        Console.WriteLine($"[CppLoopbackSource] StopCaptureAsync: HR=0x{hr:X8}");
+        Log.I("CppLoopbackSource", $"StopCaptureAsync: HR=0x{hr:X8}");
 
         if (_captureThread != null && _captureThread.IsAlive)
         {
@@ -182,7 +183,7 @@ public sealed class CppLoopbackSource : IAudioSource
 
         _managedCallback = null;
 
-        Console.WriteLine("[CppLoopbackSource] Parado.");
+        Log.I("CppLoopbackSource", "Parado.");
     }
 
     public void Dispose() => Stop();

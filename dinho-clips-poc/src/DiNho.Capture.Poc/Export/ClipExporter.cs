@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -42,89 +43,70 @@ public sealed class ClipExporter : IDisposable
                 throw new InvalidOperationException(
                     $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
-            var vidExt = rawFormat switch { "hevc" => "hevc", "av1" => "av1", _ => "h264" };
-            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.{vidExt}");
+            var mkvTemp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.mkv");
 
             try
             {
-                // Build video PTS intervals (continuous segments, excluding gaps from alt-tab)
-                var gapsRemoved = 0;
+                double activeDurationSec = 0;
+                double activeFps = frameRate;
+                double trueVidDuration = 0;
+                double audioDurationSec = 0;
+                int gapsRemoved = 0;
+
+                // Sync audio to video PTS intervals (handles alt-tab gaps)
                 if (videoPackets.Count > 0 && audioPackets.Count > 0)
                 {
                     var vFirst = videoPackets[0].Pts;
                     var vLast = videoPackets[^1].Pts;
                     var aFirst = audioPackets[0].Pts;
                     var aLast = audioPackets[^1].Pts;
-                    Console.Error.WriteLine($"[PTS] Pre-sync — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({videoPackets.Count} frames)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({audioPackets.Count} packets)");
+                    Log.D("PTS", $"Pre-sync — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({videoPackets.Count} frames)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({audioPackets.Count} packets)");
 
-                    // Identify contiguous video PTS intervals (gap tolerance: 50ms)
-                    var intervals = new List<(TimeSpan start, TimeSpan end)>();
-                    for (int vi = 0; vi < videoPackets.Count; vi++)
-                    {
-                        var pkt = videoPackets[vi];
-                        var s = pkt.Pts;
-                        var e = (vi + 1 < videoPackets.Count) ? videoPackets[vi + 1].Pts : s + pkt.Duration;
-                        if (intervals.Count == 0 || s - intervals[^1].end > TimeSpan.FromMilliseconds(50))
-                            intervals.Add((s, e));
-                        else
-                            intervals[^1] = (intervals[^1].start, e);
-                    }
+                    int origAudioCount = audioPackets.Count;
+                    var intervals = GetVideoIntervals(videoPackets, TimeSpan.FromMilliseconds(50));
+                    audioPackets = FilterAudioByIntervals(audioPackets, intervals);
+                    gapsRemoved = origAudioCount - audioPackets.Count;
+                    // Note: gapsRemoved is number of audio packets removed = original - filtered.
 
-                    // Filter audio packets to only those within video intervals
-                    int intervalIdx = 0;
-                    var syncedAudio = new List<EncodedPacket>(audioPackets.Count);
-                    foreach (var pkt in audioPackets)
-                    {
-                        while (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].end)
-                            intervalIdx++;
-                        if (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].start)
-                            syncedAudio.Add(pkt);
-                    }
-                    gapsRemoved = audioPackets.Count - syncedAudio.Count;
-                    audioPackets = syncedAudio;
+                    activeDurationSec = ComputeIntervalsDuration(intervals);
+                    trueVidDuration = videoPackets.Count >= 2
+                        ? (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds
+                        : 0;
 
-                    // Compute true video duration (actual wall-clock PTS range, ignoring alt-tab gaps)
-                    double trueVidDuration = 0;
-                    int framesWithDur = videoPackets.Count;
-                    if (videoPackets.Count >= 2)
-                        trueVidDuration = (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds;
+                    activeFps = activeDurationSec > 0 ? videoPackets.Count / activeDurationSec : frameRate;
+                    if (activeFps < 1 || activeFps > frameRate * 3) activeFps = frameRate;
 
-                    // Trim audio end to match video true duration exactly
+                    var lastVideoPts = videoPackets[^1].Pts + videoPackets[^1].Duration;
+                    audioPackets = TrimAudioEnd(audioPackets, lastVideoPts);
+
+                    audioPackets = PadAudioWithSilence(audioPackets, activeDurationSec, 48000);
+
                     if (audioPackets.Count > 0)
                     {
-                        double audioAccum = 0;
-                        int trimAt = audioPackets.Count;
-                        for (int i = 0; i < audioPackets.Count; i++)
-                        {
-                            double next = audioAccum + audioPackets[i].Duration.TotalSeconds;
-                            if (next >= trueVidDuration)
-                            {
-                                trimAt = i + 1;
-                                break;
-                            }
-                            audioAccum = next;
-                        }
-                        if (trimAt < audioPackets.Count)
-                            audioPackets = audioPackets.GetRange(0, trimAt);
+                        var af = audioPackets[0].Pts;
+                        var al = audioPackets[^1].Pts + audioPackets[^1].Duration;
+                        audioDurationSec = (al - af).TotalSeconds;
                     }
+                    if (activeDurationSec > 5 && audioDurationSec > 0 && audioDurationSec < activeDurationSec * 0.9)
+                        Log.W("PTS", $"audio duration {audioDurationSec:F2}s is <90% of active video {activeDurationSec:F2}s — {audioPackets.Count} packets may be insufficient");
 
-                    Console.Error.WriteLine($"[PTS] Post-sync — Video: trueDuration={trueVidDuration:F2}s frames={framesWithDur}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved}");
+                    Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved}");
                 }
 
-                WriteH264File(h264Temp, videoPackets);
-                Console.Error.WriteLine($"[Exporter] H264 temp: {h264Temp} ({new FileInfo(h264Temp).Length / 1024} KB)");
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat);
+                Log.I("Exporter", $"MKV temp: {mkvTemp} ({new FileInfo(mkvTemp).Length / 1024} KB) frames={videoPackets.Count}");
 
-                double totalRealSec = videoPackets.Count >= 2
-                    ? (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds
-                    : (double)videoPackets.Count / frameRate;
-                double accurateFps = totalRealSec > 0 ? videoPackets.Count / totalRealSec : frameRate;
-                Console.Error.WriteLine($"[Exporter] nominalFps={frameRate} accurateFps={accurateFps:F3} totalRealSec={totalRealSec:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved}");
+                Log.D("Exporter", $"nominalFps={frameRate} activeFps={activeFps:F1} activeDuration={activeDurationSec:F3}s totalDuration={trueVidDuration:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved} audioDurationSec={audioDurationSec:F3}s");
 
-                MuxWithFfmpegStreaming(outputPath, h264Temp, audioPackets, accurateFps, rawFormat);
+                MuxWithFfmpegStreaming(outputPath, mkvTemp, audioPackets, rawFormat);
+
+                // Gera thumbnail (320x180 JPEG) a partir do MP4 final
+                try { GenerateThumbnail(outputPath); }
+                catch (Exception ex) { Log.W("Exporter", $"Thumbnail generation failed: {ex.Message}"); }
             }
             finally
             {
-                try { File.Delete(h264Temp); } catch { }
+                try { File.Delete(mkvTemp); } catch { }
             }
 
             return outputPath;
@@ -135,73 +117,457 @@ public sealed class ClipExporter : IDisposable
         }
     }
 
-    internal static double CalculateEffectiveFps(List<EncodedPacket> videoPackets, int nominalFps)
+    internal static List<EncodedPacket> GenerateSilentAacFrames(int count, TimeSpan startPts, int sampleRate)
     {
-        if (videoPackets.Count < 2)
-            return nominalFps;
+        var frames = new List<EncodedPacket>(count);
+        long durTicks = 1024L * 10_000_000 / sampleRate;
+        var dur = TimeSpan.FromTicks(durTicks);
 
-        // Average inter-frame interval from non-gap consecutive frames
-        double totalInterval = 0;
-        int intervalCount = 0;
-        for (int i = 0; i < videoPackets.Count - 1; i++)
+        for (int i = 0; i < count; i++)
         {
-            var interval = (videoPackets[i + 1].Pts - videoPackets[i].Pts).TotalSeconds;
-            if (interval > 0.050) continue; // alt-tab gap, skip
-            totalInterval += interval;
-            intervalCount++;
+            int frameLen = 9;
+            var data = new byte[frameLen];
+
+            int profile = 1; // AAC-LC
+            int sampleRateIdx = sampleRate switch
+            {
+                96000 => 0, 88200 => 1, 64000 => 2, 48000 => 3,
+                44100 => 4, 32000 => 5, 24000 => 6, 22050 => 7,
+                16000 => 8, 12000 => 9, 11025 => 10, 8000 => 11, _ => 3
+            };
+            int chanConfig = 2;
+
+            int h1 = 0xFFF1; // syncword=0xFFF, ID=0(MPEG4), layer=0, protection_absent=1
+            int h2 = (profile << 6) | (sampleRateIdx << 2) | (chanConfig >> 2);
+            int h3 = ((chanConfig & 3) << 6) | ((frameLen >> 11) & 0x03);
+            int h4 = (frameLen >> 3) & 0xFF;
+            int h5 = ((frameLen & 7) << 5) | 0x1F;
+            int h6 = 0xFC;
+
+            data[0] = (byte)(h1 >> 8);
+            data[1] = (byte)(h1 & 0xFF);
+            data[2] = (byte)h2;
+            data[3] = (byte)h3;
+            data[4] = (byte)h4;
+            data[5] = (byte)h5;
+            data[6] = (byte)h6;
+            data[7] = 0;
+            data[8] = 0;
+
+            var pts = startPts + TimeSpan.FromTicks(durTicks * i);
+            frames.Add(new EncodedPacket(data, MediaType.Audio, pts, dur, false));
         }
-
-        if (intervalCount == 0)
-            return nominalFps;
-
-        double avgInterval = totalInterval / intervalCount;
-        double fps = 1.0 / avgInterval;
-
-        if (fps < 1 || fps > nominalFps * 3)
-            return nominalFps;
-
-        return fps;
+        return frames;
     }
 
-    private static void WriteH264File(string path, List<EncodedPacket> packets)
+    // ── EBML/Matroska helpers ─────────────────────────────────────────
+
+    private static void WriteEbmlMaster(BinaryWriter bw, uint id, Action<BinaryWriter> body)
+    {
+        var ms = new MemoryStream();
+        using (var inner = new BinaryWriter(ms))
+        {
+            body(inner);
+        }
+        var data = ms.ToArray();
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, (ulong)data.Length);
+        bw.Write(data);
+    }
+
+    private static void WriteEbmlMasterBegin(BinaryWriter bw, uint id)
+    {
+        WriteEbmlId(bw, id);
+        bw.Write((byte)0xFF); // 1-byte VINT → all 7 data bits = 1 = unknown size
+    }
+
+    private static void WriteEbmlId(BinaryWriter bw, uint id)
+    {
+        if (id >= 0x10000000) bw.Write((byte)(id >> 24));
+        if (id >= 0x100000) bw.Write((byte)(id >> 16));
+        if (id >= 0x100) bw.Write((byte)(id >> 8));
+        bw.Write((byte)id);
+    }
+
+    // ── PTS/AV Sync Helpers ────────────────────────────────────────────
+
+    internal static List<(TimeSpan start, TimeSpan end)> GetVideoIntervals(List<EncodedPacket> videoPackets, TimeSpan gapThreshold)
+    {
+        var intervals = new List<(TimeSpan start, TimeSpan end)>();
+        if (videoPackets.Count == 0) return intervals;
+
+        for (int vi = 0; vi < videoPackets.Count; vi++)
+        {
+            var pkt = videoPackets[vi];
+            var s = pkt.Pts;
+            var e = s + pkt.Duration;
+            if (intervals.Count == 0 || s - intervals[^1].end > gapThreshold)
+                intervals.Add((s, e));
+            else
+                intervals[^1] = (intervals[^1].start, e);
+        }
+
+        return intervals;
+    }
+
+    internal static List<EncodedPacket> FilterAudioByIntervals(List<EncodedPacket> audioPackets, List<(TimeSpan start, TimeSpan end)> intervals)
+    {
+        if (audioPackets.Count == 0 || intervals.Count == 0) return audioPackets;
+
+        int intervalIdx = 0;
+        var result = new List<EncodedPacket>(audioPackets.Count);
+        foreach (var pkt in audioPackets)
+        {
+            while (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].end)
+                intervalIdx++;
+            if (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].start)
+                result.Add(pkt);
+        }
+
+        return result;
+    }
+
+    internal static double ComputeIntervalsDuration(List<(TimeSpan start, TimeSpan end)> intervals)
+    {
+        double total = 0;
+        foreach (var (start, end) in intervals)
+            total += (end - start).TotalSeconds;
+        return total;
+    }
+
+    internal static List<EncodedPacket> TrimAudioEnd(List<EncodedPacket> audioPackets, TimeSpan lastVideoPts)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+
+        int trimAt = audioPackets.Count;
+        for (int i = 0; i < audioPackets.Count; i++)
+        {
+            if (audioPackets[i].Pts + audioPackets[i].Duration > lastVideoPts)
+            {
+                trimAt = i;
+                break;
+            }
+        }
+
+        return trimAt < audioPackets.Count ? audioPackets.GetRange(0, trimAt) : audioPackets;
+    }
+
+    internal static List<EncodedPacket> PadAudioWithSilence(List<EncodedPacket> audioPackets, double activeDurationSec, int sampleRate)
+    {
+        if (audioPackets.Count == 0 || activeDurationSec <= 0) return audioPackets;
+
+        double audioDurSec = 0;
+        foreach (var pkt in audioPackets)
+            audioDurSec += pkt.Duration.TotalSeconds;
+        double gapSec = activeDurationSec - audioDurSec;
+
+        if (gapSec <= 0.010) return audioPackets;
+
+        int silentFrames = (int)Math.Ceiling(gapSec * sampleRate / 1024.0);
+        var silent = GenerateSilentAacFrames(silentFrames, audioPackets[^1].Pts + audioPackets[^1].Duration, sampleRate);
+        audioPackets.AddRange(silent);
+        return audioPackets;
+    }
+
+    private static void WriteEbmlVint(BinaryWriter bw, ulong value)
+    {
+        if (value < 0x7F) { bw.Write((byte)(0x80 | value)); return; }
+        if (value < 0x3FFF) { bw.Write((byte)(0xC0 | (value >> 8))); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x1FFFFF) { bw.Write((byte)(0xE0 | (value >> 16))); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x0FFFFFFF) { bw.Write((byte)(0xF0 | (value >> 24))); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x07FFFFFFFF) { bw.Write((byte)(0xF8 | (value >> 32))); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        bw.Write((byte)(0xFC | (value >> 40)));
+        bw.Write((byte)((value >> 32) & 0xFF));
+        bw.Write((byte)((value >> 24) & 0xFF));
+        bw.Write((byte)((value >> 16) & 0xFF));
+        bw.Write((byte)((value >> 8) & 0xFF));
+        bw.Write((byte)(value & 0xFF));
+    }
+
+    private static void WriteEbmlUnsignedInt(BinaryWriter bw, uint id, ulong value)
+    {
+        WriteEbmlId(bw, id);
+        if (value <= 0xFF) { WriteEbmlVint(bw, 1); bw.Write((byte)value); }
+        else if (value <= 0xFFFF) { WriteEbmlVint(bw, 2); var b = BitConverter.GetBytes((ushort)value); Array.Reverse(b); bw.Write(b); }
+        else if (value <= 0xFFFFFFFF) { WriteEbmlVint(bw, 4); var b = BitConverter.GetBytes((uint)value); Array.Reverse(b); bw.Write(b); }
+        else { WriteEbmlVint(bw, 8); var b = BitConverter.GetBytes(value); Array.Reverse(b); bw.Write(b); }
+    }
+
+    private static void WriteEbmlFloat(BinaryWriter bw, uint id, double value)
+    {
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, 8);
+        var b = BitConverter.GetBytes(value);
+        Array.Reverse(b);
+        bw.Write(b);
+    }
+
+    private static void WriteEbmlString(BinaryWriter bw, uint id, string value)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, (ulong)bytes.Length);
+        bw.Write(bytes);
+    }
+
+    private static void WriteEbmlBinary(BinaryWriter bw, uint id, byte[] data)
+    {
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, (ulong)data.Length);
+        bw.Write(data);
+    }
+
+    private static void WriteSimpleBlock(BinaryWriter bw, int trackNumber, int timecode, bool keyframe, byte[] data, int dataLength)
+    {
+        int payloadSize = 0;
+        int trackSize = trackNumber < 0x7F ? 1 : 2;
+        payloadSize += trackSize + 2 + 1 + dataLength; // track + timecode + flags + data
+        WriteEbmlId(bw, 0xA3);
+        WriteEbmlVint(bw, (ulong)payloadSize);
+
+        if (trackNumber < 0x7F)
+            bw.Write((byte)(0x80 | trackNumber));
+        else
+        {
+            bw.Write((byte)(0xC0 | (trackNumber >> 8)));
+            bw.Write((byte)(trackNumber & 0xFF));
+        }
+
+        var tcBytes = BitConverter.GetBytes((short)timecode);
+        Array.Reverse(tcBytes);
+        bw.Write(tcBytes);
+
+        byte flags = 0;
+        if (keyframe) flags |= 0x80;
+        flags |= 0x01;
+        bw.Write(flags);
+
+        bw.Write(data, 0, dataLength);
+    }
+
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+        using var bw = new BinaryWriter(fs);
+
+        // EBML Header (known-size — ffmpeg must be able to skip it cleanly)
+        WriteEbmlMaster(bw, 0x1A45DFA3, (w) =>
+        {
+            WriteEbmlUnsignedInt(w, 0x4286, 1);  // EBMLVersion
+            WriteEbmlUnsignedInt(w, 0x42F7, 1);  // EBMLReadVersion
+            WriteEbmlUnsignedInt(w, 0x42F2, 4);  // EBMLMaxIDLength
+            WriteEbmlUnsignedInt(w, 0x42F3, 8);  // EBMLMaxSizeLength
+            WriteEbmlString(w, 0x4282, "matroska"); // DocType
+            WriteEbmlUnsignedInt(w, 0x4287, 4);  // DocTypeVersion
+            WriteEbmlUnsignedInt(w, 0x4285, 2);  // DocTypeReadVersion
+        });
+
+        // Segment (unknown size — ffmpeg doesn't need it for demux)
+        WriteEbmlMasterBegin(bw, 0x18538067); // Segment
+
+        // ── Info (known-size — required for ffmpeg when Segment has unknown size) ──
+        WriteEbmlMaster(bw, 0x1549A966, (w) =>
+        {
+            WriteEbmlUnsignedInt(w, 0x2AD7B1, 1_000_000); // TimecodeScale (1ms)
+            if (packets.Count >= 2)
+            {
+                double totalSec = (packets[^1].Pts - packets[0].Pts).TotalSeconds + packets[^1].Duration.TotalSeconds;
+                WriteEbmlFloat(w, 0x4489, totalSec);
+            }
+            WriteEbmlString(w, 0x4D80, "DiNho Capture"); // MuxingApp
+            WriteEbmlString(w, 0x5741, "DiNho Capture"); // WritingApp
+        });
+
+        // ── Tracks (known-size) ──
+        WriteEbmlMaster(bw, 0x1654AE6B, (w) =>
+        {
+            WriteEbmlMaster(w, 0xAE, (tw) =>       // TrackEntry
+        {
+            WriteEbmlUnsignedInt(tw, 0xD7, 1);  // TrackNumber
+            WriteEbmlUnsignedInt(tw, 0x73C5, 1); // TrackUID
+            WriteEbmlUnsignedInt(tw, 0x83, 1);  // TrackType (1=video)
+            WriteEbmlUnsignedInt(tw, 0x9A, 0);  // FlagDefault
+            WriteEbmlUnsignedInt(tw, 0x9C, 1);  // FlagLacing
+            WriteEbmlString(tw, 0x86, rawFormat switch
+            {
+                "hevc" => "V_MPEG4/ISO/HEVC",
+                "av1" => "V_AV1",
+                _ => "V_MPEG4/ISO/AVC"
+            }); // CodecID
+
+            // CodecPrivate (avcC for H264, hvcC for HEVC, AV1CodecConfigurationRecord for AV1)
+            if (rawFormat == "h264")
+            {
+                var avcc = ExtractAvccExtradata(packets);
+                if (avcc != null)
+                    WriteEbmlBinary(tw, 0x63A2, avcc);
+            }
+
+            WriteEbmlMaster(tw, 0xE0, (vw) => // Video
+            {
+                WriteEbmlUnsignedInt(vw, 0xB0, packets.Count > 0 ? (uint)packets[0].Width : 1920);
+                WriteEbmlUnsignedInt(vw, 0xBA, packets.Count > 0 ? (uint)packets[0].Height : 1080);
+            });
+        });
+        });
+
+        // ── Clusters ──
+        int clusterSize = 0;
+        const int maxClusterFrames = 1000;
+        long clusterBaseTimecode = 0;
 
         foreach (var pkt in packets)
         {
             if (pkt.Type != MediaType.Video) continue;
-            fs.Write(pkt.Data, 0, pkt.DataLength);
+
+            long ptsMs = pkt.Pts.Ticks / 10_000; // 100ns → ms
+
+            bool startNew = clusterSize == 0 ||
+                            clusterSize >= maxClusterFrames ||
+                            ptsMs - clusterBaseTimecode > 30000 ||
+                            ptsMs - clusterBaseTimecode > short.MaxValue;
+
+            if (startNew)
+            {
+                clusterSize = 0;
+                clusterBaseTimecode = ptsMs;
+                WriteEbmlMasterBegin(bw, 0x1F43B675); // Cluster
+                WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode (absolute ms)
+                clusterSize = 1;
+            }
+            else
+            {
+                clusterSize++;
+            }
+
+            int relTc = (int)(ptsMs - clusterBaseTimecode);
+            WriteSimpleBlock(bw, 1, relTc, pkt.IsKeyFrame, pkt.Data, pkt.DataLength);
         }
+    }
+
+    internal static byte[]? ExtractAvccExtradata(List<EncodedPacket> packets)
+    {
+        // Scan video packets for SPS (type 7) and PPS (type 8) NAL units
+        byte[]? sps = null, pps = null;
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+            var data = pkt.Data;
+            int len = pkt.DataLength;
+            int i = 0;
+            while (i < len - 3)
+            {
+                // Find startcode
+                if (!(data[i] == 0 && data[i + 1] == 0)) { i++; continue; }
+                int scLen = (i + 3 < len && data[i + 2] == 1) ? 3 :
+                            (i + 4 < len && data[i + 2] == 0 && data[i + 3] == 1) ? 4 : 0;
+                if (scLen == 0) { i++; continue; }
+
+                int nalStart = i + scLen;
+                if (nalStart >= len) break;
+                int nalType = data[nalStart] & 0x1F;
+
+                // Find next startcode to get NAL length
+                int nextSC = -1;
+                for (int j = nalStart + 1; j < len - 2; j++)
+                {
+                    if (data[j] != 0) continue;
+                    if (data[j + 1] != 0) continue;
+                    if (j + 2 < len && data[j + 2] == 1) { nextSC = j; break; }
+                    if (j + 3 < len && data[j + 2] == 0 && data[j + 3] == 1) { nextSC = j; break; }
+                }
+                int nalLen = nextSC > 0 ? nextSC - nalStart : len - nalStart;
+
+                if (nalType == 7 && sps == null)
+                {
+                    sps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, sps, 0, nalLen);
+                }
+                else if (nalType == 8 && pps == null)
+                {
+                    pps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, pps, 0, nalLen);
+                }
+
+                i = nextSC > 0 ? nextSC : len;
+            }
+            if (sps != null && pps != null) break;
+        }
+
+        if (sps == null || pps == null) return null;
+
+        // Build AVCDecoderConfigurationRecord (avcC)
+        // aligned(8) class AVCDecoderConfigurationRecord {
+        //   unsigned int(8) configurationVersion = 1;
+        //   unsigned int(8) AVCProfileIndication;
+        //   unsigned int(8) profile_compatibility;
+        //   unsigned int(8) AVCLevelIndication;
+        //   bit(6) reserved = '111111'b;
+        //   unsigned int(2) lengthSizeMinusOne = 3; // 4-byte NAL length
+        //   bit(3) reserved = '111'b;
+        //   unsigned int(5) numOfSequenceParameterSets = 1;
+        //   SPS data...
+        //   unsigned int(8) numOfPictureParameterSets = 1;
+        //   PPS data...
+        // }
+        int avccLen = 5 + 1 + 2 + sps.Length + 1 + 2 + pps.Length;
+        var avcc = new byte[avccLen];
+        avcc[0] = 1; // configurationVersion
+        avcc[1] = sps[1]; // AVCProfileIndication
+        avcc[2] = sps[2]; // profile_compatibility
+        avcc[3] = sps[3]; // AVCLevelIndication
+        avcc[4] = 0xFC | 3; // reserved(111111) | lengthSizeMinusOne(3)
+        avcc[5] = 0xE0 | 1; // numOfSequenceParameterSets = 1
+        avcc[6] = (byte)(sps.Length >> 8);
+        avcc[7] = (byte)(sps.Length & 0xFF);
+        System.Buffer.BlockCopy(sps, 0, avcc, 8, sps.Length);
+        int off = 8 + sps.Length;
+        avcc[off] = 1; // numOfPictureParameterSets = 1
+        avcc[off + 1] = (byte)(pps.Length >> 8);
+        avcc[off + 2] = (byte)(pps.Length & 0xFF);
+        System.Buffer.BlockCopy(pps, 0, avcc, off + 3, pps.Length);
+
+        return avcc;
     }
 
     private static void MuxWithFfmpegStreaming(
         string outputPath,
-        string h264Path,
+        string videoPath,
         List<EncodedPacket> audioPackets,
-        double frameRate,
         string rawFormat = "h264")
     {
         bool hasAudio = audioPackets.Count > 0;
         bool isAac = hasAudio && IsAdts(audioPackets[0]);
 
-        var fmtFlag = rawFormat switch { "hevc" => "hevc", "av1" => "av1", _ => "h264" };
         var args = $"-y -loglevel warning " +
-                   $"-f {fmtFlag} -framerate {frameRate.ToString("F3", CultureInfo.InvariantCulture)} -i \"{h264Path}\"";
+                   $"-f matroska -i \"{videoPath}\"";
 
-        // Audio goes to ffmpeg's stdin (pipe:0 is video file, we use audio as second input via pipe)
-        // ffmpeg maps video file as input 0 and stdin as input 1
-        args += hasAudio
-            ? (isAac ? " -f aac -i pipe:0" : " -f s16le -ar 48000 -ac 2 -i pipe:0")
-            : "";
+        var audioInput = "";
+        var audioOpts = "";
+        if (hasAudio)
+        {
+            if (isAac)
+            {
+                audioInput = " -f aac -i pipe:0";
+                audioOpts = " -c:a copy";
+            }
+            else
+            {
+                audioInput = " -f s16le -ar 48000 -ac 2 -i pipe:0";
+                audioOpts = " -c:a aac -b:a 192k";
+            }
+        }
 
-        args += $" -map 0:v:0" +
+        args += audioInput +
+                $" -map 0:v:0" +
                 (hasAudio ? " -map 1:a:0" : "") +
                 $" -c:v copy" +
-                (hasAudio ? (isAac ? " -c:a copy" : " -c:a aac -b:a 192k") : "") +
-                $" -fflags +genpts -movflags +faststart \"{outputPath}\"";
+                audioOpts +
+                $" -metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\"" +
+                $" -movflags +faststart \"{outputPath}\"";
 
-        Console.Error.WriteLine($"[Exporter] ffmpeg mux: {args.Replace("\"", "'")}");
+        Log.D("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
 
         using var proc = new Process
         {
@@ -223,7 +589,7 @@ public sealed class ClipExporter : IDisposable
         };
 
         proc.Start();
-        try { proc.PriorityClass = ProcessPriorityClass.Idle; } catch { }
+
         proc.BeginErrorReadLine();
 
         if (hasAudio)
@@ -273,7 +639,7 @@ public sealed class ClipExporter : IDisposable
         }
 
         if (!string.IsNullOrWhiteSpace(finalStderr))
-            Console.Error.WriteLine($"[Exporter] ffmpeg stderr: {finalStderr.Trim()}");
+            Log.I("Exporter", $"ffmpeg stderr: {finalStderr.Trim()}");
     }
 
     private static void StreamPcmAsS16Le(List<EncodedPacket> packets, Stream output)
@@ -409,6 +775,37 @@ public sealed class ClipExporter : IDisposable
         }
 
         return outputPath;
+    }
+
+    internal static void GenerateThumbnail(string videoPath)
+    {
+        var thumbPath = Path.ChangeExtension(videoPath, ".thumb.jpg");
+
+        using var proc = new Process
+        {
+            StartInfo = new ProcessStartInfo("ffmpeg")
+            {
+                Arguments = $"-y -loglevel warning -i \"{videoPath}\" -vframes 1 -s 320x180 -f image2 \"{thumbPath}\"",
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        proc.Start();
+        proc.BeginErrorReadLine();
+
+        if (!proc.WaitForExit(30_000))
+        {
+            proc.Kill();
+            throw new InvalidOperationException("ffmpeg thumbnail timed out");
+        }
+
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"ffmpeg thumbnail exit code {proc.ExitCode}");
+
+        if (File.Exists(thumbPath))
+            Log.I("Exporter", $"Thumbnail: {thumbPath} ({new FileInfo(thumbPath).Length / 1024} KB)");
     }
 
     private static string DetectFastestCodec()

@@ -90,7 +90,7 @@ public sealed class HybridCaptureSource : ICaptureSource
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Hybrid] PrintWindow init falhou: {ex.Message}");
+                Log.W("Hybrid", $"PrintWindow init falhou: {ex.Message}");
                 _printWindow = null;
             }
         }
@@ -101,7 +101,7 @@ public sealed class HybridCaptureSource : ICaptureSource
         // Choose initial mode
         _currentMode = PickDesiredMode();
 
-        Console.WriteLine($"[Hybrid] Inicializado: DXGI({_fullWidth}x{_fullHeight}) + " +
+        Log.I("Hybrid", $"Inicializado: DXGI({_fullWidth}x{_fullHeight}) + " +
             $"PrintWindow={(_printWindow != null ? "ok" : "n/a")} " +
             $"modo={_currentMode}");
     }
@@ -303,7 +303,7 @@ public sealed class HybridCaptureSource : ICaptureSource
         _currentMode = newMode;
         _lastActiveMode = oldMode;
 
-        Console.WriteLine($"[Hybrid] Modo: {oldMode} → {newMode}");
+        Log.I("Hybrid", $"Modo: {oldMode} → {newMode}");
     }
 
     private void SaveTransitionFrame()

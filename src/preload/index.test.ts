@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC } from '@shared/channels'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   ipcRenderer: {
@@ -746,7 +746,9 @@ describe('preload API bridge', () => {
     })
 
     it('clipsGetVideoUrl returns clip-video:// URL for Windows path', () => {
-      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe('clip-video://file?path=C%3A%5CUsers%5Ctest%5Cclip.mp4')
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe(
+        'clip-video://file?path=C%3A%5CUsers%5Ctest%5Cclip.mp4',
+      )
     })
 
     it('clipsGetVideoUrl handles already normalized path', () => {
@@ -754,7 +756,9 @@ describe('preload API bridge', () => {
     })
 
     it('clipsGetVideoUrl handles spaces in path', () => {
-      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe('clip-video://file?path=C%3A%5CUsers%5Ctest%5Cmy%20clip.mp4')
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe(
+        'clip-video://file?path=C%3A%5CUsers%5Ctest%5Cmy%20clip.mp4',
+      )
     })
   })
 })

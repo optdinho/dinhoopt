@@ -143,6 +143,10 @@ export function parsePeImports(buffer: Buffer): ImportDescriptor[] {
       continue
     }
     const dllName = readCString(buffer, nameRaw)
+    if (!dllName) {
+      descOffset += 20
+      continue
+    }
 
     // Use OriginalFirstThunk if non-zero, else FirstThunk
     const thunkRva = originalFirstThunk !== 0 ? originalFirstThunk : firstThunk

@@ -16,15 +16,20 @@ public sealed class FfmpegAacEncoder : IDisposable
         });
 
     private int _sampleRate;
+    private int _channels;
     private bool _initialized, _disposed;
     private Thread? _readerThread;
     private CancellationTokenSource? _readerCts;
     private long _outputFrameIndex;
     private byte[]? _pcmBuf;
+    private long _pcmBytesWritten;
+    private int _pcmWriteErrors;
+    private int _totalAacFrames;
 
     public void Initialize(int sampleRate, int channels, int bitrate = 128000)
     {
         _sampleRate = sampleRate;
+        _channels = channels;
 
         _process = new Process
         {
@@ -41,20 +46,20 @@ public sealed class FfmpegAacEncoder : IDisposable
             }
         };
         _process.Start();
-        try { _process.PriorityClass = ProcessPriorityClass.Idle; } catch { }
+        try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
 
         // Read stderr asynchronously to prevent pipe deadlock
         _process.BeginErrorReadLine();
         _process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrEmpty(e.Data))
-                Console.Error.WriteLine($"[ffmpeg-aac-stderr] {e.Data}");
+                Log.D("ffmpeg-aac-stderr", e.Data);
         };
 
         _stdin = _process.StandardInput.BaseStream;
         _stdout = _process.StandardOutput.BaseStream;
 
-        Console.WriteLine($"[FfmpegAacEncoder] Initialized (ffmpeg PID={_process.Id})");
+        Log.I("FfmpegAacEncoder", $"Initialized (ffmpeg PID={_process.Id})");
 
         _readerCts = new CancellationTokenSource();
         _readerThread = new Thread(() => ReaderLoop(_readerCts.Token))
@@ -73,13 +78,32 @@ public sealed class FfmpegAacEncoder : IDisposable
         if (_pcmBuf == null || _pcmBuf.Length < byteLen)
             _pcmBuf = new byte[byteLen * 2];
         System.Buffer.BlockCopy(pcmSamples, 0, _pcmBuf, 0, byteLen);
-        try { _stdin!.Write(_pcmBuf, 0, byteLen); _stdin.Flush(); } catch { }
+        try
+        {
+            _stdin!.Write(_pcmBuf, 0, byteLen);
+            _stdin.Flush();
+            _pcmBytesWritten += byteLen;
+        }
+        catch (Exception ex)
+        {
+            _pcmWriteErrors++;
+            Log.E("FfmpegAacEncoder", $"PCM write #{_pcmWriteErrors} failed ({byteLen} bytes, totalWrote={_pcmBytesWritten}): {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     public EncodedPacket? TryReadPacket()
     {
         _outputChannel.Reader.TryRead(out var pkt);
         return pkt;
+    }
+
+    public void LogStats()
+    {
+        Log.I("FfmpegAacEncoder", $"STATS: pcmBytesWritten={_pcmBytesWritten} aacFrames={_totalAacFrames} pcmWriteErrors={_pcmWriteErrors}");
+        int ch = _channels > 0 ? _channels : 2;
+        long expectedAacFrames = _pcmBytesWritten / 4 / ch / 1024;
+        if (_totalAacFrames > 0 && expectedAacFrames > 0 && _totalAacFrames < expectedAacFrames * 0.95)
+            Log.W("FfmpegAacEncoder", $"AAC frames ({_totalAacFrames}) << expected ({expectedAacFrames}) — PCM data may be lost");
     }
 
     public int FlushAndDrain(List<EncodedPacket> outBuffer)
@@ -114,7 +138,7 @@ public sealed class FfmpegAacEncoder : IDisposable
 
             if (read == 0)
             {
-                Console.WriteLine($"[FfmpegAacEncoder] ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames})");
+                Log.I("FfmpegAacEncoder", $"ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames})");
                 break;
             }
 
@@ -154,8 +178,9 @@ public sealed class FfmpegAacEncoder : IDisposable
             }
 
             totalFrames += framesInChunk;
+            _totalAacFrames = totalFrames;
             if (totalReads <= 3 || framesInChunk > 0)
-                Console.WriteLine($"[FfmpegAacEncoder] ReaderLoop: read={read} bytes framesInChunk={framesInChunk} totalFrames={totalFrames}");
+                Log.D("FfmpegAacEncoder", $"ReaderLoop: read={read} bytes framesInChunk={framesInChunk} totalFrames={totalFrames}");
 
             offset = total - pos;
             if (offset > 0 && pos < total)

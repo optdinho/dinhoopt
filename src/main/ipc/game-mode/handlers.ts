@@ -1,6 +1,7 @@
 import { IPC } from '@shared/channels'
 import type { GameModeAuditReport, GameModeConfig, GameModeProgress } from '@shared/types'
 import { ipcMain } from 'electron'
+import { loadClipsConfig } from '../../services/clips-config-store'
 import {
   isDetectorRunning,
   startGameDetector,
@@ -11,9 +12,8 @@ import type { GameAutoEvent } from '../../services/game-detector'
 import { runGameModeAudit } from '../../services/game-mode-audit'
 import { getLogger } from '../../services/logger.service'
 import { getSettings } from '../../services/settings-store'
+import { startClipCapture } from '../clips-engine-connection'
 import type { WindowGetter } from '../index'
-import { loadClipsConfig } from '../../services/clips-config-store'
-import { startClipCapture } from '../clips.ipc'
 import { activateGameMode } from './activate'
 import { deactivateGameMode } from './deactivate'
 import { readSnapshot } from './snapshot'

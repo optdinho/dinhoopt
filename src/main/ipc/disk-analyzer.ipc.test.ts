@@ -1207,3 +1207,339 @@ describe('disk:repair:chkdsk spawn event handling', () => {
     expect(result.log).toContain('stderr data')
   })
 })
+
+describe('disk:repair:dism additional summary branches', () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    mockIsAdmin.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: origPlatform.value, configurable: true })
+  })
+
+  it('handles "No component store corruption detected" message', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:dism')
+    const promise = handler()
+
+    stdout.emit('data', Buffer.from('No component store corruption detected — image is healthy.'))
+    child.emit('close', 0)
+
+    const result = (await promise) as { summary: string }
+    expect(result.summary).toContain('No component store corruption detected')
+  })
+
+  it('handles "The restore operation completed successfully" message', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:dism')
+    const promise = handler()
+
+    stdout.emit('data', Buffer.from('The restore operation completed successfully.'))
+    child.emit('close', 0)
+
+    const result = (await promise) as { summary: string }
+    expect(result.summary).toContain('successfully repaired')
+  })
+
+  it('sends progress to window during DISM even when progress re-sent', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    const mockWin = mockWindow()
+    registerDiskAnalyzerIpc(() => mockWin as never)
+    const handler = getHandler('disk:repair:dism')
+    const promise = handler()
+
+    stdout.emit('data', Buffer.from('[==      25.0%              ]'))
+    stdout.emit('data', Buffer.from('[==      25.0%              ]'))
+    child.emit('close', 0)
+
+    await promise
+    const progressCalls = mockSend.mock.calls.filter((c: unknown[]) => c[0] === 'disk:repair:progress')
+    // 25% + close = 2 calls (duplicate 25% is skipped)
+    expect(progressCalls.length).toBe(2)
+  })
+})
+
+describe('disk:repair:chkdsk additional summary branches', () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    mockIsAdmin.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: origPlatform.value, configurable: true })
+  })
+
+  it('handles code=1 without matching keywords — falls to code===1 branch', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:chkdsk')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('Some generic output'))
+    child.emit('close', 1)
+
+    const result = (await promise) as { success: boolean; summary: string; exitCode: number }
+    expect(result.success).toBe(true)
+    expect(result.exitCode).toBe(1)
+    expect(result.summary).toContain('Errors were found and fixed successfully')
+  })
+
+  it('handles code=2 without matching keywords — falls to code===2 branch', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:chkdsk')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('Some generic output'))
+    child.emit('close', 2)
+
+    const result = (await promise) as { success: boolean; summary: string; exitCode: number }
+    expect(result.success).toBe(true)
+    expect(result.exitCode).toBe(2)
+    expect(result.summary).toContain('CHKDSK completed disk cleanup')
+  })
+
+  it('handles code=0 without matching keywords — falls to code===0 branch', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:chkdsk')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('Some generic output'))
+    child.emit('close', 0)
+
+    const result = (await promise) as { success: boolean; summary: string; exitCode: number }
+    expect(result.success).toBe(true)
+    expect(result.exitCode).toBe(0)
+    expect(result.summary).toContain('CHKDSK completed successfully')
+  })
+
+  it('handles progress percentage via "%" pattern', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    const mockWin = mockWindow()
+    registerDiskAnalyzerIpc(() => mockWin as never)
+    const handler = getHandler('disk:repair:chkdsk')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('Stage 1: 42% complete'))
+    child.emit('close', 0)
+
+    await promise
+    expect(mockSend).toHaveBeenCalledWith(
+      'disk:repair:progress',
+      expect.objectContaining({ tool: 'chkdsk', percent: 42 }),
+    )
+  })
+})
+
+describe('resolveRootPath edge cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns empty node for multi-character letter', async () => {
+    const result = await analyzeDisk('AB')
+    expect(result).toEqual({ name: '', path: '', size: 0, children: [] })
+  })
+
+  it('returns empty node for numeric string', async () => {
+    const result = await analyzeDisk('123')
+    expect(result).toEqual({ name: '', path: '', size: 0, children: [] })
+  })
+})
+
+describe('collectFileTypes additional paths', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function makeEntry(name: string, isDir: boolean) {
+    return { name, isDirectory: () => isDir }
+  }
+
+  it('recurses into subdirectories', async () => {
+    if (process.platform !== 'win32') return
+    mockReaddir
+      .mockResolvedValueOnce([makeEntry('subdir', true)])
+      .mockResolvedValueOnce([makeEntry('nested.txt', false)])
+    mockStat.mockResolvedValue({ isDirectory: () => false, size: 512, mtime: new Date(), birthtime: new Date() })
+
+    const result = await getFileTypes('C')
+    expect(result).toHaveLength(1)
+    expect(result[0]!.extension).toBe('.txt')
+    expect(result[0]!.fileCount).toBe(1)
+  })
+
+  it('handles entries with no extension', async () => {
+    if (process.platform !== 'win32') return
+    mockReaddir.mockResolvedValueOnce([makeEntry('README', false)])
+    mockStat.mockResolvedValue({ isDirectory: () => false, size: 256, mtime: new Date(), birthtime: new Date() })
+
+    const result = await getFileTypes('C')
+    expect(result).toHaveLength(1)
+    expect(result[0]!.extension).toBe('(no extension)')
+  })
+
+  it('uses uppercase extension for grouping', async () => {
+    if (process.platform !== 'win32') return
+    mockReaddir.mockResolvedValueOnce([makeEntry('file.TXT', false), makeEntry('file2.txt', false)])
+    mockStat
+      .mockResolvedValueOnce({ isDirectory: () => false, size: 100, mtime: new Date(), birthtime: new Date() })
+      .mockResolvedValueOnce({ isDirectory: () => false, size: 200, mtime: new Date(), birthtime: new Date() })
+
+    const result = await getFileTypes('C')
+    expect(result).toHaveLength(1)
+    expect(result[0]!.extension).toBe('.txt')
+    expect(result[0]!.totalSize).toBe(300)
+    expect(result[0]!.fileCount).toBe(2)
+  })
+})
+
+describe('quickSize edge cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function makeEntry(name: string, isDir: boolean) {
+    return { name, isDirectory: () => isDir }
+  }
+
+  it('skips subdirectories in quickSize calculation', async () => {
+    if (process.platform !== 'win32') return
+
+    mockReaddir
+      .mockResolvedValueOnce([makeEntry('d1', true)])
+      .mockResolvedValueOnce([makeEntry('d2', true)])
+      .mockResolvedValueOnce([makeEntry('d3', true)])
+      .mockResolvedValueOnce([makeEntry('subdir', true), makeEntry('file.txt', false)])
+
+    mockStat.mockReset()
+    mockStat.mockImplementation((filePath: string) => {
+      const name = filePath.split(/[/\\]/).pop()
+      if (name === 'subdir') {
+        return Promise.resolve({ isDirectory: () => true, size: 0, mtime: new Date(), birthtime: new Date() })
+      }
+      return Promise.resolve({ isDirectory: () => false, size: 512, mtime: new Date(), birthtime: new Date() })
+    })
+
+    const result = await analyzeDisk('C')
+    expect(result.size).toBe(512)
+  })
+
+  it('handles stat failure during quickSize', async () => {
+    if (process.platform !== 'win32') return
+
+    mockReaddir
+      .mockResolvedValueOnce([makeEntry('d1', true)])
+      .mockResolvedValueOnce([makeEntry('d2', true)])
+      .mockResolvedValueOnce([makeEntry('d3', true)])
+      .mockResolvedValueOnce([makeEntry('bad.txt', false)])
+
+    mockStat.mockReset()
+    mockStat.mockRejectedValue(new Error('stat failed'))
+
+    const result = await analyzeDisk('C')
+    // stat failure silently returns 0 for that entry in quickSize
+    expect(result.size).toBe(0)
+  })
+
+  it('handles readdir failure during quickSize', async () => {
+    if (process.platform !== 'win32') return
+
+    mockReaddir
+      .mockResolvedValueOnce([makeEntry('d1', true)])
+      .mockResolvedValueOnce([makeEntry('d2', true)])
+      .mockResolvedValueOnce([makeEntry('d3', true)])
+      .mockRejectedValueOnce(new Error('access denied'))
+
+    const result = await analyzeDisk('C')
+    // quickSize returns 0 on readdir failure
+    expect(result.size).toBe(0)
+  })
+})
+
+describe('sendRepairProgress with destroyed window', () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    mockIsAdmin.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: origPlatform.value, configurable: true })
+  })
+
+  it('SFC does not send progress when window is destroyed', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    const destroyedWin = { isDestroyed: () => true, webContents: { send: mockSend } }
+    registerDiskAnalyzerIpc(() => destroyedWin as never)
+    const handler = getHandler('disk:repair:sfc')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('Verification 50% complete.'))
+    child.emit('close', 0)
+
+    await promise
+    // Only the close "done" message would attempt to send (but window destroyed)
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('DISM does not send progress when window is destroyed', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    const destroyedWin = { isDestroyed: () => true, webContents: { send: mockSend } }
+    registerDiskAnalyzerIpc(() => destroyedWin as never)
+    const handler = getHandler('disk:repair:dism')
+    const promise = handler()
+
+    stdout.emit('data', Buffer.from('[==      50.0%              ]'))
+    child.emit('close', 0)
+
+    await promise
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('CHKDSK does not send progress when window is destroyed', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    const destroyedWin = { isDestroyed: () => true, webContents: { send: mockSend } }
+    registerDiskAnalyzerIpc(() => destroyedWin as never)
+    const handler = getHandler('disk:repair:chkdsk')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('42 percent complete'))
+    child.emit('close', 0)
+
+    await promise
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+})

@@ -1761,7 +1761,6 @@ export interface ClipsConfig {
   gameVolume?: number
   /** Volume do microfone no clip (0.0 a 2.0, default 1.0) */
   micVolume?: number
-  pushToTalkKey?: number
   selectedAudioSessions: number[]
   useExcludeMode: boolean
   excludeProcessId: number

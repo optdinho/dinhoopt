@@ -348,9 +348,7 @@ describe('ClipsPage', () => {
     showSettings()
     await screen.findByText('recordingQuality')
     screen.getByText('Alta').click()
-    expect(mockSetConfig).toHaveBeenCalledWith(
-      expect.objectContaining({ cq: 20, maxrateKbps: 40000 })
-    )
+    expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ cq: 20, maxrateKbps: 40000 }))
   })
 
   it('renders force software toggle', async () => {

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -35,9 +36,6 @@ public sealed class FfmpegEncoder : IEncoder
 
     private GpuVideoConverter? _gpuConverter;
     private ID3D11Texture2D? _nv12Staging;
-    private ID3D11Texture2D? _inputCopy;
-    private Format _inputCopyFormat;
-    private int _inputCopyW, _inputCopyH;
     private int _stagingW, _stagingH;
 
     private readonly Queue<EncodedPacket> _pendingOutputs = new();
@@ -51,16 +49,15 @@ public sealed class FfmpegEncoder : IEncoder
     private int _cq = 24;
     private int _maxrateKbps = 50000;
     private int _bufsizeKbps = 100000;
-    private int _bframes = 2;
+    private int _bframes = 0;
     private int _lookahead = 4;
     private string _nvencPreset = "p4";
 
     // Reusable NV12 scratch buffer — elimina alocação de 3.1MB no LOH a cada frame
     private byte[]? _nv12Scratch;
 
-    // Real PTS tracking — lock-protected queue because Enqueue (pipeline thread) and Dequeue (reader thread) are different threads
-    private readonly Queue<TimeSpan> _inputPtsQueue = new();
-    private readonly object _ptsQueueLock = new();
+    // Real PTS tracking — ConcurrentQueue because Enqueue (pipeline thread) and Dequeue (reader thread) are different threads
+    private readonly ConcurrentQueue<TimeSpan> _inputPtsQueue = new();
 
     // H.264 parser state
     private byte[]? _pendingBuf;
@@ -223,9 +220,9 @@ public sealed class FfmpegEncoder : IEncoder
         {
             "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
             "libx265" => "-preset ultrafast -tune zerolatency -x265-params no-open-gop=1:bframes=0:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 120 -keyint_min 120 -sc_threshold 0",
-            "hevc_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 120 -keyint_min 120 -sc_threshold 0",
-            "av1_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 120 -keyint_min 120 -sc_threshold 0",
+            "h264_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 30",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 30",
+            "av1_nvenc" => $"-preset {_nvencPreset} -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K {bframesArg} {lookaheadArg} -spatial-aq 1 -temporal-aq 1 -g 60 -keyint_min 30",
             "h264_amf" => $"-quality quality -rc cqp -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)}",
             "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)}",
             _ => "-preset ultrafast -tune zerolatency -threads 1"
@@ -445,9 +442,7 @@ public sealed class FfmpegEncoder : IEncoder
 
         long dur = 10_000_000L / _frameRate;
         // Use real PTS from input queue (pipeline clock) instead of fake CFR _outputFrameIndex * dur
-        bool gotRealPts;
-        TimeSpan realPts;
-        lock (_ptsQueueLock) { gotRealPts = _inputPtsQueue.TryDequeue(out realPts); }
+        bool gotRealPts = _inputPtsQueue.TryDequeue(out var realPts);
         long pts = gotRealPts ? realPts.Ticks : _outputFrameIndex * dur;
         bool key = CheckKeyFrame(data);
 
@@ -491,7 +486,7 @@ public sealed class FfmpegEncoder : IEncoder
         if (nv12 == null) return null;
 
         // Enfileira o PTS real antes de escrever — EmitPacket() vai desenfileirar
-        lock (_ptsQueueLock) { _inputPtsQueue.Enqueue(pts); }
+        _inputPtsQueue.Enqueue(pts);
 
         try
         {
@@ -627,7 +622,7 @@ public sealed class FfmpegEncoder : IEncoder
         }
         _pendingLen = 0;
         _pendingOutputs.Clear();
-        lock (_ptsQueueLock) { _inputPtsQueue.Clear(); }
+        while (_inputPtsQueue.TryDequeue(out _)) { }
 
         while (_outputChannel.Reader.TryRead(out _)) { }
 
@@ -636,8 +631,6 @@ public sealed class FfmpegEncoder : IEncoder
         _gpuConverter = null;
         _nv12Staging?.Dispose();
         _nv12Staging = null;
-        _inputCopy?.Dispose();
-        _inputCopy = null;
         _nv12Scratch = null;
     }
 
@@ -680,12 +673,7 @@ public sealed class FfmpegEncoder : IEncoder
 
         try
         {
-            // Freeze the WGC texture immediately
-            EnsureInputCopy(texture, device);
-            ctx.CopyResource(_inputCopy, texture);
-            ctx.Flush();
-
-            var nv12Tex = _gpuConverter.Convert(_inputCopy);
+            var nv12Tex = _gpuConverter.Convert(texture);
             EnsureStaging(device);
             ctx.CopyResource(_nv12Staging, nv12Tex);
             ctx.Flush();
@@ -704,29 +692,6 @@ public sealed class FfmpegEncoder : IEncoder
             Log.E("FfmpegEncoder", $"GPU convert fail #{_gpuConvertFails}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
-    }
-
-    private void EnsureInputCopy(ID3D11Texture2D texture, ID3D11Device device)
-    {
-        var desc = texture.Description;
-        if (_inputCopy != null && _inputCopyW == desc.Width && _inputCopyH == desc.Height && _inputCopyFormat == desc.Format)
-            return;
-        _inputCopy?.Dispose();
-        _inputCopy = device.CreateTexture2D(new Texture2DDescription
-        {
-            Width = desc.Width,
-            Height = desc.Height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = desc.Format,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.None,
-            CPUAccessFlags = CpuAccessFlags.None,
-        });
-        _inputCopyW = desc.Width;
-        _inputCopyH = desc.Height;
-        _inputCopyFormat = desc.Format;
     }
 
     private void EnsureStaging(ID3D11Device device)
@@ -838,7 +803,6 @@ public sealed class FfmpegEncoder : IEncoder
         _process?.Dispose();
         _gpuConverter?.Dispose();
         _nv12Staging?.Dispose();
-        _inputCopy?.Dispose();
         _nv12Scratch = null;
     }
 }

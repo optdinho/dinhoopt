@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.IO.Pipes;
-using DiNho.Capture.Poc.Logging;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -165,8 +164,8 @@ public sealed class NamedPipeServer : IDisposable
             }
         }, null, 2000, 2000);
 
-        Console.WriteLine($"[NamedPipeServer] Pipe: \\\\.\\pipe\\{PipeName} (protocolo envelope v1)");
-        Console.WriteLine($"[NamedPipeServer) Envelope: {{ \"v\": 1, \"cmd\": \"...\", \"payload\": {{...}} }}");
+        Log.I("NamedPipeServer", $"Pipe: \\\\.\\pipe\\{PipeName} (protocolo envelope v1)");
+        Log.I("NamedPipeServer", $"Envelope: {{ \"v\": 1, \"cmd\": \"...\", \"payload\": {{...}} }}");
 
     }
 

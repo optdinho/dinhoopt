@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DiNho.Capture.Poc.Hotkeys;
@@ -186,13 +187,13 @@ public sealed class ConfigManager : IDisposable
                     config.HotkeyBindings = bindings;
                     config.ReplayTimeSeconds = root.TryGetProperty("ReplayTimeSeconds", out var oldDur)
                         ? oldDur.GetInt32() : 300;
-                    Console.Error.WriteLine("[Config] Migrado formato antigo para bindings dinâmicos");
+                    Log.I("Config", "Migrado formato antigo para bindings dinâmicos");
                     SaveToDisk(config);
                 }
             }
             if (config == null)
             {
-                Console.Error.WriteLine("[Config] Arquivo corrompido, revertendo para defaults");
+                Log.W("Config", "Arquivo corrompido, revertendo para defaults");
                 SaveToDisk(_defaults);
                 return CloneConfig(_defaults);
             }
@@ -259,7 +260,7 @@ public sealed class ConfigManager : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[Config] Erro ao carregar: {ex.Message}, revertendo para defaults");
+            Log.E("Config", $"Erro ao carregar: {ex.Message}, revertendo para defaults");
             return CloneConfig(_defaults);
         }
     }
@@ -287,7 +288,7 @@ public sealed class ConfigManager : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[Config] Erro ao salvar: {ex.Message}");
+            Log.E("Config", $"Erro ao salvar: {ex.Message}");
         }
     }
 

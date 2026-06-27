@@ -10,7 +10,7 @@ export default defineConfig({
     pool: 'threads',
     setupFiles: ['src/test-setup.ts'],
     coverage: {
-      enabled: false,
+      enabled: true,
       provider: 'v8',
       reporter: ['text-summary', 'html', 'lcov'],
       include: ['src/**'],

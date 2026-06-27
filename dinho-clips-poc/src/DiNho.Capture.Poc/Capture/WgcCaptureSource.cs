@@ -1,7 +1,6 @@
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using DiNho.Capture.Poc.Logging;
 using System.Threading;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -84,7 +83,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] QueryInterface<IDXGIDevice> falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"QueryInterface<IDXGIDevice> falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
 
@@ -92,7 +91,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[WGC-DIAG] CreateDirect3DDeviceFromDxgiDevice falhou: {ex.GetType().Name}: {ex.Message}");
+            Log.E("WGC-DIAG", $"CreateDirect3DDeviceFromDxgiDevice falhou: {ex.GetType().Name}: {ex.Message}");
             throw;
         }
         finally
@@ -109,7 +108,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] CreateForWindow falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"CreateForWindow falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
             if (item is null)
@@ -125,7 +124,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] CreateForPrimaryMonitor falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"CreateForPrimaryMonitor falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
             if (item is null)
@@ -136,7 +135,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         _framePool = Direct3D11CaptureFramePool.Create(
             _winrtDevice,
             DirectXPixelFormat.B8G8R8A8UIntNormalized,
-            numberOfBuffers: 2,
+            numberOfBuffers: 4,
             _captureItem.Size);
 
         _session = _framePool.CreateCaptureSession(_captureItem);
@@ -229,7 +228,7 @@ public sealed class WgcCaptureSource : ICaptureSource
                                 if (hrGet == 0 && d3dPtr != IntPtr.Zero)
                                     sourceTexture = new ID3D11Texture2D(d3dPtr);
                                 else
-                                    Console.Error.WriteLine($"[WGC] GetInterface falhou: hr={hrGet}");
+                                    Log.E("WGC", $"GetInterface falhou: hr={hrGet}");
                             }
                             finally
                             {
@@ -260,13 +259,13 @@ public sealed class WgcCaptureSource : ICaptureSource
 
                         if (sourceTexture is null)
                         {
-                            Console.Error.WriteLine($"[WGC] Ambas estratégias falharam — IDirect3DDxgiInterfaceAccess={hr1}, IDXGISurface={hr2}");
+                            Log.E("WGC", $"Ambas estratégias falharam — IDirect3DDxgiInterfaceAccess={hr1}, IDXGISurface={hr2}");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[WGC] Falha ao extrair textura: {ex.GetType().Name}: {ex.Message}");
+                    Log.E("WGC", $"Falha ao extrair textura: {ex.GetType().Name}: {ex.Message}");
                 }
 
                 var extractEndTicks = Stopwatch.GetTimestamp();
@@ -279,7 +278,7 @@ public sealed class WgcCaptureSource : ICaptureSource
                 var desc = sourceTexture.Description;
                 if (desc.Width != size.Width || desc.Height != size.Height)
                 {
-                    Console.Error.WriteLine($"[WGC] DIM MISMATCH: tex={desc.Width}x{desc.Height} fmt={desc.Format} vs content={size.Width}x{size.Height} — frame pulado para evitar E_OUTOFMEMORY no GpuVideoConverter");
+                    Log.W("WGC", $"DIM MISMATCH: tex={desc.Width}x{desc.Height} fmt={desc.Format} vs content={size.Width}x{size.Height} — frame pulado");
                     return new CapturedFrame(startTicks, endTicks, 0, 0, success: false, waitEndTicks: waitEndTicks);
                 }
 

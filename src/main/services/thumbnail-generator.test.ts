@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
-  execFileSync: vi.fn(() => { throw new Error('not found') }),
+  execFileSync: vi.fn(() => {
+    throw new Error('not found')
+  }),
 }))
 
 vi.mock('node:fs', () => ({
@@ -94,7 +96,9 @@ describe('thumbnail-generator', () => {
     })
 
     it('returns null when reading fails', async () => {
-      vi.mocked(readFileSync).mockImplementation(() => { throw new Error('read error') })
+      vi.mocked(readFileSync).mockImplementation(() => {
+        throw new Error('read error')
+      })
       const { readThumbnailDataUrl } = await import('./thumbnail-generator')
       const result = readThumbnailDataUrl('C:\\clips\\.thumbnails\\test.jpg')
       expect(result).toBeNull()
@@ -135,23 +139,27 @@ describe('generateThumbnail full flow', () => {
     })
     vi.mocked(statSync).mockReturnValue({ size: 1000 })
     execFileMock.mockImplementation((...args: unknown[]) => {
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      ffmpegRan = true
-      cb(null, { stdout: '', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'Duration: 00:00:30.00, start: 0.000000, bitrate: 1000 kb/s\n' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
     })
     const { generateThumbnail } = await import('./thumbnail-generator')
     const result = await generateThumbnail('C:\\clips', 'test.mp4')
     expect(result).toBe('C:\\clips\\.thumbnails\\test.jpg')
-    expect(execFile).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(execFile).mock.calls[0][0]).toContain('ffmpeg')
+    expect(execFile).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(execFile).mock.calls[1][0]).toContain('ffmpeg')
     expect(mkdirSync).toHaveBeenCalledWith('C:\\clips\\.thumbnails', { recursive: true })
   })
 
-  it('uses ffprobe duration to calculate seek position', async () => {
+  it('uses ffmpeg duration to calculate seek position', async () => {
     vi.resetModules()
     execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
-      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
       throw new Error('not found')
     })
     let ffmpegRan = false
@@ -163,9 +171,10 @@ describe('generateThumbnail full flow', () => {
     vi.mocked(statSync).mockReturnValue({ size: 1000 })
     execFileMock.mockImplementation((...args: unknown[]) => {
       const cmd = args[0] as string
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      if (cmd.includes('ffprobe')) {
-        cb(null, { stdout: '100.0\n', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'Duration: 00:01:40.00, start: 0.000000, bitrate: 1000 kb/s\n' })
       } else {
         ffmpegRan = true
         cb(null, { stdout: '', stderr: '' })
@@ -179,11 +188,10 @@ describe('generateThumbnail full flow', () => {
     expect(ffmpegArgs).toContain('25')
   })
 
-  it('caps ffprobe seek at 60 seconds for long videos', async () => {
+  it('caps ffmpeg seek at 60 seconds for long videos', async () => {
     vi.resetModules()
     execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
-      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
       throw new Error('not found')
     })
     let ffmpegRan = false
@@ -195,9 +203,10 @@ describe('generateThumbnail full flow', () => {
     vi.mocked(statSync).mockReturnValue({ size: 1000 })
     execFileMock.mockImplementation((...args: unknown[]) => {
       const cmd = args[0] as string
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      if (cmd.includes('ffprobe')) {
-        cb(null, { stdout: '300.0\n', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'Duration: 00:05:00.00, start: 0.000000, bitrate: 1000 kb/s\n' })
       } else {
         ffmpegRan = true
         cb(null, { stdout: '', stderr: '' })
@@ -210,11 +219,10 @@ describe('generateThumbnail full flow', () => {
     expect(ffmpegArgs).toContain('60')
   })
 
-  it('falls back to default seek when ffprobe returns NaN', async () => {
+  it('falls back to default seek when ffmpeg output has no Duration', async () => {
     vi.resetModules()
     execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
-      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
       throw new Error('not found')
     })
     let ffmpegRan = false
@@ -226,9 +234,10 @@ describe('generateThumbnail full flow', () => {
     vi.mocked(statSync).mockReturnValue({ size: 1000 })
     execFileMock.mockImplementation((...args: unknown[]) => {
       const cmd = args[0] as string
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      if (cmd.includes('ffprobe')) {
-        cb(null, { stdout: 'not-a-number\n', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'ffmpeg version ... no Duration line here' })
       } else {
         ffmpegRan = true
         cb(null, { stdout: '', stderr: '' })
@@ -241,11 +250,10 @@ describe('generateThumbnail full flow', () => {
     expect(ffmpegArgs).toContain('5')
   })
 
-  it('falls back to default seek when ffprobe returns 0 duration', async () => {
+  it('falls back to default seek when ffmpeg returns 0 duration', async () => {
     vi.resetModules()
     execFileSyncMock.mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'where.exe' && args[0] === 'ffmpeg') return 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe\n'
-      if (cmd === 'where.exe' && args[0] === 'ffprobe') return 'C:\\tools\\ffmpeg\\bin\\ffprobe.exe\n'
       throw new Error('not found')
     })
     let ffmpegRan = false
@@ -257,9 +265,10 @@ describe('generateThumbnail full flow', () => {
     vi.mocked(statSync).mockReturnValue({ size: 1000 })
     execFileMock.mockImplementation((...args: unknown[]) => {
       const cmd = args[0] as string
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      if (cmd.includes('ffprobe')) {
-        cb(null, { stdout: '0\n', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'Duration: 00:00:00.00, start: 0.000000, bitrate: 0 kb/s\n' })
       } else {
         ffmpegRan = true
         cb(null, { stdout: '', stderr: '' })
@@ -286,14 +295,19 @@ describe('generateThumbnail full flow', () => {
     })
     vi.mocked(statSync).mockReturnValue({ size: 0 })
     execFileMock.mockImplementation((...args: unknown[]) => {
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      ffmpegRan = true
-      cb(null, { stdout: '', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'Duration: 00:00:30.00, start: 0.000000, bitrate: 1000 kb/s\n' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
     })
     const { generateThumbnail } = await import('./thumbnail-generator')
     const result = await generateThumbnail('C:\\clips', 'test.mp4')
     expect(result).toBeNull()
-    expect(execFile).toHaveBeenCalledTimes(1)
+    expect(execFile).toHaveBeenCalledTimes(2)
   })
 
   it('returns null when ffmpeg execFile fails (catch block)', async () => {
@@ -339,13 +353,18 @@ describe('getThumbnailDataUrl full flow', () => {
     vi.mocked(statSync).mockReturnValue({ size: 1000 })
     vi.mocked(readFileSync).mockReturnValue(Buffer.from('thumbnail-data'))
     execFileMock.mockImplementation((...args: unknown[]) => {
+      const procArgs = args[1] as string[]
       const cb = args[args.length - 1] as Function
-      ffmpegRan = true
-      cb(null, { stdout: '', stderr: '' })
+      if (procArgs.includes('-f')) {
+        cb(null, { stdout: '', stderr: 'Duration: 00:00:30.00, start: 0.000000, bitrate: 1000 kb/s\n' })
+      } else {
+        ffmpegRan = true
+        cb(null, { stdout: '', stderr: '' })
+      }
     })
     const { getThumbnailDataUrl } = await import('./thumbnail-generator')
     const result = await getThumbnailDataUrl('C:\\clips', 'test.mp4')
     expect(result).toBe('data:image/jpeg;base64,dGh1bWJuYWlsLWRhdGE=')
-    expect(execFile).toHaveBeenCalledTimes(1)
+    expect(execFile).toHaveBeenCalledTimes(2)
   })
 })

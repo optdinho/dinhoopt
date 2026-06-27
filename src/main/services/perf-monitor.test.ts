@@ -592,4 +592,283 @@ describe('PerfMonitorService', () => {
       vi.useRealTimers()
     })
   })
+
+  describe('startMonitoring (startup item edge cases)', () => {
+    it('handles startup item command without .exe path', async () => {
+      const getStartupItems = vi.fn().mockResolvedValue([
+        {
+          id: 'custom',
+          name: 'Custom Launcher',
+          displayName: 'Custom Launcher',
+          command: 'rundll32.exe shell32.dll,Control_RunDLL',
+          location: 'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+          source: 'registry-hklm',
+          enabled: true,
+          publisher: '',
+          impact: 'medium',
+        },
+      ])
+
+      mockedProcesses.mockResolvedValue({
+        all: 2,
+        running: 2,
+        blocked: 0,
+        sleeping: 0,
+        list: [{ pid: 100, name: 'rundll32.exe', cpu: 2, memRss: 5000000, user: 'user', started: '09:00' }],
+      })
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+
+      await service.startMonitoring(mockSender, getStartupItems)
+
+      await vi.waitFor(() => {
+        expect(mockSender.send).toHaveBeenCalledWith(IPC.PERF_PROCESS_LIST, expect.any(Object))
+      })
+
+      const processListCall = mockSender.send.mock.calls.find(([ch]: unknown[]) => ch === IPC.PERF_PROCESS_LIST) as [
+        string,
+        { processes: Array<{ name: string; isStartupItem: boolean }> },
+      ]
+
+      const rundll32 = processListCall[1].processes.find((p) => p.name === 'rundll32.exe')
+      // Command 'rundll32.exe shell32.dll,Control_RunDLL' matches regex → rundll32.exe should be found
+      expect(rundll32?.isStartupItem).toBe(true)
+    })
+
+    it('handles startup item command with no exe match at all', async () => {
+      const getStartupItems = vi.fn().mockResolvedValue([
+        {
+          id: 'nopath',
+          name: 'No Path',
+          displayName: 'No Path',
+          command: '/usr/bin/env python',
+          location: '',
+          source: 'registry',
+          enabled: true,
+          publisher: '',
+          impact: 'low',
+        },
+      ])
+
+      mockedProcesses.mockResolvedValue({
+        all: 1,
+        running: 1,
+        blocked: 0,
+        sleeping: 0,
+        list: [{ pid: 50, name: 'python.exe', cpu: 5, memRss: 10000000, user: 'user', started: '09:00' }],
+      })
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+
+      await service.startMonitoring(mockSender, getStartupItems)
+
+      await vi.waitFor(() => {
+        expect(mockSender.send).toHaveBeenCalledWith(IPC.PERF_PROCESS_LIST, expect.any(Object))
+      })
+
+      const processListCall = mockSender.send.mock.calls.find(([ch]: unknown[]) => ch === IPC.PERF_PROCESS_LIST) as [
+        string,
+        { processes: Array<{ name: string; isStartupItem: boolean }> },
+      ]
+
+      const python = processListCall[1].processes.find((p) => p.name === 'python.exe')
+      // '/usr/bin/env python' has no .exe match → startupExeMap won't have it
+      expect(python?.isStartupItem).toBe(false)
+    })
+  })
+
+  describe('collectSnapshot re-entrant guard and error handling', () => {
+    it('does not collect when snapshotRunning is true', async () => {
+      vi.useFakeTimers()
+
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 20, cpus: [{ load: 20 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 512, wIO_sec: 1024 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 100000, tx_sec: 50000 }])
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+      mockedProcesses.mockResolvedValue({ all: 1, running: 1, blocked: 0, sleeping: 0, list: [] })
+
+      await service.startMonitoring(mockSender)
+      await vi.advanceTimersByTimeAsync(1)
+
+      // First call completed, snapshotRunning = false now
+      expect(mockedCurrentLoad).toHaveBeenCalledTimes(1)
+      mockSender.send.mockClear()
+
+      // Make si.currentLoad slow to trigger re-entrant scenario
+      let resolveCurrentLoad: (v: unknown) => void
+      mockedCurrentLoad.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveCurrentLoad = resolve
+          }),
+      )
+
+      // Trigger another interval
+      await vi.advanceTimersByTimeAsync(1000)
+      // snapshotRunning = true now (inside collectSnapshot)
+
+      // Try triggering again (should be blocked by re-entrant guard)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Only one send should occur (or none if the first promise didn't resolve)
+      expect(mockedCurrentLoad).toHaveBeenCalledTimes(2)
+
+      // Resolve the hanging promise
+      resolveCurrentLoad!({ currentLoad: 30, cpus: [{ load: 30 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+
+      await vi.advanceTimersByTimeAsync(100)
+
+      vi.useRealTimers()
+    })
+
+    it('handles si.currentLoad throwing an error', async () => {
+      mockedCurrentLoad.mockRejectedValue(new Error('Load failed'))
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      mockedProcesses.mockResolvedValue({ all: 1, running: 1, blocked: 0, sleeping: 0, list: [] })
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+
+      // Call startMonitoring to set up sender
+      await service.startMonitoring(mockSender)
+
+      // After the initial snapshot, we need to trigger another one
+      // The first collectSnapshot already ran (caught error)
+      await vi.waitFor(() => {
+        expect(mockedCurrentLoad).toHaveBeenCalled()
+      })
+
+      // Should not throw — error is caught silently
+      expect(mockSender.send).not.toHaveBeenCalledWith(IPC.PERF_SNAPSHOT, expect.any(Object))
+    })
+
+    it('handles sender destroyed after snapshot capture', async () => {
+      mockSender = createMockSender()
+      mockSender.isDestroyed.mockReturnValue(true)
+
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 50, cpus: [{ load: 50 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      mockedProcesses.mockResolvedValue({ all: 1, running: 1, blocked: 0, sleeping: 0, list: [] })
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+
+      // startMonitoring will call collectSnapshot immediately
+      // Since sender.isDestroyed() returns true, the first check stops monitoring
+      await service.startMonitoring(mockSender)
+
+      // The sender is destroyed, so no IPC sends should happen
+      // and stopMonitoring will be called (fastTimer = null)
+      expect(mockSender.send).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('collectProcesses re-entrant guard and error handling', () => {
+    it('does not collect when processesRunning is true', async () => {
+      vi.useFakeTimers()
+
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+
+      let resolveProcesses: (v: unknown) => void
+      mockedProcesses.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveProcesses = resolve
+          }),
+      )
+
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+
+      await service.startMonitoring(mockSender)
+      await vi.advanceTimersByTimeAsync(1)
+
+      // First collectProcesses is running (processesRunning = true)
+      // Trigger another interval cycle
+      await vi.advanceTimersByTimeAsync(10000)
+
+      // The re-entrant guard should prevent a second call
+      expect(mockedProcesses).toHaveBeenCalledTimes(1)
+
+      // Resolve the hanging promise
+      resolveProcesses!({
+        all: 2,
+        running: 2,
+        blocked: 0,
+        sleeping: 0,
+        list: [{ pid: 100, name: 'test.exe', cpu: 10, memRss: 10000000, user: 'user', started: '' }],
+      })
+      await vi.advanceTimersByTimeAsync(100)
+
+      vi.useRealTimers()
+    })
+
+    it('handles si.processes throwing an error', async () => {
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      mockedProcesses.mockRejectedValue(new Error('Process list failed'))
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+
+      await expect(service.startMonitoring(mockSender)).resolves.toBeUndefined()
+
+      // Error is caught silently — no process list sent
+      expect(mockSender.send).not.toHaveBeenCalledWith(IPC.PERF_PROCESS_LIST, expect.any(Object))
+    })
+
+    it('handles sender destroyed during process collection', async () => {
+      mockSender.isDestroyed.mockReturnValue(true)
+
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      mockedProcesses.mockResolvedValue({
+        all: 2,
+        running: 2,
+        blocked: 0,
+        sleeping: 0,
+        list: [{ pid: 100, name: 'test.exe', cpu: 10, memRss: 10000000, user: 'user', started: '' }],
+      })
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+
+      await service.startMonitoring(mockSender)
+
+      // Since sender is destroyed at the isDestroyed check inside collectProcesses,
+      // the _slowTimer check runs first, but since it's the first call,
+      // mockSender.isDestroyed() was already returning true before startMonitoring
+      // So both collectSnapshot and collectProcesses stop monitoring immediately
+      expect(mockSender.send).not.toHaveBeenCalledWith(IPC.PERF_PROCESS_LIST, expect.any(Object))
+    })
+  })
+
+  describe('stopMonitoring with slowTimer cleanup', () => {
+    it('cleans up both fast and slow timers', async () => {
+      vi.useFakeTimers()
+
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      mockedProcesses.mockResolvedValue({ all: 1, running: 1, blocked: 0, sleeping: 0, list: [] })
+      mockedMem.mockResolvedValue({ total: 17179869184 })
+
+      await service.startMonitoring(mockSender)
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(mockSender.send).toHaveBeenCalled()
+      mockSender.send.mockClear()
+
+      service.stopMonitoring()
+      await vi.advanceTimersByTimeAsync(30000)
+
+      // After stop, no more sends
+      expect(mockSender.send).not.toHaveBeenCalled()
+
+      vi.useRealTimers()
+    })
+  })
 })

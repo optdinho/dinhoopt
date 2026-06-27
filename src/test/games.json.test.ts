@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
 
 interface GameEntry {
   processName: string
@@ -24,9 +24,7 @@ function findGamesJsonPath(): string {
   for (const p of candidates) {
     if (existsSync(p)) return p
   }
-  throw new Error(
-    `games.json not found at any candidate path:\n${candidates.map((c) => `  - ${c}`).join('\n')}`
-  )
+  throw new Error(`games.json not found at any candidate path:\n${candidates.map((c) => `  - ${c}`).join('\n')}`)
 }
 
 function loadGamesDatabase(): GameDatabase {
@@ -77,7 +75,7 @@ describe('games.json', () => {
         const key = alias.toLowerCase()
         if (processNameMap.has(key) && processNameMap.get(key) !== game.displayName) {
           conflicts.push(
-            `Alias "${alias}" of "${game.displayName}" collides with processName of "${processNameMap.get(key)}"`
+            `Alias "${alias}" of "${game.displayName}" collides with processName of "${processNameMap.get(key)}"`,
           )
         }
       }
@@ -92,9 +90,7 @@ describe('games.json', () => {
       for (const alias of game.aliases) {
         const key = alias.toLowerCase()
         if (aliasMap.has(key)) {
-          conflicts.push(
-            `Alias "${alias}" is used by both "${aliasMap.get(key)}" and "${game.displayName}"`
-          )
+          conflicts.push(`Alias "${alias}" is used by both "${aliasMap.get(key)}" and "${game.displayName}"`)
         } else {
           aliasMap.set(key, game.displayName)
         }
@@ -168,24 +164,19 @@ describe('games.json', () => {
   })
 
   it('all windowClasses are non-empty strings', () => {
-    const empty = db.games.filter(
-      (g) => typeof g.windowClass !== 'string' || g.windowClass.trim() === ''
-    )
+    const empty = db.games.filter((g) => typeof g.windowClass !== 'string' || g.windowClass.trim() === '')
     expect(empty).toEqual([])
   })
 
   it('each game can be identified by at least one property', () => {
     for (const game of db.games) {
-      const hasUsableIdentifier =
-        game.processName.trim() !== '' || game.windowClass.trim() !== ''
+      const hasUsableIdentifier = game.processName.trim() !== '' || game.windowClass.trim() !== ''
       expect(hasUsableIdentifier).toBe(true)
     }
   })
 
   it('has processName entries matching common Windows exe patterns', () => {
-    const allMatch = db.games.every(
-      (g) => !g.processName.includes('.exe')
-    )
+    const allMatch = db.games.every((g) => !g.processName.includes('.exe'))
     expect(allMatch).toBe(true)
   })
 

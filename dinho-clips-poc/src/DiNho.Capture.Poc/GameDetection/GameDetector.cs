@@ -136,12 +136,12 @@ public sealed class GameDetector : IDisposable
         if (_winEventHook == IntPtr.Zero)
         {
             // Hook falhou — fallback para polling
-            Console.WriteLine("[GameDetector] SetWinEventHook falhou, usando polling fallback");
+            Log.W("GameDetector", "SetWinEventHook falhou, usando polling fallback");
             _fallbackTimer = new Timer(PollForeground, null, 0, 1000);
             return;
         }
 
-        Console.WriteLine($"[GameDetector] SetWinEventHook OK ({(long)_winEventHook:X})");
+        Log.I("GameDetector", $"SetWinEventHook OK ({(long)_winEventHook:X})");
 
         // Detecção inicial na hora
         var hwnd = GetForegroundWindow();

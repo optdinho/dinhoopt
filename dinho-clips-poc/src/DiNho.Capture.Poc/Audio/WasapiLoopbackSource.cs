@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
 
@@ -29,18 +30,18 @@ public sealed class WasapiLoopbackSource : IAudioSource
 
         _capture = new WasapiLoopbackCapture(_device);
         _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(_sampleRate, 2);
-        Console.WriteLine($"[WasapiLoopbackSource] Format set: {_capture.WaveFormat.Encoding} SR={_capture.WaveFormat.SampleRate} Ch={_capture.WaveFormat.Channels} Bps={_capture.WaveFormat.BitsPerSample}");
+        Log.I("WasapiLoopbackSource", $"Format set: {_capture.WaveFormat.Encoding} SR={_capture.WaveFormat.SampleRate} Ch={_capture.WaveFormat.Channels} Bps={_capture.WaveFormat.BitsPerSample}");
         Channels = 2;
 
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += (s, e) =>
         {
-            Console.WriteLine("[WasapiLoopbackSource] RecordingStopped");
+            Log.I("WasapiLoopbackSource", "RecordingStopped");
             _running = false;
         };
 
         _capture.StartRecording();
-        Console.WriteLine("[WasapiLoopbackSource] StartRecording() OK");
+        Log.I("WasapiLoopbackSource", "StartRecording() OK");
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)

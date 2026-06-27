@@ -62,11 +62,11 @@ public sealed class HotkeyManager : IDisposable
         {
             _bindings.Clear();
             _bindings.AddRange(bindings);
-            Console.WriteLine($"[HotkeyManager] UpdateBindings: {bindings.Count} bindings");
+            Log.I("HotkeyManager", $"UpdateBindings: {bindings.Count} bindings");
             foreach (var b in _bindings)
             {
                 var mods = b.Modifiers.Count > 0 ? $"+0x{string.Join("+0x", b.Modifiers.Select(m => m.ToString("X2")))}" : "";
-                Console.WriteLine($"  Vk=0x{b.Vk:X2}{mods} Action={b.Action} Enabled={b.Enabled}");
+                Log.D("HotkeyManager", $"  Vk=0x{b.Vk:X2}{mods} Action={b.Action} Enabled={b.Enabled}");
             }
         }
     }
@@ -84,9 +84,9 @@ public sealed class HotkeyManager : IDisposable
             if (module == null) return;
             var moduleHandle = GetModuleHandle(module.ModuleName);
             _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _hookDelegate, moduleHandle, 0);
-            Console.WriteLine($"[HotkeyManager] WH_KEYBOARD_LL hook: {(long)_hookId:X} (0=falhou)");
+            Log.I("HotkeyManager", $"WH_KEYBOARD_LL hook: {(long)_hookId:X} (0=falhou)");
             _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookDelegate, moduleHandle, 0);
-            Console.WriteLine($"[HotkeyManager] WH_MOUSE_LL hook: {(long)_mouseHookId:X} (0=falhou)");
+            Log.I("HotkeyManager", $"WH_MOUSE_LL hook: {(long)_mouseHookId:X} (0=falhou)");
 
             while (!_disposed)
             {
@@ -129,7 +129,7 @@ public sealed class HotkeyManager : IDisposable
                 // Diagnóstico: loga CapsLock (0x14) sempre, e toda tecla a cada 50 eventos
                 _kbdCounter++;
                 if (vkCode == 0x14 || (_kbdCounter % 50 == 0))
-                    Console.WriteLine($"[KbdHook] vk=0x{vkCode:X2} down={isKeyDown} up={isKeyUp} nCode={nCode}");
+                    Log.D("KbdHook", $"vk=0x{vkCode:X2} down={isKeyDown} up={isKeyUp} nCode={nCode}");
 
                 if (isKeyDown)
                 {
@@ -155,7 +155,7 @@ public sealed class HotkeyManager : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[HotkeyManager] Erro no callback: {ex.GetType().Name}: {ex.Message}");
+            Log.E("HotkeyManager", $"Erro no callback: {ex.GetType().Name}: {ex.Message}");
         }
 
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
@@ -197,7 +197,7 @@ public sealed class HotkeyManager : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[HotkeyManager] Erro no callback mouse: {ex.GetType().Name}: {ex.Message}");
+            Log.E("HotkeyManager", $"Erro no callback mouse: {ex.GetType().Name}: {ex.Message}");
         }
 
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
@@ -207,26 +207,26 @@ public sealed class HotkeyManager : IDisposable
     {
         lock (_lock)
         {
-            Console.WriteLine($"[HotkeyManager] MatchAndFireHotkey: vk=0x{vkCode:X2} bindings={_bindings.Count}");
+            Log.D("HotkeyManager", $"MatchAndFireHotkey: vk=0x{vkCode:X2} bindings={_bindings.Count}");
             foreach (var binding in _bindings)
             {
-                Console.WriteLine($"  check: Vk=0x{binding.Vk:X2} Mods=[{string.Join(",", binding.Modifiers)}] Enabled={binding.Enabled}");
+                Log.D("HotkeyManager", $"  check: Vk=0x{binding.Vk:X2} Mods=[{string.Join(",", binding.Modifiers)}] Enabled={binding.Enabled}");
                 if (!binding.Enabled) continue;
                 if (binding.Vk != vkCode) continue;
 
                 if (binding.Modifiers.Count > 0 && !ModifiersPressed(binding.Modifiers))
                 {
-                    Console.WriteLine($"  mods NOT pressed");
+                    Log.D("HotkeyManager", "  mods NOT pressed");
                     continue;
                 }
 
                 if (!Enum.TryParse<HotkeyAction>(binding.Action, ignoreCase: true, out var action))
                 {
-                    Console.WriteLine($"  parse action FAILED: '{binding.Action}'");
+                    Log.D("HotkeyManager", $"  parse action FAILED: '{binding.Action}'");
                     continue;
                 }
 
-                Console.WriteLine($"  FIRED! Action={action}");
+                Log.D("HotkeyManager", $"  FIRED! Action={action}");
                 OnHotkeyPressed?.Invoke(new HotkeyPressedEventArgs
                 {
                     Action = action,

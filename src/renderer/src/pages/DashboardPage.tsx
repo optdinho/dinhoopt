@@ -24,16 +24,7 @@ import { useStatsStore } from '@/stores/stats-store'
 import { useUpdaterStore } from '@/stores/updater-store'
 import { CleanerType } from '@shared/enums'
 import type { CleanResult, DriveInfo, PerfQuickStats, ScanResult } from '@shared/types'
-import {
-  Cpu,
-  Database,
-  Download,
-  HardDrive,
-  MemoryStick,
-  Search,
-  Server,
-  Zap,
-} from 'lucide-react'
+import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Zap } from 'lucide-react'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'

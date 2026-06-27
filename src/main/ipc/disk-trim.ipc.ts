@@ -264,9 +264,6 @@ async function runTrimWindows(letter: string, getWindow: WindowGetter): Promise<
     return failResult(id, start, 'Invalid drive letter')
   }
   getLogger().info('disk-trim', `Starting Windows TRIM on ${id}:...`)
-  if (typeof id !== 'string' || !/^[A-Za-z]$/.test(id)) {
-    throw new Error(`Invalid drive letter: ${id}`)
-  }
   return new Promise((resolve) => {
     const psCmd = `Optimize-Volume -DriveLetter ${id} -ReTrim -Verbose`
     const child = spawn('cmd', ['/c', `chcp 65001 >nul & powershell.exe -NoProfile -Command "${psCmd}"`], {

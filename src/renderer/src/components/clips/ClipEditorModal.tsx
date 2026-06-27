@@ -1,5 +1,5 @@
 import type { ClipInfo, ClipMergeResult, ClipTrimResult } from '@shared/types'
-import { Scissors, Combine, Play, Pause, Maximize, Minimize, X } from 'lucide-react'
+import { Combine, Maximize, Minimize, Pause, Play, Scissors, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -85,7 +85,10 @@ function TrimTimeline({
       }}
     >
       {/* Track background */}
-      <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full" style={{ background: 'rgba(255,255,255,0.12)' }} />
+      <div
+        className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full"
+        style={{ background: 'rgba(255,255,255,0.12)' }}
+      />
 
       {/* Selected region highlight */}
       <div
@@ -168,7 +171,10 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
     const vid = videoRef.current
     if (!vid) return
     if (vid.paused) {
-      vid.play().then(() => setPlaying(true)).catch(() => {})
+      vid
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => {})
     } else {
       vid.pause()
       setPlaying(false)
@@ -216,9 +222,15 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().then(() => setFullscreen(true)).catch(() => {})
+      containerRef.current
+        ?.requestFullscreen()
+        .then(() => setFullscreen(true))
+        .catch(() => {})
     } else {
-      document.exitFullscreen().then(() => setFullscreen(false)).catch(() => {})
+      document
+        .exitFullscreen()
+        .then(() => setFullscreen(false))
+        .catch(() => {})
     }
   }
 
@@ -264,7 +276,14 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const trimDuration = endSec - startSec
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape') onClose() }} role="presentation">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose()
+      }}
+      role="presentation"
+    >
       <div
         className="w-full rounded-xl border shadow-2xl"
         style={{
@@ -301,7 +320,11 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
             <>
               {/* Video wrapper */}
               <div className="relative flex-1 flex flex-col" style={{ minHeight: fullscreen ? 0 : undefined }}>
-                <div className={fullscreen ? 'flex-1 flex items-center justify-center bg-black' : 'mb-4 overflow-hidden rounded-lg'}>
+                <div
+                  className={
+                    fullscreen ? 'flex-1 flex items-center justify-center bg-black' : 'mb-4 overflow-hidden rounded-lg'
+                  }
+                >
                   <video
                     ref={videoRef}
                     src={videoUrl}
@@ -311,14 +334,26 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     muted
                     playsInline
                     onClick={togglePlay}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePlay() } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        togglePlay()
+                      }
+                    }}
                     role="button"
                     tabIndex={0}
-                    onLoadedMetadata={() => { if (videoRef.current) setRealDuration(videoRef.current.duration) }}
-                    onEnded={() => { setPlaying(false); setCurrentTime(effectiveDuration) }}
+                    onLoadedMetadata={() => {
+                      if (videoRef.current) setRealDuration(videoRef.current.duration)
+                    }}
+                    onEnded={() => {
+                      setPlaying(false)
+                      setCurrentTime(effectiveDuration)
+                    }}
                     onPlay={() => setPlaying(true)}
                     onPause={() => setPlaying(false)}
-                    onTimeUpdate={() => { if (videoRef.current) setCurrentTime(videoRef.current.currentTime) }}
+                    onTimeUpdate={() => {
+                      if (videoRef.current) setCurrentTime(videoRef.current.currentTime)
+                    }}
                     onError={() => toast.error('Failed to load video preview')}
                     preload="auto"
                   />
@@ -338,21 +373,35 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       startSec={startSec}
                       endSec={endSec}
                       duration={effectiveDuration}
-                      onSeek={(s) => { setCurrentTime(s); seekTo(s) }}
-                      onStartChange={(s) => { setStartSec(s); seekTo(s) }}
-                      onEndChange={(s) => { setEndSec(s); seekTo(s) }}
+                      onSeek={(s) => {
+                        setCurrentTime(s)
+                        seekTo(s)
+                      }}
+                      onStartChange={(s) => {
+                        setStartSec(s)
+                        seekTo(s)
+                      }}
+                      onEndChange={(s) => {
+                        setEndSec(s)
+                        seekTo(s)
+                      }}
                     />
-                    <div className="flex items-center gap-3 px-4 py-4" style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.9))' }}>
+                    <div
+                      className="flex items-center gap-3 px-4 py-4"
+                      style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.9))' }}
+                    >
                       <button type="button" onClick={togglePlay} className="rounded p-1.5 hover:bg-white/10">
                         {playing ? <Pause className="h-6 w-6 text-white" /> : <Play className="h-6 w-6 text-white" />}
                       </button>
                       <span className="text-sm font-mono text-white/90">
                         {fmt(currentTime)} / {fmt(effectiveDuration)}
                       </span>
-                      <span className="ml-2 text-xs font-mono text-white/60">
-                        {fmt(trimDuration)}
-                      </span>
-                      <button type="button" onClick={toggleFullscreen} className="ml-auto rounded p-1.5 hover:bg-white/10">
+                      <span className="ml-2 text-xs font-mono text-white/60">{fmt(trimDuration)}</span>
+                      <button
+                        type="button"
+                        onClick={toggleFullscreen}
+                        className="ml-auto rounded p-1.5 hover:bg-white/10"
+                      >
                         <Minimize className="h-5 w-5 text-white" />
                       </button>
                     </div>
@@ -367,9 +416,18 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       startSec={startSec}
                       endSec={endSec}
                       duration={effectiveDuration}
-                      onSeek={(s) => { setCurrentTime(s); seekTo(s) }}
-                      onStartChange={(s) => { setStartSec(s); seekTo(s) }}
-                      onEndChange={(s) => { setEndSec(s); seekTo(s) }}
+                      onSeek={(s) => {
+                        setCurrentTime(s)
+                        seekTo(s)
+                      }}
+                      onStartChange={(s) => {
+                        setStartSec(s)
+                        seekTo(s)
+                      }}
+                      onEndChange={(s) => {
+                        setEndSec(s)
+                        seekTo(s)
+                      }}
                     />
                     <div className="flex items-center gap-2 px-1 py-1.5">
                       <button type="button" onClick={togglePlay} className="rounded p-0.5 hover:bg-white/10">
@@ -378,7 +436,11 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
                         {fmt(currentTime)} / {fmt(effectiveDuration)}
                       </span>
-                      <button type="button" onClick={toggleFullscreen} className="ml-auto rounded p-0.5 hover:bg-white/10">
+                      <button
+                        type="button"
+                        onClick={toggleFullscreen}
+                        className="ml-auto rounded p-0.5 hover:bg-white/10"
+                      >
                         <Maximize className="h-3 w-3" />
                       </button>
                     </div>
@@ -393,9 +455,15 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     {clip.path} · {(clip.size / 1024 / 1024).toFixed(1)}MB · {effectiveDuration.toFixed(1)}s
                   </p>
                 )}
-                <div className="rounded-lg p-3" style={{ background: fullscreen ? 'rgba(255,255,255,0.06)' : 'rgba(113,113,122,0.08)' }}>
+                <div
+                  className="rounded-lg p-3"
+                  style={{ background: fullscreen ? 'rgba(255,255,255,0.06)' : 'rgba(113,113,122,0.08)' }}
+                >
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="flex items-center gap-1.5 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    <h3
+                      className="flex items-center gap-1.5 text-sm font-medium"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
                       <Scissors className="h-3.5 w-3.5" />
                       {t('trim')}
                     </h3>
@@ -407,12 +475,22 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                   {/* In/Out markers + hotkey hints */}
                   <div className="mb-3 flex items-center gap-3 text-[10px]" style={{ color: 'var(--text-dim)' }}>
                     <span>
-                      <kbd className="rounded border px-1 py-0.5 font-mono text-[9px]" style={{ borderColor: 'var(--border-medium)' }}>I</kbd>
-                      {' '}{fmt(startSec)}
+                      <kbd
+                        className="rounded border px-1 py-0.5 font-mono text-[9px]"
+                        style={{ borderColor: 'var(--border-medium)' }}
+                      >
+                        I
+                      </kbd>{' '}
+                      {fmt(startSec)}
                     </span>
                     <span>
-                      <kbd className="rounded border px-1 py-0.5 font-mono text-[9px]" style={{ borderColor: 'var(--border-medium)' }}>O</kbd>
-                      {' '}{fmt(endSec)}
+                      <kbd
+                        className="rounded border px-1 py-0.5 font-mono text-[9px]"
+                        style={{ borderColor: 'var(--border-medium)' }}
+                      >
+                        O
+                      </kbd>{' '}
+                      {fmt(endSec)}
                     </span>
                     <span className="ml-auto text-[9px]" style={{ color: 'var(--text-muted)' }}>
                       arraste as alças ou use I/O
@@ -446,7 +524,11 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
             </p>
             <div className="mb-2 max-h-32 space-y-1 overflow-y-auto">
               {mergeClips.map((p, i) => (
-                <div key={p} className="flex items-center gap-1 rounded px-2 py-1 text-[10px]" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div
+                  key={p}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-[10px]"
+                  style={{ background: 'rgba(0,0,0,0.2)' }}
+                >
                   <span className="flex-1 truncate">{p}</span>
                   {mergeClips.length > 1 && (
                     <button

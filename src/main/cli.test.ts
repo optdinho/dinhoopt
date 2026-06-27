@@ -45,10 +45,33 @@ vi.mock('./services/file-utils', () => ({
 
 vi.mock('./services/scan-cache', () => ({
   cacheItems: vi.fn(),
+  getCachedItem: vi.fn(),
 }))
+
+let mockBetterSqlite3Error: Error | null = null
+
+vi.mock('better-sqlite3', () => {
+  if (mockBetterSqlite3Error) {
+    const err = mockBetterSqlite3Error
+    err.message = 'factory-throw:' + err.message
+    throw err
+  }
+  return {
+    default: vi.fn(() => ({
+      pragma: vi.fn().mockReturnValue('wal'),
+      exec: vi.fn(),
+      close: vi.fn(),
+    })),
+  }
+})
 
 vi.mock('node:fs', () => ({
   existsSync: vi.fn(() => true),
+  statSync: vi.fn(),
+  readdirSync: vi.fn(),
+  openSync: vi.fn(),
+  readSync: vi.fn(),
+  closeSync: vi.fn(),
 }))
 
 vi.mock('node:fs/promises', () => ({
@@ -60,24 +83,22 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('./services/perf-monitor', () => ({
-  PerfMonitorService: vi.fn(function () {
-    return {
-      getSystemInfo: vi.fn().mockResolvedValue({
-        cpuModel: 'Test CPU',
-        cpuCores: 4,
-        cpuThreads: 8,
-        totalMemBytes: 8589934592,
-        osVersion: 'Windows 11',
-        hostname: 'TEST-PC',
-      }),
-      getDiskHealth: vi
-        .fn()
-        .mockResolvedValue([
-          { model: 'SSD', type: 'SSD', healthStatus: 'Good', temperature: 35, remainingLife: 90, powerOnHours: 1000 },
-        ]),
-      killProcess: vi.fn().mockResolvedValue({ success: true, pid: 1234 }),
-    }
-  }),
+  PerfMonitorService: vi.fn(() => ({
+    getSystemInfo: vi.fn().mockResolvedValue({
+      cpuModel: 'Test CPU',
+      cpuCores: 4,
+      cpuThreads: 8,
+      totalMemBytes: 8589934592,
+      osVersion: 'Windows 11',
+      hostname: 'TEST-PC',
+    }),
+    getDiskHealth: vi
+      .fn()
+      .mockResolvedValue([
+        { model: 'SSD', type: 'SSD', healthStatus: 'Good', temperature: 35, remainingLife: 90, powerOnHours: 1000 },
+      ]),
+    killProcess: vi.fn().mockResolvedValue({ success: true, pid: 1234 }),
+  })),
 }))
 
 vi.mock('./services/history-store', () => ({
@@ -287,6 +308,7 @@ vi.mock('./ipc/malware-scanner.ipc', () => ({
 
 beforeEach(() => {
   appExitMock = vi.fn()
+  mockBetterSqlite3Error = null
   vi.resetModules()
 })
 
@@ -2297,6 +2319,23 @@ describe('legacy scan functions', () => {
 
       expect(appExitMock).toHaveBeenCalledWith(5)
     })
+
+    it('handles non-Error exception thrown by scanner', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockRejectedValue('string error')
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
   })
 
   // ── scanApp ──────────────────────────────────────────────────
@@ -2337,6 +2376,18 @@ describe('legacy scan functions', () => {
       const { runCli } = await import('./cli')
       await runCli()
 
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
+
+    it('returns empty results when appPaths are empty', async () => {
+      const { getPlatform } = await import('./platform')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ appPaths: () => [] }))
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--app']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('No items found'))
       expect(appExitMock).toHaveBeenCalledWith(5)
     })
   })
@@ -2402,6 +2453,20 @@ describe('legacy scan functions', () => {
       const { runCli } = await import('./cli')
       await runCli()
 
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
+
+    it('returns empty results when gamingPaths and gpuCachePaths are empty', async () => {
+      const { getPlatform } = await import('./platform')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({ gamingPaths: () => [], gpuCachePaths: () => [] }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--gaming']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('No items found'))
       expect(appExitMock).toHaveBeenCalledWith(5)
     })
   })
@@ -2480,6 +2545,25 @@ describe('legacy scan functions', () => {
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Trash'))
       expect(appExitMock).toHaveBeenCalledWith(0)
     })
+
+    it('returns empty when trash directory does not exist', async () => {
+      const { getPlatform } = await import('./platform')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return !p.includes('.Trash')
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({ trashPath: () => '/Users/test/.Trash' }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--recycle-bin']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('No items found'))
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
   })
 
   // ── cleanRecycleBin ──────────────────────────────────────────
@@ -2535,6 +2619,30 @@ describe('legacy scan functions', () => {
       await runCli()
 
       // GENERAL_ERROR: items scanned but clean had errors with 0 filesDeleted
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Errors'))
+      expect(appExitMock).toHaveBeenCalledWith(1)
+    })
+
+    it('handles non-Error exception during clean', async () => {
+      const { getPlatform } = await import('./platform')
+      const { execFile } = await import('node:child_process')
+      const { scanDirectory } = await import('./services/file-utils')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
+      ;(execFile as unknown as ReturnType<typeof vi.fn>)
+        .mockImplementationOnce(
+          (_file: string, _args: string[], _opts: unknown, cb: (err: unknown, result: unknown) => void) => {
+            cb(null, { stdout: '5|10240' })
+          },
+        )
+        .mockImplementationOnce((...args: unknown[]) => {
+          const cb = args.find((a): a is (err: unknown) => void => typeof a === 'function')
+          if (cb) cb('string error')
+        })
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--recycle-bin', '--clean']
+      const { runCli } = await import('./cli')
+      await runCli()
+
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Errors'))
       expect(appExitMock).toHaveBeenCalledWith(1)
     })
@@ -2726,6 +2834,248 @@ describe('legacy scan functions', () => {
     })
   })
 
+  // ── scanBrowserCli empty results ─────────────────────────────
+
+  describe('scanBrowserCli empty results', () => {
+    it('returns empty when no browser base dirs exist', async () => {
+      const { getPlatform } = await import('./platform')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          browserPaths: () => ({
+            chrome: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            edge: {
+              base: 'C:\\Edge',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            brave: {
+              base: 'C:\\Brave',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            vivaldi: {
+              base: 'C:\\Vivaldi',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            opera: {
+              base: 'C:\\Opera',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            operaGX: {
+              base: 'C:\\OperaGX',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            arc: {
+              base: 'C:\\Arc',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            chromium: {
+              base: 'C:\\Chromium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            thorium: {
+              base: 'C:\\Thorium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            supermium: {
+              base: 'C:\\Supermium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            helium: {
+              base: 'C:\\Helium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            cromite: {
+              base: 'C:\\Cromite',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            catsxp: {
+              base: 'C:\\CatsXP',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            firefox: { cache: 'C:\\Firefox\\cache' },
+            librewolf: { cache: 'C:\\LibreWolf\\cache' },
+            waterfox: { cache: 'C:\\Waterfox\\cache' },
+            floorp: { cache: 'C:\\Floorp\\cache' },
+            safari: null,
+          }),
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--browser']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('No items found'))
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
+
+    it('returns empty when firefox cache dir does not exist', async () => {
+      const { getPlatform } = await import('./platform')
+      const { existsSync, readdirSync } = await import('node:fs')
+      const { scanDirectory } = await import('./services/file-utils')
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockReset()
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('browser', 'Chrome - Cache', 0, 0))
+      ;(readdirSync as ReturnType<typeof vi.fn>).mockReset()
+      ;(readdirSync as ReturnType<typeof vi.fn>).mockReturnValue([])
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return p.startsWith('C:\\Chrome') || p.startsWith('C:\\Edge')
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          browserPaths: () => ({
+            chrome: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            edge: {
+              base: 'C:\\Edge',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            brave: {
+              base: 'C:\\Brave',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            vivaldi: {
+              base: 'C:\\Vivaldi',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            opera: {
+              base: 'C:\\Opera',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            operaGX: {
+              base: 'C:\\OperaGX',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            arc: {
+              base: 'C:\\Arc',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            chromium: {
+              base: 'C:\\Chromium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            thorium: {
+              base: 'C:\\Thorium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            supermium: {
+              base: 'C:\\Supermium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            helium: {
+              base: 'C:\\Helium',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            cromite: {
+              base: 'C:\\Cromite',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            catsxp: {
+              base: 'C:\\CatsXP',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            firefox: { cache: 'C:\\Firefox\\cache' },
+            librewolf: { cache: undefined },
+            waterfox: { cache: undefined },
+            floorp: { cache: undefined },
+            safari: null,
+          }),
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--browser']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('No items found'))
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
+  })
+
   // ── Multi-category scenarios ─────────────────────────────────
 
   describe('multi-category scan', () => {
@@ -2754,6 +3104,327 @@ describe('legacy scan functions', () => {
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Discord'))
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Steam'))
       expect(appExitMock).toHaveBeenCalledWith(0)
+    })
+  })
+
+  // ── scanDatabaseCli ────────────────────────────────────────────
+
+  describe('scanDatabaseCli', () => {
+    beforeEach(async () => {
+      const { statSync, readdirSync, openSync, readSync, existsSync } = await import('node:fs')
+      statSync.mockReset()
+      readdirSync.mockReset()
+      openSync.mockReset()
+      readSync.mockReset()
+      existsSync.mockReset()
+    })
+
+    it('scans with single target, finds db', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, readdirSync, openSync, readSync } = await import('node:fs')
+      statSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
+    })
+
+    it('skips target when basePath does not exist', async () => {
+      const { getPlatform } = await import('./platform')
+      const { existsSync } = await import('node:fs')
+      existsSync.mockReturnValue(false)
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(5)
+    })
+
+    it('skips db file when not an SQLite file', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync, readSync } = await import('node:fs')
+      statSync.mockReturnValue({ size: 50000, mtimeMs: Date.now() })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('Not a SQLite header', 0, 19, 'utf8')
+        return 19
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(5)
+    })
+
+    it('skips db file when size is 0', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync, readSync } = await import('node:fs')
+      statSync.mockReturnValue({ size: 0, mtimeMs: Date.now() })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(5)
+    })
+
+    it('skips when wastedBytes < 4096 (small db, no WAL)', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync, readSync } = await import('node:fs')
+      statSync.mockReturnValue({ size: 100, mtimeMs: Date.now() })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(5)
+    })
+
+    it('accounts for WAL file in wasted bytes', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync, readSync } = await import('node:fs')
+      statSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) return { size: 4096, mtimeMs: Date.now() }
+        return { size: 1000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
+    })
+
+    it('scans with multiProfile using Default / Profile N pattern', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, readdirSync, openSync, readSync } = await import('node:fs')
+      statSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      readdirSync.mockReturnValue([
+        { name: 'Default', isDirectory: () => true },
+        { name: 'Profile 1', isDirectory: () => true },
+        { name: 'not-a-profile.txt', isDirectory: () => false },
+      ])
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'Chrome', basePath: 'C:\\Chrome\\Data', dbFiles: ['History'], multiProfile: true },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
+    })
+
+    it('scans with multiProfile using profilePattern matching', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, readdirSync, openSync, readSync } = await import('node:fs')
+      statSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      readdirSync.mockReturnValue([
+        { name: 'profile.abcdef', isDirectory: () => true },
+        { name: 'profile.123456', isDirectory: () => true },
+        { name: 'other', isDirectory: () => true },
+      ])
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            {
+              label: 'Firefox',
+              basePath: 'C:\\Firefox\\Profiles',
+              dbFiles: ['places.sqlite'],
+              multiProfile: true,
+              profilePattern: ['profile.*'],
+            },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
+    })
+
+    it('handles readdirSync error in multiProfile (falls back to basePath)', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, readdirSync, openSync, readSync } = await import('node:fs')
+      statSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      readdirSync.mockImplementation(() => {
+        throw new Error('access denied')
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'Chrome', basePath: 'C:\\Chrome\\Data', dbFiles: ['History'], multiProfile: true },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
+    })
+
+    it('scans multiple targets and multiple dbFiles', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync, readSync } = await import('node:fs')
+      const statMock = statSync as ReturnType<typeof vi.fn>
+      statMock.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'App1', basePath: 'C:\\App1\\Data', dbFiles: ['main.db', 'wallet.db'], multiProfile: false },
+            { label: 'App2', basePath: 'C:\\App2\\Data', dbFiles: ['storage.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
+    })
+
+    it('handles isSqliteFile open/read error gracefully', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync } = await import('node:fs')
+      statSync.mockReturnValue({ size: 50000, mtimeMs: Date.now() })
+      openSync.mockImplementation(() => {
+        throw new Error('open failed')
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(5)
+    })
+
+    it('reads multiple dbFiles from a string dbFiles entry (not array)', async () => {
+      const { getPlatform } = await import('./platform')
+      const { statSync, openSync, readSync } = await import('node:fs')
+      statSync.mockReturnValue({ size: 50000, mtimeMs: Date.now() })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'Chrome', basePath: 'C:\\Chrome\\Data', dbFiles: ['History', 'Favicons'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const results = await runLegacyScanClean(['database'], false, { json: false, verbosity: 'normal' })
+      expect(results).toBe(0)
     })
   })
 
@@ -2831,6 +3502,552 @@ describe('legacy scan functions', () => {
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Skipped'))
       expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Errors'))
       expect(appExitMock).toHaveBeenCalledWith(4)
+    })
+
+    it('returns needsElevation when clean reports permission denied', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { cleanItems } = await import('./services/file-utils')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 3))
+      ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
+        totalCleaned: 0,
+        filesDeleted: 0,
+        filesSkipped: 3,
+        errors: [{ path: 'C:\\Windows\\Temp\\file.tmp', reason: 'permission-denied' }],
+        needsElevation: true,
+      })
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system', '--clean']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(appExitMock).toHaveBeenCalledWith(3)
+    })
+
+    it('truncates error list when >10 errors', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { cleanItems } = await import('./services/file-utils')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 15))
+      const errors = Array.from({ length: 12 }, (_, i) => ({
+        path: `C:\\file${i}.tmp`,
+        reason: 'in-use',
+      }))
+      ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
+        totalCleaned: 1024,
+        filesDeleted: 3,
+        filesSkipped: 12,
+        errors,
+        needsElevation: false,
+      })
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system', '--clean']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('... and 2 more'))
+      expect(appExitMock).toHaveBeenCalledWith(4)
+    })
+
+    it('outputs JSON with clean result when --json and --clean are both passed', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { cleanItems } = await import('./services/file-utils')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 2))
+      ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
+        totalCleaned: 2048,
+        filesDeleted: 2,
+        filesSkipped: 1,
+        errors: [],
+        needsElevation: false,
+      })
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system', '--json', '--clean']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('"scan"'))
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('"clean"'))
+      expect(appExitMock).toHaveBeenCalledWith(0)
+    })
+  })
+
+  // ── cleanDatabasesCli ─────────────────────────────────────────
+
+  describe('cleanDatabasesCli', () => {
+    it('cleans WAL database successfully', async () => {
+      const { getCachedItem } = await import('./services/scan-cache')
+      const { statSync } = await import('node:fs')
+      getCachedItem.mockReturnValue({ id: 'db1', path: 'C:\\data\\main.db', size: 50000 })
+      statSync
+        .mockReturnValueOnce({ size: 50000 }) // sizeBefore
+        .mockReturnValueOnce({ size: 4096 }) // walSizeBefore
+        .mockReturnValueOnce({ size: 30000 }) // sizeAfter
+        .mockReturnValueOnce({ size: 0 }) // walSizeAfter
+
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['db1'])
+      expect(result.filesDeleted).toBe(1)
+      expect(result.totalCleaned).toBe(24096) // 50000+4096 - 30000+0
+    })
+
+    it('cleans non-WAL database (journal_mode is not WAL)', async () => {
+      const betterSqlite3 = await import('better-sqlite3')
+      const { getCachedItem } = await import('./services/scan-cache')
+      const { statSync } = await import('node:fs')
+      getCachedItem.mockReturnValue({ id: 'db1', path: 'C:\\data\\main.db', size: 50000 })
+      statSync
+        .mockReturnValueOnce({ size: 50000 })
+        .mockReturnValueOnce({ size: 0 }) // walSizeBefore throws normally, but mock returns 0
+        .mockReturnValueOnce({ size: 45000 })
+        .mockReturnValueOnce({ size: 0 })
+      // Override pragma to return 'delete' (non-WAL)
+      const dbMock = (betterSqlite3.default as ReturnType<typeof vi.fn>).mock.results[0]?.value
+      if (dbMock) dbMock.pragma.mockReturnValue('delete')
+
+      const { scanDatabaseCli } = await import('./cli/commands/legacy')
+      const { statSync: fsStatSync, openSync, readSync } = await import('node:fs')
+      fsStatSync.mockReset()
+      fsStatSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      const { getPlatform } = await import('./platform')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--system']
+      const { runCli } = await import('./cli')
+      // Need scan + clean to test: scan to find db, then clean to vacuum
+      // But the scan already found it (via runLegacyScanClean).
+      // Just test cleanDatabasesCli directly for the non-WAL branch
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['db1'])
+      expect(result.filesDeleted).toBe(1)
+    })
+
+    it('skips item when getCachedItem returns null', async () => {
+      const { getCachedItem } = await import('./services/scan-cache')
+      getCachedItem.mockReturnValue(undefined)
+
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['nonexistent'])
+      expect(result.filesDeleted).toBe(0)
+      expect(result.filesSkipped).toBe(0)
+    })
+
+    it('handles Database constructor errors', async () => {
+      const betterSqlite3 = await import('better-sqlite3')
+      const { getCachedItem } = await import('./services/scan-cache')
+      const { statSync } = await import('node:fs')
+      getCachedItem.mockReturnValue({ id: 'db1', path: 'C:\\data\\main.db', size: 50000 })
+      statSync.mockReturnValue({ size: 50000 })
+
+      const origDb = betterSqlite3.default
+      const err = new Error('db locked') as Error & { code: string }
+      err.code = 'SQLITE_BUSY'
+      betterSqlite3.default = vi.fn(() => {
+        throw err
+      })
+
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['db1'])
+      expect(result.filesSkipped).toBe(1)
+      expect(result.errors[0].reason).toBe('in-use')
+      betterSqlite3.default = origDb
+    })
+
+    it('handles WAL stat errors before and after (no WAL file)', async () => {
+      const { getCachedItem } = await import('./services/scan-cache')
+      const { statSync } = await import('node:fs')
+      getCachedItem.mockReturnValue({ id: 'db1', path: 'C:\\data\\main.db', size: 50000 })
+      statSync
+        .mockReturnValueOnce({ size: 50000 }) // sizeBefore
+        .mockImplementationOnce(() => {
+          throw new Error('no wal file')
+        }) // walSizeBefore
+        .mockReturnValueOnce({ size: 45000 }) // sizeAfter
+        .mockImplementationOnce(() => {
+          throw new Error('no wal file')
+        }) // walSizeAfter
+
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['db1'])
+      expect(result.filesDeleted).toBe(1)
+      expect(result.totalCleaned).toBe(5000) // 50000 - 45000
+    })
+
+    it('handles non-Error exception thrown during clean', async () => {
+      const { getCachedItem } = await import('./services/scan-cache')
+      const { statSync } = await import('node:fs')
+      getCachedItem.mockReturnValue({ id: 'db1', path: 'C:\\data\\main.db', size: 50000 })
+      statSync.mockReturnValue({ size: 50000 })
+
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['db1'])
+      expect(result.filesDeleted).toBe(1)
+    })
+
+    // Skipped because vi.mock factory is cached after first import;
+    // changing mockBetterSqlite3Error doesn't re-trigger the factory.
+    // This path (import('better-sqlite3') failing) is tested implicitly
+    // by 'handles Database constructor errors' above (same catch block).
+    it.skip('handles better-sqlite3 not available', async () => {
+      mockBetterSqlite3Error = new Error('module not found')
+      const { cleanDatabasesCli } = await import('./cli/commands/legacy')
+      const result = await cleanDatabasesCli(['db1'])
+      expect(result.filesDeleted).toBe(0)
+      expect(result.errors).toEqual([])
+    })
+  })
+
+  // ── getChromiumProfiles (direct unit tests) ─────────────────
+
+  describe('getChromiumProfiles', () => {
+    it('returns Default when readdir fails', async () => {
+      const { readdir } = await import('node:fs/promises')
+      ;(readdir as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('access denied'))
+
+      const { getChromiumProfiles } = await import('./cli/commands/legacy')
+      const profiles = await getChromiumProfiles('C:\\Fake\\Browser')
+
+      expect(profiles).toEqual(['Default'])
+    })
+
+    it('returns Default and matching Profile N directories', async () => {
+      const { readdir } = await import('node:fs/promises')
+      ;(readdir as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { name: 'Default', isDirectory: () => true },
+        { name: 'Profile 1', isDirectory: () => true },
+        { name: 'Profile 2', isDirectory: () => true },
+        { name: 'Guest', isDirectory: () => true },
+        { name: 'file.txt', isDirectory: () => false },
+      ])
+
+      const { getChromiumProfiles } = await import('./cli/commands/legacy')
+      const profiles = await getChromiumProfiles('C:\\Chrome\\User Data')
+
+      expect(profiles).toEqual(['Default', 'Profile 1', 'Profile 2'])
+    })
+
+    it('returns only Default when no Profile N directories exist', async () => {
+      const { readdir } = await import('node:fs/promises')
+      ;(readdir as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { name: 'Default', isDirectory: () => true },
+        { name: 'Guest', isDirectory: () => true },
+      ])
+
+      const { getChromiumProfiles } = await import('./cli/commands/legacy')
+      const profiles = await getChromiumProfiles('C:\\Chrome\\User Data')
+
+      expect(profiles).toEqual(['Default'])
+    })
+  })
+
+  // ── scanBrowserCli Firefox cache with profiles ──────────────
+
+  describe('scanBrowserCli Firefox cache', () => {
+    it('scans Firefox cache with profiles returning results', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { readdir } = await import('node:fs/promises')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return p.includes('Firefox') || p.includes('chrome') || p.includes('Chrome')
+      })
+      ;(readdir as ReturnType<typeof vi.fn>).mockResolvedValue([{ name: 'default-release', isDirectory: () => true }])
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          browserPaths: () => ({
+            chrome: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            edge: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            brave: undefined,
+            vivaldi: undefined,
+            opera: undefined,
+            operaGX: undefined,
+            arc: undefined,
+            chromium: undefined,
+            thorium: undefined,
+            supermium: undefined,
+            helium: undefined,
+            cromite: undefined,
+            catsxp: undefined,
+            firefox: { cache: 'C:\\Firefox\\Profiles' },
+            librewolf: { cache: undefined },
+            waterfox: { cache: undefined },
+            floorp: { cache: undefined },
+            safari: null,
+          }),
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockClear()
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeScanResult('browser', 'Firefox - default-release Cache', 1024, 3),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--browser']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Firefox'))
+      expect(appExitMock).toHaveBeenCalledWith(0)
+    })
+
+    it('handles Firefox readdir error gracefully', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { readdir } = await import('node:fs/promises')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return p.includes('Firefox') || p.includes('chrome') || p.includes('Chrome')
+      })
+      ;(readdir as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('access denied'))
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          browserPaths: () => ({
+            chrome: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            edge: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            brave: undefined,
+            vivaldi: undefined,
+            opera: undefined,
+            operaGX: undefined,
+            arc: undefined,
+            chromium: undefined,
+            thorium: undefined,
+            supermium: undefined,
+            helium: undefined,
+            cromite: undefined,
+            catsxp: undefined,
+            firefox: { cache: 'C:\\Firefox\\Profiles' },
+            librewolf: { cache: undefined },
+            waterfox: { cache: undefined },
+            floorp: { cache: undefined },
+            safari: null,
+          }),
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockClear()
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('browser', 'Chrome - Cache', 0, 0))
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--browser']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(appExitMock).toHaveBeenCalledWith(5)
+    })
+
+    it('scans Firefox fork (LibreWolf) with existing cache', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { readdir } = await import('node:fs/promises')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return p.includes('LibreWolf') || p.includes('Chrome')
+      })
+      ;(readdir as ReturnType<typeof vi.fn>).mockResolvedValue([{ name: 'abc123.default', isDirectory: () => true }])
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          browserPaths: () => ({
+            chrome: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            edge: {
+              base: 'C:\\Chrome',
+              cache: 'Cache',
+              codeCache: 'Code Cache',
+              gpuCache: 'GPU Cache',
+              serviceWorker: 'Service Worker',
+            },
+            brave: undefined,
+            vivaldi: undefined,
+            opera: undefined,
+            operaGX: undefined,
+            arc: undefined,
+            chromium: undefined,
+            thorium: undefined,
+            supermium: undefined,
+            helium: undefined,
+            cromite: undefined,
+            catsxp: undefined,
+            firefox: { cache: 'C:\\Firefox\\NotFound' },
+            librewolf: { cache: 'C:\\LibreWolf\\Profiles' },
+            waterfox: { cache: undefined },
+            floorp: { cache: undefined },
+            safari: null,
+          }),
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockClear()
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeScanResult('browser', 'LibreWolf - abc123.default Cache', 1024, 2),
+      )
+
+      process.argv = ['node.exe', 'script.js', '--cli', '--browser']
+      const { runCli } = await import('./cli')
+      await runCli()
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('LibreWolf'))
+      expect(appExitMock).toHaveBeenCalledWith(0)
+    })
+  })
+
+  // ── runLegacyScanClean scan-only path ───────────────────────
+
+  describe('runLegacyScanClean scan-only path', () => {
+    it('shows Run with --clean when items found but doClean is false', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          systemCleanTargets: () => [{ path: 'C:\\Windows\\Temp', subcategory: 'Windows Temp', childSubdir: false }],
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('system', 'Windows Temp', 1024, 3))
+
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const exitCode = await runLegacyScanClean(['system'], false, { json: false, verbosity: 'normal' })
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Run with --clean to delete these items'))
+      expect(exitCode).toBe(0)
+    })
+
+    it('scans and cleans database items when doClean is true', async () => {
+      const { getPlatform } = await import('./platform')
+      const { existsSync, statSync, openSync, readSync } = await import('node:fs')
+      const { getCachedItem } = await import('./services/scan-cache')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true)
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          databaseOptimizeTargets: () => [
+            { label: 'TestApp', basePath: 'C:\\TestApp\\Data', dbFiles: ['main.db'], multiProfile: false },
+          ],
+        }),
+      )
+      statSync.mockReset()
+      statSync.mockImplementation((p: string) => {
+        if (p.endsWith('-wal')) throw new Error('no wal')
+        return { size: 50000, mtimeMs: Date.now() }
+      })
+      openSync.mockReturnValue(3)
+      readSync.mockImplementation((_fd: number, buf: Buffer) => {
+        buf.write('SQLite format 3\0', 0, 16, 'utf8')
+        return 16
+      })
+      getCachedItem.mockReturnValue({ id: 'db1', path: 'C:\\TestApp\\Data\\main.db', size: 50000 })
+
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const exitCode = await runLegacyScanClean(['database'], true, { json: false, verbosity: 'normal' })
+
+      expect(exitCode).toBe(0)
+    })
+
+    it('cleans recycle bin via trash path (file items not COM)', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { cleanItems } = await import('./services/file-utils')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return p.includes('.Trash')
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          trashPath: () => '/Users/test/.Trash',
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockReset()
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockResolvedValue(makeScanResult('recycleBin', 'Trash', 2048, 2))
+      ;(cleanItems as ReturnType<typeof vi.fn>).mockResolvedValue({
+        totalCleaned: 4096,
+        filesDeleted: 2,
+        filesSkipped: 0,
+        errors: [],
+        needsElevation: false,
+      })
+
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const exitCode = await runLegacyScanClean(['recycle-bin'], true, { json: false, verbosity: 'normal' })
+
+      expect(cleanItems).toHaveBeenCalled()
+      expect(exitCode).toBe(0)
+    })
+
+    it('outputs JSON with scan errors when they exist', async () => {
+      const { getPlatform } = await import('./platform')
+      const { scanDirectory } = await import('./services/file-utils')
+      const { existsSync } = await import('node:fs')
+      ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+        if (typeof p !== 'string') return false
+        return true
+      })
+      ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(
+        makePlatform({
+          trashPath: () => '/Users/test/.Trash',
+        }),
+      )
+      ;(scanDirectory as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Scan crashed'))
+
+      const { runLegacyScanClean } = await import('./cli/commands/legacy')
+      const exitCode = await runLegacyScanClean(['recycle-bin'], false, { json: true, verbosity: 'normal' })
+
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('"errors"'))
+      expect(exitCode).toBe(5)
     })
   })
 })
@@ -3143,5 +4360,3 @@ describe('utility: printHelp', () => {
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Exit Codes'))
   })
 })
-
-

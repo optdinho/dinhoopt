@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(),
+  spawnSync: vi.fn(),
   execFile: vi.fn(),
   execFileSync: vi.fn(),
 }))
@@ -53,12 +54,55 @@ vi.mock('../services/logger.service', () => ({
   }),
 }))
 
-import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+const mockIsPipeConnected = vi.hoisted(() => vi.fn().mockReturnValue(false))
+const mockIsEngineRunning = vi.hoisted(() => vi.fn().mockReturnValue(false))
+const mockSendWithFallback = vi.hoisted(() => vi.fn().mockResolvedValue({ success: true }))
+const mockSendPipeCommand = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
+const mockSetEngineCapturing = vi.hoisted(() => vi.fn())
+
+vi.mock('./clips-engine-connection', async (importOriginal) => {
+  const mod = await importOriginal()
+  return {
+    ...mod,
+    isPipeConnected: mockIsPipeConnected,
+    isEngineRunning: mockIsEngineRunning,
+    sendWithFallback: mockSendWithFallback,
+    sendPipeCommand: mockSendPipeCommand,
+    setEngineCapturing: mockSetEngineCapturing,
+  }
+})
+
+function resetEngineMocks(): void {
+  mockIsPipeConnected.mockReturnValue(false)
+  mockIsEngineRunning.mockReturnValue(false)
+  mockSendWithFallback.mockResolvedValue({ success: true })
+  mockSendPipeCommand.mockResolvedValue({ cmd: 'test', payload: {} })
+  mockSetEngineCapturing.mockReset()
+}
+
+import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
-import { ipcMain, shell } from 'electron'
 import { IPC } from '@shared/channels'
-import { registerClipsIpc, stopEngineProcess } from './clips.ipc'
+import type {
+  AudioSessionInfo,
+  ClipInfo,
+  ClipMergeResult,
+  ClipTrimResult,
+  ClipsConfig,
+  MicDeviceInfo,
+} from '@shared/types'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { config as clipsConfig } from '../services/clips-config-manager'
+import {
+  isEngineRunning,
+  isPipeConnected,
+  sendPipeCommand,
+  sendWithFallback,
+  setEngineCapturing,
+  stopEngineProcess,
+} from './clips-engine-connection'
+import { registerClipsIpc } from './clips.ipc'
 
 function captureHandlers(): Map<string, (...args: unknown[]) => unknown> {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -144,25 +188,42 @@ describe('CLIPS_LIST_CLIPS', () => {
     vi.clearAllMocks()
   })
 
-  it('returns empty array when output directory does not exist', () => {
+  function mockDuration(stderr: string) {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', stderr)
+        return undefined as never
+      },
+    )
+  }
+
+  it('returns empty array when output directory does not exist', async () => {
     vi.mocked(existsSync).mockReturnValue(false)
     const handlers = captureHandlers()
-    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toEqual([])
   })
 
-  it('returns sorted clips from disk', () => {
+  it('returns sorted clips from disk', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['clip2.mp4', 'clip1.mp4'])
-    vi.mocked(execFileSync).mockReturnValue('150.0\n')
+    mockDuration('Duration: 00:01:30.50, start: 0.000000, bitrate: 1000 kb/s\n')
 
     const statMock = vi.mocked(statSync)
-    statMock.mockReturnValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z') } as ReturnType<typeof statSync>)
-    statMock.mockReturnValueOnce({ size: 200, birthtime: new Date('2026-06-21T10:00:00Z') } as ReturnType<typeof statSync>)
+    statMock.mockReturnValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z') } as ReturnType<
+      typeof statSync
+    >)
+    statMock.mockReturnValueOnce({ size: 200, birthtime: new Date('2026-06-21T10:00:00Z') } as ReturnType<
+      typeof statSync
+    >)
 
     const handlers = captureHandlers()
-    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string; size: number; createdAt: string }>
-    // Sorted descending by date → clip1 (June 21) first, clip2 (June 20) second
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toHaveLength(2)
     expect(list[0]!.name).toBe('clip1.mp4')
     expect(list[0]!.size).toBe(200)
@@ -170,52 +231,80 @@ describe('CLIPS_LIST_CLIPS', () => {
     expect(list[1]!.size).toBe(100)
   })
 
-  it('filters out non-mp4 files', () => {
+  it('falls back to mtime when birthtime is epoch 0 (FAT32/exFAT)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(readdirSync).mockReturnValue(['clip.mp4'])
+    mockDuration('Duration: 00:01:00.00, start: 0.000000, bitrate: 1000 kb/s\n')
+    vi.mocked(statSync).mockReturnValue({
+      size: 100,
+      birthtime: new Date(0),
+      mtime: new Date('2026-06-21T10:00:00Z'),
+    } as ReturnType<typeof statSync>)
+
+    const handlers = captureHandlers()
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
+    expect(list).toHaveLength(1)
+    expect(list[0]!.createdAt).toBe('2026-06-21T10:00:00.000Z')
+  })
+
+  it('filters out non-mp4 files', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['clip.mp4', 'notes.txt', 'image.png'])
     vi.mocked(statSync).mockReturnValue({ size: 50, birthtime: new Date() } as ReturnType<typeof statSync>)
-    vi.mocked(execFileSync).mockReturnValue('60.0\n')
+    mockDuration('Duration: 00:01:00.00\n')
 
     const handlers = captureHandlers()
-    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string }>
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toHaveLength(1)
     expect(list[0]!.name).toBe('clip.mp4')
   })
 
-  it('skips files that fail to stat', () => {
+  it('skips files that fail to stat', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['good.mp4', 'bad.mp4'])
-    vi.mocked(execFileSync).mockReturnValue('30.0\n')
+    mockDuration('Duration: 00:00:30.00\n')
     vi.mocked(statSync)
       .mockReturnValueOnce({ size: 50, birthtime: new Date() } as ReturnType<typeof statSync>)
-      .mockImplementationOnce(() => { throw new Error('permission denied') })
+      .mockImplementationOnce(() => {
+        throw new Error('permission denied')
+      })
 
     const handlers = captureHandlers()
-    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string }>
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toHaveLength(1)
     expect(list[0]!.name).toBe('good.mp4')
   })
 
-  it('populates duration from ffprobe', () => {
+  it('populates duration from ffmpeg', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['clip.mp4'])
     vi.mocked(statSync).mockReturnValue({ size: 100, birthtime: new Date() } as ReturnType<typeof statSync>)
-    vi.mocked(execFileSync).mockReturnValue('90.5\n')
+    mockDuration('Duration: 00:01:30.50, start: 0.000000, bitrate: 1000 kb/s\n')
 
     const handlers = captureHandlers()
-    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string; duration: number }>
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toHaveLength(1)
     expect(list[0]!.duration).toBe(91)
   })
 
-  it('returns 0 duration when ffprobe fails', () => {
+  it('returns 0 duration when ffmpeg fails', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdirSync).mockReturnValue(['clip.mp4'])
     vi.mocked(statSync).mockReturnValue({ size: 100, birthtime: new Date() } as ReturnType<typeof statSync>)
-    vi.mocked(execFileSync).mockImplementation(() => { throw new Error('ffprobe not found') })
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(new Error('ffmpeg not found'), '', '')
+        return undefined as never
+      },
+    )
 
     const handlers = captureHandlers()
-    const list = getSyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)() as Array<{ name: string; duration: number }>
+    const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toHaveLength(1)
     expect(list[0]!.duration).toBe(0)
   })
@@ -231,7 +320,7 @@ describe('CLIPS_DELETE_CLIP', () => {
     vi.mocked(unlinkSync).mockReturnValue(undefined)
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_DELETE_CLIP)
-    const result = await handler({}, 'myclip.mp4') as { success: boolean }
+    const result = (await handler({}, 'myclip.mp4')) as { success: boolean }
     expect(result.success).toBe(true)
     expect(unlinkSync).toHaveBeenCalled()
   })
@@ -240,7 +329,7 @@ describe('CLIPS_DELETE_CLIP', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_DELETE_CLIP)
-    const result = await handler({}, 123) as { success: boolean; error?: string }
+    const result = (await handler({}, 123)) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toBe('Invalid clip name')
     expect(unlinkSync).not.toHaveBeenCalled()
@@ -248,12 +337,34 @@ describe('CLIPS_DELETE_CLIP', () => {
 
   it('catches unlink errors', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(unlinkSync).mockImplementation(() => { throw new Error('Access denied') })
+    vi.mocked(unlinkSync).mockImplementation(() => {
+      throw new Error('Access denied')
+    })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_DELETE_CLIP)
-    const result = await handler({}, 'myclip.mp4') as { success: boolean; error?: string }
+    const result = (await handler({}, 'myclip.mp4')) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toBe('Access denied')
+  })
+
+  it('rejects path traversal in clipName', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_DELETE_CLIP)
+    const result = (await handler({}, '../../../Windows/system.ini')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid path')
+  })
+
+  it('handles non-Error exception from unlinkSync', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(unlinkSync).mockImplementation(() => {
+      throw 'disk-error'
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_DELETE_CLIP)
+    const result = (await handler({}, 'myclip.mp4')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('disk-error')
   })
 })
 
@@ -317,9 +428,27 @@ describe('CLIPS_GET_CONFIG', () => {
     expect(cfg.gameAudioOnly).toBe(true)
     const hk = cfg.hotkeys as Array<Record<string, unknown>>
     expect(hk).toHaveLength(3)
-    expect(hk[0]).toMatchObject({ vk: 123, action: 'saveClip', modifiers: [], enabled: true, replayDurationSeconds: 300 })
-    expect(hk[1]).toMatchObject({ vk: 122, action: 'saveClip', modifiers: [], enabled: true, replayDurationSeconds: 120 })
-    expect(hk[2]).toMatchObject({ vk: 49, modifiers: ['Alt'], action: 'toggleCapture', enabled: true, replayDurationSeconds: 60 })
+    expect(hk[0]).toMatchObject({
+      vk: 123,
+      action: 'saveClip',
+      modifiers: [],
+      enabled: true,
+      replayDurationSeconds: 300,
+    })
+    expect(hk[1]).toMatchObject({
+      vk: 122,
+      action: 'saveClip',
+      modifiers: [],
+      enabled: true,
+      replayDurationSeconds: 120,
+    })
+    expect(hk[2]).toMatchObject({
+      vk: 49,
+      modifiers: ['Alt'],
+      action: 'toggleCapture',
+      enabled: true,
+      replayDurationSeconds: 60,
+    })
   })
 })
 
@@ -332,7 +461,7 @@ describe('CLIPS_START_ENGINE', () => {
     vi.mocked(existsSync).mockReturnValue(false)
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_START_ENGINE)
-    const result = await handler() as { success: boolean; error?: string }
+    const result = (await handler()) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toContain('not found')
   })
@@ -371,7 +500,7 @@ describe('CLIPS_START_ENGINE success + stopEngineProcess', () => {
   it('starts engine successfully', async () => {
     const child = startEngineAndVerifySuccess()
     const { handler } = startEngine()
-    const result = await handler() as { success: boolean }
+    const result = (await handler()) as { success: boolean }
     expect(result.success).toBe(true)
     expect(spawn).toHaveBeenCalled()
     // cleanup so next test has fresh state
@@ -399,7 +528,7 @@ describe('CLIPS_START_ENGINE success + stopEngineProcess', () => {
     await handler()
 
     const stopHandler = getAsyncHandler(handlers, IPC.CLIPS_STOP_ENGINE)
-    const result = await stopHandler() as { success: boolean }
+    const result = (await stopHandler()) as { success: boolean }
     expect(result.success).toBe(true)
     expect(child.kill).toHaveBeenCalledWith('SIGTERM')
   })
@@ -413,7 +542,7 @@ describe('CLIPS_SET_CONFIG', () => {
   it('returns success when pipe is not connected', async () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
-    const result = await handler({}, { fps: 120 }) as { success: boolean; error?: string }
+    const result = (await handler({}, { fps: 120 })) as { success: boolean; error?: string }
     expect(result.success).toBe(true)
   })
 
@@ -448,6 +577,83 @@ describe('CLIPS_SET_CONFIG', () => {
     const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
     expect(cfg.gameAudioOnly).toBe(true)
   })
+
+  it('updates pushToTalkKeys to default when filter yields empty', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { pushToTalkKeys: ['not-a-number', null] })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.pushToTalkKeys).toEqual([0x7a])
+  })
+
+  it('handles falsy config gracefully', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    const result = (await handler({}, null)) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+  })
+
+  it('updates all typed config fields', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler(
+      {},
+      {
+        replayTimeSeconds: 300,
+        fps: 60,
+        width: 1920,
+        height: 1080,
+        bitrateKbps: 15000,
+        cq: 24,
+        maxrateKbps: 50000,
+        bufsizeKbps: 100000,
+        bframes: 2,
+        lookahead: 4,
+        encoderPreset: 'p4',
+        codec: 'h264',
+        adapterIndex: 0,
+        micEnabled: true,
+        audioLoopback: true,
+        forceSoftware: false,
+        gameDetection: true,
+        autoStartCapture: false,
+        useExcludeMode: true,
+        excludeProcessId: 1234,
+        gameVolume: 0.8,
+        micVolume: 1.2,
+        noiseSuppression: true,
+        audioSampleRate: 48000,
+        autoCleanupEnabled: true,
+        autoCleanupThresholdPercent: 85,
+      },
+    )
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.fps).toBe(60)
+    expect(cfg.width).toBe(1920)
+    expect(cfg.cq).toBe(24)
+    expect(cfg.adapterIndex).toBe(0)
+    expect(cfg.micEnabled).toBe(true)
+    expect(cfg.forceSoftware).toBe(false)
+    expect(cfg.gameVolume).toBe(0.8)
+    expect(cfg.micVolume).toBe(1.2)
+    expect(cfg.encoderPreset).toBe('p4')
+    expect(cfg.autoCleanupThresholdPercent).toBe(85)
+  })
+
+  it('syncs customGameProcess and micDeviceId when pipe is connected', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendWithFallback.mockResolvedValue({ success: true })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    const result = (await handler(
+      {},
+      {
+        customGameProcess: 'FiveM.exe',
+        micDeviceId: 'mic-1',
+      },
+    )) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+  })
 })
 
 describe('CLIPS_SELECT_OUTPUT_DIR', () => {
@@ -457,10 +663,14 @@ describe('CLIPS_SELECT_OUTPUT_DIR', () => {
 
   it('returns selected path when dialog is not canceled', async () => {
     const { dialog } = await import('electron')
-    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['D:\\Clipes'], bookmarks: undefined })
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({
+      canceled: false,
+      filePaths: ['D:\\Clipes'],
+      bookmarks: undefined,
+    })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SELECT_OUTPUT_DIR)
-    const result = await handler() as string | null
+    const result = (await handler()) as string | null
     expect(result).toBe('D:\\Clipes')
   })
 
@@ -469,20 +679,69 @@ describe('CLIPS_SELECT_OUTPUT_DIR', () => {
     vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: true, filePaths: [], bookmarks: undefined })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SELECT_OUTPUT_DIR)
-    const result = await handler() as string | null
+    const result = (await handler()) as string | null
     expect(result).toBeNull()
+  })
+
+  it('uses dialog without focused window', async () => {
+    const { dialog, BrowserWindow } = await import('electron')
+    vi.mocked(BrowserWindow.getFocusedWindow).mockReturnValue(null)
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({
+      canceled: false,
+      filePaths: ['D:\\Clipes'],
+      bookmarks: undefined,
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SELECT_OUTPUT_DIR)
+    const result = (await handler()) as string | null
+    expect(result).toBe('D:\\Clipes')
   })
 })
 
 describe('CLIPS_GET_AUDIO_SESSIONS', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetEngineMocks()
   })
 
   it('returns empty array when pipe is not connected', async () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_AUDIO_SESSIONS)
-    const result = await handler() as unknown[]
+    const result = (await handler()) as unknown[]
+    expect(result).toEqual([])
+  })
+
+  it('returns sessions when pipe is connected and session array is present', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getAudioSessions',
+      payload: { sessions: [{ id: 1, name: 'Game', pid: 1234 }] },
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_AUDIO_SESSIONS)
+    const result = (await handler()) as AudioSessionInfo[]
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ id: 1, name: 'Game', pid: 1234 })
+  })
+
+  it('returns empty array when sessions payload is not an array', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getAudioSessions',
+      payload: { sessions: 'not-an-array' },
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_AUDIO_SESSIONS)
+    const result = (await handler()) as AudioSessionInfo[]
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array when sendPipeCommand throws', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockRejectedValue(new Error('pipe error'))
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_AUDIO_SESSIONS)
+    const result = (await handler()) as AudioSessionInfo[]
     expect(result).toEqual([])
   })
 })
@@ -490,12 +749,13 @@ describe('CLIPS_GET_AUDIO_SESSIONS', () => {
 describe('CLIPS_SET_AUDIO_SESSIONS', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetEngineMocks()
   })
 
   it('rejects non-array sessionPids', async () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_AUDIO_SESSIONS)
-    const result = await handler({}, 'not-an-array') as { success: boolean; error?: string }
+    const result = (await handler({}, 'not-an-array')) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toBe('sessionPids must be an array')
   })
@@ -503,8 +763,742 @@ describe('CLIPS_SET_AUDIO_SESSIONS', () => {
   it('returns pipe-not-connected error when pipe is not connected', async () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_AUDIO_SESSIONS)
-    const result = await handler({}, [1234]) as { success: boolean; error?: string }
+    const result = (await handler({}, [1234])) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toBe('Engine pipe not connected')
+  })
+
+  it('sets audio sessions successfully when pipe is connected', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({ cmd: 'setAudioSessions', payload: { success: true } })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_AUDIO_SESSIONS)
+    const result = (await handler({}, [1234, 5678])) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(mockSendPipeCommand).toHaveBeenCalledWith('setAudioSessions', { pids: [1234, 5678] })
+  })
+
+  it('returns error when engine responds with success:false', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'setAudioSessions',
+      payload: { success: false, error: 'Session not found' },
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_AUDIO_SESSIONS)
+    const result = (await handler({}, [9999])) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Session not found')
+  })
+
+  it('returns error when sendPipeCommand throws', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockRejectedValue(new Error('connection lost'))
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_AUDIO_SESSIONS)
+    const result = (await handler({}, [1234])) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('connection lost')
+  })
+})
+
+describe('CLIPS_STOP_CAPTURE', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('returns success when engine is not running', async () => {
+    mockIsEngineRunning.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)
+    const result = (await handler()) as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(mockSetEngineCapturing).toHaveBeenCalledWith(false)
+    expect(mockSendWithFallback).not.toHaveBeenCalled()
+  })
+
+  it('stops capture when engine is running and pipe responds', async () => {
+    mockIsEngineRunning.mockReturnValue(true)
+    mockSendWithFallback.mockResolvedValue({ success: true })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)
+    const result = (await handler()) as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(mockSendWithFallback).toHaveBeenCalledWith('stopCapture')
+    expect(mockSetEngineCapturing).toHaveBeenCalledWith(false)
+  })
+
+  it('returns error when engine is running but pipe fails', async () => {
+    mockIsEngineRunning.mockReturnValue(true)
+    mockSendWithFallback.mockResolvedValue({ success: false, error: 'pipe error' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)
+    const result = (await handler()) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('pipe error')
+    expect(mockSetEngineCapturing).not.toHaveBeenCalled()
+  })
+})
+
+describe('CLIPS_SAVE_CLIP', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('returns error when engine is not running', async () => {
+    mockIsEngineRunning.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
+    const result = (await handler()) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Engine not running')
+    expect(mockSendWithFallback).not.toHaveBeenCalled()
+  })
+
+  it('saves clip when pipe is connected directly', async () => {
+    mockIsEngineRunning.mockReturnValue(true)
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendWithFallback.mockResolvedValue({ success: true })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
+    const result = (await handler()) as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(mockSendWithFallback).toHaveBeenCalledWith('config', expect.any(Object))
+    expect(mockSendWithFallback).toHaveBeenCalledWith('saveClip')
+  })
+
+  it('waits for pipe reconnection and returns saveClip result', async () => {
+    mockIsEngineRunning.mockReturnValue(true)
+    mockIsPipeConnected
+      .mockReturnValueOnce(false) // first check → enters wait loop
+      .mockReturnValueOnce(false) // iteration 1
+    mockIsPipeConnected.mockReturnValue(true) // iteration 2 → connected, stays true for post-loop check
+    mockSendWithFallback.mockResolvedValue({ success: true, path: '/clips/test.mp4' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
+    const result = (await handler()) as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(mockSendWithFallback).toHaveBeenCalledWith('config', expect.any(Object))
+  })
+
+  it('returns error if engine dies during wait loop', async () => {
+    mockIsEngineRunning
+      .mockReturnValueOnce(true) // first check passes
+      .mockReturnValueOnce(false) // engine dies during loop
+    mockIsPipeConnected.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
+    const result = (await handler()) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Engine not running')
+  })
+})
+
+describe('CLIPS_GET_THUMBNAIL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('processes thumbnail request for valid clip name', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_THUMBNAIL)
+    const result = (await handler({}, 'myclip.mp4')) as string | null
+    expect(typeof result).toBe('object') // null because no cached/generated thumbnails exist
+    expect(result).toBeNull()
+  })
+
+  it('returns null for non-string clipName', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_THUMBNAIL)
+    const result = (await handler({}, 123)) as string | null
+    expect(result).toBeNull()
+  })
+})
+
+describe('CLIPS_GET_RUNNING_PROCESSES', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('parses CSV output from tasklist', async () => {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '"chrome.exe","1234"\n"explorer.exe","5678"\n', '')
+        return undefined as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_RUNNING_PROCESSES)
+    const result = (await handler()) as Array<{ name: string; pid: number }>
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ name: 'chrome.exe', pid: 1234 })
+    expect(result[1]).toEqual({ name: 'explorer.exe', pid: 5678 })
+  })
+
+  it('skips lines that do not match CSV pattern', async () => {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '"chrome.exe","1234"\ninvalid line\n"good.exe","9999"\n', '')
+        return undefined as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_RUNNING_PROCESSES)
+    const result = (await handler()) as Array<{ name: string; pid: number }>
+    expect(result).toHaveLength(2)
+  })
+
+  it('returns empty array when execFile fails', async () => {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(new Error('tasklist not found'), '', '')
+        return undefined as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_RUNNING_PROCESSES)
+    const result = (await handler()) as Array<{ name: string; pid: number }>
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array from empty stdout', async () => {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return undefined as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_RUNNING_PROCESSES)
+    const result = (await handler()) as Array<{ name: string; pid: number }>
+    expect(result).toEqual([])
+  })
+})
+
+describe('CLIPS_GET_MIC_DEVICES', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('returns empty array when pipe is not connected', async () => {
+    mockIsPipeConnected.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_MIC_DEVICES)
+    const result = (await handler()) as MicDeviceInfo[]
+    expect(result).toEqual([])
+  })
+
+  it('returns devices when pipe is connected and devices array is present', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getMicDevices',
+      payload: { devices: [{ id: 'mic1', name: 'Microphone' }] },
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_MIC_DEVICES)
+    const result = (await handler()) as MicDeviceInfo[]
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ id: 'mic1', name: 'Microphone' })
+  })
+
+  it('returns empty array when devices payload is not an array', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getMicDevices',
+      payload: { devices: 'not-an-array' },
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_MIC_DEVICES)
+    const result = (await handler()) as MicDeviceInfo[]
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array when sendPipeCommand throws', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockRejectedValue(new Error('connection failed'))
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_MIC_DEVICES)
+    const result = (await handler()) as MicDeviceInfo[]
+    expect(result).toEqual([])
+  })
+})
+
+describe('CLIPS_SET_MIC_DEVICE', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('rejects non-string deviceId', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_MIC_DEVICE)
+    const result = (await handler({}, 123)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('deviceId must be a string')
+  })
+
+  it('returns success when pipe is not connected', async () => {
+    mockIsPipeConnected.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_MIC_DEVICE)
+    const result = (await handler({}, 'mic-device-1')) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(mockSendPipeCommand).not.toHaveBeenCalled()
+  })
+
+  it('updates mic device and syncs to engine when pipe is connected', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({ cmd: 'setMicDevice', payload: {} })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_MIC_DEVICE)
+    const result = (await handler({}, 'mic-device-1')) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(mockSendPipeCommand).toHaveBeenCalledWith('setMicDevice', { deviceId: 'mic-device-1' })
+  })
+
+  it('returns error when sendPipeCommand throws', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockRejectedValue(new Error('pipe disconnected'))
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_MIC_DEVICE)
+    const result = (await handler({}, 'mic-device-1')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('pipe disconnected')
+  })
+})
+
+describe('CLIPS_GET_GPUS', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('returns empty array when pipe is not connected', async () => {
+    mockIsPipeConnected.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)
+    const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
+    expect(result).toEqual([])
+  })
+
+  it('returns GPU list when pipe is connected and payload is array', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'NVIDIA RTX 5050', vendorId: 4318 }],
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)
+    const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ index: 0, vendorId: 4318 })
+  })
+
+  it('returns empty array when payload is not an array', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: { error: 'no gpus' },
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)
+    const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array when sendPipeCommand throws', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockRejectedValue(new Error('timeout'))
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)
+    const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
+    expect(result).toEqual([])
+  })
+})
+
+describe('CLIPS_SET_FAVORITE', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    resetEngineMocks()
+    clipsConfig.outputDirectory = ''
+  })
+
+  it('rejects non-string clipName', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, 123, true)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid clip name')
+  })
+
+  it('rejects empty string clipName', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, '', true)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid clip name')
+  })
+
+  it('rejects non-boolean favorite value', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, 'clip.mp4', 'yes')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid favorite value')
+  })
+
+  it('rejects when clipPathInOutputDir returns null', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    // Handler wraps clipName as `.${clipName}.favorite` → `.a/../../../tmp/outside.mp4.favorite`
+    // which resolves outside the default output dir → clipPathInOutputDir returns null
+    const result = (await handler({}, 'a/../../../tmp/outside.mp4', true)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid clip name')
+  })
+
+  it('writes favorite marker when favorite is true', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, 'clip.mp4', true)) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(writeFileSync).toHaveBeenCalled()
+  })
+
+  it('removes favorite marker when favorite is false and file exists', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, 'clip.mp4', false)) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(unlinkSync).toHaveBeenCalled()
+  })
+
+  it('does nothing when favorite is false and marker file does not exist', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    // No existsSync mock → default vi.fn() returns undefined (falsy)
+    const result = (await handler({}, 'clip.mp4', false)) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(unlinkSync).not.toHaveBeenCalled()
+  })
+
+  it('returns error when writeFileSync fails', async () => {
+    vi.mocked(writeFileSync).mockImplementation(() => {
+      throw new Error('disk full')
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, 'clip.mp4', true)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('disk full')
+  })
+
+  it('handles non-Error exception from writeFileSync', async () => {
+    vi.mocked(writeFileSync).mockImplementation(() => {
+      throw 'unknown-error'
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_FAVORITE)
+    const result = (await handler({}, 'clip.mp4', true)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('unknown-error')
+  })
+})
+
+describe('CLIPS_TRIM_CLIP', () => {
+  const mockFFProc = { on: vi.fn() }
+
+  beforeEach(() => {
+    vi.resetAllMocks()
+    resetEngineMocks()
+    mockFFProc.on.mockReset()
+    clipsConfig.outputDirectory = ''
+  })
+
+  it('rejects non-string clipPath', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, '', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid clip path')
+  })
+
+  it('rejects when clipPathInOutputDir returns null', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    // '../outside.mp4' resolves outside the default output dir → clipPathInOutputDir returns null
+    const result = (await handler({}, '../outside.mp4', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Clip file not found')
+  })
+
+  it('rejects invalid trim range when endSeconds <= startSeconds', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 20, 10)) as ClipTrimResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid trim range')
+  })
+
+  it('rejects startSeconds < 0', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', -1, 10)) as ClipTrimResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid trim range')
+  })
+
+  it('returns success when ffmpeg trim succeeds', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    expect(result.path).toBeDefined()
+    expect(typeof result.path).toBe('string')
+  })
+
+  it('creates output directory when trimmed dir does not exist', async () => {
+    vi.mocked(existsSync).mockReturnValueOnce(true) // safePath exists
+    // second existsSync(outDir) → undefined → falsy → triggers mkdirSync
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    expect(mkdirSync).toHaveBeenCalled()
+  })
+
+  it('returns error when ffmpeg trim fails', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(new Error('ffmpeg error'), '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('ffmpeg error')
+  })
+
+  it('handles process spawn error', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(execFile).mockReturnValue(mockFFProc as never)
+    mockFFProc.on.mockImplementation((_event: string, cb: (e: Error) => void) => {
+      if (_event === 'error') {
+        setTimeout(() => cb(new Error('spawn failed')), 10)
+      }
+      return mockFFProc
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('spawn failed')
+  })
+})
+
+describe('CLIPS_MERGE_CLIPS', () => {
+  const mockFFProc = { on: vi.fn() }
+
+  beforeEach(() => {
+    vi.resetAllMocks()
+    resetEngineMocks()
+    mockFFProc.on.mockReset()
+    clipsConfig.outputDirectory = ''
+  })
+
+  it('rejects non-array or less than 2 clips', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['onlyone.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('At least 2 clips required')
+  })
+
+  it('rejects non-string path in array', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, [123, 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid clip path')
+  })
+
+  it('rejects when a clip path is not found', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not found')
+  })
+
+  it('returns success when ffmpeg merge succeeds', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(true)
+    expect(result.path).toBeDefined()
+    expect(typeof result.path).toBe('string')
+    expect(writeFileSync).toHaveBeenCalled() // concat file written
+  })
+
+  it('returns error when ffmpeg merge fails', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(new Error('merge failed'), '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('merge failed')
+  })
+
+  it('handles process spawn error during merge', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(execFile).mockReturnValue(mockFFProc as never)
+    mockFFProc.on.mockImplementation((_event: string, cb: (e: Error) => void) => {
+      if (_event === 'error') {
+        setTimeout(() => cb(new Error('spawn error')), 10)
+      }
+      return mockFFProc
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('spawn error')
+  })
+
+  it('handles writeFileSync failure for concat file', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(writeFileSync)
+      .mockReset()
+      .mockImplementation(() => {
+        throw new Error('permission denied')
+      })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('permission denied')
+  })
+
+  it('creates output directory when merged dir does not exist', async () => {
+    vi.mocked(existsSync).mockReturnValueOnce(true) // clip1.mp4 exists
+    vi.mocked(existsSync).mockReturnValueOnce(true) // clip2.mp4 exists
+    // third existsSync(outDir) → undefined → falsy → triggers mkdirSync
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(true)
+    expect(mkdirSync).toHaveBeenCalled()
+  })
+
+  it('handles non-Error exception during merge', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(writeFileSync)
+      .mockReset()
+      .mockImplementation(() => {
+        throw 'write-error'
+      })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('write-error')
   })
 })

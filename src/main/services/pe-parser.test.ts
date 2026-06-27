@@ -494,8 +494,184 @@ describe('parsePeImports', () => {
 
   it('returns empty array for PE with NumberOfSections = 0', () => {
     const buf = buildPe([], false)
-    // Set NumberOfSections = 0
     buf.writeUInt16LE(0, PE_OFFSET + 6)
+    const result = parsePeImports(buf)
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array when file header extends past buffer', () => {
+    const buf = buildPe([], false)
+    const truncated = buf.subarray(0, PE_OFFSET + 4 + FILE_HEADER_SIZE - 1) // 151 bytes
+    expect(parsePeImports(truncated)).toEqual([])
+  })
+
+  it('returns empty array when NumberOfSections exceeds MAX_SECTIONS', () => {
+    const buf = buildPe([], false)
+    buf.writeUInt16LE(97, PE_OFFSET + 6)
+    expect(parsePeImports(buf)).toEqual([])
+  })
+
+  it('returns empty array when optional header extends past buffer', () => {
+    const buf = buildPe([], false)
+    buf.writeUInt16LE(0xffff, PE_OFFSET + 20)
+    expect(parsePeImports(buf)).toEqual([])
+  })
+
+  it('returns empty array when optional header magic is invalid', () => {
+    const buf = buildPe([], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    buf.writeUInt16LE(0x0300, optHeaderStart)
+    expect(parsePeImports(buf)).toEqual([])
+  })
+
+  it('returns empty array when data directory area is truncated', () => {
+    const buf = buildPe([], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const dataDirOffset = 96
+    const minNeeded = optHeaderStart + dataDirOffset + 16
+    const truncated = buf.subarray(0, minNeeded - 1)
+    expect(parsePeImports(truncated)).toEqual([])
+  })
+
+  it('returns empty array when section headers extend past buffer', () => {
+    const buf = buildPe([{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sizeOfOptionalHeader = buf.readUInt16LE(PE_OFFSET + 20)
+    const sectionTableStart = optHeaderStart + sizeOfOptionalHeader
+    const truncated = buf.subarray(0, sectionTableStart + 40 - 1)
+    expect(parsePeImports(truncated)).toEqual([])
+  })
+
+  it('breaks section loop when a section header is truncated', () => {
+    const buf = buildPe([], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sizeOfOptionalHeader = buf.readUInt16LE(PE_OFFSET + 20)
+    const sectionTableStart = optHeaderStart + sizeOfOptionalHeader
+    const oneFullSectionPast = sectionTableStart + 40
+    const truncated = buf.subarray(0, oneFullSectionPast + 10)
+    const origNumSections = buf.readUInt16LE(PE_OFFSET + 6)
+    buf.writeUInt16LE(origNumSections + 2, PE_OFFSET + 6)
+    const result = parsePeImports(truncated)
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('skips section with rawPtr or rawSize zero in rvaToRawOffset', () => {
+    const imports: ImportSpec[] = [{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }]
+    const buf = buildPe(imports, false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sizeOfOptionalHeader = buf.readUInt16LE(PE_OFFSET + 20)
+    const sectionTableStart = optHeaderStart + sizeOfOptionalHeader
+    buf.writeUInt32LE(0, sectionTableStart + 20)
+    const result = parsePeImports(buf)
+    expect(result).toEqual([])
+  })
+
+  it('returns empty string when readCString has no null terminator', () => {
+    const imports: ImportSpec[] = [{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }]
+    const buf = buildPe(imports, false)
+    const rawDataStart =
+      Math.ceil((PE_OFFSET + 4 + FILE_HEADER_SIZE + OPT_HDR_SIZE_32 + SECTION_HEADER_SIZE) / 512) * 512
+    const importDataSize = (1 + 1) * 20
+    const thunkArraySize = (1 + 1) * 4
+    const dllNameRelOffset = importDataSize + thunkArraySize
+    const dllNamePos = rawDataStart + dllNameRelOffset
+    for (let i = dllNamePos; i < buf.length; i++) {
+      if (buf[i] === 0) buf[i] = 0x20
+    }
+    const result = parsePeImports(buf)
+    expect(result).toHaveLength(0)
+  })
+
+  it('handles empty function name (null at offset) in IMAGE_IMPORT_BY_NAME', () => {
+    const imports: ImportSpec[] = [{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }]
+    const buf = buildPe(imports, false)
+    const rawDataStart =
+      Math.ceil((PE_OFFSET + 4 + FILE_HEADER_SIZE + OPT_HDR_SIZE_32 + SECTION_HEADER_SIZE) / 512) * 512
+    const importDataSize = (1 + 1) * 20
+    const thunkArraySize = (1 + 1) * 4
+    const dllNameLen = 'kernel32.dll'.length + 1
+    const fnHintNameOffset = importDataSize + thunkArraySize + dllNameLen
+    const fnNamePos = rawDataStart + fnHintNameOffset + 2
+    buf[fnNamePos] = 0
+    const result = parsePeImports(buf)
+    expect(result).toHaveLength(1)
+    expect(result[0]!.functions).not.toContain('CreateFileW')
+  })
+
+  it('returns empty array when import raw offset extends past buffer', () => {
+    const imports: ImportSpec[] = [{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }]
+    const buf = buildPe(imports, false)
+    const rawDataStart =
+      Math.ceil((PE_OFFSET + 4 + FILE_HEADER_SIZE + OPT_HDR_SIZE_32 + SECTION_HEADER_SIZE) / 512) * 512
+    const truncated = buf.subarray(0, rawDataStart + 19)
+    expect(parsePeImports(truncated)).toEqual([])
+  })
+
+  it('breaks descriptor loop when descriptor extends past buffer', () => {
+    const imports: ImportSpec[] = [
+      { dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] },
+      { dllName: 'user32.dll', functions: ['MessageBoxW'], ordinals: [] },
+    ]
+    const buf = buildPe(imports, false)
+    const rawDataStart =
+      Math.ceil((PE_OFFSET + 4 + FILE_HEADER_SIZE + OPT_HDR_SIZE_32 + SECTION_HEADER_SIZE) / 512) * 512
+    const truncated = buf.subarray(0, rawDataStart + 25)
+    const result = parsePeImports(truncated)
+    expect(result.length).toBeLessThanOrEqual(1)
+  })
+
+  it('skips descriptor when DLL name RVA resolves past buffer', () => {
+    const buf = buildPe([{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sectionHeaderStart = optHeaderStart + OPT_HDR_SIZE_32
+    const rawDataStart = Math.ceil((sectionHeaderStart + SECTION_HEADER_SIZE) / 512) * 512
+    buf.writeUInt32LE(rawDataStart + 9999, rawDataStart + 12)
+    const result = parsePeImports(buf)
+    expect(result).toEqual([])
+  })
+
+  it('skips descriptor when OriginalFirstThunk and FirstThunk are both zero', () => {
+    const buf = buildPe([{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sectionHeaderStart = optHeaderStart + OPT_HDR_SIZE_32
+    const rawDataStart = Math.ceil((sectionHeaderStart + SECTION_HEADER_SIZE) / 512) * 512
+    buf.writeUInt32LE(0, rawDataStart)
+    buf.writeUInt32LE(0, rawDataStart + 16)
+    const result = parsePeImports(buf)
+    expect(result).toEqual([])
+  })
+
+  it('skips descriptor when thunk RVA cannot be resolved', () => {
+    const buf = buildPe([{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sectionHeaderStart = optHeaderStart + OPT_HDR_SIZE_32
+    const rawDataStart = Math.ceil((sectionHeaderStart + SECTION_HEADER_SIZE) / 512) * 512
+    buf.writeUInt32LE(0xffffffff, rawDataStart)
+    const result = parsePeImports(buf)
+    expect(result).toEqual([])
+  })
+
+  it('breaks thunk loop when thunk offset extends past buffer', () => {
+    const imports: ImportSpec[] = [{ dllName: 'kernel32.dll', functions: ['CreateFileW', 'ReadFile'], ordinals: [] }]
+    const buf = buildPe(imports, false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sectionHeaderStart = optHeaderStart + OPT_HDR_SIZE_32
+    const rawDataStart = Math.ceil((sectionHeaderStart + SECTION_HEADER_SIZE) / 512) * 512
+    // Corrupt ReadFile's thunk entry (at offset +44) so it cannot be resolved
+    buf.writeUInt32LE(0xffffffff, rawDataStart + 44)
+    const result = parsePeImports(buf)
+    expect(result).toHaveLength(1)
+    expect(result[0]!.functions).toEqual(['CreateFileW'])
+  })
+
+  it('skips by-name import when name RVA cannot be resolved', () => {
+    const buf = buildPe([{ dllName: 'kernel32.dll', functions: ['CreateFileW'], ordinals: [] }], false)
+    const optHeaderStart = PE_OFFSET + 4 + FILE_HEADER_SIZE
+    const sectionHeaderStart = optHeaderStart + OPT_HDR_SIZE_32
+    const rawDataStart = Math.ceil((sectionHeaderStart + SECTION_HEADER_SIZE) / 512) * 512
+    // Zero OriginalFirstThunk so code falls through to the corrupted FirstThunk
+    buf.writeUInt32LE(0, rawDataStart)
+    buf.writeUInt32LE(0xffffffff, rawDataStart + 16)
     const result = parsePeImports(buf)
     expect(result).toEqual([])
   })

@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 
 namespace DiNho.Capture.Poc.Audio;
@@ -46,7 +47,7 @@ public sealed class RnnoiseFilter : IDisposable
         _stdin = _process.StandardInput.BaseStream;
         _stdout = _process.StandardOutput.BaseStream;
 
-        Console.Error.WriteLine($"[RnnoiseFilter] Started: filter={filter} SR={sampleRate} Ch={channels}");
+        Log.I("RnnoiseFilter", $"Started: filter={filter} SR={sampleRate} Ch={channels}");
     }
 
     public float[] Process(float[] input)

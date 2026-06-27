@@ -192,6 +192,14 @@ describe('dirSize', () => {
     })
     expect(dirSize('C:\\locked')).toBe(0)
   })
+
+  it('processes subdirectory entries recursively', () => {
+    mocks.readdirSync
+      .mockReturnValueOnce([{ isFile: () => false, isDirectory: () => true, name: 'sub' }])
+      .mockReturnValueOnce([{ isFile: () => true, isDirectory: () => false, name: 'nested.bin' }])
+    mocks.statSync.mockReturnValueOnce({ size: 400 })
+    expect(dirSize('C:\\root')).toBe(400)
+  })
 })
 
 describe('registerDriverManagerIpc', () => {
@@ -286,6 +294,53 @@ describe('registerDriverManagerIpc', () => {
       expect(result.installed).toBe(1)
     })
   })
+
+  describe('DRIVER_SCAN handler with progress via webContents', () => {
+    it('sends progress events to window', async () => {
+      const mockWin = { webContents: { send: vi.fn() }, isDestroyed: vi.fn(() => false) }
+      mocks.execFileAsync.mockResolvedValue({
+        stdout: JSON.stringify([
+          {
+            PublishedName: 'oem0.inf',
+            ProviderName: 'Intel',
+            ClassName: 'Display',
+            DriverVersion: '10.0.1',
+            DriverDate: '2024-01-01',
+            SignerName: 'Microsoft',
+          },
+        ]),
+      })
+      mocks.execNativeUtf8.mockResolvedValue({ stdout: '' })
+      registerDriverManagerIpc(() => mockWin as any)
+      const handler = getHandler('driver:scan')
+      await handler()
+      expect(mockWin.webContents.send).toHaveBeenCalled()
+      expect(mockWin.webContents.send.mock.calls[0][0]).toBe('driver:progress')
+    })
+  })
+
+  describe('DRIVER_UPDATE_SCAN handler with progress via webContents', () => {
+    it('sends progress events to window', async () => {
+      const mockWin = { webContents: { send: vi.fn() }, isDestroyed: vi.fn(() => false) }
+      mocks.execFileAsync.mockResolvedValue({
+        stdout: 'DRVUPD|Intel Graphics|HWID001|Display|10.0.1|2024-01-01|upd-001|2024-06-01|Intel|Intel Driver|10 MB',
+      })
+      registerDriverManagerIpc(() => mockWin as any)
+      const handler = getHandler('driver:update:scan')
+      await handler()
+      expect(mockWin.webContents.send).toHaveBeenCalled()
+      expect(mockWin.webContents.send.mock.calls[0][0]).toBe('driver:update:progress')
+    })
+  })
+
+  describe('DRIVER_CLEAN handler with empty array', () => {
+    it('returns empty result for empty array input', async () => {
+      registerDriverManagerIpc(() => null)
+      const handler = getHandler('driver:clean')
+      const result = await handler({} as unknown[], [])
+      expect(result).toEqual({ removed: 0, failed: 0, spaceRecovered: 0, errors: [] })
+    })
+  })
 })
 
 describe('scanDrivers', () => {
@@ -298,6 +353,78 @@ describe('scanDrivers', () => {
     const result = await scanDrivers()
     expect(result).toEqual({ packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 })
     expect(mocks.logger.warning).toHaveBeenCalledWith('driver-manager', 'Driver scan skipped — not on Windows')
+  })
+
+  it('parses single driver object from registry JSON (non-array)', async () => {
+    mocks.execFileAsync
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        }),
+      })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+    const result = await scanDrivers()
+    expect(result.packages).toHaveLength(1)
+    expect(result.packages[0].publishedName).toBe('oem0.inf')
+  })
+
+  it('filters out entries without valid PublishedName', async () => {
+    mocks.execFileAsync
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          {
+            PublishedName: 'oem0.inf',
+            ProviderName: 'Intel',
+            ClassName: 'Display',
+            DriverVersion: '10.0.1',
+            DriverDate: '2024-01-01',
+            SignerName: 'Microsoft',
+          },
+          {
+            PublishedName: 'custom.inf',
+            ProviderName: 'NVIDIA',
+            ClassName: 'Display',
+            DriverVersion: '10.0.2',
+            DriverDate: '2024-06-01',
+            SignerName: 'Microsoft',
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+    const result = await scanDrivers()
+    expect(result.packages).toHaveLength(1)
+    expect(result.packages[0].publishedName).toBe('oem0.inf')
+  })
+
+  it('falls back to pnputil for active driver detection when WMI fails', async () => {
+    mocks.execFileAsync
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          {
+            PublishedName: 'oem0.inf',
+            ProviderName: 'Intel',
+            ClassName: 'Display',
+            DriverVersion: '10.0.1',
+            DriverDate: '2024-01-01',
+            SignerName: 'Microsoft',
+          },
+        ]),
+      })
+      .mockRejectedValueOnce({ stderr: 'WMI failed' })
+      .mockResolvedValueOnce({ stdout: '' })
+    mocks.execNativeUtf8.mockResolvedValueOnce({ stdout: 'Driver Name: oem0.inf\n' })
+    const result = await scanDrivers()
+    expect(result.packages).toHaveLength(1)
+    expect(result.packages[0].isCurrent).toBe(true)
+    expect(mocks.execNativeUtf8).toHaveBeenCalledWith('pnputil', ['/enum-devices', '/connected'], expect.any(Object))
   })
 
   it('returns classified drivers with stale and current', async () => {
@@ -432,13 +559,100 @@ describe('scanDrivers', () => {
     expect(result.packages[0].size).toBe(5000)
   })
 
+  it('computes folder size with subdirectory entry', async () => {
+    mocks.execFileAsync.mockResolvedValueOnce({
+      stdout: JSON.stringify([
+        {
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        },
+      ]),
+    })
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' })
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'oem0.inf|folder123\n' })
+    mocks.readdirSync
+      .mockReturnValueOnce([{ isFile: () => false, isDirectory: () => true, name: 'sub' }])
+      .mockReturnValueOnce([{ isFile: () => true, isDirectory: () => false, name: 'nested.bin' }])
+    mocks.statSync.mockReturnValueOnce({ size: 3000 })
+
+    const result = await scanDrivers()
+    expect(result.packages[0].size).toBe(3000)
+  })
+
   it('handles empty drivers from parseEnumDrivers', async () => {
     mocks.execFileAsync.mockRejectedValueOnce(new Error('PowerShell failed'))
-    mocks.execNativeUtf8.mockRejectedValueOnce(new Error('pnputil failed'))
+    mocks.execNativeUtf8.mockRejectedValueOnce(new Error('pnputil -e failed'))
 
     const result = await scanDrivers()
     expect(result.packages).toHaveLength(0)
     expect(result.totalStaleCount).toBe(0)
+  })
+
+  it('handles both pnputil commands failing silently', async () => {
+    mocks.execFileAsync.mockRejectedValueOnce(new Error('PowerShell failed'))
+    mocks.execNativeUtf8
+      .mockRejectedValueOnce(new Error('pnputil -e failed'))
+      .mockRejectedValueOnce(new Error('pnputil /enum-drivers failed'))
+
+    const result = await scanDrivers()
+    expect(result.packages).toHaveLength(0)
+    expect(result.totalStaleCount).toBe(0)
+  })
+
+  it('sorts drivers with equal versions', async () => {
+    mocks.execFileAsync.mockResolvedValueOnce({
+      stdout: JSON.stringify([
+        {
+          PublishedName: 'oem0.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-01-01',
+          SignerName: 'Microsoft',
+        },
+        {
+          PublishedName: 'oem1.inf',
+          OriginalName: '',
+          ProviderName: 'Intel',
+          ClassName: 'Display',
+          DriverVersion: '10.0.1',
+          DriverDate: '2024-06-01',
+          SignerName: 'Microsoft',
+        },
+      ]),
+    })
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' })
+    mocks.execFileAsync.mockResolvedValueOnce({ stdout: '' })
+
+    const result = await scanDrivers()
+    expect(result.packages).toHaveLength(2)
+    expect(result.packages[0].version).toBe('10.0.1')
+    expect(result.packages[1].version).toBe('10.0.1')
+  })
+
+  it('parses driver date and version from combined field via pnputil fallback', async () => {
+    const pnputilBlock = [
+      'Published Name : oem0.inf',
+      'Driver Date and Version : 2024-01-01 10.0.1',
+      'Original Name : nv_disp.inf',
+      'Provider Name : NVIDIA',
+      'Class Name : Display',
+      'Signer Name : Microsoft',
+      '',
+    ].join('\n')
+
+    mocks.execNativeUtf8.mockResolvedValueOnce({ stdout: pnputilBlock })
+
+    const result = await scanDrivers()
+    expect(result.packages).toHaveLength(1)
+    expect(result.packages[0].version).toBe('10.0.1')
+    expect(result.packages[0].date).toBe('2024-01-01')
   })
 })
 
@@ -510,6 +724,18 @@ describe('cleanDrivers', () => {
     expect(result.failed).toBe(1)
     expect(result.errors[0].reason).toBe('Unknown failure')
   })
+
+  it('computes preSize from OEM folder map', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: 'oem0.inf|folder123\n' })
+    mocks.execNativeUtf8.mockResolvedValue({ stdout: '' })
+    mocks.readdirSync.mockReturnValue([{ isFile: () => true, isDirectory: () => false, name: 'driver.sys' }])
+    mocks.statSync.mockReturnValue({ size: 10000 })
+
+    const result = await cleanDrivers(['oem0.inf'])
+    expect(result.removed).toBe(1)
+    expect(result.failed).toBe(0)
+    expect(result.spaceRecovered).toBe(10000)
+  })
 })
 
 describe('scanDriverUpdates', () => {
@@ -580,11 +806,57 @@ describe('scanDriverUpdates', () => {
     expect(result.updates).toHaveLength(0)
   })
 
+  it('ignores lines not starting with DRVUPD| in output', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout:
+        'Some PS warning\nDRVUPD|Intel Graphics|HWID001|Display|10.0.1|2024-01-01|upd-001|2024-06-01|Intel|Intel Driver|10 MB\nDRVUPD_NONE',
+    })
+
+    const result = await scanDriverUpdates()
+    expect(result.updates).toHaveLength(1)
+    expect(result.updates[0].deviceName).toBe('Intel Graphics')
+  })
+
+  it('falls back to availableDate when version not in title', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: 'DRVUPD|NVIDIA GPU|HWID002|Display|||upd-002|2024-06-01|NVIDIA|NVIDIA Driver Update|500 MB',
+    })
+
+    const result = await scanDriverUpdates()
+    expect(result.updates).toHaveLength(1)
+    expect(result.updates[0].availableVersion).toBe('2024-06-01')
+  })
+
+  it('falls back to deviceName when updateTitle is empty', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: 'DRVUPD|Realtek Audio|HWID003|Media|||upd-003||Realtek||15 MB\nDRVUPD_NONE',
+    })
+
+    const result = await scanDriverUpdates()
+    expect(result.updates).toHaveLength(1)
+    expect(result.updates[0].updateTitle).toBe('Realtek Audio')
+  })
+
   it('handles error with only message property', async () => {
     mocks.execFileAsync.mockRejectedValue(new Error('Search timeout'))
 
     await expect(scanDriverUpdates()).rejects.toThrow('Search timeout')
     expect(mocks.logger.error).toHaveBeenCalled()
+  })
+
+  it('sorts same-device updates by descending version', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: [
+        'DRVUPD|Intel Graphics|HWID001|Display|10.0.1|2024-01-01|upd-001|2024-06-01|Intel|Intel Driver Update 31.0.1|10 MB',
+        'DRVUPD|Intel Graphics|HWID001|Display|10.0.2|2024-02-01|upd-002|2024-07-01|Intel|Intel Driver Update 31.0.2|10 MB',
+      ].join('\n'),
+    })
+
+    const result = await scanDriverUpdates()
+    expect(result.updates).toHaveLength(2)
+    // scanDriverUpdates preserves input order before any grouping
+    expect(result.updates[0].availableVersion).toBe('31.0.1')
+    expect(result.updates[1].availableVersion).toBe('31.0.2')
   })
 })
 
@@ -696,5 +968,36 @@ describe('installDriverUpdates', () => {
     const onProgress = vi.fn()
     await installDriverUpdates(['upd-001', 'upd-002'], onProgress)
     expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'installing', percent: 50 }))
+  })
+
+  it('handles lowercase "true" in RESULT line', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: 'INSTALLED|Driver1\nRESULT|1|0|true',
+    })
+
+    const result = await installDriverUpdates(['upd-001'])
+    expect(result.installed).toBe(1)
+    expect(result.rebootRequired).toBe(true)
+  })
+
+  it('handles STATUS line with unparseable total falling back to input length', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: 'STATUS|downloading|abc\nINSTALLED|Driver1\nRESULT|1|0|false',
+    })
+
+    const onProgress = vi.fn()
+    const result = await installDriverUpdates(['upd-001'], onProgress)
+    expect(result.installed).toBe(1)
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'downloading', total: 1 }))
+  })
+
+  it('handles FAILED line without reason', async () => {
+    mocks.execFileAsync.mockResolvedValue({
+      stdout: 'FAILED|Driver1\nRESULT|0|1|false',
+    })
+
+    const result = await installDriverUpdates(['upd-001'])
+    expect(result.failed).toBe(1)
+    expect(result.errors[0].reason).toBe('Install failed')
   })
 })

@@ -112,7 +112,10 @@ export function GameModeAutoDetect({
               >
                 <motion.div
                   className="absolute top-0.5 h-5 w-5 rounded-full"
-                  animate={{ left: autoStartCapture ? 22 : 2, background: autoStartCapture ? '#fff' : 'var(--text-muted)' }}
+                  animate={{
+                    left: autoStartCapture ? 22 : 2,
+                    background: autoStartCapture ? '#fff' : 'var(--text-muted)',
+                  }}
                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                 />
               </button>

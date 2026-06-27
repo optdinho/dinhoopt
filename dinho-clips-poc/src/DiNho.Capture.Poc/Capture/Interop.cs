@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Logging;
 using System.Runtime.InteropServices;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
@@ -75,7 +76,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] GetActivationFactoryInterop() falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"GetActivationFactoryInterop() falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
 
@@ -87,7 +88,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] interop.CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"interop.CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
 
@@ -97,7 +98,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] MarshalInterface<GraphicsCaptureItem>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"MarshalInterface<GraphicsCaptureItem>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
         }
@@ -105,7 +106,7 @@ namespace DiNho.Capture.Poc.Capture
         public static GraphicsCaptureItem CreateForPrimaryMonitor()
         {
             var hMonitor = MonitorHelper.GetPrimaryMonitorHandle();
-            Console.Error.WriteLine($"[WGC-DIAG] CreateForPrimaryMonitor: hMonitor=0x{hMonitor:X8}");
+            Log.D("WGC-DIAG", $"CreateForPrimaryMonitor: hMonitor=0x{hMonitor:X8}");
             return CreateForMonitor(hMonitor);
         }
 
@@ -118,7 +119,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC] TryCreateFromWindowId falhou: {ex.Message}");
+                Log.E("WGC", $"TryCreateFromWindowId falhou: {ex.Message}");
                 return null;
             }
         }
@@ -138,7 +139,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] dxgiDevice.NativePointer falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"dxgiDevice.NativePointer falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
 
@@ -149,7 +150,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] d3d11!CreateDirect3D11DeviceFromDXGIDevice falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"d3d11!CreateDirect3D11DeviceFromDXGIDevice falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
 
@@ -159,7 +160,7 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[WGC-DIAG] MarshalInterface<IDirect3DDevice>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"MarshalInterface<IDirect3DDevice>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
         }

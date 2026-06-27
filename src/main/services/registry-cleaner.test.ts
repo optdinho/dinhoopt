@@ -39,6 +39,13 @@ vi.mock('node:fs', () => ({
 
 import type { RegistryEntry } from '@shared/types'
 import { collectBackupTargets, fixRegistryEntries, scanRegistry } from './registry-cleaner.service'
+import {
+  clsidExists,
+  expandEnvVars,
+  extractExePath,
+  findMissingClsidDll,
+  splitTaskPath,
+} from './registry-cleaner/utils'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -193,6 +200,40 @@ describe('collectBackupTargets', () => {
 
   it('returns empty for no entries', () => {
     const result = collectBackupTargets([])
+    expect(result.keys).toEqual([])
+    expect(result.tasks).toEqual([])
+  })
+
+  it('handles falsy fix.key with empty keyPath (line 90 false)', () => {
+    const result = collectBackupTargets([
+      {
+        id: '1',
+        type: 'invalid',
+        keyPath: '',
+        valueName: 'Val',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'delete-value', key: '' },
+      },
+    ])
+    expect(result.keys).toEqual([])
+    expect(result.tasks).toEqual([])
+  })
+
+  it('handles falsy keyPath for task entries (line 94 false)', () => {
+    const result = collectBackupTargets([
+      {
+        id: '1',
+        type: 'task',
+        keyPath: '',
+        valueName: '',
+        issue: 'x',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'disable-task' },
+      },
+    ])
     expect(result.keys).toEqual([])
     expect(result.tasks).toEqual([])
   })
@@ -506,6 +547,123 @@ describe('fixRegistryEntries', () => {
       defaultEntry({ type: 'task', keyPath: '\\MyFolder\\MyTask', valueName: '', fix: { op: 'delete-task' } }) as never,
     ])
     expect(result.fixed).toBe(1)
+  })
+
+  it('creates full backup with signal present (covers all signal spreads in createFullBackup)', async () => {
+    mockGetSettings.mockReturnValue({ backupMode: 'full' })
+    const ctrl = new AbortController()
+    mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
+    const result = await fixRegistryEntries(
+      [defaultEntry({ fix: { op: 'delete-value' } }) as never],
+      undefined,
+      ctrl.signal,
+    )
+    expect(result.fixed).toBe(1)
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
+      'reg',
+      expect.arrayContaining(['export']),
+      expect.objectContaining({ signal: ctrl.signal }),
+    )
+  })
+
+  it('creates targeted backup with signal aborted during key loop (line 114)', async () => {
+    mockGetSettings.mockReturnValue({ backupMode: 'targeted' })
+    const ctrl = new AbortController()
+    ctrl.abort()
+    mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
+    const result = await fixRegistryEntries(
+      [defaultEntry({ fix: { op: 'delete-value' } }) as never],
+      undefined,
+      ctrl.signal,
+    )
+    expect(result.fixed).toBe(0)
+  })
+
+  it('creates targeted backup with signal aborted during task loop (line 134)', async () => {
+    mockGetSettings.mockReturnValue({ backupMode: 'targeted' })
+    const ctrl = new AbortController()
+    ctrl.abort()
+    mockExecNativeUtf8.mockResolvedValue({ stdout: '', stderr: '' })
+    const result = await fixRegistryEntries(
+      [
+        defaultEntry({
+          type: 'task',
+          keyPath: '\\MyFolder\\MyTask',
+          valueName: '',
+          fix: { op: 'delete-task' },
+        }) as never,
+      ],
+      undefined,
+      ctrl.signal,
+    )
+    expect(result.fixed).toBe(0)
+  })
+
+  it('handles splitTaskPath returning null during targeted backup (line 136)', async () => {
+    mockGetSettings.mockReturnValue({ backupMode: 'targeted' })
+    mockExecNativeUtf8
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockRejectedValueOnce(new Error('schtasks failed'))
+    const result = await fixRegistryEntries(
+      [
+        defaultEntry({
+          type: 'task',
+          keyPath: '\\Folder\\Bad<Task>',
+          valueName: '',
+          fix: { op: 'delete-task' },
+        }) as never,
+      ],
+      undefined,
+      undefined,
+    )
+    expect(result.failed).toBe(1)
+    expect(result.failures[0]!.reason).toContain('Invalid task path')
+  })
+
+  it('handles empty safeName (name falls back to "task") in targeted backup (line 138)', async () => {
+    mockGetSettings.mockReturnValue({ backupMode: 'targeted' })
+    mockExecNativeUtf8
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ stdout: '<xml/>', stderr: '' })
+    const result = await fixRegistryEntries(
+      [
+        defaultEntry({
+          type: 'task',
+          keyPath: '\\MyFolder\\',
+          valueName: '',
+          fix: { op: 'delete-task' },
+        }) as never,
+      ],
+      undefined,
+      undefined,
+    )
+    expect(result.fixed).toBe(1)
+  })
+
+  it('passes signal to execNativeUtf8 during task backup (line 142)', async () => {
+    mockGetSettings.mockReturnValue({ backupMode: 'targeted' })
+    const ctrl = new AbortController()
+    mockExecNativeUtf8
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ stdout: '<xml/>', stderr: '' })
+    const result = await fixRegistryEntries(
+      [
+        defaultEntry({
+          type: 'task',
+          keyPath: '\\MyFolder\\MyTask',
+          valueName: '',
+          fix: { op: 'delete-task' },
+        }) as never,
+      ],
+      undefined,
+      ctrl.signal,
+    )
+    expect(result.fixed).toBe(1)
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
+      'schtasks',
+      expect.any(Array),
+      expect.objectContaining({ signal: ctrl.signal }),
+    )
   })
 })
 
@@ -1450,6 +1608,32 @@ describe('clsidExists (via shell extensions)', () => {
     expect(handlerEntries).toHaveLength(0)
     expect(results).toBeDefined()
   })
+
+  it('passes signal to execReg in both views (lines 70, 76)', async () => {
+    mockExecNativeUtf8.mockResolvedValue({ stdout: '    (Default)    REG_SZ    COM Object', stderr: '' })
+    const ctrl = new AbortController()
+    const exists = await clsidExists('{00000000-0000-0000-C000-000000000046}', ctrl.signal)
+    expect(exists).toBe(true)
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
+      'reg',
+      expect.arrayContaining(['query', expect.stringContaining('CLSID')]),
+      expect.objectContaining({ signal: ctrl.signal }),
+    )
+  })
+
+  it('passes signal to execReg in WOW64 query when native view fails (line 76)', async () => {
+    mockExecNativeUtf8
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockResolvedValue({ stdout: '    (Default)    REG_SZ    COM Object', stderr: '' })
+    const ctrl = new AbortController()
+    const exists = await clsidExists('{11111111-1111-1111-1111-111111111111}', ctrl.signal)
+    expect(exists).toBe(true)
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
+      'reg',
+      expect.arrayContaining(['query', expect.stringContaining('WOW6432Node')]),
+      expect.objectContaining({ signal: ctrl.signal }),
+    )
+  })
 })
 
 describe('findMissingClsidDll (via shell extensions)', () => {
@@ -1566,6 +1750,62 @@ describe('findMissingClsidDll (via shell extensions)', () => {
     const results = await scanRegistry()
     const handlerEntries = results.filter((r) => r.issue?.includes('WithLocalHandler'))
     expect(handlerEntries).toHaveLength(0)
+  })
+
+  it('returns null when InprocServer32 has no (Default) value (lines 96, 103)', async () => {
+    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args[1]?.includes('InprocServer32') && args[1]?.startsWith('HKCR\\CLSID')) {
+        return { stdout: '    SomeOther    REG_SZ    value', stderr: '' }
+      }
+      if (args[1]?.includes('LocalServer32') && args[1]?.startsWith('HKCR\\CLSID')) {
+        throw new Error('not found')
+      }
+      if (args[1]?.includes('CLSID') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+        return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+    const ctrl = new AbortController()
+    const result = await findMissingClsidDll('{A0000000-0000-0000-C000-000000000010}', ctrl.signal)
+    expect(result).toBeNull()
+  })
+
+  it('passes signal to execReg in findMissingClsidDll (lines 92, 109)', async () => {
+    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args[1]?.includes('InprocServer32') && args[1]?.startsWith('HKCR\\CLSID')) {
+        return { stdout: '    SomeOther    REG_SZ    value', stderr: '' }
+      }
+      if (args[1]?.includes('LocalServer32') && args[1]?.startsWith('HKCR\\CLSID')) {
+        throw new Error('not found')
+      }
+      if (args[1]?.includes('CLSID') && !args[1]?.includes('InprocServer32') && !args[1]?.includes('LocalServer32')) {
+        return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+    const ctrl = new AbortController()
+    await findMissingClsidDll('{A0000000-0000-0000-C000-000000000011}', ctrl.signal)
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
+      'reg',
+      expect.arrayContaining(['query', expect.stringContaining('InprocServer32')]),
+      expect.objectContaining({ signal: ctrl.signal }),
+    )
+  })
+
+  it('passes signal to execReg on LocalServer32 query when InprocServer32 missing (line 109)', async () => {
+    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+      const query = args.join(' ')
+      if (query.includes('InprocServer32')) throw new Error('not found')
+      if (query.includes('LocalServer32')) throw new Error('not found')
+      return { stdout: '    (Default)    REG_SZ    COM Object', stderr: '' }
+    })
+    const ctrl = new AbortController()
+    await findMissingClsidDll('{B0000000-0000-0000-C000-000000000022}', ctrl.signal)
+    expect(mockExecNativeUtf8).toHaveBeenCalledWith(
+      'reg',
+      expect.arrayContaining(['query', expect.stringContaining('LocalServer32')]),
+      expect.objectContaining({ signal: ctrl.signal }),
+    )
   })
 })
 
@@ -1900,6 +2140,72 @@ describe('extractExePath edge cases (via Run keys)', () => {
 })
 
 // ----------------------------------------------------------------
+// extractExePath direct tests
+// ----------------------------------------------------------------
+describe('extractExePath', () => {
+  it('handles empty trimmed command (returns null)', () => {
+    const result = extractExePath('   ')
+    expect(result).toBeNull()
+  })
+
+  it('handles quoted match with [1] undefined (empty quotes)', () => {
+    // The regex requires at least 1 char between quotes, so "" doesn't match
+    // This exercises the fallthrough path, not the quotedMatch branch
+    const result = extractExePath('"" C:\\path.exe')
+    expect(result).not.toBeNull()
+  })
+
+  it('handles statSync returning directory (isFile false at line 54)', async () => {
+    const { statSync } = await import('node:fs')
+    ;(statSync as ReturnType<typeof vi.fn>).mockReset()
+    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (typeof path !== 'string') throw new Error('not found')
+      if (path === 'C:\\Windows\\System32') return { isFile: () => false }
+      throw new Error('not found')
+    })
+    const result = extractExePath('C:\\Windows\\System32 missing.exe')
+    expect(result).toBe('C:\\Windows\\System32 missing.exe')
+  })
+
+  it('handles statSync returning file at line 54 (isFile true path)', async () => {
+    const { statSync } = await import('node:fs')
+    ;(statSync as ReturnType<typeof vi.fn>).mockReset()
+    ;(statSync as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (typeof path !== 'string') throw new Error('not found')
+      if (path === 'C:\\Windows\\System32\\cmd.exe') return { isFile: () => true }
+      throw new Error('not found')
+    })
+    const result = extractExePath('C:\\Windows\\System32\\cmd.exe test')
+    expect(result).toBe('C:\\Windows\\System32\\cmd.exe')
+  })
+})
+
+// ----------------------------------------------------------------
+// splitTaskPath direct tests
+// ----------------------------------------------------------------
+describe('splitTaskPath', () => {
+  it('handles path without backslash (line 23)', () => {
+    const result = splitTaskPath('TaskNameOnly')
+    expect(result).toEqual({ path: '\\', name: 'TaskNameOnly' })
+  })
+
+  it('handles path with forward slashes converted to backslashes', () => {
+    const result = splitTaskPath('/Folder/Sub/TaskName')
+    expect(result).toEqual({ path: '\\Folder\\Sub\\', name: 'TaskName' })
+  })
+
+  it('returns null for invalid characters', () => {
+    const result = splitTaskPath('\\Folder\\Bad<Task>')
+    expect(result).toBeNull()
+  })
+
+  it('handles root-level task name with leading backslash', () => {
+    const result = splitTaskPath('\\RootTask')
+    expect(result).toEqual({ path: '\\', name: 'RootTask' })
+  })
+})
+
+// ----------------------------------------------------------------
 // expandEnvVars additional env vars
 // ----------------------------------------------------------------
 describe('expandEnvVars additional variables', () => {
@@ -1989,6 +2295,29 @@ describe('expandEnvVars additional variables', () => {
     const results = await scanRegistry()
     const muiEntries = results.filter((r) => r.issue?.includes('UserProfileApp.exe'))
     expect(muiEntries.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('uses default fallbacks when env vars are undefined', () => {
+    vi.unstubAllEnvs()
+    vi.stubEnv('WINDIR', undefined as unknown as string)
+    vi.stubEnv('PROGRAMFILES', undefined as unknown as string)
+    vi.stubEnv('PROGRAMFILES(X86)', undefined as unknown as string)
+    vi.stubEnv('PROGRAMDATA', undefined as unknown as string)
+    vi.stubEnv('COMMONPROGRAMFILES', undefined as unknown as string)
+    vi.stubEnv('USERPROFILE', undefined as unknown as string)
+    vi.stubEnv('LOCALAPPDATA', undefined as unknown as string)
+    vi.stubEnv('APPDATA', undefined as unknown as string)
+
+    const result = expandEnvVars(
+      '%SystemRoot%\\system32\\%ProgramFiles%\\test\\%ProgramFiles(x86)%\\test\\%ProgramData%\\test\\%CommonProgramFiles%\\test\\%USERPROFILE%\\test\\%LOCALAPPDATA%\\test\\%APPDATA%\\test',
+    )
+    expect(result).toContain('C:\\Windows')
+    expect(result).toContain('C:\\Program Files\\test')
+    expect(result).toContain('C:\\Program Files (x86)')
+    expect(result).toContain('C:\\ProgramData')
+    expect(result).toContain('C:\\Program Files\\Common Files')
+    // empty fallbacks for USERPROFILE/LOCALAPPDATA/APPDATA → three trailing \test
+    expect(result).toContain('\\\\test\\\\test\\\\test')
   })
 })
 

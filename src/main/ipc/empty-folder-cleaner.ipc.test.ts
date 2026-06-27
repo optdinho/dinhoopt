@@ -423,6 +423,141 @@ describe('registerEmptyFolderCleanerIpc', () => {
 
   // ── DELETE ──
 
+  // ── SCAN: isProtectedFolder user-profile-dirs ──
+
+  describe('EMPTY_FOLDERS_SCAN - user profile protection', () => {
+    const origHome = process.env.HOME
+
+    afterEach(() => {
+      process.env.HOME = origHome
+    })
+
+    it('protects Desktop when directly under HOME', async () => {
+      process.env.HOME = ROOT
+      registerEmptyFolderCleanerIpc(winNull)
+      mocks.readdir.mockImplementation(async (_dirPath: string) => {
+        const dir = n(_dirPath)
+        // Desktop is directly under HOME (=ROOT) → isProtectedFolder should return true
+        // because parent of Desktop === HOME
+        if (dir === `${ROOT}/Desktop`) return []
+        if (dir === ROOT) {
+          return [{ name: 'Desktop', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
+        }
+        return []
+      })
+      const handler = getHandler('empty-folders:scan')
+      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      // Desktop should be protected (parent matches HOME), NOT in results
+      expect(result.folders.map((f) => f.name)).not.toContain('Desktop')
+    })
+
+    it('does not protect Desktop when HOME is not set', async () => {
+      delete process.env.HOME
+      delete process.env.USERPROFILE
+      registerEmptyFolderCleanerIpc(winNull)
+      mocks.readdir.mockImplementation(async (_dirPath: string) => {
+        const dir = n(_dirPath)
+        if (dir === ROOT) {
+          return [{ name: 'Desktop', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }]
+        }
+        return []
+      })
+      const handler = getHandler('empty-folders:scan')
+      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      // HOME not set, so isProtectedFolder skips the user profile check,
+      // Desktop is not protected → appears in empty folders
+      expect(result.folders.map((f) => f.name)).toContain('Desktop')
+    })
+  })
+
+  // ── SCAN: mid-loop cancellation ──
+
+  describe('EMPTY_FOLDERS_SCAN - mid-loop cancellation', () => {
+    it('returns cancelled=true when cancel handler fires mid-scan', async () => {
+      registerEmptyFolderCleanerIpc(winNull)
+      const scanHandler = getHandler('empty-folders:scan')
+      const cancelHandler = getHandler('empty-folders:cancel')
+
+      let readdirCalls = 0
+      mocks.readdir.mockImplementation(async (_dirPath: string) => {
+        readdirCalls++
+        const dir = n(_dirPath)
+        if (dir === ROOT) {
+          // Return 3 subdirectories; the 3rd will trigger a deeper recursion
+          return [
+            { name: 'empty1', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+            { name: 'empty2', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+            { name: 'trigger', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+          ]
+        }
+        // On the first recursive directory (empty1, empty2, or trigger),
+        // fire cancel so subsequent entries see cancelled=true
+        cancelHandler()
+        return []
+      })
+
+      const result = await scanHandler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      expect(result.cancelled).toBe(true)
+    })
+  })
+
+  // ── SCAN: sendProgress with destroyed window ──
+
+  describe('EMPTY_FOLDERS_SCAN - sendProgress with destroyed window', () => {
+    it('does not throw when window is destroyed', async () => {
+      registerEmptyFolderCleanerIpc(() => {
+        return { webContents: { send: mocks.webContentsSend }, isDestroyed: () => true } as unknown as BrowserWindow
+      })
+      mocks.readdir.mockImplementation(async (_dirPath: string) => {
+        const dir = n(_dirPath)
+        if (dir === ROOT) {
+          return [
+            { name: 'sub1', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+            { name: 'sub2', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+          ]
+        }
+        return []
+      })
+      const handler = getHandler('empty-folders:scan')
+      await expect(handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })).resolves.not.toThrow()
+    })
+  })
+
+  // ── SCAN: progress sent when scan takes >500ms ──
+
+  describe('EMPTY_FOLDERS_SCAN - progress send', () => {
+    it('sends progress when scan takes longer than 500ms', async () => {
+      vi.useFakeTimers()
+      registerEmptyFolderCleanerIpc(() => {
+        return { webContents: { send: mocks.webContentsSend }, isDestroyed: () => false } as unknown as BrowserWindow
+      })
+      // Each readdir call waits for a fake timer to advance
+      mocks.readdir.mockImplementation(async (_dirPath: string) => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 300))
+        const dir = n(_dirPath)
+        if (dir === ROOT) {
+          return [
+            { name: 'sub1', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+            { name: 'sub2', isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false },
+          ]
+        }
+        return []
+      })
+      const handler = getHandler('empty-folders:scan')
+      // Start the scan (readdir calls are pending on setTimeout)
+      const resultPromise = handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      // Advance enough for both readdir calls (300ms each = 600ms) + 500ms throttle gap
+      await vi.advanceTimersByTimeAsync(1200)
+      const result = await resultPromise
+      // Progress should have been sent at least once
+      expect(mocks.webContentsSend).toHaveBeenCalledWith('empty-folders:progress', expect.anything())
+      expect(result.cancelled).toBe(false)
+      vi.useRealTimers()
+    }, 10000)
+  })
+
+  // ── DELETE ──
+
   describe('EMPTY_FOLDERS_DELETE', () => {
     beforeEach(() => {
       mocks.readdir.mockReset()

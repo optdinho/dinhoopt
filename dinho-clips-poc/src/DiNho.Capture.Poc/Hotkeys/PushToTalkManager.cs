@@ -1,3 +1,5 @@
+using DiNho.Capture.Poc.Logging;
+
 namespace DiNho.Capture.Poc.Hotkeys;
 
 public enum PttMode
@@ -43,7 +45,7 @@ public sealed class PushToTalkManager : IDisposable
     private void OnRawKey(int vkCode, bool isKeyDown)
     {
         var isPtt = _pttKeys.Contains(vkCode);
-        Console.WriteLine($"[PushToTalk] vk=0x{vkCode:X2} down={isKeyDown} ptt={isPtt} pttKeys=[{string.Join(",", _pttKeys)}]");
+        Log.D("PushToTalk", $"vk=0x{vkCode:X2} down={isKeyDown} ptt={isPtt} pttKeys=[{string.Join(",", _pttKeys)}]");
 
         if (!isPtt) return;
         if (_mode == PttMode.Off) return;
@@ -51,13 +53,13 @@ public sealed class PushToTalkManager : IDisposable
         if (_mode == PttMode.Hold)
         {
             _micActive = isKeyDown;
-            Console.WriteLine($"[PushToTalk] Hold -> micActive={_micActive}");
+            Log.D("PushToTalk", $"Hold -> micActive={_micActive}");
             OnMicStateChanged?.Invoke(_micActive);
         }
         else if (_mode == PttMode.Toggle && isKeyDown)
         {
             _micActive = !_micActive;
-            Console.WriteLine($"[PushToTalk] Toggle -> micActive={_micActive}");
+            Log.D("PushToTalk", $"Toggle -> micActive={_micActive}");
             OnMicStateChanged?.Invoke(_micActive);
         }
     }
