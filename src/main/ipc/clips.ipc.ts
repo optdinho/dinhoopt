@@ -29,6 +29,7 @@ import {
   isPipeConnected,
   readClipsFromDisk,
   sendPipeCommand,
+  sendPipeCommandLongRunning,
   sendWithFallback,
   setEngineCapturing,
   startClipCapture,
@@ -76,7 +77,15 @@ export function registerClipsIpc(): void {
       const engineConfig = buildEngineConfig()
       await sendWithFallback('config', engineConfig)
     }
-    return await sendWithFallback('saveClip')
+    try {
+      const resp = await sendPipeCommandLongRunning('saveClip')
+      if (resp.payload?.success === false || resp.payload?.error) {
+        return { success: false, error: String(resp.payload?.error || 'Save failed') }
+      }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   ipcMain.handle(IPC.CLIPS_LIST_CLIPS, async (): Promise<ClipInfo[]> => {

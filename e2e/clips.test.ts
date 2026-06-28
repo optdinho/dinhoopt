@@ -38,7 +38,7 @@ test('should navigate to Clips page', async () => {
 
 test('should render the Clips page header', async () => {
   const hasTitle = await page.evaluate(() => {
-    return document.body.textContent?.includes('Clipe de Jogo')
+    return document.body.textContent?.includes('Clipes de Jogo')
       || document.body.textContent?.includes('Game Clips')
       || document.body.textContent?.includes('Clips')
   })
@@ -54,8 +54,8 @@ test('should expose clips IPC handlers', async () => {
       saveClip: typeof d?.clipsSaveClip,
       startCapture: typeof d?.clipsStartCapture,
       stopCapture: typeof d?.clipsStopCapture,
-      listClips: typeof d?.clipsListClips,
-      deleteClip: typeof d?.clipsDeleteClip,
+      listClips: typeof d?.clipsList,
+      deleteClip: typeof d?.clipsDelete,
       getConfig: typeof d?.clipsGetConfig,
       setConfig: typeof d?.clipsSetConfig,
       getVideoUrl: typeof d?.clipsGetVideoUrl,

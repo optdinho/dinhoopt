@@ -63,7 +63,6 @@ public sealed class GameDatabaseUpdater
             catch (Exception ex)
             {
                 Log.W("GameDatabaseUpdater", $"HTTP request failed: {ex.Message}");
-                SaveState(new UpdateState { LastCheckUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), LastVersion = state?.LastVersion ?? 0 });
                 return false;
             }
 
@@ -75,7 +74,6 @@ public sealed class GameDatabaseUpdater
             catch (Exception ex)
             {
                 Log.W("GameDatabaseUpdater", $"Failed to read response content: {ex.Message}");
-                SaveState(new UpdateState { LastCheckUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), LastVersion = state?.LastVersion ?? 0 });
                 return false;
             }
 
@@ -87,14 +85,12 @@ public sealed class GameDatabaseUpdater
             catch (Exception ex)
             {
                 Log.W("GameDatabaseUpdater", $"Failed to parse remote games.json: {ex.Message}");
-                SaveState(new UpdateState { LastCheckUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), LastVersion = state?.LastVersion ?? 0 });
                 return false;
             }
 
             if (remoteDb?.Games == null || remoteDb.Games.Count == 0)
             {
                 Log.W("GameDatabaseUpdater", "Remote games.json has no games entries");
-                SaveState(new UpdateState { LastCheckUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), LastVersion = state?.LastVersion ?? 0 });
                 return false;
             }
 
@@ -108,14 +104,15 @@ public sealed class GameDatabaseUpdater
             }
 
             var targetPath = Path.Combine(_outputDirectory, "games.json");
+            var tmpPath = targetPath + ".tmp";
             try
             {
-                await File.WriteAllTextAsync(targetPath, json);
+                await File.WriteAllTextAsync(tmpPath, json);
+                File.Move(tmpPath, targetPath, overwrite: true);
             }
             catch (Exception ex)
             {
                 Log.W("GameDatabaseUpdater", $"Failed to write updated games.json: {ex.Message}");
-                SaveState(new UpdateState { LastCheckUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), LastVersion = localVersion });
                 return false;
             }
 

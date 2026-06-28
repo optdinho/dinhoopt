@@ -114,5 +114,7 @@
   "mergeFailed": "Falha ao mesclar",
   "needTwoClips": "Precisa de pelo menos 2 clipes para mesclar",
   "noiseSuppression": "Redução de Ruído",
-  "noiseSuppressionTooltip": "Reduz ruídos de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Ajuda a eliminar barulhos de teclado, ventoinha ou ambiente."
+  "noiseSuppressionTooltip": "Reduz ruídos de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Ajuda a eliminar barulhos de teclado, ventoinha ou ambiente.",
+  "adaptiveQuality": "Qualidade Adaptativa",
+  "adaptiveQualityTooltip": "Ajusta automaticamente a qualidade da gravação conforme a RAM disponível. Reduz CQ, resolução e buffer em PCs com pouca memória para evitar travamentos. Desative para qualidade máxima sempre."
 }

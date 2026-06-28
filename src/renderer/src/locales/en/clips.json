@@ -114,5 +114,7 @@
   "mergeFailed": "Merge failed",
   "needTwoClips": "Need at least 2 clips to merge",
   "noiseSuppression": "Noise Suppression",
-  "noiseSuppressionTooltip": "Reduces background noise from the microphone using built-in audio filters (anlmdn/arnndn). Helps eliminate keyboard, fan, or ambient noise."
+  "noiseSuppressionTooltip": "Reduces background noise from the microphone using built-in audio filters (anlmdn/arnndn). Helps eliminate keyboard, fan, or ambient noise.",
+  "adaptiveQuality": "Adaptive Quality",
+  "adaptiveQualityTooltip": "Automatically adjusts recording quality based on available RAM. Reduces CQ, resolution and buffer on low-memory systems to prevent stuttering. Disable for maximum quality at all times."
 }

@@ -331,7 +331,6 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     className={fullscreen ? 'max-h-full max-w-full' : 'w-full'}
                     style={fullscreen ? { objectFit: 'contain' } : { maxHeight: 240 }}
                     autoPlay
-                    muted
                     playsInline
                     onClick={togglePlay}
                     onKeyDown={(e) => {

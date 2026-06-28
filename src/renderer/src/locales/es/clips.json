@@ -114,5 +114,7 @@
   "mergeFailed": "Error al combinar",
   "needTwoClips": "Se necesitan al menos 2 clips para combinar",
   "noiseSuppression": "Reducción de Ruido",
-  "noiseSuppressionTooltip": "Reduce el ruido de fondo del micrófono usando filtros de audio integrados (anlmdn/arnndn). Ayuda a eliminar ruidos de teclado, ventilador o ambiente."
+  "noiseSuppressionTooltip": "Reduce el ruido de fondo del micrófono usando filtros de audio integrados (anlmdn/arnndn). Ayuda a eliminar ruidos de teclado, ventilador o ambiente.",
+  "adaptiveQuality": "Calidad Adaptativa",
+  "adaptiveQualityTooltip": "Ajusta automáticamente la calidad de grabación según la RAM disponible. Reduce CQ, resolución y búfer en PCs con poca memoria para evitar tirones. Desactive para máxima calidad siempre."
 }

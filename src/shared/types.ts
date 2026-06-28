@@ -1772,6 +1772,8 @@ export interface ClipsConfig {
   autoCleanupThresholdPercent: number
   /** RNNoise/anlmdn noise suppression on microphone */
   noiseSuppression?: boolean
+  /** RAM-aware adaptive quality: adjusts CQ/resolution/replay based on available system RAM */
+  adaptiveQuality?: boolean
 }
 
 export interface ClipTrimResult {

@@ -253,6 +253,8 @@ export function ClipsPage() {
         'Grava apenas o áudio do jogo e do microfone, silenciando outros aplicativos (Discord, navegador, etc).',
       'noise-suppression':
         'Reduz ruído de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Útil para eliminar barulhos de teclado, ventoinha ou ambiente.',
+      'adaptive-quality':
+        'Ajusta automaticamente a qualidade da gravação conforme a RAM disponível. Reduz CQ, resolução e buffer em PCs com pouca memória para evitar travamentos. Desative para qualidade máxima sempre.',
     }),
     [t],
   )
@@ -1133,15 +1135,15 @@ export function ClipsPage() {
                               {
                                 id: 'muito-alta',
                                 label: 'Muito Alta',
-                                sub: 'CQ 18 · 1440p',
+                                sub: 'CQ 15 · 1440p',
                                 icon: '●●●',
                                 config: {
-                                  cq: 18,
-                                  maxrateKbps: 60000,
-                                  bufsizeKbps: 120000,
+                                  cq: 15,
+                                  maxrateKbps: 100000,
+                                  bufsizeKbps: 200000,
                                   encoderPreset: 'p5',
-                                  bframes: 0,
-                                  lookahead: 4,
+                                  bframes: 3,
+                                  lookahead: 32,
                                   bitrateKbps: 40000,
                                   width: 2560,
                                   height: 1440,
@@ -1150,15 +1152,15 @@ export function ClipsPage() {
                               {
                                 id: 'alta',
                                 label: 'Alta',
-                                sub: 'CQ 20 · 1080p',
+                                sub: 'CQ 16 · 1080p',
                                 icon: '●●○',
                                 config: {
-                                  cq: 20,
-                                  maxrateKbps: 40000,
-                                  bufsizeKbps: 80000,
-                                  encoderPreset: 'p4',
-                                  bframes: 0,
-                                  lookahead: 4,
+                                  cq: 16,
+                                  maxrateKbps: 80000,
+                                  bufsizeKbps: 160000,
+                                  encoderPreset: 'p5',
+                                  bframes: 3,
+                                  lookahead: 32,
                                   bitrateKbps: 40000,
                                   width: 1920,
                                   height: 1080,
@@ -1167,15 +1169,15 @@ export function ClipsPage() {
                               {
                                 id: 'boa',
                                 label: 'Boa',
-                                sub: 'CQ 22 · 720p',
+                                sub: 'CQ 18 · 720p',
                                 icon: '●○○',
                                 config: {
-                                  cq: 22,
-                                  maxrateKbps: 25000,
-                                  bufsizeKbps: 50000,
+                                  cq: 18,
+                                  maxrateKbps: 50000,
+                                  bufsizeKbps: 100000,
                                   encoderPreset: 'p4',
-                                  bframes: 0,
-                                  lookahead: 2,
+                                  bframes: 2,
+                                  lookahead: 16,
                                   bitrateKbps: 25000,
                                   width: 1280,
                                   height: 720,
@@ -1440,6 +1442,35 @@ export function ClipsPage() {
                                 enabled={config.forceSoftware}
                                 accent="amber"
                                 onToggle={() => handleConfigUpdate({ forceSoftware: !config.forceSoftware })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Adaptive Quality */}
+                          <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
+                                  {t('adaptiveQuality')}
+                                </span>
+                                <span className="relative inline-flex" data-tip="adaptive-quality">
+                                  <span
+                                    className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
+                                    style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
+                                    onClick={() =>
+                                      setActiveTip(activeTip === 'adaptive-quality' ? null : 'adaptive-quality')
+                                    }
+                                  >
+                                    ?
+                                  </span>
+                                </span>
+                              </div>
+                              <TogglePill
+                                enabled={config.adaptiveQuality ?? true}
+                                accent="green"
+                                onToggle={() =>
+                                  handleConfigUpdate({ adaptiveQuality: !(config.adaptiveQuality ?? true) })
+                                }
                               />
                             </div>
                           </div>

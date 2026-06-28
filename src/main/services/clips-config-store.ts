@@ -36,6 +36,7 @@ interface ClipsPersistedConfig {
   audioSampleRate: number
   autoCleanupEnabled: boolean
   autoCleanupThresholdPercent: number
+  adaptiveQuality: boolean
 }
 
 const DEFAULTS: ClipsPersistedConfig = {
@@ -47,11 +48,11 @@ const DEFAULTS: ClipsPersistedConfig = {
   width: 1920,
   height: 1080,
   bitrateKbps: 40000,
-  cq: 20,
-  maxrateKbps: 40000,
-  bufsizeKbps: 80000,
-  bframes: 0,
-  lookahead: 4,
+  cq: 16,
+  maxrateKbps: 80000,
+  bufsizeKbps: 160000,
+  bframes: 3,
+  lookahead: 32,
   encoderPreset: 'p4',
   codec: 'auto',
   adapterIndex: -1,
@@ -98,6 +99,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
   autoCleanupThresholdPercent: 90,
+  adaptiveQuality: true,
 }
 
 const store = createJsonStore<ClipsPersistedConfig>({

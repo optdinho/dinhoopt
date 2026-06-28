@@ -10,6 +10,7 @@ using DiNho.Capture.Poc.Ipc;
 using DiNho.Capture.Poc.Status;
 using DiNho.Capture.Poc.Sync;
 using DiNho.Capture.Poc.Watchdog;
+using DiNho.Capture.Poc.Memory;
 using System.Collections.Concurrent;
 using DiNho.Capture.Poc.Logging;
 using System.Linq;
@@ -39,6 +40,10 @@ public sealed partial class EngineCoordinator : IDisposable
     private readonly EngineStatus _status;
     private readonly AudioSessionManager _audioSessions;
 
+    // RamManager (RAM-aware capture profiles)
+    private RamManager? _ramManager;
+    private CaptureProfile _activeProfile = new();
+
     // Pipeline (criados no Start)
     private ICaptureSource? _capture;
     private IEncoder? _encoder;
@@ -48,7 +53,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private IAudioSource? _micSource;
 
     // Estado
-    private bool _recording;
+    private volatile bool _recording;
     private string? _capturedGameProcess;
     private bool _captureActive;
     private bool _exportInProgress;
@@ -326,18 +331,52 @@ public sealed partial class EngineCoordinator : IDisposable
                 _captureWidth = Math.Max(_capture.Width, 320);
                 _captureHeight = Math.Max(_capture!.Height, 240);
 
+                _ramManager?.Dispose();
+                if (_config.Config.AdaptiveQualityEnabled)
+                {
+                    _ramManager = new RamManager(
+                        _captureWidth,
+                        _captureHeight,
+                        _config.Config.EffectiveReplaySeconds,
+                        _config.Config.Cq,
+                        _config.Config.MaxrateKbps,
+                        _config.Config.BufsizeKbps,
+                        _config.Config.Bframes,
+                        _config.Config.Lookahead);
+                    _activeProfile = _ramManager.ResolveProfile();
+                }
+                else
+                {
+                    _ramManager = null;
+                    _activeProfile = new CaptureProfile
+                    {
+                        Level = RamProfileLevel.Full,
+                        Cq = _config.Config.Cq,
+                        MaxrateKbps = _config.Config.MaxrateKbps,
+                        BufsizeKbps = _config.Config.BufsizeKbps,
+                        Bframes = _config.Config.Bframes,
+                        Lookahead = _config.Config.Lookahead,
+                        EncodeWidth = _config.Config.Width,
+                        EncodeHeight = _config.Config.Height,
+                        ReplaySeconds = _config.Config.EffectiveReplaySeconds,
+                        MaxBufferBytes = 0, // unlimited
+                    };
+                }
+                _buffer.MaxBytes = _activeProfile.MaxBufferBytes;
+                _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+
                 _encoder?.Dispose();
-                _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _config.Config.BitrateKbps);
+                _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
                 if (_encoder is FfmpegEncoder fe)
                     fe.SetQualityParams(
-                        cq: _config.Config.Cq,
-                        maxrateKbps: _config.Config.MaxrateKbps,
-                        bufsizeKbps: _config.Config.BufsizeKbps,
-                        bframes: _config.Config.Bframes,
-                        lookahead: _config.Config.Lookahead,
+                        cq: _activeProfile.Cq,
+                        maxrateKbps: _activeProfile.MaxrateKbps,
+                        bufsizeKbps: _activeProfile.BufsizeKbps,
+                        bframes: _activeProfile.Bframes,
+                        lookahead: _activeProfile.Lookahead,
                         preset: _config.Config.EncoderPreset,
                         codec: _config.Config.Codec);
-                _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _config.Config.BitrateKbps);
+                _encoder.Initialize(_activeProfile.EncodeWidth, _activeProfile.EncodeHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
                 _status.Update(s => s.Encoder = _encoder.GetType().Name.Replace("Encoder", ""));
 
                 _dxgiManager?.Dispose();
@@ -372,6 +411,23 @@ public sealed partial class EngineCoordinator : IDisposable
 
                 _recording = true;
                 _status.Update(s => s.Recording = true);
+
+                if (_ramManager != null)
+                {
+                    _ramManager.OnBroadcast = msg => _pipeServer.BroadcastRaw(msg);
+                    _ramManager.OnReduceReplay = secs =>
+                    {
+                        _buffer.MaxDuration = TimeSpan.FromSeconds(secs);
+                        Log.I("RamManager", $"Replay reduzido para {secs}s por pressão de RAM");
+                    };
+                    _ramManager.OnNormal = () =>
+                    {
+                        _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                        _buffer.MaxBytes = _activeProfile.MaxBufferBytes;
+                        Log.I("RamManager", "RAM normalizada — buffer restaurado ao perfil ativo");
+                    };
+                    _ramManager.StartWatchdog();
+                }
 
                 _pttDiagTimer?.Dispose();
                 _pttDiagTimer = new Timer(_ =>
@@ -712,12 +768,15 @@ public sealed partial class EngineCoordinator : IDisposable
  					Log.I("EngineCoordinator", $"Captura: janela '{game.ProcessName}' ({gameHwnd})");
  					goto multiMonitor;
  				}
- 				catch (Exception ex) when (attempt < maxRetries)
- 				{
- 					var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
- 					Log.E("EngineCoordinator", $"WGC window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{innerMsg}, retry em {retryDelayMs}ms...");
- 					Thread.Sleep(retryDelayMs);
- 				}
+  				catch (Exception ex) when (attempt < maxRetries)
+  				{
+  					var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
+  					Log.E("EngineCoordinator", $"WGC window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{innerMsg}, retry em {retryDelayMs}ms...");
+  					bool heldLock = Monitor.IsEntered(_pipelineLock);
+  					if (heldLock) Monitor.Exit(_pipelineLock);
+  					try { Thread.Sleep(retryDelayMs); }
+  					finally { if (heldLock) Monitor.Enter(_pipelineLock); }
+  				}
  				catch (Exception ex)
  				{
  					var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
@@ -727,12 +786,16 @@ public sealed partial class EngineCoordinator : IDisposable
  		}
 
         // 2) WGC desktop (full monitor via DWM) — funciona para qualquer janela
+        //    No multi-monitor, captura o monitor onde o jogo está
         try
         {
+            var gameMonitor = gameHwnd != IntPtr.Zero
+                ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd)
+                : IntPtr.Zero;
             var wgc = new WgcCaptureSource();
             _wgcPump!.Invoke(() =>
             {
-                wgc.Initialize(_sharedDevice);
+                wgc.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
                 wgc.StartFramePump();
             });
             _capture = wgc;
@@ -847,6 +910,7 @@ public sealed partial class EngineCoordinator : IDisposable
         {
             _recording = false;
             _captureActive = false;
+            _ramManager?.StopWatchdog();
             _captureTargetGame = new GameInfo();
             _captureTargetHwnd = IntPtr.Zero;
             _gameBackgrounded = false;
@@ -903,6 +967,11 @@ public sealed partial class EngineCoordinator : IDisposable
                 _aacEncoder = null;
             }
 
+            // Reseta contadores de PTS/AAC entre sessões de captura
+            _aacFramesProduced = 0;
+            _audioPacketCount = 0;
+            _pcmPtsQueue.Clear();
+
             _capture?.Dispose();
             _capture = null;
 
@@ -943,7 +1012,12 @@ public sealed partial class EngineCoordinator : IDisposable
             try
             {
                 int captureTimeout = Math.Max(1, Math.Min(100, 1000 / _config.Config.Fps));
-                using var frame = cap.TryCaptureFrame(captureTimeout);
+                using var frame = cap?.TryCaptureFrame(captureTimeout);
+                if (frame is null)
+                {
+                    _watchdog.ReportDroppedFrame(PipelineIssue.CaptureError);
+                    continue;
+                }
                 if (++diagFrames % 60 == 1)
                 {
                     var captureType = _capture?.GetType().Name ?? "null";
@@ -1081,7 +1155,7 @@ public sealed partial class EngineCoordinator : IDisposable
             }
             catch (Exception ex)
             {
-                if (cap.CheckDeviceLost())
+                if (cap?.CheckDeviceLost() == true)
                 {
                     _deviceLost = true;
                     _needsReinit = true;
@@ -1116,15 +1190,6 @@ public sealed partial class EngineCoordinator : IDisposable
         Log.E("Pipeline", $"Loop encerrado: {reason}");
     }
 
-    private void SwitchCaptureApi()
-    {
-        // Gerenciado internamente pelo HybridCaptureSource.
-        // Se o _capture não for híbrido, faz reinit.
-        _watchdog.ReportApiSwitch();
-        _needsReinit = true;
-        _ = ReinitializePipelineAsync();
-    }
-
     private async Task ReinitializePipelineAsync()
     {
         var reinitGame = _gameDetector.CurrentGame;
@@ -1136,7 +1201,7 @@ public sealed partial class EngineCoordinator : IDisposable
             return;
         }
 
-        // Cancela o pipeline loop antigo e aguarda sua parada
+        // Cancela o pipeline loop antigo e aguarda sua parada (FORA do lock)
         _pipelineCts?.Cancel();
         if (_pipelineTask != null)
         {
@@ -1146,9 +1211,11 @@ public sealed partial class EngineCoordinator : IDisposable
         _pipelineCts = null;
         _pipelineTask = null;
 
-        try
+        lock (_pipelineLock)
         {
-            if (_deviceLost)
+            try
+            {
+                if (_deviceLost)
             {
                 _sharedDevice?.Dispose();
                 _sharedDevice = null;
@@ -1177,17 +1244,17 @@ public sealed partial class EngineCoordinator : IDisposable
 
             // Reinicia o encoder (ffmpeg pode ter travado ou atrasado)
             _encoder?.Dispose();
-            _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _config.Config.BitrateKbps);
+            _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
             if (_encoder is FfmpegEncoder fe)
                 fe.SetQualityParams(
-                    cq: _config.Config.Cq,
-                    maxrateKbps: _config.Config.MaxrateKbps,
-                    bufsizeKbps: _config.Config.BufsizeKbps,
-                    bframes: _config.Config.Bframes,
-                    lookahead: _config.Config.Lookahead,
+                    cq: _activeProfile.Cq,
+                    maxrateKbps: _activeProfile.MaxrateKbps,
+                    bufsizeKbps: _activeProfile.BufsizeKbps,
+                    bframes: _activeProfile.Bframes,
+                    lookahead: _activeProfile.Lookahead,
                     preset: _config.Config.EncoderPreset,
                     codec: _config.Config.Codec);
-            _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _config.Config.BitrateKbps);
+            _encoder.Initialize(_activeProfile.EncodeWidth, _activeProfile.EncodeHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
             _status.Update(s => s.Encoder = _encoder.GetType().Name.Replace("Encoder", ""));
 
             if (_capture != null)
@@ -1202,11 +1269,12 @@ public sealed partial class EngineCoordinator : IDisposable
                 Log.I("EngineCoordinator", $"Pipeline reinicializado com sucesso ({_capture!.Name}, {_captureWidth}x{_captureHeight}).");
             }
         }
-        catch (Exception ex)
-        {
-            Log.E("EngineCoordinator", $"Falha na reinicialização: {ex.Message}");
-            _recording = false;
-            _captureActive = false;
+            catch (Exception ex)
+            {
+                Log.E("EngineCoordinator", $"Falha na reinicialização: {ex.Message}");
+                _recording = false;
+                _captureActive = false;
+            }
         }
     }
 
@@ -1216,6 +1284,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private int _aacFramesProduced;
     private int _audioSampleRate = 48000;
     private int _audioChannels = 2;
+    private TimeSpan _lastKnownRealPts = TimeSpan.Zero;
 
     /// <summary>
     /// Retorna o PTS estimado para o próximo frame AAC com base nos
@@ -1244,17 +1313,19 @@ public sealed partial class EngineCoordinator : IDisposable
             }
         }
 
-        if (first) // Fila vazia — fallback para PTS estimado
+        if (first) // Fila vazia — fallback para último PTS real conhecido
         {
-            result = TimeSpan.FromTicks(_aacFramesProduced * 1024L * 10_000_000 / _audioSampleRate);
+            result = _lastKnownRealPts + TimeSpan.FromTicks(1024L * 10_000_000 / _audioSampleRate);
             if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
-                Log.I("SYNC-PCM-PTS", $"FALLBACK frame#{_aacFramesProduced} estimatedPts={result.TotalSeconds:F4}s queueEmpty");
+                Log.I("SYNC-PCM-PTS", $"FALLBACK frame#{_aacFramesProduced} lastRealPts={_lastKnownRealPts.TotalSeconds:F4}s estimated={result.TotalSeconds:F4}s queueEmpty");
         }
-        else if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
+        else
         {
-            Log.I("SYNC-PCM-PTS", $"frame#{_aacFramesProduced} pts={result.TotalSeconds:F4}s queueRemaining={_pcmPtsQueue.Count}");
+            _lastKnownRealPts = result;
         }
 
+        if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
+            Log.I("SYNC-PCM-PTS", $"frame#{_aacFramesProduced} pts={result.TotalSeconds:F4}s queueRemaining={_pcmPtsQueue.Count}");
         return result;
     }
 
@@ -1295,7 +1366,8 @@ public sealed partial class EngineCoordinator : IDisposable
         foreach (var (pid, name) in selectedPids)
         {
             bool alive = false;
-            try { using var p = Process.GetProcessById(pid); alive = !p.HasExited; } catch { }
+            try { using var p = Process.GetProcessById(pid); alive = !p.HasExited; }
+            catch (Exception ex) { Log.W("AudioPids", $"PID {pid}: {ex.GetType().Name}"); }
 
             if (alive)
             {
@@ -1423,6 +1495,7 @@ public sealed partial class EngineCoordinator : IDisposable
             var fileName = $"DiNho Optimizer {DateTime.Now:yyyy-MM-dd_HH-mm-ss}.mp4";
             var outputPath = Path.Combine(outputDir, fileName);
 
+            var cachedAvcc = (_encoder as FfmpegEncoder)?.AvccCache;
             await Task.Run(() =>
             {
                 var result = _exporter.ExportToMp4(
@@ -1431,7 +1504,9 @@ public sealed partial class EngineCoordinator : IDisposable
                     audio,
                     _captureWidth,
                     _captureHeight,
-                    _config.Config.Fps);
+                    _config.Config.Fps,
+                    rawFormat: (_encoder as FfmpegEncoder)?.RawFormat ?? "h264",
+                    avccFallback: cachedAvcc);
 
                 var fileInfo = new FileInfo(result);
                 Log.I("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");
@@ -1489,8 +1564,7 @@ public sealed partial class EngineCoordinator : IDisposable
         "WindowsTerminal", "conhost", "cmd", "powershell", "pwsh",
         "regedit", "gpedit", "msconfig", "resmon", "perfmon",
         "diskmgmt", "compmgmt", "taskschd", "eventvwr",
-        "dxdiag", "winver", "mstsc", "msra",
-        "powershell_ise", "wsl", "bash",
+        "dxdiag", "winver", "mstsc",         "powershell_ise", "wsl", "bash",
         "msra", "migwiz", "control", "mmc",
         // === Navegadores ===
         "chrome", "firefox", "msedge", "brave", "opera", "vivaldi",
@@ -1539,7 +1613,7 @@ public sealed partial class EngineCoordinator : IDisposable
         "mumble", "teampeak", "teamspeak3",
         // === Ferramentas Windows ===
         "notepad", "calc", "mspaint", "SnippingTool",
-        "Magnify", "osk", " Narrator", "StikyNot",
+        "Magnify", "osk", "Narrator", "StikyNot",
         // === Utilidades ===
         "everything", "wox", "flowlauncher",
         "7zfm", "winrar", "winzip",
@@ -1890,6 +1964,7 @@ public sealed partial class EngineCoordinator : IDisposable
         _audioSessions.Dispose();
         _exporter.Dispose();
         _pipeServer.Dispose();
+        _ramManager?.Dispose();
         _config.Dispose();
     }
 

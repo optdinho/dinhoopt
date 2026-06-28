@@ -280,11 +280,7 @@ public sealed class GameDatabaseUpdaterTests : IDisposable
 
         await _updater.CheckForUpdateAsync();
 
-        Assert.True(File.Exists(_stateFilePath), "State file should exist even after failed request");
-
-        var savedJson = File.ReadAllText(_stateFilePath);
-        var savedState = JsonSerializer.Deserialize<GameDatabaseUpdater.UpdateState>(savedJson);
-        Assert.NotNull(savedState);
+        Assert.False(File.Exists(_stateFilePath), "State file should NOT exist after failed request");
     }
 
     [Fact]

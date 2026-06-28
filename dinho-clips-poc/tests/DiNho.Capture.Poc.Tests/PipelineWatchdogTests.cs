@@ -127,4 +127,53 @@ public sealed class PipelineWatchdogTests
         Assert.Equal(1, h.ExportStalls);
         Assert.Equal(PipelineIssue.ExportStall, h.LastIssue);
     }
+
+    // ─── New tests ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ShouldReinit_HighDropRate_TriggersReinit()
+    {
+        var wd = new PipelineWatchdog();
+
+        // Need BadFrameThreshold (10) exceeded: at least 11 dropped + 11 total + >50% rate + 5s
+        for (int i = 0; i < 11; i++)
+            wd.ReportDroppedFrame(PipelineIssue.CaptureError);
+
+        Thread.Sleep(5500); // exceed 5s min reinit interval
+
+        Assert.True(wd.ShouldReinit(), "Should reinit with 11/11 drops after 5s");
+    }
+
+    [Fact]
+    public void ShouldReinit_FewerThanThreshold_DoesNotTrigger()
+    {
+        var wd = new PipelineWatchdog();
+
+        // Only 6 drops — below BadFrameThreshold (10)
+        for (int i = 0; i < 6; i++)
+            wd.ReportDroppedFrame(PipelineIssue.NoFrame);
+
+        Thread.Sleep(2000);
+
+        Assert.False(wd.ShouldReinit(), "Should not reinit with <10 dropped frames");
+    }
+
+    [Fact]
+    public void ShouldReinit_GoodFrameBlocksQuickPath()
+    {
+        var wd = new PipelineWatchdog();
+
+        for (int i = 0; i < 5; i++)
+            wd.ReportDroppedFrame(PipelineIssue.NoFrame);
+
+        // Quick reinit path: _consecutiveGood == 0 + 3s → would trigger
+        // But a single good frame sets _consecutiveGood = 1 → blocks quick reinit
+        wd.ReportGoodFrame(16.0);
+
+        Thread.Sleep(3500);
+
+        // Quick reinit blocked by _consecutiveGood > 0
+        // Drop-rate path: _droppedFrames (5) < BadFrameThreshold (10) → also blocked
+        Assert.False(wd.ShouldReinit());
+    }
 }

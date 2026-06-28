@@ -1,6 +1,7 @@
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace DiNho.Capture.Poc.GameDetection;
 
@@ -70,7 +71,9 @@ public sealed class GameDetector : IDisposable
     // Eventos
     public event Action<GameInfo>? OnGameChanged;
 
-    public GameInfo CurrentGame { get; private set; }
+    private volatile GameInfo _currentGame = new();
+    public GameInfo CurrentGame => _currentGame;
+    private void SetCurrentGame(GameInfo value) => _currentGame = value;
 
     // Constantes WinEvent
     private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
@@ -79,7 +82,6 @@ public sealed class GameDetector : IDisposable
 
     public GameDetector()
     {
-        CurrentGame = new GameInfo();
     }
 
     public void SetElectronPid(int pid)
@@ -179,13 +181,13 @@ public sealed class GameDetector : IDisposable
 
     private void OnForegroundChanged(IntPtr hwnd)
     {
-        if (hwnd == _lastForegroundHwnd && hwnd != IntPtr.Zero)
+        if (hwnd == Interlocked.CompareExchange(ref _lastForegroundHwnd, IntPtr.Zero, IntPtr.Zero) && hwnd != IntPtr.Zero)
             return;
 
-        _lastForegroundHwnd = hwnd;
+        Interlocked.Exchange(ref _lastForegroundHwnd, hwnd);
         if (hwnd == IntPtr.Zero)
         {
-            CurrentGame = new GameInfo();
+            SetCurrentGame(new GameInfo());
             OnGameChanged?.Invoke(CurrentGame);
             return;
         }
@@ -199,7 +201,7 @@ public sealed class GameDetector : IDisposable
         }
 
         var gameInfo = DetectGame(hwnd);
-        CurrentGame = gameInfo;
+        SetCurrentGame(gameInfo);
         OnGameChanged?.Invoke(gameInfo);
     }
 
@@ -208,13 +210,14 @@ public sealed class GameDetector : IDisposable
     {
         if (!_running) return;
         var hwnd = GetForegroundWindow();
-        if (hwnd == _lastForegroundHwnd && hwnd != IntPtr.Zero)
+        if (hwnd == Interlocked.CompareExchange(ref _lastForegroundHwnd, IntPtr.Zero, IntPtr.Zero) && hwnd != IntPtr.Zero)
             return;
 
-        _lastForegroundHwnd = hwnd;
+        Interlocked.Exchange(ref _lastForegroundHwnd, hwnd);
         if (hwnd == IntPtr.Zero)
         {
-            CurrentGame = new GameInfo();
+            SetCurrentGame(new GameInfo());
+            OnGameChanged?.Invoke(CurrentGame);
             return;
         }
 
@@ -226,7 +229,7 @@ public sealed class GameDetector : IDisposable
         }
 
         var gameInfo = DetectGame(hwnd);
-        CurrentGame = gameInfo;
+        SetCurrentGame(gameInfo);
         OnGameChanged?.Invoke(gameInfo);
     }
 

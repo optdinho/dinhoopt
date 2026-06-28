@@ -52,7 +52,11 @@ public sealed class RnnoiseFilter : IDisposable
 
     public float[] Process(float[] input)
     {
-        if (_disposed || _process == null || _process.HasExited)
+        if (_disposed) return input;
+        var stdin = _stdin;
+        var stdout = _stdout;
+        var process = _process;
+        if (process == null || process.HasExited || stdin == null || stdout == null)
             return input;
 
         int byteLen = input.Length * 4;
@@ -61,14 +65,19 @@ public sealed class RnnoiseFilter : IDisposable
 
         try
         {
-            _stdin!.Write(inBytes, 0, byteLen);
-            _stdin.Flush();
+            var writeTask = stdin.WriteAsync(inBytes, 0, byteLen);
+            if (!writeTask.Wait(100))
+            {
+                Log.W("RnnoiseFilter", "Write timeout after 100ms, skipping frame");
+                return input;
+            }
+            stdin.Flush();
 
             int expectedBytes = byteLen;
             int totalRead = 0;
             while (totalRead < expectedBytes)
             {
-                int read = _stdout!.Read(_readBuf, _readOffset, Math.Min(_readBuf.Length - _readOffset, expectedBytes - totalRead));
+                int read = stdout.Read(_readBuf, _readOffset, Math.Min(_readBuf.Length - _readOffset, expectedBytes - totalRead));
                 if (read <= 0) break;
                 _readOffset += read;
                 totalRead += read;
@@ -98,6 +107,10 @@ public sealed class RnnoiseFilter : IDisposable
         {
             return input;
         }
+        catch (InvalidOperationException)
+        {
+            return input;
+        }
     }
 
     public void Dispose()
@@ -106,15 +119,34 @@ public sealed class RnnoiseFilter : IDisposable
         _disposed = true;
 
         try { _stdin?.Dispose(); } catch { }
-        if (_process is { HasExited: false })
-        {
-            try { _process.Kill(entireProcessTree: true); } catch { }
-            _process.WaitForExit(1000);
-        }
-        _stdout?.Dispose();
-        _process?.Dispose();
+
+        var process = _process;
+        var stdout = _stdout;
         _stdin = null;
         _stdout = null;
         _process = null;
+
+        if (process == null) return;
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    if (!process.WaitForExit(5000))
+                    {
+                        try { process.Kill(entireProcessTree: true); } catch { }
+                        process.WaitForExit(1000);
+                    }
+                }
+            }
+            catch { }
+            finally
+            {
+                try { stdout?.Dispose(); } catch { }
+                process.Dispose();
+            }
+        });
     }
 }

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.Logging;
@@ -16,8 +17,8 @@ public sealed class AudioMixer : IDisposable
     private readonly Queue<(AudioBuffer Buffer, TimeSpan Timestamp)> _micQueue = new();
     private readonly object _lock = new();
     private bool _micEnabled;
-    private int _sampleRate;
-    private int _channels;
+    private int _sampleRate = 48000;
+    private int _channels = 2;
     private RnnoiseFilter? _noiseFilter;
     private float _gameGain = 1.0f;
     private float _micGain = 1.0f;
@@ -152,6 +153,7 @@ public sealed class AudioMixer : IDisposable
     {
         (AudioBuffer Buffer, TimeSpan Timestamp) loopbackItem;
         float[]? micSamples = null;
+        int micSamplesConsumed = 0;
 
         lock (_lock)
         {
@@ -160,39 +162,73 @@ public sealed class AudioMixer : IDisposable
 
             if (_micEnabled && _micQueue.Count > 0)
             {
-                var combined = new List<float>(loopbackItem.Buffer.Samples.Length);
-                TimeSpan? firstMicTs = null;
-                TimeSpan? lastMicTs = null;
-                int micPackets = 0;
-                while (_micQueue.Count > 0)
+                int loopbackSamples = loopbackItem.Buffer.Samples.Length;
+                micSamples = ArrayPool<float>.Shared.Rent(loopbackSamples);
+                try
                 {
-                    var (buf, ts) = _micQueue.Dequeue();
-                    firstMicTs ??= ts;
-                    lastMicTs = ts;
-                    micPackets++;
-                    combined.AddRange(buf.Samples);
+                    int filled = 0;
+                    TimeSpan? firstMicTs = null;
+                    TimeSpan? lastMicTs = null;
+                    int micPackets = 0;
+
+                    while (filled < loopbackSamples && _micQueue.Count > 0)
+                    {
+                        var (buf, ts) = _micQueue.Peek();
+                        firstMicTs ??= ts;
+                        lastMicTs = ts;
+                        micPackets++;
+                        int take = Math.Min(buf.Samples.Length, loopbackSamples - filled);
+                        Array.Copy(buf.Samples, 0, micSamples, filled, take);
+                        filled += take;
+                        if (take >= buf.Samples.Length)
+                            _micQueue.Dequeue();
+                        else
+                        {
+                            // consume parcial — re-enfileira o restante
+                            var remaining = new float[buf.Samples.Length - take];
+                            Array.Copy(buf.Samples, take, remaining, 0, remaining.Length);
+                            _micQueue.Dequeue();
+                            _micQueue.Enqueue((new AudioBuffer(remaining, buf.SampleRate, buf.Channels), ts + TimeSpan.FromSeconds((double)take / buf.SampleRate)));
+                        }
+                    }
+                    micSamplesConsumed = filled;
+                    // preenche o resto com zero se não houver mic suficiente
+                    if (filled < loopbackSamples)
+                        Array.Clear(micSamples, filled, loopbackSamples - filled);
+
+                    var drift = (lastMicTs ?? loopbackItem.Timestamp) - loopbackItem.Timestamp;
+                    var n = Stopwatch.GetTimestamp();
+                    if (n - _lastLogTicks >= LogThrottleTicks)
+                    {
+                        _lastLogTicks = n;
+                        Log.D("Sync", $"loopbackTs={loopbackItem.Timestamp.TotalSeconds:F3} firstMicTs={firstMicTs?.TotalSeconds:F3} lastMicTs={lastMicTs?.TotalSeconds:F3} driftMs={drift.TotalMilliseconds:F1} micPackets={micPackets} consumed={micSamplesConsumed}/{loopbackSamples}");
+                    }
                 }
-                micSamples = [.. combined];
-                var drift = lastMicTs.Value - loopbackItem.Timestamp;
-                var n = Stopwatch.GetTimestamp();
-                if (n - _lastLogTicks >= LogThrottleTicks)
+                catch
                 {
-                    _lastLogTicks = n;
-                    Log.D("Sync", $"loopbackTs={loopbackItem.Timestamp.TotalSeconds:F3} firstMicTs={firstMicTs.Value.TotalSeconds:F3} lastMicTs={lastMicTs.Value.TotalSeconds:F3} driftMs={drift.TotalMilliseconds:F1} micPackets={micPackets}");
+                    ArrayPool<float>.Shared.Return(micSamples);
+                    throw;
                 }
             }
         }
 
         if (micSamples != null)
         {
-            var mixed = Mix(loopbackItem.Buffer.Samples, loopbackItem.Buffer.Channels, micSamples, _gameGain, _micGain);
-            var n = Stopwatch.GetTimestamp();
-            if (n - _lastLogTicks >= LogThrottleTicks)
+            try
             {
-                _lastLogTicks = n;
-                Log.D("AudioMixer", $"Mic mixed: loopbackLen={loopbackItem.Buffer.Samples.Length} micLen={micSamples.Length}");
+                var mixed = Mix(loopbackItem.Buffer.Samples, loopbackItem.Buffer.Channels, micSamples, _gameGain, _micGain);
+                var n = Stopwatch.GetTimestamp();
+                if (n - _lastLogTicks >= LogThrottleTicks)
+                {
+                    _lastLogTicks = n;
+                    Log.D("AudioMixer", $"Mic mixed: loopbackLen={loopbackItem.Buffer.Samples.Length} micConsumed={micSamplesConsumed}");
+                }
+                EmitPacket(mixed, loopbackItem.Timestamp, AudioStreamKind.Mixed);
             }
-            EmitPacket(mixed, loopbackItem.Timestamp, AudioStreamKind.Mixed);
+            finally
+            {
+                ArrayPool<float>.Shared.Return(micSamples);
+            }
         }
         else
         {
@@ -208,15 +244,20 @@ public sealed class AudioMixer : IDisposable
         float gameGain = 1.0f, float micGain = 1.0f)
     {
         var result = new float[loopbackSamples.Length];
-        int micFrames = micSamples.Length;
+        int micTotal = micSamples.Length;
         int loopbackFrames = loopbackSamples.Length / loopbackChannels;
 
         for (int i = 0; i < loopbackSamples.Length; i++)
         {
             int frame = i / loopbackChannels;
-            int micIdx = frame < micFrames ? frame : micFrames - 1;
-            float micVal = micIdx >= 0 ? micSamples[micIdx] * 4f * micGain : 0f;
+            float micVal = 0f;
+            if (frame < micTotal)
+                micVal = micSamples[frame] * micGain;
             float sample = loopbackSamples[i] * gameGain + micVal;
+            if (float.IsNaN(sample))
+            {
+                sample = 0f;
+            }
             result[i] = SoftClip(sample);
         }
 
@@ -225,10 +266,7 @@ public sealed class AudioMixer : IDisposable
 
     internal static float SoftClip(float x)
     {
-        float abs = Math.Abs(x);
-        if (abs <= 0.333f) return x;
-        if (abs < 1f) return Math.Sign(x) * (3f - (2f - 3f * abs) * (2f - 3f * abs)) / 3f;
-        return Math.Sign(x);
+        return x / (1f + Math.Abs(x));
     }
 
     private int _emittedPackets;
@@ -248,11 +286,6 @@ public sealed class AudioMixer : IDisposable
         }
 
         OnMixedAudio?.Invoke(packet);
-    }
-
-    public (List<EncodedPacket> game, List<EncodedPacket> mic) GetPendingAudio()
-    {
-        return (new List<EncodedPacket>(), new List<EncodedPacket>());
     }
 
     public void Dispose()

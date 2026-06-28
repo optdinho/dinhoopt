@@ -58,6 +58,7 @@ let engineReplayBufferVideoBytes = 0
 let engineReplayBufferAudioPackets = 0
 let engineReplayBufferAudioBytes = 0
 const pendingRequests = new Map<string, PendingRequest>()
+const longRunningPending = new Map<string, { resolve: (value: PipeMessage) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 export function isEngineRunning(): boolean {
@@ -239,6 +240,28 @@ export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>):
   })
 }
 
+export function sendPipeCommandLongRunning(
+  cmd: string,
+  payload?: Record<string, unknown>,
+  timeoutMs = 120_000,
+): Promise<PipeMessage> {
+  return new Promise((resolve, reject) => {
+    sendPipeCommand(cmd, payload)
+      .then((accepted) => {
+        if (accepted.payload?.status === 'accepted') {
+          const timer = setTimeout(() => {
+            longRunningPending.delete(cmd)
+            reject(new Error(`Long-running command "${cmd}" timed out after ${timeoutMs}ms`))
+          }, timeoutMs)
+          longRunningPending.set(cmd, { resolve, reject, timer })
+        } else {
+          resolve(accepted)
+        }
+      })
+      .catch(reject)
+  })
+}
+
 function onPipeData(chunk: Buffer): void {
   pipeBuffer += chunk.toString('utf-8')
   const lines = pipeBuffer.split('\n')
@@ -257,6 +280,24 @@ function onPipeData(chunk: Buffer): void {
 }
 
 function handlePipeMessage(msg: PipeMessage): void {
+  if (msg.cmd === '_event' && msg.payload?.type === 'commandResult') {
+    const originalCmd = String(msg.payload.originalCmd ?? '')
+    const pending = longRunningPending.get(originalCmd)
+    if (pending) {
+      longRunningPending.delete(originalCmd)
+      clearTimeout(pending.timer)
+      if (msg.payload.error) {
+        getLogger().warning('clips-pipe', `Long-running command "${originalCmd}" failed: ${msg.payload.error}`)
+        pending.reject(new Error(String(msg.payload.error)))
+      } else {
+        pending.resolve({ cmd: originalCmd, payload: msg.payload.value as Record<string, unknown> | undefined })
+      }
+    } else {
+      getLogger().warning('clips-pipe', `No pending long-running request for cmd="${originalCmd}"`)
+    }
+    return
+  }
+
   if (msg.cmd === '_event' && msg.payload?.type === 'engineStatus') {
     const p = msg.payload as Record<string, unknown>
     const d = p.data as Record<string, unknown> | undefined
@@ -389,6 +430,11 @@ function disconnectPipe(): void {
     pending.reject(new Error('Pipe disconnected'))
   }
   pendingRequests.clear()
+  for (const [, pending] of longRunningPending) {
+    clearTimeout(pending.timer)
+    pending.reject(new Error('Pipe disconnected'))
+  }
+  longRunningPending.clear()
   if (pipeSocket) {
     pipeSocket.destroy()
     pipeSocket = null

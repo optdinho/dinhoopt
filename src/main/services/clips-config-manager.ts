@@ -43,6 +43,7 @@ export interface ConfigState {
   audioSampleRate: number
   autoCleanupEnabled: boolean
   autoCleanupThresholdPercent: number
+  adaptiveQuality: boolean
 }
 
 export const config: ConfigState = {
@@ -51,11 +52,11 @@ export const config: ConfigState = {
   width: 1920,
   height: 1080,
   bitrateKbps: 40000,
-  cq: 20,
-  maxrateKbps: 40000,
-  bufsizeKbps: 80000,
-  bframes: 2,
-  lookahead: 4,
+  cq: 16,
+  maxrateKbps: 80000,
+  bufsizeKbps: 160000,
+  bframes: 3,
+  lookahead: 32,
   encoderPreset: 'p4',
   codec: 'auto',
   adapterIndex: -1,
@@ -80,6 +81,7 @@ export const config: ConfigState = {
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
   autoCleanupThresholdPercent: 90,
+  adaptiveQuality: true,
 }
 
 function defaultHotkeys(): HotkeyBinding[] {
@@ -125,6 +127,7 @@ function baseConfigPayload(): Record<string, unknown> {
     autoCleanupEnabled: c.autoCleanupEnabled,
     autoCleanupThresholdPercent: c.autoCleanupThresholdPercent,
     noiseSuppression: c.noiseSuppression,
+    adaptiveQuality: c.adaptiveQuality,
   }
 }
 
@@ -164,7 +167,7 @@ export function getCurrentConfigPayload(): Record<string, unknown> {
     ...baseConfigPayload(),
     selectedAudioSessions: config.selectedAudioSessions,
     hotkeys: config.hotkeys.length > 0 ? config.hotkeys : defaultHotkeys(),
-    excludeProcessId: config.excludeProcessId,
+    excludeProcessId: config.useExcludeMode ? process.pid : config.excludeProcessId,
   }
 }
 
@@ -197,6 +200,7 @@ export function loadPersistedClipsConfig(): void {
   config.micVolume = saved.micVolume ?? 1.0
   config.selectedAudioSessions = saved.selectedAudioSessions ?? []
   config.noiseSuppression = saved.noiseSuppression ?? false
+  config.adaptiveQuality = saved.adaptiveQuality ?? true
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
   config.autoCleanupThresholdPercent = saved.autoCleanupThresholdPercent ?? 90
@@ -235,6 +239,7 @@ export function persistClipsConfig(): void {
     micVolume: config.micVolume,
     selectedAudioSessions: config.selectedAudioSessions,
     noiseSuppression: config.noiseSuppression,
+    adaptiveQuality: config.adaptiveQuality,
     audioSampleRate: config.audioSampleRate,
     autoCleanupEnabled: config.autoCleanupEnabled,
     autoCleanupThresholdPercent: config.autoCleanupThresholdPercent,

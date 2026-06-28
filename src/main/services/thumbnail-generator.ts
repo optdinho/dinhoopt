@@ -1,10 +1,21 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import type { ExecFileException } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join, parse } from 'node:path'
-import { promisify } from 'node:util'
 import { getLogger } from './logger.service'
 
-const execFileAsync = promisify(execFile)
+function execFileAsync(
+  cmd: string,
+  args: readonly string[],
+  options: { timeout: number; encoding: string },
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, options, (err: ExecFileException | null, stdout: string, stderr: string) => {
+      if (err) reject(err)
+      else resolve({ stdout, stderr })
+    })
+  })
+}
 
 const THUMB_DIR = '.thumbnails'
 const THUMB_WIDTH = 320
@@ -12,52 +23,58 @@ const DEFAULT_SEEK_SEC = 5
 const FFMPEG_TIMEOUT = 30_000
 
 let _ffmpegPath: string | null | undefined
+let _scanning: Promise<void> | null = null
 
-function scanFfmpeg(): void {
+async function scanFfmpeg(): Promise<void> {
   if (_ffmpegPath !== undefined) return
+  if (_scanning) return _scanning
 
-  const candidates = ['ffmpeg.exe', 'ffmpeg']
-  const dirs: string[] = []
+  _scanning = (async () => {
+    const candidates = ['ffmpeg.exe', 'ffmpeg']
+    const dirs: string[] = []
 
-  const pf = process.env['ProgramFiles']
-  const pf86 = process.env['ProgramFiles(x86)']
-  const localAppData = process.env['LOCALAPPDATA']
-  if (pf) dirs.push(join(pf, 'ffmpeg', 'bin'), join(pf, 'FFmpeg', 'bin'))
-  if (pf86) dirs.push(join(pf86, 'ffmpeg', 'bin'), join(pf86, 'FFmpeg', 'bin'))
-  if (localAppData) {
-    dirs.push(
-      join(localAppData, 'Microsoft', 'WinGet', 'Packages', 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe'),
-    )
-  }
-  dirs.push('C:\\ffmpeg\\bin', 'C:\\FFmpeg\\bin', 'C:\\tools\\ffmpeg\\bin')
+    const pf = process.env['ProgramFiles']
+    const pf86 = process.env['ProgramFiles(x86)']
+    const localAppData = process.env['LOCALAPPDATA']
+    if (pf) dirs.push(join(pf, 'ffmpeg', 'bin'), join(pf, 'FFmpeg', 'bin'))
+    if (pf86) dirs.push(join(pf86, 'ffmpeg', 'bin'), join(pf86, 'FFmpeg', 'bin'))
+    if (localAppData) {
+      dirs.push(
+        join(localAppData, 'Microsoft', 'WinGet', 'Packages', 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe'),
+      )
+    }
+    dirs.push('C:\\ffmpeg\\bin', 'C:\\FFmpeg\\bin', 'C:\\tools\\ffmpeg\\bin')
 
-  for (const dir of dirs) {
-    for (const name of candidates) {
-      const p = join(dir, name)
-      if (existsSync(p)) {
-        _ffmpegPath = p
-        return
+    for (const dir of dirs) {
+      for (const name of candidates) {
+        const p = join(dir, name)
+        if (existsSync(p)) {
+          _ffmpegPath = p
+          return
+        }
       }
     }
-  }
 
-  // Try PATH resolution via where.exe
-  try {
-    const stdout = execFileSync('where.exe', ['ffmpeg'], { encoding: 'utf-8', timeout: 5000 })
-    const firstLine = stdout.split('\n')[0].trim()
-    if (firstLine) {
-      _ffmpegPath = firstLine
-      return
+    // Try PATH resolution via where.exe (async, non-blocking)
+    try {
+      const { stdout } = await execFileAsync('where.exe', ['ffmpeg'], { encoding: 'utf-8', timeout: 5000 })
+      const firstLine = stdout.split('\n')[0].trim()
+      if (firstLine) {
+        _ffmpegPath = firstLine
+        return
+      }
+    } catch {
+      /* ffmpeg not in PATH */
     }
-  } catch {
-    /* ffmpeg not in PATH */
-  }
 
-  _ffmpegPath = null
+    _ffmpegPath = null
+  })()
+
+  await _scanning
 }
 
-export function hasFfmpeg(): boolean {
-  scanFfmpeg()
+export async function hasFfmpeg(): Promise<boolean> {
+  await scanFfmpeg()
   return _ffmpegPath !== null
 }
 
@@ -79,7 +96,7 @@ export function getCachedThumbnailPath(outputDir: string, clipName: string): str
 }
 
 export async function generateThumbnail(outputDir: string, clipName: string): Promise<string | null> {
-  scanFfmpeg()
+  await scanFfmpeg()
   if (!_ffmpegPath) return null
 
   const videoPath = join(outputDir, clipName)

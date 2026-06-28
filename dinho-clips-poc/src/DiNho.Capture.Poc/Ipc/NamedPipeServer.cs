@@ -143,6 +143,8 @@ public sealed class NamedPipeServer : IDisposable
     private const string PipeName = "dinho-clips-engine";
     private CancellationTokenSource? _cts;
     private Task? _listenerTask;
+    private readonly ConcurrentQueue<string> _rawBroadcastQueue = new();
+    private const int MaxBroadcastQueueSize = 1000;
 
     public Func<IpcMessage, Task<IpcMessage?>>? OnMessage { get; set; }
     public Func<EngineStatusMessage>? GetStatus { get; set; }
@@ -177,6 +179,13 @@ public sealed class NamedPipeServer : IDisposable
         _listenerTask = null;
     }
 
+    public void BroadcastRaw(string json)
+    {
+        _rawBroadcastQueue.Enqueue(json);
+        while (_rawBroadcastQueue.Count > MaxBroadcastQueueSize)
+            _rawBroadcastQueue.TryDequeue(out _);
+    }
+
     private async Task ListenLoop(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -189,12 +198,12 @@ public sealed class NamedPipeServer : IDisposable
                     PipeDirection.InOut,
                     maxNumberOfServerInstances: 1,
                     PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
+                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
                 await server.WaitForConnectionAsync(ct);
 
                 var captured = server;
-                server = null; // ownership transferred to handler
+                server = null;
                 _ = Task.Run(() => HandleClientAsync(captured, ct), ct);
             }
             catch (OperationCanceledException)
@@ -211,6 +220,13 @@ public sealed class NamedPipeServer : IDisposable
         }
     }
 
+    private static readonly HashSet<string> _longRunningCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "saveClip", "trimClip", "mergeClips"
+    };
+
+    private readonly ConcurrentQueue<string> _longRunningResultQueue = new();
+
     private async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken ct)
     {
         var broadcastQueue = new ConcurrentQueue<string>();
@@ -222,7 +238,7 @@ public sealed class NamedPipeServer : IDisposable
             {
                 broadcastQueue.Enqueue(JsonSerializer.Serialize(msg.ToEnvelope()));
             }
-            catch { /* serialization error — skip this broadcast */ }
+            catch { }
         };
         OnStatusBroadcast += onStatus;
 
@@ -234,7 +250,6 @@ public sealed class NamedPipeServer : IDisposable
             {
                 while (!ct.IsCancellationRequested && server.IsConnected)
                 {
-                    // Poll: wait up to 500ms for a command from Electron
                     var readTask = reader.ReadLineAsync(ct).AsTask();
                     var pollTask = Task.Delay(500, ct);
                     var completed = await Task.WhenAny(readTask, pollTask);
@@ -244,63 +259,97 @@ public sealed class NamedPipeServer : IDisposable
                         var line = await readTask;
                         if (line == null) break;
 
-                        string? responseJson = null;
                         try
                         {
                             var envelope = JsonSerializer.Deserialize<IpcEnvelope>(line);
                             if (envelope != null)
                             {
-                                var msg = IpcMessage.FromEnvelope(envelope);
-                                if (msg != null && OnMessage != null)
+                                if (_longRunningCommands.Contains(envelope.Command) && OnMessage != null)
                                 {
-                                    var resp = await OnMessage(msg);
-                                    if (resp != null)
+                                    // Respond immediately with "accepted"
+                                    var accepted = new IpcEnvelope
                                     {
-                                        // Echo back original cmd for Electron response matching
-                                        var env = resp.ToEnvelope();
-                                        env.Command = envelope.Command;
-                                        responseJson = JsonSerializer.Serialize(env);
+                                        Version = 1,
+                                        Command = envelope.Command,
+                                        Payload = JsonSerializer.SerializeToElement(new { status = "accepted" })
+                                    };
+                                    await writer.WriteLineAsync(JsonSerializer.Serialize(accepted));
+
+                                    // Process on background — result forwarded via _longRunningResultQueue
+                                    var msgCopy = IpcMessage.FromEnvelope(envelope);
+                                    if (msgCopy != null)
+                                    {
+                                        var capturedCmd = envelope.Command;
+                                        var capturedMsg = msgCopy;
+                                        _ = ProcessLongRunningAsync(capturedCmd, capturedMsg, ct);
+                                    }
+                                }
+                                else
+                                {
+                                    var msg = IpcMessage.FromEnvelope(envelope);
+                                    string? responseJson = null;
+                                    if (msg != null && OnMessage != null)
+                                    {
+                                        var resp = await OnMessage(msg);
+                                        if (resp != null)
+                                        {
+                                            var env = resp.ToEnvelope();
+                                            env.Command = envelope.Command;
+                                            responseJson = JsonSerializer.Serialize(env);
+                                        }
+                                    }
+                                    if (responseJson != null)
+                                    {
+                                        await writer.WriteLineAsync(responseJson);
                                     }
                                 }
                             }
                             else
                             {
-                                // Fallback: tenta parser como mensagem legacy (sem envelope)
                                 var msg = JsonSerializer.Deserialize<IpcMessage>(line);
+                                string? responseJson = null;
                                 if (msg != null && OnMessage != null)
                                 {
                                     var resp = await OnMessage(msg);
                                     if (resp != null)
                                         responseJson = JsonSerializer.Serialize(resp.ToEnvelope());
                                 }
+                                if (responseJson != null)
+                                {
+                                    await writer.WriteLineAsync(responseJson);
+                                }
                             }
                         }
                         catch (JsonException ex)
                         {
                             DebugWrite($"Invalid JSON: {ex.Message}");
-                            responseJson = JsonSerializer.Serialize(new IpcEnvelope
+                            var errorJson = JsonSerializer.Serialize(new IpcEnvelope
                             {
                                 Version = 1,
                                 Command = "error",
                                 Payload = JsonSerializer.SerializeToElement(new { error = "Invalid JSON" })
                             });
-                        }
-
-                        if (responseJson != null)
-                        {
-                            await writer.WriteLineAsync(responseJson);
+                            await writer.WriteLineAsync(errorJson);
                         }
                     }
                     else if (readTask.IsFaulted)
                     {
                         break;
                     }
-                    // else: poll timeout — drain broadcasts below
 
-                    // Write any pending status broadcasts to the pipe
                     while (broadcastQueue.TryDequeue(out var broadcastJson))
                     {
                         await writer.WriteLineAsync(broadcastJson);
+                    }
+
+                    while (_rawBroadcastQueue.TryDequeue(out var rawJson))
+                    {
+                        await writer.WriteLineAsync(rawJson);
+                    }
+
+                    while (_longRunningResultQueue.TryDequeue(out var resultJson))
+                    {
+                        await writer.WriteLineAsync(resultJson);
                     }
                 }
             }
@@ -316,6 +365,60 @@ public sealed class NamedPipeServer : IDisposable
         finally
         {
             OnStatusBroadcast -= onStatus;
+        }
+    }
+
+    private async Task ProcessLongRunningAsync(string originalCmd, IpcMessage msg, CancellationToken ct)
+    {
+        try
+        {
+            var resp = await OnMessage!(msg);
+            IpcEnvelope resultEnvelope;
+            if (resp != null)
+            {
+                resultEnvelope = new IpcEnvelope
+                {
+                    Version = 1,
+                    Command = "_event",
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        type = "commandResult",
+                        originalCmd,
+                        value = resp.Value
+                    })
+                };
+            }
+            else
+            {
+                resultEnvelope = new IpcEnvelope
+                {
+                    Version = 1,
+                    Command = "_event",
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        type = "commandResult",
+                        originalCmd,
+                        value = new { }
+                    })
+                };
+            }
+            _longRunningResultQueue.Enqueue(JsonSerializer.Serialize(resultEnvelope));
+        }
+        catch (Exception ex)
+        {
+            Log.E("NamedPipeServer", $"Long-running command '{originalCmd}' failed: {ex.Message}");
+            var errorEnvelope = new IpcEnvelope
+            {
+                Version = 1,
+                Command = "_event",
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    type = "commandResult",
+                    originalCmd,
+                    error = ex.Message
+                })
+            };
+            _longRunningResultQueue.Enqueue(JsonSerializer.Serialize(errorEnvelope));
         }
     }
 

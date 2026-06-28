@@ -111,7 +111,16 @@ public sealed class HotkeyManager : IDisposable
     public void Stop()
     {
         _disposed = true;
-        _hookThread?.Join(1000);
+        // Post a thread message to wake up GetMessage() so the hook thread
+        // can exit cleanly instead of hanging indefinitely.
+        if (_hookThread is { IsAlive: true })
+        {
+            PostThreadMessage((uint)_hookThread.ManagedThreadId, 0x0012, IntPtr.Zero, IntPtr.Zero); // WM_QUIT
+            if (!_hookThread.Join(1000))
+            {
+                Log.W("HotkeyManager", "Hook thread did not exit within 1s — continuing");
+            }
+        }
         _hookThread = null;
     }
 
@@ -203,7 +212,7 @@ public sealed class HotkeyManager : IDisposable
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
     }
 
-    private void MatchAndFireHotkey(int vkCode)
+    internal void MatchAndFireHotkey(int vkCode)
     {
         lock (_lock)
         {
@@ -236,6 +245,14 @@ public sealed class HotkeyManager : IDisposable
                 break;
             }
         }
+    }
+
+    internal void SetKeyPressed(int vk, bool pressed)
+    {
+        if (pressed)
+            _keysDown.Add(vk);
+        else
+            _keysDown.Remove(vk);
     }
 
     private static int? MapToGenericVk(int vk)
@@ -273,6 +290,10 @@ public sealed class HotkeyManager : IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);

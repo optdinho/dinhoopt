@@ -90,6 +90,9 @@ public sealed class AppConfig
     // Audio Loopback: captura áudio do sistema (true) ou apenas microfone (false)
     public bool AudioLoopback { get; set; } = true;
 
+    // RAM-aware adaptive quality (true = RamManager ajusta CQ/resolução/replay conforme RAM disponível)
+    public bool AdaptiveQualityEnabled { get; set; } = true;
+
     // PID do processo Electron (para ignorar foreground changes quando o Electron rouba o foco)
     public int ElectronPid { get; set; }
 
@@ -160,7 +163,7 @@ public sealed class ConfigManager : IDisposable
             }
 
             var json = File.ReadAllText(_configPath);
-            var config = JsonSerializer.Deserialize<AppConfig>(json);
+            var config = JsonSerializer.Deserialize<AppConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             // Migração: config antigo com campos fixos → bindings dinâmicos
             if (config != null && config.HotkeyBindings.Count == 3 &&
@@ -242,13 +245,24 @@ public sealed class ConfigManager : IDisposable
                 _ => _defaults.PttMode,
             };
 
-            // Valida diretório de saída
+            // Valida diretório de saída (anti-path-traversal)
             if (!string.IsNullOrEmpty(config.OutputDirectory))
             {
                 try
                 {
-                    if (!Directory.Exists(config.OutputDirectory))
-                        Directory.CreateDirectory(config.OutputDirectory);
+                    var resolved = Path.GetFullPath(config.OutputDirectory);
+                    var profileDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    if (!resolved.StartsWith(profileDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log.W("Config", $"OutputDirectory '{resolved}' fora do perfil do usuário — rejeitado");
+                        config.OutputDirectory = "";
+                    }
+                    else
+                    {
+                        config.OutputDirectory = resolved;
+                        if (!Directory.Exists(config.OutputDirectory))
+                            Directory.CreateDirectory(config.OutputDirectory);
+                    }
                 }
                 catch
                 {
@@ -300,34 +314,6 @@ public sealed class ConfigManager : IDisposable
             SaveToDisk(Config);
         }
         OnConfigChanged?.Invoke(Config);
-    }
-
-    // Valida se o diretório de saída existe e tem permissão de escrita
-    public static bool ValidateOutputDirectory(string path, out string? error)
-    {
-        error = null;
-        try
-        {
-            if (string.IsNullOrEmpty(path))
-            {
-                error = "Caminho não pode ser vazio";
-                return false;
-            }
-
-            if (!Directory.Exists(path))
-                Directory.CreateDirectory(path);
-
-            var testFile = Path.Combine(path, ".dinho_write_test");
-            File.WriteAllText(testFile, "test");
-            File.Delete(testFile);
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
     }
 
     private static AppConfig CloneConfig(AppConfig source)

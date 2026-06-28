@@ -35,12 +35,21 @@ public sealed class WasapiMicSource : IAudioSource
     public void Start()
     {
         if (_running) return;
-        _running = true;
         _capture = new WasapiCapture(_device, true);
         _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(_sampleRate, 1);
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += (s, e) => _running = false;
-        _capture.StartRecording();
+        try
+        {
+            _capture.StartRecording();
+        }
+        catch
+        {
+            _capture.Dispose();
+            _capture = null;
+            throw;
+        }
+        _running = true;
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)

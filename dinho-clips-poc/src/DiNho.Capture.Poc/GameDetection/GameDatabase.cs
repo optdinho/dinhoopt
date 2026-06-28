@@ -26,7 +26,8 @@ public class GameDatabase
 
     private Dictionary<string, GameEntry> _byWindowClass = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, GameEntry> _byProcessName = new(StringComparer.OrdinalIgnoreCase);
-    private bool _loaded;
+    private volatile bool _loaded;
+    private readonly object _loadLock = new();
 
     private static readonly Lazy<GameDatabase> _instance = new(() => new GameDatabase());
     public static GameDatabase Instance => _instance.Value;
@@ -43,6 +44,9 @@ public class GameDatabase
     public void Load(string? jsonPath = null)
     {
         if (_loaded) return;
+        lock (_loadLock)
+        {
+            if (_loaded) return;
 
         // Try provided path, then executable directory, then fallback paths
         var candidates = new List<string>();
@@ -82,7 +86,8 @@ public class GameDatabase
             }
         }
 
-        Log.W("GameDatabase", "No games.json found, using hardcoded fallback");
+            Log.W("GameDatabase", "No games.json found, using hardcoded fallback");
+        }
     }
 
     private void BuildIndexes()

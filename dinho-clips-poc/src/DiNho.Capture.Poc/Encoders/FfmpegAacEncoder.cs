@@ -25,6 +25,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private long _pcmBytesWritten;
     private int _pcmWriteErrors;
     private int _totalAacFrames;
+    private volatile bool _flushing;
 
     public void Initialize(int sampleRate, int channels, int bitrate = 128000)
     {
@@ -46,7 +47,7 @@ public sealed class FfmpegAacEncoder : IDisposable
             }
         };
         _process.Start();
-        try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+        try { _process.PriorityClass = ProcessPriorityClass.Normal; } catch { }
 
         // Read stderr asynchronously to prevent pipe deadlock
         _process.BeginErrorReadLine();
@@ -73,7 +74,7 @@ public sealed class FfmpegAacEncoder : IDisposable
 
     public void EncodeAudio(float[] pcmSamples)
     {
-        if (!_initialized || _disposed) return;
+        if (!_initialized || _disposed || _flushing) return;
         int byteLen = pcmSamples.Length * 4;
         if (_pcmBuf == null || _pcmBuf.Length < byteLen)
             _pcmBuf = new byte[byteLen * 2];
@@ -89,6 +90,9 @@ public sealed class FfmpegAacEncoder : IDisposable
             _pcmWriteErrors++;
             Log.E("FfmpegAacEncoder", $"PCM write #{_pcmWriteErrors} failed ({byteLen} bytes, totalWrote={_pcmBytesWritten}): {ex.GetType().Name}: {ex.Message}");
         }
+
+        if (_pcmBuf.Length > byteLen * 4 && _pcmBuf.Length > 65536)
+            Array.Resize(ref _pcmBuf, Math.Max(byteLen, 65536));
     }
 
     public EncodedPacket? TryReadPacket()
@@ -109,6 +113,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     public int FlushAndDrain(List<EncodedPacket> outBuffer)
     {
         int count = 0;
+        _flushing = true;
         try
         {
             _stdin?.Dispose();

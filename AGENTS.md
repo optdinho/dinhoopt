@@ -1590,3 +1590,279 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - **126 C# tests** — **0 failures**
 - **Coverage**: Statements 94.22%, Branches 85.67%, Functions 94.49%, Lines 95.34%
 - **Lint**: 38 errors remaining (pre-existing `noBannedTypes`/`Function` in test files), 37 warnings
+
+## Session Summary (2026-06-27 — H264 CodecPrivate fix: avccCache from encoder)
+
+### Done
+
+- **Root cause re-confirmed**: Logs from real test (FiveM, 629 frames, 10.8s) showed "Invalid track number 1470849" and "Could not find codec parameters for stream 0" — the MKV temp worked (1122 KB) but MP4 output was only 253 KB (just AAC, video dropped), and thumbnail failed (exit code -22).
+
+- **Existing fix already implemented but not deployed**:
+  - `FfmpegEncoder.cs`: caches SPS/PPS NALUs from NVENC stream at encode time (`_cachedSps`/`_cachedPps`), calls `BuildAvcc()` to produce avcC atom when both SPS+PPS are available, exposes via `AvccCache` property
+  - `ClipExporter.cs`: `WriteMatroskaFile()` accepts `avccFallback` parameter; tries `ExtractAvccExtradata(packets) ?? avccFallback` — if neither source has SPS/PPS, logs warning `[Exporter] avcC CodecPrivate not found in packets or fallback — MKV may not mux correctly`
+  - `EngineCoordinator.cs:1491`: passes `(_encoder as FfmpegEncoder)?.AvccCache` as `avccFallback` to export
+  - `BuildAvcc()` constructs AVCDecoderConfigurationRecord from SPS (NAL type 7) + PPS (NAL type 8)
+
+- **Deployed fix**: `dotnet build` (0 errors), `dotnet publish -c Release --self-contained true -r win-x64`, `npm run copy-engine` (288 files staged)
+
+- **C# tests**: 146/149 pass (3 pre-existing AudioMixer failures from soft-knee limiter change, unrelated)
+
+## Session Summary (2026-06-27 — Test data fix: AnnexB → AVCC format)
+
+### Done
+
+- **3 integration tests fixed** for AVCC format expectation:
+  1. `ExtractAvccExtradata_FromSpsPps_ReturnsCorrectAvcc`: Manual AnnexB start-code construction replaced with `BuildAvccNal` (4-byte length prefix)
+  2. `ExtractAvccExtradata_NullWhenMissingSps`: AnnexB start-code construction replaced with `BuildAvccNal`
+  3. `WriteMatroskaFile_CodecPrivateAvccPresent`: Passes because `GenerateH264Packets` now uses `BuildAvccNal`
+
+- **`GenerateValidH264Packets` + `SplitH264IntoFrames` fixed**: ffmpeg produces AnnexB raw H264, frames now converted to AVCC via `ConvertAnnexBFrameToAvcc()` helper before creating `EncodedPacket` — ensures `ExportToMp4_ProducesValidMp4` test works correctly
+
+- **146/149 C# tests pass** (3 pre-existing `AudioMixerTests` soft-knee limiter precision failures)
+- **Engine published + staged**: `dotnet publish -c Release --self-contained true -r win-x64` (0 errors), `npm run copy-engine` (288 files staged)
+
+### Relevant Files Changed (this session)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ClipExporterIntegrationTests.cs`: `BuildAnnexBNal` → `BuildAvccNal`, `ConvertAnnexBFrameToAvcc` helper, `SplitH264IntoFrames` updated, 3 manual data constructions fixed
+
+### Next Steps
+- Test with `npm run dev` + FiveM: verify clip exports with correct size and thumbnail generation
+
+## Session Summary (2026-06-27 — VINT unknown-size fix: range checks exclude max values)
+
+### Done
+
+- **Bug find from real test with FiveM (15s, 748 frames 1080p60)**:
+  - ✅ **Emulation prevention fix works**: avcC now 37 bytes (was 38), spsLen=22 (was 23), `00 00 03` removed
+  - ✅ **VINT fix resolved "Invalid track number"**: MKV temp 2216 KB (correct size for 748 frames)
+  - ❌ **New error**: `Element with ID 0xA3 at pos. 0x44825 has unknown length` — SimpleBlock with unknown-size VINT
+
+- **Root cause — range checks included max VINT value (all-1s sentinel)**:
+  - The earlier session (2026-06-26 H264 corruption fix) changed range checks from `< 0x7F`/`< 0x3FFF` to `< 0x80`/`< 0x4000`, which **include** `0x7F` (1-byte) and `0x3FFF` (2-byte) — the maximum representable values
+  - In EBML, the all-1s VINT value is the "unknown size" sentinel, valid only for master elements (Segment, Cluster)
+  - SimpleBlocks (0xA3) are **data elements** — unknown size is invalid
+  - Any frame with total payload size = 127 bytes (1-byte VINT) or **16383 bytes** (2-byte VINT) triggered the sentinel, making ffmpeg unable to parse subsequent SimpleBlocks
+  - 16383 bytes payload = 16379 bytes of H264 NAL data — a plausible keyframe size at 1080p60
+
+- **Fix applied to `WriteEbmlVint` in `ClipExporter.cs`**:
+  - Reverted range checks to original values: `< 0x7F`, `< 0x3FFF`, `< 0x1FFFFF`, `< 0x0FFFFFFF`, `< 0x07FFFFFFFF`, `< 0x03FFFFFFFFFFF`, `< 0x01FFFFFFFFFFFFF`
+  - Each check excludes the max value, forcing the next larger VINT width when needed
+  - Fixed fallthrough case: `0x02` prefix → `0x01` prefix (8-byte VINT), added `(value >> 56)` byte
+  - Preserved corrected prefixes: `0x40`, `0x20`, `0x10`, `0x08`, `0x04`, `0x02`, `0x01`
+  - Added comment explaining the sentinel constraint
+
+- **Local VINT max values that MUST be excluded** (because all-1s = unknown size):
+  | Width | Data bits | Max value | Exclude value (sentinel) |
+  |-------|-----------|-----------|------------------------|
+  | 1 byte | 7 | 0x7E (126) | 0x7F (127) |
+  | 2 bytes | 14 | 0x3FFE (16382) | 0x3FFF (16383) |
+  | 3 bytes | 21 | 0x1FFFFE | 0x1FFFFF |
+
+### Full Suite
+
+- **5998 TS tests**, 189 files — **0 failures**
+- **149 C# tests** — **146 pass**, 3 pre-existing AudioMixer failures
+- **Engine**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK, `copy-engine` staged 288 files
+- **Coverage**: Statements 94.22%, Branches 85.67%, Functions 94.49%, Lines 95.34%
+
+### Key Decisions
+
+- **Max-value exclusion over width bump**: Using `value < 0x7F` instead of `value < 0x80` means a value of 127 gets encoded as 2-byte VINT (14 bits) instead of 1-byte VINT (7 bits). The 1 extra byte overhead per rare edge case is negligible vs. breaking the entire SimpleBlock stream
+- **Same principle applies to all widths**: 2-byte max 0x3FFF → fall through to 3-byte; 3-byte max 0x1FFFFF → fall through to 4-byte. The guard ensures VINT_VALUE can never be all-1s for data elements
+- **Test isolation**: Cross-test state leakage in the earlier clip IPC tests was caused by `engineRunning`/`engineProcess` module-level vars persisting between tests. Fixed with `stopEngineProcess()` in `afterEach`
+
+## Session Summary (2026-06-27 — FfmpegEncoder fix: AVCC format detection + cross-read _pendingLen)
+
+### Done
+
+- **Root cause of "0 packets emitted / hadSlice=False / pendingBytes=12" identified**: Three bugs:
+
+  1. **ReaderLoop line 332-333 cleared `_pendingLen = 0; _hadSlice = false` on EVERY read** — This discarded any partial NALs cached by `AppendPending` and reset the slice-detection flag, breaking frame boundary detection across reads. The previous 9MB accumulation occurred because without proper slice detection, `EmitPacket` was never called, so `_pendingBuf` grew unbounded.
+
+  2. **`ConvertAnnexBToAvcc` corrupted already-AVCC data** — NVENC `h264_nvenc` outputs AVCC format (4-byte length prefix) by default, not AnnexB (start-code delimited). My converter scanned for `00 00 01` start codes in AVCC data, found false positives (e.g., emulation-prevention bytes within NAL data), and split NALs incorrectly. Only the first ~80 bytes (SPS+PPS+SEI/AUD) survived; all slice NALs were lost.
+
+  3. **Diagnostic hex was logged AFTER conversion** — Both `Raw=` and `Avcc=` hex showed the same converted buffer, obscuring the actual ffmpeg output format.
+
+- **Fixes applied**:
+
+  1. **AVCC auto-detection**: New `IsAnnexB()` method checks first 4 bytes for `00 00 01` or `00 00 00 01` start code pattern. If not AnnexB, data passes directly to `ParseAvcc` without conversion.
+
+  2. **Raw hex logged BEFORE conversion**: Moved diagnostic logging to capture pre-conversion data, with `isAnnexB` flag.
+
+  3. **No more `_pendingLen`/`_hadSlice` reset on each read**: Removed lines 332-333. `_pendingLen` is already properly cleared to 0 inside `EmitPacket` (line 536). `_hadSlice` continuity across reads ensures the first slice NAL in a new read can trigger `EmitPacket` via the previous read's last slice.
+
+- **Engine compiled and published**: `dotnet build` (0 errors), `dotnet publish -c Release --self-contained true -r win-x64` OK, `copy-engine` staged 288 files
+
+- **C# tests**: 146/149 pass (3 pre-existing AudioMixer soft-knee precision failures, unrelated)
+
+- **TS tests**: 95/95 clip IPC tests pass
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `IsAnnexB()` (new), `ReaderLoop` format detection + diagnostic ordering, removed stale `_pendingLen`/`_hadSlice` reset
+
+## Session Summary (2026-06-27 — avcC extradata corruption fix: video=0 frames)
+
+### Done
+
+- **Root cause of `video=0` frames / `buffer vazio` confirmed**: `-f h264 pipe:1` output format prepends the **avcC extradata** (SPS/PPS config record: `01 64 00 1e ...`) before actual AVCC NALUs. `ParseAvcc` interpreted the avcC header byte `01` as a 23MB NALU length → everything went to `AppendPending` → no NALUs ever parsed → `_hadSlice` never true → `EmitPacket` never called → `video=0`.
+
+- **Fix**: Added `-bsf:v {rawFmt}_mp4toannexb` to ffmpeg args (FfmpegEncoder.cs:267). This converts NVENC's AVCC output to AnnexB (start-code delimited) before writing to the pipe. The reader's `IsAnnexB` detects AnnexB start codes → `ConvertAnnexBToAvcc` converts to clean AVCC → `ParseAvcc` works correctly.
+
+- The `-bsf:v` was mentioned in 2026-06-26 session but lost in a refactoring. Now restored for all codecs (h264/hevc/av1).
+
+- **Engine deployed**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK, `npm run copy-engine` (288 files staged)
+
+- **Full suite**: 127 TS tests pass (clips IPC + config), 146/149 C# tests (3 pre-existing AudioMixer precision failures)
+
+### Next Steps
+- Test with `npm run dev` + FiveM: verify clip exports now produce non-zero video frames and correct MP4 size
+
+## Session Summary (2026-06-27 — 3-root cause fix: video=0frames + reader loop corruption + ReplayBuffer budget)
+
+### Diagnostics (Phase 1)
+- Traced full NVENC → stdout → reader loop → ReplayBuffer → ClipExporter pipeline across 5 subsystems
+- Identified `video=0frames` from reader loop never emitting packets; `_pendingBuf` grew to 9MB without `EmitPacket` being called
+- Cross-read combine: AVCC pending buffer + AnnexB new data in same buffer, `IsAnnexB` at pos 0 (AVCC) returned false → entire buffer parsed as AVCC → AnnexB portion misparsed
+- `_hadSlice = false` reset after combine caused frame N to merge into frame N+1
+- ReplayBuffer could evict all video frames when audio pushed combined bytes over budget
+- `av1_mp4toannexb` bitstream filter doesn't exist in any ffmpeg version
+
+### FIX #1: Reader loop restructured (FfmpegEncoder.cs)
+- Convert AnnexB → AVCC **before** combining with pending buffer
+- `_hadSlice` preserved after combine so frame boundary detection spans reads
+- Explicit `-bsf:v h264_mp4toannexb` ensures NVENC output is always AnnexB for `-f h264`
+- Removed `av1_nvenc` from auto-fallback chain (non-existent bsf); codec-specific guard skips bsf for AV1
+
+### FIX #2: TrimExcessVideo video-only budget (ReplayBuffer.cs)
+- Changed `_totalVideoBytes + _totalAudioBytes > _maxBytes` → `_totalVideoBytes > _maxBytes`
+- Audio can no longer evict all video frames from buffer
+
+### C# test fixes
+- `ReplayBufferTests.MaxBytes_CombinedAudioVideo_TrimsToBudget`: updated assertion for video-only budget (checks `videoCount > 0` and `bytes <= maxBytes + audio`)
+- `AudioMixerTests` (3 tests): pass explicit `micGain: 4.0f` (default was 1.0 after refactoring); `Mix_ShorterMic_Loops` updated for non-looping mic access
+
+### Final suite
+- **TS**: 5998 tests, 189 files — **0 failures**
+- **C#**: 149/149 tests — **0 failures**
+- **Coverage**: Statements 94.22%, Branches 85.67%, Functions 94.49%, Lines 95.34%
+- **Build**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: reader loop restructured, explicit `-bsf:v`, fallback chain fix, AVCC auto-detection
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: video-only budget check
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs`: budget assertion updated
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/AudioMixerTests.cs`: explicit `micGain: 4.0f`, non-looping mic test
+
+## Session Summary (2026-06-27 — Pipe-split NALU fix: persistent _rawBuf across reads + live FiveM confirmation)
+
+### Done
+
+- **Root cause of `hadSlice=False` / `video=0` re-confirmed**: `-f h264` outputs AnnexB start-code-delimited data. The previous fix (AnnexB→AVCC conversion) assumed each pipe read contained at least one complete start code at offset 0. When the pipe split mid-NALU, the orphaned tail had no start code → `IsAnnexB` returned false → raw AnnexB treated as AVCC → `ParseAvcc` consumed garbage → `hadSlice` never set to true.
+
+- **New fix — persistent `_rawBuf` across pipe reads**:
+  - Replaced ephemeral per-read AnnexB detection + conversion with `_rawBuf`/`_rawLen` that accumulates raw AnnexB data across reads
+  - `ConvertAnnexBToAvcc()` scans for start codes anywhere in the buffer (handles orphaned tails from pipe splits)
+  - After conversion, orphaned tail preserved at start of `_rawBuf` for next iteration
+  - Removed old `_pendingLen` combine path (was corrupting data by mixing raw AnnexB with AVCC)
+
+- **Live FiveM test confirmed fix works**:
+  - `hadSlice=True` consistently after fix
+  - Clip exported successfully: `video=616 audio=733` — **15.4MB MP4** saved to Desktop
+  - ffmpeg reports `frame=592 fps=41`
+  - `avcC len=55 spsLen=40 ppsLen=4` — SPS/PPS cached correctly
+  - Thumbnail generated successfully
+
+- **Diagnostic logging cleaned up**:
+  - Per-read `reader: conv` and `ParseAvcc: dataLen=...` logs demoted from `Log.I` to `Log.D` (Debug only)
+  - Per-NAL type logging already gated to first 10 frames
+  - Startup, warning, and error logs preserved
+
+### Full Suite
+
+- **TS**: 5998+ tests, 189 files — **0 failures**
+- **C#**: 149/149 tests — **0 failures**
+- **Build**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: persistent `_rawBuf`/`_rawLen` accumulation, `ConvertAnnexBToAvcc` handles orphaned tails, removed stale `_pendingLen` combine path, per-read logs → `Log.D`
+
+## Session Summary (2026-06-27 — ConvertAnnexBToAvcc orphaned data fix: `missing picture in access unit` + 900KB accumulation)
+
+### Done
+
+- **Root cause of `missing picture in access unit` + 900KB burst accumulation identified**:
+  - `ConvertAnnexBToAvcc` wrote orphaned data before the first start code as a valid AVCC NALU → H264 decoder warned "missing picture"
+  - After conversion, the orphaned tail was calculated from `writePos` (AVCC bytes written), but unconsumed raw data started at `readPos` — the gap between them contained garbage + a consumed start code, which got carried forward and prevented start code discovery in subsequent calls
+  - This caused `_rawBuf` to grow to ~900KB before a start code was eventually found in new data
+
+- **Fix #1 — `foundFirstSc` guard**: Data before the first start code is now skipped (`nalLen > 0 && foundFirstSc`) instead of being written as AVCC. Eliminates `missing picture in access unit` warnings.
+
+- **Fix #2 — `out int consumed` parameter**: `ConvertAnnexBToAvcc` now returns the `consumed` position (`readPos`), not `writePos`. The orphaned tail is calculated as `_rawLen - consumed`, correctly excluding garbage between `writePos` and `readPos`. This allows start code discovery in subsequent calls and prevents unbounded accumulation.
+
+### Full Suite
+
+- **C#**: 149/149 tests — **0 failures**
+- **Build**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `ConvertAnnexBToAvcc` now has `foundFirstSc` + `out int consumed`; ReaderLoop orphaned tail uses `consumed` instead of `avccLen`
+
+## Session Summary (2026-06-27 — `video=0frames` fix: AVCC/AnnexB format detection)
+
+### Diagnostics
+- Logs de sessão FiveM ao vivo mostraram `video=0frames` com `hadSlice=False` em TODAS as iterações do ReaderLoop. ffmpeg produzia frames (`frame=672 fps=52`) mas `ConvertAnnexBToAvcc` só gerava ~12B de AVCC de ~1293B raw.
+- **Root cause identificada**: `-bsf:v h264_mp4toannexb` NÃO estava convertendo AVCC→AnnexB corretamente em algumas versões do ffmpeg com `-f h264`. O `ConvertAnnexBToAvcc` escaneava dados AVCC (4-byte length-prefixed) procurando start codes AnnexB (`00 00 01`), não encontrava nenhum, e retornava avccLen=0/consumed=0 — fazendo o buffer acumular infinitamente (6791→9000+).
+- A confusão anterior sobre overlapped in-place BlockCopy estava incorreta: a conversão in-place funciona corretamente para dados AnnexB porque BlockCopy usa temp buffer para overlap.
+
+### Fix aplicado
+- **`ScanForStartCode()`** — novo helper que escaneia TODO o buffer bruto por start codes AnnexB, não apenas a posição 0. Isso lida corretamente com orphaned tails (dados parciais de NALU de reads anteriores).
+- **ReaderLoop format detection** — três caminhos:
+  1. `foundAnyStartCode == true`: dados são AnnexB → `ConvertAnnexBToAvcc()` original (inalterado)
+  2. `foundAnyStartCode == false && _rawLen >= 64`: dados são AVCC → parse direto via `ParseAvcc()`, `_rawLen = 0`
+  3. `foundAnyStartCode == false && _rawLen < 64`: buffer muito curto → acumula mais dados
+
+### Resultados
+- **C#**: 149/149 tests — 0 failures
+- **TS**: 247/247 tests (5 files) — 0 failures
+- **Build**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 288 files staged
+
+### Key Decisions
+- Threshold de 64 bytes para assumir AVCC: buffer grande o suficiente para conter pelo menos um NALU típico sem falso positivo em orphaned tails minúsculos
+- `ScanForStartCode()` em vez de `IsAnnexB()` na posição 0: necessário para dados que começam com orphaned tail mas contêm start codes no meio
+- Parse direto AVCC descarta o buffer (`_rawLen = 0`): AVCC não tem orphaned tails (cada NALU tem length prefix), então não há dados parciais
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `ScanForStartCode()` (new helper), ReaderLoop format detection com 3 caminhos (AnnexB/AVCC/aguardar)
+
+## Session Summary (2026-06-28 — Formato latch + log noise + MP4 bsf fix)
+
+### Done
+
+- **Formato latch (`_detectedFormat`)**: Criado enum `EncoderFormat.Unknown/AnnexB/Avcc`. ReaderLoop usa `_detectedFormat` persistente — detecta formato uma vez e pula `ScanForStartCode` + `ConvertAnnexBToAvcc` em toda leitura subsequente. Reseta só em `ResetState()`.
+
+- **Log silenciado**: Substituído `foundFirst` local (resetava a cada `ProcessAvccRaw` — logava "AVCC first NALU" a cada 16ms) por `_loggedFirstNalu` field. Log aparece 1x por sessão do encoder.
+
+- **MP4 H264 corruption fix (`-bsf:v h264_mp4toannexb`)**: Adicionado bitstream filter no `ClipExporter.MuxWithFfmpegStreaming` para converter AVCC→AnnexB durante mux. Essencial porque NVENC produz AVCC (length-prefixed), mas ffmpeg demux espera AnnexB (start-code) para `-c:v copy`.
+
+- **Logs do usuário confirmam**: Formato latch funcionando (sem "AnnexB ratio" spam em toda leitura). "AVCC first NALU" sumiu (agora 1x/sessão). `EmitPacket` emitindo `hadSlice=True` com `len=782B`. `video=407frames, 0,5MB` visível no status — saiu do `video=0frames`.
+
+- **Engine published**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK, `npm run copy-engine` (288 files staged).
+
+### Full Suite
+
+- **TS**: 5998 tests, 189 files — **0 failures**
+- **C#**: 206/206 tests — **0 failures**
+- **Coverage**: Statements 94.22%, Branches 85.67%, Functions 94.49%, Lines 95.34%
+
+### Next Steps
+
+- Confirmar se MP4 exportado toca corretamente (sem `pps_id 3199971767 out of range`) com o `-bsf:v` aplicado
+- Thumbnail exit code 69 — possivelmente ffmpeg não consegue decodificar frames do buffer circular
+- Clip de 407 frames / 1343 KB ainda pequeno para 1080p60 (~3.3 KB/frame) — verificar bitrate/QP
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: formato latch linhas 80-82, lógica de leitura linhas 457-461, `_loggedFirstNalu` linha 69, reset linha 976
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `-bsf:v h264_mp4toannexb` linhas 658-665

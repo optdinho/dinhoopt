@@ -292,6 +292,7 @@ public sealed partial class EngineCoordinator
                             c.BitrateKbps = incoming.BitrateKbps;
                             c.OutputDirectory = incoming.OutputDirectory;
                             c.ForceSoftware = incoming.ForceSoftware;
+                            c.Codec = incoming.Codec;
                             c.HotkeyBindings = incoming.HotkeyBindings;
                             c.PushToTalkKeys = incoming.PushToTalkKeys;
                             c.PttMode = incoming.PttMode;
@@ -408,24 +409,31 @@ public sealed partial class EngineCoordinator
                         // Se estiver capturando, recria o mic source com o novo device
                         if (_recording)
                         {
-                            _audioMixer?.Stop();
-                            _audioMixer?.Dispose();
+                            // Create new mixer BEFORE disposing old one to avoid null window
+                            var oldMixer = _audioMixer;
                             _audioMixer = null;
 
-                            if (_micSource != null)
+                            try
                             {
-                                _micSource.Stop();
-                                _micSource.Dispose();
-                                _micSource = null;
+                                _audioMixer = CreateAudioMixer();
+                            }
+                            catch
+                            {
+                                _audioMixer = oldMixer;
+                                _recording = false;
+                                throw;
                             }
 
-                            _audioMixer = CreateAudioMixer();
                             _audioMixer.MicEnabled = NormalizePttMode(_config.Config.PttMode) is "Hold" or "Toggle" ? false : _config.Config.MicEnabled;
                             Log.I("EngineCoordinator", $"[reinitMic] MicEnabled={_audioMixer.MicEnabled}");
                             _audioMixer.GameGain = _config.Config.GameVolume;
                             _audioMixer.MicGain = _config.Config.MicVolume;
                             _audioMixer.OnMixedAudio += OnAudioPacket;
                             _audioMixer.Start();
+
+                            // Dispose old AFTER new is successfully created and started
+                            oldMixer?.Stop();
+                            oldMixer?.Dispose();
                         }
 
                         Log.I("EngineCoordinator", $"Mic device set to '{deviceId}'");

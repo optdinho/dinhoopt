@@ -11,11 +11,11 @@ vi.mock('./clips-config-store', () => ({
     width: 1920,
     height: 1080,
     bitrateKbps: 40000,
-    cq: 20,
-    maxrateKbps: 40000,
-    bufsizeKbps: 80000,
-    bframes: 0,
-    lookahead: 4,
+    cq: 16,
+    maxrateKbps: 80000,
+    bufsizeKbps: 160000,
+    bframes: 3,
+    lookahead: 32,
     encoderPreset: 'p4',
     codec: 'auto',
     adapterIndex: -1,
@@ -48,6 +48,7 @@ vi.mock('./clips-config-store', () => ({
     audioSampleRate: 48000,
     autoCleanupEnabled: true,
     autoCleanupThresholdPercent: 90,
+    adaptiveQuality: true,
   })),
   saveClipsConfig: vi.fn((cfg: Record<string, unknown>) => cfg),
 }))
@@ -96,11 +97,11 @@ describe('clips-config-manager', () => {
       expect(result.width).toBe(1920)
       expect(result.height).toBe(1080)
       expect(result.bitrateKbps).toBe(40000)
-      expect(result.cq).toBe(20)
-      expect(result.maxrateKbps).toBe(40000)
-      expect(result.bufsizeKbps).toBe(80000)
-      expect(result.bframes).toBe(0)
-      expect(result.lookahead).toBe(4)
+      expect(result.cq).toBe(16)
+      expect(result.maxrateKbps).toBe(80000)
+      expect(result.bufsizeKbps).toBe(160000)
+      expect(result.bframes).toBe(3)
+      expect(result.lookahead).toBe(32)
       expect(result.encoderPreset).toBe('p4')
       expect(result.codec).toBe('auto')
       expect(result.adapterIndex).toBe(-1)
@@ -310,6 +311,7 @@ describe('clips-config-manager', () => {
         audioSampleRate: undefined as unknown as number,
         autoCleanupEnabled: undefined as unknown as boolean,
         autoCleanupThresholdPercent: undefined as unknown as number,
+        adaptiveQuality: undefined as unknown as boolean,
       })
       loadPersistedClipsConfig()
       expect(config.cq).toBe(24)
@@ -343,11 +345,11 @@ describe('clips-config-manager', () => {
         width: 1920,
         height: 1080,
         bitrateKbps: 40000,
-        cq: 20,
-        maxrateKbps: 40000,
-        bufsizeKbps: 80000,
-        bframes: 0,
-        lookahead: 4,
+        cq: 16,
+        maxrateKbps: 80000,
+        bufsizeKbps: 160000,
+        bframes: 3,
+        lookahead: 32,
         encoderPreset: 'p4',
         codec: 'auto',
         adapterIndex: -1,
@@ -369,6 +371,7 @@ describe('clips-config-manager', () => {
         audioSampleRate: 48000,
         autoCleanupEnabled: true,
         autoCleanupThresholdPercent: 90,
+        adaptiveQuality: true,
       }
       vi.mocked(loadClipsConfig).mockReturnValueOnce(saved)
       loadPersistedClipsConfig()

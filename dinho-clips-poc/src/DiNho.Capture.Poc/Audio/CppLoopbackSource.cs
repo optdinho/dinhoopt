@@ -38,6 +38,7 @@ public sealed class CppLoopbackSource : IAudioSource
     private readonly Queue<AudioBuffer> _pendingBuffers = new();
     private readonly object _lock = new();
     private Thread? _pumpThread;
+    private short[]? _shortBuffer;
 
     public int SampleRate => _sampleRate;
     public int Channels => _channels;
@@ -109,12 +110,15 @@ public sealed class CppLoopbackSource : IAudioSource
             return;
 
         int sampleCount = length / 2;
+
+        if (_shortBuffer == null || _shortBuffer.Length < sampleCount)
+            _shortBuffer = new short[sampleCount];
+
+        Marshal.Copy(data, _shortBuffer, 0, sampleCount);
+
         var samples = new float[sampleCount];
         for (int i = 0; i < sampleCount; i++)
-        {
-            short pcmSample = Marshal.ReadInt16(data, i * 2);
-            samples[i] = pcmSample / 32768f;
-        }
+            samples[i] = _shortBuffer[i] / 32768f;
 
         var buffer = new AudioBuffer(samples, _sampleRate, _channels);
         lock (_lock)
@@ -156,6 +160,8 @@ public sealed class CppLoopbackSource : IAudioSource
             Monitor.Pulse(_lock);
 
         Log.I("CppLoopbackSource", "Parando captura...");
+
+        // Stop native capture first so it stops calling the callback
         int hr = NativeMethods.StopCaptureAsync();
         Log.I("CppLoopbackSource", $"StopCaptureAsync: HR=0x{hr:X8}");
 
@@ -164,14 +170,14 @@ public sealed class CppLoopbackSource : IAudioSource
             try
             {
                 _captureThread.Interrupt();
-                _captureThread.Join(2000);
+                _captureThread.Join(3000);
             }
             catch { }
         }
 
         if (_pumpThread != null && _pumpThread.IsAlive)
         {
-            try { _pumpThread.Join(1000); }
+            try { _pumpThread.Join(2000); }
             catch { }
         }
 
@@ -182,6 +188,7 @@ public sealed class CppLoopbackSource : IAudioSource
             _callbackHandle.Free();
 
         _managedCallback = null;
+        _shortBuffer = null;
 
         Log.I("CppLoopbackSource", "Parado.");
     }

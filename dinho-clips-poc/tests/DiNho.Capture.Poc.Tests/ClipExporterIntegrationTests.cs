@@ -12,34 +12,35 @@ public sealed class ClipExporterIntegrationTests
 
     // ── Helpers ──────────────────────────────────────────────────────
 
-    private static byte[] BuildAnnexBNal(byte[] nalData)
+    private static byte[] BuildAvccNal(byte[] nalData)
     {
         var result = new byte[4 + nalData.Length];
-        result[0] = 0x00;
-        result[1] = 0x00;
-        result[2] = 0x00;
-        result[3] = 0x01;
+        int len = nalData.Length;
+        result[0] = (byte)(len >> 24);
+        result[1] = (byte)(len >> 16);
+        result[2] = (byte)(len >> 8);
+        result[3] = (byte)len;
         System.Buffer.BlockCopy(nalData, 0, result, 4, nalData.Length);
         return result;
     }
 
     private static List<EncodedPacket> GenerateH264Packets(int count, int width = 1920, int height = 1080)
     {
-        var sps = BuildAnnexBNal([
+        var sps = BuildAvccNal([
             0x67, 0x64, 0x00, 0x1E, 0xAC, 0x52, 0x80, 0x7B,
             0x02, 0x20, 0x20, 0x20, 0x80
         ]);
 
-        var pps = BuildAnnexBNal([0x68, 0xEE, 0x3C, 0x80]);
+        var pps = BuildAvccNal([0x68, 0xEE, 0x3C, 0x80]);
 
-        var idr = BuildAnnexBNal([
+        var idr = BuildAvccNal([
             0x65, 0x88, 0x84, 0x00, 0x00, 0x7D, 0x40,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00
         ]);
 
-        var nonIdr = BuildAnnexBNal([
+        var nonIdr = BuildAvccNal([
             0x41, 0x9A, 0x22, 0x00, 0x00, 0x7D, 0x40,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -109,6 +110,42 @@ public sealed class ClipExporterIntegrationTests
         }
     }
 
+    private static byte[] ConvertAnnexBFrameToAvcc(byte[] annexBFrame)
+    {
+        var result = new List<byte>();
+        int pos = 0;
+        while (pos < annexBFrame.Length)
+        {
+            if (pos + 3 > annexBFrame.Length) break;
+            if (annexBFrame[pos] != 0 || annexBFrame[pos + 1] != 0) { pos++; continue; }
+
+            int scLen = (pos + 3 <= annexBFrame.Length && annexBFrame[pos + 2] == 1) ? 3 :
+                        (pos + 4 <= annexBFrame.Length && annexBFrame[pos + 2] == 0 && annexBFrame[pos + 3] == 1) ? 4 : 0;
+            if (scLen == 0) { pos++; continue; }
+
+            int nalStart = pos + scLen;
+            int nextSC = -1;
+            for (int j = nalStart; j < annexBFrame.Length - 2; j++)
+            {
+                if (annexBFrame[j] != 0) continue;
+                if (annexBFrame[j + 1] != 0) continue;
+                if (j + 2 < annexBFrame.Length && annexBFrame[j + 2] == 1) { nextSC = j; break; }
+                if (j + 3 < annexBFrame.Length && annexBFrame[j + 2] == 0 && annexBFrame[j + 3] == 1) { nextSC = j; break; }
+            }
+
+            int nalLen = nextSC > 0 ? nextSC - nalStart : annexBFrame.Length - nalStart;
+            result.Add((byte)(nalLen >> 24));
+            result.Add((byte)(nalLen >> 16));
+            result.Add((byte)(nalLen >> 8));
+            result.Add((byte)nalLen);
+            for (int k = 0; k < nalLen; k++)
+                result.Add(annexBFrame[nalStart + k]);
+
+            pos = nextSC > 0 ? nextSC : annexBFrame.Length;
+        }
+        return result.ToArray();
+    }
+
     private static List<EncodedPacket> SplitH264IntoFrames(byte[] raw, int targetFrames, int width, int height)
     {
         var packets = new List<EncodedPacket>();
@@ -146,8 +183,9 @@ public sealed class ClipExporterIntegrationTests
             if (isSlice)
             {
                 int frameLen = nalEnd - frameStart;
-                var frameData = new byte[frameLen];
-                System.Buffer.BlockCopy(raw, frameStart, frameData, 0, frameLen);
+                var tempFrame = new byte[frameLen];
+                System.Buffer.BlockCopy(raw, frameStart, tempFrame, 0, frameLen);
+                var frameData = ConvertAnnexBFrameToAvcc(tempFrame);
 
                 bool isKeyFrame = nalType == 5;
                 var pts = TimeSpan.FromTicks(TicksPerFrame * frameCount);
@@ -200,14 +238,11 @@ public sealed class ClipExporterIntegrationTests
         var sps = new byte[] { 0x67, 0x64, 0x00, 0x1E, 0xAC, 0x52, 0x80, 0x7B, 0x02, 0x20, 0x20, 0x20, 0x80 };
         var pps = new byte[] { 0x68, 0xEE, 0x3C, 0x80 };
 
-        var data = new byte[4 + sps.Length + 4 + pps.Length];
-
-        data[0] = 0x00; data[1] = 0x00; data[2] = 0x00; data[3] = 0x01;
-        System.Buffer.BlockCopy(sps, 0, data, 4, sps.Length);
-
-        int off = 4 + sps.Length;
-        data[off] = 0x00; data[off + 1] = 0x00; data[off + 2] = 0x00; data[off + 3] = 0x01;
-        System.Buffer.BlockCopy(pps, 0, data, off + 4, pps.Length);
+        var avccSps = BuildAvccNal(sps);
+        var avccPps = BuildAvccNal(pps);
+        var data = new byte[avccSps.Length + avccPps.Length];
+        System.Buffer.BlockCopy(avccSps, 0, data, 0, avccSps.Length);
+        System.Buffer.BlockCopy(avccPps, 0, data, avccSps.Length, avccPps.Length);
 
         var packet = new EncodedPacket(
             data, MediaType.Video,
@@ -239,9 +274,7 @@ public sealed class ClipExporterIntegrationTests
     public void ExtractAvccExtradata_NullWhenMissingSps()
     {
         var pps = new byte[] { 0x68, 0xEE, 0x3C, 0x80 };
-        var data = new byte[4 + pps.Length];
-        data[0] = 0x00; data[1] = 0x00; data[2] = 0x00; data[3] = 0x01;
-        System.Buffer.BlockCopy(pps, 0, data, 4, pps.Length);
+        var data = BuildAvccNal(pps);
 
         var packet = new EncodedPacket(
             data, MediaType.Video,

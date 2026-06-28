@@ -58,6 +58,7 @@ const mockIsPipeConnected = vi.hoisted(() => vi.fn().mockReturnValue(false))
 const mockIsEngineRunning = vi.hoisted(() => vi.fn().mockReturnValue(false))
 const mockSendWithFallback = vi.hoisted(() => vi.fn().mockResolvedValue({ success: true }))
 const mockSendPipeCommand = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
+const mockSendPipeCommandLongRunning = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
 const mockSetEngineCapturing = vi.hoisted(() => vi.fn())
 
 vi.mock('./clips-engine-connection', async (importOriginal) => {
@@ -68,6 +69,7 @@ vi.mock('./clips-engine-connection', async (importOriginal) => {
     isEngineRunning: mockIsEngineRunning,
     sendWithFallback: mockSendWithFallback,
     sendPipeCommand: mockSendPipeCommand,
+    sendPipeCommandLongRunning: mockSendPipeCommandLongRunning,
     setEngineCapturing: mockSetEngineCapturing,
   }
 })
@@ -77,6 +79,7 @@ function resetEngineMocks(): void {
   mockIsEngineRunning.mockReturnValue(false)
   mockSendWithFallback.mockResolvedValue({ success: true })
   mockSendPipeCommand.mockResolvedValue({ cmd: 'test', payload: {} })
+  mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'test', payload: {} })
   mockSetEngineCapturing.mockReset()
 }
 
@@ -415,10 +418,10 @@ describe('CLIPS_GET_CONFIG', () => {
     expect(cfg.height).toBe(1080)
     expect(cfg.bitrateKbps).toBe(40000)
 
-    expect(cfg.maxrateKbps).toBe(40000)
-    expect(cfg.bufsizeKbps).toBe(80000)
-    expect(cfg.bframes).toBe(0)
-    expect(cfg.lookahead).toBe(4)
+    expect(cfg.maxrateKbps).toBe(80000)
+    expect(cfg.bufsizeKbps).toBe(160000)
+    expect(cfg.bframes).toBe(3)
+    expect(cfg.lookahead).toBe(32)
     expect(cfg.encoderPreset).toBe('p4')
     expect(cfg.outputDirectory).toContain('DiNhoClips')
     expect(cfg.forceSoftware).toBe(false)
@@ -860,13 +863,13 @@ describe('CLIPS_SAVE_CLIP', () => {
   it('saves clip when pipe is connected directly', async () => {
     mockIsEngineRunning.mockReturnValue(true)
     mockIsPipeConnected.mockReturnValue(true)
-    mockSendWithFallback.mockResolvedValue({ success: true })
+    mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'saveClip', payload: { success: true } })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
     const result = (await handler()) as { success: boolean }
     expect(result.success).toBe(true)
     expect(mockSendWithFallback).toHaveBeenCalledWith('config', expect.any(Object))
-    expect(mockSendWithFallback).toHaveBeenCalledWith('saveClip')
+    expect(mockSendPipeCommandLongRunning).toHaveBeenCalledWith('saveClip')
   })
 
   it('waits for pipe reconnection and returns saveClip result', async () => {
@@ -875,7 +878,7 @@ describe('CLIPS_SAVE_CLIP', () => {
       .mockReturnValueOnce(false) // first check → enters wait loop
       .mockReturnValueOnce(false) // iteration 1
     mockIsPipeConnected.mockReturnValue(true) // iteration 2 → connected, stays true for post-loop check
-    mockSendWithFallback.mockResolvedValue({ success: true, path: '/clips/test.mp4' })
+    mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'saveClip', payload: { success: true, path: '/clips/test.mp4' } })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
     const result = (await handler()) as { success: boolean }

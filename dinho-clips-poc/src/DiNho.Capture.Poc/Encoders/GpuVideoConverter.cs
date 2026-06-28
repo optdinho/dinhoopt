@@ -112,9 +112,12 @@ internal sealed class GpuVideoConverter : IDisposable
         _cachedOutput?.Dispose();
         _cachedInputView?.Dispose();
         _cachedOutputView?.Dispose();
+        // VideoProcessor and Enumerator were created by us — safe to dispose.
         _videoProcessor.Dispose();
         _enumerator.Dispose();
-        _videoContext.Dispose();
-        _videoDevice.Dispose();
+        // _videoContext and _videoDevice are QueryInterface references from the
+        // shared D3D11 device. Disposing them releases the shared COM object
+        // and crashes other subsystems using the same device (FfmpegEncoder,
+        // WgcCaptureSource, etc.). We must NOT dispose or Release them here.
     }
 }

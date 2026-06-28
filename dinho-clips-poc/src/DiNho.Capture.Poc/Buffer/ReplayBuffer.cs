@@ -1,3 +1,4 @@
+using System.Threading;
 using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Buffer;
@@ -13,28 +14,67 @@ public sealed class ReplayBuffer : IDisposable
     private int _audioTail;
     private int _audioCount;
     private TimeSpan _maxDuration;
-    private readonly object _lock = new();
+    private long _maxBytes;
+    private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
     private TimeSpan _totalVideoDuration;
     private TimeSpan _totalAudioDuration;
     private long _totalVideoBytes;
     private long _totalAudioBytes;
 
-    public ReplayBuffer(TimeSpan maxDuration)
+    public ReplayBuffer(TimeSpan maxDuration, long maxBytes = 0)
     {
         _maxDuration = maxDuration;
+        _maxBytes = maxBytes;
         _videoPackets = new EncodedPacket[4096];
         _audioPackets = new EncodedPacket[1024];
     }
 
     public TimeSpan MaxDuration
     {
-        get { lock (_lock) { return _maxDuration; } }
-        set { lock (_lock) { _maxDuration = value; TrimExcess(); } }
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _maxDuration; }
+            finally { _lock.ExitReadLock(); }
+        }
+        set
+        {
+            _lock.EnterWriteLock();
+            try { _maxDuration = value; TrimExcess(); }
+            finally { _lock.ExitWriteLock(); }
+        }
+    }
+
+    public long MaxBytes
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _maxBytes; }
+            finally { _lock.ExitReadLock(); }
+        }
+        set
+        {
+            _lock.EnterWriteLock();
+            try { _maxBytes = value; TrimExcess(); }
+            finally { _lock.ExitWriteLock(); }
+        }
+    }
+
+    public int VideoCount
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _videoCount; }
+            finally { _lock.ExitReadLock(); }
+        }
     }
 
     public void AddVideo(EncodedPacket packet)
     {
-        lock (_lock)
+        _lock.EnterWriteLock();
+        try
         {
             GrowIfNeeded(ref _videoPackets, ref _videoHead, ref _videoTail, ref _videoCount);
             _videoPackets[_videoTail] = packet;
@@ -44,11 +84,13 @@ public sealed class ReplayBuffer : IDisposable
             _totalVideoBytes += packet.DataLength;
             TrimExcessVideo();
         }
+        finally { _lock.ExitWriteLock(); }
     }
 
     public void AddAudio(EncodedPacket packet)
     {
-        lock (_lock)
+        _lock.EnterWriteLock();
+        try
         {
             GrowIfNeeded(ref _audioPackets, ref _audioHead, ref _audioTail, ref _audioCount);
             _audioPackets[_audioTail] = packet;
@@ -58,6 +100,7 @@ public sealed class ReplayBuffer : IDisposable
             _totalAudioBytes += packet.PcmSamples is { } pcm ? pcm.Length * 4L : packet.DataLength;
             TrimExcessAudio();
         }
+        finally { _lock.ExitWriteLock(); }
     }
 
     private void TrimExcess()
@@ -68,7 +111,7 @@ public sealed class ReplayBuffer : IDisposable
 
     private void TrimExcessVideo()
     {
-        while (_videoCount > 0 && _totalVideoDuration > _maxDuration)
+        while (_videoCount > 0 && (_totalVideoDuration > _maxDuration || (_maxBytes > 0 && _totalVideoBytes > _maxBytes)))
         {
             var oldest = _videoPackets[_videoHead]!;
             _videoPackets[_videoHead] = null;
@@ -83,6 +126,18 @@ public sealed class ReplayBuffer : IDisposable
     private void TrimExcessAudio()
     {
         while (_audioCount > 0 && _totalAudioDuration > _maxDuration)
+        {
+            var oldest = _audioPackets[_audioHead]!;
+            _audioPackets[_audioHead] = null;
+            _audioHead = (_audioHead + 1) % _audioPackets.Length;
+            _audioCount--;
+            _totalAudioDuration -= oldest.Duration;
+            _totalAudioBytes -= oldest.PcmSamples is { } pcm ? pcm.Length * 4L : oldest.DataLength;
+            oldest.Release();
+        }
+
+        // Trim audio-only when combined bytes exceed budget
+        while (_audioCount > 0 && _maxBytes > 0 && _totalVideoBytes + _totalAudioBytes > _maxBytes)
         {
             var oldest = _audioPackets[_audioHead]!;
             _audioPackets[_audioHead] = null;
@@ -120,7 +175,8 @@ public sealed class ReplayBuffer : IDisposable
 
     public (List<EncodedPacket> video, List<EncodedPacket> audio) GetSegments(TimeSpan? duration = null, TimeSpan? endOffset = null)
     {
-        lock (_lock)
+        _lock.EnterReadLock();
+        try
         {
             var video = CopyRing(_videoPackets, _videoHead, _videoCount);
             var audio = CopyRing(_audioPackets, _audioHead, _audioCount);
@@ -147,6 +203,7 @@ public sealed class ReplayBuffer : IDisposable
 
             return (video, audio);
         }
+        finally { _lock.ExitReadLock(); }
     }
 
     private static List<EncodedPacket> CopyRing(EncodedPacket?[] buffer, int head, int count)
@@ -181,25 +238,30 @@ public sealed class ReplayBuffer : IDisposable
 
     public (int videoCount, int audioCount, TimeSpan duration, long bytes) Stats()
     {
-        lock (_lock)
+        _lock.EnterReadLock();
+        try
         {
             var maxDuration = _totalVideoDuration > _totalAudioDuration
                 ? _totalVideoDuration : _totalAudioDuration;
             return (_videoCount, _audioCount, maxDuration, _totalVideoBytes + _totalAudioBytes);
         }
+        finally { _lock.ExitReadLock(); }
     }
 
     public (int videoCount, int audioCount, long videoBytes, long audioBytes, TimeSpan videoDuration, TimeSpan audioDuration) StatsDetailed()
     {
-        lock (_lock)
+        _lock.EnterReadLock();
+        try
         {
             return (_videoCount, _audioCount, _totalVideoBytes, _totalAudioBytes, _totalVideoDuration, _totalAudioDuration);
         }
+        finally { _lock.ExitReadLock(); }
     }
 
     public void Clear()
     {
-        lock (_lock)
+        _lock.EnterWriteLock();
+        try
         {
             ReleaseAll(_videoPackets, _videoHead, _videoCount);
             ReleaseAll(_audioPackets, _audioHead, _audioCount);
@@ -212,6 +274,7 @@ public sealed class ReplayBuffer : IDisposable
             _totalVideoBytes = 0;
             _totalAudioBytes = 0;
         }
+        finally { _lock.ExitWriteLock(); }
     }
 
     private static void ReleaseAll(EncodedPacket?[] buffer, int head, int count)
@@ -226,5 +289,6 @@ public sealed class ReplayBuffer : IDisposable
     public void Dispose()
     {
         Clear();
+        _lock.Dispose();
     }
 }

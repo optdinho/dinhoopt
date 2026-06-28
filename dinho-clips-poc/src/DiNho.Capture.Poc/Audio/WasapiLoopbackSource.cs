@@ -26,12 +26,18 @@ public sealed class WasapiLoopbackSource : IAudioSource
     public void Start()
     {
         if (_running) return;
-        _running = true;
 
         _capture = new WasapiLoopbackCapture(_device);
-        _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(_sampleRate, 2);
+        try
+        {
+            _capture.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(_sampleRate, 2);
+        }
+        catch
+        {
+            Log.W("WasapiLoopbackSource", $"Format {_sampleRate}/2 rejected, using device default");
+        }
         Log.I("WasapiLoopbackSource", $"Format set: {_capture.WaveFormat.Encoding} SR={_capture.WaveFormat.SampleRate} Ch={_capture.WaveFormat.Channels} Bps={_capture.WaveFormat.BitsPerSample}");
-        Channels = 2;
+        Channels = _capture.WaveFormat.Channels;
 
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += (s, e) =>
@@ -40,7 +46,17 @@ public sealed class WasapiLoopbackSource : IAudioSource
             _running = false;
         };
 
-        _capture.StartRecording();
+        try
+        {
+            _capture.StartRecording();
+        }
+        catch
+        {
+            _capture.Dispose();
+            _capture = null;
+            throw;
+        }
+        _running = true;
         Log.I("WasapiLoopbackSource", "StartRecording() OK");
     }
 

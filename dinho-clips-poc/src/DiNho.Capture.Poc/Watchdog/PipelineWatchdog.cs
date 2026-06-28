@@ -31,7 +31,7 @@ public sealed class PipelineHealth
 public sealed class PipelineWatchdog
 {
     private readonly TimeSpan _healthWindow = TimeSpan.FromSeconds(10);
-    private readonly LinkedList<double> _frameTimesMs = new();
+    private readonly LinkedList<(DateTime timestamp, double durationMs)> _frameTimesMs = new();
     private int _totalFrames;
     private int _droppedFrames;
     private int _consecutiveGood;
@@ -45,16 +45,17 @@ public sealed class PipelineWatchdog
     public int ConsecutiveGoodReset { get; set; } = 30;
     public double MaxStableFrameMs { get; set; } = 33.0;
 
-    public void ReportGoodFrame(double elapsedMs)
+    public void ReportGoodFrame(double durationMs)
     {
         _totalFrames++;
         _consecutiveGood = Math.Min(_consecutiveGood + 1, ConsecutiveGoodReset * 2);
         _lastFrameTime = DateTime.UtcNow;
 
+        var now = _lastFrameTime;
         lock (_frameTimesMs)
         {
-            _frameTimesMs.AddLast(elapsedMs);
-            while (_frameTimesMs.Count > 0 && _frameTimesMs.First!.Value < elapsedMs - _healthWindow.TotalMilliseconds)
+            _frameTimesMs.AddLast((now, durationMs));
+            while (_frameTimesMs.Count > 0 && (now - _frameTimesMs.First!.Value.timestamp).TotalMilliseconds > _healthWindow.TotalMilliseconds)
                 _frameTimesMs.RemoveFirst();
         }
     }
@@ -83,8 +84,21 @@ public sealed class PipelineWatchdog
 
     public bool ShouldReinit()
     {
-        return _consecutiveGood == 0 && _lastIssueTime != DateTime.MinValue
-            && (DateTime.UtcNow - _lastIssueTime).TotalSeconds > 3;
+        // Quick reinit: no good frames at all for 3+ seconds
+        if (_consecutiveGood == 0 && _lastIssueTime != DateTime.MinValue
+            && (DateTime.UtcNow - _lastIssueTime).TotalSeconds > 3)
+            return true;
+
+        // Drop-rate reinit: persistent >50% drop rate for 5+ seconds
+        // Prevents a single good frame from masking a fundamentally broken pipeline.
+        if (_droppedFrames > BadFrameThreshold && _totalFrames > BadFrameThreshold)
+        {
+            double dropRate = (double)_droppedFrames / _totalFrames;
+            if (dropRate > 0.5 && (DateTime.UtcNow - _lastIssueTime).TotalSeconds > 5)
+                return true;
+        }
+
+        return false;
     }
 
     public PipelineHealth GetHealth()
@@ -94,7 +108,7 @@ public sealed class PipelineWatchdog
         {
             if (_frameTimesMs.Count > 0)
             {
-                var sorted = new List<double>(_frameTimesMs);
+                var sorted = new List<double>(_frameTimesMs.Select(f => f.durationMs));
                 sorted.Sort();
                 p95 = sorted[(int)(sorted.Count * 0.95)];
             }
@@ -111,7 +125,7 @@ public sealed class PipelineWatchdog
             Level = level,
             TotalFrames = _totalFrames,
             DroppedFrames = _droppedFrames,
-            AvgFrameTimeMs = _frameTimesMs.Count > 0 ? _frameTimesMs.Average() : 0,
+            AvgFrameTimeMs = _frameTimesMs.Count > 0 ? _frameTimesMs.Average(f => f.durationMs) : 0,
             P95FrameTimeMs = p95,
             LastIssue = _lastIssue,
             ConsecutiveGoodFrames = _consecutiveGood,

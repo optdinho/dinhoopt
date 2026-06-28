@@ -27,7 +27,8 @@ public sealed class ClipExporter : IDisposable
         int width,
         int height,
         int frameRate,
-        string rawFormat = "h264")
+        string rawFormat = "h264",
+        byte[]? avccFallback = null)
     {
         if (videoPackets.Count == 0)
             throw new InvalidOperationException("No video packets to export");
@@ -93,8 +94,22 @@ public sealed class ClipExporter : IDisposable
                     Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved}");
                 }
 
-                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat);
-                Log.I("Exporter", $"MKV temp: {mkvTemp} ({new FileInfo(mkvTemp).Length / 1024} KB) frames={videoPackets.Count}");
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback);
+                var mkvLen = new FileInfo(mkvTemp).Length;
+                Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) frames={videoPackets.Count}");
+
+                // Hex dump first 100 bytes of MKV for diagnostics
+                try
+                {
+                    var mkvBytes = new byte[Math.Min((int)mkvLen, 200)];
+                    using (var mkvFs = File.OpenRead(mkvTemp))
+                        mkvFs.ReadExactly(mkvBytes, 0, mkvBytes.Length);
+                    var hex = new System.Text.StringBuilder();
+                    for (int i = 0; i < mkvBytes.Length; i++)
+                        hex.Append($"{mkvBytes[i]:X2} ");
+                    Log.I("Exporter", $"MKV hex ({mkvBytes.Length}B)={hex.ToString().Trim()}");
+                }
+                catch { }
 
                 Log.D("Exporter", $"nominalFps={frameRate} activeFps={activeFps:F1} activeDuration={activeDurationSec:F3}s totalDuration={trueVidDuration:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved} audioDurationSec={audioDurationSec:F3}s");
 
@@ -271,12 +286,26 @@ public sealed class ClipExporter : IDisposable
 
     private static void WriteEbmlVint(BinaryWriter bw, ulong value)
     {
+        // ffmpeg's matroskadec.c: ebml_read_vint counts leading ZERO bits before the first 1
+        // bit in the first octet. num_size = leading_zero_count + 1.
+        //  1 byte: 1xxx xxxx  (mask = 0x80, leading zeros = 0, num_size = 1)
+        //  2 bytes: 01xx xxxx  (mask = 0x40, leading zeros = 1, num_size = 2)
+        //  3 bytes: 001x xxxx  (mask = 0x20, leading zeros = 2, num_size = 3)
+        //  etc.
+        // After removing width/marker, value occupies (num_size * 8 - num_size) bits.
+        // IMPORTANT: the ALL-1s value for a given width is the "unknown size" sentinel
+        // and MUST NOT be used for data elements. Each range check excludes the max value,
+        // bumping to the next width to avoid producing the sentinel.
         if (value < 0x7F) { bw.Write((byte)(0x80 | value)); return; }
-        if (value < 0x3FFF) { bw.Write((byte)(0xC0 | (value >> 8))); bw.Write((byte)(value & 0xFF)); return; }
-        if (value < 0x1FFFFF) { bw.Write((byte)(0xE0 | (value >> 16))); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
-        if (value < 0x0FFFFFFF) { bw.Write((byte)(0xF0 | (value >> 24))); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
-        if (value < 0x07FFFFFFFF) { bw.Write((byte)(0xF8 | (value >> 32))); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
-        bw.Write((byte)(0xFC | (value >> 40)));
+        if (value < 0x3FFF) { bw.Write((byte)(0x40 | (byte)(value >> 8))); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x1FFFFF) { bw.Write((byte)(0x20 | (byte)(value >> 16))); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x0FFFFFFF) { bw.Write((byte)(0x10 | (byte)(value >> 24))); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x07FFFFFFFF) { bw.Write((byte)(0x08 | (byte)(value >> 32))); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x03FFFFFFFFFFF) { bw.Write((byte)(0x04 | (byte)(value >> 40))); bw.Write((byte)((value >> 32) & 0xFF)); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x01FFFFFFFFFFFFF) { bw.Write((byte)(0x02 | (byte)(value >> 48))); bw.Write((byte)((value >> 40) & 0xFF)); bw.Write((byte)((value >> 32) & 0xFF)); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        bw.Write((byte)(0x01 | (byte)(value >> 56)));
+        bw.Write((byte)((value >> 48) & 0xFF));
+        bw.Write((byte)((value >> 40) & 0xFF));
         bw.Write((byte)((value >> 32) & 0xFF));
         bw.Write((byte)((value >> 24) & 0xFF));
         bw.Write((byte)((value >> 16) & 0xFF));
@@ -345,11 +374,59 @@ public sealed class ClipExporter : IDisposable
         bw.Write(data, 0, dataLength);
     }
 
-    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat)
+    /// <summary>Convert AVCC (4-byte length prefix) to AnnexB (00 00 01 start code).
+    /// SimpleBlocks in Matroska require AnnexB format for H.264/HEVC/AV1 data.</summary>
+    internal static byte[] ConvertAvccToAnnexB(byte[] avccData, int dataLength)
+    {
+        // Count NALUs to allocate exact buffer size
+        int nalCount = 0;
+        int pos = 0;
+        while (pos + 4 <= dataLength)
+        {
+            int nalLen = (avccData[pos] << 24) | (avccData[pos + 1] << 16) | (avccData[pos + 2] << 8) | avccData[pos + 3];
+            if (nalLen <= 0 || pos + 4 + nalLen > dataLength) break;
+            nalCount++;
+            pos += 4 + nalLen;
+        }
+
+        if (nalCount == 0) return avccData[..dataLength];
+
+        int annexBSize = dataLength - nalCount * 4 + nalCount * 3; // replace 4-byte len with 3-byte sc
+        var result = new byte[annexBSize];
+        int srcPos = 0;
+        int dstPos = 0;
+
+        while (srcPos + 4 <= dataLength)
+        {
+            int nalLen = (avccData[srcPos] << 24) | (avccData[srcPos + 1] << 16) | (avccData[srcPos + 2] << 8) | avccData[srcPos + 3];
+            if (nalLen <= 0 || srcPos + 4 + nalLen > dataLength) break;
+
+            // Write start code (0x00 0x00 0x01) instead of 4-byte length
+            result[dstPos] = 0;
+            result[dstPos + 1] = 0;
+            result[dstPos + 2] = 1;
+            dstPos += 3;
+
+            // Copy NAL data
+            System.Buffer.BlockCopy(avccData, srcPos + 4, result, dstPos, nalLen);
+            srcPos += 4 + nalLen;
+            dstPos += nalLen;
+        }
+
+        return result;
+    }
+
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
         using var bw = new BinaryWriter(fs);
+
+        // Re-baseline PTS so the first frame starts at 0
+        var minPts = packets.Count > 0 ? packets[0].Pts : TimeSpan.Zero;
+        for (int i = 1; i < packets.Count; i++)
+            if (packets[i].Pts < minPts)
+                minPts = packets[i].Pts;
 
         // EBML Header (known-size — ffmpeg must be able to skip it cleanly)
         WriteEbmlMaster(bw, 0x1A45DFA3, (w) =>
@@ -372,7 +449,7 @@ public sealed class ClipExporter : IDisposable
             WriteEbmlUnsignedInt(w, 0x2AD7B1, 1_000_000); // TimecodeScale (1ms)
             if (packets.Count >= 2)
             {
-                double totalSec = (packets[^1].Pts - packets[0].Pts).TotalSeconds + packets[^1].Duration.TotalSeconds;
+                double totalSec = (packets[^1].Pts - minPts).TotalSeconds + packets[^1].Duration.TotalSeconds;
                 WriteEbmlFloat(w, 0x4489, totalSec);
             }
             WriteEbmlString(w, 0x4D80, "DiNho Capture"); // MuxingApp
@@ -397,11 +474,30 @@ public sealed class ClipExporter : IDisposable
             }); // CodecID
 
             // CodecPrivate (avcC for H264, hvcC for HEVC, AV1CodecConfigurationRecord for AV1)
+            // Use encoder-cached avcC (avccFallback) first — it's from the FIRST keyframe's
+            // SPS/PPS and is always correct. ExtractAvccExtradata may find false-positive SPS
+            // bytes within slice data that happen to look like NAL type 7 with a valid length.
             if (rawFormat == "h264")
             {
-                var avcc = ExtractAvccExtradata(packets);
+                var avcc = avccFallback ?? ExtractAvccExtradata(packets);
                 if (avcc != null)
+                {
+                    // Log avcC bytes for diagnostics
+                    {
+                        int spsLen = avcc.Length >= 8 ? (avcc[6] << 8) | avcc[7] : 0;
+                        int ppsOff = 8 + spsLen;
+                        int ppsLen = (ppsOff + 2 < avcc.Length) ? (avcc[ppsOff + 1] << 8) | avcc[ppsOff + 2] : 0;
+                        var hex = new System.Text.StringBuilder();
+                        for (int i = 0; i < Math.Min(avcc.Length, 40); i++)
+                            hex.Append($"{avcc[i]:X2} ");
+                        string source = avcc == avccFallback ? "encoder" : "packets";
+                    Log.I("Exporter", $"avcC len={avcc.Length} spsLen={spsLen} ppsOff={ppsOff} ppsLen={ppsLen} source={source} hex={hex.ToString().Trim()}");
+                    }
+
                     WriteEbmlBinary(tw, 0x63A2, avcc);
+                }
+                else
+                    Log.W("Exporter", $"avcC CodecPrivate not found in packets or fallback — MKV may not mux correctly");
             }
 
             WriteEbmlMaster(tw, 0xE0, (vw) => // Video
@@ -412,7 +508,10 @@ public sealed class ClipExporter : IDisposable
         });
         });
 
-        // ── Clusters ──
+        // ── Diagnostics: log first frame hex ──
+        bool loggedFirstFrame = false;
+
+        // ── Clusters (PTS re-baselined to minPts) ──
         int clusterSize = 0;
         const int maxClusterFrames = 1000;
         long clusterBaseTimecode = 0;
@@ -421,7 +520,17 @@ public sealed class ClipExporter : IDisposable
         {
             if (pkt.Type != MediaType.Video) continue;
 
-            long ptsMs = pkt.Pts.Ticks / 10_000; // 100ns → ms
+            if (!loggedFirstFrame)
+            {
+                loggedFirstFrame = true;
+                var hex = new System.Text.StringBuilder();
+                int dumpLen = Math.Min(pkt.DataLength, 128);
+                for (int i = 0; i < dumpLen; i++)
+                    hex.Append($"{pkt.Data[i]:X2} ");
+                Log.I("Exporter", $"first frame: pts={pkt.Pts.TotalMilliseconds:F0}ms len={pkt.DataLength}B key={pkt.IsKeyFrame} hex={hex.ToString().Trim()}");
+            }
+
+            long ptsMs = (pkt.Pts - minPts).Ticks / 10_000; // 100ns → ms, re-baselined
 
             bool startNew = clusterSize == 0 ||
                             clusterSize >= maxClusterFrames ||
@@ -433,7 +542,7 @@ public sealed class ClipExporter : IDisposable
                 clusterSize = 0;
                 clusterBaseTimecode = ptsMs;
                 WriteEbmlMasterBegin(bw, 0x1F43B675); // Cluster
-                WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode (absolute ms)
+                WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode (re-baselined ms)
                 clusterSize = 1;
             }
             else
@@ -442,42 +551,44 @@ public sealed class ClipExporter : IDisposable
             }
 
             int relTc = (int)(ptsMs - clusterBaseTimecode);
+            // Write AVCC (4-byte length-prefixed NALUs) directly.
+            // The CodecPrivate (avcC) in the Track header tells ffmpeg's matroskadec
+            // to expect AVCC format, not AnnexB. Writing AnnexB would cause mismatch.
             WriteSimpleBlock(bw, 1, relTc, pkt.IsKeyFrame, pkt.Data, pkt.DataLength);
+        }
+
+        // Copy MKV to Desktop for analysis
+        try
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string mkvCopy = System.IO.Path.Combine(desktop, "dinho_debug.mkv");
+            fs.Flush();
+            System.IO.File.Copy(path, mkvCopy, overwrite: true);
+            Log.I("Exporter", $"MKV diagnostic copy saved to {mkvCopy} ({new System.IO.FileInfo(mkvCopy).Length}B)");
+        }
+        catch (Exception ex)
+        {
+            Log.W("Exporter", $"Failed to copy MKV to Desktop: {ex.Message}");
         }
     }
 
     internal static byte[]? ExtractAvccExtradata(List<EncodedPacket> packets)
     {
-        // Scan video packets for SPS (type 7) and PPS (type 8) NAL units
+        // Scan video packets for SPS (type 7) and PPS (type 8) NAL units.
+        // Data is in AVCC format: 4-byte big-endian length prefix + NAL unit.
         byte[]? sps = null, pps = null;
         foreach (var pkt in packets)
         {
             if (pkt.Type != MediaType.Video) continue;
             var data = pkt.Data;
             int len = pkt.DataLength;
-            int i = 0;
-            while (i < len - 3)
+            int pos = 0;
+            while (pos + 4 <= len)
             {
-                // Find startcode
-                if (!(data[i] == 0 && data[i + 1] == 0)) { i++; continue; }
-                int scLen = (i + 3 < len && data[i + 2] == 1) ? 3 :
-                            (i + 4 < len && data[i + 2] == 0 && data[i + 3] == 1) ? 4 : 0;
-                if (scLen == 0) { i++; continue; }
-
-                int nalStart = i + scLen;
-                if (nalStart >= len) break;
+                int nalLen = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
+                if (nalLen <= 0 || pos + 4 + nalLen > len) break;
+                int nalStart = pos + 4;
                 int nalType = data[nalStart] & 0x1F;
-
-                // Find next startcode to get NAL length
-                int nextSC = -1;
-                for (int j = nalStart + 1; j < len - 2; j++)
-                {
-                    if (data[j] != 0) continue;
-                    if (data[j + 1] != 0) continue;
-                    if (j + 2 < len && data[j + 2] == 1) { nextSC = j; break; }
-                    if (j + 3 < len && data[j + 2] == 0 && data[j + 3] == 1) { nextSC = j; break; }
-                }
-                int nalLen = nextSC > 0 ? nextSC - nalStart : len - nalStart;
 
                 if (nalType == 7 && sps == null)
                 {
@@ -490,45 +601,83 @@ public sealed class ClipExporter : IDisposable
                     System.Buffer.BlockCopy(data, nalStart, pps, 0, nalLen);
                 }
 
-                i = nextSC > 0 ? nextSC : len;
+                pos = nalStart + nalLen;
             }
             if (sps != null && pps != null) break;
         }
 
         if (sps == null || pps == null) return null;
 
-        // Build AVCDecoderConfigurationRecord (avcC)
-        // aligned(8) class AVCDecoderConfigurationRecord {
-        //   unsigned int(8) configurationVersion = 1;
-        //   unsigned int(8) AVCProfileIndication;
-        //   unsigned int(8) profile_compatibility;
-        //   unsigned int(8) AVCLevelIndication;
-        //   bit(6) reserved = '111111'b;
-        //   unsigned int(2) lengthSizeMinusOne = 3; // 4-byte NAL length
-        //   bit(3) reserved = '111'b;
-        //   unsigned int(5) numOfSequenceParameterSets = 1;
-        //   SPS data...
-        //   unsigned int(8) numOfPictureParameterSets = 1;
-        //   PPS data...
-        // }
-        int avccLen = 5 + 1 + 2 + sps.Length + 1 + 2 + pps.Length;
-        var avcc = new byte[avccLen];
-        avcc[0] = 1; // configurationVersion
-        avcc[1] = sps[1]; // AVCProfileIndication
-        avcc[2] = sps[2]; // profile_compatibility
-        avcc[3] = sps[3]; // AVCLevelIndication
-        avcc[4] = 0xFC | 3; // reserved(111111) | lengthSizeMinusOne(3)
-        avcc[5] = 0xE0 | 1; // numOfSequenceParameterSets = 1
-        avcc[6] = (byte)(sps.Length >> 8);
-        avcc[7] = (byte)(sps.Length & 0xFF);
-        System.Buffer.BlockCopy(sps, 0, avcc, 8, sps.Length);
-        int off = 8 + sps.Length;
-        avcc[off] = 1; // numOfPictureParameterSets = 1
-        avcc[off + 1] = (byte)(pps.Length >> 8);
-        avcc[off + 2] = (byte)(pps.Length & 0xFF);
-        System.Buffer.BlockCopy(pps, 0, avcc, off + 3, pps.Length);
+        return BuildAvcc(sps, pps);
+    }
 
+    /// <summary>Convert AVCC data (4-byte BE length prefix per NAL) to AnnexB (00 00 00 01 start code per NAL).
+    /// Output buffer has the same length as input (4-byte prefix → 4-byte start code).</summary>
+    private static byte[] AvccToAnnexB(byte[] avcc, int length)
+    {
+        if (avcc == null || length < 4) return avcc ?? Array.Empty<byte>();
+        var result = new byte[length];
+        System.Buffer.BlockCopy(avcc, 0, result, 0, length);
+        int pos = 0;
+        while (pos + 4 <= length)
+        {
+            int nalLen = (result[pos] << 24) | (result[pos + 1] << 16) | (result[pos + 2] << 8) | result[pos + 3];
+            if (nalLen <= 0 || pos + 4 + nalLen > length) break;
+            result[pos] = 0x00;
+            result[pos + 1] = 0x00;
+            result[pos + 2] = 0x00;
+            result[pos + 3] = 0x01;
+            pos += 4 + nalLen;
+        }
+        return result;
+    }
+
+    internal static byte[]? BuildAvcc(byte[] sps, byte[] pps)
+    {
+        if (sps.Length < 4 || pps.Length == 0) return null;
+
+        byte[] cleanSps = RemoveEmulationPrevention(sps);
+        byte[] cleanPps = RemoveEmulationPrevention(pps);
+
+        int avccLen = 5 + 1 + 2 + cleanSps.Length + 1 + 2 + cleanPps.Length;
+        var avcc = new byte[avccLen];
+        avcc[0] = 1;
+        avcc[1] = cleanSps[1];
+        avcc[2] = cleanSps[2];
+        avcc[3] = cleanSps[3];
+        avcc[4] = 0xFC | 3;
+        avcc[5] = 0xE0 | 1;
+        avcc[6] = (byte)(cleanSps.Length >> 8);
+        avcc[7] = (byte)(cleanSps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanSps, 0, avcc, 8, cleanSps.Length);
+        int off = 8 + cleanSps.Length;
+        avcc[off] = 1;
+        avcc[off + 1] = (byte)(cleanPps.Length >> 8);
+        avcc[off + 2] = (byte)(cleanPps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanPps, 0, avcc, off + 3, cleanPps.Length);
         return avcc;
+    }
+
+    /// <summary>Strip H.264/HEVC emulation prevention bytes (00 00 03) from a NAL unit.
+    /// Per ISO 14496-10, avcC must store NAL data without emulation prevention.</summary>
+    internal static byte[] RemoveEmulationPrevention(byte[] nal)
+    {
+        int count = 0;
+        for (int i = 2; i < nal.Length; i++)
+            if (nal[i - 2] == 0 && nal[i - 1] == 0 && nal[i] == 3)
+                count++;
+
+        if (count == 0) return nal;
+
+        var result = new byte[nal.Length - count];
+        int ri = 0;
+        for (int i = 0; i < nal.Length; i++)
+        {
+            if (i >= 2 && nal[i - 2] == 0 && nal[i - 1] == 0 && nal[i] == 3)
+                continue;
+            result[ri++] = nal[i];
+        }
+        return result;
     }
 
     private static void MuxWithFfmpegStreaming(
@@ -559,6 +708,10 @@ public sealed class ClipExporter : IDisposable
             }
         }
 
+        // NO bitstream filter: WriteMatroskaFile writes AVCC (4-byte length-prefixed NALUs)
+        // with avcC CodecPrivate. The MP4 muxer with -c:v copy expects AVCC natively —
+        // adding h264_mp4toannexb would convert AVCC→AnnexB (wrong direction for MP4 output).
+        // AV1 doesn't need any bsf (no AnnexB concept), but our muxer doesn't use AV1.
         args += audioInput +
                 $" -map 0:v:0" +
                 (hasAudio ? " -map 1:a:0" : "") +
@@ -567,7 +720,7 @@ public sealed class ClipExporter : IDisposable
                 $" -metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\"" +
                 $" -movflags +faststart \"{outputPath}\"";
 
-        Log.D("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
+        Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
 
         using var proc = new Process
         {

@@ -10,8 +10,6 @@ public sealed class FfmpegEncoderTests
     [InlineData("libx264")]
     public void CheckFfmpegEncoder_FindsKnownEncoders(string encoder)
     {
-        // This test requires ffmpeg to be in PATH (as it is in the build env)
-        // If not found, it simply returns false — no crash
         var result = FfmpegEncoder.CheckFfmpegEncoder(encoder);
         Assert.True(result, $"Expected ffmpeg to have {encoder} available");
     }
@@ -24,5 +22,273 @@ public sealed class FfmpegEncoderTests
     {
         var result = FfmpegEncoder.CheckFfmpegEncoder(encoder);
         Assert.False(result);
+    }
+
+    // ─── IsAnnexB ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void IsAnnexB_StartCode_00_00_01_ReturnsTrue()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x01, 0x67 };
+        Assert.True(FfmpegEncoder.IsAnnexB(buf, buf.Length));
+    }
+
+    [Fact]
+    public void IsAnnexB_StartCode_00_00_00_01_ReturnsTrue()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x00, 0x01, 0x67 };
+        Assert.True(FfmpegEncoder.IsAnnexB(buf, buf.Length));
+    }
+
+    [Fact]
+    public void IsAnnexB_AvccFormat_ReturnsFalse()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x00, 0x19, 0x67 };
+        Assert.False(FfmpegEncoder.IsAnnexB(buf, buf.Length));
+    }
+
+    [Fact]
+    public void IsAnnexB_TooShort_ReturnsFalse()
+    {
+        var buf = new byte[] { 0x00, 0x00 };
+        Assert.False(FfmpegEncoder.IsAnnexB(buf, buf.Length));
+    }
+
+    [Fact]
+    public void IsAnnexB_DataWithoutStartCode_ReturnsFalse()
+    {
+        var buf = new byte[] { 0x67, 0x68, 0x69 };
+        Assert.False(FfmpegEncoder.IsAnnexB(buf, buf.Length));
+    }
+
+    // ─── ScanForStartCode ───────────────────────────────────────────────
+
+    [Fact]
+    public void ScanForStartCode_FindsCodeAtBeginning()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x01, 0x67, 0x68, 0x69 };
+        Assert.True(FfmpegEncoder.ScanForStartCode(buf, buf.Length, out var pos));
+        Assert.Equal(0, pos);
+    }
+
+    [Fact]
+    public void ScanForStartCode_FindsCodeAtOffset()
+    {
+        var buf = new byte[] { 0x67, 0x00, 0x00, 0x01, 0x68 };
+        Assert.True(FfmpegEncoder.ScanForStartCode(buf, buf.Length, out var pos));
+        Assert.Equal(1, pos);
+    }
+
+    [Fact]
+    public void ScanForStartCode_FindsFourByteCode()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x00, 0x01, 0x67 };
+        Assert.True(FfmpegEncoder.ScanForStartCode(buf, buf.Length, out var pos));
+        Assert.Equal(0, pos);
+    }
+
+    [Fact]
+    public void ScanForStartCode_NoCode_ReturnsFalse()
+    {
+        var buf = new byte[] { 0xAA, 0xBB, 0xCC, 0x01 };
+        Assert.False(FfmpegEncoder.ScanForStartCode(buf, buf.Length, out _));
+    }
+
+    [Fact]
+    public void ScanForStartCode_EmptyBuffer_ReturnsFalse()
+    {
+        Assert.False(FfmpegEncoder.ScanForStartCode([], 0, out _));
+    }
+
+    [Fact]
+    public void ScanForStartCode_TooShort_ReturnsFalse()
+    {
+        var buf = new byte[] { 0x00, 0x01 };
+        Assert.False(FfmpegEncoder.ScanForStartCode(buf, buf.Length, out _));
+    }
+
+    [Fact]
+    public void ScanForStartCode_FirstOfMultipleCodes()
+    {
+        var buf = new byte[] { 0x41, 0x00, 0x00, 0x01, 0x67, 0x00, 0x00, 0x01, 0x68 };
+        Assert.True(FfmpegEncoder.ScanForStartCode(buf, buf.Length, out var pos));
+        Assert.Equal(1, pos);
+    }
+
+    // ─── ConvertAnnexBToAvcc ────────────────────────────────────────────
+    //
+    // ConvertAnnexBToAvcc processes data incrementally. It scans for AnnexB
+    // start codes and writes AVCC (4-byte length-prefixed) NALUs into the
+    // same buffer. A NALU is only written when there is data BETWEEN two
+    // start codes — the first start code opens it, the next closes it.
+    // The last "orphaned" NALU body (after the final start code) is NOT
+    // written; instead `consumed` tells the caller where to preserve
+    // orphaned data for the next call.
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_SingleStartCode_NoNaluWritten()
+    {
+        // One start code, one NALU body, but no following start code → orphaned
+        var buf = new byte[] { 0x00, 0x00, 0x01, 0x67, 0x68 };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(0, result); // no NALU between two start codes
+        Assert.Equal(3, consumed); // orphaned body starts after the SC
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_MultipleNalus_FirstWritten()
+    {
+        // Two NALUs: first delimited by start codes on both sides → written
+        // Second: no following start code → orphaned
+        var buf = new byte[]
+        {
+            0x00, 0x00, 0x01, 0x67, 0xAA, // SC + SPS body (2B)
+            0x00, 0x00, 0x01, 0x68, 0xBB  // SC + PPS body (2B, orphaned)
+        };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        // AVCC: [len=2][0x67, 0xAA] = 6 bytes
+        Assert.Equal(6, result);
+        Assert.Equal(8, consumed); // bytes 0-7 consumed, orphaned tail at 8
+
+        // Verify length prefix
+        Assert.Equal(0x00, buf[0]);
+        Assert.Equal(0x00, buf[1]);
+        Assert.Equal(0x00, buf[2]);
+        Assert.Equal(0x02, buf[3]);
+        Assert.Equal(0x67, buf[4]);
+        Assert.Equal(0xAA, buf[5]);
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_EmptyBuffer_ReturnsZero()
+    {
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc([], 0, out var consumed);
+        Assert.Equal(0, result);
+        Assert.Equal(0, consumed);
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_OnlyStartCode_NoNaluBody_ReturnsZero()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x01 };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(0, result);
+        Assert.Equal(3, consumed);
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_OrphanedTail_Processed()
+    {
+        // Orphaned tail before start code IS processed (foundFirstSc=true when
+        // first SC is not at position 0). Data DE AD before SC is a continuation
+        // from a previous call's last NALU.
+        var buf = new byte[] { 0xDE, 0xAD, 0x00, 0x00, 0x01, 0x67 };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(6, result); // AVCC: [len=2][DE,AD] = 6 bytes
+        Assert.Equal(5, consumed); // orphaned 0x67 at position 5
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_IncompleteTail_Orphaned()
+    {
+        // Start code + body, but body extends to end without following SC
+        var buf = new byte[] { 0x00, 0x00, 0x01, 0x67, 0xDE };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(0, result); // no NALU delimited by two SCs
+        Assert.Equal(3, consumed);
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_FourByteStartCode_Orphaned()
+    {
+        var buf = new byte[] { 0x00, 0x00, 0x00, 0x01, 0x67, 0x68 };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(0, result);
+        Assert.Equal(4, consumed); // 4-byte SC consumed
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_OnlyGarbage_NoStartCode_ReturnsZero()
+    {
+        var buf = new byte[] { 0x67, 0x68, 0x69 };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(0, result);
+        Assert.Equal(0, consumed); // no start code found
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_KeyframeSequence_FirstTwoWritten()
+    {
+        // SPS + PPS are delimited by following start codes → written
+        // IDR slice is orphaned (no following SC)
+        var buf = new byte[]
+        {
+            0x00, 0x00, 0x01, 0x67, 0x64, 0x00, 0x1E, // SC + SPS (4B body)
+            0x00, 0x00, 0x01, 0x68, 0xEB,             // SC + PPS (2B body)
+            0x00, 0x00, 0x01, 0x65, 0x88, 0x84        // SC + IDR (3B body, orphaned)
+        };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        // SPS: [len=4][4B] = 8, PPS: [len=2][2B] = 6, total = 14
+        Assert.Equal(14, result);
+        Assert.Equal(15, consumed); // orphaned IDR body (0x65,0x88,0x84) starts at position 15
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_ThreeDelimited_SuccessiveNalus()
+    {
+        // Three NALUs each followed by a start code for the NEXT one.
+        // First two are written, third is orphaned.
+        var buf = new byte[]
+        {
+            0x00, 0x00, 0x01, 0x41,
+            0x00, 0x00, 0x01, 0x42,
+            0x00, 0x00, 0x01, 0x43
+        };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        // First NALU: [len=1][0x41] = 5
+        // Second NALU: [len=1][0x42] = 5
+        // Total: 10
+        Assert.Equal(10, result);
+        Assert.Equal(11, consumed); // orphaned 0x43 at position 11
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_LargeNaluWrittenThenSmallNalu()
+    {
+        // First NALU has 100 bytes body; second NALU 1 byte body (orphaned)
+        var buf = new byte[106];
+        buf[0] = 0x00; buf[1] = 0x00; buf[2] = 0x01; // SC for first NALU
+        for (int i = 3; i < 103; i++) buf[i] = (byte)(i - 3); // 100-byte NALU body
+        buf[103] = 0x00; buf[104] = 0x00; buf[105] = 0x01; // SC for second NALU
+
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        // First NALU: [len=100][100B] = 104 bytes
+        Assert.Equal(104, result);
+        Assert.Equal(106, consumed); // second SC at 103 + 3 = 106
+        Assert.Equal(0x64, buf[3]); // length = 100 = 0x64
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_OrphanedTail_DataBeforeFirstScProcessed()
+    {
+        // Data before first start code is orphaned from a previous pipe read —
+        // now processed correctly as continuation NALU.
+        var buf = new byte[] { 0xDE, 0xAD, 0x00, 0x00, 0x01, 0x67 };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(buf, buf.Length, out var consumed);
+        Assert.Equal(6, result); // AVCC: [len=2][DE,AD] = 6 bytes
+        Assert.Equal(5, consumed); // orphaned 0x67 at position 5
+    }
+
+    [Fact]
+    public void ConvertAnnexBToAvcc_OrphanedThenCompleteNalu_OrphanProcessed()
+    {
+        // Orphan tail from call1 (0x67, 0xAA) IS processed now.
+        // The second NALU after the SC is orphaned (no following SC).
+        var combined = new byte[] { 0x67, 0xAA, 0x00, 0x00, 0x01, 0x68, 0xBB };
+        var result = FfmpegEncoder.ConvertAnnexBToAvcc(combined, combined.Length, out var consumed);
+        // Orphan (0x67, 0xAA) written as AVCC: [len=2][0x67,0xAA] = 6 bytes.
+        // NALU (0x68, 0xBB) is orphaned — no following SC.
+        Assert.Equal(6, result);
+        Assert.Equal(5, consumed);
     }
 }

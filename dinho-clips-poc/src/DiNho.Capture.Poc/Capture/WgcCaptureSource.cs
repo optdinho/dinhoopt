@@ -26,21 +26,27 @@ public sealed class WgcCaptureSource : ICaptureSource
     private Direct3D11CaptureFramePool? _framePool;
     private GraphicsCaptureSession? _session;
     private IntPtr _targetHwnd;
+    private IntPtr _desktopMonitor; // non-zero when desktop capture should target a specific monitor
 
     private Direct3D11CaptureFrame? _latestFrame;
     private long _latestFrameTicks;
     private readonly AutoResetEvent _frameSignal = new(false);
+    private volatile bool _disposed;
     private bool _hasReceivedFrame;
     private ID3D11Texture2D? _copyTexture;
     private int _copyTexW, _copyTexH;
     private Format _copyTexFormat;
 
     public void Initialize(ID3D11Device? sharedDevice = null) =>
-        Initialize(sharedDevice, IntPtr.Zero);
+        Initialize(sharedDevice, IntPtr.Zero, IntPtr.Zero);
 
-    public void Initialize(ID3D11Device? sharedDevice, IntPtr targetHwnd)
+    public void Initialize(ID3D11Device? sharedDevice, IntPtr targetHwnd) =>
+        Initialize(sharedDevice, targetHwnd, IntPtr.Zero);
+
+    public void Initialize(ID3D11Device? sharedDevice, IntPtr targetHwnd, IntPtr desktopMonitor)
     {
         _targetHwnd = targetHwnd;
+        _desktopMonitor = desktopMonitor;
 
         if (sharedDevice != null)
         {
@@ -120,15 +126,17 @@ public sealed class WgcCaptureSource : ICaptureSource
             GraphicsCaptureItem? item;
             try
             {
-                item = GraphicsCaptureItemHelper.CreateForPrimaryMonitor();
+                item = _desktopMonitor != IntPtr.Zero
+                    ? GraphicsCaptureItemHelper.CreateForMonitor(_desktopMonitor)
+                    : GraphicsCaptureItemHelper.CreateForPrimaryMonitor();
             }
             catch (Exception ex)
             {
-                Log.E("WGC-DIAG", $"CreateForPrimaryMonitor falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
             if (item is null)
-                throw new InvalidOperationException("WGC CreateForPrimaryMonitor retornou null — WGC pode não estar disponível.");
+                throw new InvalidOperationException("WGC CreateForMonitor retornou null — WGC pode não estar disponível.");
             _captureItem = item;
         }
 
@@ -173,17 +181,25 @@ public sealed class WgcCaptureSource : ICaptureSource
     {
         var startTicks = Stopwatch.GetTimestamp();
 
-        if (_frameSignal is null || _device is null)
+        if (_disposed || _frameSignal is null || _device is null)
             return new CapturedFrame(startTicks, Stopwatch.GetTimestamp(), 0, 0, success: false);
 
         try
         {
             var effectiveTimeout = !_hasReceivedFrame ? Math.Max(timeoutMs, 500) : timeoutMs;
 
-            if (!_frameSignal.WaitOne(effectiveTimeout))
+            try
             {
-                var timeoutTicks = Stopwatch.GetTimestamp();
-                return new CapturedFrame(startTicks, timeoutTicks, 0, 0, success: false, waitEndTicks: timeoutTicks);
+                if (!_frameSignal.WaitOne(effectiveTimeout))
+                {
+                    var timeoutTicks = Stopwatch.GetTimestamp();
+                    return new CapturedFrame(startTicks, timeoutTicks, 0, 0, success: false, waitEndTicks: timeoutTicks);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                var disposedTicks = Stopwatch.GetTimestamp();
+                return new CapturedFrame(startTicks, disposedTicks, 0, 0, success: false, waitEndTicks: disposedTicks);
             }
 
             var waitEndTicks = Stopwatch.GetTimestamp();
@@ -332,6 +348,7 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     public void Dispose()
     {
+        _disposed = true;
         _frameSignal.Dispose();
         _session?.Dispose();
         if (_framePool is not null)

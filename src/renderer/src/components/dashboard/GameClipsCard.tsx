@@ -17,7 +17,7 @@ export function GameClipsCard() {
   )
 
   const capturing = status?.capturing ?? false
-  const running = status?.engineRunning ?? status?.running ?? false
+  const running = status?.running ?? false
   const [toggling, setToggling] = useState(false)
   const isActive = capturing || running
   const glowColor = capturing ? '#ef4444' : running ? '#22c55e' : 'transparent'

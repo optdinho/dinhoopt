@@ -77,7 +77,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
 
         for (int i = 0; adapter.EnumOutputs(i, out var output).Success; i++)
         {
-            using var output1 = output.QueryInterface<IDXGIOutput1>();
+            var output1 = output.QueryInterface<IDXGIOutput1>();
             var desc = output1.Description;
 
             // Verificar se este output corresponde ao monitor da janela
@@ -92,6 +92,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
                 _duplication = output1.DuplicateOutput(_device);
                 _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
                 _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
+                output1.Dispose();
                 return;
             }
 
@@ -101,6 +102,10 @@ public sealed class DxgiCaptureSource : ICaptureSource
                 selectedOutput = output1;
                 selectedDesc = desc;
             }
+            else
+            {
+                output1.Dispose();
+            }
         }
 
         if (selectedOutput is null)
@@ -109,6 +114,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
         _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
         _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
         _duplication = selectedOutput.DuplicateOutput(_device);
+        selectedOutput.Dispose();
     }
 
     public CapturedFrame TryCaptureFrame(int timeoutMs)
@@ -182,7 +188,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
         }
         finally
         {
-            desktopResource.Dispose();
+            desktopResource?.Dispose();
             _duplication.ReleaseFrame();
         }
     }
