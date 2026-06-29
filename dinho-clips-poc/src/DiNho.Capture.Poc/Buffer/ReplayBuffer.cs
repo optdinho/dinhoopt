@@ -175,20 +175,22 @@ public sealed class ReplayBuffer : IDisposable
             var cutoff = endOffset ?? TimeSpan.Zero;
             var maxAge = duration ?? _maxDuration;
 
-            // Use video's last PTS as the single reference point for both streams.
-            // This ensures the same window is applied to video and audio — without this,
-            // audio evicted by TrimExcessAudio has an earlier last PTS, creating a shorter
-            // window and amplifying the duration mismatch.
-            var refPts = video.Count > 0 ? video[^1].Pts : audio.Count > 0 ? audio[^1].Pts : TimeSpan.Zero;
-            var segmentStart = refPts - maxAge + cutoff;
+            // Use each stream's own last PTS as reference point, so both video and audio
+            // produce a window of exactly 'maxAge' seconds from their respective end.
+            // Using video[^1].Pts as the single reference (previous approach) caused the audio
+            // window to be larger than the video window when encoder speed <1.0x — because
+            // video PTS lags behind real-time audio PTS, creating a wider audio segment.
+            var videoStart = video.Count > 0 ? video[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
+            if (videoStart < TimeSpan.Zero) videoStart = TimeSpan.Zero;
+            var audioStart = audio.Count > 0 ? audio[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
+            if (audioStart < TimeSpan.Zero) audioStart = TimeSpan.Zero;
 
             var trimmedVideo = new List<EncodedPacket>(video.Count);
             for (int i = 0; i < video.Count; i++)
-                if (video[i].Pts >= segmentStart)
+                if (video[i].Pts >= videoStart)
                     trimmedVideo.Add(video[i]);
             video = trimmedVideo;
 
-            var audioStart = segmentStart;
             var trimmedAudio = new List<EncodedPacket>(audio.Count);
             for (int i = 0; i < audio.Count; i++)
                 if (audio[i].Pts >= audioStart)
@@ -211,6 +213,19 @@ public sealed class ReplayBuffer : IDisposable
             result.Add(pkt);
         }
         return result;
+    }
+
+    public (TimeSpan firstPts, TimeSpan lastPts, TimeSpan span) PeekVideoPtsRange()
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            if (_videoCount == 0) return (TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
+            var first = _videoPackets[_videoHead]!.Pts;
+            var last = _videoPackets[(_videoHead + _videoCount - 1) % _videoPackets.Length]!.Pts;
+            return (first, last, last - first);
+        }
+        finally { _lock.ExitReadLock(); }
     }
 
     public (int videoCount, int audioCount, TimeSpan duration, long bytes) Stats()

@@ -1894,4 +1894,70 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ### Relevant Files Changed
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: FindTrailingFrozenFrames scan-all-frames fix (removed 50ms early-return)
-- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: SAVE START / OK / FAILED log markers`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: SAVE START / OK / FAILED log markers
+
+## Session Summary (2026-06-29 — Clip stale ending fix: FindTrailingFrozenFrames removido)
+
+### Done
+
+- **Root cause do clip terminar antes do momento real identificada**: `FindTrailingFrozenFrames` no `ExportToMp4` detectava gaps de PTS causados por glitches do encoder (formato re-detect, self-heal) e truncava frames válidos DEPOIS do gap. Com WGC desktop capture (não per-window), não existem frames congelados pós-alt-tab — todo frame produzido pelo WGC é conteúdo real.
+  - Gap no encoder em ~3 min de um clip de 5 min → truncava 2 min de frames válidos → clip final com ~3 min, terminando em "momentos antes"
+  - Guard de 50% não ajudava porque cortes de 30-40% ainda passavam
+
+- **Fix**: Removida a chamada ao `FindTrailingFrozenFrames` (linhas 78-90) do `ExportToMp4`. Áudio sync (intervals, `FilterAudioByIntervals`, `PadAudioWithSilence`) mantido intacto.
+
+- **Confirmado funcional pelo usuário**: "resolveu"
+
+### Full Suite
+
+- **C#**: 214/214 tests — **0 failures**
+- **Engine**: `dotnet publish -c Release --self-contained true -r win-x64` (0 errors), `npm run copy-engine` — 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: removed `FindTrailingFrozenFrames` call from `ExportToMp4` (lines 78-90), audio sync logic preserved
+
+## Session Summary (2026-06-29 — Clip truncado em 3:39 fix: MaxBufferBytes dinâmico)
+
+### Done
+
+- **Root cause do clip sempre ~151s identificada**: `RamManager.BuildSettings` para perfil `Full` tinha `MaxBufferBytes` fixo em **512MB**. Com bitrate real de ~15.8 Mbps, o buffer enchia em ~151s → `TrimExcessVideo` no `ReplayBuffer` evictava frames antigos para ficar abaixo do limite, efetivamente capando a duração máxima do clip em ~151s independente do `replaySec` configurado (300s).
+
+  - Evidência dos logs: `[RAM] video=9100frames 511,9MB | total=519,1MB | duracao=151,7s` — buffer batendo exatamente no limite de 512MB
+  - `ReplayBuffer.cs:TrimExcessVideo` linhas 93-97: loop while `_videoPackets.Count > 0` removia frames mais antigos até `_totalVideoBytes <= _maxBytes`
+  - Se encoder NVENC produzisse menos de 15.8 Mbps (CQ 20), clip chegava mais longe; se mais bits (cenas de movimento), clip ficava ainda mais curto que 151s
+
+- **Fix em `ResolveProfile` (`RamManager.cs`)**: Após `BuildSettings`, calcula `MaxBufferBytes` dinamicamente:
+  `maxrateKbps × replaySec × 1024 × 13 / 80` (base +30% headroom)
+  - Clamped ao mínimo entre o valor calculado e 75% do `budgetMb` (safe RAM budget)
+  - Apenas aumenta o buffer (nunca reduz) — preserva valores menores dos perfis LowMemory/Balanced
+  - Exemplo (default Full, 40000 Kbps × 300s): ~2.0 GB calculados, clampado ao budget disponível
+  - Na máquina do usuário (16GB RAM, ~1.4GB budget): ~1.05GB de buffer → suficiente para 300s a 15.8 Mbps
+
+- **Full suite**: **214/214 C# tests** — 0 quebras
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Memory/RamManager.cs`: `ResolveProfile` override de `MaxBufferBytes` com cálculo dinâmico
+
+## Session Summary (2026-06-29 — Per-stream PTS reference fix: A/V sync quando encoder speed < 1.0x)
+
+### Done
+
+- **Root cause da dessincronização A/V (áudio adiantado ~40s, assovio em 2:30) identificada**: `ReplayBuffer.GetSegments()` usava `video[^1].Pts` como referência única para cortar ambos os streams. Quando o encoder NVENC roda abaixo de 1.0x speed (ex: 0.809x observado), o último PTS de vídeo fica atrasado em relação ao áudio (real-time). Isso fazia o segmento de áudio ser maior que o de vídeo — ex: pedido de 30s retornava 40s de áudio vs 30s de vídeo.
+
+- **Fix em `ReplayBuffer.GetSegments()`**: Cada stream agora usa sua própria referência (`video[^1].Pts` para vídeo, `audio[^1].Pts` para áudio), garantindo janelas de exatamente `maxAge` segundos independentemente da velocidade do encoder.
+
+- **SYNC-MEASURE log**: Adicionado diagnóstico em `SaveClipAsync` que loga `videoRef`, `audioRef`, `refGap` (diferença entre últimos PTS), e os tamanhos das janelas de cada stream.
+
+- **3 correções auxiliares mantidas** da sessão anterior:
+  1. `WasapiLoopbackSource`: `CaptureTimestamp` capturado antes do `BlockCopy`
+  2. `_audioSampleRate` sincronizado de `_audioMixer.SampleRate` após `Start()`
+  3. Âncora de silêncio condicional em `ExportToMp4` (só faz padding se `audio[0].Pts < video[0].Pts`)
+
+- **Confirmado funcional pelo usuário**: "parece que resolveu"
+
+- **Build**: 0 erros, **214/214 C# tests**, todos passando
+- **Engine**: publicado + staged (288 files)
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `GetSegments()` per-stream PTS reference
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: SYNC-MEASURE diagnostic log`

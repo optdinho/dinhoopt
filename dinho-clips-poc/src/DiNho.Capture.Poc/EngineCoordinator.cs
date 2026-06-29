@@ -399,7 +399,8 @@ public sealed partial class EngineCoordinator : IDisposable
                 Log.I("EngineCoordinator", $"Gains iniciais: game={_config.Config.GameVolume:F2} mic={_config.Config.MicVolume:F2}");
                 _audioMixer.OnMixedAudio += OnAudioPacket;
                 _audioMixer.Start();
-                Log.I("SYNC-STARTUP", $"_audioMixer.Start() at uptime={_clock.Now.TotalSeconds:F3}s");
+                _audioSampleRate = _audioMixer.SampleRate;
+                Log.I("SYNC-STARTUP", $"_audioMixer.Start() at uptime={_clock.Now.TotalSeconds:F3}s sampleRate={_audioSampleRate}");
 
                 _aacEncoder?.Dispose();
                 _aacEncoder = new FfmpegAacEncoder();
@@ -888,12 +889,12 @@ public sealed partial class EngineCoordinator : IDisposable
                 else
                 {
                     Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
-                    _loopbackSource = new WasapiLoopbackSource(sampleRate);
+                    _loopbackSource = new WasapiLoopbackSource(sampleRate, _clock);
                 }
             }
             else
             {
-                _loopbackSource = new WasapiLoopbackSource(sampleRate);
+                _loopbackSource = new WasapiLoopbackSource(sampleRate, _clock);
                 Log.I("EngineCoordinator", "Áudio: captura completa (loopback) — NENHUM filtro ativo");
             }
         }
@@ -966,6 +967,8 @@ public sealed partial class EngineCoordinator : IDisposable
             _aacFramesProduced = 0;
             _audioPacketCount = 0;
             _hasFirstPcmPts = false;
+            _firstPcmPts = TimeSpan.Zero;
+            _audioSampleRate = 48000;
 
             _capture?.Dispose();
             _capture = null;
@@ -1412,10 +1415,19 @@ public sealed partial class EngineCoordinator : IDisposable
 
         try
         {
-            var durationLabel = customDurationSeconds.HasValue
-                ? $"{customDurationSeconds}s (binding)"
-                : $"{_config.Config.ReplayTimeSeconds}s (padrão)";
-            Log.I("EngineCoordinator", $"Exportando clip ({durationLabel})...");
+            // Post-clip buffer: espera N segundos para incluir o momento após o trigger
+            Log.I("ENGINE-DEBUG", $"SaveClip: customDuration={(customDurationSeconds.HasValue ? customDurationSeconds.ToString() : "null")} " +
+                $"ReplayTimeSeconds={_config.Config.ReplayTimeSeconds}s " +
+                $"BufferMaxDuration={_buffer.MaxDuration.TotalSeconds:F0}s " +
+                $"BufferActual={_buffer.Stats().duration.TotalSeconds:F0}s " +
+                $"PostClip={_config.Config.PostClipDurationSeconds}s");
+            var replaySec = Math.Min(
+                customDurationSeconds ?? _config.Config.ReplayTimeSeconds,
+                (int)_buffer.MaxDuration.TotalSeconds);
+            var postClipSec = Math.Max(0, _config.Config.PostClipDurationSeconds);
+            var totalSec = replaySec + postClipSec;
+
+            Log.I("EngineCoordinator", $"Exportando clip ({replaySec}s + {postClipSec}s post)...");
 
             // Verifica espaço em disco (spec 14.1)
             var outputDir = GetOutputDirectory();
@@ -1429,11 +1441,23 @@ public sealed partial class EngineCoordinator : IDisposable
             // Diagnóstico do AAC encoder antes de congelar o buffer
             _aacEncoder?.LogStats();
 
-            // Post-clip buffer: espera N segundos para incluir o momento após o trigger
-            var replaySec = customDurationSeconds ?? _config.Config.ReplayTimeSeconds;
-            var postClipSec = Math.Max(0, _config.Config.PostClipDurationSeconds);
-            var totalSec = replaySec + postClipSec;
+            // Diagnóstico completo do buffer antes do save
+            {
+                var d = _buffer.StatsDetailed();
+                var r = _buffer.PeekVideoPtsRange();
+                string profileInfo = _activeProfile != null
+                    ? $"profile={_activeProfile.Level} replaySec={_activeProfile.ReplaySeconds}s maxBufMB={_activeProfile.MaxBufferBytes / (1024*1024)}"
+                    : "profile=none";
+                Log.I("BUF-DIAG",
+                    $"Stats: video={d.videoCount} audio={d.audioCount} " +
+                    $"vidBytes={d.videoBytes} audBytes={d.audioBytes} " +
+                    $"vidDur={d.videoDuration.TotalSeconds:F1}s audDur={d.audioDuration.TotalSeconds:F1}s " +
+                    $"maxBytes={_buffer.MaxBytes} maxDur={_buffer.MaxDuration.TotalSeconds:F0}s " +
+                    $"PTS_range={r.firstPts.TotalSeconds:F1}s→{r.lastPts.TotalSeconds:F1}s ({r.span.TotalSeconds:F1}s) " +
+                    $"{profileInfo}");
+            }
 
+            // Post-clip buffer: espera N segundos para incluir o momento após o trigger
             List<EncodedPacket> video, audio;
 
             if (postClipSec > 0)
@@ -1461,6 +1485,14 @@ public sealed partial class EngineCoordinator : IDisposable
                 var startOffset = (aFirst - vFirst).TotalMilliseconds;
                 var endOffset = (aLast - vLast).TotalMilliseconds;
                 Log.I("SYNC-PROBE", $"Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({(vLast - vFirst).TotalSeconds:F2}s)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({(aLast - aFirst).TotalSeconds:F2}s)  StartOffset={startOffset:F1}ms  EndOffset={endOffset:F1}ms");
+                var syncMaxAge = TimeSpan.FromSeconds(customDurationSeconds ?? _config.Config.ReplayTimeSeconds);
+                var videoRef = video[^1].Pts;
+                var audioRef = audio[^1].Pts;
+                var videoWinStart = videoRef - syncMaxAge;
+                var audioWinStart = audioRef - syncMaxAge;
+                var videoWinSize = (videoRef - (videoWinStart > TimeSpan.Zero ? videoWinStart : video[0].Pts)).TotalSeconds;
+                var audioWinSize = (audioRef - (audioWinStart > TimeSpan.Zero ? audioWinStart : audio[0].Pts)).TotalSeconds;
+                Log.I("SYNC-MEASURE", $"maxAge={syncMaxAge.TotalSeconds:F0}s  videoRef={videoRef.TotalSeconds:F3}s  audioRef={audioRef.TotalSeconds:F3}s  refGap={(audioRef - videoRef).TotalSeconds:F2}s  videoWin={videoWinSize:F1}s  audioWin={audioWinSize:F1}s");
             }
             if (video.Count == 0)
             {
