@@ -18,6 +18,12 @@ public sealed class EncodedPacket
     public bool IsPooled { get; }
     public int DataLength { get; private set; }
     public bool IsPooledPcm { get; }
+    private int _retainCount;
+
+    public void Retain()
+    {
+        Interlocked.Increment(ref _retainCount);
+    }
 
     public EncodedPacket(
         byte[] data,
@@ -81,6 +87,9 @@ public sealed class EncodedPacket
 
     public void Release()
     {
+        if (Interlocked.Decrement(ref _retainCount) >= 0)
+            return;
+
         if (IsPooled && DataLength > 0)
         {
             ArrayPool<byte>.Shared.Return(Data);

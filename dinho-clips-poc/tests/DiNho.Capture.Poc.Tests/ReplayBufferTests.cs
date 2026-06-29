@@ -143,8 +143,10 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
-    public void MaxBytes_CombinedAudioVideo_TrimsToBudget()
+    public void MaxBytes_IndependentBudget_EachStreamStaysWithinBudget()
     {
+        // Video and audio have independent byte budgets: each stream can use
+        // up to _maxBytes. Combined bytes can exceed _maxBytes.
         using var buf = new ReplayBuffer(TimeSpan.FromSeconds(30), 1000);
         for (int i = 0; i < 10; i++)
         {
@@ -152,9 +154,12 @@ public sealed class ReplayBufferTests
             buf.AddAudio(MakeAudio(TimeSpan.FromTicks(i * 333_333), 100));
         }
 
-        var s = buf.Stats();
-        Assert.True(s.videoCount > 0, "Video should still have frames after trim");
-        Assert.True(s.bytes <= 1000, $"Combined bytes {s.bytes} exceeded maxBytes budget");
+        var s = buf.StatsDetailed();
+        Assert.True(s.videoBytes > 0, "Video should still have frames after trim");
+        Assert.True(s.videoBytes <= 1000,
+            $"Video bytes {s.videoBytes} > 1000 budget");
+        Assert.True(s.audioBytes <= 1000,
+            $"Audio bytes {s.audioBytes} > 1000 budget");
     }
 
     // ─── New tests ──────────────────────────────────────────────────────
@@ -245,11 +250,10 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
-    public void AudioMaxBytes_TrimsCombinedExcess()
+    public void AudioMaxBytes_TrimsExcessIndependently()
     {
-        // With a tight byte budget, audio should be trimmed first
-        // (video-only budget means _totalVideoBytes > _maxBytes triggers video trim,
-        //  otherwise audio is trimmed when combined exceeds budget)
+        // Video and audio each have their own byte budget (_maxBytes each),
+        // so they don't compete for space. Combined can exceed _maxBytes.
         using var buf = new ReplayBuffer(TimeSpan.FromSeconds(30), 2000);
         for (int i = 0; i < 20; i++)
         {
@@ -259,8 +263,11 @@ public sealed class ReplayBufferTests
 
         var s = buf.StatsDetailed();
         Assert.True(s.videoBytes > 0, "Some video should remain");
-        Assert.True(s.videoBytes + s.audioBytes <= 2000,
-            $"Combined bytes {s.videoBytes + s.audioBytes} > 2000");
+        Assert.True(s.videoBytes <= 2000,
+            $"Video bytes {s.videoBytes} > 2000 budget");
+        Assert.True(s.audioBytes <= 2000,
+            $"Audio bytes {s.audioBytes} > 2000 budget");
+        // Combined can exceed 2000 because each stream has its own budget
     }
 
     [Fact]

@@ -1866,3 +1866,32 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 ### Relevant Files Changed
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: formato latch linhas 80-82, lógica de leitura linhas 457-461, `_loggedFirstNalu` linha 69, reset linha 976
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `-bsf:v h264_mp4toannexb` linhas 658-665
+
+## Session Summary (2026-06-28 — FindTrailingFrozenFrames fix + save diagnostics)
+
+### Done
+
+- **FindTrailingFrozenFrames bug fix**: The function scanned from the end of the video packet list for PTS gaps but **stopped at the first gap >50ms**. If that gap was < 1s (minFreezeDuration), it returned `videoPackets.Count` (keep all) and **never scanned further back** for larger gaps. This meant a 100ms jitter gap near the end would mask a 2s alt-tab freeze gap further back, leaving stale WGC frames in the exported clip.
+  - **Fix**: Removed the `gap > 50ms` guard and the early-return for small gaps. The loop now scans ALL frames and only returns when it finds a gap >= minFreezeDuration. Small gaps are passed through. If no gap >= 1s exists, all frames are kept.
+  - All 5 existing tests pass (no gaps, 40ms gap, 2s freeze, 500ms below threshold, single packet).
+
+- **Save diagnostics**: Added visible `═══════ SAVE START ═══════  → <path>` and `═══════ SAVE OK ═══════` / `═══ EXPORT FAILED ═══` markers around the export pipeline so the user can easily spot save events in the fast-scrolling 60fps console log.
+
+### Known Issue: Silent save failure
+
+- User reported that pressing the Save Clip hotkey (F9/F11) during a live FiveM session did not produce an MP4 file. The `SaveClipAsync` log confirms `video=2437 frames, audio=2373 packets` — the buffer was populated and GetSegments returned data.
+- The export pipeline (WriteMatroskaFile → MuxWithFfmpegStreaming) should have produced the file, but the user says "nao salvou nada". Possible causes:
+  1. Exception thrown in ExportToMp4 — now labeled with `═══ EXPORT FAILED ═══` for easy spotting
+  2. ffmpeg muxer issue (e.g., ADTS silent frame rejection, pipe error)
+  3. Output path not where the user checked (Desktop\DiNhoClips\ by default)
+- Next test session should verify whether the SAVE markers appear and whether the file is created.
+
+### Full Suite
+
+- **C#**: 214/214 tests — **0 failures**
+- **Coverage**: Statements 94.22%, Branches 85.67%, Functions 94.49%, Lines 95.34%
+- **Engine**: `dotnet publish -c Release --self-contained true -r win-x64` (0 errors), 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: FindTrailingFrozenFrames scan-all-frames fix (removed 50ms early-return)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: SAVE START / OK / FAILED log markers`

@@ -36,6 +36,10 @@ public sealed class AppConfig
     // Replay (fallback global, sobrescrito por binding.DurationSeconds se existir)
     public int ReplayTimeSeconds { get; set; } = 300; // 5 min
 
+    // Post-clip buffer: continua gravando N segundos após o save trigger
+    // para garantir que o momento não seja cortado (ex: Medal/ShadowPlay)
+    public int PostClipDurationSeconds { get; set; } = 5;
+
     // Audio
     public bool MicEnabled { get; set; } = true;
     public int AudioSampleRate { get; set; } = 48000;

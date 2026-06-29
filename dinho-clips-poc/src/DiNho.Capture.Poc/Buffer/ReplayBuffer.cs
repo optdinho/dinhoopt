@@ -125,19 +125,7 @@ public sealed class ReplayBuffer : IDisposable
 
     private void TrimExcessAudio()
     {
-        while (_audioCount > 0 && _totalAudioDuration > _maxDuration)
-        {
-            var oldest = _audioPackets[_audioHead]!;
-            _audioPackets[_audioHead] = null;
-            _audioHead = (_audioHead + 1) % _audioPackets.Length;
-            _audioCount--;
-            _totalAudioDuration -= oldest.Duration;
-            _totalAudioBytes -= oldest.PcmSamples is { } pcm ? pcm.Length * 4L : oldest.DataLength;
-            oldest.Release();
-        }
-
-        // Trim audio-only when combined bytes exceed budget
-        while (_audioCount > 0 && _maxBytes > 0 && _totalVideoBytes + _totalAudioBytes > _maxBytes)
+        while (_audioCount > 0 && (_totalAudioDuration > _maxDuration || (_maxBytes > 0 && _totalAudioBytes > _maxBytes)))
         {
             var oldest = _audioPackets[_audioHead]!;
             _audioPackets[_audioHead] = null;
@@ -187,14 +175,20 @@ public sealed class ReplayBuffer : IDisposable
             var cutoff = endOffset ?? TimeSpan.Zero;
             var maxAge = duration ?? _maxDuration;
 
-            var videoStart = (video.Count > 0) ? video[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
+            // Use video's last PTS as the single reference point for both streams.
+            // This ensures the same window is applied to video and audio — without this,
+            // audio evicted by TrimExcessAudio has an earlier last PTS, creating a shorter
+            // window and amplifying the duration mismatch.
+            var refPts = video.Count > 0 ? video[^1].Pts : audio.Count > 0 ? audio[^1].Pts : TimeSpan.Zero;
+            var segmentStart = refPts - maxAge + cutoff;
+
             var trimmedVideo = new List<EncodedPacket>(video.Count);
             for (int i = 0; i < video.Count; i++)
-                if (video[i].Pts >= videoStart)
+                if (video[i].Pts >= segmentStart)
                     trimmedVideo.Add(video[i]);
             video = trimmedVideo;
 
-            var audioStart = (audio.Count > 0) ? audio[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
+            var audioStart = segmentStart;
             var trimmedAudio = new List<EncodedPacket>(audio.Count);
             for (int i = 0; i < audio.Count; i++)
                 if (audio[i].Pts >= audioStart)
@@ -213,25 +207,8 @@ public sealed class ReplayBuffer : IDisposable
         {
             int idx = (head + i) % buffer.Length;
             var pkt = buffer[idx]!;
-            if (pkt.IsPooled)
-            {
-                if (pkt.PcmSamples is { } src)
-                {
-                    var copy = new float[src.Length];
-                    System.Buffer.BlockCopy(src, 0, copy, 0, src.Length * 4);
-                    result.Add(new EncodedPacket(copy, pkt.Type, pkt.Pts, pkt.Duration));
-                }
-                else
-                {
-                    var copy = new byte[pkt.DataLength];
-                    System.Buffer.BlockCopy(pkt.Data, 0, copy, 0, pkt.DataLength);
-                    result.Add(new EncodedPacket(copy, pkt.Type, pkt.Pts, pkt.Duration, pkt.IsKeyFrame, pkt.Width, pkt.Height));
-                }
-            }
-            else
-            {
-                result.Add(pkt);
-            }
+            pkt.Retain();
+            result.Add(pkt);
         }
         return result;
     }

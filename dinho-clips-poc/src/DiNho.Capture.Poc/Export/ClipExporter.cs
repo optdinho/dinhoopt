@@ -48,6 +48,18 @@ public sealed class ClipExporter : IDisposable
 
             try
             {
+                // SYNC-PROBE: PTS offset between audio and video BEFORE any processing
+                if (videoPackets.Count > 0 && audioPackets.Count > 0)
+                {
+                    var vFirst = videoPackets[0].Pts;
+                    var vLast = videoPackets[^1].Pts + videoPackets[^1].Duration;
+                    var aFirst = audioPackets[0].Pts;
+                    var aLast = audioPackets[^1].Pts + audioPackets[^1].Duration;
+                    var startOffset = (aFirst - vFirst).TotalMilliseconds;
+                    var endOffset = (aLast - vLast).TotalMilliseconds;
+                    Log.I("SYNC-PROBE", $"ExportToMp4 RAW — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({(vLast - vFirst).TotalSeconds:F2}s)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({(aLast - aFirst).TotalSeconds:F2}s)  StartOffset={startOffset:F1}ms  EndOffset={endOffset:F1}ms");
+                }
+
                 double activeDurationSec = 0;
                 double activeFps = frameRate;
                 double trueVidDuration = 0;
@@ -62,6 +74,16 @@ public sealed class ClipExporter : IDisposable
                     var aFirst = audioPackets[0].Pts;
                     var aLast = audioPackets[^1].Pts;
                     Log.D("PTS", $"Pre-sync — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({videoPackets.Count} frames)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({audioPackets.Count} packets)");
+
+                    // Truncate trailing frozen video frames (stale WGC frames after alt-tab)
+                    int freezeCut = FindTrailingFrozenFrames(videoPackets, TimeSpan.FromSeconds(1), frameRate);
+                    int beforeFreezeCut = videoPackets.Count;
+                    if (freezeCut > 0)
+                    {
+                        var freezeStartPts = videoPackets[freezeCut].Pts;
+                        videoPackets = videoPackets.GetRange(0, freezeCut);
+                        Log.I("PTS", $"Truncated {freezeCut}/{beforeFreezeCut} trailing frozen frames at {freezeStartPts.TotalSeconds:F3}s");
+                    }
 
                     int origAudioCount = audioPackets.Count;
                     var intervals = GetVideoIntervals(videoPackets, TimeSpan.FromMilliseconds(50));
@@ -80,7 +102,8 @@ public sealed class ClipExporter : IDisposable
                     var lastVideoPts = videoPackets[^1].Pts + videoPackets[^1].Duration;
                     audioPackets = TrimAudioEnd(audioPackets, lastVideoPts);
 
-                    audioPackets = PadAudioWithSilence(audioPackets, activeDurationSec, 48000);
+                    // Fill the init delay gap (audio starts after video) by padding silence from video[0].Pts
+                    audioPackets = PadAudioWithSilence(audioPackets, 48000, videoPackets[0].Pts);
 
                     if (audioPackets.Count > 0)
                     {
@@ -90,6 +113,10 @@ public sealed class ClipExporter : IDisposable
                     }
                     if (activeDurationSec > 5 && audioDurationSec > 0 && audioDurationSec < activeDurationSec * 0.9)
                         Log.W("PTS", $"audio duration {audioDurationSec:F2}s is <90% of active video {activeDurationSec:F2}s — {audioPackets.Count} packets may be insufficient");
+
+                    var expectedDuration = (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds;
+                    var durDiff = expectedDuration - activeDurationSec;
+                    Log.I("PTS", $"Post-sync — expectedDuration={expectedDuration:F2}s activeDuration={activeDurationSec:F2}s diff={durDiff:F3}s gapsRemoved={gapsRemoved} audioFrames={audioPackets.Count}");
 
                     Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved}");
                 }
@@ -267,21 +294,61 @@ public sealed class ClipExporter : IDisposable
         return trimAt < audioPackets.Count ? audioPackets.GetRange(0, trimAt) : audioPackets;
     }
 
-    internal static List<EncodedPacket> PadAudioWithSilence(List<EncodedPacket> audioPackets, double activeDurationSec, int sampleRate)
+    internal static int FindTrailingFrozenFrames(List<EncodedPacket> videoPackets, TimeSpan minFreezeDuration, int nominalFps)
     {
-        if (audioPackets.Count == 0 || activeDurationSec <= 0) return audioPackets;
+        // Scan from the end for the last PTS gap >= minFreezeDuration (WGC paused during alt-tab).
+        // Everything after this gap is stale/frozen frames from WGC resumption.
+        // Small gaps (< minFreezeDuration) are skipped — we continue scanning for larger gaps further back.
+        for (int i = videoPackets.Count - 1; i > 0; i--)
+        {
+            var gap = videoPackets[i].Pts - (videoPackets[i - 1].Pts + videoPackets[i - 1].Duration);
+            if (gap >= minFreezeDuration)
+            {
+                Log.I("PTS", $"FindTrailingFrozenFrames: gap at frame #{i} of {gap.TotalSeconds:F3}s — truncating {(videoPackets.Count - i)} trailing frames");
+                return i;
+            }
+        }
 
-        double audioDurSec = 0;
+        return videoPackets.Count;
+    }
+
+    internal static List<EncodedPacket> PadAudioWithSilence(List<EncodedPacket> audioPackets, int sampleRate, TimeSpan? expectedStart = null)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+
+        long durTicks = 1024L * 10_000_000 / sampleRate;
+        var gapThreshold = TimeSpan.FromMilliseconds(30);
+
+        var result = new List<EncodedPacket>(audioPackets.Count * 2);
+
+        // If expectedStart is set and audio starts later (e.g. WASAPI init delay), pad silence upfront
+        var expectedPts = expectedStart ?? audioPackets[0].Pts;
+        if (expectedStart.HasValue && audioPackets[0].Pts > expectedStart.Value + gapThreshold)
+        {
+            var gapSec = (audioPackets[0].Pts - expectedStart.Value).TotalSeconds;
+            int silentFrames = (int)(gapSec * sampleRate / 1024.0); // floor — remaining sub-frame gap handled by in-loop check
+            if (silentFrames > 0)
+            {
+                Log.I("PTS", $"PadAudioWithSilence: inserting {silentFrames} silent frames at start for init delay gap of {gapSec:F3}s");
+                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedStart.Value, sampleRate));
+                expectedPts = expectedStart.Value + TimeSpan.FromTicks(durTicks * silentFrames);
+            }
+        }
+
         foreach (var pkt in audioPackets)
-            audioDurSec += pkt.Duration.TotalSeconds;
-        double gapSec = activeDurationSec - audioDurSec;
+        {
+            // Insert silence at any PTS gap > 30ms (e.g. alt-tab gaps, buffer eviction gaps)
+            if (pkt.Pts > expectedPts + gapThreshold)
+            {
+                var gapSec = (pkt.Pts - expectedPts).TotalSeconds;
+                int silentFrames = (int)Math.Ceiling(gapSec * sampleRate / 1024.0);
+                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedPts, sampleRate));
+            }
+            result.Add(pkt);
+            expectedPts = pkt.Pts + pkt.Duration;
+        }
 
-        if (gapSec <= 0.010) return audioPackets;
-
-        int silentFrames = (int)Math.Ceiling(gapSec * sampleRate / 1024.0);
-        var silent = GenerateSilentAacFrames(silentFrames, audioPackets[^1].Pts + audioPackets[^1].Duration, sampleRate);
-        audioPackets.AddRange(silent);
-        return audioPackets;
+        return result;
     }
 
     private static void WriteEbmlVint(BinaryWriter bw, ulong value)

@@ -334,57 +334,184 @@ public sealed class ClipExporterTests
         Assert.Empty(result);
     }
 
+    // ── FindTrailingFrozenFrames ──
+
+    [Fact]
+    public void FindTrailingFrozenFrames_NoGap_ReturnsAll()
+    {
+        var dur = TimeSpan.FromMilliseconds(16);
+        var packets = new List<EncodedPacket>();
+        for (int i = 0; i < 10; i++)
+            packets.Add(new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(i * 16), dur, false));
+
+        var result = ClipExporter.FindTrailingFrozenFrames(packets, TimeSpan.FromSeconds(1), 60);
+        Assert.Equal(10, result);
+    }
+
+    [Fact]
+    public void FindTrailingFrozenFrames_GapBelowThreshold_ReturnsAll()
+    {
+        var dur = TimeSpan.FromMilliseconds(16);
+        var packets = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Video, TimeSpan.Zero, dur, false),
+            new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(16), dur, false),
+            // 40ms gap (below 50ms threshold) — not a freeze
+            new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(56), dur, false)
+        };
+
+        var result = ClipExporter.FindTrailingFrozenFrames(packets, TimeSpan.FromSeconds(1), 60);
+        Assert.Equal(3, result);
+    }
+
+    [Fact]
+    public void FindTrailingFrozenFrames_GapAboveFreezeThreshold_Truncates()
+    {
+        var dur = TimeSpan.FromMilliseconds(16);
+        var packets = new List<EncodedPacket>();
+        // 10 normal frames (160ms)
+        for (int i = 0; i < 10; i++)
+            packets.Add(new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(i * 16), dur, false));
+        // 2s gap (alt-tab)
+        // 3 frozen frames after gap
+        for (int i = 0; i < 3; i++)
+            packets.Add(new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(2000 + i * 16), dur, false));
+
+        var result = ClipExporter.FindTrailingFrozenFrames(packets, TimeSpan.FromSeconds(1), 60);
+        Assert.Equal(10, result); // only keep the 10 frames before the gap
+    }
+
+    [Fact]
+    public void FindTrailingFrozenFrames_GapBelowFreezeThreshold_ReturnsAll()
+    {
+        var dur = TimeSpan.FromMilliseconds(16);
+        var packets = new List<EncodedPacket>();
+        for (int i = 0; i < 10; i++)
+            packets.Add(new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(i * 16), dur, false));
+        // 500ms gap (below 1s freeze threshold)
+        for (int i = 0; i < 3; i++)
+            packets.Add(new(Array.Empty<byte>(), MediaType.Video, TimeSpan.FromMilliseconds(500 + i * 16), dur, false));
+
+        var result = ClipExporter.FindTrailingFrozenFrames(packets, TimeSpan.FromSeconds(1), 60);
+        Assert.Equal(13, result); // keep all — gap < minFreezeDuration
+    }
+
+    [Fact]
+    public void FindTrailingFrozenFrames_SinglePacket_ReturnsAll()
+    {
+        var packets = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Video, TimeSpan.Zero, TimeSpan.FromMilliseconds(16), false)
+        };
+
+        var result = ClipExporter.FindTrailingFrozenFrames(packets, TimeSpan.FromSeconds(1), 60);
+        Assert.Equal(1, result);
+    }
+
     // ── PadAudioWithSilence ──
 
     [Fact]
     public void PadAudioWithSilence_Empty_ReturnsEmpty()
     {
-        var result = ClipExporter.PadAudioWithSilence(new List<EncodedPacket>(), 10, 48000);
+        var result = ClipExporter.PadAudioWithSilence(new List<EncodedPacket>(), 48000);
         Assert.Empty(result);
     }
 
     [Fact]
-    public void PadAudioWithSilence_ZeroActiveDuration_NoChange()
+    public void PadAudioWithSilence_SinglePacket_NoChange()
     {
         var audio = new List<EncodedPacket>
         {
             new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, TimeSpan.FromSeconds(5), false)
         };
-        var result = ClipExporter.PadAudioWithSilence(audio, 0, 48000);
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000);
         Assert.Single(result);
     }
 
     [Fact]
-    public void PadAudioWithSilence_SmallGap_NoPadding()
+    public void PadAudioWithSilence_ConsecutivePackets_NoPadding()
     {
+        var dur = TimeSpan.FromMilliseconds(21);
         var audio = new List<EncodedPacket>
         {
-            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, TimeSpan.FromMilliseconds(995), false)
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, dur, false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromTicks(dur.Ticks), dur, false)
         };
-        var result = ClipExporter.PadAudioWithSilence(audio, 1.0, 48000);
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000);
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public void PadAudioWithSilence_GapBetweenPackets_InsertsSilence()
+    {
+        var dur = TimeSpan.FromMilliseconds(21);
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, dur, false),
+            // 3-second gap
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(3), dur, false)
+        };
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000);
+        // original 2 + silence frames for 3s gap
+        Assert.True(result.Count > 2);
+    }
+
+    [Fact]
+    public void PadAudioWithSilence_GapBelowThreshold_NoPadding()
+    {
+        var dur = TimeSpan.FromMilliseconds(21);
+        var gap = TimeSpan.FromMilliseconds(10); // below 30ms threshold
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, dur, false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromTicks(dur.Ticks + gap.Ticks), dur, false)
+        };
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000);
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public void PadAudioWithSilence_ExpectedStart_InsertsSilenceBeforeFirstPacket()
+    {
+        var dur = TimeSpan.FromMilliseconds(21);
+        // First packet at 667ms (simulating WASAPI init delay)
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromMilliseconds(667), dur, false)
+        };
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000, TimeSpan.Zero);
+        // Should have original 1 + silence frames for 667ms gap
+        Assert.True(result.Count > 1, $"Expected >1 frame, got {result.Count}");
+        // First frame should have PTS = 0
+        Assert.Equal(TimeSpan.Zero, result[0].Pts);
+        // Last frame should be the original (PTS = 667ms)
+        Assert.Equal(TimeSpan.FromMilliseconds(667), result[^1].Pts);
+    }
+
+    [Fact]
+    public void PadAudioWithSilence_ExpectedStartMatchesAudio_NoExtraSilence()
+    {
+        var dur = TimeSpan.FromMilliseconds(21);
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, dur, false)
+        };
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000, TimeSpan.Zero);
         Assert.Single(result);
     }
 
     [Fact]
-    public void PadAudioWithSilence_LargeGap_PaddingAdded()
+    public void PadAudioWithSilence_ExpectedStartNull_NoExtraSilence()
     {
+        var dur = TimeSpan.FromMilliseconds(21);
         var audio = new List<EncodedPacket>
         {
-            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, TimeSpan.FromSeconds(5), false)
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromMilliseconds(500), dur, false)
         };
-        var result = ClipExporter.PadAudioWithSilence(audio, 10, 48000);
-        Assert.True(result.Count > 1);
-    }
-
-    [Fact]
-    public void PadAudioWithSilence_NegativeActiveDuration_NoChange()
-    {
-        var audio = new List<EncodedPacket>
-        {
-            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, TimeSpan.FromSeconds(5), false)
-        };
-        var result = ClipExporter.PadAudioWithSilence(audio, -1, 48000);
+        // null expectedStart means start from first audio packet — 500ms gap not filled
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000, null);
         Assert.Single(result);
+        Assert.Equal(TimeSpan.FromMilliseconds(500), result[0].Pts);
     }
 
     // ── GenerateThumbnail ──

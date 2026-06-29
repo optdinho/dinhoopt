@@ -953,15 +953,10 @@ public sealed partial class EngineCoordinator : IDisposable
                 _aacEncoder.FlushAndDrain(remaining);
                 foreach (var pkt in remaining)
                 {
-                    var correctedPts = ConsumePcmPts();
-                    var corrected = new EncodedPacket(pkt.Data, pkt.Type, correctedPts, pkt.Duration, pkt.IsKeyFrame);
+                    var pts = ComputeAacPts();
+                    var corrected = new EncodedPacket(pkt.Data, pkt.Type, pts, pkt.Duration, pkt.IsKeyFrame);
                     _buffer.AddAudio(corrected);
-                }
-                int orphanSamples = _pcmPtsQueue.Count;
-                if (orphanSamples > 0)
-                {
-                    int orphanMs = orphanSamples * 1024 / _audioSampleRate;
-                    Log.I("SYNC-PCM-PTS", $"WARN: {orphanSamples} PCM entries orphaned after AAC flush (~{orphanMs}ms audio lost)");
+                    _aacFramesProduced++;
                 }
                 _aacEncoder.Dispose();
                 _aacEncoder = null;
@@ -970,7 +965,7 @@ public sealed partial class EngineCoordinator : IDisposable
             // Reseta contadores de PTS/AAC entre sessões de captura
             _aacFramesProduced = 0;
             _audioPacketCount = 0;
-            _pcmPtsQueue.Clear();
+            _hasFirstPcmPts = false;
 
             _capture?.Dispose();
             _capture = null;
@@ -1279,54 +1274,16 @@ public sealed partial class EngineCoordinator : IDisposable
     }
 
     private int _audioPacketCount;
-    private const int MaxPcmPtsQueue = 10000;
-    private readonly Queue<(TimeSpan pts, int samples)> _pcmPtsQueue = new();
     private int _aacFramesProduced;
     private int _audioSampleRate = 48000;
-    private int _audioChannels = 2;
-    private TimeSpan _lastKnownRealPts = TimeSpan.Zero;
+    private TimeSpan _firstPcmPts = TimeSpan.Zero;
+    private bool _hasFirstPcmPts;
 
-    /// <summary>
-    /// Retorna o PTS estimado para o próximo frame AAC com base nos
-    /// PTS reais dos pacotes PCM de entrada (AudioMixer usa _clock.Now).
-    /// </summary>
-    private TimeSpan ConsumePcmPts(int aacSamples = 1024)
+    private TimeSpan ComputeAacPts()
     {
-        int samplesPerFrame = aacSamples * _audioChannels;
-        int needed = samplesPerFrame;
-        TimeSpan result = TimeSpan.Zero;
-        bool first = true;
-
-        while (needed > 0 && _pcmPtsQueue.Count > 0)
-        {
-            var (pts, samples) = _pcmPtsQueue.Peek();
-            if (first) { result = pts; first = false; }
-            int take = Math.Min(needed, samples);
-            needed -= take;
-            if (take >= samples)
-                _pcmPtsQueue.Dequeue();
-            else
-            {
-                // Partial consume — avança PTS pelos samples consumidos
-                _pcmPtsQueue.Dequeue();
-                _pcmPtsQueue.Enqueue((pts + TimeSpan.FromSeconds((double)take / _audioSampleRate), samples - take));
-            }
-        }
-
-        if (first) // Fila vazia — fallback para último PTS real conhecido
-        {
-            result = _lastKnownRealPts + TimeSpan.FromTicks(1024L * 10_000_000 / _audioSampleRate);
-            if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
-                Log.I("SYNC-PCM-PTS", $"FALLBACK frame#{_aacFramesProduced} lastRealPts={_lastKnownRealPts.TotalSeconds:F4}s estimated={result.TotalSeconds:F4}s queueEmpty");
-        }
-        else
-        {
-            _lastKnownRealPts = result;
-        }
-
-        if (_aacFramesProduced <= 5 || _aacFramesProduced % 100 == 0)
-            Log.I("SYNC-PCM-PTS", $"frame#{_aacFramesProduced} pts={result.TotalSeconds:F4}s queueRemaining={_pcmPtsQueue.Count}");
-        return result;
+        if (!_hasFirstPcmPts)
+            return TimeSpan.Zero;
+        return _firstPcmPts + TimeSpan.FromSeconds((double)_aacFramesProduced * 1024.0 / _audioSampleRate);
     }
 
     private void OnAudioPacket(EncodedPacket packet)
@@ -1334,14 +1291,17 @@ public sealed partial class EngineCoordinator : IDisposable
         if (!_recording) return;
 
         _audioPacketCount++;
-        int sampleCount = packet.PcmSamples?.Length ?? packet.Data.Length / 4;
-        if (_audioPacketCount <= 5 || _audioPacketCount % 100 == 0)
-            Log.I("AudioDiag", $"packet #{_audioPacketCount} samples={sampleCount} ts={packet.Pts.TotalSeconds:F2} pcmQueueDepth={_pcmPtsQueue.Count}");
 
-        // Enfileira o PTS real do mixer (baseado em _clock.Now) + contagem de samples
-        if (_pcmPtsQueue.Count >= MaxPcmPtsQueue)
-            _pcmPtsQueue.Dequeue();
-        _pcmPtsQueue.Enqueue((packet.Pts, sampleCount));
+        // Anchora o primeiro PTS real do mixer (baseado em _clock.Now)
+        if (!_hasFirstPcmPts)
+        {
+            _firstPcmPts = packet.Pts;
+            _hasFirstPcmPts = true;
+            Log.I("AudioDiag", $"AAC PTS anchor: firstPcmPts={_firstPcmPts.TotalSeconds:F4}s");
+        }
+
+        if (_audioPacketCount <= 5 || _audioPacketCount % 100 == 0)
+            Log.I("AudioDiag", $"packet #{_audioPacketCount} ts={packet.Pts.TotalSeconds:F2} anchor={_firstPcmPts.TotalSeconds:F2}");
 
         if (packet.PcmSamples != null)
             _aacEncoder?.EncodeAudio(packet.PcmSamples);
@@ -1349,10 +1309,9 @@ public sealed partial class EngineCoordinator : IDisposable
         while (_aacEncoder?.TryReadPacket() is { } aacPkt)
         {
             aacCount++;
-            // Corrige o PTS do AAC: usa o PTS real do PCM de entrada em vez do
-            // _outputFrameIndex * dur (que ignora delays de encoding)
-            var correctedPts = ConsumePcmPts();
-            var corrected = new EncodedPacket(aacPkt.Data, aacPkt.Type, correctedPts, aacPkt.Duration, aacPkt.IsKeyFrame);
+            // PTS monotônico: âncora + frames AAC emitidos * duração por frame
+            var pts = ComputeAacPts();
+            var corrected = new EncodedPacket(aacPkt.Data, aacPkt.Type, pts, aacPkt.Duration, aacPkt.IsKeyFrame);
             _buffer.AddAudio(corrected);
             _aacFramesProduced++;
         }
@@ -1470,11 +1429,28 @@ public sealed partial class EngineCoordinator : IDisposable
             // Diagnóstico do AAC encoder antes de congelar o buffer
             _aacEncoder?.LogStats();
 
-            // Freeze buffer (spec 5.1) — se bind tem duração custom, trunca
-            var truncateTo = customDurationSeconds.HasValue
-                ? TimeSpan.FromSeconds(customDurationSeconds.Value)
-                : TimeSpan.FromSeconds(_config.Config.ReplayTimeSeconds);
-            var (video, audio) = _buffer.GetSegments(truncateTo);
+            // Post-clip buffer: espera N segundos para incluir o momento após o trigger
+            var replaySec = customDurationSeconds ?? _config.Config.ReplayTimeSeconds;
+            var postClipSec = Math.Max(0, _config.Config.PostClipDurationSeconds);
+            var totalSec = replaySec + postClipSec;
+
+            List<EncodedPacket> video, audio;
+
+            if (postClipSec > 0)
+            {
+                var originalMax = _buffer.MaxDuration;
+                _buffer.MaxDuration = TimeSpan.FromSeconds(totalSec);
+                Log.I("EngineCoordinator", $"Aguardando {postClipSec}s pós-clip (total={totalSec}s)...");
+                await Task.Delay(TimeSpan.FromSeconds(postClipSec));
+                Log.I("EngineCoordinator", $"Coletando buffer ({totalSec}s)...");
+
+                (video, audio) = _buffer.GetSegments(TimeSpan.FromSeconds(totalSec));
+                _buffer.MaxDuration = originalMax;
+            }
+            else
+            {
+                (video, audio) = _buffer.GetSegments(TimeSpan.FromSeconds(replaySec));
+            }
             Log.I("AudioDiag", $"SaveClip: video={video.Count} frames, audio={audio.Count} packets");
             if (video.Count > 0 && audio.Count > 0)
             {
@@ -1494,6 +1470,7 @@ public sealed partial class EngineCoordinator : IDisposable
 
             var fileName = $"DiNho Optimizer {DateTime.Now:yyyy-MM-dd_HH-mm-ss}.mp4";
             var outputPath = Path.Combine(outputDir, fileName);
+            Log.I("EngineCoordinator", $"═══════ SAVE START ═══════  → {outputPath}");
 
             var cachedAvcc = (_encoder as FfmpegEncoder)?.AvccCache;
             await Task.Run(() =>
@@ -1510,12 +1487,18 @@ public sealed partial class EngineCoordinator : IDisposable
 
                 var fileInfo = new FileInfo(result);
                 Log.I("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");
+                Log.I("EngineCoordinator", $"═══════ SAVE OK ═══════");
                 _status.Update(s => s.LastClipSize = fileInfo.Length);
             });
+
+            // Libera retain dos pacotes — TrimExcess pode já ter Release()'d alguns,
+            // então este Release() extra é o que efetivamente retorna ao pool.
+            foreach (var pkt in video) pkt.Release();
+            foreach (var pkt in audio) pkt.Release();
         }
         catch (Exception ex)
         {
-            Log.E("EngineCoordinator", $"Export FAILED: {ex.GetType().Name}: {ex.Message}");
+            Log.E("EngineCoordinator", $"═══ EXPORT FAILED ═══  {ex.GetType().Name}: {ex.Message}");
             if (ex.InnerException != null)
                 Log.E("EngineCoordinator", $"Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
         }

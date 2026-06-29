@@ -68,11 +68,13 @@ public sealed class FfmpegEncoder : IEncoder
     private byte[]? _pendingBuf;   // AVCC frame assembly buffer (ParseAvcc → EmitPacket)
     private int _pendingLen;
     private bool _hadSlice;
+    private bool _pendingTooLarge; // Set by ParseAvcc when pending exceeds 200KB — prevents false EmitPacket
     private long _outputFrameIndex;
 
     // Raw AnnexB/AVCC accumulation buffer — handles pipe splits that land mid-NALU
     private byte[]? _rawBuf;
     private int _rawLen;
+    private bool _hadRawSlice; // tracked in AnnexB path before conversion
 
     // Format latch — ffmpeg -f h264 with -bsf:v should output AnnexB, but sometimes
     // frames slip through in AVCC format. We detect once and latch.
@@ -271,14 +273,14 @@ public sealed class FfmpegEncoder : IEncoder
         };
 
         // NVENC/AMF/QSV produce AVCC (4-byte length prefix) natively.
-        // h264_mp4toannexb/hevc_mp4toannexb converts to AnnexB so the ReaderLoop
-        // always gets start-code delimited data — no heuristic AVCC scan needed.
-        string bsfArg = rawFmt switch
-        {
-            "hevc" => " -bsf:v hevc_mp4toannexb",
-            "av1" => "",
-            _ => " -bsf:v h264_mp4toannexb"
-        };
+        // We DO NOT use -bsf:v h264_mp4toannexb because:
+        //   a) It's unreliable — some ffmpeg builds occasionally skip it on random frames,
+        //      causing format confusion in the reader (AVCC data treated as AnnexB)
+        //   b) The AVCC path in ReaderLoop is simpler, more robust, and handles orphaned
+        //      tails via _pendingBuf
+        //   c) WriteMatroskaFile stores AVCC natively with CodecPrivate — no AnnexB needed
+        // The reader latches the format once from position 0 and processes accordingly.
+        string bsfArg = "";
 
         _process = new Process
         {
@@ -421,6 +423,49 @@ public sealed class FfmpegEncoder : IEncoder
         return writePos;
     }
 
+    /// <summary>
+    /// Encontra o final do primeiro access unit AnnexB completo no buffer.
+    /// Retorna a posição do start code que INICIA o próximo AU, ou 0 se ainda
+    /// não há um AU completo (acumulando mais dados necessários).
+    /// Suporta H264 NAL types. HEVC NAL types diferem ((b >> 1) &amp; 0x3F) —
+    /// TODO: adicionar suporte HEVC quando necessário.
+    /// </summary>
+    private static int FindAnnexBAccessUnitBoundary(byte[] buf, int len, bool hadSlice)
+    {
+        int pos = 0;
+        bool seenSlice = hadSlice;
+
+        while (pos + 3 < len)
+        {
+            if (buf[pos] != 0 || buf[pos + 1] != 0) { pos++; continue; }
+            int scLen = 0;
+            if (buf[pos + 2] == 1) scLen = 3;
+            else if (pos + 3 < len && buf[pos + 2] == 0 && buf[pos + 3] == 1) scLen = 4;
+            if (scLen == 0) { pos++; continue; }
+
+            int nalStart = pos + scLen;
+            if (nalStart >= len) break;
+
+            int nalType = buf[nalStart] & 0x1F;
+
+            bool isAuStart = nalType == 9  // AUD
+                          || nalType == 7  // SPS
+                          || nalType == 8; // PPS
+
+            bool isSlice = nalType >= 1 && nalType <= 5;
+
+            if (seenSlice && (isAuStart || isSlice))
+                return pos;
+
+            if (isSlice)
+                seenSlice = true;
+
+            pos = nalStart + 1;
+        }
+
+        return 0;
+    }
+
     private void ReaderLoop(CancellationToken ct)
     {
         var buf = ArrayPool<byte>.Shared.Rent(2 * 1024 * 1024);
@@ -467,17 +512,19 @@ public sealed class FfmpegEncoder : IEncoder
                 _rawLen = need;
 
                 // Step 2: Detect format once, then latch.
-                // The -bsf:v h264_mp4toannexb in ffmpeg args should always
-                // produce AnnexB, but some versions of ffmpeg still output
-                // native AVCC for occasional frames. We handle both.
-                if (_pipeFormat == PipeFormat.Unknown && _rawLen >= 64)
+                // Without -bsf:v, NVENC produces AVCC (4-byte length prefix).
+                // libx264 produces AnnexB (start-code delimited) with -f h264.
+                // We check position 0 ONLY — not anywhere in the buffer — because
+                // AVCC data can contain false 00 00 01 patterns as emulation
+                // prevention bytes within NALU payloads.
+                if (_pipeFormat == PipeFormat.Unknown && _rawLen >= 4)
                 {
-                    // Scan first 128 bytes (or less) for AnnexB start code
-                    int scanLen = Math.Min(_rawLen, 128);
-                    _pipeFormat = ScanForStartCode(_rawBuf, scanLen, out _)
-                        ? PipeFormat.AnnexB
-                        : PipeFormat.Avcc;
-                    Log.I("FfmpegEncoder", $"pipe format latched: {_pipeFormat} (codec={_codec})");
+                    if ((_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 1) ||
+                        (_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 0 && _rawBuf[3] == 1))
+                        _pipeFormat = PipeFormat.AnnexB;
+                    else
+                        _pipeFormat = PipeFormat.Avcc;
+                    Log.I("FfmpegEncoder", $"pipe format latched: {_pipeFormat} (codec={_codec}) rawHex={Convert.ToHexString(_rawBuf.AsSpan(0, Math.Min(_rawLen, 8)))}");
                 }
 
                 if (_pipeFormat == PipeFormat.Unknown)
@@ -488,14 +535,38 @@ public sealed class FfmpegEncoder : IEncoder
 
                 if (_pipeFormat == PipeFormat.AnnexB)
                 {
-                    // AnnexB path: convert to AVCC, parse, keep orphaned tail
-                    int avccLen = ConvertAnnexBToAvcc(_rawBuf, _rawLen, out int consumed);
-                    if (avccLen > 0)
-                        ParseAvcc(new ReadOnlySpan<byte>(_rawBuf, 0, avccLen));
-                    int orphaned = _rawLen - consumed;
-                    if (orphaned > 0)
-                        System.Buffer.BlockCopy(_rawBuf, consumed, _rawBuf, 0, orphaned);
-                    _rawLen = orphaned;
+                    // AnnexB path: accumulate until a complete Access Unit is found,
+                    // then convert only the complete AU. This avoids ConvertAnnexBToAvcc
+                    // receiving partial NALUs (the root cause of orphaned-tail corruption).
+                    int auEnd = FindAnnexBAccessUnitBoundary(_rawBuf, _rawLen, _hadRawSlice);
+
+                    if (auEnd > 0)
+                    {
+                        // Complete AU available in [0, auEnd)
+                        int avccLen = ConvertAnnexBToAvcc(_rawBuf, auEnd, out int consumed);
+                        if (avccLen > 0)
+                            ParseAvcc(new ReadOnlySpan<byte>(_rawBuf, 0, avccLen));
+
+                        // Preserve tail (start of next AU) for next iteration
+                        int tail = _rawLen - auEnd;
+                        if (tail > 0)
+                            System.Buffer.BlockCopy(_rawBuf, auEnd, _rawBuf, 0, tail);
+                        _rawLen = tail;
+                        _hadRawSlice = false; // reset for next AU
+                    }
+
+                    // Self-heal: if raw buffer overflows without finding an AU boundary,
+                    // the format latch is likely wrong. Reset to Unknown for re-detection.
+                    if (_rawLen > 2 * 1024 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"AnnexB raw overflow {_rawLen}B hadRawSlice={_hadRawSlice} — forcing format re-detect");
+                        _pipeFormat = PipeFormat.Unknown;
+                        _rawLen = 0;
+                        _hadRawSlice = false;
+                        int drained = 0;
+                        while (_inputPtsQueue.TryDequeue(out _)) drained++;
+                        Log.W("FfmpegEncoder", $"drained {drained} stale PTS entries");
+                    }
                 }
                 else
                 {
@@ -504,6 +575,20 @@ public sealed class FfmpegEncoder : IEncoder
                     // ParseAvcc handles incomplete tails via _pendingBuf.
                     ParseAvcc(new ReadOnlySpan<byte>(_rawBuf, 0, _rawLen));
                     _rawLen = 0;
+
+                    // Self-heal: if the format latch is wrong (AnnexB data parsed as AVCC),
+                    // pending accumulates without ever finding a slice. Reset format latch
+                    // to Unknown for re-detection on the next iteration.
+                    if (!_hadSlice && _pendingLen > 512 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"AVCC mismatch: pending={_pendingLen}B hadSlice={_hadSlice} — forcing format re-detect");
+                        _pipeFormat = PipeFormat.Unknown;
+                        _pendingLen = 0;
+                        _hadSlice = false;
+                        int drained = 0;
+                        while (_inputPtsQueue.TryDequeue(out _)) drained++;
+                        Log.W("FfmpegEncoder", $"drained {drained} stale PTS entries");
+                    }
                 }
             }
         }
@@ -536,6 +621,7 @@ public sealed class FfmpegEncoder : IEncoder
 
     private void ParseAvcc(ReadOnlySpan<byte> data)
     {
+        _pendingTooLarge = false;
         int pos = 0;
         int firstHex = data.Length >= 4 ? (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3] : -1;
         Log.D("FfmpegEncoder", $"ParseAvcc: dataLen={data.Length} first4Bytes=0x{firstHex:X8} pending={_pendingLen} hadSlice={_hadSlice}");
@@ -596,13 +682,36 @@ public sealed class FfmpegEncoder : IEncoder
 
                 // Frame boundary (fallback): new slice NALU while one is pending → emit
                 if (isSlice && _hadSlice)
-                    EmitPacket();
+                {
+                    if (_pendingLen > 200 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"ParseAvcc: slice trigger with {_pendingLen}B pending — likely format mismatch");
+                        _pendingTooLarge = true;
+                    }
+                    else
+                    {
+                        EmitPacket();
+                    }
+                }
 
                 // PPS emit trigger: when PPS arrives after we already have slice data,
                 // it signals a new access unit. Handles streams where AUD is absent.
                 int ppsNalType = IsHevc ? 34 : 8;
                 if (nalType == ppsNalType && _hadSlice)
-                    EmitPacket();
+                {
+                    // Safety guard: if pending > 200KB before first emit in this ParseAvcc,
+                    // the accumulated data likely contains multiple frames (format mismatch).
+                    // Skip the emit to avoid emitting 50 frames as one packet.
+                    if (_pendingLen > 200 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"ParseAvcc: PPS trigger with {_pendingLen}B pending — likely format mismatch, skipping emit");
+                        _pendingTooLarge = true;
+                    }
+                    else
+                    {
+                        EmitPacket();
+                    }
+                }
 
                 AppendPending(data.Slice(pos, totalSize));
                 if (isSlice) _hadSlice = true;
@@ -610,6 +719,11 @@ public sealed class FfmpegEncoder : IEncoder
 
             pos += totalSize;
         }
+
+        // Force-emit any accumulated frame at end of buffer to prevent
+        // stale accumulation (safety net when AUD/slice-boundary not seen)
+        if (_hadSlice && !_pendingTooLarge)
+            EmitPacket();
     }
 
     private void AppendPending(ReadOnlySpan<byte> chunk)
@@ -664,24 +778,22 @@ public sealed class FfmpegEncoder : IEncoder
         System.Buffer.BlockCopy(_pendingBuf, 0, data, 0, _pendingLen);
 
         long dur = 10_000_000L / _frameRate;
-        // Use real PTS from input queue (pipeline clock). When queue is drained
-        // (e.g., after ffmpeg restart), extrapolate from last known real PTS to
-        // prevent non-monotonic timestamps that would corrupt the Matroska writer.
-        bool gotRealPts = _inputPtsQueue.TryDequeue(out var realPts);
-        long pts;
-        if (gotRealPts)
+        // Drain all stale PTS entries keeping only the most recent.
+        // When frames accumulate in _pendingBuf without emitting (e.g., due to
+        // AVCC/AnnexB format confusion), one EmitPacket may cover multiple
+        // EncodeFrame calls — draining stale entries keeps the PTS clock in sync.
+        long pts = _outputFrameIndex * dur;
+        int ptsDrained = 0;
+        while (_inputPtsQueue.TryDequeue(out var realPts))
         {
             pts = realPts.Ticks;
             _lastRealPtsTicks = pts;
+            ptsDrained++;
         }
-        else if (_lastRealPtsTicks >= 0)
+        if (ptsDrained == 0 && _lastRealPtsTicks >= 0)
         {
             pts = _lastRealPtsTicks + dur;
             _lastRealPtsTicks = pts;
-        }
-        else
-        {
-            pts = _outputFrameIndex * dur;
         }
         bool key = CheckKeyFrame(data);
 
@@ -878,6 +990,8 @@ public sealed class FfmpegEncoder : IEncoder
         _frameCount = 0;
         _outputFrameIndex = 0;
         _hadSlice = false;
+        _hadRawSlice = false;
+        _pendingTooLarge = false;
         _pipeFormat = PipeFormat.Unknown;
         if (_pendingBuf != null)
         {
