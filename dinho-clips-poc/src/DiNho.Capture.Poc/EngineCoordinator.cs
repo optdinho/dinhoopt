@@ -124,9 +124,16 @@ public sealed partial class EngineCoordinator : IDisposable
     private bool _restartPending;
     private readonly object _restartLock = new();
 
+    // DriftMonitor — acompanha continuamente a diferença entre PTS de vídeo e áudio
+    // durante a captura, emitindo warning quando o drift acumulado excede limites perceptuais.
+    private const int DRIFT_WARN_THRESHOLD_MS = 150; // ITU-R BT.1359 detectável: 125ms áudio atrasado, 45ms liderando
+
     // True quando o áudio caiu para loopback completo (WasapiLoopbackSource)
     // porque o per-process loopback (ActivateAudioInterfaceAsync) foi bloqueado por anti-cheat
     private bool _audioFallback;
+
+    // High-res timer via timeBeginPeriod (ativado em StartAsync, desativado em StopAsync)
+    private bool _highResTimerEnabled;
 
     // Dimensões reais da captura (usadas no encoder e export)
     private int _captureWidth;
@@ -190,6 +197,13 @@ public sealed partial class EngineCoordinator : IDisposable
     {
         Log.I("EngineCoordinator", "Iniciando...");
 
+        // timeBeginPeriod(1) garante resolução de 1ms no scheduler,
+        // reduzindo glitches de áudio e melhorando precisão de timestamps QPC
+        var result = timeBeginPeriod(1);
+        _highResTimerEnabled = result == 0;
+        if (!_highResTimerEnabled)
+            Log.W("EngineCoordinator", $"timeBeginPeriod(1) failed: {result}");
+
         // Load game database from games.json (falls back to hardcoded if not found)
         GameDetection.GameDatabase.Instance.Load();
         var gameCount = GameDetection.GameDatabase.Instance.GameCount;
@@ -241,6 +255,11 @@ public sealed partial class EngineCoordinator : IDisposable
         _gameDetector.Stop();
         _wgcPump?.Dispose();
         _wgcPump = null;
+        if (_highResTimerEnabled)
+        {
+            timeEndPeriod(1);
+            _highResTimerEnabled = false;
+        }
         if (_mfStarted)
         {
             MediaFactory.MFShutdown();
@@ -952,22 +971,20 @@ public sealed partial class EngineCoordinator : IDisposable
             {
                 var remaining = new List<EncodedPacket>();
                 _aacEncoder.FlushAndDrain(remaining);
+                int flushIdx = 0;
                 foreach (var pkt in remaining)
                 {
-                    var pts = ComputeAacPts();
+                    var pts = _lastAudioAnchor + TimeSpan.FromSeconds((double)flushIdx * 1024.0 / _audioSampleRate);
+                    flushIdx++;
                     var corrected = new EncodedPacket(pkt.Data, pkt.Type, pts, pkt.Duration, pkt.IsKeyFrame);
                     _buffer.AddAudio(corrected);
-                    _aacFramesProduced++;
                 }
                 _aacEncoder.Dispose();
                 _aacEncoder = null;
             }
 
-            // Reseta contadores de PTS/AAC entre sessões de captura
-            _aacFramesProduced = 0;
+            // Reseta contadores entre sessões de captura
             _audioPacketCount = 0;
-            _hasFirstPcmPts = false;
-            _firstPcmPts = TimeSpan.Zero;
             _audioSampleRate = 48000;
 
             _capture?.Dispose();
@@ -992,6 +1009,10 @@ public sealed partial class EngineCoordinator : IDisposable
 
     private async Task PipelineLoop(CancellationToken ct)
     {
+        // AvSetMmThreadCharacteristics prioriza esta thread no scheduler
+        // como thread de captura multimídia, reduzindo latência e glitches
+        SetMmThreadPriority();
+
         var frameIntervalUs = 1_000_000L / _config.Config.Fps;
         var frameDuration = TimeSpan.FromSeconds(1.0 / _config.Config.Fps);
         var frameDurationHns = frameDuration.Ticks;
@@ -1007,6 +1028,9 @@ public sealed partial class EngineCoordinator : IDisposable
             var enc = _encoder;
 
             var beforeCapture = Stopwatch.GetTimestamp();
+            // Captura o PTS da câmera ANTES de TryCaptureFrame — reflete o momento
+            // real da captura, não o momento após latência de encoding (NVENC/AMF)
+            var capturePts = TimeSpan.FromSeconds((double)(beforeCapture - _clock.StartTimestamp) / Stopwatch.Frequency);
             try
             {
                 int captureTimeout = Math.Max(1, Math.Min(100, 1000 / _config.Config.Fps));
@@ -1042,7 +1066,7 @@ public sealed partial class EngineCoordinator : IDisposable
                         }
                         _bgDropCount = 0;
                         _starvationStart = default;
-                        var encoded = enc.EncodeFrame(frame.Texture, _clock.Now);
+                        var encoded = enc.EncodeFrame(frame.Texture, capturePts);
                         if (encoded != null)
                         {
                             _buffer.AddVideo(encoded);
@@ -1149,6 +1173,21 @@ public sealed partial class EngineCoordinator : IDisposable
                     double audioMb = d.audioBytes / (1024.0 * 1024.0);
                     double totalMb = videoMb + audioMb;
                     Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s");
+                }
+
+                // DriftMonitor: a cada ~300 frames (~5s a 60fps), verifica se o PTS de
+                // vídeo e áudio estão divergindo. Loga warning se drift > 150ms (ITU-R perceptível).
+                if (diagFrames % 300 == 0)
+                {
+                    var (vPts, aPts) = _buffer.StatsPtsRange();
+                    if (vPts > TimeSpan.Zero && aPts > TimeSpan.Zero)
+                    {
+                        var driftMs = (aPts - vPts).TotalMilliseconds;
+                        if (Math.Abs(driftMs) > DRIFT_WARN_THRESHOLD_MS)
+                            Log.W("DriftMonitor", $"A/V PTS drift: audio={aPts.TotalSeconds:F2}s video={vPts.TotalSeconds:F2}s drift={driftMs:F0}ms (threshold={DRIFT_WARN_THRESHOLD_MS}ms)");
+                        else if (diagFrames % 600 == 0)
+                            Log.D("DriftMonitor", $"A/V PTS drift OK: drift={driftMs:F0}ms video={vPts.TotalSeconds:F2}s audio={aPts.TotalSeconds:F2}s");
+                    }
                 }
             }
             catch (Exception ex)
@@ -1277,17 +1316,8 @@ public sealed partial class EngineCoordinator : IDisposable
     }
 
     private int _audioPacketCount;
-    private int _aacFramesProduced;
     private int _audioSampleRate = 48000;
-    private TimeSpan _firstPcmPts = TimeSpan.Zero;
-    private bool _hasFirstPcmPts;
-
-    private TimeSpan ComputeAacPts()
-    {
-        if (!_hasFirstPcmPts)
-            return TimeSpan.Zero;
-        return _firstPcmPts + TimeSpan.FromSeconds((double)_aacFramesProduced * 1024.0 / _audioSampleRate);
-    }
+    private TimeSpan _lastAudioAnchor = TimeSpan.Zero;
 
     private void OnAudioPacket(EncodedPacket packet)
     {
@@ -1295,31 +1325,35 @@ public sealed partial class EngineCoordinator : IDisposable
 
         _audioPacketCount++;
 
-        // Anchora o primeiro PTS real do mixer (baseado em _clock.Now)
-        if (!_hasFirstPcmPts)
-        {
-            _firstPcmPts = packet.Pts;
-            _hasFirstPcmPts = true;
-            Log.I("AudioDiag", $"AAC PTS anchor: firstPcmPts={_firstPcmPts.TotalSeconds:F4}s");
-        }
-
         if (_audioPacketCount <= 5 || _audioPacketCount % 100 == 0)
-            Log.I("AudioDiag", $"packet #{_audioPacketCount} ts={packet.Pts.TotalSeconds:F2} anchor={_firstPcmPts.TotalSeconds:F2}");
+            Log.D("AudioDiag", $"packet #{_audioPacketCount} pts={packet.Pts.TotalSeconds:F3}s clock={_clock.Now.TotalSeconds:F3}s anchor={_lastAudioAnchor.TotalSeconds:F3}s");
 
+        // Envia PCM ao encoder ANTES de drenar AAC — o encoder precisa de dados
+        // para produzir frames. A drenagem usa _lastAudioAnchor (PTS do batch PCM
+        // que gerou estes AAC frames), que é atualizado SÓ DEPOIS do drain.
         if (packet.PcmSamples != null)
             _aacEncoder?.EncodeAudio(packet.PcmSamples);
+
+        // Drena AAC frames usando _lastAudioAnchor (PTS do PCM que os produziu)
+        // — NÃO packet.Pts (que pode ser de um batch MAIS NOVO se o encoder
+        // estiver acumulando backlog). Isso limita o erro de PTS a ~20ms.
         int aacCount = 0;
         while (_aacEncoder?.TryReadPacket() is { } aacPkt)
         {
             aacCount++;
-            // PTS monotônico: âncora + frames AAC emitidos * duração por frame
-            var pts = ComputeAacPts();
+            var pts = _lastAudioAnchor + TimeSpan.FromSeconds((double)(aacCount - 1) * 1024.0 / _audioSampleRate);
             var corrected = new EncodedPacket(aacPkt.Data, aacPkt.Type, pts, aacPkt.Duration, aacPkt.IsKeyFrame);
             _buffer.AddAudio(corrected);
-            _aacFramesProduced++;
         }
+
+        // Avança o anchor SÓ DEPOIS do drain, usando o PTS do batch atual.
+        // Antes o anchor era atualizado ANTES do drain, fazendo AAC frames
+        // receberem PTS de batches MAIS NOVOS que os produziram.
+        if (packet.Pts > _lastAudioAnchor || _lastAudioAnchor == TimeSpan.Zero)
+            _lastAudioAnchor = packet.Pts;
+
         if ((_audioPacketCount <= 5 || _audioPacketCount % 100 == 0) && aacCount > 0)
-            Log.I("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced={aacCount}");
+            Log.D("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced={aacCount}");
     }
 
     private List<(int Pid, string Name)> ResolveAudioPids(Dictionary<int, string> selectedPids)
@@ -2029,6 +2063,23 @@ public sealed partial class EngineCoordinator : IDisposable
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    private static extern uint timeBeginPeriod(uint uPeriod);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    private static extern uint timeEndPeriod(uint uPeriod);
+
+    [DllImport("avrt.dll", SetLastError = true)]
+    private static extern IntPtr AvSetMmThreadCharacteristicsW([MarshalAs(UnmanagedType.LPWStr)] string taskName, out uint taskIndex);
+
+    private static void SetMmThreadPriority()
+    {
+        uint index = 0;
+        var ret = AvSetMmThreadCharacteristicsW("Capture", out index);
+        if (ret == IntPtr.Zero)
+            Log.D("EngineCoordinator", $"AvSetMmThreadCharacteristics('Capture') failed: {Marshal.GetLastWin32Error()}");
+    }
 
     /// <summary>
     /// Thread STA dedicada com message pump para WGC.

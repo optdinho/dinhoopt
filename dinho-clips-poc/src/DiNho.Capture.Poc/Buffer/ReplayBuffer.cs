@@ -15,6 +15,8 @@ public sealed class ReplayBuffer : IDisposable
     private int _audioCount;
     private TimeSpan _maxDuration;
     private long _maxBytes;
+    private long _maxVideoBytes;
+    private long _maxAudioBytes;
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
     private TimeSpan _totalVideoDuration;
     private TimeSpan _totalAudioDuration;
@@ -25,8 +27,26 @@ public sealed class ReplayBuffer : IDisposable
     {
         _maxDuration = maxDuration;
         _maxBytes = maxBytes;
+        RecalculateProportionalBudgets();
         _videoPackets = new EncodedPacket[4096];
         _audioPackets = new EncodedPacket[1024];
+    }
+
+    private void RecalculateProportionalBudgets()
+    {
+        // Video tipicamente consome ~90% do budget (frames H.264 grandes),
+        // áudio ~10% (AAC compacto). Budgets separados evitam que um stream
+        // trime excessivamente o outro, garantindo janelas de tempo balanceadas.
+        if (_maxBytes <= 0)
+        {
+            _maxVideoBytes = _maxAudioBytes = 0;
+            return;
+        }
+        // Proporção 90/10 com base na observação empírica de que AAC a 192kbps
+        // é ~5% do bitrate total (NVENC ~15-40 Mbps + AAC 0.192 Mbps).
+        // 10% dá folga para áudio sem comprometer vídeo.
+        _maxVideoBytes = (long)(_maxBytes * 0.9);
+        _maxAudioBytes = _maxBytes - _maxVideoBytes;
     }
 
     public TimeSpan MaxDuration
@@ -56,7 +76,12 @@ public sealed class ReplayBuffer : IDisposable
         set
         {
             _lock.EnterWriteLock();
-            try { _maxBytes = value; TrimExcess(); }
+            try
+            {
+                _maxBytes = value;
+                RecalculateProportionalBudgets();
+                TrimExcess();
+            }
             finally { _lock.ExitWriteLock(); }
         }
     }
@@ -111,7 +136,7 @@ public sealed class ReplayBuffer : IDisposable
 
     private void TrimExcessVideo()
     {
-        while (_videoCount > 0 && (_totalVideoDuration > _maxDuration || (_maxBytes > 0 && _totalVideoBytes > _maxBytes)))
+        while (_videoCount > 0 && (_totalVideoDuration > _maxDuration || (_maxVideoBytes > 0 && _totalVideoBytes > _maxVideoBytes)))
         {
             var oldest = _videoPackets[_videoHead]!;
             _videoPackets[_videoHead] = null;
@@ -125,7 +150,7 @@ public sealed class ReplayBuffer : IDisposable
 
     private void TrimExcessAudio()
     {
-        while (_audioCount > 0 && (_totalAudioDuration > _maxDuration || (_maxBytes > 0 && _totalAudioBytes > _maxBytes)))
+        while (_audioCount > 0 && (_totalAudioDuration > _maxDuration || (_maxAudioBytes > 0 && _totalAudioBytes > _maxAudioBytes)))
         {
             var oldest = _audioPackets[_audioHead]!;
             _audioPackets[_audioHead] = null;
@@ -236,6 +261,22 @@ public sealed class ReplayBuffer : IDisposable
             var maxDuration = _totalVideoDuration > _totalAudioDuration
                 ? _totalVideoDuration : _totalAudioDuration;
             return (_videoCount, _audioCount, maxDuration, _totalVideoBytes + _totalAudioBytes);
+        }
+        finally { _lock.ExitReadLock(); }
+    }
+
+    public (TimeSpan videoLastPts, TimeSpan audioLastPts) StatsPtsRange()
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            var vLast = _videoCount > 0
+                ? _videoPackets[(_videoHead + _videoCount - 1) % _videoPackets.Length]!.Pts
+                : TimeSpan.Zero;
+            var aLast = _audioCount > 0
+                ? _audioPackets[(_audioHead + _audioCount - 1) % _audioPackets.Length]!.Pts
+                : TimeSpan.Zero;
+            return (vLast, aLast);
         }
         finally { _lock.ExitReadLock(); }
     }

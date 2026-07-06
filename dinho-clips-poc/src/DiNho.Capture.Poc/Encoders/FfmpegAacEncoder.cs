@@ -1,5 +1,6 @@
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Channels;
 
 namespace DiNho.Capture.Poc.Encoders;
@@ -10,9 +11,9 @@ public sealed class FfmpegAacEncoder : IDisposable
     private Stream? _stdin;
     private Stream? _stdout;
     private readonly Channel<EncodedPacket> _outputChannel =
-        Channel.CreateBounded<EncodedPacket>(new BoundedChannelOptions(256)
+        Channel.CreateBounded<EncodedPacket>(new BoundedChannelOptions(4096)
         {
-            FullMode = BoundedChannelFullMode.DropOldest
+            FullMode = BoundedChannelFullMode.DropWrite
         });
 
     private int _sampleRate;
@@ -25,6 +26,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private long _pcmBytesWritten;
     private int _pcmWriteErrors;
     private int _totalAacFrames;
+    private int _droppedFrameCount;
     private volatile bool _flushing;
 
     public void Initialize(int sampleRate, int channels, int bitrate = 128000)
@@ -94,6 +96,9 @@ public sealed class FfmpegAacEncoder : IDisposable
         if (_pcmBuf.Length > byteLen * 4 && _pcmBuf.Length > 65536)
             Array.Resize(ref _pcmBuf, Math.Max(byteLen, 65536));
     }
+
+    public int TotalAacFrames => _totalAacFrames;
+    public int DroppedFrameCount => _droppedFrameCount;
 
     public EncodedPacket? TryReadPacket()
     {
@@ -172,10 +177,14 @@ public sealed class FfmpegAacEncoder : IDisposable
                 long dur = 1024L * 10_000_000 / _sampleRate;
                 long pts = _outputFrameIndex * dur;
 
-                _outputChannel.Writer.TryWrite(new EncodedPacket(
-                    data, MediaType.Audio,
-                    TimeSpan.FromTicks(pts), TimeSpan.FromTicks(dur),
-                    false));
+                if (!_outputChannel.Writer.TryWrite(new EncodedPacket(
+                        data, MediaType.Audio,
+                        TimeSpan.FromTicks(pts), TimeSpan.FromTicks(dur),
+                        false)))
+                {
+                    Interlocked.Increment(ref _droppedFrameCount);
+                    Log.W("FfmpegAacEncoder", $"AAC frame dropped (channel full at {_outputFrameIndex}) — totalDrops={_droppedFrameCount}");
+                }
 
                 _outputFrameIndex++;
                 framesInChunk++;
@@ -184,7 +193,7 @@ public sealed class FfmpegAacEncoder : IDisposable
 
             totalFrames += framesInChunk;
             _totalAacFrames = totalFrames;
-            if (totalReads <= 3 || framesInChunk > 0)
+            if (framesInChunk > 0 && totalFrames % 1000 == 0)
                 Log.D("FfmpegAacEncoder", $"ReaderLoop: read={read} bytes framesInChunk={framesInChunk} totalFrames={totalFrames}");
 
             offset = total - pos;

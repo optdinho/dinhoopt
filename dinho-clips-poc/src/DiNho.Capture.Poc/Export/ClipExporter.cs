@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Audio;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Globalization;
@@ -75,21 +76,15 @@ public sealed class ClipExporter : IDisposable
                     var aLast = audioPackets[^1].Pts;
                     Log.D("PTS", $"Pre-sync — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({videoPackets.Count} frames)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({audioPackets.Count} packets)");
 
-                    // Truncate trailing frozen video frames (stale WGC frames after alt-tab)
-                    int freezeCut = FindTrailingFrozenFrames(videoPackets, TimeSpan.FromSeconds(1), frameRate);
-                    int beforeFreezeCut = videoPackets.Count;
-                    if (freezeCut > 0)
-                    {
-                        var freezeStartPts = videoPackets[freezeCut].Pts;
-                        videoPackets = videoPackets.GetRange(0, freezeCut);
-                        Log.I("PTS", $"Truncated {freezeCut}/{beforeFreezeCut} trailing frozen frames at {freezeStartPts.TotalSeconds:F3}s");
-                    }
-
                     int origAudioCount = audioPackets.Count;
                     var intervals = GetVideoIntervals(videoPackets, TimeSpan.FromMilliseconds(50));
                     audioPackets = FilterAudioByIntervals(audioPackets, intervals);
                     gapsRemoved = origAudioCount - audioPackets.Count;
                     // Note: gapsRemoved is number of audio packets removed = original - filtered.
+
+                    int startTrimmed = audioPackets.Count;
+                    audioPackets = TrimAudioStart(audioPackets, videoPackets[0].Pts);
+                    int startTrimCount = startTrimmed - audioPackets.Count;
 
                     activeDurationSec = ComputeIntervalsDuration(intervals);
                     trueVidDuration = videoPackets.Count >= 2
@@ -102,8 +97,47 @@ public sealed class ClipExporter : IDisposable
                     var lastVideoPts = videoPackets[^1].Pts + videoPackets[^1].Duration;
                     audioPackets = TrimAudioEnd(audioPackets, lastVideoPts);
 
-                    // Fill the init delay gap (audio starts after video) by padding silence from video[0].Pts
-                    audioPackets = PadAudioWithSilence(audioPackets, 48000, videoPackets[0].Pts);
+                    // Sync start: só trima vídeo se offset >2s (AAC vs NVENC speed);
+                    // offsets 30ms-2s com áudio após vídeo: não faz nada (áudio começa
+                    // naturalmente, vídeo sem áudio por ~300ms é menos perceptível que
+                    // silêncio artificial — ITU-R BT.1359: humano tolera áudio atrasado
+                    // até 125ms como "detectável", 185ms como "aceitável").
+                    // Offsets com áudio antes do vídeo: PadAudioWithSilence (silêncio
+                    // no início do áudio para alinhar).
+                    if (audioPackets.Count > 0 && videoPackets.Count > 0)
+                    {
+                        var offsetMs = (audioPackets[0].Pts - videoPackets[0].Pts).TotalMilliseconds;
+                        if (offsetMs > 2000)
+                        {
+                            var target = audioPackets[0].Pts;
+                            int trimIdx = videoPackets.FindIndex(p => p.Pts + p.Duration > target);
+                            if (trimIdx > 0)
+                            {
+                                int lastKey = videoPackets.FindLastIndex(trimIdx, p => p.IsKeyFrame);
+                                if (lastKey >= 0 && lastKey < trimIdx)
+                                {
+                                    Log.I("PTS", $"TrimVideoStart: rolling back from {trimIdx} to {lastKey} (keyframe at {videoPackets[lastKey].Pts.TotalSeconds:F3}s)");
+                                    trimIdx = lastKey;
+                                }
+                                Log.I("PTS", $"TrimVideoStart: {trimIdx}/{videoPackets.Count} frames ({videoPackets[0].Pts.TotalSeconds:F3}s → {videoPackets[trimIdx].Pts.TotalSeconds:F3}s) because audio starts at {target.TotalSeconds:F3}s");
+                                videoPackets = videoPackets.GetRange(trimIdx, videoPackets.Count - trimIdx);
+                            }
+                        }
+                        else if (offsetMs < -30)
+                        {
+                            // Áudio começa ANTES do vídeo — adiciona silêncio no início
+                            // do áudio para alinhar. Offset negativo = áudio adiantado.
+                            Log.I("PTS", $"PadAudioWithSilence: audio starts {-offsetMs:F0}ms before video — padding silence");
+                            audioPackets = PadAudioWithSilence(audioPackets, 48000, videoPackets[0].Pts);
+                        }
+                        else if (offsetMs > 30 && offsetMs <= 2000)
+                        {
+                            // Áudio começa DEPOIS do vídeo com offset pequeno — não faz nada.
+                            // O vídeo toca sem áudio por alguns ms, que é menos perceptível
+                            // que silêncio artificial no início do clipe.
+                            Log.D("PTS", $"NoSyncNeeded: audio starts {offsetMs:F0}ms after video — letting audio start naturally");
+                        }
+                    }
 
                     if (audioPackets.Count > 0)
                     {
@@ -116,9 +150,33 @@ public sealed class ClipExporter : IDisposable
 
                     var expectedDuration = (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds;
                     var durDiff = expectedDuration - activeDurationSec;
-                    Log.I("PTS", $"Post-sync — expectedDuration={expectedDuration:F2}s activeDuration={activeDurationSec:F2}s diff={durDiff:F3}s gapsRemoved={gapsRemoved} audioFrames={audioPackets.Count}");
+                    Log.I("PTS", $"Post-sync — expectedDuration={expectedDuration:F2}s activeDuration={activeDurationSec:F2}s diff={durDiff:F3}s gapsRemoved={gapsRemoved} audioFrames={audioPackets.Count} startTrimmed={startTrimCount}");
 
-                    Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved}");
+                    Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved} startTrimmed={startTrimCount}");
+                }
+
+                // Frame-by-frame PTS drift diagnostic
+                if (videoPackets.Count > 0 && audioPackets.Count > 0)
+                {
+                    var driftLog = new System.Text.StringBuilder();
+                    driftLog.Append("PTS-DRIFT | ");
+                    var vidStart = videoPackets[0].Pts;
+                    var audStart = audioPackets[0].Pts;
+                    var step = Math.Max(1, videoPackets.Count / 20);
+                    for (int i = 0; i < videoPackets.Count; i += step)
+                    {
+                        var vp = videoPackets[i];
+                        var nearestAudio = audioPackets
+                            .Select(a => new { Pkt = a, Delta = (a.Pts - vp.Pts).Duration() })
+                            .OrderBy(a => a.Delta)
+                            .FirstOrDefault();
+                        var drift = nearestAudio != null
+                            ? (nearestAudio.Pkt.Pts - vp.Pts).TotalMilliseconds
+                            : 0;
+                        if (i > 0) driftLog.Append(", ");
+                        driftLog.Append($"@{((vp.Pts - vidStart).TotalSeconds):F1}s vPTS={vp.Pts.TotalMilliseconds:F0} aPTS={nearestAudio?.Pkt.Pts.TotalMilliseconds:F0} drift={drift:F1}ms");
+                    }
+                    Log.I("SYNC", driftLog.ToString());
                 }
 
                 WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback);
@@ -277,6 +335,22 @@ public sealed class ClipExporter : IDisposable
         return total;
     }
 
+    internal static List<EncodedPacket> TrimAudioStart(List<EncodedPacket> audioPackets, TimeSpan firstVideoPts)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+
+        int skip = 0;
+        for (int i = 0; i < audioPackets.Count; i++)
+        {
+            if (audioPackets[i].Pts + audioPackets[i].Duration < firstVideoPts)
+                skip = i + 1;
+            else
+                break;
+        }
+
+        return skip > 0 ? audioPackets.GetRange(skip, audioPackets.Count - skip) : audioPackets;
+    }
+
     internal static List<EncodedPacket> TrimAudioEnd(List<EncodedPacket> audioPackets, TimeSpan lastVideoPts)
     {
         if (audioPackets.Count == 0) return audioPackets;
@@ -304,7 +378,15 @@ public sealed class ClipExporter : IDisposable
             var gap = videoPackets[i].Pts - (videoPackets[i - 1].Pts + videoPackets[i - 1].Duration);
             if (gap >= minFreezeDuration)
             {
-                Log.I("PTS", $"FindTrailingFrozenFrames: gap at frame #{i} of {gap.TotalSeconds:F3}s — truncating {(videoPackets.Count - i)} trailing frames");
+                int trailingFrames = videoPackets.Count - i;
+                // Sanity check: if more than 50% of frames would be discarded,
+                // it's probably a circular buffer boundary, not a real alt-tab freeze.
+                if (trailingFrames > videoPackets.Count / 2)
+                {
+                    Log.W("PTS", $"FindTrailingFrozenFrames: gap at frame #{i} of {gap.TotalSeconds:F3}s but {trailingFrames}/{videoPackets.Count} frames would be discarded — assuming buffer boundary, keeping all frames");
+                    return videoPackets.Count;
+                }
+                Log.I("PTS", $"FindTrailingFrozenFrames: gap at frame #{i} of {gap.TotalSeconds:F3}s — truncating {trailingFrames} trailing frames");
                 return i;
             }
         }
@@ -884,7 +966,7 @@ public sealed class ClipExporter : IDisposable
                         var sDst = (short*)dst;
                         for (int i = 0; i < pcmSamples.Length; i++)
                         {
-                            float f = Math.Clamp(src[i], -1f, 1f);
+                            float f = AudioMixer.SoftClip(src[i]);
                             sDst[i] = (short)(f * 32767f);
                         }
                     }
@@ -907,7 +989,7 @@ public sealed class ClipExporter : IDisposable
                         var sDst = (short*)dst;
                         for (int i = 0; i < len; i++)
                         {
-                            float f = Math.Clamp(fSrc[i], -1f, 1f);
+                            float f = AudioMixer.SoftClip(fSrc[i]);
                             sDst[i] = (short)(f * 32767f);
                         }
                     }
