@@ -1960,4 +1960,103 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ### Relevant Files Changed
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `GetSegments()` per-stream PTS reference
-- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: SYNC-MEASURE diagnostic log`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: SYNC-MEASURE diagnostic log
+
+## Session Summary (2026-06-30)
+
+### Done
+
+- **Análise de logs ao vivo**: Usuário compartilhou logs do engine mostrando sessão de captura saudável — NVENC 57fps, AAC encoder sem erros, ReplayBuffer 300s/~840MB. `hadSlice=False` nos logs de `ParseAvcc` é comportamento esperado (log mostra valor na entrada, resetado pelo `EmitPacket` entre frames). Nada anormal identificado.
+
+## Session Summary (2026-06-30b)
+
+### Done
+
+- **"10s de delay" root cause identificada e corrigida**: Áudio usa pipeline AAC (~11s) mais rápido que NVENC (~20s). Isso cria um offset de 9-10s onde os valores de PTS do áudio no buffer são mais "frescos" que os do vídeo. Ao salvar um clipe, `PadAudioWithSilence` inseria 9s de silêncio no início → usuário ouvia "10 segundos de delay".
+
+- **Fix em `ClipExporter.cs`**: Substituído `PadAudioWithSilence` por `TrimVideoStart` — quando áudio começa depois do vídeo (devido à diferença de latência dos pipelines), trima os frames de vídeo anteriores ao início do áudio em vez de adicionar silêncio. O clipe fica ligeiramente mais curto (ex: 111s em vez de 120s) mas perfeitamente sincronizado sem silêncio no início.
+
+- **220/220 C# tests** — 0 quebras
+- **Engine**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: TrimVideoStart substitui PadAudioWithSilence quando áudio começa depois do vídeo (linhas 99-111)
+
+### Next Steps
+
+- Usuário deve reiniciar o engine (fechar e abrir o app) para o novo build entrar em vigor
+- Testar clipe de 120s: verificar se não há silêncio no início e se A/V sync está correto
+
+## Session Summary (2026-06-30c — Video freeze fix: Non-monotonic DTS do drain da PTS queue)
+
+### Done
+
+- **SoftClip fix was in wrong code path**: `StreamPcmAsS16Le` (PCM→S16LE) had `Math.Clamp` replaced with `SoftClip`, but export uses `-c:a copy` (AAC passthrough) — function is never called. Had zero effect on freeze symptom.
+
+- **Root cause do video freeze identificada**: ffmpeg muxer reporta 8 "Non-monotonic DTS" warnings — frames com timestamps duplicados no MKV. O player trava momentaneamente ao encontrar DTS não monótono.
+
+- **Bug em `EmitPacket` (FfmpegEncoder.cs:786-803)**: O loop `while (_inputPtsQueue.TryDequeue(...))` drenava TODAS as entradas PTS da fila e mantinha só a ÚLTIMA. Quando N frames acumulavam no encoder (NVENC a 0.85x speed), todos N pacotes emitidos recebiam o MESMO PTS (ou extrapolação a partir dele), causando timestamps duplicados no Matroska.
+
+- **Fix**: Mudado de drain-all-keep-last para `TryDequeue` de UM PTS por `EmitPacket`. Durante catch-up, cada frame recebe um PTS real único da fila. Quando a fila está vazia, extrapolação mantém monotonicidade. Comentário adicionado explicando o bug anterior.
+
+- **220/220 C# tests** — 0 quebras
+- **Engine**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: EmitPacket PTS drain — one-at-a-time instead of drain-all-keep-last
+
+### Next Steps
+- Usuário testa clipe: verificar se o "travada" quando áudio forte começa foi resolvido (Non-monotonic DTS causa do freeze)
+
+## Session Summary (2026-06-30 — TrimVideoStart fix: threshold 30ms→2s)
+
+### Done
+
+- **Root cause do freeze de 303ms identificada**: `TrimVideoStart` cortava frames de vídeo anteriores ao início do áudio mesmo quando o offset era pequeno (303ms). O player MP4 congelava o primeiro frame enquanto esperava dados de áudio chegarem. O fix anterior (per-stream PTS reference) reduziu o offset de ~9s para ~300ms, mas `TrimVideoStart` ainda disparava com threshold de 30ms.
+
+- **Fix**: Threshold do `TrimVideoStart` subiu de **30ms para 2s**:
+  - Offsets > 2s (AAC vs NVENC speed): `TrimVideoStart` com rollback ao último keyframe (preservado)
+  - Offsets < 2s: `PadAudioWithSilence(videoPackets[0].Pts)` — insere frames AAC silenciosos no início do áudio para alinhar com o vídeo
+  - Offsets < 30ms em qualquer direção: ignorado (imperceptível)
+
+- **220/220 C# tests** — 0 quebras
+- **62/62 ClipExporter tests** — 0 quebras
+- **Engine**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 288 files staged
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: linhas 98-126 — threshold 2s, PadAudioWithSilence para offsets <2s
+
+## Session Summary (2026-07-05)
+
+### Done
+
+- **Auditoria completa do sistema de clips A/V sync**: Pipeline mapeado do WGC capture → NVENC → ReplayBuffer → Matroska → MP4. Identificadas 5 causas de desincronia:
+  1. `_lastAudioAnchor` avançava ANTES do drain AAC (EngineCoordinator.cs:1309-1310)
+  2. AAC channel `DropOldest` criava gaps permanentes (FfmpegAacEncoder.cs:177-181)
+  3. PTS drift só era diagnosticado no export (pós-hoc)
+  4. `PadAudioWithSilence` para offsets <2s inseria silêncio perceptível
+  5. Budget de bytes único fazia vídeo e áudio competirem por espaço
+
+- **5 correções implementadas e validadas**:
+  - **A**: `_lastAudioAnchor` avança SÓ DEPOIS do drain AAC — erro de PTS limitado a ~20ms
+  - **B**: `DropOldest` → `DropWrite` + `DroppedFrameCount` exposto — frames novos são dropados em vez de criar gaps no buffer
+  - **C**: `DriftMonitor` contínuo no PipelineLoop — compara PTS vídeo/áudio a cada ~5s, warning se >150ms (ITU-R BT.1359)
+  - **D**: Offsets 30ms-2s com áudio após vídeo: não faz nada (sem silêncio); áudio antes vídeo: `PadAudioWithSilence` mantido
+  - **E**: Budgets proporcionais 90/10 video/audio no ReplayBuffer — `_maxVideoBytes`/`_maxAudioBytes` calculados de `_maxBytes`
+
+- **Pesquisa externa (7 tópicos)**: NVENC speed <1.0x é a principal causa de desync em game capture; per-stream PTS reference é a mitigação padrão da indústria; ITU-R BT.1359 define limites perceptuais (áudio após vídeo ≤125ms detectável, ≤185ms aceitável)
+
+- **220/220 C# tests** — 0 quebras
+- **224/224 TS tests** (clips IPC + config-manager + config-store + engine-connection) — 0 quebras
+- **Engine**: `dotnet build` 0 erros
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: anchor advancement moved after AAC drain, DriftMonitor added
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegAacEncoder.cs`: DropOldest→DropWrite, DroppedFrameCount counter
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: proportional 90/10 budgets, StatsPtsRange() method
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: directional sync (no silence for audio-after-video offsets <2s)
+
+### Commit
+- `6a71b2e` — `fix: 5 correções de sincronia A/V no pipeline de clips`
