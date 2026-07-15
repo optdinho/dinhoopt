@@ -8,73 +8,114 @@ namespace DiNho.Capture.Poc.Audio;
 
 public enum AudioStreamKind { Game, Mic, Mixed }
 
+/// <summary>
+/// Mistura áudio de jogo (loopback) com microfone opcional com noise suppression.
+/// Emite pacotes PCM float32 via OnMixedAudio para o encoder AAC.
+///
+/// Fluxo:
+///   [CppLoopbackSource | WasapiLoopbackSource] → OnLoopbackData → _loopbackQueue
+///   [WasapiMicSource] → OnMicData → RnnoiseFilter (opcional) → _micQueue
+///   TryMix: drena _loopbackQueue, mistura com mic proporcional, emite EncodedPacket
+/// </summary>
 public sealed class AudioMixer : IDisposable
 {
+    // Fontes
     private readonly IAudioSource _loopbackSource;
     private readonly IAudioSource _micSource;
     private readonly MasterClock _clock;
-    private readonly Queue<(AudioBuffer Buffer, TimeSpan Timestamp)> _loopbackQueue = new();
-    private readonly Queue<(AudioBuffer Buffer, TimeSpan Timestamp)> _micQueue = new();
+
+    // Filas internas — protegidas por _lock
+    private readonly Queue<(AudioBuffer Buffer, TimeSpan Pts)> _loopbackQueue = new();
+    private readonly Queue<(float[] Samples, int Offset, int Length, TimeSpan Pts)> _micQueue = new();
     private readonly object _lock = new();
-    private bool _micEnabled;
+
+    // Configuração (thread-safe via propriedades)
+    private volatile bool _micEnabled;
     private int _sampleRate = 48000;
     private int _channels = 2;
     private RnnoiseFilter? _noiseFilter;
+    private MaxineAfxFilter? _maxineFilter;
     private float _gameGain = 1.0f;
     private float _micGain = 1.0f;
 
-    /// <summary>
-    /// Game audio volume multiplier (0.0 – 2.0). Default 1.0.
-    /// </summary>
-    public float GameGain { get => _gameGain; set => _gameGain = Math.Clamp(value, 0f, 2f); }
+    // Log throttle — separados por contexto
+    private long _lastEmitLogTick;
+    private long _lastSyncLogTick;
+    private int _emittedPackets;
+    private static readonly long LogThrottleTicks = Stopwatch.Frequency / 2; // 500ms
 
-    /// <summary>
-    /// Microphone volume multiplier aplicado sobre o boost fixo de 2x (0.0 – 2.0). Default 1.0.
-    /// Ex: 0.5 → 1x, 1.0 → 2x, 2.0 → 4x.
-    /// </summary>
-    public float MicGain { get => _micGain; set => _micGain = Math.Clamp(value, 0f, 4f); }
+    // Capacidades das filas
+    private const int MaxLoopbackQueue = 512;  // ~5s a 48kHz/960frames
+    private const int MaxMicQueue = 256;        // ~2.5s
 
-    public event Action<EncodedPacket>? OnMixedAudio;
-    public event Action<float>? OnMicLevel;
-
+    // Propriedades públicas
+    public float GameGain
+    {
+        get => _gameGain;
+        set => _gameGain = Math.Clamp(value, 0f, 4f);
+    }
+    public float MicGain
+    {
+        get => _micGain;
+        set => _micGain = Math.Clamp(value, 0f, 4f);
+    }
     public bool MicEnabled
     {
         get => _micEnabled;
         set
         {
-            if (value == _micEnabled) return;
+            if (_micEnabled == value) return;
             _micEnabled = value;
             lock (_lock)
             {
                 _micQueue.Clear();
-                _loopbackQueue.Clear();
+                if (!value) _loopbackQueue.Clear(); // descarta acúmulo ao desativar
             }
-            Log.I("AudioMixer", $"Mic {(value ? "ativado" : "desativado")}, filas limpas");
+            Log.I("AudioMixer", $"Mic {(value ? "ativado" : "desativado")}");
         }
     }
     public bool NoiseSuppressionEnabled
     {
-        get => _noiseFilter?.Active == true;
+        get => _noiseFilter?.Active == true || _maxineFilter?.Active == true;
         set
         {
-            if (value == (_noiseFilter?.Active == true)) return;
+            if (value == (_noiseFilter?.Active == true || _maxineFilter?.Active == true)) return;
+            
+            // Dispose existing filters
+            _noiseFilter?.Dispose();
+            _maxineFilter?.Dispose();
+            _noiseFilter = null;
+            _maxineFilter = null;
+            
             if (value)
             {
-                _noiseFilter?.Dispose();
-                _noiseFilter = new RnnoiseFilter(_sampleRate > 0 ? _sampleRate : 48000, _channels > 0 ? _channels : 2);
-                Log.I("AudioMixer", "NoiseSuppression ON");
+                // Try Maxine AFX first (RTX GPU), fallback to RNNoise
+                var maxineFilter = new MaxineAfxFilter(_sampleRate, _channels);
+                if (maxineFilter.IsMaxineAvailable)
+                {
+                    _maxineFilter = maxineFilter;
+                    Log.I("AudioMixer", $"NoiseSuppression ON (Maxine AFX)");
+                }
+                else
+                {
+                    // Maxine not available, dispose and use RNNoise
+                    maxineFilter.Dispose();
+                    _noiseFilter = new RnnoiseFilter(_sampleRate, _channels);
+                    Log.I("AudioMixer", $"NoiseSuppression ON (RNNoise fallback)");
+                }
             }
             else
             {
-                _noiseFilter?.Dispose();
-                _noiseFilter = null;
-                Log.I("AudioMixer", "NoiseSuppression OFF");
+                Log.I("AudioMixer", $"NoiseSuppression OFF");
             }
         }
     }
-
     public int SampleRate => _sampleRate;
     public int Channels => _channels;
+
+    // Eventos
+    public event Action<EncodedPacket>? OnMixedAudio;
+    public event Action<float>? OnMicLevel;
 
     public AudioMixer(IAudioSource loopbackSource, IAudioSource micSource, MasterClock clock)
     {
@@ -92,14 +133,16 @@ public sealed class AudioMixer : IDisposable
         _micSource.Start();
         _sampleRate = _loopbackSource.SampleRate;
         _channels = _loopbackSource.Channels;
-        Log.I("AudioMixer", $"Started: SR={_sampleRate} Ch={_channels} loopback={_loopbackSource.GetType().Name} mic={_micSource.GetType().Name}");
+        Log.I("AudioMixer",
+            $"Iniciado: SR={_sampleRate} Ch={_channels} " +
+            $"loopback={_loopbackSource.GetType().Name} " +
+            $"mic={_micSource.GetType().Name}");
     }
 
     public void Stop()
     {
         _loopbackSource.Stop();
         _micSource.Stop();
-
         lock (_lock)
         {
             _loopbackQueue.Clear();
@@ -107,160 +150,188 @@ public sealed class AudioMixer : IDisposable
         }
     }
 
-    private const int MaxLoopbackQueue = 1024;
-    private const int MaxMicQueue = 256;
-
     private void OnLoopbackData(AudioBuffer buf)
     {
+        // Usa o timestamp do buffer (capturado na fonte) quando disponível.
+        // Fallback para _clock.Now apenas para CppLoopbackSource (sem timestamp nativo).
+        var pts = buf.CaptureTimestamp ?? _clock.Now;
+
         lock (_lock)
         {
             if (_loopbackQueue.Count >= MaxLoopbackQueue)
-                _loopbackQueue.Dequeue();
-            _loopbackQueue.Enqueue((buf, _clock.Now));
+                _loopbackQueue.Dequeue(); // descarta o mais antigo
+            _loopbackQueue.Enqueue((buf, pts));
         }
         TryMix();
     }
 
     private void OnMicData(AudioBuffer buf)
     {
+        // Nível do mic — sempre, independente de estar habilitado (para VU meter no UI)
+        float peak = 0f;
+        foreach (var s in buf.Samples)
+        {
+            var abs = MathF.Abs(s);
+            if (abs > peak) peak = abs;
+        }
+        OnMicLevel?.Invoke(peak);
+
         if (!_micEnabled) return;
 
-        AudioBuffer filtered = buf;
-        if (_noiseFilter?.Active == true)
-        {
-            var denoised = _noiseFilter.Process(buf.Samples);
-            filtered = new AudioBuffer(denoised, buf.SampleRate, buf.Channels);
-        }
+        // Aplica noise suppression se ativo (Maxine AFX ou RNNoise)
+        float[] samples;
+        if (_maxineFilter?.Active == true)
+            samples = _maxineFilter.Process(buf.Samples);
+        else if (_noiseFilter?.Active == true)
+            samples = _noiseFilter.Process(buf.Samples);
+        else
+            samples = buf.Samples;
+
+        var pts = buf.CaptureTimestamp ?? _clock.Now;
 
         lock (_lock)
         {
             if (_micQueue.Count >= MaxMicQueue)
                 _micQueue.Dequeue();
-            _micQueue.Enqueue((filtered, _clock.Now));
+            _micQueue.Enqueue((samples, 0, samples.Length, pts));
         }
         TryMix();
-
-        float peak = 0f;
-        for (int i = 0; i < buf.Samples.Length; i++)
-        {
-            var abs = Math.Abs(buf.Samples[i]);
-            if (abs > peak) peak = abs;
-        }
-        OnMicLevel?.Invoke(peak);
     }
 
     private void TryMix()
     {
-        (AudioBuffer Buffer, TimeSpan Timestamp) loopbackItem;
-        float[]? micSamples = null;
-        int micSamplesConsumed = 0;
+        (AudioBuffer Buffer, TimeSpan Pts) loopback;
+        float[]? micOut = null;
 
         lock (_lock)
         {
             if (_loopbackQueue.Count == 0) return;
-            loopbackItem = _loopbackQueue.Dequeue();
+            loopback = _loopbackQueue.Dequeue();
 
-            if (_micEnabled && _micQueue.Count > 0)
+            if (_micEnabled)
             {
-                int loopbackSamples = loopbackItem.Buffer.Samples.Length;
-                micSamples = ArrayPool<float>.Shared.Rent(loopbackSamples);
-                try
-                {
-                    int filled = 0;
-                    TimeSpan? firstMicTs = null;
-                    TimeSpan? lastMicTs = null;
-                    int micPackets = 0;
+                int needed = loopback.Buffer.Samples.Length;
+                micOut = ArrayPool<float>.Shared.Rent(needed);
+                int filled = 0;
 
-                    while (filled < loopbackSamples && _micQueue.Count > 0)
+                while (filled < needed && _micQueue.Count > 0)
+                {
+                    var (samples, offset, length, pts) = _micQueue.Peek();
+                    int take = Math.Min(length - offset, needed - filled);
+
+                    // Upmix mono mic para stereo loopback se necessário
+                    if (_channels == 2 && loopback.Buffer.Channels == 2)
                     {
-                        var (buf, ts) = _micQueue.Peek();
-                        firstMicTs ??= ts;
-                        lastMicTs = ts;
-                        micPackets++;
-                        int take = Math.Min(buf.Samples.Length, loopbackSamples - filled);
-                        Array.Copy(buf.Samples, 0, micSamples, filled, take);
-                        filled += take;
-                        if (take >= buf.Samples.Length)
-                            _micQueue.Dequeue();
-                        else
+                        for (int i = 0; i < take; i++)
                         {
-                            // consume parcial — re-enfileira o restante
-                            var remaining = new float[buf.Samples.Length - take];
-                            Array.Copy(buf.Samples, take, remaining, 0, remaining.Length);
-                            _micQueue.Dequeue();
-                            _micQueue.Enqueue((new AudioBuffer(remaining, buf.SampleRate, buf.Channels), ts + TimeSpan.FromSeconds((double)take / buf.SampleRate)));
+                            if (filled + 1 >= needed) break;
+                            float s = samples[offset + i];
+                            micOut[filled++] = s;
+                            micOut[filled++] = s;
                         }
                     }
-                    micSamplesConsumed = filled;
-                    // preenche o resto com zero se não houver mic suficiente
-                    if (filled < loopbackSamples)
-                        Array.Clear(micSamples, filled, loopbackSamples - filled);
-
-                    var drift = (lastMicTs ?? loopbackItem.Timestamp) - loopbackItem.Timestamp;
-                    var n = Stopwatch.GetTimestamp();
-                    if (n - _lastLogTicks >= LogThrottleTicks)
+                    else
                     {
-                        _lastLogTicks = n;
-                        Log.D("Sync", $"loopbackTs={loopbackItem.Timestamp.TotalSeconds:F3} firstMicTs={firstMicTs?.TotalSeconds:F3} lastMicTs={lastMicTs?.TotalSeconds:F3} driftMs={drift.TotalMilliseconds:F1} micPackets={micPackets} consumed={micSamplesConsumed}/{loopbackSamples}");
+                        Array.Copy(samples, offset, micOut, filled, take);
+                        filled += take;
+                    }
+
+                    int newOffset = offset + take;
+                    _micQueue.Dequeue();
+                    if (newOffset < length)
+                    {
+                        // Reinsere o restante sem alocar novo array
+                        _micQueue.Enqueue((samples, newOffset, length, pts));
                     }
                 }
-                catch
+
+                // Silêncio para o restante se mic não tiver amostras suficientes
+                if (filled < needed)
+                    Array.Clear(micOut, filled, needed - filled);
+
+                // Log de drift A/V do mic (throttled)
+                var now = Stopwatch.GetTimestamp();
+                if (now - _lastSyncLogTick >= LogThrottleTicks)
                 {
-                    ArrayPool<float>.Shared.Return(micSamples);
-                    throw;
+                    _lastSyncLogTick = now;
+                    if (_micQueue.Count > 0)
+                    {
+                        var (_, _, _, micPts) = _micQueue.Peek();
+                        var drift = (micPts - loopback.Pts).TotalMilliseconds;
+                        Log.D("AudioMixer",
+                            $"MicDrift={drift:+0.0;-0.0}ms loopbackQ={_loopbackQueue.Count} micQ={_micQueue.Count}");
+                    }
                 }
             }
         }
 
-        if (micSamples != null)
+        float[] outSamples;
+        if (micOut != null)
         {
             try
             {
-                var mixed = Mix(loopbackItem.Buffer.Samples, loopbackItem.Buffer.Channels, micSamples, _gameGain, _micGain);
-                var n = Stopwatch.GetTimestamp();
-                if (n - _lastLogTicks >= LogThrottleTicks)
-                {
-                    _lastLogTicks = n;
-                    Log.D("AudioMixer", $"Mic mixed: loopbackLen={loopbackItem.Buffer.Samples.Length} micConsumed={micSamplesConsumed}");
-                }
-                EmitPacket(mixed, loopbackItem.Timestamp, AudioStreamKind.Mixed);
+                outSamples = MixSamples(loopback.Buffer.Samples, micOut,
+                    loopback.Buffer.Samples.Length, _gameGain, _micGain);
             }
             finally
             {
-                ArrayPool<float>.Shared.Return(micSamples);
+                ArrayPool<float>.Shared.Return(micOut);
             }
         }
         else
         {
-            if (_micEnabled)
-                Log.W("AudioMixer", $"Mic enabled but queue empty (loopback={_loopbackQueue.Count} mic={_micQueue.Count})");
-            EmitPacket(loopbackItem.Buffer.Samples, loopbackItem.Timestamp, AudioStreamKind.Game);
+            // Só jogo — aplicar gain sem alocar novo array quando gain == 1.0
+            outSamples = _gameGain == 1.0f
+                ? loopback.Buffer.Samples
+                : ApplyGain(loopback.Buffer.Samples, _gameGain);
         }
+
+        EmitPacket(outSamples, loopback.Pts,
+            micOut != null ? AudioStreamKind.Mixed : AudioStreamKind.Game);
     }
 
-    internal static float[] Mix(
-        float[] loopbackSamples, int loopbackChannels,
-        float[] micSamples,
-        float gameGain = 1.0f, float micGain = 1.0f)
+    /// <summary>
+    /// Mistura loopback + mic com ganhos independentes.
+    /// Usa SoftClip (x / (1 + |x|)) — função C¹ contínua sem aliasing.
+    /// HardClip (Math.Clamp) introduz harmônicos ímpares que o AAC encoder
+    /// não remove e soa agressivo em repetições.
+    /// </summary>
+    /// <summary>
+    /// Wrapper preservado para compatibilidade com testes existentes.
+    /// Converte mic per-frame para upmix stereo e delega a MixSamples.
+    /// </summary>
+    internal static float[] Mix(float[] loopbackSamples, int loopbackChannels,
+                                 float[] micSamples, float gameGain = 1.0f, float micGain = 1.0f)
     {
-        var result = new float[loopbackSamples.Length];
-        int micTotal = micSamples.Length;
-        int loopbackFrames = loopbackSamples.Length / loopbackChannels;
-
-        for (int i = 0; i < loopbackSamples.Length; i++)
+        int frames = loopbackSamples.Length / loopbackChannels;
+        var upmixed = new float[loopbackSamples.Length];
+        for (int i = 0; i < upmixed.Length; i++)
         {
             int frame = i / loopbackChannels;
-            float micVal = 0f;
-            if (frame < micTotal)
-                micVal = micSamples[frame] * micGain;
-            float sample = loopbackSamples[i] * gameGain + micVal;
-            if (float.IsNaN(sample))
-            {
-                sample = 0f;
-            }
-            result[i] = SoftClip(sample);
+            upmixed[i] = frame < micSamples.Length ? micSamples[frame] : 0f;
         }
+        return MixSamples(loopbackSamples, upmixed, loopbackSamples.Length, gameGain, micGain);
+    }
 
+    internal static float[] MixSamples(float[] game, float[] mic, int length,
+                                        float gameGain, float micGain)
+    {
+        var result = new float[length];
+        for (int i = 0; i < length; i++)
+        {
+            float g = i < game.Length ? game[i] : 0f;
+            float m = i < mic.Length ? mic[i] : 0f;
+            float mixed = g * gameGain + m * micGain;
+            result[i] = float.IsNaN(mixed) ? 0f : SoftClip(mixed);
+        }
+        return result;
+    }
+
+    private static float[] ApplyGain(float[] samples, float gain)
+    {
+        var result = new float[samples.Length];
+        for (int i = 0; i < samples.Length; i++)
+            result[i] = SoftClip(samples[i] * gain);
         return result;
     }
 
@@ -269,20 +340,20 @@ public sealed class AudioMixer : IDisposable
         return x / (1f + Math.Abs(x));
     }
 
-    private int _emittedPackets;
-    private long _lastLogTicks;
-    private const long LogThrottleTicks = 5_000_000; // 500ms
-    private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind, bool isPooled = false)
+    private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind)
     {
         _emittedPackets++;
         var duration = TimeSpan.FromSeconds((double)samples.Length / (_sampleRate * _channels));
-        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration, isPooled);
+        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration, isPooled: false);
 
         var now = Stopwatch.GetTimestamp();
-        if (_emittedPackets <= 3 || now - _lastLogTicks >= LogThrottleTicks)
+        if (_emittedPackets <= 5 || now - _lastEmitLogTick >= LogThrottleTicks)
         {
-            _lastLogTicks = now;
-            Log.D("AudioMixer", $"EmitPacket #{_emittedPackets} kind={kind} samples={samples.Length} dur={duration.TotalSeconds:F4}s isPooled={isPooled}");
+            _lastEmitLogTick = now;
+            Log.D("AudioMixer",
+                $"EmitPacket #{_emittedPackets} kind={kind} " +
+                $"samples={samples.Length} dur={duration.TotalSeconds:F4}s " +
+                $"pts={pts.TotalSeconds:F3}s");
         }
 
         OnMixedAudio?.Invoke(packet);
@@ -293,11 +364,11 @@ public sealed class AudioMixer : IDisposable
         Stop();
         _loopbackSource.OnAudioData -= OnLoopbackData;
         _micSource.OnAudioData -= OnMicData;
-        if (_loopbackSource is IDisposable loopbackDisposable)
-            loopbackDisposable.Dispose();
-        if (_micSource is IDisposable micDisposable)
-            micDisposable.Dispose();
+        (_loopbackSource as IDisposable)?.Dispose();
+        (_micSource as IDisposable)?.Dispose();
         _noiseFilter?.Dispose();
         _noiseFilter = null;
+        _maxineFilter?.Dispose();
+        _maxineFilter = null;
     }
 }

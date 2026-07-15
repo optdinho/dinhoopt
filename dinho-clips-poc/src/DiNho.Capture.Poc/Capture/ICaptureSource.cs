@@ -13,10 +13,11 @@ public sealed class CapturedFrame : IDisposable
     public bool Success { get; }
     public ID3D11Texture2D? Texture { get; }
     public ID3D11Device? Device { get; }
+    public bool OwnsTexture { get; }
 
     public CapturedFrame(long startTicks, long endTicks, int width, int height, bool success,
         ID3D11Texture2D? texture = null, ID3D11Device? device = null,
-        long waitEndTicks = 0, long copyEndTicks = 0)
+        long waitEndTicks = 0, long copyEndTicks = 0, bool ownsTexture = true)
     {
         CaptureStartTicks = startTicks;
         CaptureEndTicks = endTicks;
@@ -27,11 +28,12 @@ public sealed class CapturedFrame : IDisposable
         Success = success;
         Texture = texture;
         Device = device;
+        OwnsTexture = ownsTexture;
     }
 
     public void Dispose()
     {
-        Texture?.Dispose();
+        if (OwnsTexture) Texture?.Dispose();
     }
 }
 

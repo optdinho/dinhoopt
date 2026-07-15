@@ -33,9 +33,7 @@ public sealed class WgcCaptureSource : ICaptureSource
     private readonly AutoResetEvent _frameSignal = new(false);
     private volatile bool _disposed;
     private bool _hasReceivedFrame;
-    private ID3D11Texture2D? _copyTexture;
-    private int _copyTexW, _copyTexH;
-    private Format _copyTexFormat;
+    private TexturePool? _texturePool;
 
     public void Initialize(ID3D11Device? sharedDevice = null) =>
         Initialize(sharedDevice, IntPtr.Zero, IntPtr.Zero);
@@ -140,13 +138,25 @@ public sealed class WgcCaptureSource : ICaptureSource
             _captureItem = item;
         }
 
-        _framePool = Direct3D11CaptureFramePool.Create(
+        // HDR detection — choose optimal pixel format
+        var pixelFormat = DirectXPixelFormat.B8G8R8A8UIntNormalized;
+        if (HdrHelper.IsHdrActive())
+        {
+            Log.I("WGC", "HDR detectado no monitor — usando BGRA8 (DWM tone-maps automaticamente)");
+        }
+
+        _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _winrtDevice,
-            DirectXPixelFormat.B8G8R8A8UIntNormalized,
+            pixelFormat,
             numberOfBuffers: 4,
             _captureItem.Size);
 
         _session = _framePool.CreateCaptureSession(_captureItem);
+
+        // Win11 24H2+ session settings — fail silently on older Windows
+        ConfigureSession3();
+
+        _texturePool = new TexturePool(_device, poolSize: 3);
 
         // NOTA: FrameArrived NÃO é registrado aqui — precisa ser na pump thread.
         // StartCapture() também não é chamado aqui — será via StartFramePump().
@@ -154,8 +164,8 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     /// <summary>
     /// Registra o FrameArrived event handler e inicia a captura.
-    /// Deve ser chamado na pump thread (STA com message pump) para que
-    /// o DWM consiga entregar frames via o Windows message loop.
+    /// CreateFreeThreaded() permite chamar de qualquer thread —
+    /// FrameArrived dispara em worker thread interno do WinRT.
     /// </summary>
     public void StartFramePump()
     {
@@ -292,25 +302,24 @@ public sealed class WgcCaptureSource : ICaptureSource
                 }
 
                 var desc = sourceTexture.Description;
+
+                // WGC per-window pode retornar ContentSize != textura D3D (bug conhecido).
+                // A textura D3D é o dado real — confiar nela para dimensões do encoder.
                 if (desc.Width != size.Width || desc.Height != size.Height)
                 {
-                    Log.W("WGC", $"DIM MISMATCH: tex={desc.Width}x{desc.Height} fmt={desc.Format} vs content={size.Width}x{size.Height} — frame pulado");
-                    return new CapturedFrame(startTicks, endTicks, 0, 0, success: false, waitEndTicks: waitEndTicks);
+                    Log.D("WGC", $"DIM MISMATCH: tex={desc.Width}x{desc.Height} fmt={desc.Format} vs content={size.Width}x{size.Height} — usando textura");
                 }
 
-                EnsureCopyTexture(desc.Width, desc.Height, desc.Format);
-                var ctx = _device.ImmediateContext;
-                ctx.CopyResource(_copyTexture, sourceTexture);
-                ctx.Flush();
+                var frameW = desc.Width;
+                var frameH = desc.Height;
 
-                // Clone the shared texture so CapturedFrame.Dispose() doesn't destroy _copyTexture
-                var frameDesc = _copyTexture.Description;
-                var frameTexture = _device.CreateTexture2D(frameDesc);
-                ctx.CopyResource(frameTexture, _copyTexture);
+                var poolTex = _texturePool!.Rent((int)frameW, (int)frameH, desc.Format);
+                var ctx = _device.ImmediateContext;
+                ctx.CopyResource(poolTex, sourceTexture);
 
                 var copyEndTicks = Stopwatch.GetTimestamp();
-                return new CapturedFrame(startTicks, copyEndTicks, size.Width, size.Height, success: true, frameTexture, _device,
-                    waitEndTicks, copyEndTicks);
+                return new CapturedFrame(startTicks, copyEndTicks, (int)frameW, (int)frameH, success: true, poolTex, _device,
+                    waitEndTicks, copyEndTicks, ownsTexture: false);
             }
             finally
             {
@@ -324,26 +333,52 @@ public sealed class WgcCaptureSource : ICaptureSource
         }
     }
 
-    private void EnsureCopyTexture(int width, int height, Format format)
+    public bool CheckDeviceLost() => _device?.DeviceRemovedReason is { Failure: true };
+
+    /// <summary>
+    /// Win11+ — configurações avançadas da sessão WGC.
+    /// IsBorderRequired=false: remove indicador amarelo de captura (IGraphicsCaptureSession3, Win11 21H2+).
+    /// IsCursorCaptureEnabled=false: evita overhead de software cursor (IGraphicsCaptureSession2, Win10 1903+).
+    /// </summary>
+    private void ConfigureSession3()
     {
-        if (_copyTexture != null && _copyTexW == width && _copyTexH == height && _copyTexFormat == format)
-            return;
-        _copyTexture?.Dispose();
-        _copyTexture = _device!.CreateTexture2D(new Texture2DDescription
+        if (_session is null) return;
+
+        var sessionPtr = Marshal.GetIUnknownForObject(_session);
+        try
         {
-            Width = width,
-            Height = height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = format,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.None,
-            CPUAccessFlags = CpuAccessFlags.None,
-        });
-        _copyTexW = width;
-        _copyTexH = height;
-        _copyTexFormat = format;
+            // IGraphicsCaptureSession2 — IsCursorCaptureEnabled
+            var iid2 = typeof(IGraphicsCaptureSession2).GUID;
+            if (Marshal.QueryInterface(sessionPtr, ref iid2, out var ptr2) == 0 && ptr2 != IntPtr.Zero)
+            {
+                try
+                {
+                    var session2 = (IGraphicsCaptureSession2)Marshal.GetObjectForIUnknown(ptr2);
+                    session2.IsCursorCaptureEnabled = false;
+                    Log.I("WGC", "Session2: cursor capture disabled");
+                }
+                catch { }
+                finally { Marshal.Release(ptr2); }
+            }
+
+            // IGraphicsCaptureSession3 — IsBorderRequired
+            var iid3 = typeof(IGraphicsCaptureSession3).GUID;
+            if (Marshal.QueryInterface(sessionPtr, ref iid3, out var ptr3) == 0 && ptr3 != IntPtr.Zero)
+            {
+                try
+                {
+                    var session3 = (IGraphicsCaptureSession3)Marshal.GetObjectForIUnknown(ptr3);
+                    session3.IsBorderRequired = false;
+                    Log.I("WGC", "Session3: border indicator disabled");
+                }
+                catch { }
+                finally { Marshal.Release(ptr3); }
+            }
+        }
+        finally
+        {
+            Marshal.Release(sessionPtr);
+        }
     }
 
     public void Dispose()
@@ -357,7 +392,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             _framePool.Dispose();
         }
         _latestFrame?.Dispose();
-        _copyTexture?.Dispose();
+        _texturePool?.Dispose();
         _winrtDevice?.Dispose();
         if (_ownsDevice) _device?.Dispose();
     }
@@ -369,4 +404,28 @@ public sealed class WgcCaptureSource : ICaptureSource
 internal interface IDirect3DDxgiInterfaceAccess
 {
     int GetInterface(ref Guid iid, out IntPtr device);
+}
+
+/// <summary>
+/// WinRT IGraphicsCaptureSession3 — Win11 21H2+.
+/// Provides IsBorderRequired (removes yellow capture border indicator).
+/// </summary>
+[ComImport]
+[Guid("f2cdd966-22ae-5ea1-9596-3a289344c3be")]
+[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+internal interface IGraphicsCaptureSession3
+{
+    bool IsBorderRequired { get; set; }
+}
+
+/// <summary>
+/// WinRT IGraphicsCaptureSession2 — Win10 1903+.
+/// Provides IsCursorCaptureEnabled (software cursor causes DWM composition overhead).
+/// </summary>
+[ComImport]
+[Guid("2c39ae40-7d2e-5044-804e-8b6799d4cf9e")]
+[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+internal interface IGraphicsCaptureSession2
+{
+    bool IsCursorCaptureEnabled { get; set; }
 }

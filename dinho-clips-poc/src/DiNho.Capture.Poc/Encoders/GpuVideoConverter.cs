@@ -32,11 +32,11 @@ internal sealed class GpuVideoConverter : IDisposable
         {
             InputFrameFormat = VideoFrameFormat.Progressive,
             InputFrameRate = new Rational(60, 1),
-            InputWidth = width,
-            InputHeight = height,
+            InputWidth = (uint)width,
+            InputHeight = (uint)height,
             OutputFrameRate = new Rational(60, 1),
-            OutputWidth = width,
-            OutputHeight = height,
+            OutputWidth = (uint)width,
+            OutputHeight = (uint)height,
             Usage = VideoUsage.PlaybackNormal
         };
 
@@ -45,8 +45,8 @@ internal sealed class GpuVideoConverter : IDisposable
 
         var nv12Desc = new Texture2DDescription
         {
-            Width = _width,
-            Height = _height,
+            Width = (uint)_width,
+            Height = (uint)_height,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.NV12,
@@ -95,12 +95,19 @@ internal sealed class GpuVideoConverter : IDisposable
             InputSurface = _cachedInputView
         };
 
-        _videoContext.VideoProcessorBlt(
-            _videoProcessor,
-            _cachedOutputView,
-            0,
-            1,
-            new[] { stream });
+        try
+        {
+            _videoContext.VideoProcessorBlt(
+                _videoProcessor,
+                _cachedOutputView,
+                0,
+                1,
+                new[] { stream });
+        }
+        catch (Exception) when (IsDeviceLost())
+        {
+            throw new DeviceLostException("VideoProcessorBlt failed — device removed");
+        }
 
         return _cachedOutput;
     }
@@ -119,5 +126,22 @@ internal sealed class GpuVideoConverter : IDisposable
         // shared D3D11 device. Disposing them releases the shared COM object
         // and crashes other subsystems using the same device (FfmpegEncoder,
         // WgcCaptureSource, etc.). We must NOT dispose or Release them here.
+    }
+
+    /// <summary>
+    /// Verifica se o dispositivo D3D11 foi removido (TDR, driver crash, sleep/wake).
+    /// Chamado no catch do VideoProcessorBlt para distinguir device lost de outros erros.
+    /// </summary>
+    private bool IsDeviceLost()
+    {
+        try
+        {
+            using var device = _videoDevice.QueryInterface<ID3D11Device>();
+            return device.DeviceRemovedReason is { Failure: true };
+        }
+        catch
+        {
+            return true; // Se não conseguiu obter o device, considerar lost
+        }
     }
 }

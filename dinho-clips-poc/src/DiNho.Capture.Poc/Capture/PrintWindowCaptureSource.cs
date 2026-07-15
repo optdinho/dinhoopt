@@ -145,7 +145,7 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
             try
             {
                 int srcRowPitch = _windowWidth * 4;
-                int dstRowPitch = mapped.RowPitch;
+                int dstRowPitch = (int)mapped.RowPitch;
 
                 // Copy row-by-row handling pitch differences
                 for (int y = 0; y < _windowHeight; y++)
@@ -292,8 +292,8 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
 
         var desc = new Texture2DDescription
         {
-            Width = width,
-            Height = height,
+            Width = (uint)width,
+            Height = (uint)height,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm,
@@ -307,8 +307,8 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
 
         var stagingDesc = new Texture2DDescription
         {
-            Width = width,
-            Height = height,
+            Width = (uint)width,
+            Height = (uint)height,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm,

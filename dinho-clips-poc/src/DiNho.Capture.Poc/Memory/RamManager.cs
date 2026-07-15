@@ -171,6 +171,14 @@ public sealed class RamManager : IDisposable
             _configuredBframes,
             _configuredLookahead);
 
+        // Override MaxBufferBytes based on actual bitrate × replay duration
+        // Fixed 512MB for Full profile is insufficient at higher bitrates
+        // (observed: 512MB holds only ~151s at 15.8 Mbps → TrimExcess evicts)
+        long neededBytes = (long)profile.MaxrateKbps * profile.ReplaySeconds * 1024L * 13L / 80L; // +30% headroom
+        long maxAllowed = Math.Min(neededBytes, int.MaxValue);
+        long budgetLimit = (long)budgetMb * 1024 * 1024 * 3 / 4; // at most 75% of safe budget
+        profile.MaxBufferBytes = (int)Math.Max(profile.MaxBufferBytes, Math.Min(maxAllowed, budgetLimit));
+
         _lastProfile = profile;
         _wasUnderPressure = level != RamProfileLevel.Full;
         var memMb = (int)(availableBytes / (1024L * 1024L));

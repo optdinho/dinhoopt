@@ -26,7 +26,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private long _pcmBytesWritten;
     private int _pcmWriteErrors;
     private int _totalAacFrames;
-    private int _droppedFrameCount;
+    private volatile int _droppedFrameCount;
     private volatile bool _flushing;
 
     public void Initialize(int sampleRate, int channels, int bitrate = 128000)
@@ -49,7 +49,7 @@ public sealed class FfmpegAacEncoder : IDisposable
             }
         };
         _process.Start();
-        try { _process.PriorityClass = ProcessPriorityClass.Normal; } catch { }
+        try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
 
         // Read stderr asynchronously to prevent pipe deadlock
         _process.BeginErrorReadLine();
@@ -144,7 +144,11 @@ public sealed class FfmpegAacEncoder : IDisposable
         {
             int read;
             try { read = _stdout!.Read(buf, offset, buf.Length - offset); }
-            catch { break; }
+            catch (Exception ex)
+            {
+                Log.E("FfmpegAacEncoder", $"ReaderLoop: stdout read failed: {ex.Message}");
+                break;
+            }
 
             if (read == 0)
             {

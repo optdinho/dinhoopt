@@ -1,4 +1,3 @@
-using DiNho.Capture.Poc.Audio;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Globalization;
@@ -125,10 +124,16 @@ public sealed class ClipExporter : IDisposable
                         }
                         else if (offsetMs < -30)
                         {
-                            // Áudio começa ANTES do vídeo — adiciona silêncio no início
-                            // do áudio para alinhar. Offset negativo = áudio adiantado.
-                            Log.I("PTS", $"PadAudioWithSilence: audio starts {-offsetMs:F0}ms before video — padding silence");
-                            audioPackets = PadAudioWithSilence(audioPackets, 48000, videoPackets[0].Pts);
+                            // Áudio começa ANTES do vídeo — não adiciona silêncio.
+                            // O mixer já iniciou antes do NVENC produzir o 1º frame;
+                            // silêncio artificial causaria delay incorreto.
+                            // Passar null para PadAudioWithSilence = sem âncora, sem padding.
+                            Log.D("PTS", $"NoSilenceNeeded: audio starts {-offsetMs:F0}ms before video — passing null anchor");
+                            var silenceAnchor = audioPackets.Count > 0
+                                && audioPackets[0].Pts < videoPackets[0].Pts
+                                ? (TimeSpan?)null
+                                : videoPackets[0].Pts;
+                            audioPackets = PadAudioWithSilence(audioPackets, 48000, 2, silenceAnchor);
                         }
                         else if (offsetMs > 30 && offsetMs <= 2000)
                         {
@@ -179,11 +184,28 @@ public sealed class ClipExporter : IDisposable
                     Log.I("SYNC", driftLog.ToString());
                 }
 
-                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback);
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback,
+                    audioPackets.Count > 0 ? audioPackets : null);
                 var mkvLen = new FileInfo(mkvTemp).Length;
-                Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) frames={videoPackets.Count}");
+                var audioCount = audioPackets?.Count(p => p.Type == MediaType.Audio) ?? 0;
+                Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) videoFrames={videoPackets.Count} audioPackets={audioCount}");
 
-                // Hex dump first 100 bytes of MKV for diagnostics
+#if DEBUG
+                // Copia MKV para o mesmo diretório do MP4 para diagnóstico
+                try
+                {
+                    var mkvDiag = Path.Combine(
+                        Path.GetDirectoryName(Path.GetFullPath(outputPath))!,
+                        Path.GetFileNameWithoutExtension(outputPath) + ".mkv");
+                    File.Copy(mkvTemp, mkvDiag, overwrite: true);
+                    Log.D("Exporter", $"MKV diagnostic: {mkvDiag} ({new FileInfo(mkvDiag).Length / 1024} KB)");
+                }
+                catch (Exception ex)
+                {
+                    Log.W("Exporter", $"Failed to save MKV diagnostic: {ex.Message}");
+                }
+
+                // Hex dump first 200 bytes of MKV for diagnostics
                 try
                 {
                     var mkvBytes = new byte[Math.Min((int)mkvLen, 200)];
@@ -192,13 +214,15 @@ public sealed class ClipExporter : IDisposable
                     var hex = new System.Text.StringBuilder();
                     for (int i = 0; i < mkvBytes.Length; i++)
                         hex.Append($"{mkvBytes[i]:X2} ");
-                    Log.I("Exporter", $"MKV hex ({mkvBytes.Length}B)={hex.ToString().Trim()}");
+                    Log.D("Exporter", $"MKV hex ({mkvBytes.Length}B)={hex.ToString().Trim()}");
                 }
                 catch { }
+#endif
 
                 Log.D("Exporter", $"nominalFps={frameRate} activeFps={activeFps:F1} activeDuration={activeDurationSec:F3}s totalDuration={trueVidDuration:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved} audioDurationSec={audioDurationSec:F3}s");
 
-                MuxWithFfmpegStreaming(outputPath, mkvTemp, audioPackets, rawFormat);
+                bool hasAudioTracks = audioPackets.Count > 0 && IsAdts(audioPackets[0]);
+                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat);
 
                 // Gera thumbnail (320x180 JPEG) a partir do MP4 final
                 try { GenerateThumbnail(outputPath); }
@@ -217,7 +241,74 @@ public sealed class ClipExporter : IDisposable
         }
     }
 
-    internal static List<EncodedPacket> GenerateSilentAacFrames(int count, TimeSpan startPts, int sampleRate)
+    /// <summary>
+    /// Hybrid MP4 export — streaming writer that avoids intermediate MKV file.
+    /// Faster and lower memory than ExportToMp4 for large clips.
+    /// </summary>
+    public string ExportToMp4Hybrid(
+        string outputPath,
+        List<EncodedPacket> videoPackets,
+        List<EncodedPacket> audioPackets,
+        int width,
+        int height,
+        int frameRate,
+        string rawFormat = "h264",
+        byte[]? avccFallback = null)
+    {
+        if (videoPackets.Count == 0)
+            throw new InvalidOperationException("No video packets to export");
+
+        if (!Monitor.TryEnter(_exportLock))
+            throw new InvalidOperationException("Export ja em andamento");
+
+        try
+        {
+            var outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
+            var drive = new DriveInfo(outputDir);
+            if (drive.AvailableFreeSpace < 100_000_000)
+                throw new InvalidOperationException(
+                    $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
+
+            // Process PTS sync (same as ExportToMp4)
+            if (videoPackets.Count > 0 && audioPackets.Count > 0)
+            {
+                var vFirst = videoPackets[0].Pts;
+                var aFirst = audioPackets[0].Pts;
+                var startOffset = (aFirst - vFirst).TotalMilliseconds;
+                Log.I("HYBRID", $"PTS offset: {startOffset:F1}ms");
+            }
+
+            // Use hybrid writer
+            using var writer = new HybridMp4Writer(outputPath, width, height, frameRate, rawFormat);
+
+            // Write video frames
+            foreach (var pkt in videoPackets)
+                writer.WriteVideoFrame(pkt);
+
+            // Write audio packets (if AAC)
+            if (audioPackets.Count > 0 && IsAdts(audioPackets[0]))
+            {
+                foreach (var pkt in audioPackets)
+                    writer.WriteAudioPacket(pkt);
+            }
+
+            writer.Finalize();
+
+            Log.I("HYBRID", $"Export complete: video={writer.VideoFramesWritten}, audio={writer.AudioPacketsWritten}");
+
+            // Generate thumbnail
+            try { GenerateThumbnail(outputPath); }
+            catch (Exception ex) { Log.W("Exporter", $"Thumbnail generation failed: {ex.Message}"); }
+
+            return outputPath;
+        }
+        finally
+        {
+            Monitor.Exit(_exportLock);
+        }
+    }
+
+    internal static List<EncodedPacket> GenerateSilentAacFrames(int count, TimeSpan startPts, int sampleRate, int channels = 2)
     {
         var frames = new List<EncodedPacket>(count);
         long durTicks = 1024L * 10_000_000 / sampleRate;
@@ -235,7 +326,7 @@ public sealed class ClipExporter : IDisposable
                 44100 => 4, 32000 => 5, 24000 => 6, 22050 => 7,
                 16000 => 8, 12000 => 9, 11025 => 10, 8000 => 11, _ => 3
             };
-            int chanConfig = 2;
+            int chanConfig = channels;
 
             int h1 = 0xFFF1; // syncword=0xFFF, ID=0(MPEG4), layer=0, protection_absent=1
             int h2 = (profile << 6) | (sampleRateIdx << 2) | (chanConfig >> 2);
@@ -394,7 +485,7 @@ public sealed class ClipExporter : IDisposable
         return videoPackets.Count;
     }
 
-    internal static List<EncodedPacket> PadAudioWithSilence(List<EncodedPacket> audioPackets, int sampleRate, TimeSpan? expectedStart = null)
+    internal static List<EncodedPacket> PadAudioWithSilence(List<EncodedPacket> audioPackets, int sampleRate, int channels = 2, TimeSpan? expectedStart = null)
     {
         if (audioPackets.Count == 0) return audioPackets;
 
@@ -412,7 +503,7 @@ public sealed class ClipExporter : IDisposable
             if (silentFrames > 0)
             {
                 Log.I("PTS", $"PadAudioWithSilence: inserting {silentFrames} silent frames at start for init delay gap of {gapSec:F3}s");
-                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedStart.Value, sampleRate));
+                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedStart.Value, sampleRate, channels));
                 expectedPts = expectedStart.Value + TimeSpan.FromTicks(durTicks * silentFrames);
             }
         }
@@ -424,7 +515,7 @@ public sealed class ClipExporter : IDisposable
             {
                 var gapSec = (pkt.Pts - expectedPts).TotalSeconds;
                 int silentFrames = (int)Math.Ceiling(gapSec * sampleRate / 1024.0);
-                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedPts, sampleRate));
+                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedPts, sampleRate, channels));
             }
             result.Add(pkt);
             expectedPts = pkt.Pts + pkt.Duration;
@@ -517,7 +608,6 @@ public sealed class ClipExporter : IDisposable
 
         byte flags = 0;
         if (keyframe) flags |= 0x80;
-        flags |= 0x01;
         bw.Write(flags);
 
         bw.Write(data, 0, dataLength);
@@ -565,7 +655,7 @@ public sealed class ClipExporter : IDisposable
         return result;
     }
 
-    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null)
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null, List<EncodedPacket>? audioPackets = null)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
@@ -576,6 +666,10 @@ public sealed class ClipExporter : IDisposable
         for (int i = 1; i < packets.Count; i++)
             if (packets[i].Pts < minPts)
                 minPts = packets[i].Pts;
+        if (audioPackets != null)
+            foreach (var pkt in audioPackets)
+                if (pkt.Pts < minPts)
+                    minPts = pkt.Pts;
 
         // EBML Header (known-size — ffmpeg must be able to skip it cleanly)
         WriteEbmlMaster(bw, 0x1A45DFA3, (w) =>
@@ -596,11 +690,16 @@ public sealed class ClipExporter : IDisposable
         WriteEbmlMaster(bw, 0x1549A966, (w) =>
         {
             WriteEbmlUnsignedInt(w, 0x2AD7B1, 1_000_000); // TimecodeScale (1ms)
+            double totalSec = 0;
             if (packets.Count >= 2)
+                totalSec = (packets[^1].Pts - minPts).TotalSeconds + packets[^1].Duration.TotalSeconds;
+            if (audioPackets?.Count >= 2)
             {
-                double totalSec = (packets[^1].Pts - minPts).TotalSeconds + packets[^1].Duration.TotalSeconds;
-                WriteEbmlFloat(w, 0x4489, totalSec);
+                double audioEnd = (audioPackets[^1].Pts - minPts).TotalSeconds + audioPackets[^1].Duration.TotalSeconds;
+                if (audioEnd > totalSec) totalSec = audioEnd;
             }
+            if (totalSec > 0)
+                WriteEbmlFloat(w, 0x4489, totalSec);
             WriteEbmlString(w, 0x4D80, "DiNho Capture"); // MuxingApp
             WriteEbmlString(w, 0x5741, "DiNho Capture"); // WritingApp
         });
@@ -608,12 +707,13 @@ public sealed class ClipExporter : IDisposable
         // ── Tracks (known-size) ──
         WriteEbmlMaster(bw, 0x1654AE6B, (w) =>
         {
-            WriteEbmlMaster(w, 0xAE, (tw) =>       // TrackEntry
+            // Track 1: Video
+            WriteEbmlMaster(w, 0xAE, (tw) =>
         {
             WriteEbmlUnsignedInt(tw, 0xD7, 1);  // TrackNumber
             WriteEbmlUnsignedInt(tw, 0x73C5, 1); // TrackUID
             WriteEbmlUnsignedInt(tw, 0x83, 1);  // TrackType (1=video)
-            WriteEbmlUnsignedInt(tw, 0x9A, 0);  // FlagDefault
+            WriteEbmlUnsignedInt(tw, 0x9A, 0);  // FlagDefault (audio é o default)
             WriteEbmlUnsignedInt(tw, 0x9C, 1);  // FlagLacing
             WriteEbmlString(tw, 0x86, rawFormat switch
             {
@@ -623,30 +723,38 @@ public sealed class ClipExporter : IDisposable
             }); // CodecID
 
             // CodecPrivate (avcC for H264, hvcC for HEVC, AV1CodecConfigurationRecord for AV1)
-            // Use encoder-cached avcC (avccFallback) first — it's from the FIRST keyframe's
-            // SPS/PPS and is always correct. ExtractAvccExtradata may find false-positive SPS
-            // bytes within slice data that happen to look like NAL type 7 with a valid length.
             if (rawFormat == "h264")
             {
                 var avcc = avccFallback ?? ExtractAvccExtradata(packets);
                 if (avcc != null)
                 {
-                    // Log avcC bytes for diagnostics
-                    {
-                        int spsLen = avcc.Length >= 8 ? (avcc[6] << 8) | avcc[7] : 0;
-                        int ppsOff = 8 + spsLen;
-                        int ppsLen = (ppsOff + 2 < avcc.Length) ? (avcc[ppsOff + 1] << 8) | avcc[ppsOff + 2] : 0;
-                        var hex = new System.Text.StringBuilder();
-                        for (int i = 0; i < Math.Min(avcc.Length, 40); i++)
-                            hex.Append($"{avcc[i]:X2} ");
-                        string source = avcc == avccFallback ? "encoder" : "packets";
-                    Log.I("Exporter", $"avcC len={avcc.Length} spsLen={spsLen} ppsOff={ppsOff} ppsLen={ppsLen} source={source} hex={hex.ToString().Trim()}");
-                    }
-
+                    Log.I("Exporter", $"avcC len={avcc.Length} source={(avcc == avccFallback ? "encoder" : "packets")}");
                     WriteEbmlBinary(tw, 0x63A2, avcc);
                 }
                 else
-                    Log.W("Exporter", $"avcC CodecPrivate not found in packets or fallback — MKV may not mux correctly");
+                    Log.W("Exporter", "avcC CodecPrivate not found — MKV may not mux correctly");
+            }
+            else if (rawFormat == "hevc")
+            {
+                var hvcc = ExtractHvccExtradata(packets);
+                if (hvcc != null)
+                {
+                    Log.I("Exporter", $"hvcC len={hvcc.Length}");
+                    WriteEbmlBinary(tw, 0x63A2, hvcc);
+                }
+                else
+                    Log.W("Exporter", "hvcC CodecPrivate not found — MKV may not mux correctly");
+            }
+            else if (rawFormat == "av1")
+            {
+                var av1c = ExtractAv1Extradata(packets);
+                if (av1c != null)
+                {
+                    Log.I("Exporter", $"AV1CodecConfigurationRecord len={av1c.Length}");
+                    WriteEbmlBinary(tw, 0x63A2, av1c);
+                }
+                else
+                    Log.W("Exporter", "AV1CodecConfigurationRecord not found — MKV may not mux correctly");
             }
 
             WriteEbmlMaster(tw, 0xE0, (vw) => // Video
@@ -655,6 +763,35 @@ public sealed class ClipExporter : IDisposable
                 WriteEbmlUnsignedInt(vw, 0xBA, packets.Count > 0 ? (uint)packets[0].Height : 1080);
             });
         });
+
+            // Track 2: Audio (AAC) — only if audio packets are provided
+            if (audioPackets?.Count > 0)
+            {
+                var asc = BuildAudioSpecificConfig(audioPackets[0]);
+                var adtsProfile = (audioPackets[0].Data[2] >> 6) & 0x03;
+                var adtsSampleRateIdx = (audioPackets[0].Data[2] >> 2) & 0x0F;
+                var adtsChanConfig = ((audioPackets[0].Data[2] & 0x03) << 2) | ((audioPackets[0].Data[3] >> 6) & 0x03);
+                int[] sampleRates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000];
+                int sampleRate = adtsSampleRateIdx < sampleRates.Length ? sampleRates[adtsSampleRateIdx] : 48000;
+
+            WriteEbmlMaster(w, 0xAE, (tw) =>
+            {
+                WriteEbmlUnsignedInt(tw, 0xD7, 2);   // TrackNumber
+                WriteEbmlUnsignedInt(tw, 0x73C5, 2); // TrackUID
+                WriteEbmlUnsignedInt(tw, 0x83, 2);   // TrackType (2=audio)
+                WriteEbmlUnsignedInt(tw, 0x9A, 1);   // FlagDefault
+                WriteEbmlUnsignedInt(tw, 0x9C, 1);   // FlagLacing
+                WriteEbmlString(tw, 0x86, "A_AAC");  // CodecID
+                if (asc != null)
+                    WriteEbmlBinary(tw, 0x63A2, asc); // CodecPrivate (AudioSpecificConfig)
+                WriteEbmlMaster(tw, 0xE1, (aw) => // Audio
+                {
+                    WriteEbmlUnsignedInt(aw, 0xB5, (uint)sampleRate); // SamplingFrequency
+                    WriteEbmlUnsignedInt(aw, 0x9F, (uint)adtsChanConfig); // Channels
+                });
+            });
+            }
+
         });
 
         // ── Diagnostics: log first frame hex ──
@@ -706,19 +843,41 @@ public sealed class ClipExporter : IDisposable
             WriteSimpleBlock(bw, 1, relTc, pkt.IsKeyFrame, pkt.Data, pkt.DataLength);
         }
 
-        // Copy MKV to Desktop for analysis
-        try
+        // ── Audio Clusters ──
+        if (audioPackets?.Count > 0)
         {
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string mkvCopy = System.IO.Path.Combine(desktop, "dinho_debug.mkv");
-            fs.Flush();
-            System.IO.File.Copy(path, mkvCopy, overwrite: true);
-            Log.I("Exporter", $"MKV diagnostic copy saved to {mkvCopy} ({new System.IO.FileInfo(mkvCopy).Length}B)");
+            int audioClusterSize = 0;
+            long audioClusterBaseTimecode = 0;
+
+            foreach (var pkt in audioPackets)
+            {
+                if (pkt.Type != MediaType.Audio) continue;
+
+                long ptsMs = (pkt.Pts - minPts).Ticks / 10_000;
+
+                bool startNew = audioClusterSize == 0 ||
+                                audioClusterSize >= maxClusterFrames ||
+                                ptsMs - audioClusterBaseTimecode > 30000 ||
+                                ptsMs - audioClusterBaseTimecode > short.MaxValue;
+
+                if (startNew)
+                {
+                    audioClusterSize = 0;
+                    audioClusterBaseTimecode = ptsMs;
+                    WriteEbmlMasterBegin(bw, 0x1F43B675); // Cluster
+                    WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode
+                    audioClusterSize = 1;
+                }
+                else
+                {
+                    audioClusterSize++;
+                }
+
+                int relTc = (int)(ptsMs - audioClusterBaseTimecode);
+                WriteSimpleBlock(bw, 2, relTc, false, pkt.Data, pkt.DataLength);
+            }
         }
-        catch (Exception ex)
-        {
-            Log.W("Exporter", $"Failed to copy MKV to Desktop: {ex.Message}");
-        }
+
     }
 
     internal static byte[]? ExtractAvccExtradata(List<EncodedPacket> packets)
@@ -758,27 +917,6 @@ public sealed class ClipExporter : IDisposable
         if (sps == null || pps == null) return null;
 
         return BuildAvcc(sps, pps);
-    }
-
-    /// <summary>Convert AVCC data (4-byte BE length prefix per NAL) to AnnexB (00 00 00 01 start code per NAL).
-    /// Output buffer has the same length as input (4-byte prefix → 4-byte start code).</summary>
-    private static byte[] AvccToAnnexB(byte[] avcc, int length)
-    {
-        if (avcc == null || length < 4) return avcc ?? Array.Empty<byte>();
-        var result = new byte[length];
-        System.Buffer.BlockCopy(avcc, 0, result, 0, length);
-        int pos = 0;
-        while (pos + 4 <= length)
-        {
-            int nalLen = (result[pos] << 24) | (result[pos + 1] << 16) | (result[pos + 2] << 8) | result[pos + 3];
-            if (nalLen <= 0 || pos + 4 + nalLen > length) break;
-            result[pos] = 0x00;
-            result[pos + 1] = 0x00;
-            result[pos + 2] = 0x00;
-            result[pos + 3] = 0x01;
-            pos += 4 + nalLen;
-        }
-        return result;
     }
 
     internal static byte[]? BuildAvcc(byte[] sps, byte[] pps)
@@ -829,45 +967,204 @@ public sealed class ClipExporter : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Extract HEVCDecoderConfigurationRecord (hvcC) from video packets.
+    /// Scans for VPS (NAL type 32), SPS (NAL type 33), and PPS (NAL type 34).
+    /// </summary>
+    internal static byte[]? ExtractHvccExtradata(List<EncodedPacket> packets)
+    {
+        byte[]? vps = null, sps = null, pps = null;
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+            var data = pkt.Data;
+            int len = pkt.DataLength;
+            int pos = 0;
+            while (pos + 4 <= len)
+            {
+                int nalLen = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
+                if (nalLen <= 0 || pos + 4 + nalLen > len) break;
+                int nalStart = pos + 4;
+                int nalType = (data[nalStart] >> 1) & 0x3F;
+
+                if (nalType == 32 && vps == null)
+                {
+                    vps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, vps, 0, nalLen);
+                }
+                else if (nalType == 33 && sps == null)
+                {
+                    sps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, sps, 0, nalLen);
+                }
+                else if (nalType == 34 && pps == null)
+                {
+                    pps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, pps, 0, nalLen);
+                }
+
+                pos = nalStart + nalLen;
+            }
+            if (vps != null && sps != null && pps != null) break;
+        }
+
+        if (vps == null || sps == null || pps == null) return null;
+        return BuildHvcc(vps, sps, pps);
+    }
+
+    internal static byte[] BuildHvcc(byte[] vps, byte[] sps, byte[] pps)
+    {
+        var cleanVps = RemoveEmulationPrevention(vps);
+        var cleanSps = RemoveEmulationPrevention(sps);
+        var cleanPps = RemoveEmulationPrevention(pps);
+
+        int profileSpace = (cleanSps[0] >> 6) & 0x03;
+        bool tierFlag = (cleanSps[0] & 0x20) != 0;
+        int profileIdc = cleanSps[0] & 0x1F;
+        int generalProfileCompat = (cleanSps[1] << 24) | (cleanSps[2] << 16) | (cleanSps[3] << 8) | cleanSps[4];
+        int generalLevelIdc = cleanSps[12];
+
+        int len = 23 + 2 + cleanVps.Length + 2 + cleanSps.Length + 2 + cleanPps.Length;
+        var hvcc = new byte[len];
+        hvcc[0] = 1;
+        hvcc[1] = (byte)((profileSpace << 6) | (tierFlag ? 0x20 : 0) | profileIdc);
+        hvcc[2] = (byte)(generalProfileCompat >> 24);
+        hvcc[3] = (byte)(generalProfileCompat >> 16);
+        hvcc[4] = (byte)(generalProfileCompat >> 8);
+        hvcc[5] = (byte)generalProfileCompat;
+        hvcc[10] = (byte)generalLevelIdc;
+        hvcc[11] = 0xF0;
+        hvcc[12] = 0xFC;
+        hvcc[13] = 0xFC;
+        hvcc[14] = 0xF8;
+        hvcc[15] = 0xF8;
+        hvcc[16] = 0; hvcc[17] = 0;
+        hvcc[18] = 0x0F;
+        hvcc[19] = 3;
+
+        int off = 20;
+        hvcc[off++] = 0x20;
+        hvcc[off++] = 0; hvcc[off++] = 1;
+        hvcc[off++] = (byte)(cleanVps.Length >> 8);
+        hvcc[off++] = (byte)(cleanVps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanVps, 0, hvcc, off, cleanVps.Length);
+        off += cleanVps.Length;
+
+        hvcc[off++] = 0x21;
+        hvcc[off++] = 0; hvcc[off++] = 1;
+        hvcc[off++] = (byte)(cleanSps.Length >> 8);
+        hvcc[off++] = (byte)(cleanSps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanSps, 0, hvcc, off, cleanSps.Length);
+        off += cleanSps.Length;
+
+        hvcc[off++] = 0x22;
+        hvcc[off++] = 0; hvcc[off++] = 1;
+        hvcc[off++] = (byte)(cleanPps.Length >> 8);
+        hvcc[off++] = (byte)(cleanPps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanPps, 0, hvcc, off, cleanPps.Length);
+
+        return hvcc;
+    }
+
+    /// <summary>
+    /// Extract AV1CodecConfigurationRecord from AV1 OBUs.
+    /// </summary>
+    internal static byte[]? ExtractAv1Extradata(List<EncodedPacket> packets)
+    {
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+            var data = pkt.Data;
+            int len = pkt.DataLength;
+            int pos = 0;
+
+            while (pos < len)
+            {
+                if (pos + 2 > len) break;
+                int headerByte = data[pos];
+                int obuType = (headerByte >> 3) & 0x0F;
+                bool obuExtension = (headerByte & 0x04) != 0;
+                int headerLen = 1 + (obuExtension ? 1 : 0);
+
+                int sizeStart = pos + headerLen;
+                if (sizeStart >= len) break;
+                ulong obuSize = 0;
+                int shift = 0;
+                int sizeIdx = sizeStart;
+                while (sizeIdx < len && shift < 64)
+                {
+                    byte b = data[sizeIdx++];
+                    obuSize |= (ulong)(b & 0x7F) << shift;
+                    shift += 7;
+                    if ((b & 0x80) == 0) break;
+                }
+
+                int obuStart = sizeIdx;
+                int obuEnd = obuStart + (int)obuSize;
+                if (obuEnd > len) break;
+
+                if (obuType == 1)
+                {
+                    int seqHeaderLen = obuEnd - obuStart;
+                    var seqHeader = new byte[seqHeaderLen];
+                    System.Buffer.BlockCopy(data, obuStart, seqHeader, 0, seqHeaderLen);
+                    int seqProfile = seqHeader.Length > 0 ? (seqHeader[0] >> 5) & 0x07 : 0;
+
+                    return [
+                        0,
+                        (byte)((seqProfile << 5) | 0x1F),
+                        0x0C,
+                        0
+                    ];
+                }
+
+                pos = obuEnd;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Build a 2-byte AudioSpecificConfig from an AAC ADTS frame.
+    /// Per ISO 14496-3, this is the CodecPrivate for A_AAC in Matroska.</summary>
+    internal static byte[]? BuildAudioSpecificConfig(EncodedPacket audioPkt)
+    {
+        if (audioPkt.Data == null || audioPkt.DataLength < 5) return null;
+        var data = audioPkt.Data;
+        if (data[0] != 0xFF || (data[1] & 0xF0) != 0xF0) return null; // not ADTS
+
+        int profile = (data[2] >> 6) & 0x03;
+        int sampleRateIdx = (data[2] >> 2) & 0x0F;
+        int channelConfig = ((data[2] & 0x03) << 2) | ((data[3] >> 6) & 0x03);
+        int audioObjectType = profile + 1;
+
+        return [ (byte)((audioObjectType << 3) | (sampleRateIdx >> 1)),
+                 (byte)(((sampleRateIdx & 0x01) << 7) | (channelConfig << 3)) ];
+    }
+
     private static void MuxWithFfmpegStreaming(
         string outputPath,
         string videoPath,
-        List<EncodedPacket> audioPackets,
+        bool hasAudioTracks,
         string rawFormat = "h264")
     {
-        bool hasAudio = audioPackets.Count > 0;
-        bool isAac = hasAudio && IsAdts(audioPackets[0]);
-
-        var args = $"-y -loglevel warning " +
-                   $"-f matroska -i \"{videoPath}\"";
-
-        var audioInput = "";
-        var audioOpts = "";
-        if (hasAudio)
+        string args;
+        if (hasAudioTracks)
         {
-            if (isAac)
-            {
-                audioInput = " -f aac -i pipe:0";
-                audioOpts = " -c:a copy";
-            }
-            else
-            {
-                audioInput = " -f s16le -ar 48000 -ac 2 -i pipe:0";
-                audioOpts = " -c:a aac -b:a 192k";
-            }
+            args = $"-y -loglevel warning " +
+                   $"-f matroska -i \"{videoPath}\" " +
+                   $"-map 0:v:0 -map 0:a:0 " +
+                   $"-c:v copy -c:a copy " +
+                   $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
+                   $"-movflags +faststart \"{outputPath}\"";
         }
-
-        // NO bitstream filter: WriteMatroskaFile writes AVCC (4-byte length-prefixed NALUs)
-        // with avcC CodecPrivate. The MP4 muxer with -c:v copy expects AVCC natively —
-        // adding h264_mp4toannexb would convert AVCC→AnnexB (wrong direction for MP4 output).
-        // AV1 doesn't need any bsf (no AnnexB concept), but our muxer doesn't use AV1.
-        args += audioInput +
-                $" -map 0:v:0" +
-                (hasAudio ? " -map 1:a:0" : "") +
-                $" -c:v copy" +
-                audioOpts +
-                $" -metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\"" +
-                $" -movflags +faststart \"{outputPath}\"";
+        else
+        {
+            args = $"-y -loglevel warning " +
+                   $"-f matroska -i \"{videoPath}\" " +
+                   $"-map 0:v:0 -c:v copy " +
+                   $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
+                   $"-movflags +faststart \"{outputPath}\"";
+        }
 
         Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
 
@@ -876,7 +1173,7 @@ public sealed class ClipExporter : IDisposable
             StartInfo = new ProcessStartInfo("ffmpeg")
             {
                 Arguments = args,
-                RedirectStandardInput = hasAudio,
+                RedirectStandardInput = false,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -891,44 +1188,12 @@ public sealed class ClipExporter : IDisposable
         };
 
         proc.Start();
-
         proc.BeginErrorReadLine();
-
-        if (hasAudio)
-        {
-            try
-            {
-                var stdin = proc.StandardInput.BaseStream;
-                if (isAac)
-                {
-                    foreach (var pkt in audioPackets)
-                    {
-                        if (pkt.Type != MediaType.Audio) continue;
-                        stdin.Write(pkt.Data, 0, pkt.DataLength);
-                    }
-                }
-                else
-                {
-                    StreamPcmAsS16Le(audioPackets, stdin);
-                }
-                stdin.Flush();
-                stdin.Dispose();
-            }
-            catch (IOException ex)
-            {
-                proc.WaitForExit(5000);
-                string stderrText;
-                lock (stderr) { stderrText = stderr.ToString(); }
-                throw new InvalidOperationException(
-                    $"ffmpeg mux failed: {ex.Message}. stderr: {stderrText.Trim()}");
-            }
-        }
 
         if (!proc.WaitForExit(300_000))
         {
             proc.Kill();
-            throw new InvalidOperationException(
-                $"ffmpeg nao terminou em 5min");
+            throw new InvalidOperationException("ffmpeg nao terminou em 5min");
         }
 
         string finalStderr;
@@ -944,140 +1209,8 @@ public sealed class ClipExporter : IDisposable
             Log.I("Exporter", $"ffmpeg stderr: {finalStderr.Trim()}");
     }
 
-    private static void StreamPcmAsS16Le(List<EncodedPacket> packets, Stream output)
-    {
-        var buf = new byte[65536];
-        foreach (var pkt in packets)
-        {
-            if (pkt.Type != MediaType.Audio) continue;
-
-            if (pkt.PcmSamples is { } pcmSamples)
-            {
-                int byteLen = pcmSamples.Length * 2;
-                var conversionBuf = buf;
-                if (byteLen > conversionBuf.Length)
-                    conversionBuf = new byte[byteLen * 2];
-
-                unsafe
-                {
-                    fixed (float* src = pcmSamples)
-                    fixed (byte* dst = conversionBuf)
-                    {
-                        var sDst = (short*)dst;
-                        for (int i = 0; i < pcmSamples.Length; i++)
-                        {
-                            float f = AudioMixer.SoftClip(src[i]);
-                            sDst[i] = (short)(f * 32767f);
-                        }
-                    }
-                }
-                output.Write(conversionBuf, 0, byteLen);
-            }
-            else
-            {
-                int len = pkt.DataLength / 4;
-                var conversionBuf = buf;
-                if (len * 2 > conversionBuf.Length)
-                    conversionBuf = new byte[len * 2];
-
-                unsafe
-                {
-                    fixed (byte* src = pkt.Data)
-                    fixed (byte* dst = conversionBuf)
-                    {
-                        var fSrc = (float*)src;
-                        var sDst = (short*)dst;
-                        for (int i = 0; i < len; i++)
-                        {
-                            float f = AudioMixer.SoftClip(fSrc[i]);
-                            sDst[i] = (short)(f * 32767f);
-                        }
-                    }
-                }
-                output.Write(conversionBuf, 0, pkt.DataLength / 2);
-            }
-        }
-    }
-
     internal static bool IsAdts(EncodedPacket pkt) =>
         pkt.Data.Length >= 2 && pkt.Data[0] == 0xFF && (pkt.Data[1] & 0xF0) == 0xF0;
-
-    public static string EncodeRawNv12ToMp4(
-        string outputPath,
-        int width, int height, int frameRate,
-        IReadOnlyList<ReadOnlyMemory<byte>> nv12Frames,
-        IReadOnlyList<long> ptsHns,
-        IReadOnlyList<long> durationHns)
-    {
-        if (nv12Frames.Count == 0)
-            throw new InvalidOperationException("No frames to encode");
-
-        var codec = DetectFastestCodec();
-        int frameSize = width * height * 3 / 2;
-
-        var args = $"-y -loglevel warning " +
-                   $"-f rawvideo -pix_fmt nv12 -s {width}x{height} " +
-                   $"-r {frameRate} -i pipe:0 " +
-                   $"-c:v {codec} ";
-
-        args += codec switch
-        {
-            "libx264" => "-preset ultrafast -tune zerolatency",
-            "h264_nvenc" => "-preset p1 -tune ll -rc constqp -qp 23",
-            _ => ""
-        };
-
-        args += $" -movflags +faststart \"{outputPath}\"";
-
-        using var proc = new Process
-        {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = args,
-                RedirectStandardInput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-
-        proc.Start();
-        try { proc.PriorityClass = ProcessPriorityClass.Idle; } catch { }
-
-        try
-        {
-            var stdin = proc.StandardInput.BaseStream;
-            foreach (var frame in nv12Frames)
-            {
-                stdin.Write(frame.Span);
-            }
-            stdin.Flush();
-            stdin.Dispose();
-        }
-        catch (IOException ex)
-        {
-            proc.WaitForExit(5000);
-            var err = proc.StandardError.ReadToEnd();
-            throw new InvalidOperationException(
-                $"ffmpeg encode failed: {ex.Message}. stderr: {err.Trim()}");
-        }
-
-        if (!proc.WaitForExit(300_000))
-        {
-            proc.Kill();
-            throw new InvalidOperationException(
-                $"ffmpeg nao terminou em 5min");
-        }
-
-        if (proc.ExitCode != 0)
-        {
-            var err = proc.StandardError.ReadToEnd();
-            throw new InvalidOperationException(
-                $"ffmpeg exit code {proc.ExitCode}: {err.Trim()}");
-        }
-
-        return outputPath;
-    }
 
     internal static void GenerateThumbnail(string videoPath)
     {
@@ -1108,31 +1241,6 @@ public sealed class ClipExporter : IDisposable
 
         if (File.Exists(thumbPath))
             Log.I("Exporter", $"Thumbnail: {thumbPath} ({new FileInfo(thumbPath).Length / 1024} KB)");
-    }
-
-    private static string DetectFastestCodec()
-    {
-        try
-        {
-            using var p = new Process
-            {
-                StartInfo = new ProcessStartInfo("ffmpeg")
-                {
-                    Arguments = "-encoders",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-            p.Start();
-            var o = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(2000);
-            if (o.Contains("h264_nvenc", StringComparison.OrdinalIgnoreCase)) return "h264_nvenc";
-            if (o.Contains("h264_amf", StringComparison.OrdinalIgnoreCase)) return "h264_amf";
-            if (o.Contains("h264_qsv", StringComparison.OrdinalIgnoreCase)) return "h264_qsv";
-        }
-        catch { }
-        return "libx264";
     }
 
     public void Dispose()

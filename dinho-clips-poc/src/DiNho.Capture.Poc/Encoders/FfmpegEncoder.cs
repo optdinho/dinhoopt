@@ -75,6 +75,7 @@ public sealed class FfmpegEncoder : IEncoder
     private byte[]? _rawBuf;
     private int _rawLen;
     private bool _hadRawSlice; // tracked in AnnexB path before conversion
+    private bool _loggedParseAvcc; // first-call guard for ParseAvcc log
 
     // Format latch — ffmpeg -f h264 with -bsf:v should output AnnexB, but sometimes
     // frames slip through in AVCC format. We detect once and latch.
@@ -246,10 +247,11 @@ public sealed class FfmpegEncoder : IEncoder
         {
             "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
             "libx265" => "-preset ultrafast -tune zerolatency -x265-params no-open-gop=1:bframes=0:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset p2 -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf 0 -rc-lookahead 0 -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
-            "hevc_nvenc" => $"-preset p2 -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf 0 -rc-lookahead 0 -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
-            "av1_nvenc" => $"-preset p2 -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -rc-lookahead 0 -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
-            "h264_amf" => $"-quality quality -rc cqp -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)}",
+            "h264_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
+            "av1_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
+            "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0",
+            "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0",
             "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)}",
             _ => "-preset ultrafast -tune zerolatency -threads 1"
         };
@@ -624,7 +626,11 @@ public sealed class FfmpegEncoder : IEncoder
         _pendingTooLarge = false;
         int pos = 0;
         int firstHex = data.Length >= 4 ? (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3] : -1;
-        Log.D("FfmpegEncoder", $"ParseAvcc: dataLen={data.Length} first4Bytes=0x{firstHex:X8} pending={_pendingLen} hadSlice={_hadSlice}");
+        if (!_loggedParseAvcc)
+        {
+            _loggedParseAvcc = true;
+            Log.D("FfmpegEncoder", $"ParseAvcc: dataLen={data.Length} first4Bytes=0x{firstHex:X8} pending={_pendingLen} hadSlice={_hadSlice}");
+        }
 
         while (pos + 4 <= data.Length)
         {
@@ -778,19 +784,19 @@ public sealed class FfmpegEncoder : IEncoder
         System.Buffer.BlockCopy(_pendingBuf, 0, data, 0, _pendingLen);
 
         long dur = 10_000_000L / _frameRate;
-        // Drain all stale PTS entries keeping only the most recent.
-        // When frames accumulate in _pendingBuf without emitting (e.g., due to
-        // AVCC/AnnexB format confusion), one EmitPacket may cover multiple
-        // EncodeFrame calls — draining stale entries keeps the PTS clock in sync.
+        // Dequeue exactly one PTS per emitted packet. During catch-up (NVENC slower than
+        // capture), the queue accumulates one entry per frame; draining one-at-a-time gives
+        // each emitted packet a unique, monotonically increasing real timestamp. If the queue
+        // is empty (reader loop outpacing capture), extrapolate from the last real PTS.
+        // Previously we drained ALL entries and kept only the last, causing N accumulated
+        // frames to share the same PTS → duplicate DTS in Matroska → "Non-monotonic DTS".
         long pts = _outputFrameIndex * dur;
-        int ptsDrained = 0;
-        while (_inputPtsQueue.TryDequeue(out var realPts))
+        if (_inputPtsQueue.TryDequeue(out var realPts))
         {
             pts = realPts.Ticks;
             _lastRealPtsTicks = pts;
-            ptsDrained++;
         }
-        if (ptsDrained == 0 && _lastRealPtsTicks >= 0)
+        else if (_lastRealPtsTicks >= 0)
         {
             pts = _lastRealPtsTicks + dur;
             _lastRealPtsTicks = pts;
@@ -989,9 +995,11 @@ public sealed class FfmpegEncoder : IEncoder
         _gpuConvertFails = 0;
         _frameCount = 0;
         _outputFrameIndex = 0;
+        _lastRealPtsTicks = -1;
         _hadSlice = false;
         _hadRawSlice = false;
         _pendingTooLarge = false;
+        _loggedParseAvcc = false;
         _pipeFormat = PipeFormat.Unknown;
         if (_pendingBuf != null)
         {
@@ -1074,6 +1082,18 @@ public sealed class FfmpegEncoder : IEncoder
             }
             finally { ctx.Unmap(_nv12Staging, 0); }
         }
+        catch (DeviceLostException)
+        {
+            // Device lost — clear stale GPU resources so reinit creates fresh ones
+            _gpuConverter?.Dispose();
+            _gpuConverter = null;
+            _nv12Staging?.Dispose();
+            _nv12Staging = null;
+            _inputCopy?.Dispose();
+            _inputCopy = null;
+            _gpuConvertFails++;
+            throw; // propagate to pipeline loop for device recreation
+        }
         catch (Exception ex)
         {
             _gpuConvertFails++;
@@ -1098,8 +1118,8 @@ public sealed class FfmpegEncoder : IEncoder
             CPUAccessFlags = CpuAccessFlags.None,
         });
         Log.D("FfmpegEncoder", $"EnsureInputCopy: {desc.Width}x{desc.Height} fmt={desc.Format}");
-        _inputCopyW = desc.Width;
-        _inputCopyH = desc.Height;
+        _inputCopyW = (int)desc.Width;
+        _inputCopyH = (int)desc.Height;
         _inputCopyFormat = desc.Format;
     }
 
@@ -1109,7 +1129,7 @@ public sealed class FfmpegEncoder : IEncoder
         _nv12Staging?.Dispose();
         _nv12Staging = device.CreateTexture2D(new Texture2DDescription
         {
-            Width = _width, Height = _height, MipLevels = 1, ArraySize = 1,
+            Width = (uint)_width, Height = (uint)_height, MipLevels = 1, ArraySize = 1,
             Format = Format.NV12,
             SampleDescription = new SampleDescription(1, 0),
             Usage = ResourceUsage.Staging,
@@ -1122,7 +1142,7 @@ public sealed class FfmpegEncoder : IEncoder
 
     private unsafe byte[] PackNv12(MappedSubresource map)
     {
-        int srcPitch = map.RowPitch;
+        int srcPitch = (int)map.RowPitch;
         int ySize = _height * _width;
         int totalSize = ySize + _height / 2 * _width;
 

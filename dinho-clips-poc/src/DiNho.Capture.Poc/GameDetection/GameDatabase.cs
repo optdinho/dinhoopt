@@ -144,6 +144,11 @@ public class GameDatabase
             var byAlias = FindByAlias(processName);
             if (byAlias != null)
                 return byAlias;
+
+            // Fallback: verificar Steam/Epic libraries escaneadas
+            var byScanned = LibraryScanner.LookupProcessName(processName);
+            if (byScanned != null)
+                return byScanned;
         }
 
         return null;

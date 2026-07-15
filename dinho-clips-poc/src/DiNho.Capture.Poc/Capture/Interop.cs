@@ -2,27 +2,13 @@ using DiNho.Capture.Poc.Logging;
 using System.Runtime.InteropServices;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
+using Vortice.Direct3D;
+using Vortice.Direct3D11;
 using Vortice.DXGI;
 using WinRT;
 
 namespace DiNho.Capture.Poc.Capture
 {
-    [ComImport]
-    [Guid("1EB64011-96F5-463A-A87B-4B1E9BFAE9F9")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IGraphicsCaptureItemInterop
-    {
-        // IInspectable vtable padding (3 methods) — slots [3], [4], [5]
-        // Necessário porque IGraphicsCaptureItemInterop herda de IInspectable.
-        // InterfaceIsIUnknown + padding evita o crash do CLR ao tentar validar
-        // projeção WinRT no Marshal.GetTypedObjectForIUnknown.
-        [PreserveSig] int GetIids(out int iidCount, out IntPtr iids);
-        [PreserveSig] int GetRuntimeClassName(out IntPtr className);
-        [PreserveSig] int GetTrustLevel(out int trustLevel);
-        // Método real em vtable[6]
-        void CreateForMonitor(nint monitor, ref Guid riid, out nint result);
-    }
-
     internal static class GraphicsCaptureItemHelper
     {
         [DllImport("combase.dll", PreserveSig = false)]
@@ -35,7 +21,23 @@ namespace DiNho.Capture.Poc.Capture
         private static extern int WindowsDeleteString(IntPtr hstring);
 
         private const string RuntimeClassName = "Windows.Graphics.Capture.GraphicsCaptureItem";
+
+        // IInspectable GUID — every WinRT activation factory implements this
+        private static readonly Guid IInspectableGuid = new("AF86E2E0-B12D-4C6A-9C5A-D78A0574605B");
+
+        // IGraphicsCaptureItemInterop — COM interface on the activation factory for monitor/window capture
         private static readonly Guid IGraphicsCaptureItemInteropGuid = new("1EB64011-96F5-463A-A87B-4B1E9BFAE9F9");
+
+        // GraphicsCaptureItem GUID — passed to CreateForWindow/CreateForMonitor as riid
+        private static readonly Guid GraphicsCaptureItemGuid = typeof(GraphicsCaptureItem).GUID;
+
+        // Raw vtable delegates — bypass COM interop marshaling entirely.
+        // COM vtable methods use stdcall convention on Windows.
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate int CreateForMonitorDelegate(IntPtr thisPtr, IntPtr hMonitor, ref Guid iid, out IntPtr result);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate int CreateForWindowDelegate(IntPtr thisPtr, IntPtr hwnd, ref Guid iid, out IntPtr result);
 
         private static IntPtr CreateHString(string s)
         {
@@ -45,21 +47,18 @@ namespace DiNho.Capture.Poc.Capture
             return hstr;
         }
 
-        private static IGraphicsCaptureItemInterop GetActivationFactoryInterop()
+        /// <summary>
+        /// Gets the activation factory as IInspectable via RoGetActivationFactory.
+        /// Caller must Marshal.Release() when done.
+        /// </summary>
+        private static IntPtr GetActivationFactoryAsInspectable()
         {
             var hstr = CreateHString(RuntimeClassName);
             try
             {
-                var iid = IGraphicsCaptureItemInteropGuid;
+                var iid = IInspectableGuid;
                 RoGetActivationFactory(hstr, ref iid, out var factoryPtr);
-                try
-                {
-                    return (IGraphicsCaptureItemInterop)Marshal.GetTypedObjectForIUnknown(factoryPtr, typeof(IGraphicsCaptureItemInterop));
-                }
-                finally
-                {
-                    Marshal.Release(factoryPtr);
-                }
+                return factoryPtr;
             }
             finally
             {
@@ -67,39 +66,65 @@ namespace DiNho.Capture.Poc.Capture
             }
         }
 
+        /// <summary>
+        /// Creates a GraphicsCaptureItem for a monitor using raw vtable calls.
+        /// Two-step approach:
+        ///   1) Get activation factory as IInspectable (always works for WinRT classes)
+        ///   2) Marshal.QueryInterface for IGraphicsCaptureItemInterop (standard COM QI)
+        /// Then call CreateForMonitor via raw vtable (slot 4 — IUnknown(3) + method(1)).
+        /// </summary>
         public static GraphicsCaptureItem CreateForMonitor(IntPtr hMonitor)
         {
-            IGraphicsCaptureItemInterop interop;
+            IntPtr factoryPtr;
             try
             {
-                interop = GetActivationFactoryInterop();
+                factoryPtr = GetActivationFactoryAsInspectable();
             }
             catch (Exception ex)
             {
-                Log.E("WGC-DIAG", $"GetActivationFactoryInterop() falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"GetActivationFactoryAsInspectable() falhou: {ex.GetType().Name}: {ex.Message}");
                 throw;
             }
 
-            var guid = typeof(GraphicsCaptureItem).GUID;
-            IntPtr itemPtr;
+            IntPtr interopPtr = IntPtr.Zero;
             try
             {
-                interop.CreateForMonitor(hMonitor, ref guid, out itemPtr);
-            }
-            catch (Exception ex)
-            {
-                Log.E("WGC-DIAG", $"interop.CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
-                throw;
-            }
+                // QI the activation factory for IGraphicsCaptureItemInterop
+                var interopGuid = IGraphicsCaptureItemInteropGuid;
+                var qiHr = Marshal.QueryInterface(factoryPtr, ref interopGuid, out interopPtr);
+                if (qiHr != 0 || interopPtr == IntPtr.Zero)
+                    throw new COMException($"QI for IGraphicsCaptureItemInterop failed: HRESULT=0x{qiHr:X8}", qiHr);
 
-            try
-            {
+                Log.D("WGC-DIAG", $"QI IGraphicsCaptureItemInterop OK: interopPtr=0x{interopPtr:X8}");
+
+                // IGraphicsCaptureItemInterop vtable (inherits IUnknown):
+                //   [0] QueryInterface, [1] AddRef, [2] Release
+                //   [3] CreateForWindow, [4] CreateForMonitor
+                var vtable = Marshal.ReadIntPtr(interopPtr);
+                var createForMonitorPtr = Marshal.ReadIntPtr(vtable, 4 * IntPtr.Size);
+                var createForMonitor = Marshal.GetDelegateForFunctionPointer<CreateForMonitorDelegate>(createForMonitorPtr);
+
+                var itemGuid = GraphicsCaptureItemGuid;
+                var hr = createForMonitor(interopPtr, hMonitor, ref itemGuid, out var itemPtr);
+
+                if (hr != 0)
+                    throw new COMException($"CreateForMonitor failed: HRESULT=0x{hr:X8}", hr);
+
                 return MarshalInterface<GraphicsCaptureItem>.FromAbi(itemPtr);
             }
+            catch (COMException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                Log.E("WGC-DIAG", $"MarshalInterface<GraphicsCaptureItem>.FromAbi falhou: {ex.GetType().Name}: {ex.Message}");
+                Log.E("WGC-DIAG", $"CreateForMonitor raw vtable call failed: {ex.GetType().Name}: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                if (interopPtr != IntPtr.Zero) Marshal.Release(interopPtr);
+                Marshal.Release(factoryPtr);
             }
         }
 
@@ -249,6 +274,159 @@ namespace DiNho.Capture.Poc.Capture
             if (!GetMonitorInfo(hMonitor, ref mi))
                 return (0, 0, 0, 0);
             return (mi.rcMonitor.Left, mi.rcMonitor.Top, mi.rcMonitor.Right, mi.rcMonitor.Bottom);
+        }
+    }
+
+    /// <summary>
+    /// Seleciona o melhor adaptador DXGI (preferência: GPU dedicada > integrada).
+    /// Em notebooks com iGPU + dGPU, evita capturar na GPU errada.
+    /// </summary>
+    internal static class AdapterHelper
+    {
+        public static bool TryCreateDevice(out ID3D11Device? device, out ID3D11DeviceContext? context)
+        {
+            device = null;
+            context = null;
+
+            try
+            {
+                using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory6>();
+                if (factory == null) return false;
+
+                // Preferência: GPU dedicada (dGPU) > integrada (iGPU)
+                for (uint i = 0; ; i++)
+                {
+                    var hr = factory.EnumAdapterByGpuPreference<IDXGIAdapter>(i, GpuPreference.HighPerformance, out var adapter);
+                    if (hr.Failure || adapter == null) break;
+
+                    var desc = adapter.Description;
+                    // Pular adaptadores de software (WARP, etc.)
+                    if (adapter is IDXGIAdapter1 adapter1)
+                    {
+                        var desc1 = adapter1.Description1;
+                        if (desc1.Flags.HasFlag(AdapterFlags.Software))
+                        {
+                            adapter.Dispose();
+                            continue;
+                        }
+                    }
+
+                    var flags = DeviceCreationFlags.BgraSupport;
+                    var result = D3D11.D3D11CreateDevice(
+                        adapter, DriverType.Unknown, flags,
+                        [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0],
+                        out device, out _, out context);
+                    adapter.Dispose();
+
+                    if (result.Success && device != null) return true;
+                    break;
+                }
+            }
+            catch { }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Detecção HDR via DisplayConfigGetDeviceInfo (Win10 1703+).
+    /// Retorna true se o monitor alvo estiver em modo HDR.
+    /// Com BGRA8, o DWM faz HDR→SDR automaticamente (resultado visual correto).
+    /// Com R16G16B16A16_FLOAT, preserva faixa HDR mas requer tone mapping manual.
+    /// </summary>
+    internal static class HdrHelper
+    {
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO requestPacket);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+        {
+            public uint type;
+            public uint size;
+            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            public uint advancedColorInfoFlags;
+            public uint advancedColorMode;
+            public uint bitsPerChannel;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DISPLAYCONFIG_DEVICE_INFO_HEADER
+        {
+            public uint type;
+            public uint size;
+            public LUID adapterId;
+            public uint id;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LUID
+        {
+            public uint LowPart;
+            public int HighPart;
+        }
+
+        private const uint DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO = 0x00000047;
+        private const uint DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_FLAG_ADVANCED_COLOR_ACTIVE = 0x1;
+
+        public static bool IsHdrActive()
+        {
+            try
+            {
+                // Query primary display (adapterId=0, id=0)
+                var request = new DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+                {
+                    type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                    size = (uint)Marshal.SizeOf<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>(),
+                    header = new DISPLAYCONFIG_DEVICE_INFO_HEADER
+                    {
+                        type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                        size = (uint)Marshal.SizeOf<DISPLAYCONFIG_DEVICE_INFO_HEADER>(),
+                    }
+                };
+
+                var hr = DisplayConfigGetDeviceInfo(ref request);
+                if (hr != 0) return false;
+
+                return (request.advancedColorInfoFlags & DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_FLAG_ADVANCED_COLOR_ACTIVE) != 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Detecção WDA (Window Display Affinity).
+    /// Jogos que usam SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) não podem ser capturados.
+    /// O WGC retorna frames pretos nesse caso.
+    /// </summary>
+    internal static class WdaHelper
+    {
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwFlags);
+
+        public const uint WDA_NONE = 0x00;
+        public const uint WDA_EXCLUDEFROMCAPTURE = 0x01;
+        public const uint WDA_EXCLUEFROMCAPTURE_WIN11 = 0x11; // Win11 name variant
+
+        /// <summary>
+        /// Retorna true se a janela está excluída de captura (WDA_EXCLUDEFROMCAPTURE).
+        /// Nesse caso, WGC retorna frames pretos — deve-se fazer fallback para Hybrid/DDA.
+        /// </summary>
+        public static bool IsExcludedFromCapture(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return false;
+            try
+            {
+                if (!GetWindowDisplayAffinity(hwnd, out var affinity)) return false;
+                return affinity == WDA_EXCLUDEFROMCAPTURE || affinity == WDA_EXCLUEFROMCAPTURE_WIN11;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

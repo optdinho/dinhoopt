@@ -224,7 +224,7 @@ public sealed class HybridCaptureSource : ICaptureSource
                 Array.Clear(_compositeBuffer, 0, bufSize);
 
                 // Copy window pixels into position (handling pitch alignment)
-                int srcRowPitch = mapped.RowPitch;
+                int srcRowPitch = (int)mapped.RowPitch;
                 int winStride = winW * 4;
                 for (int y = 0; y < clampedH; y++)
                 {
@@ -240,8 +240,8 @@ public sealed class HybridCaptureSource : ICaptureSource
                 var gcHandle = GCHandle.Alloc(_compositeBuffer, GCHandleType.Pinned);
                 try
                 {
-                    _context.UpdateSubresource(_compositeTexture!, 0, null,
-                        gcHandle.AddrOfPinnedObject(), fullStride, 0);
+                    _context.UpdateSubresource(_compositeTexture!, 0u, null,
+                        gcHandle.AddrOfPinnedObject(), (uint)fullStride, 0u);
                 }
                 finally
                 {
@@ -356,8 +356,8 @@ public sealed class HybridCaptureSource : ICaptureSource
         _compositeTexture?.Dispose();
         _compositeTexture = _sharedDevice!.CreateTexture2D(new Texture2DDescription
         {
-            Width = width,
-            Height = height,
+            Width = (uint)width,
+            Height = (uint)height,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm,

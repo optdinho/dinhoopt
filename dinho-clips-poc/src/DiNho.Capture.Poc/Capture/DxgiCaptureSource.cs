@@ -20,6 +20,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
     private int _outputWidth;
     private int _outputHeight;
 
+    private TexturePool? _texturePool;
     private ID3D11Texture2D? _cachedTexture;
     private int _cachedWidth;
     private int _cachedHeight;
@@ -75,24 +76,74 @@ public sealed class DxgiCaptureSource : ICaptureSource
         IDXGIOutput1? selectedOutput = null;
         OutputDescription selectedDesc = default;
 
-        for (int i = 0; adapter.EnumOutputs(i, out var output).Success; i++)
+        for (uint i = 0; adapter.EnumOutputs(i, out var output).Success; i++)
         {
-            var output1 = output.QueryInterface<IDXGIOutput1>();
-            var desc = output1.Description;
-
-            // Verificar se este output corresponde ao monitor da janela
-            var outputBounds = desc.DesktopCoordinates;
-            var outputMidX = (outputBounds.Left + outputBounds.Right) / 2;
-            var outputMidY = (outputBounds.Top + outputBounds.Bottom) / 2;
-            var outputMonitor = MonitorHelper.MonitorFromPoint(outputMidX, outputMidY);
-
-            if (outputMonitor == monitorHwnd)
+            IDXGIOutput1? output1 = null;
+            try
             {
-                selectedDesc = desc;
+                // Tentar IDXGIOutput5.DuplicateOutput1() primeiro (Win10 1703+)
+                // Suporta formatos modernos (BGRA1010102, RGBA16Float)
+                var output5 = output.QueryInterface<IDXGIOutput5>();
+                if (output5 != null)
+                {
+                    try
+                    {
+                        var formats = new[] { Format.B8G8R8A8_UNorm };
+                        var duplication = output5.DuplicateOutput1(_device, formats);
+                        var desc = output5.Description;
+                        var outputBounds = desc.DesktopCoordinates;
+                        var outputMidX = (outputBounds.Left + outputBounds.Right) / 2;
+                        var outputMidY = (outputBounds.Top + outputBounds.Bottom) / 2;
+                        var outputMonitor = MonitorHelper.MonitorFromPoint(outputMidX, outputMidY);
+
+                        if (outputMonitor == monitorHwnd)
+                        {
+                            selectedDesc = desc;
+                            _duplication = duplication;
+                            _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
+                            _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
+                            _texturePool = new TexturePool(_device, poolSize: 3);
+                            return;
+                        }
+
+                        if (selectedOutput is null)
+                        {
+                            selectedOutput = output5;
+                            selectedDesc = desc;
+                            _duplication = duplication;
+                        }
+                        else
+                        {
+                            duplication.Dispose();
+                            output5.Dispose();
+                        }
+                        continue;
+                    }
+                    catch
+                    {
+                        // DuplicateOutput1 não suportado — fallback para DuplicateOutput
+                    }
+                }
+            }
+            catch { }
+
+            // Fallback: IDXGIOutput1.DuplicateOutput() (Win8+)
+            output1 = output.QueryInterface<IDXGIOutput1>();
+            var desc1 = output1.Description;
+
+            var outputBounds1 = desc1.DesktopCoordinates;
+            var outputMidX1 = (outputBounds1.Left + outputBounds1.Right) / 2;
+            var outputMidY1 = (outputBounds1.Top + outputBounds1.Bottom) / 2;
+            var outputMonitor1 = MonitorHelper.MonitorFromPoint(outputMidX1, outputMidY1);
+
+            if (outputMonitor1 == monitorHwnd)
+            {
+                selectedDesc = desc1;
                 _duplication = output1.DuplicateOutput(_device);
                 _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
                 _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
                 output1.Dispose();
+                _texturePool = new TexturePool(_device, poolSize: 3);
                 return;
             }
 
@@ -100,7 +151,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
             if (selectedOutput is null)
             {
                 selectedOutput = output1;
-                selectedDesc = desc;
+                selectedDesc = desc1;
             }
             else
             {
@@ -113,8 +164,9 @@ public sealed class DxgiCaptureSource : ICaptureSource
 
         _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
         _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
-        _duplication = selectedOutput.DuplicateOutput(_device);
+        _duplication ??= selectedOutput.DuplicateOutput(_device);
         selectedOutput.Dispose();
+        _texturePool = new TexturePool(_device, poolSize: 3);
     }
 
     public CapturedFrame TryCaptureFrame(int timeoutMs)
@@ -125,7 +177,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
         var startTicks = Stopwatch.GetTimestamp();
 
         var hr = _duplication.AcquireNextFrame(
-            timeoutMs,
+            (uint)timeoutMs,
             out var frameInfo,
             out var desktopResource);
 
@@ -133,13 +185,12 @@ public sealed class DxgiCaptureSource : ICaptureSource
 
         if (hr == Vortice.DXGI.ResultCode.WaitTimeout)
         {
-            if (_cachedTexture != null)
+            if (_cachedTexture != null && _texturePool != null)
             {
-                var desc = _cachedTexture.Description;
-                var clone = _device!.CreateTexture2D(desc);
-                _context!.CopyResource(clone, _cachedTexture);
-                return new CapturedFrame(startTicks, waitEndTicks, _cachedWidth, _cachedHeight, success: true, clone, _device,
-                    waitEndTicks, waitEndTicks);
+                var poolTex = _texturePool.Rent(_cachedWidth, _cachedHeight, _cachedTexture.Description.Format);
+                _context!.CopyResource(poolTex, _cachedTexture);
+                return new CapturedFrame(startTicks, waitEndTicks, _cachedWidth, _cachedHeight, success: true, poolTex, _device,
+                    waitEndTicks, waitEndTicks, ownsTexture: false);
             }
             return new CapturedFrame(startTicks, waitEndTicks, 0, 0, success: false);
         }
@@ -149,41 +200,24 @@ public sealed class DxgiCaptureSource : ICaptureSource
             return new CapturedFrame(startTicks, waitEndTicks, 0, 0, success: false);
         }
 
-        ID3D11Texture2D? copy = null;
         try
         {
             using var texture = desktopResource.QueryInterface<ID3D11Texture2D>();
             var desc = texture.Description;
 
-            var copyDesc = new Texture2DDescription
-            {
-                Width = desc.Width,
-                Height = desc.Height,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = desc.Format,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Default,
-                BindFlags = BindFlags.None,
-                CPUAccessFlags = CpuAccessFlags.None,
-            };
+            var poolTex = _texturePool!.Rent((int)desc.Width, (int)desc.Height, desc.Format);
+            _context!.CopyResource(poolTex, texture);
 
-            copy = _device!.CreateTexture2D(copyDesc);
-            _context!.CopyResource(copy, texture);
-
-            _cachedTexture?.Dispose();
-            _cachedTexture = copy;
+            _cachedTexture = poolTex;
             _cachedWidth = (int)desc.Width;
             _cachedHeight = (int)desc.Height;
+
             var copyEndTicks = Stopwatch.GetTimestamp();
-            var clone = _device!.CreateTexture2D(copyDesc);
-            _context!.CopyResource(clone, copy);
-            return new CapturedFrame(startTicks, copyEndTicks, (int)desc.Width, (int)desc.Height, success: true, clone, _device,
-                waitEndTicks, copyEndTicks);
+            return new CapturedFrame(startTicks, copyEndTicks, (int)desc.Width, (int)desc.Height, success: true, poolTex, _device,
+                waitEndTicks, copyEndTicks, ownsTexture: false);
         }
         catch
         {
-            copy?.Dispose();
             return new CapturedFrame(startTicks, waitEndTicks, 0, 0, success: false);
         }
         finally
@@ -195,7 +229,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
 
     public void Dispose()
     {
-        _cachedTexture?.Dispose();
+        _texturePool?.Dispose();
         _duplication?.Dispose();
         if (_ownsDevice)
         {
