@@ -13,10 +13,12 @@ vi.mock('electron', () => ({
 
 let spawnEventCallbacks: Record<string, (chunk: Buffer) => void> = {}
 let spawnCloseCallback: ((code: number) => void) | null = null
+let spawnErrorCallback: ((err: Error) => void) | null = null
 
 function resetSpawnMocks(): void {
   spawnEventCallbacks = {}
   spawnCloseCallback = null
+  spawnErrorCallback = null
 }
 
 vi.mock('child_process', () => ({
@@ -30,6 +32,7 @@ vi.mock('child_process', () => ({
       },
       on: (event: string, cb: unknown) => {
         if (event === 'close') spawnCloseCallback = cb as (code: number) => void
+        if (event === 'error') spawnErrorCallback = cb as (err: Error) => void
       },
     }
   },
