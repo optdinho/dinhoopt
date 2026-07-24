@@ -1488,11 +1488,38 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - AI auto-clipping (event detection) — prioridade futura
 - Voice clip ("clip that")
 - Full session recording + bookmarks
-- Multi-track audio separado (game/mic/Discord)
 - Compilação automática de highlights
 - Compartilhamento / links instantâneos
 - Cloud storage
 - Mobile app
+
+## Future: Multi-Track Audio (registered 2026-07-23)
+
+**Objetivo:** Gravar tracks de áudio independentes no clip (game, Discord, mic, etc.) para allowar edição/exclusão pós-gravação.
+
+### Arquitetura necessária
+```
+CppLoopbackSource (só jogo PID) ──→ Mixer 1 → AAC encoder 1 → track 0 (game)
+WasapiLoopbackSource (tudo) ──────→ Mixer 2 → AAC encoder 2 → track 1 (mixed)
+WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encoder 3 → track 2 (mic)
+```
+
+### O que já existe
+- `CppLoopbackSource` captura áudio por PID (INCLUDE mode) — funciona
+- `WasapiLoopbackSource` captura tudo — funciona
+- `WasapiMicSource` captura microfone — funciona
+- `getAudioSessions` / `setAudioSessions` no engine — enumera e filtra PIDs
+- `AudioMixer` + `FfmpegAacEncoder` — já funcionam para 1 stream
+
+### O que falta
+- Múltiplos `AudioMixer` + `FfmpegAacEncoder` paralelos (1 por track)
+- `ClipExporter` aceitar N streams de áudio (`-map 0:v -map 1:a -map 2:a`)
+- UI para selecionar quais tracks gravar (toggle por app)
+- Preload methods: `clipsGetAudioSessions`, `clipsSetAudioSessions` (já existem, só precisa de UI)
+- Separação no player/editor
+
+### Esforço estimado
+~1-2 semanas
 
 ## Session Summary (2026-06-26 — Items 7, 8: games.json auto-update + ffprobe removal)
 
@@ -2060,3 +2087,81 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ### Commit
 - `6a71b2e` — `fix: 5 correções de sincronia A/V no pipeline de clips`
+
+## Session Summary (2026-07-23 — Áudio clip fix: ADTS separate file + two-input mux)
+
+### Done
+
+- **Áudio nos clips FUNCIONANDO!** FIX 21 validado com FiveM ao vivo:
+  - `MP4 probe: streams=2 video=True audio=True` — áudio confirmado no MP4 final
+  - `═══ SAVE OK ═══` — clipe salvo com sucesso
+  - PTS drift máximo ~10ms (muito abaixo do limite perceptual de 125ms)
+
+- **Root cause do "codec frame size is not set" identificada e corrigida**:
+  - **Problema**: Matroskadec não define `frame_size` para `A_AAC` tracks — o ffmpeg mux com `-c:v copy` via Matroska demux não consegue determinar o tamanho dos frames AAC
+  - **FIX 18 (falhou)**: ADTS headers mantidos no Matroska + `-bsf:a aac_adtstoasc` — ainda `frame_size` zero
+  - **FIX 21 (funcionou)**: Áudio escrito em arquivo `.adts` separado, mux com dois inputs: `-f matroska -i video.mkv -f aac -i audio.adts -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy`
+  - **`-f aac` é o demuxer correto** — `-f adts` é apenas um muxer (output), não aceito como input
+
+- **Diagnostics adicionados**:
+  - `MP4 probe: streams=2 video=True audio=True` — confirmação pós-mux
+  - `ADTS temp: ... (355 KB) audioFrames=701` — tamanho do arquivo ADTS
+  - `ffmpeg mux: ... -f aac -i ...` — comando completo de mux
+  - `First audio: adtsHdr=...` — primeiro frame ADTS para debug
+
+- **Engine compilado e publicado**: `dotnet build` 0 erros, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **214/214 C# tests** — 0 quebras
+- **copy-engine staged**: 288 files
+
+### Key Decisions
+
+- **Separate ADTS file sobre Matroska audio track**: O matroskadec do ffmpeg não define `frame_size` para `A_AAC`, tornando impossível muxar com `-c:v copy` para MP4. Arquivo ADTS separado + `-f aac` demux resolve o problema porque o demuxer AAC nativo lê ADTS frames corretamente e seta `frame_size`.
+- **`-f aac` em vez de `-f adts`**: ffmpeg aceita `adts` apenas como muxer (output), não como demuxer (input). O demuxer correto para dados AAC com headers ADTS é `aac`.
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `WriteAdtsFile()` (novo), `MuxWithFfmpegStreaming()` (dois inputs: `-f matroska` + `-f aac`), `ExportToMp4()` (cria ADTS temp, passa para mux, limpa ambos no finally)
+
+## Session Summary (2026-07-23b — ReplayBuffer disk spill)
+
+### Done
+
+- **ReplayBuffer disk spill implementation**: When RAM budget is insufficient for the required clip duration, oldest frames are evicted to a temp file on disk instead of being discarded.
+
+- **`DiskSpillBuffer` class** (`Buffer/DiskSpillBuffer.cs`):
+  - Append-only temp file in `%TEMP%` (`dinho-spill-{guid}.bin`)
+  - In-memory index of `SpillEntry` records (offset + length per packet)
+  - `Write(byte[])`, `ReadAll()`, `ReadOldest()`, `DrainAll()`, `Clear()`, `CompactFile()`, `Dispose()`
+  - Uses `MemoryMarshal.AsBytes` + helper methods `SysCopyBlock()` to avoid `System.Buffer` namespace collision
+
+- **`ReplayBuffer` modifications** (`Buffer/ReplayBuffer.cs`):
+  - Added `_spill` (DiskSpillBuffer), `_diskSpillEnabled` flag
+  - `EnableDiskSpill()`, `IsDiskSpillEnabled`, `SpillStats()`
+  - `TrimExcessVideo/Audio` now calls `_spill.Write()` before `oldest.Release()` — evicted packets go to disk
+  - `GetSegments()` merges disk packets (sorted by PTS) with RAM packets before window filtering
+  - `Clear()` calls `_spill.Clear()`, `Dispose()` calls `_spill.Dispose()`
+
+- **EngineCoordinator auto-activation** (`EngineCoordinator.Capture.cs`):
+  - After `_buffer.MaxBytes = _activeProfile.MaxBufferBytes`, calculates `neededBytes = maxrateKbps × replaySec × 1024 × 13 / 80`
+  - If `neededBytes > MaxBufferBytes`, calls `_buffer.EnableDiskSpill()` automatically
+  - Logs disk spill status: `[RAM] disk spill enabled: needed=X MB > budget=Y MB`
+
+- **9 new C# tests** for disk spill:
+  - `DiskSpill_EnabledFlag`, `DiskSpill_EvictedPacketsGoToSpill`, `DiskSpill_GetSegmentsMergesDiskAndRam`, `DiskSpill_GetSegmentsWithWindow_FiltersCorrectly`, `DiskSpill_ClearRemovesTempFiles`, `DiskSpill_DisposeCleansUp`, `DiskSpill_AudioSpillsCorrectly`, `DiskSpill_PCMFloatsSurviveRoundTrip`, `DiskSpill_NoSpillWhenDisabled`
+
+- **Full suite**: **5998 TS tests**, 189 files — **0 failures**
+- **C# tests**: **223/223** — **0 failures**
+- **Engine**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 291 files staged (288 engine + ffmpeg)
+- **Coverage**: Statements 94.03%, Branches 85.47%, Functions 94.35%, Lines 95.12%
+
+### Key Decisions
+
+- **ArrayPool-backed disk I/O**: `DiskSpillBuffer.Write()` copies from ArrayPool arrays to file immediately, then calls `Release()` — avoids holding ArrayPool slots during I/O
+- **`MemoryMarshal.AsBytes`** over `Buffer.BlockCopy`: avoids `System.Buffer` namespace shadowing (file is in `DiNho.Capture.Poc.Buffer` namespace)
+- **Auto-activation threshold**: `neededBytes > MaxBufferBytes` — only spills when RAM budget is genuinely insufficient for the configured clip duration
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/DiskSpillBuffer.cs` (new)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs` (disk spill integration)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs` (auto-activation)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs` (9 new tests)
