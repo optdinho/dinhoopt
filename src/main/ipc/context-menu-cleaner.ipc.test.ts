@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ──
 // The IPC module imports electron and our exec-utf8 wrapper. We mock electron
@@ -40,14 +40,12 @@ vi.mock('../services/logger.service', () => ({
   })),
 }))
 
-import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { ContextMenuApplyRequest, ContextMenuEntry, ContextMenuScanResult } from '@shared/types'
+import type { ContextMenuApplyRequest, ContextMenuApplyResult, ContextMenuScanResult } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import { ipcMain } from 'electron'
-import { getBackupDir } from '../services/backup-dir'
 import { execNativeUtf8 } from '../services/exec-utf8'
-import { getLogger } from '../services/logger.service'
 
 import {
   CLSID_SAFELIST,
@@ -478,7 +476,7 @@ describe('scanContextMenu', () => {
     await scanContextMenu(new AbortController().signal)
     // writeDisabledState should be called to persist pruning
     expect(writeFileSync).toHaveBeenCalled()
-    const writeCall = vi.mocked(writeFileSync).mock.calls[0]
+    const writeCall = vi.mocked(writeFileSync).mock.calls[0]!
     const written = JSON.parse(writeCall[1] as string)
     expect(written.entries[staleEntry]).toBeDefined()
   })
@@ -508,10 +506,9 @@ describe('applyContextMenu', () => {
   it('applies disable verb action on entries from scanSession', async () => {
     // Populate scanSession by running the IPC scan handler
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
 
     registerContextMenuCleanerIpc(() => null)
 
@@ -534,17 +531,16 @@ describe('applyContextMenu', () => {
     // Now apply disable on the first verb
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
     const targetEntry = scanResult.entries.find((e) => e.kind === 'verb')!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     expect(result.updates[0]!.status).toBe('disabled')
   })
 
   it('applies enable verb action', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = [
@@ -565,7 +561,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'enable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'enable' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     expect(result.updates[0]!.status).toBe('enabled')
     const expectedArgs = ['delete', targetEntry.keyPath, '/v', 'LegacyDisable', '/f']
@@ -578,10 +574,9 @@ describe('applyContextMenu', () => {
 
   it('deletes a verb entry', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\DeleteMe', '    (Default)    REG_SZ    Delete Me', ''].join('\n')
@@ -596,7 +591,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
       'reg',
@@ -607,10 +602,9 @@ describe('applyContextMenu', () => {
 
   it('disables a handler entry (copy + delete)', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellexBlock = [
@@ -631,7 +625,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     expect(result.updates[0]!.status).toBe('disabled')
     // backupShellExtensionHives runs 11 export calls + 2 applyOne calls
@@ -652,10 +646,9 @@ describe('applyContextMenu', () => {
 
   it('enables a handler entry (copy disabled ← + delete disabled)', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellexBlock = [
@@ -675,7 +668,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'enable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'enable' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     expect(result.updates[0]!.status).toBe('enabled')
     // backupShellExtensionHives runs 11 export calls + 2 applyOne calls
@@ -696,10 +689,9 @@ describe('applyContextMenu', () => {
 
   it('deletes a handler entry (enabled state)', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellexBlock = [
@@ -719,7 +711,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     // Delete in enabled state deletes the enabled path
     expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
@@ -731,10 +723,9 @@ describe('applyContextMenu', () => {
 
   it('deletes a handler entry (disabled state)', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellexBlock = [
@@ -754,7 +745,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'delete' }])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
     // Delete in disabled state deletes the disabled path (with - prefix)
     expect(vi.mocked(execNativeUtf8)).toHaveBeenCalledWith(
@@ -766,10 +757,9 @@ describe('applyContextMenu', () => {
 
   it('returns protected entry error when disabling a protected verb', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\open', '    (Default)    REG_SZ    &Open', ''].join('\n')
@@ -784,17 +774,18 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockReset()
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: protectedEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [
+      { entryId: protectedEntry.id, action: 'disable' },
+    ])) as ContextMenuApplyResult
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toBe('Entry is protected and cannot be modified.')
   })
 
   it('allows enabling a protected entry', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = [
@@ -815,16 +806,17 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: protectedEntry.id, action: 'enable' }])
+    const result = (await applyHandler({}, [
+      { entryId: protectedEntry.id, action: 'enable' },
+    ])) as ContextMenuApplyResult
     expect(result.succeeded).toBe(1)
   })
 
   it('handles errors from execReg during applyOne', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
@@ -839,7 +831,7 @@ describe('applyContextMenu', () => {
     vi.mocked(execNativeUtf8).mockRejectedValue(new Error('ERROR: Access is denied.'))
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])) as ContextMenuApplyResult
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toBe('Access is denied.')
   })
@@ -848,10 +840,9 @@ describe('applyContextMenu', () => {
     const mockWebContents = { send: vi.fn() }
     const mockWindow = { webContents: mockWebContents } as unknown as BrowserWindow
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => mockWindow)
 
     vi.mocked(execNativeUtf8).mockResolvedValue({ stdout: '', stderr: '' })
@@ -864,10 +855,9 @@ describe('applyContextMenu', () => {
 
   it('handles abort signal during apply', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = [
@@ -891,7 +881,6 @@ describe('applyContextMenu', () => {
     const controller = new AbortController()
     controller.abort()
 
-    const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
     const reqs = entries.map((e) => ({ entryId: e.id, action: 'disable' as const }))
     // Pass an abort signal by calling applyContextMenu directly with it
     // (the IPC handler doesn't forward signal, so we call the internal fn)
@@ -903,10 +892,9 @@ describe('applyContextMenu', () => {
 
   it('writes disabled state on disable action', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
@@ -925,7 +913,7 @@ describe('applyContextMenu', () => {
     await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
 
     expect(writeFileSync).toHaveBeenCalled()
-    const writeCall = vi.mocked(writeFileSync).mock.calls[0]
+    const writeCall = vi.mocked(writeFileSync).mock.calls[0]!
     const written = JSON.parse(writeCall[1] as string)
     expect(written.entries[targetEntry.id]).toBeDefined()
     expect(written.entries[targetEntry.id].keyPath).toBe(targetEntry.keyPath)
@@ -935,10 +923,9 @@ describe('applyContextMenu', () => {
 
   it('clears disabled state on enable action', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = [
@@ -977,7 +964,7 @@ describe('applyContextMenu', () => {
     await applyHandler({}, [{ entryId: targetEntry.id, action: 'enable' }])
 
     expect(writeFileSync).toHaveBeenCalled()
-    const writeCall = vi.mocked(writeFileSync).mock.calls[0]
+    const writeCall = vi.mocked(writeFileSync).mock.calls[0]!
     const written = JSON.parse(writeCall[1] as string)
     // The enabled entry should be removed from disabled state
     expect(written.entries[targetEntry.id]).toBeUndefined()
@@ -1004,10 +991,10 @@ describe('registerContextMenuCleanerIpc', () => {
 
   it('scan handler returns empty result on non-Windows', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const scanCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_SCAN)
@@ -1025,10 +1012,10 @@ describe('registerContextMenuCleanerIpc', () => {
 
   it('apply handler validates payload — rejects non-array', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const applyCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_APPLY)
@@ -1050,10 +1037,10 @@ describe('registerContextMenuCleanerIpc', () => {
 
   it('apply handler rejects entries with invalid action', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const applyCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_APPLY)
@@ -1075,10 +1062,10 @@ describe('registerContextMenuCleanerIpc', () => {
 
   it('apply handler returns empty on non-Windows', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const applyCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_APPLY)
@@ -1096,10 +1083,10 @@ describe('registerContextMenuCleanerIpc', () => {
 
   it('scan cancel handler aborts previous scan', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const cancelCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_SCAN_CANCEL)
@@ -1121,10 +1108,9 @@ describe('cleanRegError (indirect)', () => {
 
   it('parses ERROR: prefix from reg.exe', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
@@ -1141,17 +1127,16 @@ describe('cleanRegError (indirect)', () => {
     )
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])) as ContextMenuApplyResult
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toBe('The system was unable to find the specified registry key or value.')
   })
 
   it('returns generic message for non-ERROR format', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
@@ -1166,17 +1151,16 @@ describe('cleanRegError (indirect)', () => {
     vi.mocked(execNativeUtf8).mockRejectedValue(new Error('Something went wrong'))
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])) as ContextMenuApplyResult
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toBe('Something went wrong')
   })
 
   it('truncates long error messages', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
-      return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const shellBlock = ['HKEY_CLASSES_ROOT\\*\\shell\\TestVerb', '    (Default)    REG_SZ    Test Verb', ''].join('\n')
@@ -1192,7 +1176,7 @@ describe('cleanRegError (indirect)', () => {
     vi.mocked(execNativeUtf8).mockRejectedValue(new Error(longMsg))
 
     const applyHandler = handlers.get(IPC.CONTEXT_MENU_APPLY)!
-    const result = await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])
+    const result = (await applyHandler({}, [{ entryId: targetEntry.id, action: 'disable' }])) as ContextMenuApplyResult
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toHaveLength(201) // 200 + …
     expect(result.errors[0]!.reason).toMatch(/…$/)
@@ -1208,10 +1192,10 @@ describe('isApplyRequestArray (indirect via IPC handler)', () => {
 
   it('rejects payload with missing entryId', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const applyCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_APPLY)
@@ -1227,10 +1211,10 @@ describe('isApplyRequestArray (indirect via IPC handler)', () => {
 
   it('rejects non-object entries in array', async () => {
     const mockHandle = vi.fn()
-    vi.mocked(ipcMain.handle).mockImplementation((_ch: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation(((_ch: string, handler: (...args: unknown[]) => unknown) => {
       mockHandle(_ch, handler)
       return undefined as never
-    })
+    }) as never)
     registerContextMenuCleanerIpc(() => null)
 
     const applyCall = mockHandle.mock.calls.find((c: unknown[]) => c[0] === IPC.CONTEXT_MENU_APPLY)

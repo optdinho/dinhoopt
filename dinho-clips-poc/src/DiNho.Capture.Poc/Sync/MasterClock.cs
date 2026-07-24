@@ -8,10 +8,12 @@ public sealed class MasterClock : IDisposable
     private static readonly double TicksPerSecond = Frequency;
 
     private readonly long _startTimestamp;
+    private readonly DateTime _referenceUtc;
 
     public MasterClock()
     {
         _startTimestamp = Stopwatch.GetTimestamp();
+        _referenceUtc = DateTime.UtcNow;
     }
 
     public TimeSpan Now
@@ -25,9 +27,17 @@ public sealed class MasterClock : IDisposable
 
     public long NowHns => (long)(Now.TotalMilliseconds * 10000.0);
 
-    public static TimeSpan FromTimestamp(long timestamp)
+    public long StartTimestamp => _startTimestamp;
+
+    /// <summary>
+    /// Converts a Stopwatch timestamp (from audio capture callback) to the clock's time base.
+    /// Returns the TimeSpan since engine start when the capture happened.
+    /// Uses the same Stopwatch that video PTS uses, eliminating DateTime/Stopwatch drift.
+    /// </summary>
+    public TimeSpan FromTimestamp(long captureTicks)
     {
-        return TimeSpan.FromSeconds((double)timestamp / TicksPerSecond);
+        var elapsed = captureTicks - _startTimestamp;
+        return TimeSpan.FromSeconds((double)elapsed / TicksPerSecond);
     }
 
     public void Dispose()

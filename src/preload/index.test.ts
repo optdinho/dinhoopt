@@ -17,9 +17,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import './index'
 
 function getApi(): Record<string, unknown> {
-  const call = (contextBridge as ReturnType<typeof vi.fn>).exposeInMainWorld.mock.calls.find(
-    (c: [string, unknown]) => c[0] === 'dinho',
-  )
+  const call = (
+    contextBridge as unknown as { exposeInMainWorld: ReturnType<typeof vi.fn> }
+  ).exposeInMainWorld.mock.calls.find((c) => c[0] === 'dinho')
   return call ? (call[1] as Record<string, unknown>) : {}
 }
 

@@ -46,29 +46,36 @@ public sealed partial class EngineCoordinator
                 else
                 {
                     Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
-                    _loopbackSource = new WasapiLoopbackSource(sampleRate, _clock);
+                    _loopbackSource = new WasapiLoopbackSource(sampleRate);
                 }
             }
             else
             {
-                _loopbackSource = new WasapiLoopbackSource(sampleRate, _clock);
+                _loopbackSource = new WasapiLoopbackSource(sampleRate);
                 Log.I("EngineCoordinator", "Áudio: captura completa (loopback) — NENHUM filtro ativo");
             }
         }
 
         _micSource = string.IsNullOrEmpty(_config.Config.MicDeviceId)
-            ? new WasapiMicSource(sampleRate, null, _clock)
-            : new WasapiMicSource(sampleRate, _config.Config.MicDeviceId, _clock);
+            ? new WasapiMicSource(sampleRate, null)
+            : new WasapiMicSource(sampleRate, _config.Config.MicDeviceId);
         return new AudioMixer(_loopbackSource, _micSource, _clock);
     }
 
     private int _audioPacketCount;
     private int _audioSampleRate = 48000;
     private TimeSpan _lastAudioAnchor = TimeSpan.Zero;
+    private int _maxAacDrainCount;
 
     private void OnAudioPacket(EncodedPacket packet)
     {
-        if (!_recording) return;
+        if (!_recording)
+        {
+            if (_audioPacketCount == 0)
+                Log.W("AudioDiag", $"Primeiro packet DESCARTADO: !_recording. packet pts={packet.Pts.TotalSeconds:F3}s");
+            _audioPacketCount++;
+            return;
+        }
 
         _audioPacketCount++;
 
@@ -80,6 +87,8 @@ public sealed partial class EngineCoordinator
         // que gerou estes AAC frames), que é atualizado SÓ DEPOIS do drain.
         if (packet.PcmSamples != null)
             _aacEncoder?.EncodeAudio(packet.PcmSamples);
+        else if (_audioPacketCount <= 5)
+            Log.W("AudioDiag", $"packet #{_audioPacketCount}: PcmSamples=null (sem dados PCM)");
 
         // Drena AAC frames usando _lastAudioAnchor (PTS do PCM que os produziu)
         // — NÃO packet.Pts (que pode ser de um batch MAIS NOVO se o encoder
@@ -99,8 +108,19 @@ public sealed partial class EngineCoordinator
         if (packet.Pts > _lastAudioAnchor || _lastAudioAnchor == TimeSpan.Zero)
             _lastAudioAnchor = packet.Pts;
 
+        // Diagnóstico de A/V sync: rastreia pico de aacCount (frames AAC drenados por batch).
+        // Se aacCount > 1, o offset dentro do batch usa o mesmo anchor → erro potencial
+        // de (aacCount-1) * 21.3ms (1024 samples / 48kHz).
+        if (aacCount > _maxAacDrainCount)
+            _maxAacDrainCount = aacCount;
+
+        if (_audioPacketCount % 1000 == 0 && _audioPacketCount > 0)
+            Log.I("AudioDiag", $"SYNC-DIAG: packets={_audioPacketCount} maxAacDrain={_maxAacDrainCount} anchorGap={(_lastAudioAnchor - TimeSpan.FromSeconds((_audioPacketCount - 1) * 1024.0 / _audioSampleRate)).TotalMilliseconds:F1}ms");
+
         if ((_audioPacketCount <= 5 || _audioPacketCount % 100 == 0) && aacCount > 0)
             Log.D("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced={aacCount}");
+        else if (_audioPacketCount <= 5 && aacCount == 0 && packet.PcmSamples != null)
+            Log.W("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced=0 (encoder pode estar aquecendo)");
     }
 
     private List<(int Pid, string Name)> ResolveAudioPids(Dictionary<int, string> selectedPids)
@@ -153,17 +173,19 @@ public sealed partial class EngineCoordinator
 
     private void ToggleMic()
     {
-        if (_audioMixer != null)
+        var mixer = _audioMixer;
+        if (mixer != null)
         {
-            _audioMixer.MicEnabled = !_audioMixer.MicEnabled;
-            Log.I("EngineCoordinator", $"[toggleMic] Microfone: {(_audioMixer.MicEnabled ? "ATIVO" : "MUTO")}");
+            mixer.MicEnabled = !mixer.MicEnabled;
+            Log.I("EngineCoordinator", $"[toggleMic] Microfone: {(mixer.MicEnabled ? "ATIVO" : "MUTO")}");
         }
     }
 
     private void OnMicStateChanged(bool active)
     {
-        if (_audioMixer != null)
-            _audioMixer.MicEnabled = active;
+        var mixer = _audioMixer;
+        if (mixer != null)
+            mixer.MicEnabled = active;
         Log.I("EngineCoordinator", $"[pttEvent] Microfone (PTT): {(active ? "ATIVO" : "MUTO")}");
     }
 

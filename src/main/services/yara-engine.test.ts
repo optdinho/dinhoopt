@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,7 @@ vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
   return {
     ...actual,
-    readFileSync: (path: string, encoding: string) => {
+    readFileSync: (path: string) => {
       if (mockReadFileError) throw mockReadFileError
       if (path === '/rules/elastic_Linux_Rule.yar' || path === '/rules/elastic_Linux_Trojan_Mirai.yar') {
         return ''
@@ -397,8 +397,8 @@ describe('YaraEngine', () => {
       await engine.loadRules([], [RULE_HELLO])
       const result = engine.scanBuffer(Buffer.from('say hello world'))
       expect(result.length).toBe(1)
-      expect(result[0].ruleName).toBe('MatchHello')
-      expect(result[0].matchedStrings).toEqual(['hello'])
+      expect(result[0]!.ruleName).toBe('MatchHello')
+      expect(result[0]!.matchedStrings).toEqual(['hello'])
     })
 
     it('returns empty for clean data', async () => {
@@ -429,7 +429,7 @@ describe('YaraEngine', () => {
       writeFileSync(filePath, 'hello from file')
       const result = engine.scanFile(filePath)
       expect(result.length).toBe(1)
-      expect(result[0].ruleName).toBe('MatchHello')
+      expect(result[0]!.ruleName).toBe('MatchHello')
       rmSync(tmp, { recursive: true, force: true })
     })
   })
@@ -452,12 +452,12 @@ rule TestMeta {
       await engine.loadRules([], [RULE_WITH_META])
       const result = engine.scanBuffer(Buffer.from('trigger word'))
       expect(result.length).toBe(1)
-      expect(result[0].ruleName).toBe('TestMeta')
-      expect(result[0].metadata.detectionName).toBe('Custom.Detect')
-      expect(result[0].metadata.severity).toBe('critical')
-      expect(result[0].metadata.details).toBe('Test detail')
-      expect(result[0].metadata.filenameOnly).toBe('bad.exe')
-      expect(result[0].matchedStrings).toEqual(['trigger'])
+      expect(result[0]!.ruleName).toBe('TestMeta')
+      expect(result[0]!.metadata.detectionName).toBe('Custom.Detect')
+      expect(result[0]!.metadata.severity).toBe('critical')
+      expect(result[0]!.metadata.details).toBe('Test detail')
+      expect(result[0]!.metadata.filenameOnly).toBe('bad.exe')
+      expect(result[0]!.matchedStrings).toEqual(['trigger'])
     })
   })
 
@@ -492,7 +492,7 @@ describe('scanFileWithLock', () => {
     ;(await import('node:fs')).writeFileSync(fp, 'hello scan')
     const result = await scanFileWithLock(fp)
     expect(result.length).toBe(1)
-    expect(result[0].ruleName).toBe('MatchHello')
+    expect(result[0]!.ruleName).toBe('MatchHello')
     ;(await import('node:fs')).rmSync(tmp, { recursive: true, force: true })
   })
 
@@ -527,7 +527,7 @@ describe('scanBufferWithLock', () => {
 
     const result = await scanBufferWithLock(Buffer.from('hello test'))
     expect(result.length).toBe(1)
-    expect(result[0].ruleName).toBe('MatchHello')
+    expect(result[0]!.ruleName).toBe('MatchHello')
   })
 
   it('returns empty when no active engine', async () => {

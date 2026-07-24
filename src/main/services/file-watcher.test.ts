@@ -35,7 +35,7 @@ vi.mock('node:fs', () => ({
 function triggerWatchEvent(eventType: string, filename: string | null): void {
   const watcher = emittedWatchers[0]
   if (watcher) {
-    watcher.emit('change', eventType, filename)
+    ;(watcher.emit as unknown as (...args: unknown[]) => void)('change', eventType, filename)
   }
 }
 

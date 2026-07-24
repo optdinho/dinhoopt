@@ -152,9 +152,8 @@ public sealed class AudioMixer : IDisposable
 
     private void OnLoopbackData(AudioBuffer buf)
     {
-        // Usa o timestamp do buffer (capturado na fonte) quando disponível.
-        // Fallback para _clock.Now apenas para CppLoopbackSource (sem timestamp nativo).
-        var pts = buf.CaptureTimestamp ?? _clock.Now;
+        // Use Stopwatch-based capture timestamp for A/V sync — same clock as video
+        var pts = _clock.FromTimestamp(buf.CaptureTicks);
 
         lock (_lock)
         {
@@ -187,7 +186,7 @@ public sealed class AudioMixer : IDisposable
         else
             samples = buf.Samples;
 
-        var pts = buf.CaptureTimestamp ?? _clock.Now;
+        var pts = _clock.FromTimestamp(buf.CaptureTicks);
 
         lock (_lock)
         {

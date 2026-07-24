@@ -41,4 +41,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "Build concluído com sucesso!" -ForegroundColor Green
-Write-Host "Binário: $(Join-Path $ProjectDir "bin" "x64" $Configuration "net9.0-windows10.0.19041.0" "DiNho.Capture.Poc.exe")"
+Write-Host "Binário: $(Join-Path $ProjectDir "bin" "x64" $Configuration "net10.0-windows10.0.26100.0" "DiNho.Capture.Poc.exe")"

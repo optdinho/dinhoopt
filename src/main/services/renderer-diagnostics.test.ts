@@ -145,8 +145,7 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('does not open DevTools when app is not packaged', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    vi.mocked(app).isPackaged = false
+    Object.defineProperty(app, 'isPackaged', { value: false, writable: true, configurable: true })
     // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 

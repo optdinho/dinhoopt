@@ -42,7 +42,8 @@ const mockSocket = {
 
 vi.mock('node:child_process', () => ({ execFile: vi.fn(), execFileSync: vi.fn(), spawn: vi.fn() }))
 vi.mock('node:net', () => ({ connect: vi.fn(() => mockSocket) }))
-vi.mock('node:fs', () => ({ existsSync: vi.fn(), readdirSync: vi.fn(), statSync: vi.fn() }))
+vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
+vi.mock('node:fs/promises', () => ({ readdir: vi.fn(), stat: vi.fn() }))
 vi.mock('electron', () => ({
   app: { isPackaged: false },
   BrowserWindow: { getAllWindows: vi.fn(() => []) },
@@ -72,7 +73,8 @@ vi.mock('../services/clips-config-manager', () => ({
 vi.mock('../services/thumbnail-generator', () => ({ getCachedThumbnailPath: vi.fn(() => null) }))
 
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync } from 'node:fs'
+import { readdir, stat } from 'node:fs/promises'
 import { connect } from 'node:net'
 import { BrowserWindow, app } from 'electron'
 import {
@@ -184,7 +186,7 @@ describe('getEnginePath', () => {
       'DiNho.Capture.Poc',
       'bin',
       isDev ? 'Debug' : 'Release',
-      'net9.0-windows10.0.26100.0',
+      'net10.0-windows10.0.26100.0',
       isDev ? 'DiNho.Capture.Poc.exe' : join('publish', 'DiNho.Capture.Poc.exe'),
     )
   }
@@ -272,7 +274,7 @@ describe('getEnginePath', () => {
       'DiNho.Capture.Poc',
       'bin',
       'Release',
-      'net9.0-windows10.0.26100.0',
+      'net10.0-windows10.0.26100.0',
       'publish',
       'DiNho.Capture.Poc.exe',
     )
@@ -359,11 +361,11 @@ describe('readClipsFromDisk', () => {
 
   it('returns sorted clips from disk', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdirSync).mockReturnValue(['b.mp4', 'a.mp4'])
+    vi.mocked(readdir).mockResolvedValue(['b.mp4', 'a.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
     mockFfmpegDuration('Duration: 00:01:00.00\n')
-    vi.mocked(statSync)
-      .mockReturnValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z') } as ReturnType<typeof statSync>)
-      .mockReturnValueOnce({ size: 200, birthtime: new Date('2026-06-21T10:00:00Z') } as ReturnType<typeof statSync>)
+    vi.mocked(stat)
+      .mockResolvedValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z'), mtime: new Date('2026-06-20T10:00:00Z') } as Awaited<ReturnType<typeof stat>>)
+      .mockResolvedValueOnce({ size: 200, birthtime: new Date('2026-06-21T10:00:00Z'), mtime: new Date('2026-06-21T10:00:00Z') } as Awaited<ReturnType<typeof stat>>)
 
     const clips = await readClipsFromDisk()
     expect(clips).toHaveLength(2)
@@ -375,13 +377,13 @@ describe('readClipsFromDisk', () => {
 
   it('falls back to mtime when birthtime is epoch 0', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdirSync).mockReturnValue(['clip.mp4'])
+    vi.mocked(readdir).mockResolvedValue(['clip.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
     mockFfmpegDuration('Duration: 00:01:00.00\n')
-    vi.mocked(statSync).mockReturnValue({
+    vi.mocked(stat).mockResolvedValue({
       size: 100,
       birthtime: new Date(0),
       mtime: new Date('2026-06-21T10:00:00Z'),
-    } as ReturnType<typeof statSync>)
+    } as Awaited<ReturnType<typeof stat>>)
 
     const clips = await readClipsFromDisk()
     expect(clips).toHaveLength(1)
@@ -390,8 +392,8 @@ describe('readClipsFromDisk', () => {
 
   it('filters non-mp4 files', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdirSync).mockReturnValue(['clip.mp4', 'notes.txt', 'image.png'])
-    vi.mocked(statSync).mockReturnValue({ size: 50, birthtime: new Date() } as ReturnType<typeof statSync>)
+    vi.mocked(readdir).mockResolvedValue(['clip.mp4', 'notes.txt', 'image.png'] as unknown as Awaited<ReturnType<typeof readdir>>)
+    vi.mocked(stat).mockResolvedValue({ size: 50, birthtime: new Date(), mtime: new Date() } as Awaited<ReturnType<typeof stat>>)
     mockFfmpegDuration('Duration: 00:01:00.00\n')
 
     const clips = await readClipsFromDisk()
@@ -401,13 +403,11 @@ describe('readClipsFromDisk', () => {
 
   it('skips files that fail to stat', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdirSync).mockReturnValue(['good.mp4', 'bad.mp4'])
+    vi.mocked(readdir).mockResolvedValue(['good.mp4', 'bad.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
     mockFfmpegDuration('Duration: 00:00:30.00\n')
-    vi.mocked(statSync)
-      .mockReturnValueOnce({ size: 50, birthtime: new Date() } as ReturnType<typeof statSync>)
-      .mockImplementationOnce(() => {
-        throw new Error('permission denied')
-      })
+    vi.mocked(stat)
+      .mockResolvedValueOnce({ size: 50, birthtime: new Date(), mtime: new Date() } as Awaited<ReturnType<typeof stat>>)
+      .mockRejectedValueOnce(new Error('permission denied'))
 
     const clips = await readClipsFromDisk()
     expect(clips).toHaveLength(1)
@@ -416,9 +416,7 @@ describe('readClipsFromDisk', () => {
 
   it('handles readdir error gracefully', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdirSync).mockImplementation(() => {
-      throw new Error('disk error')
-    })
+    vi.mocked(readdir).mockRejectedValue(new Error('disk error'))
 
     const clips = await readClipsFromDisk()
     expect(clips).toEqual([])
@@ -945,7 +943,11 @@ describe('startClipCapture', () => {
     )
 
     const promise = startClipCapture()
-    // The sendPipeCommand for startCapture should include gameProcess
+    // startClipCapture syncs config first — respond to that
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    // Flush microtasks so startClipCapture proceeds past the config await
+    await new Promise((r) => setTimeout(r, 0))
+    // Now startCapture is sent
     expect(mockSocket.write).toHaveBeenCalledWith(expect.stringContaining('startCapture'))
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
@@ -959,7 +961,8 @@ describe('startClipCapture', () => {
     await startEngine()
 
     const promise = startClipCapture()
-
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    await new Promise((r) => setTimeout(r, 0))
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
     expect(result).toEqual({ success: true })
@@ -972,6 +975,8 @@ describe('startClipCapture', () => {
     await startEngine()
 
     const promise = startClipCapture()
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    await new Promise((r) => setTimeout(r, 0))
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":false,"error":"denied"}}\n`)
     const result = await promise
     expect(result).toEqual({ success: false, error: 'denied' })
@@ -992,10 +997,12 @@ describe('startClipCapture', () => {
     )
 
     const promise = startClipCapture()
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(mockSocket.write).toHaveBeenCalledWith(expect.stringContaining('startCapture'))
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
     expect(result).toEqual({ success: true })
-    expect(mockSocket.write).toHaveBeenCalledWith(expect.stringContaining('startCapture'))
   })
 })
 

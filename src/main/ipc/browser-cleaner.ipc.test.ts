@@ -9,16 +9,14 @@ vi.mock('electron', () => ({
 }))
 
 const mockExistsSync = vi.fn()
-const mockStatSync = vi.fn(() => {
-  throw new Error('stat error')
-})
+const mockStatSync = vi.fn()
 vi.mock('fs', () => ({
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
-  statSync: (...args: unknown[]) => mockStatSync(...args),
+  statSync: (s: string) => mockStatSync(s),
 }))
 
 const mockReaddir = vi.fn()
-vi.mock('fs/promises', () => ({ readdir: (...args: unknown[]) => mockReaddir(...args) }))
+vi.mock('fs/promises', () => ({ readdir: (s: string) => mockReaddir(s) }))
 
 const mockScanDirectory = vi.fn()
 const mockCleanItems = vi.fn()

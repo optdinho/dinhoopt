@@ -170,13 +170,9 @@ public sealed partial class EngineCoordinator
                 return;
 
             var dir = GetOutputDirectory();
-            var drive = new DriveInfo(dir);
-            var threshold = _config.Config.AutoCleanupThresholdPercent / 100.0;
-            var restore = Math.Min(threshold - 0.05, 0.85);
+            var thresholdBytes = (long)_config.Config.AutoCleanupThresholdGB * 1024 * 1024 * 1024;
 
-            if (drive.AvailableFreeSpace >= drive.TotalSize * (1.0 - threshold))
-                return;
-
+            // Calcula tamanho total dos clips
             var favoriteMarkers = new HashSet<string>(
                 Directory.GetFiles(dir, "*.favorite"),
                 StringComparer.OrdinalIgnoreCase);
@@ -187,10 +183,15 @@ public sealed partial class EngineCoordinator
                 .OrderBy(f => f.CreationTime)
                 .ToList();
 
+            long totalBytes = files.Sum(f => f.Length);
+            if (totalBytes <= thresholdBytes)
+                return;
+
+            long targetBytes = (long)(_config.Config.AutoCleanupThresholdGB * 0.9) * 1024 * 1024 * 1024; // Limpa até 90% do limite
             long deleted = 0;
             foreach (var file in files)
             {
-                if (drive.AvailableFreeSpace >= drive.TotalSize * (1.0 - restore))
+                if (totalBytes - deleted <= targetBytes)
                     break;
                 try
                 {
@@ -201,7 +202,7 @@ public sealed partial class EngineCoordinator
             }
 
             if (deleted > 0)
-                Log.E("Cleanup", $"Removidos {deleted / (1024 * 1024)} MB em clips antigos (threshold={_config.Config.AutoCleanupThresholdPercent}%)");
+                Log.E("Cleanup", $"Removidos {deleted / (1024 * 1024)} MB em clips antigos (limite={_config.Config.AutoCleanupThresholdGB}GB)");
         }
         catch { }
     }

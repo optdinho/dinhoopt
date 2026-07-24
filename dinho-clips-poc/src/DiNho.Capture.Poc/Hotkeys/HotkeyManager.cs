@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -22,7 +23,7 @@ public sealed class HotkeyPressedEventArgs : EventArgs
 public sealed class HotkeyManager : IDisposable
 {
     private readonly List<HotkeyBinding> _bindings = new();
-    private readonly HashSet<int> _keysDown = new();
+    private readonly ConcurrentDictionary<int, byte> _keysDown = new();
     private WindowsHookDelegate? _hookDelegate;
     private WindowsHookDelegate? _mouseHookDelegate;
     private IntPtr _hookId = IntPtr.Zero;
@@ -142,22 +143,22 @@ public sealed class HotkeyManager : IDisposable
 
                 if (isKeyDown)
                 {
-                    if (_keysDown.Contains(vkCode))
+                    if (_keysDown.ContainsKey(vkCode))
                         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
 
-                    _keysDown.Add(vkCode);
+                    _keysDown.TryAdd(vkCode, 0);
                     var generic = MapToGenericVk(vkCode);
                     if (generic != null)
-                        _keysDown.Add(generic.Value);
+                        _keysDown.TryAdd(generic.Value, 0);
                     OnRawKeyEvent?.Invoke(vkCode, true);
                     MatchAndFireHotkey(vkCode);
                 }
                 else if (isKeyUp)
                 {
-                    _keysDown.Remove(vkCode);
+                    _keysDown.TryRemove(vkCode, out _);
                     var generic = MapToGenericVk(vkCode);
                     if (generic != null)
-                        _keysDown.Remove(generic.Value);
+                        _keysDown.TryRemove(generic.Value, out _);
                     OnRawKeyEvent?.Invoke(vkCode, false);
                 }
             }
@@ -192,15 +193,15 @@ public sealed class HotkeyManager : IDisposable
 
             if (isDown)
             {
-                if (_keysDown.Contains(vkCode))
+                if (_keysDown.ContainsKey(vkCode))
                     return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
-                _keysDown.Add(vkCode);
+                _keysDown.TryAdd(vkCode, 0);
                 OnRawKeyEvent?.Invoke(vkCode, true);
                 MatchAndFireHotkey(vkCode);
             }
             else
             {
-                _keysDown.Remove(vkCode);
+                _keysDown.TryRemove(vkCode, out _);
                 OnRawKeyEvent?.Invoke(vkCode, false);
             }
         }
@@ -250,9 +251,9 @@ public sealed class HotkeyManager : IDisposable
     internal void SetKeyPressed(int vk, bool pressed)
     {
         if (pressed)
-            _keysDown.Add(vk);
+            _keysDown.TryAdd(vk, 0);
         else
-            _keysDown.Remove(vk);
+            _keysDown.TryRemove(vk, out _);
     }
 
     private static int? MapToGenericVk(int vk)
@@ -270,7 +271,7 @@ public sealed class HotkeyManager : IDisposable
     {
         foreach (var mod in modVks)
         {
-            if (!_keysDown.Contains(mod))
+            if (!_keysDown.ContainsKey(mod))
                 return false;
         }
         return true;

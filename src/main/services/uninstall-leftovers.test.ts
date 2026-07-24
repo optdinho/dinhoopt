@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ─── Module-level mocks ──────────────────────────────────────────

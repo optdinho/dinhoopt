@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   ipcHandle: vi.fn(),
@@ -277,7 +277,7 @@ describe('registerDriverManagerIpc', () => {
       mocks.execNativeUtf8.mockResolvedValue({ stdout: '' })
       registerDriverManagerIpc(() => null)
       const handler = getHandler('driver:clean')
-      const result = await handler({} as unknown[], ['oem0.inf'])
+      const result = (await handler({} as unknown[], ['oem0.inf'])) as { removed: number; failed: number }
       expect(result.removed).toBe(1)
       expect(result.failed).toBe(0)
     })
@@ -290,7 +290,7 @@ describe('registerDriverManagerIpc', () => {
       })
       registerDriverManagerIpc(() => null)
       const handler = getHandler('driver:update:install')
-      const result = await handler({} as unknown[], ['update-001'])
+      const result = (await handler({} as unknown[], ['update-001'])) as { installed: number }
       expect(result.installed).toBe(1)
     })
   })
@@ -555,8 +555,8 @@ describe('scanDrivers', () => {
     mocks.statSync.mockReturnValueOnce({ size: 5000 })
 
     const result = await scanDrivers()
-    expect(result.packages[0].folderPath).toContain('DriverStore')
-    expect(result.packages[0].size).toBe(5000)
+    expect(result.packages[0]!.folderPath).toContain('DriverStore')
+    expect(result.packages[0]!.size).toBe(5000)
   })
 
   it('computes folder size with subdirectory entry', async () => {
@@ -682,7 +682,7 @@ describe('cleanDrivers', () => {
     const result = await cleanDrivers(['bad.exe'])
     expect(result.removed).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Invalid driver package name')
+    expect(result.errors[0]!.reason).toBe('Invalid driver package name')
   })
 
   it('handles multiple with some invalid', async () => {
@@ -702,7 +702,7 @@ describe('cleanDrivers', () => {
     const result = await cleanDrivers(['oem0.inf'])
     expect(result.removed).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Driver is currently in use by a device')
+    expect(result.errors[0]!.reason).toBe('Driver is currently in use by a device')
   })
 
   it('handles generic pnputil error', async () => {
@@ -712,7 +712,7 @@ describe('cleanDrivers', () => {
     const result = await cleanDrivers(['oem0.inf'])
     expect(result.removed).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('access denied')
+    expect(result.errors[0]!.reason).toBe('access denied')
   })
 
   it('handles error with only message property', async () => {
@@ -722,7 +722,7 @@ describe('cleanDrivers', () => {
     const result = await cleanDrivers(['oem0.inf'])
     expect(result.removed).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Unknown failure')
+    expect(result.errors[0]!.reason).toBe('Unknown failure')
   })
 
   it('computes preSize from OEM folder map', async () => {
@@ -760,9 +760,9 @@ describe('scanDriverUpdates', () => {
     const result = await scanDriverUpdates()
     expect(result.updates).toHaveLength(1)
     expect(result.totalAvailable).toBe(1)
-    expect(result.updates[0].deviceName).toBe('Intel Graphics')
-    expect(result.updates[0].updateId).toBe('upd-001')
-    expect(result.updates[0].selected).toBe(true)
+    expect(result.updates[0]!.deviceName).toBe('Intel Graphics')
+    expect(result.updates[0]!.updateId).toBe('upd-001')
+    expect(result.updates[0]!.selected).toBe(true)
   })
 
   it('returns empty when no updates found', async () => {
@@ -901,7 +901,7 @@ describe('installDriverUpdates', () => {
     expect(result.installed).toBe(1)
     expect(result.failed).toBe(1)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].deviceName).toBe('Driver2')
+    expect(result.errors[0]!.deviceName).toBe('Driver2')
   })
 
   it('reports reboot required', async () => {
@@ -920,7 +920,7 @@ describe('installDriverUpdates', () => {
     const result = await installDriverUpdates(['upd-001'])
     expect(result.installed).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].deviceName).toBe('Windows Update')
+    expect(result.errors[0]!.deviceName).toBe('Windows Update')
   })
 
   it('reports progress when onProgress provided', async () => {
@@ -946,7 +946,7 @@ describe('installDriverUpdates', () => {
     const result = await installDriverUpdates(['upd-001'])
     expect(result.installed).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Install failure')
+    expect(result.errors[0]!.reason).toBe('Install failure')
   })
 
   it('deduplicates installed count from RESULT line', async () => {

@@ -18,7 +18,7 @@ vi.mock('util', () => ({
     (fn: unknown) =>
     (...args: unknown[]) => {
       return new Promise((resolve, reject) => {
-        ;(fn as (...args: never[]) => unknown)(...args, (err: Error | null, result: unknown) => {
+        ;(fn as (...args: unknown[]) => unknown)(...args, (err: Error | null, result: unknown) => {
           if (err) reject(err)
           else resolve(result)
         })
@@ -139,7 +139,7 @@ describe('DEBLOATER_REMOVE handler', () => {
   it('sends progress via window.webContents.send on win32', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -147,7 +147,7 @@ describe('DEBLOATER_REMOVE handler', () => {
     // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDebloaterIpc(() => mockWindow() as any)
     const handler = getHandler('debloater:remove')
-    const result = await handler({}, ['Microsoft.BingNews'])
+    const result = (await handler({}, ['Microsoft.BingNews'])) as { removed: number; failed: number }
     expect(result.removed).toBe(1)
     expect(mockSend).toHaveBeenCalledWith('debloater:remove:progress', expect.any(Object))
   })
@@ -195,7 +195,7 @@ describe('scanBloatware', () => {
 
   it('returns empty array when PowerShell fails', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(new Error('PowerShell not found'), '', '')
       }
@@ -206,7 +206,7 @@ describe('scanBloatware', () => {
 
   it('returns empty array when JSON parsing fails', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: 'not valid json' })
       }
@@ -232,7 +232,7 @@ describe('scanBloatware', () => {
       { Name: 'SomeUnknownApp', PackageFullName: 'SomeUnknownApp_1.0', InstallLocation: 'C:\\fake3', Size: 1024 },
     ]
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: JSON.stringify(fakeInstalledPackages) })
       }
@@ -256,7 +256,7 @@ describe('scanBloatware', () => {
       { Name: 'Microsoft.WindowsMaps', PackageFullName: 'test5', InstallLocation: 'C:\\', Size: 0 }, // zero
     ]
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: JSON.stringify(fakePackages) })
       }
@@ -283,7 +283,7 @@ describe('scanBloatware', () => {
   it('handles single-object PowerShell output (not wrapped in array)', async () => {
     const singlePackage = { Name: 'Microsoft.BingNews', PackageFullName: 'test', InstallLocation: 'C:\\', Size: 1024 }
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: JSON.stringify(singlePackage) })
       }
@@ -299,7 +299,7 @@ describe('scanBloatware', () => {
       { Name: 'Microsoft.BingNews.Extra', PackageFullName: 'test', InstallLocation: 'C:\\', Size: 1024 },
     ]
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: JSON.stringify(fakePackages) })
       }
@@ -314,7 +314,7 @@ describe('scanBloatware', () => {
   it('scans provisioned packages in Phase 2 when Phase 1 fails', async () => {
     let callCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       callCount++
       if (typeof callback === 'function') {
         if (callCount === 1) {
@@ -340,7 +340,7 @@ describe('scanBloatware', () => {
   it('scans Win32 programs in Phase 3 and formats sizes', async () => {
     let callCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       callCount++
       if (typeof callback === 'function') {
         if (callCount === 1) {
@@ -374,7 +374,7 @@ describe('scanBloatware', () => {
   it('handles Win32 Phase 3 failure gracefully', async () => {
     let callCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       callCount++
       if (typeof callback === 'function') {
         if (callCount === 1) {
@@ -403,7 +403,7 @@ describe('removeBloatware', () => {
 
   it('filters out package names not in KNOWN_BLOATWARE', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -417,7 +417,7 @@ describe('removeBloatware', () => {
 
   it('removes known packages and counts successes', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -430,7 +430,7 @@ describe('removeBloatware', () => {
 
   it('counts failures when PowerShell removal fails', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(new Error('Remove-AppxPackage failed'), '', '')
       }
@@ -443,7 +443,7 @@ describe('removeBloatware', () => {
 
   it('calls onProgress callback during removal', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -459,7 +459,7 @@ describe('removeBloatware', () => {
 
   it('reports failed status in onProgress when removal fails', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(new Error('fail'), '', '')
       }
@@ -477,7 +477,7 @@ describe('removeBloatware', () => {
     // All valid package names come from KNOWN_BLOATWARE which don't contain quotes,
     // but the code has escaping as a safety net.
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -496,7 +496,7 @@ describe('removeBloatware', () => {
     let callCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
       callCount++
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         if (callCount === 2) {
           // Deprovisioning fails (needs admin)
@@ -536,7 +536,7 @@ describe('removeBloatware', () => {
     // Phase 3 with a Win32 match containing ProductCode
     let scanCallCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       scanCallCount++
       if (typeof callback === 'function') {
         if (scanCallCount === 1) {
@@ -572,7 +572,7 @@ describe('removeBloatware', () => {
     scanCallCount = 0
 
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -594,7 +594,7 @@ describe('removeBloatware', () => {
 
     let scanCallCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       scanCallCount++
       if (typeof callback === 'function') {
         if (scanCallCount === 1) {
@@ -623,7 +623,7 @@ describe('removeBloatware', () => {
     scanCallCount = 0
 
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(null, { stdout: '' })
       }
@@ -644,7 +644,7 @@ describe('removeBloatware', () => {
 
     let scanCallCount = 0
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       scanCallCount++
       if (typeof callback === 'function') {
         if (scanCallCount === 1) {
@@ -674,7 +674,7 @@ describe('removeBloatware', () => {
     scanCallCount = 0
 
     mockExecFile.mockImplementation((...args: unknown[]) => {
-      const callback = args[args.length - 1] as (...args: never[]) => unknown
+      const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       if (typeof callback === 'function') {
         callback(new Error('msiexec failed'), '', '')
       }

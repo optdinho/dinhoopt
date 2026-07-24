@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { UpdateSeverity } from '../../../shared/types'
 import { severityOrder, useUpdaterStore } from './updater-store'
 
-function makeApp(id: string, overrides: Partial<{ name: string; selected: boolean; severity: string }> = {}) {
+function makeApp(id: string, overrides: Partial<{ name: string; selected: boolean; severity: UpdateSeverity }> = {}) {
   return {
     id,
     name: overrides.name ?? `App ${id}`,
@@ -80,13 +81,20 @@ describe('updater-store', () => {
   })
 
   it('setProgress updates progress', () => {
-    const p = { current: 1, total: 3, currentApp: 'App1' }
+    const p = {
+      phase: 'updating' as const,
+      current: 1,
+      total: 3,
+      currentApp: 'App1',
+      percent: 33,
+      status: 'in-progress' as const,
+    }
     useUpdaterStore.getState().setProgress(p)
     expect(useUpdaterStore.getState().progress).toEqual(p)
   })
 
   it('setUpdateResult updates updateResult', () => {
-    const r = { updated: 2, failed: 0, errors: [] }
+    const r = { succeeded: 2, failed: 0, errors: [] }
     useUpdaterStore.getState().setUpdateResult(r)
     expect(useUpdaterStore.getState().updateResult).toEqual(r)
   })

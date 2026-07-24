@@ -63,12 +63,11 @@ function makeEntry(id: string, overrides?: Partial<RegistryEntry>): RegistryEntr
   return {
     id,
     keyPath: `HKLM\\SOFTWARE\\Test\\${id}`,
-    valueName: null,
+    valueName: '',
     type: 'invalid',
     risk: 'low',
     selected: false,
-    title: `Test ${id}`,
-    description: `Desc ${id}`,
+    issue: `Issue ${id}`,
     ...overrides,
   }
 }
@@ -199,7 +198,7 @@ describe('IPC.REGISTRY_SCAN', () => {
       expect.any(Function),
       expect.any(AbortSignal),
     )
-    expect(mockFixRegistryEntries.mock.calls[0][0]).toHaveLength(1)
+    expect(mockFixRegistryEntries.mock.calls[0]![0]).toHaveLength(1)
   })
 })
 
@@ -393,7 +392,6 @@ describe('IPC.REGISTRY_FIX', () => {
     const scanHandler = getHandler(IPC.REGISTRY_SCAN)
     await scanHandler()
 
-    const mockSend = vi.fn()
     mockFixRegistryEntries.mockImplementation(
       async (_entries: unknown, onProgress: (c: number, t: number, e: string) => void) => {
         onProgress(1, 1, 'null-win')
@@ -525,13 +523,13 @@ describe('module exports', () => {
 
   it('re-exports fixRegistryEntries from service', () => {
     expect(fixRegistryEntries).toBeDefined()
-    fixRegistryEntries()
+    fixRegistryEntries([])
     expect(mockFixRegistryEntries).toHaveBeenCalled()
   })
 
   it('re-exports collectBackupTargets from service', () => {
     expect(collectBackupTargets).toBeDefined()
-    collectBackupTargets()
+    collectBackupTargets([])
     expect(mockCollectBackupTargets).toHaveBeenCalled()
   })
 })

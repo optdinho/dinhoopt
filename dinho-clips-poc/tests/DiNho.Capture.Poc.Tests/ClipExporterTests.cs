@@ -479,7 +479,7 @@ public sealed class ClipExporterTests
         {
             new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromMilliseconds(667), dur, false)
         };
-        var result = ClipExporter.PadAudioWithSilence(audio, 48000, TimeSpan.Zero);
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000, 2, TimeSpan.Zero);
         // Should have original 1 + silence frames for 667ms gap
         Assert.True(result.Count > 1, $"Expected >1 frame, got {result.Count}");
         // First frame should have PTS = 0
@@ -496,7 +496,7 @@ public sealed class ClipExporterTests
         {
             new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, dur, false)
         };
-        var result = ClipExporter.PadAudioWithSilence(audio, 48000, TimeSpan.Zero);
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000, 2, TimeSpan.Zero);
         Assert.Single(result);
     }
 
@@ -509,7 +509,7 @@ public sealed class ClipExporterTests
             new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromMilliseconds(500), dur, false)
         };
         // null expectedStart means start from first audio packet — 500ms gap not filled
-        var result = ClipExporter.PadAudioWithSilence(audio, 48000, null);
+        var result = ClipExporter.PadAudioWithSilence(audio, 48000, 2, null);
         Assert.Single(result);
         Assert.Equal(TimeSpan.FromMilliseconds(500), result[0].Pts);
     }

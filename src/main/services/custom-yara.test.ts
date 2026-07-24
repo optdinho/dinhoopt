@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -128,8 +128,7 @@ describe('CustomYaraService', () => {
       rmSync(customYaraPath, { recursive: true, force: true })
     }
     expect(existsSync(customYaraPath)).toBe(false)
-
-    const service = new (await import('./custom-yara.service')).CustomYaraService()
+    ;new (await import('./custom-yara.service')).CustomYaraService()
     expect(existsSync(customYaraPath)).toBe(true)
   })
 

@@ -1,5 +1,6 @@
 import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process'
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync } from 'node:fs'
+import { readdir, stat } from 'node:fs/promises'
 import { type Socket, connect as netConnect } from 'node:net'
 import { join } from 'node:path'
 import { IPC } from '@shared/channels'
@@ -19,6 +20,93 @@ const ENGINE_EXE = 'DiNho.Capture.Poc.exe'
 const PIPE_CONNECT_TIMEOUT = 10_000
 const PIPE_RECONNECT_DELAY = 3_000
 const ENGINE_GRACE_PERIOD = 5_000
+
+// ─── Duration cache (LRU, 500 entries) ───────────────────────
+interface CacheEntry {
+  duration: number
+  mtimeMs: number
+}
+
+const MAX_CACHE_ENTRIES = 500
+const _durationCache = new Map<string, CacheEntry>()
+
+function cacheGet(filePath: string, currentMtimeMs: number): number | null {
+  const entry = _durationCache.get(filePath)
+  if (entry && entry.mtimeMs === currentMtimeMs) {
+    // LRU: move to end (most recently used)
+    _durationCache.delete(filePath)
+    _durationCache.set(filePath, entry)
+    return entry.duration
+  }
+  return null
+}
+
+function cacheSet(filePath: string, duration: number, mtimeMs: number): void {
+  if (_durationCache.size >= MAX_CACHE_ENTRIES) {
+    // Evict oldest (first entry)
+    const oldest = _durationCache.keys().next().value
+    if (oldest !== undefined) _durationCache.delete(oldest)
+  }
+  _durationCache.set(filePath, { duration, mtimeMs })
+}
+
+export function invalidateDurationCache(filePath?: string): void {
+  if (filePath) {
+    _durationCache.delete(filePath)
+  } else {
+    _durationCache.clear()
+  }
+}
+
+const DURATION_CONCURRENCY = 6
+
+async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length)
+  let nextIdx = 0
+
+  async function worker(): Promise<void> {
+    while (nextIdx < tasks.length) {
+      const idx = nextIdx++
+      results[idx] = await tasks[idx]()
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()))
+  return results
+}
+
+// Batch duration lookup — returns cached values, computes missing ones with concurrency limit
+export async function getDurationsForClips(
+  clips: Array<{ path: string; mtimeMs: number }>,
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  const missing: Array<{ path: string; mtimeMs: number }> = []
+
+  for (const clip of clips) {
+    const cached = cacheGet(clip.path, clip.mtimeMs)
+    if (cached !== null) {
+      result.set(clip.path, cached)
+    } else {
+      missing.push(clip)
+    }
+  }
+
+  if (missing.length > 0) {
+    const computed = await runWithConcurrency(
+      missing.map((clip) => async () => {
+        const duration = await getVideoDuration(clip.path)
+        cacheSet(clip.path, duration, clip.mtimeMs)
+        return { path: clip.path, duration }
+      }),
+      DURATION_CONCURRENCY,
+    )
+    for (const c of computed) {
+      result.set(c.path, c.duration)
+    }
+  }
+
+  return result
+}
 
 interface PipeEnvelope {
   v: number
@@ -58,7 +146,10 @@ let engineReplayBufferVideoBytes = 0
 let engineReplayBufferAudioPackets = 0
 let engineReplayBufferAudioBytes = 0
 const pendingRequests = new Map<string, PendingRequest>()
-const longRunningPending = new Map<string, { resolve: (value: PipeMessage) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }>()
+const longRunningPending = new Map<
+  string,
+  { resolve: (value: PipeMessage) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }
+>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 export function isEngineRunning(): boolean {
@@ -92,7 +183,7 @@ function getEnginePath(): string {
     'DiNho.Capture.Poc',
     'bin',
     isDev ? 'Debug' : 'Release',
-    'net9.0-windows10.0.26100.0',
+    'net10.0-windows10.0.26100.0',
     isDev ? ENGINE_EXE : join('publish', ENGINE_EXE),
   )
   const candidates = [
@@ -146,36 +237,47 @@ export async function getVideoDuration(filePath: string): Promise<number> {
 
 export async function readClipsFromDisk(): Promise<ClipInfo[]> {
   const dir = getDefaultOutputDir()
-  if (!existsSync(dir)) return []
   try {
-    const files = readdirSync(dir).filter((f) => f.endsWith('.mp4'))
-    const entries = files.map((f) => {
-      const fullPath = join(dir, f)
-      try {
-        const stat = statSync(fullPath)
-        return {
-          name: f,
-          path: fullPath,
-          size: stat.size,
-          createdAt: stat.birthtime.getTime() > 0 ? stat.birthtime.toISOString() : stat.mtime.toISOString(),
-          durationPromise: getVideoDuration(fullPath),
-        }
-      } catch {
-        return null
-      }
+    await new Promise<void>((resolve, reject) => {
+      existsSync(dir) ? resolve() : reject(new Error('not found'))
     })
-    const resolved = await Promise.all(
-      entries
-        .filter((e): e is NonNullable<typeof e> => e !== null)
-        .map(async (e) => ({
-          name: e.name,
-          path: e.path,
-          size: e.size,
-          createdAt: e.createdAt,
-          duration: await e.durationPromise,
-        })),
+  } catch {
+    return []
+  }
+  try {
+    const allFiles = await readdir(dir)
+    const files = allFiles.filter((f) => f.endsWith('.mp4'))
+
+    const entries = await runWithConcurrency(
+      files.map((f) => async () => {
+        const fullPath = join(dir, f)
+        try {
+          const s = await stat(fullPath)
+          const mtimeMs = s.mtime.getTime()
+          const createdAt = s.birthtime.getTime() > 0 ? s.birthtime.toISOString() : s.mtime.toISOString()
+          return { name: f, path: fullPath, size: s.size, createdAt, mtimeMs }
+        } catch {
+          return null
+        }
+      }),
+      12,
     )
-    return resolved.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    const valid = entries.filter(
+      (e): e is { name: string; path: string; size: number; createdAt: string; mtimeMs: number } => e !== null,
+    )
+
+    valid.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    const durationMap = await getDurationsForClips(valid)
+
+    return valid.map((e) => ({
+      name: e.name,
+      path: e.path,
+      size: e.size,
+      createdAt: e.createdAt,
+      duration: durationMap.get(e.path) ?? 0,
+    }))
   } catch (err) {
     getLogger().error('clips', `Failed to list clips: ${err}`)
     return []
@@ -482,8 +584,20 @@ export async function sendWithFallback(
   }
   try {
     const resp = await sendPipeCommand(cmd, payload)
-    if (resp.payload?.success === false || resp.payload?.error) {
-      return { success: false, error: (resp.payload?.error as string) || 'Command failed' }
+    const p = resp.payload as Record<string, unknown> | undefined
+    // Engine returns { Action: "error", Value: { error: "..." } } or { Action: "ok" }
+    if (p && typeof p === 'object' && 'Action' in p) {
+      if (p.Action === 'error') {
+        const val = p.Value as Record<string, unknown> | undefined
+        const errMsg = typeof val?.error === 'string' ? val.error : 'Command failed'
+        getLogger().warning('clips-pipe', `sendWithFallback cmd="${cmd}" engine error: ${errMsg}`)
+        return { success: false, error: errMsg }
+      }
+      return { success: true }
+    }
+    // Legacy format check: { success: false, error: "..." }
+    if (p?.success === false || p?.error) {
+      return { success: false, error: (p.error as string) || 'Command failed' }
     }
     return { success: true }
   } catch (err) {
@@ -498,6 +612,24 @@ export async function startClipCapture(): Promise<{ success: boolean; error?: st
   if (engineCapturing) {
     return { success: true }
   }
+
+  // Ensure pipe is connected before sending commands
+  if (!pipeConnected) {
+    getLogger().info('clips', 'startClipCapture: pipe not connected, attempting reconnect...')
+    connectPipe()
+    const connected = await waitForPipeConnection(5000)
+    if (!connected) {
+      return { success: false, error: 'Engine pipe not connected' }
+    }
+  }
+
+  // Sync config before starting capture — the engine applies config on `startCapture`
+  // but may have stale defaults if the pipe was recently reconnected
+  const configPayload = buildEngineConfig()
+  await sendWithFallback('config', configPayload).catch(() => {
+    getLogger().warning('clips', 'startClipCapture: config sync failed')
+  })
+
   const rawProcessName = (engineCurrentGame || '').replace(/ \(.*?\) \[.*?\]$/, '').trim()
   const targetGame = C.customGameProcess || rawProcessName || ''
   getLogger().info(

@@ -29,120 +29,194 @@ public sealed partial class EngineCoordinator
         {
             if (_captureActive) return;
 
-            // Se o usuário iniciou manualmente (Alt+1 ou botão), permite auto-start novamente
-            _userStoppedProcess = "";
-
-            _reinitCount = 0;
-            _gameBackgrounded = false;
-            _bgDropCount = 0;
-            _fgGoodCount = 0;
-
-            // Salva o alvo da captura ANTES de SelectCaptureSource.
-            // Durante a gravação, ResolveTargetGame() sempre retorna este mesmo alvo,
-            // mesmo que o usuário alt-tab para outra janela.
-            var game = ResolveTargetGame();
-            _captureTargetGame = game;
-
-            // D3D11 device compartilhado entre capture + encoder
-            if (_sharedDevice == null)
+            try
             {
-                var creationFlags = DeviceCreationFlags.BgraSupport;
-                var hr = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-                    null, DriverType.Hardware, creationFlags,
-                    new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0 },
-                    out _sharedDevice, out _, out _);
-                if (!hr.Success || _sharedDevice is null)
+                // Se o usuário iniciou manualmente (Alt+1 ou botão), permite auto-start novamente
+                _userStoppedProcess = "";
+
+                _reinitCount = 0;
+                _gameBackgrounded = false;
+                _bgDropCount = 0;
+                _fgGoodCount = 0;
+
+                var game = ResolveTargetGame();
+                _captureTargetGame = game;
+
+                _captureActive = true;
+
+                Log.I("EngineCoordinator", "=== StartCapture INICIADO ===");
+
+                // D3D11 device compartilhado entre capture + encoder
+                if (_sharedDevice == null)
                 {
-                    Log.E("EngineCoordinator", $"D3D11CreateDevice falhou: {hr}");
-                    return;
+                    var creationFlags = DeviceCreationFlags.BgraSupport;
+                    var hr = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+                        null, DriverType.Hardware, creationFlags,
+                        new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0 },
+                        out _sharedDevice, out _, out _);
+                    if (!hr.Success || _sharedDevice is null)
+                    {
+                        Log.E("EngineCoordinator", $"D3D11CreateDevice falhou: {hr}");
+                        _captureActive = false;
+                        return;
+                    }
+                    Log.I("EngineCoordinator", $"D3D11 device criado (feature level {_sharedDevice.FeatureLevel})");
+
+                    _dxgiManager = MediaFactory.MFCreateDXGIDeviceManager();
+                    _dxgiManager.ResetDevice(_sharedDevice!).CheckError();
                 }
-                Log.I("EngineCoordinator", $"D3D11 device criado (feature level {_sharedDevice.FeatureLevel})");
+                Log.I("EngineCoordinator", "[1/7] D3D11 device OK");
 
-                _dxgiManager = MediaFactory.MFCreateDXGIDeviceManager();
-                _dxgiManager.ResetDevice(_sharedDevice!).CheckError();
-            }
-
-            // Encoder (NVENC/AMF/QSV/software)
-            _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
-            if (_encoder is FfmpegEncoder fe)
-                fe.SetQualityParams(
-                    cq: _activeProfile.Cq,
-                    maxrateKbps: _activeProfile.MaxrateKbps,
-                    bufsizeKbps: _activeProfile.BufsizeKbps,
-                    bframes: _activeProfile.Bframes,
-                    lookahead: _activeProfile.Lookahead,
-                    preset: _config.Config.EncoderPreset,
-                    codec: _config.Config.Codec);
-
-            // Seleciona fonte de captura (WGC/DXGI/Hybrid/PrintWindow)
-            SelectCaptureSource();
-
-            if (_capture == null)
-            {
-                Log.E("EngineCoordinator", "Nenhuma fonte de captura disponível");
+                // Encoder (NVENC/AMF/QSV/software)
+                Log.I("EngineCoordinator", $"EncoderPreset config: '{_config.Config.EncoderPreset}' Cq={_activeProfile.Cq} Maxrate={_activeProfile.MaxrateKbps}kbps Bframes={_activeProfile.Bframes} Lookahead={_activeProfile.Lookahead}");
                 _encoder?.Dispose();
                 _encoder = null;
+                _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
+                if (_encoder is FfmpegEncoder fe)
+                {
+                    fe.SetQualityParams(
+                        cq: _activeProfile.Cq,
+                        maxrateKbps: _activeProfile.MaxrateKbps,
+                        bufsizeKbps: _activeProfile.BufsizeKbps,
+                        bframes: _activeProfile.Bframes,
+                        lookahead: _activeProfile.Lookahead,
+                        preset: _config.Config.EncoderPreset,
+                        codec: _config.Config.Codec);
+                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead}");
+                }
+                Log.I("EngineCoordinator", "[2/7] Encoder criado");
+
+                // Seleciona fonte de captura (WGC/DXGI/Hybrid/PrintWindow) — async selector with Task.Delay retries
+                SelectCaptureSourceAsync().GetAwaiter().GetResult();
+                Log.I("EngineCoordinator", "[3/7] SelectCaptureSource OK (async)");
+
+                if (_capture == null)
+                {
+                    Log.E("EngineCoordinator", "Nenhuma fonte de captura disponível");
+                    _encoder?.Dispose();
+                    _encoder = null;
+                    _sharedDevice?.Dispose();
+                    _sharedDevice = null;
+                    _captureActive = false;
+                    return;
+                }
+
+                // Inicializa encoder com dimensões reais da captura
+                _captureWidth = Math.Max(_capture.Width, 320);
+                _captureHeight = Math.Max(_capture.Height, 240);
+                _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
+                _status.Update(s =>
+                {
+                    s.Recording = true;
+                    s.Encoder = _encoder.GetType().Name.Replace("Encoder", "");
+                    s.ActivePipelines = 1;
+                });
+
+                Log.I("EngineCoordinator", $"[4/7] Encoder: {_encoder.GetType().Name} ({_captureWidth}x{_captureHeight} @ {_config.Config.Fps}fps)");
+
+                // Áudio
+                _audioMixer = CreateAudioMixer();
+                _audioSampleRate = _audioMixer.SampleRate;
+                _lastAudioAnchor = TimeSpan.Zero;
+                _audioPacketCount = 0;
+                _maxAacDrainCount = 0;
+                _audioMixer.OnMixedAudio += OnAudioPacket;
+                _audioMixer.Start();
+                Log.I("EngineCoordinator", "[5/7] Audio mixer started");
+
+                // AAC encoder
+                _aacEncoder?.Dispose();
+                _aacEncoder = null;
+                _aacEncoder = new FfmpegAacEncoder();
+                _aacEncoder.Initialize(_audioSampleRate, 2, 192000);
+                Log.I("EngineCoordinator", "[6/7] AAC encoder initialized");
+
+                // RamManager — detecta perfil e configura limites
+                if (_config.Config.AdaptiveQualityEnabled)
+                {
+                    _ramManager ??= new RamManager(
+                        _captureWidth, _captureHeight,
+                        _config.Config.EffectiveReplaySeconds,
+                        _activeProfile.Cq,
+                        _activeProfile.MaxrateKbps,
+                        _activeProfile.BufsizeKbps,
+                        _activeProfile.Bframes,
+                        _activeProfile.Lookahead);
+                    _ramManager.StartWatchdog();
+                    _activeProfile = _ramManager.ResolveProfile();
+                }
+                else
+                {
+                    _ramManager?.StopWatchdog();
+                    Log.I("EngineCoordinator", "AdaptiveQuality DISABLED — usando config do usuário sem ajuste RAM");
+                }
+                _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                _buffer.MaxBytes = _activeProfile.MaxBufferBytes;
+
+                // Enable disk spill when the requested replay duration exceeds what RAM can hold.
+                // Evicted frames are written to a temp file and merged back in GetSegments().
+                long neededBytes = (long)_activeProfile.MaxrateKbps * _activeProfile.ReplaySeconds * 1024L * 13L / 80L;
+                if (neededBytes > _activeProfile.MaxBufferBytes && !_buffer.IsDiskSpillEnabled)
+                {
+                    _buffer.EnableDiskSpill();
+                    Log.I("EngineCoordinator", $"Disk spill ENABLED — need={neededBytes / (1024 * 1024)}MB buf={_activeProfile.MaxBufferBytes / (1024 * 1024)}MB");
+                }
+
+                Log.I("EngineCoordinator", $"RAM profile: {_activeProfile.Level} — {_activeProfile.EncodeWidth}x{_activeProfile.EncodeHeight} " +
+                    $"maxRate={_activeProfile.MaxrateKbps}kbps maxBuf={_activeProfile.MaxBufferBytes / (1024 * 1024)}MB " +
+                    $"replay={_activeProfile.ReplaySeconds}s diskSpill={_buffer.IsDiskSpillEnabled}");
+
+                // Pipeline loop
+                _recording = true;
+                _needsReinit = false;
+                _pipelineCts = new CancellationTokenSource();
+                _pipelineTask = Task.Run(() => PipelineLoop(_pipelineCts.Token));
+                Log.I("EngineCoordinator", $"[7/7] Pipeline task created (status={_pipelineTask.Status})");
+
+                // Timer de diagnóstico PTT
+                _pttDiagTimer = new Timer(_ =>
+                {
+                    var mixer = _audioMixer;
+                    if (mixer != null)
+                        Log.D("PTT", $"pttKeys=[{string.Join(",", _config.Config.PushToTalkKeys)}] mode={_config.Config.PttMode} mic={mixer.MicEnabled} active={_ptt.MicActive}");
+                }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+
+                Log.I("EngineCoordinator", "=== StartCapture CONCLUIDO ===");
+            }
+            catch (Exception ex)
+            {
+                Log.E("EngineCoordinator", $"=== StartCapture FALHOU: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace} ===");
+
+                // Full cleanup so future startCapture calls can retry
+                _recording = false;
+                _captureActive = false;
+                _captureTargetGame = new GameInfo();
+                _captureTargetHwnd = IntPtr.Zero;
+
+                _audioMixer?.Stop();
+                _audioMixer?.Dispose();
+                _audioMixer = null;
+
+                _aacEncoder?.Dispose();
+                _aacEncoder = null;
+
+                _capture?.Dispose();
+                _capture = null;
+
+                _encoder?.Dispose();
+                _encoder = null;
+
+                _wgcPump?.Dispose();
+                _wgcPump = null;
+
                 _sharedDevice?.Dispose();
                 _sharedDevice = null;
-                return;
+
+                _dxgiManager?.Dispose();
+                _dxgiManager = null;
+
+                _status.Update(s => s.Recording = false);
             }
-
-            // Inicializa encoder com dimensões reais da captura
-            _captureWidth = _capture.Width;
-            _captureHeight = _capture.Height;
-            _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
-            _status.Update(s =>
-            {
-                s.Recording = true;
-                s.Encoder = _encoder.GetType().Name.Replace("Encoder", "");
-                s.ActivePipelines = 1;
-            });
-
-            Log.I("EngineCoordinator", $"Encoder: {_encoder.GetType().Name} ({_captureWidth}x{_captureHeight} @ {_config.Config.Fps}fps)");
-
-            // Áudio
-            _audioMixer = CreateAudioMixer();
-            _audioSampleRate = _audioMixer.SampleRate;
-            _lastAudioAnchor = TimeSpan.Zero;
-            _audioPacketCount = 0;
-            _audioMixer.OnMixedAudio += OnAudioPacket;
-            _audioMixer.Start();
-
-            // AAC encoder
-            _aacEncoder = new FfmpegAacEncoder();
-            _aacEncoder.Initialize(_audioSampleRate, 2, 192000);
-
-            // RamManager — detecta perfil e configura limites
-            _ramManager ??= new RamManager(
-                _captureWidth, _captureHeight,
-                _config.Config.EffectiveReplaySeconds,
-                _activeProfile.Cq,
-                _activeProfile.MaxrateKbps,
-                _activeProfile.BufsizeKbps,
-                _activeProfile.Bframes,
-                _activeProfile.Lookahead);
-            _ramManager.StartWatchdog();
-            _activeProfile = _ramManager.ResolveProfile();
-            _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
-            _buffer.MaxBytes = _activeProfile.MaxBufferBytes;
-
-            Log.I("EngineCoordinator", $"RAM profile: {_activeProfile.Level} — {_activeProfile.EncodeWidth}x{_activeProfile.EncodeHeight} " +
-                $"maxRate={_activeProfile.MaxrateKbps}kbps maxBuf={_activeProfile.MaxBufferBytes / (1024 * 1024)}MB " +
-                $"replay={_activeProfile.ReplaySeconds}s");
-
-            // Pipeline loop
-            _recording = true;
-            _captureActive = true;
-            _needsReinit = false;
-            _pipelineCts = new CancellationTokenSource();
-            _pipelineTask = Task.Run(() => PipelineLoop(_pipelineCts.Token));
-
-            // Timer de diagnóstico PTT
-            _pttDiagTimer = new Timer(_ =>
-            {
-                if (_audioMixer != null)
-                    Log.D("PTT", $"pttKeys=[{string.Join(",", _config.Config.PushToTalkKeys)}] mode={_config.Config.PttMode} mic={_audioMixer.MicEnabled} active={_ptt.MicActive}");
-            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         }
     }
 
@@ -207,6 +281,7 @@ public sealed partial class EngineCoordinator
 
             // Reseta contadores entre sessões de captura
             _audioPacketCount = 0;
+            _maxAacDrainCount = 0;
             _audioSampleRate = 48000;
 
             _capture?.Dispose();
@@ -217,6 +292,9 @@ public sealed partial class EngineCoordinator
 
             _encoder?.Dispose();
             _encoder = null;
+
+            _wgcPump?.Dispose();
+            _wgcPump = null;
 
             _sharedDevice?.Dispose();
             _sharedDevice = null;
@@ -231,6 +309,16 @@ public sealed partial class EngineCoordinator
 
     private async Task PipelineLoop(CancellationToken ct)
     {
+        try
+        {
+            Log.I("Pipeline", $"PipelineLoop INICIADO — capture={_capture?.GetType().Name ?? "null"} encoder={_encoder?.GetType().Name ?? "null"} fps={_config.Config.Fps} ct={ct.IsCancellationRequested}");
+        }
+        catch (Exception ex)
+        {
+            Log.E("Pipeline", $"PipelineLoop Log.I CRASHED: {ex.GetType().Name}: {ex.Message}");
+            return;
+        }
+
         // AvSetMmThreadCharacteristics prioriza esta thread no scheduler
         // como thread de captura multimídia, reduzindo latência e glitches
         SetMmThreadPriority();
@@ -243,6 +331,8 @@ public sealed partial class EngineCoordinator
         var spinTargetTicks = 0L;
             var modeCheckDue = DateTime.UtcNow;
             var diagFrames = 0;
+            var loggedFirstNullFrame = false;
+            var loggedFirstFailFrame = false;
 
         while (!ct.IsCancellationRequested && _capture != null && _encoder != null)
         {
@@ -259,6 +349,11 @@ public sealed partial class EngineCoordinator
                 using var frame = cap?.TryCaptureFrame(captureTimeout);
                 if (frame is null)
                 {
+                    if (!loggedFirstNullFrame)
+                    {
+                        loggedFirstNullFrame = true;
+                        Log.E("Pipeline", $"TryCaptureFrame retornou NULL — cap={cap?.GetType().Name ?? "null"} cap disposed={cap == null}. Isso significa que _capture é null no momento da chamada.");
+                    }
                     _watchdog.ReportDroppedFrame(PipelineIssue.CaptureError);
                     continue;
                 }
@@ -272,6 +367,8 @@ public sealed partial class EngineCoordinator
                 {
                     if (frame.Texture != null)
                     {
+                        if (diagFrames == 1)
+                            Log.I("Pipeline", $"Primeiro frame com textura! width={frame.Width} height={frame.Height} captureType={_capture?.GetType().Name ?? "null"}");
                         if (_gameBackgrounded && frame.Texture != null)
                         {
                             _fgGoodCount++;
@@ -321,6 +418,11 @@ public sealed partial class EngineCoordinator
                 }
                 else
                 {
+                    if (!loggedFirstFailFrame)
+                    {
+                        loggedFirstFailFrame = true;
+                        Log.W("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={frame.WaitEndTicks - frame.CaptureStartTicks}. Monitorando...");
+                    }
                     if (_starvationStart == default)
                     {
                         _starvationStart = DateTime.UtcNow;
@@ -466,7 +568,7 @@ public sealed partial class EngineCoordinator
         var reason = ct.IsCancellationRequested ? "cancelamento" :
                      _capture == null ? "captura nula" :
                      _encoder == null ? "encoder nulo" : "desconhecido";
-        Log.E("Pipeline", $"Loop encerrado: {reason}");
+        Log.E("Pipeline", $"Loop encerrado: {reason} diagFrames={diagFrames} loggedFirstNull={loggedFirstNullFrame} loggedFirstFail={loggedFirstFailFrame}");
         RevertMmThreadPriority();
     }
 
@@ -481,18 +583,27 @@ public sealed partial class EngineCoordinator
             return;
         }
 
-        // Cancela o pipeline loop antigo e aguarda sua parada (FORA do lock)
-        _pipelineCts?.Cancel();
-        if (_pipelineTask != null)
+        // Capture CTS/task to locals BEFORE cancelling — StopCapture() may null them
+        // concurrently under _pipelineLock. Using locals prevents NRE from TOCTOU.
+        var cts = _pipelineCts;
+        var task = _pipelineTask;
+
+        // Cancel the running pipeline loop (thread-safe, no lock needed)
+        cts?.Cancel();
+
+        // Wait for the pipeline loop to exit (outside lock to avoid deadlock with PipelineLoop)
+        if (task != null)
         {
-            try { await _pipelineTask.WaitAsync(TimeSpan.FromSeconds(2)); }
+            try { await task.WaitAsync(TimeSpan.FromSeconds(2)); }
             catch { }
         }
-        _pipelineCts = null;
-        _pipelineTask = null;
 
         lock (_pipelineLock)
         {
+            // Null the fields under lock — StopCapture() also nulls them under lock,
+            // so only one thread will actually null them.
+            _pipelineCts = null;
+            _pipelineTask = null;
             try
             {
                 if (_deviceLost)
@@ -581,33 +692,51 @@ public sealed partial class EngineCoordinator
             const int maxRetries = 3;
             const int retryDelayMs = 400;
 
+            // Ensure we have a dedicated STA thread with message pump for WGC.
+            // WGC FrameArrived needs a message pump for DWM to deliver frames.
+            _wgcPump ??= new Capture.WindowsMessagePump();
+
             for (var attempt = 1; attempt <= maxRetries; attempt++)
-            {
-                try
                 {
-                    var wgc = new WgcCaptureSource();
-                    wgc.Initialize(_sharedDevice, gameHwnd);
-                    wgc.StartFramePump();
-                    _capture = wgc;
-                    _status.Update(s => s.CaptureBackend = $"WGC:{game.ProcessName}");
-                    Log.I("EngineCoordinator", $"Captura: janela '{game.ProcessName}' ({gameHwnd})");
-                    goto multiMonitor;
+                    // Capture device reference locally — StopCapture() may dispose it during retry delay
+                    var device = _sharedDevice;
+                    if (device == null || !_captureActive)
+                    {
+                        Log.W("EngineCoordinator", $"WGC retry aborted: device={device != null} active={_captureActive}");
+                        break;
+                    }
+                    try
+                    {
+                        var wgc = new WgcCaptureSource();
+                        // Marshal Initialize + StartFramePump to the pump thread.
+                        // This ensures the WGC capture session is created on an STA thread
+                        // with a message pump, which is required for FrameArrived to fire.
+                        _wgcPump.Invoke(() =>
+                        {
+                            wgc.Initialize(device, gameHwnd);
+                            wgc.StartFramePump();
+                        });
+                        _capture = wgc;
+                        _status.Update(s => s.CaptureBackend = $"WGC:{game.ProcessName}");
+                        Log.I("EngineCoordinator", $"Captura: janela '{game.ProcessName}' ({gameHwnd})");
+                        goto multiMonitor;
+                    }
+                    catch (Exception ex) when (attempt < maxRetries)
+                    {
+                        var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
+                        Log.E("EngineCoordinator", $"WGC window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{innerMsg}, retry em {retryDelayMs}ms...");
+                        // Release lock during delay to avoid starving StopCapture, but re-check device on resume
+                        bool heldLock = Monitor.IsEntered(_pipelineLock);
+                        if (heldLock) Monitor.Exit(_pipelineLock);
+                        try { Thread.Sleep(retryDelayMs); }
+                        finally { if (heldLock) Monitor.Enter(_pipelineLock); }
+                    }
+                    catch (Exception ex)
+                    {
+                        var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
+                        Log.E("EngineCoordinator", $"WGC window tentativa {maxRetries}/{maxRetries} falhou: {ex.Message}{innerMsg}, fallback...");
+                    }
                 }
-                catch (Exception ex) when (attempt < maxRetries)
-                {
-                    var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
-                    Log.E("EngineCoordinator", $"WGC window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{innerMsg}, retry em {retryDelayMs}ms...");
-                    bool heldLock = Monitor.IsEntered(_pipelineLock);
-                    if (heldLock) Monitor.Exit(_pipelineLock);
-                    try { Thread.Sleep(retryDelayMs); }
-                    finally { if (heldLock) Monitor.Enter(_pipelineLock); }
-                }
-                catch (Exception ex)
-                {
-                    var innerMsg = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
-                    Log.E("EngineCoordinator", $"WGC window tentativa {maxRetries}/{maxRetries} falhou: {ex.Message}{innerMsg}, fallback...");
-                }
-            }
         }
 
         // 2) WGC desktop (full monitor via DWM) — funciona para qualquer janela
@@ -617,9 +746,15 @@ public sealed partial class EngineCoordinator
             var gameMonitor = gameHwnd != IntPtr.Zero
                 ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd)
                 : IntPtr.Zero;
+
+            _wgcPump ??= new Capture.WindowsMessagePump();
+
             var wgc = new WgcCaptureSource();
-            wgc.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
-            wgc.StartFramePump();
+            _wgcPump.Invoke(() =>
+            {
+                wgc.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
+                wgc.StartFramePump();
+            });
             _capture = wgc;
             _status.Update(s => s.CaptureBackend = "WGC");
             Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
@@ -669,6 +804,119 @@ public sealed partial class EngineCoordinator
             var gameMonitor = MonitorHelper.GetMonitorFromWindow(game.Hwnd);
             Log.I("EngineCoordinator", $"Multi-monitor: {monitorCount} telas, jogo no monitor {gameMonitor}");
         }
+    }
+
+    private async Task SelectCaptureSourceAsync()
+    {
+        var game = _captureTargetGame;
+        var gameHwnd = game.IsValid ? game.Hwnd : IntPtr.Zero;
+
+        // Save hwnd fallback
+        if (gameHwnd != IntPtr.Zero)
+            _captureTargetHwnd = gameHwnd;
+
+        // WDA exclusion check
+        if (game.IsValid && gameHwnd != IntPtr.Zero && WdaHelper.IsExcludedFromCapture(gameHwnd))
+        {
+            Log.I("EngineCoordinator", $"Jogo '{game.ProcessName}' usa WDA_EXCLUDEFROMCAPTURE — pulando WGC per-window, usando desktop/Hybrid");
+        }
+
+        // 1) WGC per-window (best) — async retries with delay, do not block pipeline lock        
+        if (game.IsValid && gameHwnd != IntPtr.Zero && IsWindowValidForWgc(gameHwnd)
+            && !WdaHelper.IsExcludedFromCapture(gameHwnd))
+        {
+            const int maxRetries = 3;
+            const int retryDelayMs = 400;
+
+            // Ensure pump exists
+            _wgcPump ??= new Capture.WindowsMessagePump();
+
+            for (var attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    var wgc = new WgcCaptureSource();
+                    // Marshal Initialize + StartFramePump to the pump thread.
+                    _wgcPump.Invoke(() =>
+                    {
+                        wgc.Initialize(_sharedDevice, gameHwnd);
+                        wgc.StartFramePump();
+                    });
+                    _capture = wgc;
+                    _status.Update(s => s.CaptureBackend = $"WGC:{game.ProcessName}");
+                    Log.I("EngineCoordinator", $"Captura: janela '{game.ProcessName}' ({gameHwnd})");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    var inner = ex.InnerException != null ? $" → {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : "";
+                    if (attempt < maxRetries)
+                    {
+                        Log.W("EngineCoordinator", $"WGC per-window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{inner} — retry em {retryDelayMs}ms (async)");
+                        await Task.Delay(retryDelayMs);
+                        continue;
+                    }
+                    else
+                    {
+                        Log.E("EngineCoordinator", $"WGC per-window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{inner} — fallback");
+                    }
+                }
+            }
+        }
+
+        // 2) WGC desktop (monitor)
+        try
+        {
+            var gameMonitor = gameHwnd != IntPtr.Zero ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd) : IntPtr.Zero;
+            _wgcPump ??= new Capture.WindowsMessagePump();
+            var wgc = new WgcCaptureSource();
+            _wgcPump.Invoke(() =>
+            {
+                wgc.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
+                wgc.StartFramePump();
+            });
+            _capture = wgc;
+            _status.Update(s => s.CaptureBackend = "WGC");
+            Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
+            return;
+        }
+        catch (Exception wgcEx)
+        {
+            var inner = wgcEx.InnerException != null ? $" → {wgcEx.InnerException.GetType().Name}: {wgcEx.InnerException.Message}" : "";
+            Log.E("EngineCoordinator", $"WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{inner}");
+        }
+
+        // 3) DXGI Desktop Duplication (full monitor)
+        try
+        {
+            var dxgi = new DxgiCaptureSource();
+            dxgi.Initialize(_sharedDevice, gameHwnd);
+            _capture = dxgi;
+            _status.Update(s => s.CaptureBackend = "DXGI");
+            Log.I("EngineCoordinator", "Captura: DXGI Desktop Duplication");
+            return;
+        }
+        catch (Exception dxgiEx)
+        {
+            Log.E("EngineCoordinator", $"DXGI falhou: {dxgiEx.GetType().Name}: {dxgiEx.Message}");
+        }
+
+        // 4) Hybrid fallback
+        try
+        {
+            var hybrid = new HybridCaptureSource();
+            hybrid.Initialize(_sharedDevice, gameHwnd);
+            _capture = hybrid;
+            _status.Update(s => s.CaptureBackend = _capture.Name);
+            Log.I("EngineCoordinator", $"Captura híbrida: HWND=0x{gameHwnd:X8}");
+            return;
+        }
+        catch (Exception hybridEx)
+        {
+            Log.E("EngineCoordinator", $"Hybrid falhou: {hybridEx.GetType().Name}: {hybridEx.Message}");
+        }
+
+        // If all fail, leave _capture null and caller handles cleanup.
     }
 
     private int _lastCropX, _lastCropY, _lastCropW, _lastCropH;

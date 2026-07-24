@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Threading;
 using DiNho.Capture.Poc.Encoders;
+using DiNho.Capture.Poc.Logging;
 
 namespace DiNho.Capture.Poc.Buffer;
 
@@ -22,6 +24,11 @@ public sealed class ReplayBuffer : IDisposable
     private TimeSpan _totalAudioDuration;
     private long _totalVideoBytes;
     private long _totalAudioBytes;
+    private DiskSpillBuffer? _spill;
+    private bool _diskSpillEnabled;
+    private static long _lastSegmentOffsetLogTick;
+    private const double SegmentOffsetWarnMs = 100.0;
+    private static readonly long SegmentOffsetLogThrottleTicks = Stopwatch.Frequency * 5;
 
     public ReplayBuffer(TimeSpan maxDuration, long maxBytes = 0)
     {
@@ -30,6 +37,46 @@ public sealed class ReplayBuffer : IDisposable
         RecalculateProportionalBudgets();
         _videoPackets = new EncodedPacket[4096];
         _audioPackets = new EncodedPacket[1024];
+    }
+
+    /// <summary>
+    /// Enable disk spill: evicted frames are written to a temp file
+    /// instead of being released, allowing GetSegments() to return
+    /// durations longer than the RAM budget.
+    /// </summary>
+    public void EnableDiskSpill(string? tempDir = null)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            if (_diskSpillEnabled) return;
+            _spill = new DiskSpillBuffer(tempDir);
+            _diskSpillEnabled = true;
+        }
+        finally { _lock.ExitWriteLock(); }
+    }
+
+    public bool IsDiskSpillEnabled
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _diskSpillEnabled; }
+            finally { _lock.ExitReadLock(); }
+        }
+    }
+
+    public (int ramVideo, int ramAudio, int diskVideo, int diskAudio, long ramBytes, long diskBytes) SpillStats()
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            return (_videoCount, _audioCount,
+                _spill?.VideoCount ?? 0, _spill?.AudioCount ?? 0,
+                _totalVideoBytes + _totalAudioBytes,
+                _spill?.TotalBytes ?? 0);
+        }
+        finally { _lock.ExitReadLock(); }
     }
 
     private void RecalculateProportionalBudgets()
@@ -144,6 +191,8 @@ public sealed class ReplayBuffer : IDisposable
             _videoCount--;
             _totalVideoDuration -= oldest.Duration;
             _totalVideoBytes -= oldest.DataLength;
+            if (_diskSpillEnabled && _spill != null)
+                _spill.Write(oldest);
             oldest.Release();
         }
     }
@@ -158,6 +207,8 @@ public sealed class ReplayBuffer : IDisposable
             _audioCount--;
             _totalAudioDuration -= oldest.Duration;
             _totalAudioBytes -= oldest.PcmSamples is { } pcm ? pcm.Length * 4L : oldest.DataLength;
+            if (_diskSpillEnabled && _spill != null)
+                _spill.Write(oldest);
             oldest.Release();
         }
     }
@@ -194,17 +245,48 @@ public sealed class ReplayBuffer : IDisposable
             var video = CopyRing(_videoPackets, _videoHead, _videoCount);
             var audio = CopyRing(_audioPackets, _audioHead, _audioCount);
 
+            // Merge disk-spilled packets (oldest first, already sorted by PTS)
+            if (_diskSpillEnabled && _spill is { Count: > 0 })
+            {
+                var diskPkts = _spill.ReadAll();
+                var diskVideo = new List<EncodedPacket>();
+                var diskAudio = new List<EncodedPacket>();
+                foreach (var pkt in diskPkts)
+                {
+                    if (pkt.Type == MediaType.Video) diskVideo.Add(pkt);
+                    else diskAudio.Add(pkt);
+                }
+                // Disk packets are older than RAM packets — prepend then sort
+                diskVideo.AddRange(video);
+                diskVideo.Sort((a, b) => a.Pts.CompareTo(b.Pts));
+                diskAudio.AddRange(audio);
+                diskAudio.Sort((a, b) => a.Pts.CompareTo(b.Pts));
+                video = diskVideo;
+                audio = diskAudio;
+            }
+
+            // Diagnostic: mede offset entre último PTS de video/audio (throttled 5s)
+            if (video.Count > 0 && audio.Count > 0)
+            {
+                var offsetMs = (audio[^1].Pts - video[^1].Pts).TotalMilliseconds;
+                if (Math.Abs(offsetMs) > SegmentOffsetWarnMs)
+                {
+                    var now = Stopwatch.GetTimestamp();
+                    if (now - _lastSegmentOffsetLogTick >= SegmentOffsetLogThrottleTicks)
+                    {
+                        _lastSegmentOffsetLogTick = now;
+                        Log.D("ReplayBuffer", $"GetSegments: offset entre último PTS de video/audio = {offsetMs:F0}ms " +
+                            $"(video={video[^1].Pts.TotalSeconds:F2}s audio={audio[^1].Pts.TotalSeconds:F2}s)");
+                    }
+                }
+            }
+
             if (duration == null && endOffset == null)
                 return (video, audio);
 
             var cutoff = endOffset ?? TimeSpan.Zero;
             var maxAge = duration ?? _maxDuration;
 
-            // Use each stream's own last PTS as reference point, so both video and audio
-            // produce a window of exactly 'maxAge' seconds from their respective end.
-            // Using video[^1].Pts as the single reference (previous approach) caused the audio
-            // window to be larger than the video window when encoder speed <1.0x — because
-            // video PTS lags behind real-time audio PTS, creating a wider audio segment.
             var videoStart = video.Count > 0 ? video[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
             if (videoStart < TimeSpan.Zero) videoStart = TimeSpan.Zero;
             var audioStart = audio.Count > 0 ? audio[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
@@ -306,6 +388,7 @@ public sealed class ReplayBuffer : IDisposable
             _totalAudioDuration = TimeSpan.Zero;
             _totalVideoBytes = 0;
             _totalAudioBytes = 0;
+            _spill?.Clear();
         }
         finally { _lock.ExitWriteLock(); }
     }
@@ -322,6 +405,7 @@ public sealed class ReplayBuffer : IDisposable
     public void Dispose()
     {
         Clear();
+        _spill?.Dispose();
         _lock.Dispose();
     }
 }

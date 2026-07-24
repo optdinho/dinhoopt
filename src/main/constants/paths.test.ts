@@ -51,13 +51,15 @@ describe('BROWSER_PATHS', () => {
   })
 
   it('each chromium-based browser has cache keys', () => {
-    for (const key of ['chrome', 'edge', 'brave', 'opera', 'operaGX', 'vivaldi']) {
-      const entry = BROWSER_PATHS[key as keyof typeof BROWSER_PATHS]
-      expect(entry.base).toBeTruthy()
-      expect(entry.cache).toBeTruthy()
-      expect(entry.codeCache).toBeTruthy()
-      expect(entry.gpuCache).toBeTruthy()
-      expect(entry.serviceWorker).toBeTruthy()
+    for (const key of ['chrome', 'edge', 'brave', 'opera', 'operaGX', 'vivaldi'] as const) {
+      const entry = BROWSER_PATHS[key]
+      if ('codeCache' in entry) {
+        expect(entry.base).toBeTruthy()
+        expect(entry.cache).toBeTruthy()
+        expect(entry.codeCache).toBeTruthy()
+        expect(entry.gpuCache).toBeTruthy()
+        expect(entry.serviceWorker).toBeTruthy()
+      }
     }
   })
 

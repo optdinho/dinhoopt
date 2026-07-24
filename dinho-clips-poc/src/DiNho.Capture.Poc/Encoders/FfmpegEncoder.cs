@@ -31,10 +31,14 @@ public sealed class FfmpegEncoder : IEncoder
     private Thread? _stderrThread;
     private CancellationTokenSource? _stderrCts;
     private string? _processFailedCause;
-    private static readonly string[] FallbackCodecs = ["h264_nvenc", "h264_amf", "h264_qsv", "libx264"];
     private string? _codec;
     private readonly bool _useHardware;
     private int _bitrateKbps = 2000;
+
+    // Cascading fallback chain — built once at first probe, consumed by TryFallbackCodec()
+    private List<EncoderManager.FallbackEntry>? _fallbackChain;
+    private int _currentFallbackIndex;
+    private int _scaleDivisor = 1; // 1 = full res, 2 = half, 4 = quarter
 
     private GpuVideoConverter? _gpuConverter;
     private ID3D11Texture2D? _nv12Staging;
@@ -153,24 +157,60 @@ public sealed class FfmpegEncoder : IEncoder
             if (_bestCodecCache != null) return _bestCodecCache;
         }
 
-        // Vendor-aware detection: try GPU vendor's codec first
-        var vendorId = EncoderManager.DetectGpuVendorId();
-        var vendorCodec = EncoderManager.GetPreferredCodec(vendorId);
-        if (!string.IsNullOrEmpty(vendorCodec) && CheckFfmpegEncoderCached(vendorCodec))
-        {
-            CacheBest(vendorCodec);
-            return vendorCodec;
-        }
+        // Build fallback chain from user preference + GPU vendor
+        var vendorId = EncoderManager.DetectEncodingVendorId();
+        var userCodec = _codec ?? "auto";
+        _fallbackChain = EncoderManager.BuildFallbackChain(userCodec, vendorId);
+        _currentFallbackIndex = 0;
 
-        // Fallback chain (NVENC → AMF → QSV → libx264)
-        foreach (var c in FallbackCodecs)
+        // Check NVENC session limit proactively
+        if (vendorId == 0x10DE)
         {
-            if (c == "libx264" || CheckFfmpegEncoderCached(c))
+            var nvencInfo = EncoderManager.GetNvencSessionInfo();
+            if (nvencInfo.IsLimitReached)
             {
-                CacheBest(c);
-                return c;
+                Log.E("FfmpegEncoder", $"NVENC session limit reached ({nvencInfo.SessionCount}/{nvencInfo.MaxSessions}) — falling back to CPU");
+                _fallbackChain.RemoveAll(e => e.Codec.Contains("nvenc"));
             }
         }
+
+        // Active probe: try each entry in the chain
+        foreach (var entry in _fallbackChain)
+        {
+            if (entry.ScaleDivisor > 1)
+            {
+                // Resolution-reduced entries: skip probe at full res, we'll scale at encode time
+                // Just check if the codec itself is listed in ffmpeg -encoders
+                if (entry.Codec == "libx264" || EncoderManager.CheckFfmpegEncoder(entry.Codec))
+                {
+                    _currentFallbackIndex = _fallbackChain.IndexOf(entry);
+                    _scaleDivisor = entry.ScaleDivisor;
+                    CacheBest(entry.Codec);
+                    Log.I("FfmpegEncoder", $"selected {entry.Label} (scale=1/{_scaleDivisor})");
+                    return entry.Codec;
+                }
+                continue;
+            }
+
+            // Full resolution probe
+            var probe = EncoderManager.ProbeEncoder(entry.Codec);
+            if (probe.Success)
+            {
+                _currentFallbackIndex = _fallbackChain.IndexOf(entry);
+                CacheBest(entry.Codec);
+                Log.I("FfmpegEncoder", $"probed OK: {entry.Label} ({probe.OutputBytes}B output)");
+                return entry.Codec;
+            }
+
+            Log.W("FfmpegEncoder", $"probe FAILED: {entry.Label} — {probe.Error}");
+            if (probe.IsNvencSessionLimit)
+            {
+                Log.E("FfmpegEncoder", "NVENC session limit detected — removing all NVENC from fallback chain");
+                _fallbackChain.RemoveAll(e => e.Codec.Contains("nvenc"));
+            }
+        }
+
+        // Last resort: software encoder
         CacheBest("libx264");
         return "libx264";
     }
@@ -185,8 +225,15 @@ public sealed class FfmpegEncoder : IEncoder
         };
 
         // Map user preference to vendor-aware encoder name
-        var vendorId = EncoderManager.DetectGpuVendorId();
+        var vendorId = EncoderManager.DetectEncodingVendorId();
         var result = EncoderManager.MapUserCodec(preferred, vendorId);
+
+        // AV1 gate: if user requested AV1 but GPU doesn't support HW AV1, fall back to H264
+        if (result != null && result.Contains("av1") && !EncoderManager.SupportsAv1Hardware(vendorId))
+        {
+            Log.W("FfmpegEncoder", $"AV1 requested but GPU vendor 0x{vendorId:X4} doesn't support HW AV1 — falling back to H264");
+            return EncoderManager.GetPreferredCodec(vendorId);
+        }
 
         if (result != null && CheckFfmpegEncoderCached(result))
             return result;
@@ -252,7 +299,7 @@ public sealed class FfmpegEncoder : IEncoder
             "av1_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0",
-            "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)}",
+            "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K",
             _ => "-preset ultrafast -tune zerolatency -threads 1"
         };
 
@@ -263,8 +310,23 @@ public sealed class FfmpegEncoder : IEncoder
             ch = Math.Max(ch, 240);
             Log.I("FfmpegEncoder", $"crop={cw}:{ch}:{_cropX}:{_cropY} src={_width}x{_height}");
         }
-        var cropFilter = cw > 0 && ch > 0
-            ? $" -vf \"crop={cw}:{ch}:{_cropX}:{_cropY}\""
+
+        // Build -vf filter chain: optional crop + optional scale (for cascading fallback)
+        var vfParts = new List<string>();
+        if (cw > 0 && ch > 0)
+            vfParts.Add($"crop={cw}:{ch}:{_cropX}:{_cropY}");
+        if (_scaleDivisor > 1)
+        {
+            var sw = _width / _scaleDivisor;
+            var sh = _height / _scaleDivisor;
+            // Ensure even dimensions (required by most encoders)
+            sw = sw & ~1;
+            sh = sh & ~1;
+            vfParts.Add($"scale={sw}:{sh}");
+            Log.I("FfmpegEncoder", $"cascading fallback scale: {_width}x{_height} → {sw}x{sh} (1/{_scaleDivisor})");
+        }
+        var cropFilter = vfParts.Count > 0
+            ? $" -vf \"{string.Join(",", vfParts)}\""
             : "";
 
         var rawFmt = _codec switch
@@ -429,7 +491,7 @@ public sealed class FfmpegEncoder : IEncoder
     /// Encontra o final do primeiro access unit AnnexB completo no buffer.
     /// Retorna a posição do start code que INICIA o próximo AU, ou 0 se ainda
     /// não há um AU completo (acumulando mais dados necessários).
-    /// Suporta H264 NAL types. HEVC NAL types diferem ((b >> 1) &amp; 0x3F) —
+    /// Suporta H264 NAL types. HEVC NAL types diferem ((b >> 1) & 0x3F) —
     /// TODO: adicionar suporte HEVC quando necessário.
     /// </summary>
     private static int FindAnnexBAccessUnitBoundary(byte[] buf, int len, bool hadSlice)
@@ -466,6 +528,118 @@ public sealed class FfmpegEncoder : IEncoder
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Parse a complete AnnexB Access Unit by scanning start codes directly.
+    /// Writes each NALU to _pendingBuf in AVCC format (4-byte BE length prefix)
+    /// for compatibility with EmitPacket, CheckPendingHasSlice, and CheckKeyFrame.
+    /// Handles the last NALU (no trailing start code) via buffer-end boundary.
+    /// H264 NAL types only — matches FindAnnexBAccessUnitBoundary.
+    /// </summary>
+    private void ParseAnnexBAu(byte[] buf, int length)
+    {
+        _pendingTooLarge = false;
+        int pos = 0;
+
+        while (pos + 3 < length)
+        {
+            // Find next start code from pos
+            int scLen = 0;
+            if (buf[pos] == 0 && buf[pos + 1] == 0)
+            {
+                if (buf[pos + 2] == 1) scLen = 3;
+                else if (pos + 3 < length && buf[pos + 2] == 0 && buf[pos + 3] == 1) scLen = 4;
+            }
+            if (scLen == 0) { pos++; continue; }
+
+            int nalStart = pos + scLen;
+            if (nalStart >= length) break;
+
+            int nalType = buf[nalStart] & 0x1F;
+            bool isSlice = nalType >= 1 && nalType <= 5;
+            bool isAUD = nalType == 9;
+
+            // Find end of this NALU: scan forward for next start code.
+            // If none found, NALU extends to end of AU (last NALU — the key fix
+            // over ConvertAnnexBToAvcc which dropped the last NALU).
+            int nalEnd = length;
+            for (int i = nalStart + 1; i < length - 2; i++)
+            {
+                if (buf[i] != 0 || buf[i + 1] != 0) continue;
+                if (buf[i + 2] == 1) { nalEnd = i; break; }
+                if (i + 3 < length && buf[i + 2] == 0 && buf[i + 3] == 1) { nalEnd = i; break; }
+            }
+            int nalLen = nalEnd - nalStart;
+
+            if (_outputFrameIndex == 0 && _frameCount < 10)
+                Log.D("FfmpegEncoder", $"ParseAnnexBAu: NAL type={nalType} isSlice={isSlice} isAUD={isAUD} nalLen={nalLen} pos={pos} hadSlice={_hadSlice}");
+
+            if (isAUD)
+            {
+                // AUD (Access Unit Delimiter) marks frame boundary
+                if (_hadSlice)
+                    EmitPacket();
+                // Do NOT append AUD to pending (delimiter only, no frame data)
+            }
+            else
+            {
+                // Cache SPS/PPS for avcC (H264 only; AV1 uses OBU)
+                if (_cachedAvcc == null && !IsAv1)
+                {
+                    if (nalType == 7 && _cachedSps == null)
+                    {
+                        _cachedSps = new byte[nalLen];
+                        System.Buffer.BlockCopy(buf, nalStart, _cachedSps, 0, nalLen);
+                    }
+                    else if (nalType == 8 && _cachedPps == null)
+                    {
+                        _cachedPps = new byte[nalLen];
+                        System.Buffer.BlockCopy(buf, nalStart, _cachedPps, 0, nalLen);
+                    }
+                    if (_cachedSps != null && _cachedPps != null)
+                        _cachedAvcc = ClipExporter.BuildAvcc(_cachedSps, _cachedPps);
+                }
+
+                // Frame boundary (fallback): new slice NALU while one is pending → emit
+                if (isSlice && _hadSlice)
+                {
+                    if (_pendingLen > 200 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"ParseAnnexBAu: slice trigger with {_pendingLen}B pending — likely format mismatch");
+                        _pendingTooLarge = true;
+                    }
+                    else
+                    {
+                        EmitPacket();
+                    }
+                }
+
+                // PPS emit trigger: when PPS arrives after slice data, signals new AU
+                if (nalType == 8 && _hadSlice)
+                {
+                    if (_pendingLen > 200 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"ParseAnnexBAu: PPS trigger with {_pendingLen}B pending — likely format mismatch");
+                        _pendingTooLarge = true;
+                    }
+                    else
+                    {
+                        EmitPacket();
+                    }
+                }
+
+                // Append NALU to _pendingBuf in AVCC format
+                AppendPendingAvccNal(buf, nalStart, nalLen);
+                if (isSlice) _hadSlice = true;
+            }
+
+            pos = nalEnd > nalStart ? nalEnd : nalStart + 1;
+        }
+
+        // Force-emit any accumulated frame at end of AU (safety net)
+        if (_hadSlice && !_pendingTooLarge)
+            EmitPacket();
     }
 
     private void ReaderLoop(CancellationToken ct)
@@ -538,16 +712,16 @@ public sealed class FfmpegEncoder : IEncoder
                 if (_pipeFormat == PipeFormat.AnnexB)
                 {
                     // AnnexB path: accumulate until a complete Access Unit is found,
-                    // then convert only the complete AU. This avoids ConvertAnnexBToAvcc
-                    // receiving partial NALUs (the root cause of orphaned-tail corruption).
+                    // then parse NALUs directly from raw AnnexB start codes.
+                    // No AnnexB→AVCC conversion — ParseAnnexBAu writes directly to
+                    // _pendingBuf in AVCC format, handling the last NALU correctly
+                    // (ConvertAnnexBToAvcc dropped it because no trailing start code).
                     int auEnd = FindAnnexBAccessUnitBoundary(_rawBuf, _rawLen, _hadRawSlice);
 
                     if (auEnd > 0)
                     {
-                        // Complete AU available in [0, auEnd)
-                        int avccLen = ConvertAnnexBToAvcc(_rawBuf, auEnd, out int consumed);
-                        if (avccLen > 0)
-                            ParseAvcc(new ReadOnlySpan<byte>(_rawBuf, 0, avccLen));
+                        // Complete AU available in [0, auEnd) — parse directly
+                        ParseAnnexBAu(_rawBuf, auEnd);
 
                         // Preserve tail (start of next AU) for next iteration
                         int tail = _rawLen - auEnd;
@@ -757,6 +931,44 @@ public sealed class FfmpegEncoder : IEncoder
         _pendingLen += chunk.Length;
     }
 
+    /// <summary>
+    /// Append a single NALU to _pendingBuf in AVCC format (4-byte big-endian
+    /// length prefix + raw NALU data). Used by ParseAnnexBAu for direct AnnexB
+    /// processing, bypassing the ConvertAnnexBToAvcc intermediate step.
+    /// </summary>
+    private void AppendPendingAvccNal(byte[] data, int offset, int nalLen)
+    {
+        if (_pendingLen > 50 * 1024 * 1024)
+        {
+            Log.W("FfmpegEncoder", $"AppendPendingAvccNal: pendingLen={_pendingLen} exceeds 50MB — resetting to prevent OOM");
+            _pendingLen = 0;
+            _hadSlice = false;
+        }
+        int totalSize = 4 + nalLen;
+        int need = _pendingLen + totalSize;
+        if (_pendingBuf == null)
+        {
+            _pendingBuf = ArrayPool<byte>.Shared.Rent(Math.Max(64 * 1024, need));
+            _pendingLen = 0;
+        }
+        if (need > _pendingBuf.Length)
+        {
+            var newBuf = ArrayPool<byte>.Shared.Rent(Math.Max(_pendingBuf.Length * 2, need));
+            System.Buffer.BlockCopy(_pendingBuf, 0, newBuf, 0, _pendingLen);
+            ArrayPool<byte>.Shared.Return(_pendingBuf);
+            _pendingBuf = newBuf;
+        }
+        // Write 4-byte big-endian length prefix
+        _pendingBuf[_pendingLen] = (byte)(nalLen >> 24);
+        _pendingBuf[_pendingLen + 1] = (byte)(nalLen >> 16);
+        _pendingBuf[_pendingLen + 2] = (byte)(nalLen >> 8);
+        _pendingBuf[_pendingLen + 3] = (byte)nalLen;
+        _pendingLen += 4;
+        // Copy NALU data
+        System.Buffer.BlockCopy(data, offset, _pendingBuf, _pendingLen, nalLen);
+        _pendingLen += nalLen;
+    }
+
     /// <summary>Checks that pending buffer contains at least one valid slice NALU (type 1-5).
     /// Prevents emitting partial packets that only have SPS/PPS/SEI without frame data.</summary>
     private bool CheckPendingHasSlice()
@@ -784,13 +996,17 @@ public sealed class FfmpegEncoder : IEncoder
         System.Buffer.BlockCopy(_pendingBuf, 0, data, 0, _pendingLen);
 
         long dur = 10_000_000L / _frameRate;
+
+        // Save previous PTS before dequeuing new one — monotonicity check compares
+        // against the PREVIOUS frame, not the current (which was just assigned).
+        long prevPts = _lastRealPtsTicks;
+
         // Dequeue exactly one PTS per emitted packet. During catch-up (NVENC slower than
         // capture), the queue accumulates one entry per frame; draining one-at-a-time gives
         // each emitted packet a unique, monotonically increasing real timestamp. If the queue
         // is empty (reader loop outpacing capture), extrapolate from the last real PTS.
-        // Previously we drained ALL entries and kept only the last, causing N accumulated
-        // frames to share the same PTS → duplicate DTS in Matroska → "Non-monotonic DTS".
         long pts = _outputFrameIndex * dur;
+        bool usedExtrapolated = false;
         if (_inputPtsQueue.TryDequeue(out var realPts))
         {
             pts = realPts.Ticks;
@@ -800,7 +1016,20 @@ public sealed class FfmpegEncoder : IEncoder
         {
             pts = _lastRealPtsTicks + dur;
             _lastRealPtsTicks = pts;
+            usedExtrapolated = true;
         }
+
+        // Ensure strictly monotonic timestamps — avoid duplicate or non-increasing PTS
+        if (prevPts >= 0 && pts <= prevPts)
+        {
+            pts = prevPts + 1; // minimal forward step (1 tick)
+            _lastRealPtsTicks = pts;
+            Log.W("FfmpegEncoder", $"EmitPacket: corrected non-monotonic pts to {pts / 10000}ms (frameIndex={_outputFrameIndex})");
+        }
+
+        if (usedExtrapolated)
+            Log.D("FfmpegEncoder", $"EmitPacket: used extrapolated pts {pts/10000}ms (frameIndex={_outputFrameIndex})");
+
         bool key = CheckKeyFrame(data);
 
         _outputChannel.Writer.TryWrite(new EncodedPacket(
@@ -901,11 +1130,23 @@ public sealed class FfmpegEncoder : IEncoder
 
     private bool TryFallbackCodec()
     {
-        int idx = Array.IndexOf(FallbackCodecs, _codec);
-        if (idx < 0 || idx >= FallbackCodecs.Length - 1) return false;
-        _codec = FallbackCodecs[idx + 1];
+        if (_fallbackChain == null || _fallbackChain.Count == 0) return false;
+
+        // Move to next entry in the chain
+        _currentFallbackIndex++;
+        if (_currentFallbackIndex >= _fallbackChain.Count)
+        {
+            Log.E("FfmpegEncoder", "cascading fallback exhausted — no more entries in chain");
+            return false;
+        }
+
+        var entry = _fallbackChain[_currentFallbackIndex];
+        var oldCodec = _codec;
+        _codec = entry.Codec;
+        _scaleDivisor = entry.ScaleDivisor;
         _restartAttempts = 0;
-        Log.W("FfmpegEncoder", $"falling back to codec={_codec}");
+
+        Log.W("FfmpegEncoder", $"cascading fallback: {oldCodec} (1/{(_scaleDivisor > 1 ? _scaleDivisor.ToString() : "full")}) → {entry.Label}");
         return true;
     }
 
@@ -1005,6 +1246,13 @@ public sealed class FfmpegEncoder : IEncoder
         {
             ArrayPool<byte>.Shared.Return(_pendingBuf);
             _pendingBuf = null;
+        }
+        // Return raw buffer if rented to avoid ArrayPool leaks
+        if (_rawBuf != null)
+        {
+            ArrayPool<byte>.Shared.Return(_rawBuf);
+            _rawBuf = null;
+            _rawLen = 0;
         }
         _pendingLen = 0;
         while (_pendingOutputs.Count > 0)
@@ -1234,5 +1482,27 @@ public sealed class FfmpegEncoder : IEncoder
         _nv12Staging?.Dispose();
         _inputCopy?.Dispose();
         _nv12Scratch = null;
+
+        // Release pooled buffers and packets to prevent ArrayPool leaks
+        if (_pendingBuf != null)
+        {
+            ArrayPool<byte>.Shared.Return(_pendingBuf);
+            _pendingBuf = null;
+        }
+        if (_rawBuf != null)
+        {
+            ArrayPool<byte>.Shared.Return(_rawBuf);
+            _rawBuf = null;
+        }
+        _pendingLen = 0;
+        _rawLen = 0;
+
+        while (_pendingOutputs.Count > 0)
+            _pendingOutputs.Dequeue().Release();
+
+        while (_inputPtsQueue.TryDequeue(out _)) { }
+
+        while (_outputChannel.Reader.TryRead(out var pkt))
+            pkt.Release();
     }
 }

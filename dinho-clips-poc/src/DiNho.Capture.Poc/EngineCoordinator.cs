@@ -50,7 +50,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private volatile bool _recording;
     private string? _capturedGameProcess;
     private volatile bool _captureActive;
-    private bool _exportInProgress;
+    private volatile bool _exportInProgress;
     private readonly object _exportLock = new();
     private readonly object _pipelineLock = new();
     private Timer? _cleanupTimer;
@@ -122,6 +122,12 @@ public sealed partial class EngineCoordinator : IDisposable
     // True quando o áudio caiu para loopback completo (WasapiLoopbackSource)
     // porque o per-process loopback (ActivateAudioInterfaceAsync) foi bloqueado por anti-cheat
     private volatile bool _audioFallback;
+
+    // Dedicated STA thread with Windows message pump for WGC.
+    // WGC FrameArrived needs a message pump on the thread that created the session
+    // for the DWM to deliver frames. CreateFreeThreaded() alone is not sufficient
+    // on some systems (e.g. RTX 5050 + FiveM).
+    private Capture.WindowsMessagePump? _wgcPump;
 
     // High-res timer via timeBeginPeriod (ativado em StartAsync, desativado em StopAsync)
     private volatile bool _highResTimerEnabled;
@@ -281,12 +287,16 @@ public sealed partial class EngineCoordinator : IDisposable
     {
         StopCapture();
         _hotkeys.Dispose();
+        _ptt.Dispose();
         _gameDetector.Dispose();
         _buffer.Dispose();
         _audioSessions.Dispose();
         _exporter.Dispose();
         _pipeServer.Dispose();
         _ramManager?.Dispose();
+        _wgcPump?.Dispose();
+        _status.Dispose();
+        _clock.Dispose();
         _config.Dispose();
     }
 

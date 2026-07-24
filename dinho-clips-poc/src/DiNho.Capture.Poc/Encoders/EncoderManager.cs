@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DiNho.Capture.Poc.Logging;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 
@@ -8,6 +9,8 @@ public enum EncoderType { Ffmpeg, FfmpegHw, None }
 
 public sealed class EncoderManager : IDisposable
 {
+    // ── Vendor → codec maps ──────────────────────────────────────────
+
     /// <summary>Vendor → H264 encoder map.</summary>
     public static readonly Dictionary<int, string> VendorCodecs = new()
     {
@@ -32,18 +35,59 @@ public sealed class EncoderManager : IDisposable
         [0x8086] = "libsvtav1",
     };
 
+    // ── Probe result ─────────────────────────────────────────────────
+
+    public record ProbeResult
+    {
+        public required string Codec { get; init; }
+        public required bool Success { get; init; }
+        public required int OutputBytes { get; init; }
+        public string? Error { get; init; }
+        public bool IsNvencSessionLimit { get; init; }
+    }
+
+    // ── Fallback chain entry ─────────────────────────────────────────
+
+    public record FallbackEntry
+    {
+        public required string Codec { get; init; }
+        public int ScaleDivisor { get; init; } = 1;
+        public required string Label { get; init; }
+    }
+
+    // ── GPU adapter info ─────────────────────────────────────────────
+
+    public record GpuAdapterInfo
+    {
+        public int Index { get; init; }
+        public string Name { get; init; } = "";
+        public int VendorId { get; init; }
+        public long VideoMemoryBytes { get; init; }
+    }
+
+    // ── NVENC session info ───────────────────────────────────────────
+
+    public record NvencSessionInfo
+    {
+        public int SessionCount { get; init; }
+        public int MaxSessions { get; init; }
+        public bool IsLimitReached { get; init; }
+    }
+
+    // ── GPU detection ────────────────────────────────────────────────
+
     public static int DetectGpuVendorId()
     {
         try
         {
             using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-            for (int i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
             {
                 using (adapter)
                 {
                     var desc = adapter.Description1;
                     if (desc.VendorId is 0x10DE or 0x1002 or 0x8086)
-                        return desc.VendorId;
+                        return (int)desc.VendorId;
                 }
             }
         }
@@ -58,17 +102,62 @@ public sealed class EncoderManager : IDisposable
         try
         {
             using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-            for (int i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
             {
                 using (adapter)
                 {
                     var desc = adapter.Description1;
-                    list.Add((i, desc.Description.TrimEnd('\0'), desc.VendorId));
+                    list.Add(((int)i, desc.Description.TrimEnd('\0'), (int)desc.VendorId));
                 }
             }
         }
         catch { }
         return list;
+    }
+
+    /// <summary>Enumerate all DXGI adapters with full info including VRAM size.</summary>
+    public static List<GpuAdapterInfo> DetectAllGpuAdapters()
+    {
+        var adapters = new List<GpuAdapterInfo>();
+        try
+        {
+            using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            {
+                using (adapter)
+                {
+                    var desc = adapter.Description1;
+                    adapters.Add(new GpuAdapterInfo
+                    {
+                        Index = (int)i,
+                        Name = desc.Description.TrimEnd('\0'),
+                        VendorId = (int)desc.VendorId,
+                        VideoMemoryBytes = desc.DedicatedVideoMemory,
+                    });
+                }
+            }
+        }
+        catch { }
+        return adapters;
+    }
+
+    /// <summary>Detect the primary encoding vendor from the list of available adapters.
+    /// For hybrid laptops (iGPU + dGPU), picks the first discrete GPU with encoding support.
+    /// Falls back to first adapter if no discrete GPU found.</summary>
+    public static int DetectEncodingVendorId()
+    {
+        var adapters = DetectAllGpuAdapters();
+
+        // Prefer discrete GPU (NVIDIA > AMD > Intel) — these have dedicated encoders
+        var discrete = adapters
+            .Where(a => a.VendorId is 0x10DE or 0x1002)
+            .OrderByDescending(a => a.VendorId == 0x10DE ? 2 : 1) // NVIDIA first
+            .ThenByDescending(a => a.VideoMemoryBytes)
+            .FirstOrDefault();
+        if (discrete != null) return discrete.VendorId;
+
+        // Fallback to any supported vendor
+        return adapters.FirstOrDefault(a => a.VendorId is 0x10DE or 0x1002 or 0x8086)?.VendorId ?? 0;
     }
 
     public static string GetPreferredCodec(int vendorId)
@@ -87,7 +176,7 @@ public sealed class EncoderManager : IDisposable
             "h264" => GetPreferredCodec(vendorId),
             "hevc" => vendorId == 0 ? "libx265" :
                       VendorHevcCodecs.TryGetValue(vendorId, out var h) ? h : "libx265",
-            "av1"  => vendorId == 0 ? "libsvtav1" :
+            "av1" => vendorId == 0 ? "libsvtav1" :
                       VendorAv1Codecs.TryGetValue(vendorId, out var a) ? a : "libsvtav1",
             "libx264" => "libx264",
             "libx265" => "libx265",
@@ -95,13 +184,340 @@ public sealed class EncoderManager : IDisposable
         };
     }
 
+    // ── Active encoder probe ─────────────────────────────────────────
+
+    /// <summary>
+    /// Real test-encode: pipes 5 dummy NV12 frames through the specified encoder
+    /// and checks if ffmpeg exits cleanly with non-zero output.
+    /// This is the ONLY reliable way to know if an encoder actually works on this system.
+    /// </summary>
+    public static ProbeResult ProbeEncoder(string codec, int width = 320, int height = 240, int fps = 30)
+    {
+        var args = BuildProbeArgs(codec, width, height, fps);
+        var outputBytes = 0;
+        string? errorMsg = null;
+        var isNvencSessionLimit = false;
+
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo("ffmpeg")
+                {
+                    Arguments = args,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+
+            process.Start();
+            try { process.PriorityClass = ProcessPriorityClass.Idle; } catch { }
+
+            var frameSize = width * height * 3 / 2; // NV12
+            var frameCount = 5;
+
+            // Pipe dummy frames
+            try
+            {
+                var stdin = process.StandardInput.BaseStream;
+                for (int i = 0; i < frameCount; i++)
+                {
+                    var dummy = new byte[frameSize];
+                    // Fill with slight variation per frame (gray gradient)
+                    var val = (byte)(80 + i * 20);
+                    for (int p = 0; p < dummy.Length; p += 3)
+                    {
+                        dummy[p] = val;     // Y
+                        dummy[p + 1] = 128; // U
+                        dummy[p + 2] = 128; // V
+                    }
+                    stdin.Write(dummy, 0, dummy.Length);
+                    stdin.Flush();
+                }
+                stdin.Close();
+            }
+            catch { /* pipe broken = encoder rejected input, handled by exit code */ }
+
+            // Collect output size
+            var stdoutTask = Task.Run(() =>
+            {
+                var buf = new byte[64 * 1024];
+                int total = 0, n;
+                while ((n = process.StandardOutput.BaseStream.Read(buf, 0, buf.Length)) > 0)
+                    total += n;
+                return total;
+            });
+
+            // Read stderr for diagnostics (NVENC session limit detection)
+            var stderrLines = new List<string>();
+            var stderrTask = Task.Run(() =>
+            {
+                string? line;
+                while ((line = process.StandardError.ReadLine()) != null)
+                {
+                    lock (stderrLines) stderrLines.Add(line);
+                    // Detect NVENC-specific failure messages
+                    if (line.Contains("session", StringComparison.OrdinalIgnoreCase) &&
+                        (line.Contains("limit", StringComparison.OrdinalIgnoreCase) ||
+                         line.Contains("busy", StringComparison.OrdinalIgnoreCase) ||
+                         line.Contains("overflow", StringComparison.OrdinalIgnoreCase)))
+                        isNvencSessionLimit = true;
+                    // Also detect via exit code pattern: NVENC returns 8 for resource exhaustion
+                    if (line.Contains("Cannot load nvEncodeAPI64.dll", StringComparison.OrdinalIgnoreCase) ||
+                        line.Contains("No NVENC capable devices found", StringComparison.OrdinalIgnoreCase))
+                        isNvencSessionLimit = true;
+                }
+            });
+
+            process.WaitForExit(10000);
+            Task.WaitAll(new[] { stdoutTask, stderrTask }, 5000);
+
+            outputBytes = stdoutTask.Result;
+
+            if (process.ExitCode != 0 && outputBytes == 0)
+            {
+                lock (stderrLines)
+                {
+                    var relevantErrors = stderrLines
+                        .Where(l => l.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+                                    l.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+                                    l.Contains("invalid", StringComparison.OrdinalIgnoreCase))
+                        .Take(3)
+                        .ToList();
+                    if (relevantErrors.Count > 0)
+                        errorMsg = string.Join(" | ", relevantErrors);
+                }
+            }
+
+            var success = process.ExitCode == 0 && outputBytes > 0;
+            return new ProbeResult
+            {
+                Codec = codec,
+                Success = success,
+                OutputBytes = outputBytes,
+                Error = success ? null : errorMsg ?? $"exit={process.ExitCode}",
+                IsNvencSessionLimit = isNvencSessionLimit,
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ProbeResult
+            {
+                Codec = codec,
+                Success = false,
+                OutputBytes = 0,
+                Error = ex.Message,
+            };
+        }
+    }
+
+    private static string BuildProbeArgs(string codec, int width, int height, int fps)
+    {
+        var tune = codec switch
+        {
+            "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
+            "libx265" => "-preset ultrafast -tune zerolatency -threads 1",
+            "h264_nvenc" => "-preset p1 -tune ll",
+            "hevc_nvenc" => "-preset p1 -tune ll",
+            "av1_nvenc" => "-preset p1 -tune ll",
+            "h264_amf" => "-quality speed",
+            "hevc_amf" => "-quality speed",
+            "h264_qsv" => "-preset fastest",
+            "av1_amf" => "-quality speed",
+            _ => "-preset ultrafast",
+        };
+
+        var rawFmt = codec switch
+        {
+            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265" => "hevc",
+            "av1_nvenc" or "libsvtav1" or "av1_amf" => "av1",
+            _ => "h264"
+        };
+
+        return $"-y -loglevel error " +
+               $"-f rawvideo -pix_fmt nv12 -s {width}x{height} " +
+               $"-r {fps} -i pipe:0 " +
+               $"-c:v {codec} {tune} -frames:v 5 " +
+               $"-f {rawFmt} pipe:1";
+    }
+
+    // ── NVENC session limit detection ────────────────────────────────
+
+    /// <summary>Detect NVENC session count and limit. Uses NVIDIA SMI if available.</summary>
+    public static NvencSessionInfo GetNvencSessionInfo()
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo("nvidia-smi")
+                {
+                    Arguments = "--query-gpu=encoder_stats.sessionCount,encoder_stats.maxSessionCount --format=csv,noheader,nounits",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(3000);
+
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            {
+                var parts = output.Trim().Split(',');
+                if (parts.Length >= 2 &&
+                    int.TryParse(parts[0].Trim(), out var count) &&
+                    int.TryParse(parts[1].Trim(), out var max))
+                {
+                    return new NvencSessionInfo
+                    {
+                        SessionCount = count,
+                        MaxSessions = max,
+                        IsLimitReached = count >= max,
+                    };
+                }
+            }
+        }
+        catch { /* nvidia-smi not available */ }
+
+        // Fallback: try probing with the most common encoder to check session availability
+        var probe = ProbeEncoder("h264_nvenc");
+        if (probe.IsNvencSessionLimit)
+        {
+            return new NvencSessionInfo
+            {
+                SessionCount = -1,
+                MaxSessions = -1,
+                IsLimitReached = true,
+            };
+        }
+
+        return new NvencSessionInfo { SessionCount = -1, MaxSessions = -1, IsLimitReached = false };
+    }
+
+    // ── AV1 capability gate ──────────────────────────────────────────
+
+    /// <summary>Check if a given GPU vendor supports AV1 hardware encoding.
+    /// RTX 40+, RDNA3+, Arc Alchemist+.</summary>
+    public static bool SupportsAv1Hardware(int vendorId)
+    {
+        return vendorId switch
+        {
+            0x10DE => DetectNvidiaGeneration() >= 89, // Ada Lovelace = compute capability 8.9 (RTX 40+)
+            0x1002 => DetectAmdGeneration() >= 3,      // RDNA3+ (simplified: check if av1_amf exists)
+            0x8086 => true,                             // All Intel Arc support AV1
+            _ => false,
+        };
+    }
+
+    private static int DetectNvidiaGeneration()
+    {
+        try
+        {
+            using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            {
+                using (adapter)
+                {
+                    var desc = adapter.Description1;
+                    if (desc.VendorId == 0x10DE)
+                    {
+                        // Adapter LUID → CUDA device → compute capability
+                        // Simplified: use VRAM as proxy. 8GB+ = likely RTX 20+ (Turing, sm_75)
+                        // 12GB+ = likely RTX 30+ (Ampere, sm_86)
+                        // 16GB+ = likely RTX 40+ (Ada, sm_89) — but 4060 has 8GB
+                        // Better: just check if av1_nvenc encoder exists in ffmpeg
+                        return CheckFfmpegEncoder("av1_nvenc") ? 89 : 75;
+                    }
+                }
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    private static int DetectAmdGeneration()
+    {
+        // Simplified: if av1_amf is in ffmpeg encoders, the driver supports it
+        return CheckFfmpegEncoder("av1_amf") ? 3 : 0;
+    }
+
+    // ── Cascading fallback chain builder ─────────────────────────────
+
+    /// <summary>
+    /// Build a cascading fallback chain for the given user codec preference.
+    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → CPU ultrafast.
+    /// Each entry includes the codec and optional resolution scale divisor.
+    /// </summary>
+    public static List<FallbackEntry> BuildFallbackChain(string userCodec, int vendorId)
+    {
+        var chain = new List<FallbackEntry>();
+
+        // Determine the hardware codec for this vendor
+        var hwCodec = userCodec.ToLowerInvariant() switch
+        {
+            "h264" => GetPreferredCodec(vendorId),
+            "hevc" => VendorHevcCodecs.TryGetValue(vendorId, out var h) ? h : "",
+            "av1" => SupportsAv1Hardware(vendorId) ?
+                     (VendorAv1Codecs.TryGetValue(vendorId, out var a) ? a : "") : "",
+            "libx264" => "",
+            "libx265" => "",
+            "auto" => GetPreferredCodec(vendorId),
+            _ => "",
+        };
+
+        // HW native at full resolution
+        if (!string.IsNullOrEmpty(hwCodec))
+            chain.Add(new FallbackEntry { Codec = hwCodec, Label = $"HW native ({hwCodec})" });
+
+        // HW at 720p
+        if (!string.IsNullOrEmpty(hwCodec))
+            chain.Add(new FallbackEntry
+            {
+                Codec = hwCodec,
+                ScaleDivisor = 2,
+                Label = $"HW 720p ({hwCodec})",
+            });
+
+        // HW at 480p
+        if (!string.IsNullOrEmpty(hwCodec))
+            chain.Add(new FallbackEntry
+            {
+                Codec = hwCodec,
+                ScaleDivisor = 4,
+                Label = $"HW 480p ({hwCodec})",
+            });
+
+        // CPU fallback
+        var cpuCodec = userCodec.ToLowerInvariant() switch
+        {
+            "hevc" or "libx265" => "libx265",
+            _ => "libx264",
+        };
+        chain.Add(new FallbackEntry { Codec = cpuCodec, Label = $"CPU ({cpuCodec})" });
+
+        // CPU at 720p (last resort)
+        chain.Add(new FallbackEntry
+        {
+            Codec = cpuCodec,
+            ScaleDivisor = 2,
+            Label = $"CPU 720p ({cpuCodec})",
+        });
+
+        return chain;
+    }
+
+    // ── Existing methods (kept for backward compatibility) ───────────
+
     public static List<EncoderType> DetectAvailableEncoders()
     {
         var result = new List<EncoderType>();
 
         if (CheckFfmpegAvailable())
         {
-            // Check which codecs ffmpeg supports
             var hasHw = CheckFfmpegEncoder("h264_nvenc") ||
                         CheckFfmpegEncoder("h264_amf") ||
                         CheckFfmpegEncoder("h264_qsv");
@@ -116,7 +532,7 @@ public sealed class EncoderManager : IDisposable
         return result;
     }
 
-    private static bool CheckFfmpegAvailable()
+    internal static bool CheckFfmpegAvailable()
     {
         try
         {
@@ -138,7 +554,7 @@ public sealed class EncoderManager : IDisposable
         catch { return false; }
     }
 
-    private static bool CheckFfmpegEncoder(string enc)
+    internal static bool CheckFfmpegEncoder(string enc)
     {
         try
         {

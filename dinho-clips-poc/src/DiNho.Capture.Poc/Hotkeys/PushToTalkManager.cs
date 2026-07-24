@@ -13,6 +13,7 @@ public sealed class PushToTalkManager : IDisposable
 {
     private readonly HotkeyManager _hotkeyManager;
     private readonly HashSet<int> _pttKeys = new();
+    private readonly object _pttLock = new();
     private bool _micActive;
     private PttMode _mode = PttMode.Hold;
 
@@ -29,26 +30,42 @@ public sealed class PushToTalkManager : IDisposable
 
     public void AddPttKey(VirtualKey key)
     {
-        _pttKeys.Add((int)key);
-    }
+            lock (_pttLock)
+            {
+                _pttKeys.Add((int)key);
+            }
+        }
 
-    public void RemovePttKey(VirtualKey key)
-    {
-        _pttKeys.Remove((int)key);
-    }
+        public void RemovePttKey(VirtualKey key)
+        {
+            lock (_pttLock)
+            {
+                _pttKeys.Remove((int)key);
+            }
+        }
 
-    public void ClearKeys()
-    {
-        _pttKeys.Clear();
-    }
+        public void ClearKeys()
+        {
+            lock (_pttLock)
+            {
+                _pttKeys.Clear();
+            }
+        }
 
-    private void OnRawKey(int vkCode, bool isKeyDown)
-    {
-        var isPtt = _pttKeys.Contains(vkCode);
-        Log.D("PushToTalk", $"vk=0x{vkCode:X2} down={isKeyDown} ptt={isPtt} pttKeys=[{string.Join(",", _pttKeys)}]");
+        private void OnRawKey(int vkCode, bool isKeyDown)
+        {
+            bool isPtt;
+            int[] snapshot;
+            lock (_pttLock)
+            {
+                isPtt = _pttKeys.Contains(vkCode);
+                snapshot = _pttKeys.ToArray();
+            }
 
-        if (!isPtt) return;
-        if (_mode == PttMode.Off) return;
+            Log.D("PushToTalk", $"vk=0x{vkCode:X2} down={isKeyDown} ptt={isPtt} pttKeys=[{string.Join(",", snapshot)}]");
+
+            if (!isPtt) return;
+            if (_mode == PttMode.Off) return;
 
         if (_mode == PttMode.Hold)
         {

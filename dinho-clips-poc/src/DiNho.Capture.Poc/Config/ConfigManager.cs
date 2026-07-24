@@ -95,6 +95,7 @@ public sealed class AppConfig
     public bool AudioLoopback { get; set; } = true;
 
     // RAM-aware adaptive quality (true = RamManager ajusta CQ/resolução/replay conforme RAM disponível)
+    [JsonPropertyName("adaptiveQuality")]
     public bool AdaptiveQualityEnabled { get; set; } = true;
 
     // PID do processo Electron (para ignorar foreground changes quando o Electron rouba o foco)
@@ -106,8 +107,8 @@ public sealed class AppConfig
     // AutoCleanup: remove clips antigos quando o disco está cheio
     public bool AutoCleanupEnabled { get; set; } = true;
 
-    // Percentual de ocupação do disco que dispara o cleanup (ex: 90 = limpa quando >90% cheio)
-    public int AutoCleanupThresholdPercent { get; set; } = 90;
+    // Limite em GB de espaço total que o usuário quer usar para clips (ex: 20 = limpa quando clips > 20GB)
+    public int AutoCleanupThresholdGB { get; set; } = 20;
 
     /// <summary>
     /// Retorna a maior duração de replay necessária com base

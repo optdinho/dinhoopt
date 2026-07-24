@@ -220,6 +220,9 @@ public sealed class FfmpegAacEncoder : IDisposable
             _process.WaitForExit(2000);
         }
         _readerThread?.Join(1000);
+        // Drain output channel — return ArrayPool buffers to avoid pool pressure
+        while (_outputChannel.Reader.TryRead(out var pkt))
+            pkt.Release();
         _readerCts?.Dispose();
         _process?.Dispose();
     }

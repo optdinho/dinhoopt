@@ -41,6 +41,7 @@ import { initAutoUpdater } from './services/auto-updater'
 import { isAdmin } from './services/elevation'
 import { execNativeUtf8, killAllChildren, psUtf8 } from './services/exec-utf8'
 import { getLogger } from './services/logger.service'
+import { clipPathInOutputDir } from './services/clips-config-manager'
 import { attachRendererDiagnostics } from './services/renderer-diagnostics'
 import {
   completeScheduleRun,
@@ -479,8 +480,14 @@ function initGui(): void {
           getLogger().warning('clip-video', `Missing path param in ${request.url}`)
           return new Response('Missing path', { status: 400 })
         }
-        const fileStat = await stat(path)
-        const fileSize = fileStat.size
+                // Validate against configured output dir to prevent path traversal / LFI
+                const safePath = clipPathInOutputDir(path)
+                if (!safePath) {
+                  getLogger().warning('clip-video', `clip-video attempted outside output dir: ${request.url}`)
+                  return new Response('Forbidden', { status: 403 })
+                }
+                const fileStat = await stat(safePath)
+                const fileSize = fileStat.size
         const rangeHeader = request.headers.get('range')
         const headers: Record<string, string> = {
           'Content-Type': 'video/mp4',
@@ -493,7 +500,7 @@ function initGui(): void {
             const start = Number.parseInt(match[1]!, 10)
             const end = match[2] ? Number.parseInt(match[2], 10) : fileSize - 1
             const chunkSize = end - start + 1
-            const fd = await open(path, 'r')
+            const fd = await open(safePath, 'r')
             const buf = Buffer.alloc(chunkSize)
             await fd.read(buf, 0, chunkSize, start)
             await fd.close()
@@ -502,7 +509,7 @@ function initGui(): void {
             return new Response(buf, { status: 206, headers })
           }
         }
-        const buffer = await readFile(path)
+        const buffer = await readFile(safePath)
         headers['Content-Length'] = String(fileSize)
         return new Response(buffer, { status: 200, headers })
       } catch (err) {

@@ -1768,8 +1768,8 @@ export interface ClipsConfig {
   audioSampleRate?: number
   /** AutoCleanup: remove clips antigos quando o disco está cheio */
   autoCleanupEnabled: boolean
-  /** Percentual de ocupação do disco que dispara o cleanup (default 90) */
-  autoCleanupThresholdPercent: number
+  /** Limite em GB de espaço total que o usuário quer usar para clips (default 20) */
+  autoCleanupThresholdGB: number
   /** RNNoise/anlmdn noise suppression on microphone */
   noiseSuppression?: boolean
   /** RAM-aware adaptive quality: adjusts CQ/resolution/replay based on available system RAM */

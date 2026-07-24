@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { MalwareScanResult } from '@shared/types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'

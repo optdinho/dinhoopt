@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('systeminformation', () => ({
   cpu: vi.fn(),
@@ -32,7 +32,8 @@ const mockedProcesses = vi.mocked(si.processes)
 const mockedDiskLayout = vi.mocked(si.diskLayout)
 const mockedExecFileAsync = vi.mocked(execFileAsync)
 
-function createMockSender() {
+// biome-ignore lint/suspicious/noExplicitAny: test mock
+function createMockSender(): any {
   return { send: vi.fn(), isDestroyed: vi.fn().mockReturnValue(false) }
 }
 
@@ -61,13 +62,16 @@ describe('PerfMonitorService', () => {
         brand: 'Core i7-10700K',
         physicalCores: 8,
         cores: 16,
-      })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
       mockedOsInfo.mockResolvedValue({
         distro: 'Windows',
         release: '10.0.19045',
         hostname: 'DESKTOP-ABC',
-      })
-      mockedMem.mockResolvedValue({ total: 17179869184 })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 17179869184 } as any)
 
       const info = await service.getSystemInfo()
 
@@ -87,13 +91,16 @@ describe('PerfMonitorService', () => {
         brand: 'Ryzen 9 7950X',
         physicalCores: 16,
         cores: 32,
-      })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
       mockedOsInfo.mockResolvedValue({
         distro: 'Ubuntu',
         release: '24.04',
         hostname: 'devbox',
-      })
-      mockedMem.mockResolvedValue({ total: 34359738368 })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 34359738368 } as any)
 
       const first = await service.getSystemInfo()
       const second = await service.getSystemInfo()
@@ -109,9 +116,12 @@ describe('PerfMonitorService', () => {
       mockedCurrentLoad.mockResolvedValue({
         currentLoad: 45.2,
         cpus: [{ load: 40.1 }, { load: 50.3 }],
-      })
-      mockedDisksIO.mockResolvedValue({ rIO_sec: 1024, wIO_sec: 2048 })
-      mockedNetworkStats.mockResolvedValue([{ rx_sec: 50000, tx_sec: 30000 }])
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 1024, wIO_sec: 2048 } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 50000, tx_sec: 30000 }] as any)
       mockedProcesses.mockResolvedValue({
         all: 2,
         running: 2,
@@ -121,8 +131,10 @@ describe('PerfMonitorService', () => {
           { pid: 4, name: 'System', cpu: 0, memRss: 8192, user: 'SYSTEM', started: '' },
           { pid: 100, name: 'chrome.exe', cpu: 15, memRss: 300000000, user: 'user', started: '09:00' },
         ],
-      })
-      mockedMem.mockResolvedValue({ total: 17179869184 })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 17179869184 } as any)
 
       await service.startMonitoring(mockSender)
 
@@ -141,17 +153,23 @@ describe('PerfMonitorService', () => {
     })
 
     it('updates sender without throwing when already running', async () => {
-      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
-      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
-      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }] as any)
       mockedProcesses.mockResolvedValue({
         all: 1,
         running: 1,
         blocked: 0,
         sleeping: 0,
         list: [],
-      })
-      mockedMem.mockResolvedValue({ total: 17179869184 })
+        unknown: 0,
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 17179869184 } as any)
 
       await service.startMonitoring(mockSender)
       await vi.waitFor(() => {
@@ -186,8 +204,10 @@ describe('PerfMonitorService', () => {
           { pid: 100, name: 'steam.exe', cpu: 5, memRss: 150000000, user: 'user', started: '09:00' },
           { pid: 200, name: 'notepad.exe', cpu: 1, memRss: 10000000, user: 'user', started: '09:05' },
         ],
-      })
-      mockedMem.mockResolvedValue({ total: 17179869184 })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 17179869184 } as any)
 
       await service.startMonitoring(mockSender, getStartupItems)
 
@@ -210,17 +230,23 @@ describe('PerfMonitorService', () => {
     it('does not fail when getStartupItems callback throws', async () => {
       const getStartupItems = vi.fn().mockRejectedValue(new Error('access denied'))
 
-      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
-      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
-      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }] as any)
       mockedProcesses.mockResolvedValue({
         all: 1,
         running: 1,
         blocked: 0,
         sleeping: 0,
         list: [],
-      })
-      mockedMem.mockResolvedValue({ total: 17179869184 })
+        unknown: 0,
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 17179869184 } as any)
 
       await expect(service.startMonitoring(mockSender, getStartupItems)).resolves.toBeUndefined()
 
@@ -238,17 +264,23 @@ describe('PerfMonitorService', () => {
     it('stops sending data after stop', async () => {
       vi.useFakeTimers()
 
-      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] })
-      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 })
-      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }])
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedCurrentLoad.mockResolvedValue({ currentLoad: 10, cpus: [{ load: 10 }] } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedDisksIO.mockResolvedValue({ rIO_sec: 0, wIO_sec: 0 } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedNetworkStats.mockResolvedValue([{ rx_sec: 0, tx_sec: 0 }] as any)
       mockedProcesses.mockResolvedValue({
         all: 1,
         running: 1,
         blocked: 0,
         sleeping: 0,
         list: [],
-      })
-      mockedMem.mockResolvedValue({ total: 17179869184 })
+        unknown: 0,
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedMem.mockResolvedValue({ total: 17179869184 } as any)
 
       await service.startMonitoring(mockSender)
       await vi.advanceTimersByTimeAsync(1)
@@ -276,7 +308,8 @@ describe('PerfMonitorService', () => {
           { pid: 100, name: 'chrome.exe', cpu: 10, memRss: 200000000, user: 'user', started: '09:00' },
           { pid: 200, name: 'notepad.exe', cpu: 1, memRss: 8000000, user: 'user', started: '09:05' },
         ],
-      })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
 
       const name = await service.getProcessName(100)
       expect(name).toBe('chrome.exe')
@@ -289,7 +322,8 @@ describe('PerfMonitorService', () => {
         blocked: 0,
         sleeping: 0,
         list: [{ pid: 100, name: 'chrome.exe', cpu: 10, memRss: 200000000, user: 'user', started: '' }],
-      })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      } as any)
 
       const name = await service.getProcessName(999)
       expect(name).toBeNull()
@@ -323,7 +357,8 @@ describe('PerfMonitorService', () => {
       killSpy.mockImplementation(() => {
         throw new Error('EPERM')
       })
-      mockedExecFileAsync.mockResolvedValue(undefined)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedExecFileAsync.mockResolvedValue({ stdout: '', stderr: '' } as any)
 
       const result = await service.killProcess(1234)
 
@@ -336,7 +371,8 @@ describe('PerfMonitorService', () => {
       killSpy.mockImplementation(() => {
         throw new Error('ESRCH')
       })
-      mockedExecFileAsync.mockResolvedValue(undefined)
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+      mockedExecFileAsync.mockResolvedValue({ stdout: '', stderr: '' } as any)
 
       const result = await service.killProcess(1234)
 
@@ -404,7 +440,8 @@ describe('PerfMonitorService', () => {
           smartStatus: 'Caution',
           temperature: 42,
         },
-      ])
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      ] as any)
       mockedExecFileAsync.mockResolvedValue({
         stdout: JSON.stringify([
           {
@@ -416,6 +453,7 @@ describe('PerfMonitorService', () => {
             Wear: 5,
           },
         ]),
+        stderr: '',
       })
 
       const result = await service.getDiskHealth()
@@ -460,13 +498,14 @@ describe('PerfMonitorService', () => {
           smartStatus: 'Unknown',
           temperature: null,
         },
-      ])
-      mockedExecFileAsync.mockResolvedValue({ stdout: '[]' })
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      ] as any)
+      mockedExecFileAsync.mockResolvedValue({ stdout: '[]', stderr: '' })
 
       const result = await service.getDiskHealth()
 
-      expect(result[0].type).toBe('Unknown')
-      expect(result[0].healthStatus).toBe('Unknown')
+      expect(result[0]!.type).toBe('Unknown')
+      expect(result[0]!.healthStatus).toBe('Unknown')
     })
 
     it('returns empty array when si.diskLayout fails', async () => {
@@ -488,7 +527,8 @@ describe('PerfMonitorService', () => {
           smartStatus: 'Bad',
           temperature: null,
         },
-      ])
+        // biome-ignore lint/suspicious/noExplicitAny: test mock
+      ] as any)
       mockedExecFileAsync.mockRejectedValue(new Error('access denied'))
 
       const result = await service.getDiskHealth()

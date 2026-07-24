@@ -47,7 +47,7 @@ vi.mock('./clips-config-store', () => ({
     selectedAudioSessions: [],
     audioSampleRate: 48000,
     autoCleanupEnabled: true,
-    autoCleanupThresholdPercent: 90,
+    autoCleanupThresholdGB: 20,
     adaptiveQuality: true,
   })),
   saveClipsConfig: vi.fn((cfg: Record<string, unknown>) => cfg),
@@ -310,7 +310,7 @@ describe('clips-config-manager', () => {
         selectedAudioSessions: undefined as unknown as number[],
         audioSampleRate: undefined as unknown as number,
         autoCleanupEnabled: undefined as unknown as boolean,
-        autoCleanupThresholdPercent: undefined as unknown as number,
+        autoCleanupThresholdGB: undefined as unknown as number,
         adaptiveQuality: undefined as unknown as boolean,
       })
       loadPersistedClipsConfig()
@@ -332,7 +332,7 @@ describe('clips-config-manager', () => {
       expect(config.noiseSuppression).toBe(false)
       expect(config.audioSampleRate).toBe(48000)
       expect(config.autoCleanupEnabled).toBe(true)
-      expect(config.autoCleanupThresholdPercent).toBe(90)
+      expect(config.autoCleanupThresholdGB).toBe(20)
     })
 
     it('syncs replayTimeSeconds and fps from store', () => {
@@ -370,7 +370,7 @@ describe('clips-config-manager', () => {
         selectedAudioSessions: [],
         audioSampleRate: 48000,
         autoCleanupEnabled: true,
-        autoCleanupThresholdPercent: 90,
+        autoCleanupThresholdGB: 20,
         adaptiveQuality: true,
       }
       vi.mocked(loadClipsConfig).mockReturnValueOnce(saved)

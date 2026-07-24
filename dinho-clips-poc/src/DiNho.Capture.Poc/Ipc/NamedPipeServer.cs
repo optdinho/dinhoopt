@@ -226,6 +226,14 @@ public sealed class NamedPipeServer : IDisposable
     };
 
     private readonly ConcurrentQueue<string> _longRunningResultQueue = new();
+    private const int MaxLongRunningResultQueueSize = 32;
+
+    private void EnqueueLongRunningResult(string json)
+    {
+        _longRunningResultQueue.Enqueue(json);
+        while (_longRunningResultQueue.Count > MaxLongRunningResultQueueSize)
+            _longRunningResultQueue.TryDequeue(out _);
+    }
 
     private async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken ct)
     {
@@ -402,7 +410,7 @@ public sealed class NamedPipeServer : IDisposable
                     })
                 };
             }
-            _longRunningResultQueue.Enqueue(JsonSerializer.Serialize(resultEnvelope));
+            EnqueueLongRunningResult(JsonSerializer.Serialize(resultEnvelope));
         }
         catch (Exception ex)
         {
@@ -418,7 +426,7 @@ public sealed class NamedPipeServer : IDisposable
                     error = ex.Message
                 })
             };
-            _longRunningResultQueue.Enqueue(JsonSerializer.Serialize(errorEnvelope));
+            EnqueueLongRunningResult(JsonSerializer.Serialize(errorEnvelope));
         }
     }
 

@@ -34,17 +34,19 @@ public sealed class MasterClockTests
     }
 
     [Fact]
-    public void FromTimestamp_Zero()
+    public void FromTimestamp_AtCreation_ReturnsZero()
     {
-        var ts = MasterClock.FromTimestamp(0);
+        using var clock = new MasterClock();
+        var ts = clock.FromTimestamp(clock.StartTimestamp);
         Assert.Equal(0, ts.TotalSeconds);
     }
 
     [Fact]
-    public void FromTimestamp_Positive()
+    public void FromTimestamp_OneSecondLater()
     {
+        using var clock = new MasterClock();
         var freq = System.Diagnostics.Stopwatch.Frequency;
-        var ts = MasterClock.FromTimestamp(freq);
+        var ts = clock.FromTimestamp(clock.StartTimestamp + freq);
         Assert.InRange(ts.TotalSeconds, 0.95, 1.05);
     }
 }

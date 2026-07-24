@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ──
 
@@ -13,12 +13,10 @@ vi.mock('electron', () => ({
 
 let spawnEventCallbacks: Record<string, (chunk: Buffer) => void> = {}
 let spawnCloseCallback: ((code: number) => void) | null = null
-let spawnErrorCallback: ((err: Error) => void) | null = null
 
 function resetSpawnMocks(): void {
   spawnEventCallbacks = {}
   spawnCloseCallback = null
-  spawnErrorCallback = null
 }
 
 vi.mock('child_process', () => ({
@@ -32,7 +30,6 @@ vi.mock('child_process', () => ({
       },
       on: (event: string, cb: unknown) => {
         if (event === 'close') spawnCloseCallback = cb as (code: number) => void
-        if (event === 'error') spawnErrorCallback = cb as (err: Error) => void
       },
     }
   },
@@ -60,7 +57,7 @@ function getHandler(channel: string): (...args: unknown[]) => unknown {
 }
 
 function mockWindow() {
-  return { isDestroyed: () => false, webContents: { send: mockSend } }
+  return { isDestroyed: () => false, webContents: { send: mockSend } } as never
 }
 
 function mockDestroyedWindow() {
@@ -329,7 +326,7 @@ describe('WINSXS_CLEAN handler', () => {
     const promise = (handler as () => Promise<unknown>)()
     expect(mockSpawn).toHaveBeenCalled()
 
-    const spawnCmd = mockSpawn.mock.calls[0]
+    const spawnCmd = mockSpawn.mock.calls[0]!
     expect(spawnCmd[0]).toBe('cmd')
     const args = spawnCmd[1] as string[]
     expect(args.join(' ')).toContain('StartComponentCleanup')
@@ -354,7 +351,7 @@ describe('WINSXS_CLEAN handler', () => {
     const promise = (handler as () => Promise<unknown>)()
 
     // Simulate DISM progress output
-    const stdoutOnData = spawnEventCallbacks.data
+    const stdoutOnData = spawnEventCallbacks.data!
     expect(stdoutOnData).toBeDefined()
     stdoutOnData(Buffer.from('[=====          50.0%                 ]'))
 

@@ -42,7 +42,7 @@ export interface ConfigState {
   noiseSuppression: boolean
   audioSampleRate: number
   autoCleanupEnabled: boolean
-  autoCleanupThresholdPercent: number
+  autoCleanupThresholdGB: number
   adaptiveQuality: boolean
 }
 
@@ -80,7 +80,7 @@ export const config: ConfigState = {
   noiseSuppression: false,
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
-  autoCleanupThresholdPercent: 90,
+  autoCleanupThresholdGB: 20,
   adaptiveQuality: true,
 }
 
@@ -125,7 +125,7 @@ function baseConfigPayload(): Record<string, unknown> {
     micVolume: c.micVolume,
     audioSampleRate: c.audioSampleRate,
     autoCleanupEnabled: c.autoCleanupEnabled,
-    autoCleanupThresholdPercent: c.autoCleanupThresholdPercent,
+    autoCleanupThresholdGB: c.autoCleanupThresholdGB,
     noiseSuppression: c.noiseSuppression,
     adaptiveQuality: c.adaptiveQuality,
   }
@@ -203,7 +203,7 @@ export function loadPersistedClipsConfig(): void {
   config.adaptiveQuality = saved.adaptiveQuality ?? true
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
-  config.autoCleanupThresholdPercent = saved.autoCleanupThresholdPercent ?? 90
+  config.autoCleanupThresholdGB = saved.autoCleanupThresholdGB ?? 20
   config.hotkeys = saved.hotkeys
   config.outputDirectory = saved.outputDirectory
   config.engineReplayTimeSeconds = saved.replayTimeSeconds
@@ -242,7 +242,7 @@ export function persistClipsConfig(): void {
     adaptiveQuality: config.adaptiveQuality,
     audioSampleRate: config.audioSampleRate,
     autoCleanupEnabled: config.autoCleanupEnabled,
-    autoCleanupThresholdPercent: config.autoCleanupThresholdPercent,
+    autoCleanupThresholdGB: config.autoCleanupThresholdGB,
     hotkeys: config.hotkeys,
     outputDirectory: getDefaultOutputDir(),
     replayTimeSeconds: config.engineReplayTimeSeconds,

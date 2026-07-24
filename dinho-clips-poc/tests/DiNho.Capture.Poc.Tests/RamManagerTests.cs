@@ -42,7 +42,7 @@ public sealed class RamManagerTests
         Assert.Equal(24, p.Cq);
         Assert.Equal(50000, p.MaxrateKbps);
         Assert.Equal(100000, p.BufsizeKbps);
-        Assert.Equal(2, p.Bframes);
+        Assert.Equal(0, p.Bframes); // forced 0 for NVENC PTS FIFO safety
         Assert.Equal(4, p.Lookahead);
         Assert.Equal(300, p.ReplaySeconds);
         Assert.Equal(1920, p.EncodeWidth);
@@ -59,7 +59,7 @@ public sealed class RamManagerTests
         Assert.Equal(24, p.Cq);
         Assert.Equal(35000, p.MaxrateKbps);
         Assert.Equal(70000, p.BufsizeKbps);
-        Assert.Equal(1, p.Bframes);
+        Assert.Equal(0, p.Bframes); // forced 0 for NVENC PTS FIFO safety
         Assert.Equal(4, p.Lookahead);
         Assert.Equal(180, p.ReplaySeconds);
         Assert.Equal(2560, p.EncodeWidth);
@@ -201,7 +201,7 @@ public sealed class RamManagerTests
         Assert.Equal(20, p.Cq);
         Assert.Equal(80000, p.MaxrateKbps);
         Assert.Equal(160000, p.BufsizeKbps);
-        Assert.Equal(4, p.Bframes);
+        Assert.Equal(0, p.Bframes); // forced 0 for NVENC PTS FIFO safety
         Assert.Equal(8, p.Lookahead);
         Assert.Equal(600, p.ReplaySeconds);
         Assert.Equal(1920, p.EncodeWidth);

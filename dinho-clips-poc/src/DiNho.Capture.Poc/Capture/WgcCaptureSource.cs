@@ -34,6 +34,7 @@ public sealed class WgcCaptureSource : ICaptureSource
     private volatile bool _disposed;
     private bool _hasReceivedFrame;
     private TexturePool? _texturePool;
+    private int _frameArrivedCount;
 
     public void Initialize(ID3D11Device? sharedDevice = null) =>
         Initialize(sharedDevice, IntPtr.Zero, IntPtr.Zero);
@@ -179,6 +180,12 @@ public sealed class WgcCaptureSource : ICaptureSource
         if (frame is null) return;
 
         var ticks = Stopwatch.GetTimestamp();
+        var count = Interlocked.Increment(ref _frameArrivedCount);
+
+        if (count == 1)
+            Log.I("WGC", $"OnFrameArrived: first frame! size={frame.ContentSize.Width}x{frame.ContentSize.Height} pool={_framePool?.GetType().Name ?? "null"}");
+        else if (count % 300 == 0)
+            Log.D("WGC", $"OnFrameArrived: frame #{count} size={frame.ContentSize.Width}x{frame.ContentSize.Height}");
 
         var old = Interlocked.Exchange(ref _latestFrame, frame);
         old?.Dispose();

@@ -594,6 +594,8 @@ const api = {
   clipsStopCapture: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_STOP_CAPTURE),
   clipsSaveClip: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke(IPC.CLIPS_SAVE_CLIP),
   clipsList: (): Promise<ClipInfo[]> => ipcRenderer.invoke(IPC.CLIPS_LIST_CLIPS),
+  clipsGetDurations: (paths: string[]): Promise<Record<string, number>> =>
+    ipcRenderer.invoke(IPC.CLIPS_GET_DURATIONS, paths),
   clipsDelete: (name: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.CLIPS_DELETE_CLIP, name),
   clipsOpen: (path: string): Promise<void> => ipcRenderer.invoke(IPC.CLIPS_OPEN_CLIP, path),

@@ -1,5 +1,6 @@
 import { execFile, execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { stat as fsStat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type {
@@ -24,6 +25,7 @@ import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
 import {
   getCurrentStatus,
+  getDurationsForClips,
   isEngineCapturing,
   isEngineRunning,
   isPipeConnected,
@@ -36,6 +38,58 @@ import {
   startEngine,
   stopEngineProcess,
 } from './clips-engine-connection'
+
+let _micDevicesCache: MicDeviceInfo[] | null = null
+let _micDevicesCacheTs = 0
+
+function enumerateMicDevicesLocal(): Promise<MicDeviceInfo[]> {
+  if (_micDevicesCache && Date.now() - _micDevicesCacheTs < 10_000) {
+    return Promise.resolve(_micDevicesCache)
+  }
+  const ps = [
+    'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
+    '$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq "IAsyncOperation`1" })[0]',
+    'function AsTask($WinRtTask, $ResultType) {',
+    '  $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)',
+    '  $netTask = $asTask.Invoke($null, @($WinRtTask))',
+    '  $netTask',
+    '}',
+    '[Windows.Devices.Enumeration.DeviceInformation,Windows.Devices,ContentType=WindowsRuntime] | Out-Null',
+    '[Windows.Devices.Enumeration.DeviceClass,Windows.Devices,ContentType=WindowsRuntime] | Out-Null',
+    '$task = [Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync([Windows.Devices.Enumeration.DeviceClass]::AudioCapture)',
+    '$devices = AsTask $task ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Enumeration.DeviceInformation]]).Result',
+    '$defaultId = ""',
+    'try { $defaultId = [Windows.Devices.Enumeration.DeviceInformation]::GetDefaultAsync([Windows.Devices.Enumeration.DeviceClass]::AudioCapture).GetAwaiter().GetResult().Id } catch {}',
+    'foreach ($d in $devices) {',
+    '  $isDef = if ($d.Id -eq $defaultId) { "1" } else { "0" }',
+    '  Write-Output ($d.Id + "|" + $d.Name + "|" + $isDef)',
+    '}',
+  ].join('\r\n')
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-Command', ps], { timeout: 15000 }, (_err, stdout) => {
+      if (_err || !stdout) {
+        getLogger().warning('clips-mic', `local enumerate failed: ${_err?.message ?? 'empty output'}`)
+        resolve([])
+        return
+      }
+      const lines = stdout.trim().split(/\r?\n/).filter(Boolean)
+      const devices: MicDeviceInfo[] = lines.map((line) => {
+        const [id, name, isDef] = line.split('|')
+        return {
+          id: (id ?? '').trim(),
+          name: (name ?? '').trim(),
+          isDefault: isDef === '1',
+          channels: 2,
+          sampleRate: 48000,
+        }
+      }).filter((d) => d.id && d.name)
+      _micDevicesCache = devices
+      _micDevicesCacheTs = Date.now()
+      getLogger().info('clips-mic', `local enumerate returned ${devices.length} devices`)
+      resolve(devices)
+    })
+  })
+}
 
 export function registerClipsIpc(): void {
   ipcMain.handle(IPC.CLIPS_GET_STATUS, getCurrentStatus)
@@ -93,6 +147,38 @@ export function registerClipsIpc(): void {
   })
 
   ipcMain.handle(
+    IPC.CLIPS_GET_DURATIONS,
+    async (
+      _event,
+      paths: unknown,
+    ): Promise<Record<string, number>> => {
+      if (!Array.isArray(paths)) return {}
+      const clips = (
+        await Promise.all(
+          paths
+            .filter((p): p is string => typeof p === 'string')
+            .map(async (p) => {
+              const safe = clipPathInOutputDir(p)
+              if (!safe) return null
+              try {
+                const s = await fsStat(safe)
+                return { path: safe, mtimeMs: s.mtime.getTime() }
+              } catch {
+                return { path: safe, mtimeMs: 0 }
+              }
+            }),
+        )
+      ).filter((x): x is { path: string; mtimeMs: number } => x !== null)
+      const durations = await getDurationsForClips(clips)
+      const result: Record<string, number> = {}
+      for (const [k, v] of durations) {
+        result[k] = v
+      }
+      return result
+    },
+  )
+
+  ipcMain.handle(
     IPC.CLIPS_DELETE_CLIP,
     async (_event, clipName: unknown): Promise<{ success: boolean; error?: string }> => {
       if (typeof clipName !== 'string') return { success: false, error: 'Invalid clip name' }
@@ -121,8 +207,10 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(IPC.CLIPS_OPEN_CLIP, async (_event, clipPath: unknown): Promise<void> => {
     if (typeof clipPath !== 'string') return
+    const safe = clipPathInOutputDir(clipPath)
+    if (!safe) return
     try {
-      await shell.openPath(clipPath)
+      await shell.openPath(safe)
     } catch (err) {
       getLogger().error('clips', `Failed to open clip: ${err}`)
     }
@@ -198,8 +286,9 @@ export function registerClipsIpc(): void {
         if (typeof c.noiseSuppression === 'boolean') C.noiseSuppression = c.noiseSuppression
         if (typeof c.audioSampleRate === 'number') C.audioSampleRate = c.audioSampleRate
         if (typeof c.autoCleanupEnabled === 'boolean') C.autoCleanupEnabled = c.autoCleanupEnabled
-        if (typeof c.autoCleanupThresholdPercent === 'number')
-          C.autoCleanupThresholdPercent = Math.max(50, Math.min(99, c.autoCleanupThresholdPercent))
+        if (typeof c.autoCleanupThresholdGB === 'number')
+          C.autoCleanupThresholdGB = Math.max(1, Math.min(50, c.autoCleanupThresholdGB))
+        if (typeof c.adaptiveQuality === 'boolean') C.adaptiveQuality = c.adaptiveQuality
       }
       persistClipsConfig()
       if (isPipeConnected()) {
@@ -295,24 +384,24 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(IPC.CLIPS_GET_MIC_DEVICES, async (): Promise<MicDeviceInfo[]> => {
     getLogger().info('clips-mic', `pipeConnected=${isPipeConnected()}`)
-    if (!isPipeConnected()) return []
-    try {
-      const resp = await sendPipeCommand('getMicDevices')
-      getLogger().info(
-        'clips-mic',
-        `response cmd=${resp.cmd} payload keys=${Object.keys(resp.payload ?? {})} hasDevices=${'devices' in (resp.payload ?? {})}`,
-      )
-      const devices = resp.payload?.devices
-      if (Array.isArray(devices)) {
-        getLogger().info('clips-mic', `returning ${devices.length} devices`)
-        return devices as MicDeviceInfo[]
+    if (isPipeConnected()) {
+      try {
+        const resp = await sendPipeCommand('getMicDevices')
+        getLogger().info(
+          'clips-mic',
+          `response cmd=${resp.cmd} payload keys=${Object.keys(resp.payload ?? {})} hasDevices=${'devices' in (resp.payload ?? {})}`,
+        )
+        const devices = resp.payload?.devices
+        if (Array.isArray(devices)) {
+          getLogger().info('clips-mic', `returning ${devices.length} devices from engine`)
+          return devices as MicDeviceInfo[]
+        }
+        getLogger().warning('clips-mic', 'devices is not an array')
+      } catch (err) {
+        getLogger().warning('clips-mic', `pipe error: ${err instanceof Error ? err.message : String(err)}`)
       }
-      getLogger().warning('clips-mic', 'devices is not an array')
-      return []
-    } catch (err) {
-      getLogger().warning('clips-mic', `error: ${err instanceof Error ? err.message : String(err)}`)
-      return []
     }
+    return enumerateMicDevicesLocal()
   })
 
   ipcMain.handle(

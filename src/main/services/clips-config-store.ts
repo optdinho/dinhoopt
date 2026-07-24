@@ -35,7 +35,7 @@ interface ClipsPersistedConfig {
   selectedAudioSessions: number[]
   audioSampleRate: number
   autoCleanupEnabled: boolean
-  autoCleanupThresholdPercent: number
+  autoCleanupThresholdGB: number
   adaptiveQuality: boolean
 }
 
@@ -98,7 +98,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   selectedAudioSessions: [],
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
-  autoCleanupThresholdPercent: 90,
+  autoCleanupThresholdGB: 20,
   adaptiveQuality: true,
 }
 

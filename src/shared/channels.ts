@@ -375,4 +375,5 @@ export const IPC = {
   CLIPS_SET_FAVORITE: 'clips:set-favorite',
   CLIPS_TRIM_CLIP: 'clips:trim-clip',
   CLIPS_MERGE_CLIPS: 'clips:merge-clips',
+  CLIPS_GET_DURATIONS: 'clips:get-durations',
 } as const

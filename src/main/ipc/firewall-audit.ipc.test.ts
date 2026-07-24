@@ -13,7 +13,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../services/exec-utf8', () => ({
   execFileAsync: (...args: unknown[]) => mocks.execFileAsync(...args),
-  psArgs: (...args: unknown[]) => mocks.psArgs(...args),
+  psArgs: (s: string) => mocks.psArgs(s),
 }))
 
 vi.mock('../services/logger.service', () => ({
@@ -172,7 +172,7 @@ describe('classifyRule', () => {
     programResolved: '',
     programExists: false,
     signature: 'not-applicable' as const,
-    profiles: ['Domain'] as const,
+    profiles: ['Domain'] as FirewallProfile[],
     localPort: '443',
     remoteAddress: 'LocalSubnet',
     builtin: false,

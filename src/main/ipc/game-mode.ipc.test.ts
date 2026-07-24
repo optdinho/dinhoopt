@@ -3,7 +3,7 @@ import { validateGameModeConfig as realValidateGameModeConfig } from './game-mod
 
 // ─── Mock external dependencies ──────────────────────────────────────
 
-const execFileAsyncMock = vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>()
+const execFileAsyncMock = vi.fn()
 execFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })
 
 vi.mock('child_process', () => ({
@@ -99,6 +99,7 @@ import { IPC } from '@shared/channels'
 import type { GameModeConfig, GameModeSnapshot } from '@shared/types'
 import { ipcMain, powerSaveBlocker } from 'electron'
 import type { GameAutoEvent, GameDetectorCallbacks } from '../services/game-detector'
+import type { WindowGetter } from './index'
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -225,8 +226,8 @@ describe('activateGameMode', () => {
   it('returns succeeded=0 for empty enabledOptimizations', async () => {
     const result = await activateGameMode(
       {
-        enabledOptimizations: [],
-        customProcessKillList: [],
+        enabledOptimizations: [] as string[],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -240,7 +241,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['', 'mem-clear-standby'] as GameModeConfig['enabledOptimizations'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -263,7 +264,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['svc-wsearch'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -279,7 +280,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['svc-wsearch'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -298,7 +299,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['svc-diagtrack'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -318,7 +319,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['svc-wsearch'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -336,7 +337,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-browsers'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -354,7 +355,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-chat'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -370,7 +371,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-updaters'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -398,7 +399,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-custom'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -421,7 +422,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-browsers'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -441,7 +442,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-browsers'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -460,7 +461,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-browsers'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -474,7 +475,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -488,7 +489,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-focus-assist'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -512,7 +513,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-focus-assist'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -526,7 +527,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-power-plan'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -536,7 +537,7 @@ describe('activateGameMode', () => {
   })
 
   it('handles power plan capture failure', async () => {
-    execFileAsyncMock.mockImplementation((cmd: unknown, args: unknown[]) => {
+    execFileAsyncMock.mockImplementation((_cmd: unknown, args: unknown[]) => {
       const full = (args as string[]).join(' ')
       if (full.includes('powercfg /GETACTIVESCHEME')) {
         return Promise.reject(new Error('powercfg not found'))
@@ -550,7 +551,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-power-plan'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -562,7 +563,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-prevent-sleep'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -576,7 +577,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-disable-game-bar'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -589,7 +590,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-disable-fse-opt'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -602,7 +603,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-disable-transparency'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -617,7 +618,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-timer-resolution'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -641,7 +642,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['sys-timer-resolution'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -671,7 +672,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['cpu-game-priority'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -686,7 +687,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['cpu-game-priority'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -710,7 +711,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['cpu-game-priority'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -727,7 +728,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['net-flush-dns'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -745,7 +746,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['net-flush-dns'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -763,7 +764,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['net-flush-dns'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -782,7 +783,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['net-disable-nagle'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -797,7 +798,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['net-disable-nagle'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -821,7 +822,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['svc-wsearch'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -837,7 +838,7 @@ describe('activateGameMode', () => {
     await activateGameMode(
       {
         enabledOptimizations: ['mem-clear-standby', 'sys-focus-assist'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       progress,
     )
@@ -863,7 +864,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['svc-wsearch'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -892,7 +893,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-browsers'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -918,7 +919,7 @@ describe('activateGameMode', () => {
     const result = await activateGameMode(
       {
         enabledOptimizations: ['proc-kill-browsers'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -931,8 +932,8 @@ describe('activateGameMode', () => {
   it('skips unknown optimization IDs silently', async () => {
     const result = await activateGameMode(
       {
-        enabledOptimizations: ['unknown-opt'] as GameModeConfig['enabledOptimizations'],
-        customProcessKillList: [],
+        enabledOptimizations: ['unknown-opt'] as unknown as GameModeConfig['enabledOptimizations'],
+        customProcessKillList: [] as string[],
       } as GameModeConfig,
       onProgress,
     )
@@ -1001,7 +1002,7 @@ describe('deactivateGameMode', () => {
       },
     ]
     setMockSnapshot(snap)
-    execFileAsyncMock.mockImplementation((cmd: unknown, args: unknown[]) => {
+    execFileAsyncMock.mockImplementation((_cmd: unknown, args: unknown[]) => {
       const full = (args as string[]).join(' ')
       // Make Set-ItemProperty for registry restoration fail
       if (full.includes('Set-ItemProperty') && full.includes('AppCaptureEnabled')) {
@@ -1285,7 +1286,7 @@ describe('registerGameModeIpc', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: false,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1295,7 +1296,7 @@ describe('registerGameModeIpc', () => {
   })
 
   it('registers all four IPC handlers', () => {
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
 
     expect(ipcMain.handle).toHaveBeenCalledWith(IPC.GAME_MODE_ACTIVATE, expect.any(Function))
     expect(ipcMain.handle).toHaveBeenCalledWith(IPC.GAME_MODE_DEACTIVATE, expect.any(Function))
@@ -1304,7 +1305,7 @@ describe('registerGameModeIpc', () => {
   })
 
   it('GAME_MODE_ACTIVATE returns error for invalid config', async () => {
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_ACTIVATE,
     )?.[1] as (...args: unknown[]) => Promise<unknown>
@@ -1320,7 +1321,7 @@ describe('registerGameModeIpc', () => {
 
   it('GAME_MODE_ACTIVATE returns error when already active', async () => {
     setMockSnapshot(makeValidSnapshot())
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_ACTIVATE,
     )?.[1] as (...args: unknown[]) => Promise<unknown>
@@ -1338,7 +1339,7 @@ describe('registerGameModeIpc', () => {
     const snap = makeValidSnapshot()
     snap.active = false
     setMockSnapshot(snap)
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_ACTIVATE,
     )?.[1] as (...args: unknown[]) => Promise<unknown>
@@ -1357,7 +1358,7 @@ describe('registerGameModeIpc', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: false,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1365,7 +1366,7 @@ describe('registerGameModeIpc', () => {
       },
     })
 
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_DEACTIVATE,
     )?.[1] as (...args: unknown[]) => Promise<unknown>
@@ -1379,7 +1380,7 @@ describe('registerGameModeIpc', () => {
   })
 
   it('GAME_MODE_STATUS returns status', async () => {
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_STATUS,
     )?.[1] as (...args: unknown[]) => Promise<unknown>
@@ -1389,7 +1390,7 @@ describe('registerGameModeIpc', () => {
   })
 
   it('GAME_MODE_RUN_AUDIT throws for invalid phase', async () => {
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_RUN_AUDIT,
     )?.[1] as (_event: unknown, phase: unknown) => Promise<unknown>
@@ -1398,7 +1399,7 @@ describe('registerGameModeIpc', () => {
   })
 
   it('GAME_MODE_RUN_AUDIT throws for non-string phase', async () => {
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_RUN_AUDIT,
     )?.[1] as (_event: unknown, phase: unknown) => Promise<unknown>
@@ -1412,7 +1413,7 @@ describe('registerGameModeIpc', () => {
       summary: { passed: 0, warnings: 0, errors: 0 },
       timestamp: '',
     })
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_RUN_AUDIT,
     )?.[1] as (_event: unknown, phase: unknown) => Promise<unknown>
@@ -1425,7 +1426,7 @@ describe('registerGameModeIpc', () => {
   })
 
   it('sendProgress sends IPC.GAME_MODE_PROGRESS to window', async () => {
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
     const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.find(
       (c: unknown[]) => (c as string[])[0] === IPC.GAME_MODE_ACTIVATE,
     )?.[1] as (_event: unknown, config: unknown) => Promise<unknown>
@@ -1437,7 +1438,7 @@ describe('registerGameModeIpc', () => {
 
   it('does not send to destroyed window', () => {
     mockWindow.isDestroyed.mockReturnValue(true)
-    registerGameModeIpc(mockGetWindow)
+    registerGameModeIpc(mockGetWindow as unknown as WindowGetter)
 
     // No handler called, but the sendProgress/sendAutoEvent closures are created
     // and should gracefully handle destroyed windows
@@ -1461,7 +1462,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: false,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1473,7 +1474,7 @@ describe('initGameDetector', () => {
   it('does nothing on non-Windows platforms', () => {
     Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
 
-    initGameDetector(mockGetWindow, vi.fn(), vi.fn())
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
 
     expect(mockStartGameDetector).not.toHaveBeenCalled()
     expect(mockStopGameDetector).not.toHaveBeenCalled()
@@ -1481,7 +1482,7 @@ describe('initGameDetector', () => {
   })
 
   it('stops the detector when autoDetect is disabled', () => {
-    initGameDetector(mockGetWindow, vi.fn(), vi.fn())
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
 
     expect(mockStopGameDetector).toHaveBeenCalled()
     expect(mockStartGameDetector).not.toHaveBeenCalled()
@@ -1491,7 +1492,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: true,
         customGameProcesses: ['mygame.exe'],
@@ -1499,7 +1500,7 @@ describe('initGameDetector', () => {
       },
     })
 
-    initGameDetector(mockGetWindow, vi.fn(), vi.fn())
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
 
     expect(mockStartGameDetector).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1514,7 +1515,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1525,7 +1526,7 @@ describe('initGameDetector', () => {
     })
     setMockSnapshot(null) // no active snapshot
 
-    initGameDetector(mockGetWindow, vi.fn(), vi.fn())
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
     await callbacks.onGameDetected('cs2.exe')
 
@@ -1538,7 +1539,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1546,7 +1547,7 @@ describe('initGameDetector', () => {
       },
     })
 
-    initGameDetector(mockGetWindow, vi.fn(), vi.fn())
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
     const writeCallsBefore = fsWriteFileSync.mock.calls.length
     await callbacks.onGameDetected('cs2.exe')
@@ -1560,7 +1561,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1568,7 +1569,7 @@ describe('initGameDetector', () => {
       },
     })
 
-    initGameDetector(mockGetWindow, vi.fn(), vi.fn())
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
     await callbacks.onGameDetected('cs2.exe')
 
@@ -1580,7 +1581,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1591,7 +1592,7 @@ describe('initGameDetector', () => {
       mockWindow.webContents.send(IPC.GAME_MODE_AUTO_EVENT, event)
     }
 
-    initGameDetector(mockGetWindow, vi.fn(), sendAutoEvent)
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), sendAutoEvent)
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
 
     // First detect a game
@@ -1611,7 +1612,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1622,7 +1623,7 @@ describe('initGameDetector', () => {
       mockWindow.webContents.send(IPC.GAME_MODE_AUTO_EVENT, event)
     }
 
-    initGameDetector(mockGetWindow, vi.fn(), sendAutoEvent)
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), sendAutoEvent)
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
 
     await callbacks.onGameExited()
@@ -1637,7 +1638,7 @@ describe('initGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: ['mem-clear-standby'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: false,
         customGameProcesses: [],
@@ -1648,7 +1649,7 @@ describe('initGameDetector', () => {
       mockWindow.webContents.send(IPC.GAME_MODE_AUTO_EVENT, event)
     }
 
-    initGameDetector(mockGetWindow, vi.fn(), sendAutoEvent)
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), sendAutoEvent)
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
 
     // First trigger onGameDetected to set autoActivated=true
@@ -1679,7 +1680,7 @@ describe('refreshGameDetector', () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: false,
         autoDeactivate: true,
         customGameProcesses: [],
@@ -1687,7 +1688,7 @@ describe('refreshGameDetector', () => {
       },
     })
 
-    refreshGameDetector(mockGetWindow)
+    refreshGameDetector(mockGetWindow as unknown as WindowGetter)
 
     expect(mockStopGameDetector).toHaveBeenCalled()
   })
@@ -1901,13 +1902,13 @@ describe('snapshot validation', () => {
 
   it('rejects services with non-object entries', () => {
     const snap = validSnapshot()
-    snap.services = ['not-an-object']
+    snap.services = ['not-an-object'] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
   it('rejects null service entry', () => {
     const snap = validSnapshot()
-    snap.services = [null]
+    snap.services = [null] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
@@ -1951,7 +1952,7 @@ describe('snapshot validation', () => {
 
   it('rejects killed process with null entry', () => {
     const snap = validSnapshot()
-    snap.killedProcesses = [null]
+    snap.killedProcesses = [null] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
@@ -1983,7 +1984,7 @@ describe('snapshot validation', () => {
 
   it('accepts null power plan GUID', () => {
     const snap = validSnapshot()
-    snap.originalPowerPlanGuid = null
+    snap.originalPowerPlanGuid = null as never
     expect(validateSnapshot(snap)).toBe(true)
   })
 
@@ -2029,7 +2030,7 @@ describe('snapshot validation', () => {
 
   it('accepts null powerSaveBlockerId', () => {
     const snap = validSnapshot()
-    snap.powerSaveBlockerId = null
+    snap.powerSaveBlockerId = null as never
     expect(validateSnapshot(snap)).toBe(true)
   })
 
@@ -2055,7 +2056,7 @@ describe('snapshot validation', () => {
 
   it('accepts null timer resolution', () => {
     const snap = validSnapshot()
-    snap.originalTimerResolution = null
+    snap.originalTimerResolution = null as never
     expect(validateSnapshot(snap)).toBe(true)
   })
 
@@ -2075,7 +2076,7 @@ describe('snapshot validation', () => {
 
   it('rejects nagle TcpNoDelay values outside 0-1', () => {
     const snap = validSnapshot()
-    snap.nagleInterfaces[0]!.originalTcpNoDelay = 42
+    snap.nagleInterfaces[0]!.originalTcpNoDelay = 42 as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
@@ -2099,13 +2100,13 @@ describe('snapshot validation', () => {
 
   it('rejects nagle interface with null entry', () => {
     const snap = validSnapshot()
-    snap.nagleInterfaces = [null]
+    snap.nagleInterfaces = [null] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
   it('rejects nagle interface with non-object entry', () => {
     const snap = validSnapshot()
-    snap.nagleInterfaces = ['string-entry']
+    snap.nagleInterfaces = ['string-entry'] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
@@ -2165,7 +2166,7 @@ describe('snapshot validation', () => {
 
   it('rejects registry tweaks with null entry', () => {
     const snap = validSnapshot()
-    snap.registryTweaks = [null]
+    snap.registryTweaks = [null] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
@@ -2179,7 +2180,7 @@ describe('snapshot validation', () => {
 
   it('rejects game process priority with null entry', () => {
     const snap = validSnapshot()
-    snap.gameProcessPriorities = [null]
+    snap.gameProcessPriorities = [null] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 
@@ -2221,7 +2222,7 @@ describe('snapshot validation', () => {
 
   it('rejects game process priority with non-object entry', () => {
     const snap = validSnapshot()
-    snap.gameProcessPriorities = ['string-entry']
+    snap.gameProcessPriorities = ['string-entry'] as never
     expect(validateSnapshot(snap)).toBe(false)
   })
 })
@@ -2324,7 +2325,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       }),
     ).toBe(true)
   })
@@ -2337,7 +2338,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: ['inject-command'],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       }),
     ).toBe(false)
   })
@@ -2396,7 +2397,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: 'not-array',
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       }),
     ).toBe(false)
   })
@@ -2405,7 +2406,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: Array(31).fill('mem-clear-standby'),
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
       }),
     ).toBe(false)
   })
@@ -2432,7 +2433,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: true,
         autoDeactivate: false,
       }),
@@ -2443,7 +2444,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDetect: 'yes',
       }),
     ).toBe(false)
@@ -2453,7 +2454,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         autoDeactivate: 'yes',
       }),
     ).toBe(false)
@@ -2463,7 +2464,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         customGameProcesses: ['mygame.exe'],
       }),
     ).toBe(true)
@@ -2473,7 +2474,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         customGameProcesses: 'not-array',
       }),
     ).toBe(false)
@@ -2483,7 +2484,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         customGameProcesses: Array(51).fill('proc.exe'),
       }),
     ).toBe(false)
@@ -2493,7 +2494,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         customGameProcesses: [''],
       }),
     ).toBe(false)
@@ -2503,7 +2504,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: {
           'cs2.exe': { gameName: 'CS2', enabledOptimizations: ['sys-power-plan'] },
         },
@@ -2515,7 +2516,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: 'not-object',
       }),
     ).toBe(false)
@@ -2525,7 +2526,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: [],
       }),
     ).toBe(false)
@@ -2537,7 +2538,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: profiles,
       }),
     ).toBe(false)
@@ -2547,7 +2548,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe; rm -rf': { gameName: 'CS2', enabledOptimizations: [] } },
       }),
     ).toBe(false)
@@ -2557,7 +2558,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': 'not-object' },
       }),
     ).toBe(false)
@@ -2567,7 +2568,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': null },
       }),
     ).toBe(false)
@@ -2577,7 +2578,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': { enabledOptimizations: [] } },
       }),
     ).toBe(false)
@@ -2587,7 +2588,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': { gameName: 'x'.repeat(101), enabledOptimizations: [] } },
       }),
     ).toBe(false)
@@ -2597,7 +2598,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': { gameName: 'CS2', enabledOptimizations: 'not-array' } },
       }),
     ).toBe(false)
@@ -2607,7 +2608,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': { gameName: 'CS2', enabledOptimizations: Array(31).fill('mem-clear-standby') } },
       }),
     ).toBe(false)
@@ -2617,7 +2618,7 @@ describe('IPC config validation', () => {
     expect(
       validateGameModeConfig({
         enabledOptimizations: [],
-        customProcessKillList: [],
+        customProcessKillList: [] as string[],
         gameProfiles: { 'cs2.exe': { gameName: 'CS2', enabledOptimizations: ['invalid-opt'] } },
       }),
     ).toBe(false)

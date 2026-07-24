@@ -307,8 +307,9 @@ public sealed partial class EngineCoordinator
 							// audioLoopback e gameAudioOnly são mutuamente exclusivos
 							c.GameAudioOnly = incoming.GameAudioOnly;
                             c.NoiseSuppressionEnabled = incoming.NoiseSuppressionEnabled;
+                            c.AdaptiveQualityEnabled = incoming.AdaptiveQualityEnabled;
                             c.AutoCleanupEnabled = incoming.AutoCleanupEnabled;
-                            c.AutoCleanupThresholdPercent = incoming.AutoCleanupThresholdPercent;
+                            c.AutoCleanupThresholdGB = incoming.AutoCleanupThresholdGB;
                             if (incoming.SelectedAudioSessions.Count > 0)
                                 c.SelectedAudioSessions = incoming.SelectedAudioSessions;
                         });
@@ -351,25 +352,26 @@ public sealed partial class EngineCoordinator
                         };
 
                         // Aplica noise suppression + gains no mixer (NÃO toca MicEnabled — PTT controla)
-                        if (_audioMixer != null)
+                        var mixer = _audioMixer;
+                        if (mixer != null)
                         {
-                            _audioMixer.NoiseSuppressionEnabled = _config.Config.NoiseSuppressionEnabled;
-                            _audioMixer.GameGain = _config.Config.GameVolume;
-                            _audioMixer.MicGain = _config.Config.MicVolume;
+                            mixer.NoiseSuppressionEnabled = _config.Config.NoiseSuppressionEnabled;
+                            mixer.GameGain = _config.Config.GameVolume;
+                            mixer.MicGain = _config.Config.MicVolume;
                             var newPttMode = NormalizePttMode(_config.Config.PttMode);
                             // Só muda MicEnabled se PTT mode foi desligado (Off) ou acabou de ser ligado
                             if (newPttMode is "Off" && oldPttMode is not "Off")
                             {
-                                _audioMixer.MicEnabled = _config.Config.MicEnabled;
-                                Log.I("EngineCoordinator", $"[cfgTrans→Off] MicEnabled={_audioMixer.MicEnabled}");
+                                mixer.MicEnabled = _config.Config.MicEnabled;
+                                Log.I("EngineCoordinator", $"[cfgTrans→Off] MicEnabled={mixer.MicEnabled}");
                             }
                             else if (newPttMode is not "Off" && oldPttMode is "Off")
                             {
-                                _audioMixer.MicEnabled = false;
+                                mixer.MicEnabled = false;
                                 Log.I("EngineCoordinator", $"[cfgTrans→PTT] MicEnabled=false");
                             }
                             // Se PTT já estava ativo ou já estava Off: não mexe (PTT sistema controla)
-                            Log.I("EngineCoordinator", $"Gains: game={_config.Config.GameVolume:F2} mic={_config.Config.MicVolume:F2} micEnabled={_audioMixer.MicEnabled} pttMode={newPttMode} (oldPtt={oldPttMode})");
+                            Log.I("EngineCoordinator", $"Gains: game={_config.Config.GameVolume:F2} mic={_config.Config.MicVolume:F2} micEnabled={mixer.MicEnabled} pttMode={newPttMode} (oldPtt={oldPttMode})");
                         }
 
                         // Propaga ElectronPid para o GameDetector (filtro de falsos foreground)

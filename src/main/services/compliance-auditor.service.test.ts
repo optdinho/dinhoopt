@@ -40,7 +40,7 @@ describe('scanCompliance', () => {
     expect(onProgress).toHaveBeenCalled()
     const calls = onProgress.mock.calls
     expect(calls.length).toBeGreaterThanOrEqual(1)
-    expect(calls[0][0]).toHaveProperty('total')
+    expect(calls[0]![0]).toHaveProperty('total')
   })
 
   it('detects SMB1 as enabled when registry returns 1', async () => {
@@ -361,7 +361,7 @@ describe('applyComplianceSettings', () => {
     const result = await applyComplianceSettings(['smb1-disabled'])
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('access denied')
+    expect(result.errors[0]!.reason).toBe('access denied')
   })
 
   it('handles non-Error throws in apply', async () => {
@@ -369,7 +369,7 @@ describe('applyComplianceSettings', () => {
     const result = await applyComplianceSettings(['smb1-disabled'])
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('Erro desconhecido')
+    expect(result.errors[0]!.reason).toBe('Erro desconhecido')
   })
 
   it('fails for settings without apply function', async () => {
@@ -416,7 +416,7 @@ describe('revertComplianceSettings', () => {
     const result = await revertComplianceSettings(['smb1-disabled'])
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(1)
-    expect(result.errors[0].reason).toBe('revert failed')
+    expect(result.errors[0]!.reason).toBe('revert failed')
   })
 
   it('reverts various settings', async () => {

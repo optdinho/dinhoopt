@@ -6,7 +6,7 @@ describe('ScanProfiles', () => {
   it('all 4 profiles exist with correct structure', () => {
     const expectedIds = ['quick', 'normal', 'full', 'custom']
     for (const id of expectedIds) {
-      const profile = SCAN_PROFILES[id]
+      const profile = SCAN_PROFILES[id]!
       expect(profile).toBeDefined()
       expect(profile.id).toBe(id)
       expect(typeof profile.name).toBe('string')

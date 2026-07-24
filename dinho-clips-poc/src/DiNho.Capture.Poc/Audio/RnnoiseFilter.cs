@@ -17,7 +17,8 @@ public sealed class RnnoiseFilter : IDisposable
     private readonly int _channels;
     private readonly byte[] _readBuf = new byte[65536];
     private int _readOffset;
-    private bool _disposed;
+    private volatile bool _disposed;
+    private readonly CancellationTokenSource _cts = new();
 
     public bool Active => _process is { HasExited: false };
 
@@ -65,20 +66,43 @@ public sealed class RnnoiseFilter : IDisposable
 
         try
         {
-            var writeTask = stdin.WriteAsync(inBytes, 0, byteLen);
-            if (!writeTask.Wait(100))
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            cts.CancelAfter(5000);
+
+            var writeTask = stdin.WriteAsync(inBytes, 0, byteLen, cts.Token);
+            if (!writeTask.Wait(5000))
             {
-                Log.W("RnnoiseFilter", "Write timeout after 100ms, skipping frame");
+                Log.W("RnnoiseFilter", "Write timeout after 5000ms, skipping frame");
                 return input;
             }
-            stdin.Flush();
+            // Async flush with 1s timeout — avoids blocking if ffmpeg stdin buffer is full
+            var flushTask = stdin.FlushAsync(cts.Token);
+            if (!flushTask.Wait(1000))
+            {
+                Log.W("RnnoiseFilter", "Flush timeout after 1000ms — ffmpeg may be stuck");
+            }
 
             int expectedBytes = byteLen;
             int totalRead = 0;
+            var sw = Stopwatch.StartNew();
             while (totalRead < expectedBytes)
             {
-                int read = stdout.Read(_readBuf, _readOffset, Math.Min(_readBuf.Length - _readOffset, expectedBytes - totalRead));
-                if (read <= 0) break;
+                if (sw.ElapsedMilliseconds > 5000 || cts.Token.IsCancellationRequested)
+                {
+                    Log.W("RnnoiseFilter", "Read timeout after 5000ms while waiting for filtered audio — returning original frame");
+                    break;
+                }
+                int toRead = Math.Min(_readBuf.Length - _readOffset, expectedBytes - totalRead);
+                // Async read with per-call timeout — prevents indefinite block on hung ffmpeg
+                var readTask = stdout.ReadAsync(_readBuf, _readOffset, toRead, cts.Token);
+                if (!readTask.Wait(2000))
+                {
+                    Log.W("RnnoiseFilter", "ReadAsync timeout after 2000ms — returning original frame");
+                    break;
+                }
+                int read = readTask.Result;
+                if (read <= 0)
+                    break;
                 _readOffset += read;
                 totalRead += read;
             }
@@ -103,6 +127,10 @@ public sealed class RnnoiseFilter : IDisposable
 
             return result;
         }
+        catch (OperationCanceledException)
+        {
+            return input;
+        }
         catch (IOException)
         {
             return input;
@@ -117,6 +145,7 @@ public sealed class RnnoiseFilter : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _cts.Cancel();
 
         try { _stdin?.Dispose(); } catch { }
 

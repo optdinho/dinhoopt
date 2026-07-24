@@ -233,6 +233,8 @@ export function ClipsPage() {
   const [activeTip, setActiveTip] = useState<string | null>(null)
   const [editingClip, setEditingClip] = useState<ClipInfo | null>(null)
   const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
+  const [statusLoaded, setStatusLoaded] = useState(false)
+  const [clipsLoaded, setClipsLoaded] = useState(false)
 
   const tooltipContent: Record<string, string> = useMemo(
     () => ({
@@ -357,30 +359,28 @@ export function ClipsPage() {
 
   const loadMicDevices = useCallback(async () => {
     setLoadingMicDevices(true)
-    let attempts = 0
-    const maxAttempts = 8
-    while (attempts < maxAttempts) {
-      try {
-        attempts++
-        const devices = await window.dinho?.clipsGetMicDevices()
-        if (devices && devices.length > 0) {
-          setMicDevices(devices)
-          setLoadingMicDevices(false)
-          return
-        }
-        if (attempts < maxAttempts) await new Promise((r) => setTimeout(r, 800))
-      } catch {
-        /* ignore */
+    try {
+      const devices = await window.dinho?.clipsGetMicDevices()
+      if (devices && devices.length > 0) {
+        setMicDevices(devices)
       }
+    } catch {
+      /* ignore */
     }
     setLoadingMicDevices(false)
   }, [])
+
+  useEffect(() => {
+    if (!statusLoaded) return
+    loadMicDevices()
+  }, [statusLoaded, loadMicDevices])
 
   useEffect(() => {
     if (status.running) loadMicDevices()
   }, [status.running, loadMicDevices])
 
   useEffect(() => {
+    if (!statusLoaded || gpuList.length > 0) return
     ;(async () => {
       try {
         const gpus = await window.dinho?.clipsGetGpus()
@@ -389,7 +389,7 @@ export function ClipsPage() {
         /* ignore */
       }
     })()
-  }, [status.running])
+  }, [status.running, statusLoaded])
 
   const loadThumbnail = useCallback(async (clipName: string) => {
     try {
@@ -402,19 +402,32 @@ export function ClipsPage() {
 
   useEffect(() => {
     if (clips.length === 0) return
-    const timer = setTimeout(() => {
-      for (let i = 0; i < clips.length; i++) {
-        setTimeout(() => loadThumbnail(clips[i].name), i * 200)
+    const BATCH = 6
+    let cancelled = false
+    const loadBatch = async () => {
+      for (let i = 0; i < clips.length; i += BATCH) {
+        if (cancelled) break
+        const batch = clips.slice(i, i + BATCH)
+        await Promise.all(batch.map((c) => loadThumbnail(c.name)))
       }
-    }, 500)
-    return () => clearTimeout(timer)
+    }
+    const timer = setTimeout(loadBatch, 0)
+    return () => {
+      clearTimeout(timer)
+      cancelled = true
+    }
   }, [clips, loadThumbnail])
 
   useEffect(() => {
-    refreshStatus()
-    refreshConfig()
-    refreshClips()
-  }, [refreshStatus, refreshConfig, refreshClips])
+    ;(async () => {
+      await Promise.all([refreshStatus(), refreshConfig()])
+      setStatusLoaded(true)
+    })()
+  }, [refreshStatus, refreshConfig])
+
+  useEffect(() => {
+    refreshClips().then(() => setClipsLoaded(true))
+  }, [refreshClips])
 
   useEffect(() => {
     const timer = setInterval(refreshStatus, 3000)
@@ -679,6 +692,15 @@ export function ClipsPage() {
               className="rounded-xl border p-5"
               style={{ background: 'var(--card-bg)', borderColor: 'var(--border-medium)' }}
             >
+              {!statusLoaded ? (
+                <div className="space-y-3">
+                  <div className="h-4 w-32 rounded-md animate-pulse" style={{ background: 'rgba(113,113,122,0.15)' }} />
+                  <div className="flex gap-2">
+                    <div className="h-7 w-20 rounded-lg animate-pulse" style={{ background: 'rgba(113,113,122,0.12)' }} />
+                    <div className="h-7 w-24 rounded-lg animate-pulse" style={{ background: 'rgba(113,113,122,0.12)' }} />
+                  </div>
+                </div>
+              ) : (<>
               <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {t('recordingStatus')}
               </h3>
@@ -838,6 +860,8 @@ export function ClipsPage() {
                   </button>
                 )}
               </div>
+            </>
+            )}
             </div>
 
             {/* ── Clips ── */}
@@ -949,7 +973,23 @@ export function ClipsPage() {
               )}
 
               {/* Clip grid */}
-              {filteredClips.length === 0 ? (
+              {!clipsLoaded ? (
+                <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={`skel-${i}`}
+                      className="rounded-xl border overflow-hidden"
+                      style={{ borderColor: 'var(--border-subtle)' }}
+                    >
+                      <div className="aspect-video animate-pulse" style={{ background: 'rgba(113,113,122,0.1)' }} />
+                      <div className="p-2.5 space-y-1.5">
+                        <div className="h-3 w-3/4 rounded animate-pulse" style={{ background: 'rgba(113,113,122,0.12)' }} />
+                        <div className="h-2.5 w-1/2 rounded animate-pulse" style={{ background: 'rgba(113,113,122,0.08)' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredClips.length === 0 ? (
                 <p className="py-8 text-center text-sm" style={{ color: 'var(--text-dim)' }}>
                   {searchQuery || filterTab !== 'all' ? t('noClips') : t('noClips')}
                 </p>
@@ -1049,7 +1089,7 @@ export function ClipsPage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteClip(clip.name)}
-                            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-red-500/10"
+                            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-red-500/15"
                             style={{ color: '#ef4444' }}
                           >
                             <Trash2 className="h-3 w-3" />
@@ -1195,31 +1235,31 @@ export function ClipsPage() {
                                   }`}
                                   style={{
                                     background: active
-                                      ? 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(99,102,241,0.1))'
+                                      ? 'var(--accent)'
                                       : 'rgba(113,113,122,0.06)',
-                                    borderColor: active ? 'rgba(59,130,246,0.4)' : 'rgba(113,113,122,0.1)',
-                                    boxShadow: active ? '0 0 12px rgba(59,130,246,0.15)' : 'none',
+                                    borderColor: active ? 'transparent' : 'rgba(113,113,122,0.1)',
+                                    boxShadow: 'none',
                                   }}
                                 >
                                   <div className="flex items-center justify-between">
                                     <span
                                       className="text-[11px] font-semibold"
                                       style={{
-                                        color: active ? 'var(--accent)' : 'var(--text-primary)',
+                                        color: active ? '#fff' : 'var(--text-primary)',
                                       }}
                                     >
                                       {p.label}
                                     </span>
                                     <span
                                       className="text-[9px] tracking-wider"
-                                      style={{ color: active ? 'var(--accent)' : 'var(--text-dim)', opacity: 0.5 }}
+                                      style={{ color: active ? '#fff' : 'var(--text-dim)', opacity: active ? 0.7 : 0.5 }}
                                     >
                                       {p.icon}
                                     </span>
                                   </div>
                                   <div
                                     className="mt-0.5 text-[9px]"
-                                    style={{ color: active ? 'var(--accent)' : 'var(--text-dim)', opacity: 0.6 }}
+                                    style={{ color: active ? '#fff' : 'var(--text-dim)', opacity: active ? 0.7 : 0.6 }}
                                   >
                                     {p.sub}
                                   </div>
@@ -1251,7 +1291,8 @@ export function ClipsPage() {
                                 { id: 'h264', label: 'H.264' },
                                 { id: 'hevc', label: 'HEVC' },
                                 { id: 'av1', label: 'AV1' },
-                                { id: 'libx264', label: 'Software' },
+                                { id: 'libx264', label: 'SW H.264' },
+                                { id: 'libx265', label: 'SW HEVC' },
                               ].map((c) => (
                                 <button
                                   key={c.id}
@@ -1439,9 +1480,9 @@ export function ClipsPage() {
                                 </span>
                               </div>
                               <TogglePill
-                                enabled={config.forceSoftware}
-                                accent="amber"
-                                onToggle={() => handleConfigUpdate({ forceSoftware: !config.forceSoftware })}
+                                enabled={config.forceSoftware ?? false}
+                                accent="blue"
+                                onToggle={() => handleConfigUpdate({ forceSoftware: !(config.forceSoftware ?? false) })}
                               />
                             </div>
                           </div>
@@ -1467,7 +1508,7 @@ export function ClipsPage() {
                               </div>
                               <TogglePill
                                 enabled={config.adaptiveQuality ?? true}
-                                accent="green"
+                                accent="blue"
                                 onToggle={() =>
                                   handleConfigUpdate({ adaptiveQuality: !(config.adaptiveQuality ?? true) })
                                 }
@@ -1533,7 +1574,7 @@ export function ClipsPage() {
                                 </span>
                               }
                               enabled={config.micEnabled}
-                              accent="green"
+                              accent="blue"
                               onToggle={() => handleConfigUpdate({ micEnabled: !config.micEnabled })}
                             />
                             <ToggleItem
@@ -1552,7 +1593,7 @@ export function ClipsPage() {
                                 </span>
                               }
                               enabled={config.audioLoopback}
-                              accent="green"
+                              accent="blue"
                               onToggle={() => {
                                 const newVal = !config.audioLoopback
                                 handleConfigUpdate({
@@ -1583,7 +1624,7 @@ export function ClipsPage() {
                             </div>
                             <TogglePill
                               enabled={config.noiseSuppression ?? false}
-                              accent="green"
+                              accent="blue"
                               onToggle={() =>
                                 handleConfigUpdate({ noiseSuppression: !(config.noiseSuppression ?? false) })
                               }
@@ -1743,7 +1784,7 @@ export function ClipsPage() {
                             </div>
                             <TogglePill
                               enabled={config.gameAudioOnly}
-                              accent="green"
+                              accent="blue"
                               onToggle={() => {
                                 const newVal = !config.gameAudioOnly
                                 handleConfigUpdate({
@@ -1762,7 +1803,7 @@ export function ClipsPage() {
                               </span>
                               <TogglePill
                                 enabled={config.autoCleanupEnabled ?? true}
-                                accent="cyan"
+                                accent="blue"
                                 onToggle={() =>
                                   handleConfigUpdate({
                                     autoCleanupEnabled: !(config.autoCleanupEnabled ?? true),
@@ -1771,29 +1812,27 @@ export function ClipsPage() {
                               />
                             </div>
                             {(config.autoCleanupEnabled ?? true) && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] whitespace-nowrap" style={{ color: 'var(--text-dim)' }}>
-                                  {t('autoCleanupThreshold')}
-                                </span>
-                                <input
-                                  type="range"
-                                  min={50}
-                                  max={99}
-                                  value={config.autoCleanupThresholdPercent ?? 90}
-                                  onChange={(e) =>
-                                    handleConfigUpdate({
-                                      autoCleanupThresholdPercent: Number.parseInt(e.target.value, 10),
-                                    })
-                                  }
-                                  className="flex-1 h-1 rounded-full accent-cyan-500"
-                                  style={{ accentColor: '#06b6d4' }}
-                                />
-                                <span
-                                  className="text-[10px] font-mono min-w-[2rem] text-right"
-                                  style={{ color: 'var(--text-dim)' }}
-                                >
-                                  {config.autoCleanupThresholdPercent ?? 90}%
-                                </span>
+                              <div className="flex gap-1">
+                                {[1, 2, 5, 10, 20, 50].map((gb) => (
+                                  <button
+                                    key={gb}
+                                    type="button"
+                                    onClick={() => handleConfigUpdate({ autoCleanupThresholdGB: gb })}
+                                    className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
+                                    style={{
+                                      background:
+                                        (config.autoCleanupThresholdGB ?? 20) === gb
+                                          ? 'var(--accent)'
+                                          : 'rgba(113,113,122,0.08)',
+                                      color:
+                                        (config.autoCleanupThresholdGB ?? 20) === gb
+                                          ? '#fff'
+                                          : 'var(--text-primary)',
+                                    }}
+                                  >
+                                    {gb} GB
+                                  </button>
+                                ))}
                               </div>
                             )}
                           </div>
@@ -1804,38 +1843,28 @@ export function ClipsPage() {
                               {t('micDevice')}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {status.running ? (
-                                loadingMicDevices ? (
-                                  <span className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                                    {t('loadingMicDevices')}
-                                  </span>
-                                ) : micDevices.length === 0 ? (
-                                  <span className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                                    {t('noMicDevices')}
-                                  </span>
-                                ) : (
-                                  <select
-                                    value={config.micDeviceId || ''}
-                                    onChange={(e) => handleConfigUpdate({ micDeviceId: e.target.value })}
-                                    className="rounded-md border bg-transparent px-2 py-1 text-[10px] outline-none"
-                                    style={{
-                                      borderColor: 'var(--border-medium)',
-                                      color: 'var(--text-primary)',
-                                    }}
-                                  >
-                                    <option value="">{t('defaultMic')}</option>
-                                    {micDevices.map((d) => (
-                                      <option key={d.id} value={d.id} style={{ color: '#000' }}>
-                                        {d.name}
-                                        {d.isDefault ? ` (${t('defaultMic')})` : ''}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )
-                              ) : (
+                              {loadingMicDevices ? (
                                 <span className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                                  {t('startRecording')}
+                                  {t('loadingMicDevices')}
                                 </span>
+                              ) : (
+                                <select
+                                  value={config.micDeviceId || ''}
+                                  onChange={(e) => handleConfigUpdate({ micDeviceId: e.target.value })}
+                                  className="rounded-md border bg-transparent px-2 py-1 text-[10px] outline-none"
+                                  style={{
+                                    borderColor: 'var(--border-medium)',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                >
+                                  <option value="">{t('defaultMic')}</option>
+                                  {micDevices.map((d) => (
+                                    <option key={d.id} value={d.id} style={{ color: '#000' }}>
+                                      {d.name}
+                                      {d.isDefault ? ` (${t('defaultMic')})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
                               )}
                             </div>
                           </div>
@@ -1969,15 +1998,11 @@ export function ClipsPage() {
                                       </select>
                                     )}
                                     <div className="ml-auto flex items-center gap-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => updateHotkey(hk.id, { enabled: !hk.enabled })}
-                                        className={`rounded-full px-1.5 py-0.5 text-[8px] font-medium ${
-                                          hk.enabled ? 'bg-green-500/15 text-green-500' : 'bg-zinc-500/15 text-zinc-500'
-                                        }`}
-                                      >
-                                        {hk.enabled ? 'ON' : 'OFF'}
-                                      </button>
+                                      <TogglePill
+                                        enabled={hk.enabled}
+                                        accent="blue"
+                                        onToggle={() => updateHotkey(hk.id, { enabled: !hk.enabled })}
+                                      />
                                       <button
                                         type="button"
                                         onClick={() => removeHotkey(hk.id)}
@@ -2241,10 +2266,10 @@ function TogglePill({
   onToggle,
 }: {
   enabled: boolean
-  accent?: 'green' | 'amber' | 'blue'
+  accent?: 'blue'
   onToggle: () => void
 }) {
-  const colorMap = { green: '#22c55e', amber: '#f59e0b', blue: '#3b82f6' }
+  const colorMap = { blue: '#3b82f6' }
   const c = colorMap[accent]
   return (
     <button
@@ -2318,14 +2343,18 @@ function GamePickerBtn({
         <button
           type="button"
           onClick={onOpenPicker}
-          className="rounded-md px-2 py-0.5 text-[10px] font-medium transition-all bg-zinc-500/15 text-zinc-400 hover:bg-zinc-500/25"
+          className="rounded-md px-2 py-0.5 text-[10px] font-medium transition-all"
+          style={{ background: 'rgba(113,113,122,0.12)', color: 'var(--text-dim)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(113,113,122,0.2)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(113,113,122,0.12)')}
         >
           {t('change')}
         </button>
         <button
           type="button"
           onClick={onClear}
-          className="rounded-md px-2 py-0.5 text-[10px] font-medium text-red-400 hover:text-red-300 transition-all hover:bg-red-500/10"
+          className="rounded-md px-2 py-0.5 text-[10px] font-medium transition-all hover:bg-red-500/15"
+          style={{ color: '#ef4444' }}
         >
           {t('clear')}
         </button>
@@ -2336,7 +2365,10 @@ function GamePickerBtn({
     <button
       type="button"
       onClick={onOpenPicker}
-      className="rounded-md px-2 py-0.5 text-[10px] font-medium transition-all bg-zinc-500/15 text-zinc-400 hover:bg-zinc-500/25"
+      className="rounded-md px-2 py-0.5 text-[10px] font-medium transition-all"
+      style={{ background: 'rgba(113,113,122,0.12)', color: 'var(--text-dim)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(113,113,122,0.2)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(113,113,122,0.12)')}
     >
       {t('choose')}
     </button>

@@ -187,10 +187,22 @@ public sealed class DxgiCaptureSource : ICaptureSource
         {
             if (_cachedTexture != null && _texturePool != null)
             {
-                var poolTex = _texturePool.Rent(_cachedWidth, _cachedHeight, _cachedTexture.Description.Format);
-                _context!.CopyResource(poolTex, _cachedTexture);
-                return new CapturedFrame(startTicks, waitEndTicks, _cachedWidth, _cachedHeight, success: true, poolTex, _device,
-                    waitEndTicks, waitEndTicks, ownsTexture: false);
+                try
+                {
+                    var poolTex = _texturePool.Rent(_cachedWidth, _cachedHeight, _cachedTexture.Description.Format);
+                    _context!.CopyResource(poolTex, _cachedTexture);
+                    return new CapturedFrame(startTicks, waitEndTicks, _cachedWidth, _cachedHeight, success: true, poolTex, _device,
+                        waitEndTicks, waitEndTicks, ownsTexture: false);
+                }
+                catch (System.Runtime.InteropServices.COMException)
+                {
+                    // Texture was disposed by dimension change in TexturePool.Rent() — invalidate cache
+                    _cachedTexture = null;
+                }
+                catch (ObjectDisposedException)
+                {
+                    _cachedTexture = null;
+                }
             }
             return new CapturedFrame(startTicks, waitEndTicks, 0, 0, success: false);
         }
@@ -222,14 +234,27 @@ public sealed class DxgiCaptureSource : ICaptureSource
         }
         finally
         {
-            desktopResource?.Dispose();
-            _duplication.ReleaseFrame();
+            try
+            {
+                // Release the frame back to the duplication API before disposing the resource.
+                // ReleaseFrame may throw if duplication is in a bad state; swallow to avoid crashing capture loop.
+                _duplication?.ReleaseFrame();
+            }
+            catch
+            {
+                // ignore
+            }
+            finally
+            {
+                desktopResource?.Dispose();
+            }
         }
     }
 
     public void Dispose()
     {
         _texturePool?.Dispose();
+        _cachedTexture = null;
         _duplication?.Dispose();
         if (_ownsDevice)
         {

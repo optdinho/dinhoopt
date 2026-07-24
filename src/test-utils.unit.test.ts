@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mockKudu } from './test-utils'
 
 describe('mockKudu', () => {
@@ -22,6 +22,6 @@ describe('mockKudu', () => {
     const { mockKudu: kudu } = await import('./test-utils')
     const mock = kudu()
     expect((globalThis as Record<string, unknown>).window).toBeDefined()
-    expect((window as Record<string, unknown>).dinho).toBe(mock)
+    expect((window as unknown as Record<string, unknown>).dinho).toBe(mock)
   })
 })

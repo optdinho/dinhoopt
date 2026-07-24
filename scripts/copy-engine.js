@@ -11,28 +11,30 @@ const projectRoot = join(__dirname, '..')
 function findPublishDir() {
   const base = join(projectRoot, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'bin', 'Release')
   if (!existsSync(base)) return null
-  // Scan TFM dirs (e.g. net9.0-windows10.0.26100.0) for publish subdirs
+  // Scan TFM dirs (e.g. net10.0-windows10.0.26100.0) for publish subdirs
+  const candidates = []
   for (const tfm of readdirSync(base)) {
     const tfmDir = join(base, tfm)
     if (!statSync(tfmDir).isDirectory()) continue
-    // Prefer win-x64/publish (self-contained with -r win-x64)
-    const ridPublish = join(tfmDir, 'win-x64', 'publish')
-    if (existsSync(join(ridPublish, 'DiNho.Capture.Poc.exe'))) {
-      return ridPublish
-    }
-    // Fallback to publish/ (self-contained without explicit -r)
-    const publish = join(tfmDir, 'publish')
-    if (existsSync(join(publish, 'DiNho.Capture.Poc.exe'))) {
-      return publish
+    // Check both publish/ (explicit -o) and win-x64/publish/ (implicit -r)
+    for (const sub of ['publish', join('win-x64', 'publish')]) {
+      const dir = join(tfmDir, sub)
+      const exe = join(dir, 'DiNho.Capture.Poc.exe')
+      if (existsSync(exe)) {
+        candidates.push({ dir, mtime: statSync(exe).mtimeMs })
+      }
     }
   }
-  return null
+  if (candidates.length === 0) return null
+  // Pick the most recently built candidate
+  candidates.sort((a, b) => b.mtime - a.mtime)
+  return candidates[0].dir
 }
 
 let publishDir = findPublishDir()
 
 if (!publishDir) {
-  const exact = join(projectRoot, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'bin', 'Release', 'net9.0-windows10.0.26100.0', 'publish')
+  const exact = join(projectRoot, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'bin', 'Release', 'net10.0-windows10.0.26100.0', 'publish')
   if (existsSync(exact)) publishDir = exact
 }
 

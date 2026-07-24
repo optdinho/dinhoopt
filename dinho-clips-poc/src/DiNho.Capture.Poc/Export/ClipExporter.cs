@@ -33,6 +33,18 @@ public sealed class ClipExporter : IDisposable
         if (videoPackets.Count == 0)
             throw new InvalidOperationException("No video packets to export");
 
+        // Parse audio sample rate from first ADTS packet (used for padding & CodecDelay)
+        int audioSampleRate = 48000;
+        int audioChannels = 2;
+        if (audioPackets.Count > 0 && audioPackets[0].Data.Length > 4)
+        {
+            int sri = (audioPackets[0].Data[2] >> 2) & 0x0F;
+            int[] rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000];
+            audioSampleRate = sri < rates.Length ? rates[sri] : 48000;
+            audioChannels = ((audioPackets[0].Data[2] & 0x01) << 2) | ((audioPackets[0].Data[3] >> 6) & 0x03);
+            if (audioChannels < 1 || audioChannels > 7) audioChannels = 2;
+        }
+
         if (!Monitor.TryEnter(_exportLock))
             throw new InvalidOperationException("Export ja em andamento");
 
@@ -45,6 +57,9 @@ public sealed class ClipExporter : IDisposable
                     $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
             var mkvTemp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.mkv");
+            var adtsTemp = audioPackets.Count > 0
+                ? Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.adts")
+                : null;
 
             try
             {
@@ -133,7 +148,7 @@ public sealed class ClipExporter : IDisposable
                                 && audioPackets[0].Pts < videoPackets[0].Pts
                                 ? (TimeSpan?)null
                                 : videoPackets[0].Pts;
-                            audioPackets = PadAudioWithSilence(audioPackets, 48000, 2, silenceAnchor);
+                            audioPackets = PadAudioWithSilence(audioPackets, audioSampleRate, audioChannels, silenceAnchor);
                         }
                         else if (offsetMs > 30 && offsetMs <= 2000)
                         {
@@ -222,7 +237,68 @@ public sealed class ClipExporter : IDisposable
                 Log.D("Exporter", $"nominalFps={frameRate} activeFps={activeFps:F1} activeDuration={activeDurationSec:F3}s totalDuration={trueVidDuration:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved} audioDurationSec={audioDurationSec:F3}s");
 
                 bool hasAudioTracks = audioPackets.Count > 0 && IsAdts(audioPackets[0]);
-                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat);
+
+                // Log ASC + first audio bytes before mux for diagnostics
+                if (hasAudioTracks && audioPackets.Count > 0)
+                {
+                    var asc = BuildAudioSpecificConfig(audioPackets[0]);
+                    if (asc != null)
+                    {
+                        var ascHex = BitConverter.ToString(asc).Replace("-", " ");
+                        Log.I("Exporter", $"ASC bytes: {ascHex} (profile={(asc[0] >> 3) & 0x1F} sampleRateIdx={((asc[0] & 0x07) << 1) | ((asc[1] >> 7) & 0x01)} channels={(asc[1] >> 3) & 0x0F})");
+                    }
+                    // First audio frame: show ADTS header + first 16 bytes of raw AAC
+                    var firstPkt = audioPackets[0];
+                    int adtsHdrLen = (firstPkt.Data[1] & 0x01) == 1 ? 7 : 9;
+                    var adtsHex = BitConverter.ToString(firstPkt.Data, 0, Math.Min(adtsHdrLen, firstPkt.DataLength)).Replace("-", " ");
+                    int rawStart = Math.Min(adtsHdrLen, firstPkt.DataLength);
+                    int rawLen = Math.Min(16, firstPkt.DataLength - rawStart);
+                    var rawHex = rawLen > 0 ? BitConverter.ToString(firstPkt.Data, rawStart, rawLen).Replace("-", " ") : "(empty)";
+                    Log.I("Exporter", $"First audio: adtsHdr={adtsHex} rawStart={rawHex} totalLen={firstPkt.DataLength}B");
+                }
+
+                // Write audio to a separate raw ADTS file.
+                // ffmpeg's -f adts demuxer reads ADTS natively and correctly sets
+                // frame_size from the ADTS header — bypasses the Matroska demuxer
+                // which doesn't set frame_size for A_AAC (causing "codec frame size
+                // is not set" and audio silently dropped from MP4 output).
+                if (hasAudioTracks && adtsTemp != null)
+                {
+                    WriteAdtsFile(adtsTemp, audioPackets);
+                    var adtsLen = new FileInfo(adtsTemp).Length;
+                    Log.I("Exporter", $"ADTS temp: {adtsTemp} ({adtsLen / 1024} KB) audioFrames={audioPackets.Count}");
+                }
+
+                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat, adtsTemp);
+
+                // Post-mux diagnostic: probe output MP4 for audio stream presence
+                try
+                {
+                    using var probe = new Process
+                    {
+                        StartInfo = new ProcessStartInfo("ffmpeg")
+                        {
+                            Arguments = $"-i \"{outputPath}\"",
+                            RedirectStandardError = true,
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    probe.Start();
+                    var probeOutput = probe.StandardError.ReadToEnd();
+                    probe.WaitForExit(10_000);
+                    // Count audio/video streams
+                    var hasVideoStream = probeOutput.Contains("Video:");
+                    var hasAudioStream = probeOutput.Contains("Audio:");
+                    var streamCount = System.Text.RegularExpressions.Regex.Matches(probeOutput, "Stream #").Count;
+                    Log.I("Exporter", $"MP4 probe: streams={streamCount} video={hasVideoStream} audio={hasAudioStream}");
+                    if (!hasAudioStream && hasAudioTracks)
+                        Log.W("Exporter", $"MP4 probe FAILED: expected audio but none found! Full probe:\n{probeOutput}");
+                    else if (hasAudioStream)
+                        Log.I("Exporter", $"MP4 probe OK: audio stream present");
+                }
+                catch (Exception ex) { Log.W("Exporter", $"MP4 probe failed: {ex.Message}"); }
 
                 // Gera thumbnail (320x180 JPEG) a partir do MP4 final
                 try { GenerateThumbnail(outputPath); }
@@ -231,74 +307,8 @@ public sealed class ClipExporter : IDisposable
             finally
             {
                 try { File.Delete(mkvTemp); } catch { }
+                if (adtsTemp != null) try { File.Delete(adtsTemp); } catch { }
             }
-
-            return outputPath;
-        }
-        finally
-        {
-            Monitor.Exit(_exportLock);
-        }
-    }
-
-    /// <summary>
-    /// Hybrid MP4 export — streaming writer that avoids intermediate MKV file.
-    /// Faster and lower memory than ExportToMp4 for large clips.
-    /// </summary>
-    public string ExportToMp4Hybrid(
-        string outputPath,
-        List<EncodedPacket> videoPackets,
-        List<EncodedPacket> audioPackets,
-        int width,
-        int height,
-        int frameRate,
-        string rawFormat = "h264",
-        byte[]? avccFallback = null)
-    {
-        if (videoPackets.Count == 0)
-            throw new InvalidOperationException("No video packets to export");
-
-        if (!Monitor.TryEnter(_exportLock))
-            throw new InvalidOperationException("Export ja em andamento");
-
-        try
-        {
-            var outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
-            var drive = new DriveInfo(outputDir);
-            if (drive.AvailableFreeSpace < 100_000_000)
-                throw new InvalidOperationException(
-                    $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
-
-            // Process PTS sync (same as ExportToMp4)
-            if (videoPackets.Count > 0 && audioPackets.Count > 0)
-            {
-                var vFirst = videoPackets[0].Pts;
-                var aFirst = audioPackets[0].Pts;
-                var startOffset = (aFirst - vFirst).TotalMilliseconds;
-                Log.I("HYBRID", $"PTS offset: {startOffset:F1}ms");
-            }
-
-            // Use hybrid writer
-            using var writer = new HybridMp4Writer(outputPath, width, height, frameRate, rawFormat);
-
-            // Write video frames
-            foreach (var pkt in videoPackets)
-                writer.WriteVideoFrame(pkt);
-
-            // Write audio packets (if AAC)
-            if (audioPackets.Count > 0 && IsAdts(audioPackets[0]))
-            {
-                foreach (var pkt in audioPackets)
-                    writer.WriteAudioPacket(pkt);
-            }
-
-            writer.Finalize();
-
-            Log.I("HYBRID", $"Export complete: video={writer.VideoFramesWritten}, audio={writer.AudioPacketsWritten}");
-
-            // Generate thumbnail
-            try { GenerateThumbnail(outputPath); }
-            catch (Exception ex) { Log.W("Exporter", $"Thumbnail generation failed: {ex.Message}"); }
 
             return outputPath;
         }
@@ -565,8 +575,8 @@ public sealed class ClipExporter : IDisposable
     private static void WriteEbmlFloat(BinaryWriter bw, uint id, double value)
     {
         WriteEbmlId(bw, id);
-        WriteEbmlVint(bw, 8);
-        var b = BitConverter.GetBytes(value);
+        WriteEbmlVint(bw, 4); // Matroska "float" = 32-bit IEEE 754 (4 bytes)
+        var b = BitConverter.GetBytes((float)value);
         Array.Reverse(b);
         bw.Write(b);
     }
@@ -586,7 +596,7 @@ public sealed class ClipExporter : IDisposable
         bw.Write(data);
     }
 
-    private static void WriteSimpleBlock(BinaryWriter bw, int trackNumber, int timecode, bool keyframe, byte[] data, int dataLength)
+    private static void WriteSimpleBlock(BinaryWriter bw, int trackNumber, int timecode, bool keyframe, byte[] data, int dataLength, int dataOffset = 0)
     {
         int payloadSize = 0;
         int trackSize = trackNumber < 0x7F ? 1 : 2;
@@ -610,7 +620,7 @@ public sealed class ClipExporter : IDisposable
         if (keyframe) flags |= 0x80;
         bw.Write(flags);
 
-        bw.Write(data, 0, dataLength);
+        bw.Write(data, dataOffset, dataLength);
     }
 
     /// <summary>Convert AVCC (4-byte length prefix) to AnnexB (00 00 01 start code).
@@ -699,7 +709,7 @@ public sealed class ClipExporter : IDisposable
                 if (audioEnd > totalSec) totalSec = audioEnd;
             }
             if (totalSec > 0)
-                WriteEbmlFloat(w, 0x4489, totalSec);
+                WriteEbmlFloat(w, 0x4489, totalSec * 1_000_000.0);
             WriteEbmlString(w, 0x4D80, "DiNho Capture"); // MuxingApp
             WriteEbmlString(w, 0x5741, "DiNho Capture"); // WritingApp
         });
@@ -715,6 +725,7 @@ public sealed class ClipExporter : IDisposable
             WriteEbmlUnsignedInt(tw, 0x83, 1);  // TrackType (1=video)
             WriteEbmlUnsignedInt(tw, 0x9A, 0);  // FlagDefault (audio é o default)
             WriteEbmlUnsignedInt(tw, 0x9C, 1);  // FlagLacing
+            WriteEbmlString(tw, 0x437E, "und"); // Language (undetermined)
             WriteEbmlString(tw, 0x86, rawFormat switch
             {
                 "hevc" => "V_MPEG4/ISO/HEVC",
@@ -759,8 +770,12 @@ public sealed class ClipExporter : IDisposable
 
             WriteEbmlMaster(tw, 0xE0, (vw) => // Video
             {
-                WriteEbmlUnsignedInt(vw, 0xB0, packets.Count > 0 ? (uint)packets[0].Width : 1920);
-                WriteEbmlUnsignedInt(vw, 0xBA, packets.Count > 0 ? (uint)packets[0].Height : 1080);
+                var vw_ = packets.Count > 0 ? (uint)packets[0].Width : 1920u;
+                var vh_ = packets.Count > 0 ? (uint)packets[0].Height : 1080u;
+                WriteEbmlUnsignedInt(vw, 0xB0, vw_);  // PixelWidth (mandatory)
+                WriteEbmlUnsignedInt(vw, 0xB2, vh_);  // PixelHeight (mandatory)
+                WriteEbmlUnsignedInt(vw, 0xB4, vw_);  // DisplayWidth
+                WriteEbmlUnsignedInt(vw, 0xBA, vh_);  // DisplayHeight
             });
         });
 
@@ -770,7 +785,7 @@ public sealed class ClipExporter : IDisposable
                 var asc = BuildAudioSpecificConfig(audioPackets[0]);
                 var adtsProfile = (audioPackets[0].Data[2] >> 6) & 0x03;
                 var adtsSampleRateIdx = (audioPackets[0].Data[2] >> 2) & 0x0F;
-                var adtsChanConfig = ((audioPackets[0].Data[2] & 0x03) << 2) | ((audioPackets[0].Data[3] >> 6) & 0x03);
+                var adtsChanConfig = ((audioPackets[0].Data[2] & 0x01) << 2) | ((audioPackets[0].Data[3] >> 6) & 0x03);
                 int[] sampleRates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000];
                 int sampleRate = adtsSampleRateIdx < sampleRates.Length ? sampleRates[adtsSampleRateIdx] : 48000;
 
@@ -782,11 +797,14 @@ public sealed class ClipExporter : IDisposable
                 WriteEbmlUnsignedInt(tw, 0x9A, 1);   // FlagDefault
                 WriteEbmlUnsignedInt(tw, 0x9C, 1);   // FlagLacing
                 WriteEbmlString(tw, 0x86, "A_AAC");  // CodecID
+                WriteEbmlString(tw, 0x437E, "und"); // Language (undetermined)
                 if (asc != null)
                     WriteEbmlBinary(tw, 0x63A2, asc); // CodecPrivate (AudioSpecificConfig)
+                // AAC-LC encoder delay: 1024 samples — CodecDelay in nanoseconds
+                WriteEbmlUnsignedInt(tw, 0x56AA, (ulong)(1024L * 1_000_000_000 / sampleRate)); // CodecDelay
                 WriteEbmlMaster(tw, 0xE1, (aw) => // Audio
                 {
-                    WriteEbmlUnsignedInt(aw, 0xB5, (uint)sampleRate); // SamplingFrequency
+                    WriteEbmlFloat(aw, 0xB5, sampleRate); // SamplingFrequency (float per Matroska spec)
                     WriteEbmlUnsignedInt(aw, 0x9F, (uint)adtsChanConfig); // Channels
                 });
             });
@@ -874,6 +892,11 @@ public sealed class ClipExporter : IDisposable
                 }
 
                 int relTc = (int)(ptsMs - audioClusterBaseTimecode);
+                // Keep ADTS headers in Matroska blocks.
+                // ffmpeg's aac_adtstoasc BSF in the mux command reads these headers
+                // to set frame_size=1024 and ASC extradata on the codec context.
+                // Without ADTS, the Matroska demuxer doesn't set frame_size →
+                // MP4 muxer can't build stts table → audio silently dropped.
                 WriteSimpleBlock(bw, 2, relTc, false, pkt.Data, pkt.DataLength);
             }
         }
@@ -1134,7 +1157,7 @@ public sealed class ClipExporter : IDisposable
 
         int profile = (data[2] >> 6) & 0x03;
         int sampleRateIdx = (data[2] >> 2) & 0x0F;
-        int channelConfig = ((data[2] & 0x03) << 2) | ((data[3] >> 6) & 0x03);
+        int channelConfig = ((data[2] & 0x01) << 2) | ((data[3] >> 6) & 0x03);
         int audioObjectType = profile + 1;
 
         return [ (byte)((audioObjectType << 3) | (sampleRateIdx >> 1)),
@@ -1145,15 +1168,32 @@ public sealed class ClipExporter : IDisposable
         string outputPath,
         string videoPath,
         bool hasAudioTracks,
-        string rawFormat = "h264")
+        string rawFormat = "h264",
+        string? adtsPath = null)
     {
         string args;
-        if (hasAudioTracks)
+        if (hasAudioTracks && adtsPath != null && File.Exists(adtsPath))
         {
+            // Two-input mux: Matroska for video, raw ADTS for audio.
+            // ffmpeg's aac demuxer reads ADTS frames natively, correctly
+            // sets frame_size=1024 and ASC extradata → MP4 muxer gets proper
+            // codec info (no "codec frame size is not set" warning).
+            // -c copy preserves exact quality of both video (NVENC) and audio (AAC).
+            args = $"-y -loglevel warning " +
+                   $"-f matroska -i \"{videoPath}\" " +
+                   $"-f aac -i \"{adtsPath}\" " +
+                   $"-map 0:v:0 -map 1:a:0 " +
+                   $"-c:v copy -c:a copy " +
+                   $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
+                   $"-movflags +faststart \"{outputPath}\"";
+        }
+        else if (hasAudioTracks)
+        {
+            // Fallback: audio is in the Matroska (shouldn't happen with new flow)
             args = $"-y -loglevel warning " +
                    $"-f matroska -i \"{videoPath}\" " +
                    $"-map 0:v:0 -map 0:a:0 " +
-                   $"-c:v copy -c:a copy " +
+                   $"-c:v copy -bsf:a aac_adtstoasc -c:a copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";
         }
@@ -1211,6 +1251,21 @@ public sealed class ClipExporter : IDisposable
 
     internal static bool IsAdts(EncodedPacket pkt) =>
         pkt.Data.Length >= 2 && pkt.Data[0] == 0xFF && (pkt.Data[1] & 0xF0) == 0xF0;
+
+    /// <summary>
+    /// Writes audio packets as a raw ADTS file (concatenated ADTS frames).
+    /// ffmpeg's -f adts demuxer reads this natively and correctly sets frame_size.
+    /// </summary>
+    internal static void WriteAdtsFile(string path, List<EncodedPacket> audioPackets)
+    {
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
+            FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+        foreach (var pkt in audioPackets)
+        {
+            if (pkt.Type != MediaType.Audio) continue;
+            fs.Write(pkt.Data, 0, pkt.DataLength);
+        }
+    }
 
     internal static void GenerateThumbnail(string videoPath)
     {

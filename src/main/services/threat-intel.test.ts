@@ -225,7 +225,6 @@ describe('ThreatIntelService', () => {
   })
 
   it('Parsing methods do not throw', async () => {
-    const feeds = service.getFeeds()
     await expect(service.updateAllFeeds()).resolves.toBeDefined()
   })
 
@@ -282,7 +281,7 @@ describe('ThreatIntelService', () => {
     const svc = new ThreatIntelService()
     const feeds = svc.getFeeds()
     expect(feeds).toHaveLength(1)
-    expect(feeds[0].name).toBe('Custom Feed')
+    expect(feeds[0]!.name).toBe('Custom Feed')
   })
 
   it('handles load errors gracefully when JSON.parse fails', () => {
@@ -306,8 +305,8 @@ describe('ThreatIntelService', () => {
     svc.toggleFeed('Abuse.ch SSL Blacklist', true)
     const results = await svc.updateAllFeeds()
     expect(results).toHaveLength(1)
-    expect(results[0].feed).toBe('Abuse.ch SSL Blacklist')
-    expect(results[0].added).toBe(0)
+    expect(results[0]!.feed).toBe('Abuse.ch SSL Blacklist')
+    expect(results[0]!.added).toBe(0)
   })
 
   it('updateAllFeeds with JSON feed enabled', async () => {
@@ -315,8 +314,8 @@ describe('ThreatIntelService', () => {
     svc.toggleFeed('MalwareBazaar Hashes', true)
     const results = await svc.updateAllFeeds()
     expect(results).toHaveLength(1)
-    expect(results[0].feed).toBe('MalwareBazaar Hashes')
-    expect(results[0].added).toBe(0)
+    expect(results[0]!.feed).toBe('MalwareBazaar Hashes')
+    expect(results[0]!.added).toBe(0)
   })
 
   it('updateAllFeeds handles feed update error', async () => {
@@ -324,16 +323,15 @@ describe('ThreatIntelService', () => {
     svc.toggleFeed('Abuse.ch SSL Blacklist', true)
     vi.mocked((await import('./logger.service')).getLogger).mockReturnValueOnce({
       error: vi.fn(),
-      warn: vi.fn(),
       info: vi.fn(() => {
         throw new Error('parse failed')
       }),
       success: vi.fn(),
       warning: vi.fn(),
-    })
+    } as never)
     const results = await svc.updateAllFeeds()
     expect(results).toHaveLength(1)
-    expect(results[0].added).toBe(0)
+    expect(results[0]!.added).toBe(0)
   })
 
   it('updateFeed handles unknown parser type via cache', async () => {
@@ -347,7 +345,7 @@ describe('ThreatIntelService', () => {
     const svc = new ThreatIntelService()
     const results = await svc.updateAllFeeds()
     expect(results).toHaveLength(1)
-    expect(results[0].added).toBe(0)
+    expect(results[0]!.added).toBe(0)
   })
 
   it('getThreatIntelService returns singleton', () => {
@@ -423,16 +421,15 @@ describe('ThreatIntelService', () => {
     svc.toggleFeed('Abuse.ch SSL Blacklist', true)
     vi.mocked((await import('./logger.service')).getLogger).mockReturnValueOnce({
       error: vi.fn(),
-      warn: vi.fn(),
       info: vi.fn(() => {
         throw 'string error'
       }),
       success: vi.fn(),
       warning: vi.fn(),
-    })
+    } as never)
     const results = await svc.updateAllFeeds()
     expect(results).toHaveLength(1)
-    expect(results[0].added).toBe(0)
+    expect(results[0]!.added).toBe(0)
   })
 
   it('checkDomain wildcard skips non-domain entries', () => {

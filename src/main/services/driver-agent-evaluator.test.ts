@@ -16,6 +16,7 @@ function makeUpdate(overrides: Partial<DriverUpdate> = {}): DriverUpdate {
     provider: 'NVIDIA',
     updateTitle: 'NVIDIA GeForce RTX 3080 Driver Update',
     downloadSize: '850 MB',
+    selected: false,
     ...overrides,
   }
 }
@@ -48,7 +49,7 @@ describe('driver-agent-evaluator', () => {
     it('produces 10 verdicts per candidate (9 agents + 1 consensus)', () => {
       const result = evaluateDrivers([makeUpdate()])
       expect(result.candidates).toHaveLength(1)
-      expect(result.candidates[0].verdicts).toHaveLength(10)
+      expect(result.candidates[0]!.verdicts).toHaveLength(10)
     })
 
     it('sorts candidates by consensusScore descending', () => {
@@ -56,7 +57,7 @@ describe('driver-agent-evaluator', () => {
         makeUpdate({ id: 'low', updateTitle: 'unknown brand driver', provider: 'Unknown Corp' }),
         makeUpdate({ id: 'high', provider: 'Microsoft Corporation' }),
       ])
-      expect(result.candidates[0].consensusScore).toBeGreaterThanOrEqual(result.candidates[1].consensusScore)
+      expect(result.candidates[0]!.consensusScore).toBeGreaterThanOrEqual(result.candidates[1]!.consensusScore)
     })
 
     it('sets approved to false for all candidates', () => {
@@ -75,7 +76,7 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 1: Windows Update', () => {
     it('always returns recommended with score 80', () => {
       const result = evaluateDrivers([makeUpdate()])
-      const wu = result.candidates[0].verdicts.find((v) => v.agentId === 'windows-update')!
+      const wu = result.candidates[0]!.verdicts.find((v) => v.agentId === 'windows-update')!
       expect(wu.score).toBe(80)
       expect(wu.label).toBe('recommended')
       expect(wu.summaryKey).toBe('agentWuFound')
@@ -85,21 +86,21 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 2: Version Freshness', () => {
     it('returns skip when available version is not newer', () => {
       const result = evaluateDrivers([makeUpdate({ currentVersion: '2.0', availableVersion: '1.0' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'version-freshness')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'version-freshness')!
       expect(v.label).toBe('skip')
       expect(v.score).toBe(0)
     })
 
     it('returns recommended for major version upgrade', () => {
       const result = evaluateDrivers([makeUpdate({ currentVersion: '1.0.0.0', availableVersion: '2.0.0.0' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'version-freshness')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'version-freshness')!
       expect(v.score).toBeGreaterThanOrEqual(70)
       expect(v.label).toBe('recommended')
     })
 
     it('handles non-numeric version parts gracefully', () => {
       const result = evaluateDrivers([makeUpdate({ currentVersion: 'beta', availableVersion: '1.0' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'version-freshness')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'version-freshness')!
       expect(v.score).toBeGreaterThanOrEqual(0)
     })
 
@@ -120,17 +121,17 @@ describe('driver-agent-evaluator', () => {
 
   describe('Agent 3: Date Maturity', () => {
     it('scores very low for updates less than 7 days old', () => {
-      const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0]
+      const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0]!
       const sameDate = twoDaysAgo // avoid extra bump from daysSinceCurrent
       const result = evaluateDrivers([makeUpdate({ availableDate: twoDaysAgo, currentDate: sameDate })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'date-maturity')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'date-maturity')!
       expect(v.score).toBeLessThanOrEqual(15)
     })
 
     it('scores highest for updates between 90 and 365 days', () => {
-      const old = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0]
+      const old = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0]!
       const result = evaluateDrivers([makeUpdate({ availableDate: old })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'date-maturity')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'date-maturity')!
       expect(v.score).toBeGreaterThanOrEqual(80)
     })
 
@@ -170,19 +171,19 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 4: WHQL Certification', () => {
     it('scores 90 for Microsoft provider', () => {
       const result = evaluateDrivers([makeUpdate({ provider: 'Microsoft Corporation' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'whql-certification')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'whql-certification')!
       expect(v.score).toBe(90)
     })
 
     it('scores 70 for known OEM providers', () => {
       const result = evaluateDrivers([makeUpdate({ provider: 'Intel Corporation' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'whql-certification')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'whql-certification')!
       expect(v.score).toBe(70)
     })
 
     it('scores 30 for unknown providers', () => {
       const result = evaluateDrivers([makeUpdate({ provider: 'Random Corp' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'whql-certification')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'whql-certification')!
       expect(v.score).toBe(30)
     })
   })
@@ -190,14 +191,14 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 5: Publisher Reputation', () => {
     it('scores 95 for Microsoft', () => {
       const result = evaluateDrivers([makeUpdate({ provider: 'Microsoft Corporation' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'publisher-reputation')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'publisher-reputation')!
       expect(v.score).toBe(95)
       expect(v.label).toBe('critical')
     })
 
     it('scores 85 for known GPU vendors', () => {
       const result = evaluateDrivers([makeUpdate({ provider: 'NVIDIA Corporation' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'publisher-reputation')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'publisher-reputation')!
       expect(v.score).toBe(85)
     })
 
@@ -224,7 +225,7 @@ describe('driver-agent-evaluator', () => {
 
     it('scores 40 for unknown publishers', () => {
       const result = evaluateDrivers([makeUpdate({ provider: 'Some Unknown Company' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'publisher-reputation')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'publisher-reputation')!
       expect(v.score).toBe(40)
     })
   })
@@ -237,7 +238,7 @@ describe('driver-agent-evaluator', () => {
           updateTitle: 'NVIDIA GeForce RTX 3080 Driver Update',
         }),
       ])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'hardware-match')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'hardware-match')!
       expect(v.score).toBeGreaterThanOrEqual(80)
     })
 
@@ -248,7 +249,7 @@ describe('driver-agent-evaluator', () => {
           updateTitle: 'Generic Driver Update Package',
         }),
       ])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'hardware-match')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'hardware-match')!
       expect(v.score).toBeLessThanOrEqual(60)
     })
 
@@ -282,13 +283,13 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 7: Stability Risk', () => {
     it('penalizes large version jumps', () => {
       const result = evaluateDrivers([makeUpdate({ currentVersion: '1.0.0.0', availableVersion: '5.0.0.0' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'stability-risk')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'stability-risk')!
       expect(v.score).toBeLessThan(60)
     })
 
     it('rewards minor updates within same major version', () => {
       const result = evaluateDrivers([makeUpdate({ currentVersion: '1.0.0.0', availableVersion: '1.2.0.0' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'stability-risk')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'stability-risk')!
       expect(v.score).toBeGreaterThanOrEqual(70)
     })
 
@@ -335,14 +336,14 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 8: Security Relevance', () => {
     it('flags critical security keywords', () => {
       const result = evaluateDrivers([makeUpdate({ updateTitle: 'Critical Security Update for CVE-2025-1234' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'security-relevance')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'security-relevance')!
       expect(v.label).toBe('critical')
       expect(v.score).toBeGreaterThanOrEqual(90)
     })
 
     it('returns optional for non-security updates', () => {
       const result = evaluateDrivers([makeUpdate({ updateTitle: 'Regular Feature Update' })])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'security-relevance')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'security-relevance')!
       expect(v.label).toBe('optional')
     })
 
@@ -358,7 +359,7 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 9: Rollback Safety', () => {
     it('always returns score 60 with optional label', () => {
       const result = evaluateDrivers([makeUpdate()])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'rollback-safety')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'rollback-safety')!
       expect(v.score).toBe(60)
       expect(v.label).toBe('optional')
       expect(v.summaryKey).toBe('agentRollbackAvailable')
@@ -368,13 +369,13 @@ describe('driver-agent-evaluator', () => {
   describe('Agent 10: Consensus', () => {
     it('is always the last verdict', () => {
       const result = evaluateDrivers([makeUpdate()])
-      const verdicts = result.candidates[0].verdicts
-      expect(verdicts[verdicts.length - 1].agentId).toBe('consensus')
+      const verdicts = result.candidates[0]!.verdicts
+      expect(verdicts[verdicts.length - 1]!.agentId).toBe('consensus')
     })
 
     it('falls within 0-100 range', () => {
       const result = evaluateDrivers([makeUpdate()])
-      const v = result.candidates[0].verdicts.find((v) => v.agentId === 'consensus')!
+      const v = result.candidates[0]!.verdicts.find((v) => v.agentId === 'consensus')!
       expect(v.score).toBeGreaterThanOrEqual(0)
       expect(v.score).toBeLessThanOrEqual(100)
     })
@@ -382,8 +383,8 @@ describe('driver-agent-evaluator', () => {
     it('scores higher for Microsoft drivers than unknown ones', () => {
       const microsoft = evaluateDrivers([makeUpdate({ provider: 'Microsoft Corporation' })])
       const unknown = evaluateDrivers([makeUpdate({ provider: 'Unknown Random Corp' })])
-      const mScore = microsoft.candidates[0].verdicts.find((v) => v.agentId === 'consensus')!.score
-      const uScore = unknown.candidates[0].verdicts.find((v) => v.agentId === 'consensus')!.score
+      const mScore = microsoft.candidates[0]!.verdicts.find((v) => v.agentId === 'consensus')!.score
+      const uScore = unknown.candidates[0]!.verdicts.find((v) => v.agentId === 'consensus')!.score
       expect(mScore).toBeGreaterThan(uScore)
     })
   })

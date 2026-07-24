@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
-  const execNativeUtf8Mock = vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>()
+  const execNativeUtf8Mock = vi.fn()
   const getPlatformMock = vi.fn()
   const existsSyncMock = vi.fn<(path: string) => boolean>()
   const mkdirSyncMock = vi.fn()
@@ -54,7 +54,6 @@ beforeEach(() => {
   mocks.mkdirSyncMock.mockReset()
   mocks.writeFileSyncMock.mockReset()
   mocks.appGetPathMock.mockReturnValue('C:\\MockUserData')
-  // biome-ignore lint/suspicious/noExplicitAny: test setup
   mocks.execNativeUtf8Mock.mockRejectedValue(new Error('Not found'))
 })
 
@@ -408,7 +407,7 @@ describe('enableService edge cases', () => {
       }
       if (tool === 'reg' && args[0] === 'add') {
         const dataIdx = args.indexOf('/d')
-        addDataValues.push(args[dataIdx + 1])
+        addDataValues.push(args[dataIdx + 1]!)
         return { stdout: '', stderr: '' }
       }
       throw new Error('Unexpected')
@@ -497,7 +496,7 @@ describe('service start type cache', () => {
 
     await applyPrivacySettings(['service-diagtrack'])
     expect(mocks.writeFileSyncMock).toHaveBeenCalled()
-    const writeArg = mocks.writeFileSyncMock.mock.calls[0][1] as string
+    const writeArg = mocks.writeFileSyncMock.mock.calls[0]![1] as string
     expect(writeArg).toContain('DiagTrack')
     expect(writeArg).toContain('2')
   })
@@ -563,7 +562,7 @@ describe('service start type cache', () => {
       throw new Error('Unexpected')
     })
 
-    const result = await revertPrivacySettings(['ai-service-autostart'])
+    await revertPrivacySettings(['ai-service-autostart'])
     const addCalls = mocks.execNativeUtf8Mock.mock.calls.filter(
       (c) => (c[0] as string) === 'reg' && (c[1] as string[])[0] === 'add',
     )
@@ -1042,10 +1041,10 @@ describe('scanPrivacy onProgress', () => {
     await scanPrivacy(onProgress)
 
     expect(onProgress).toHaveBeenCalled()
-    expect(onProgress.mock.calls[0][0]).toHaveProperty('current', 1)
-    expect(onProgress.mock.calls[0][0]).toHaveProperty('total', SETTING_COUNT)
-    expect(onProgress.mock.calls[0][0]).toHaveProperty('currentLabel')
-    expect(onProgress.mock.calls[0][0]).toHaveProperty('category')
+    expect(onProgress.mock.calls[0]![0]).toHaveProperty('current', 1)
+    expect(onProgress.mock.calls[0]![0]).toHaveProperty('total', SETTING_COUNT)
+    expect(onProgress.mock.calls[0]![0]).toHaveProperty('currentLabel')
+    expect(onProgress.mock.calls[0]![0]).toHaveProperty('category')
   })
 })
 

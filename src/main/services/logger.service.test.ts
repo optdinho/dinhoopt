@@ -22,7 +22,6 @@ vi.mock('node:fs/promises', () => ({
   unlink: mockUnlink,
 }))
 
-import type { LogFilter } from '@shared/types'
 import { getLogger, resetLoggerForTest } from './logger.service'
 
 // Helper to build an ISO date string relative to now
@@ -121,7 +120,7 @@ describe('LoggerService', () => {
       await logger.log('info', 'test-module', 'hello world')
 
       expect(mockAppendFile).toHaveBeenCalledTimes(1)
-      const [filePath, line, encoding] = mockAppendFile.mock.calls[0] as [string, string, string]
+      const [filePath, line, encoding] = mockAppendFile.mock.calls[0] as unknown as [string, string, string]
       expect(filePath).toMatch(/\.jsonl$/)
       expect(encoding).toBe('utf-8')
 
@@ -140,7 +139,7 @@ describe('LoggerService', () => {
       const logger = getLogger()
       await logger.log('error', 'crash', 'something broke', 'stack trace here')
 
-      const line = (mockAppendFile.mock.calls[0] as [string, string])[1]
+      const line = (mockAppendFile.mock.calls[0] as unknown as [string, string])[1]
       const parsed = JSON.parse(line)
       expect(parsed.details).toBe('stack trace here')
     })
@@ -178,35 +177,35 @@ describe('LoggerService', () => {
     it('info delegates to log with info level', async () => {
       const logger = getLogger()
       await logger.info('mod-a', 'info msg')
-      const line = (mockAppendFile.mock.calls[0] as [string, string])[1]
+      const line = (mockAppendFile.mock.calls[0] as unknown as [string, string])[1]
       expect(JSON.parse(line).level).toBe('info')
     })
 
     it('success delegates to log with success level', async () => {
       const logger = getLogger()
       await logger.success('mod-a', 'success msg')
-      const line = (mockAppendFile.mock.calls[0] as [string, string])[1]
+      const line = (mockAppendFile.mock.calls[0] as unknown as [string, string])[1]
       expect(JSON.parse(line).level).toBe('success')
     })
 
     it('warning delegates to log with warning level', async () => {
       const logger = getLogger()
       await logger.warning('mod-a', 'warn msg')
-      const line = (mockAppendFile.mock.calls[0] as [string, string])[1]
+      const line = (mockAppendFile.mock.calls[0] as unknown as [string, string])[1]
       expect(JSON.parse(line).level).toBe('warning')
     })
 
     it('error delegates to log with error level', async () => {
       const logger = getLogger()
       await logger.error('mod-a', 'error msg')
-      const line = (mockAppendFile.mock.calls[0] as [string, string])[1]
+      const line = (mockAppendFile.mock.calls[0] as unknown as [string, string])[1]
       expect(JSON.parse(line).level).toBe('error')
     })
 
     it('convenience methods forward details', async () => {
       const logger = getLogger()
       await logger.warning('mod', 'msg', 'some details')
-      const line = (mockAppendFile.mock.calls[0] as [string, string])[1]
+      const line = (mockAppendFile.mock.calls[0] as unknown as [string, string])[1]
       expect(JSON.parse(line).details).toBe('some details')
     })
   })

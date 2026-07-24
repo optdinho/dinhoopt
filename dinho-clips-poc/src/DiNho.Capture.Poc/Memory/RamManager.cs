@@ -111,7 +111,7 @@ public sealed class RamManager : IDisposable
                 cq = Math.Min(Math.Max(configuredCq, 24), MaxCq);
                 maxrateKbps = Math.Min(configuredMaxrateKbps, 35000);
                 bufsizeKbps = Math.Min(configuredBufsizeKbps, 70000);
-                bframes = Math.Min(configuredBframes, 1);
+                bframes = 0;  // Always 0 — EmitPacket() assumes strict FIFO PTS
                 lookahead = configuredLookahead;
                 replaySec = Math.Max(Math.Min(configuredReplaySec, 180), MinReplaySec);
                 encodeW = captureWidth;
@@ -122,7 +122,7 @@ public sealed class RamManager : IDisposable
                 cq = configuredCq;
                 maxrateKbps = configuredMaxrateKbps;
                 bufsizeKbps = configuredBufsizeKbps;
-                bframes = configuredBframes;
+                bframes = 0;  // Always 0 — EmitPacket() assumes strict FIFO PTS order
                 lookahead = configuredLookahead;
                 replaySec = configuredReplaySec;
                 encodeW = captureWidth;

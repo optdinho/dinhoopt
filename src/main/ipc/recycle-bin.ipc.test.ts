@@ -29,7 +29,7 @@ vi.mock('node:crypto', () => ({
 
 vi.mock('../services/exec-utf8', () => ({
   execFileAsync: (...args: unknown[]) => mocks.execFileAsync(...args),
-  psArgs: (...args: unknown[]) => mocks.psArgs(...args),
+  psArgs: (s: string) => mocks.psArgs(s),
 }))
 
 vi.mock('../services/file-utils', () => ({

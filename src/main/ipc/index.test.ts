@@ -92,7 +92,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('electron', () => ({
   BrowserWindow: class {},
   app: {
-    getPath: (...args: unknown[]) => mocks.appGetPath(...args),
+    getPath: (p: string) => mocks.appGetPath(p),
     releaseSingleInstanceLock: (...args: unknown[]) => mocks.appReleaseSingleInstanceLock(...args),
     exit: (...args: unknown[]) => mocks.appExit(...args),
     emit: (...args: unknown[]) => mocks.appEmit(...args),
@@ -168,7 +168,7 @@ vi.mock('../services/auto-updater', () => ({
 }))
 
 vi.mock('../services/backup-dir', () => ({
-  getBackupDir: (...args: unknown[]) => mocks.getBackupDir(...args),
+  getBackupDir: () => mocks.getBackupDir(),
 }))
 
 vi.mock('../services/elevation', () => ({

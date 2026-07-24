@@ -25,18 +25,20 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('electron', () => ({
-  ipcMain: { handle: (...args: unknown[]) => mocks.ipcHandle(...args) },
-  dialog: { showOpenDialog: (...args: unknown[]) => mocks.dialogShowOpenDialog(...args) },
+  ipcMain: { handle: (...args: unknown[]) => (mocks.ipcHandle as (...a: unknown[]) => unknown)(...args) },
+  dialog: {
+    showOpenDialog: (...args: unknown[]) => (mocks.dialogShowOpenDialog as (...a: unknown[]) => unknown)(...args),
+  },
   shell: {
-    trashItem: (...args: unknown[]) => mocks.shellTrashItem(...args),
-    showItemInFolder: (...args: unknown[]) => mocks.shellShowItemInFolder(...args),
+    trashItem: (...args: unknown[]) => (mocks.shellTrashItem as (...a: unknown[]) => unknown)(...args),
+    showItemInFolder: (...args: unknown[]) => (mocks.shellShowItemInFolder as (...a: unknown[]) => unknown)(...args),
   },
   BrowserWindow: vi.fn(),
 }))
 
 vi.mock('node:fs/promises', () => ({
-  readdir: (...args: unknown[]) => mocks.readdir(...args),
-  rmdir: (...args: unknown[]) => mocks.rmdir(...args),
+  readdir: (...args: unknown[]) => (mocks.readdir as (...a: unknown[]) => unknown)(...args),
+  rmdir: (...args: unknown[]) => (mocks.rmdir as (...a: unknown[]) => unknown)(...args),
 }))
 
 vi.mock('../services/logger.service', () => ({
@@ -49,6 +51,19 @@ import type { BrowserWindow } from 'electron'
 import { registerEmptyFolderCleanerIpc } from './empty-folder-cleaner.ipc'
 
 type IpcHandler = (...args: unknown[]) => unknown
+
+interface ScanResult {
+  folders: Array<{ name: string; depth: number }>
+  totalFoldersScanned: number
+  duration: number
+  cancelled: boolean
+}
+
+interface DeleteResult {
+  deleted: number
+  failed: number
+  errors: Array<{ path: string; reason: string }>
+}
 
 // On Windows, path.join() produces backslashes.  Normalise to forward slashes
 // so our mock comparisons work cross-platform.
@@ -147,7 +162,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('returns empty result when options is null', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, null)
+      const result = (await handler(undefined, null)) as ScanResult
       expect(result).toEqual({ folders: [], totalFoldersScanned: 0, duration: expect.any(Number), cancelled: false })
       expect(mocks.logger.warning).toHaveBeenCalledWith('empty-folder-cleaner', 'Scan called with invalid options')
     })
@@ -155,7 +170,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('returns empty result when options is not an object', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, 'string')
+      const result = (await handler(undefined, 'string')) as ScanResult
       expect(result).toEqual({ folders: [], totalFoldersScanned: 0, duration: expect.any(Number), cancelled: false })
       expect(mocks.logger.warning).toHaveBeenCalledWith('empty-folder-cleaner', 'Scan called with invalid options')
     })
@@ -163,7 +178,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('returns empty result when directory is missing from options', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { maxDepth: 5 })
+      const result = (await handler(undefined, { maxDepth: 5 })) as ScanResult
       expect(result).toEqual({ folders: [], totalFoldersScanned: 0, duration: expect.any(Number), cancelled: false })
       expect(mocks.logger.warning).toHaveBeenCalledWith('empty-folder-cleaner', 'Scan called without a valid directory')
     })
@@ -171,7 +186,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('returns empty result when directory is relative', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: 'relative/path', maxDepth: 5 })
+      const result = (await handler(undefined, { directory: 'relative/path', maxDepth: 5 })) as ScanResult
       expect(result).toEqual({ folders: [], totalFoldersScanned: 0, duration: expect.any(Number), cancelled: false })
       expect(mocks.logger.warning).toHaveBeenCalledWith('empty-folder-cleaner', 'Scan called without a valid directory')
     })
@@ -179,7 +194,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('returns empty result when directory is empty string', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: '', maxDepth: 5 })
+      const result = (await handler(undefined, { directory: '', maxDepth: 5 })) as ScanResult
       expect(result).toEqual({ folders: [], totalFoldersScanned: 0, duration: expect.any(Number), cancelled: false })
       expect(mocks.logger.warning).toHaveBeenCalledWith('empty-folder-cleaner', 'Scan called without a valid directory')
     })
@@ -187,7 +202,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('defaults maxDepth to 20 when not provided', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT })
+      const result = (await handler(undefined, { directory: ROOT })) as ScanResult
       expect(result.folders).toEqual([])
       expect(result.cancelled).toBe(false)
     })
@@ -195,28 +210,32 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('defaults maxDepth to 20 when invalid (negative)', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: -1 })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: -1 })) as ScanResult
       expect(result.folders).toEqual([])
     })
 
     it('defaults maxDepth to 20 when invalid (zero)', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 0 })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 0 })) as ScanResult
       expect(result.folders).toEqual([])
     })
 
     it('defaults excludePatterns to empty array when not provided', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10 })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10 })) as ScanResult
       expect(result.folders).toEqual([])
     })
 
     it('filters non-string items from excludePatterns', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: ['ok', 42, null] })
+      const result = (await handler(undefined, {
+        directory: ROOT,
+        maxDepth: 10,
+        excludePatterns: ['ok', 42, null],
+      })) as ScanResult
       expect(result.folders).toEqual([])
     })
 
@@ -233,7 +252,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return []
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       expect(result.folders).toHaveLength(2)
       expect(result.folders.map((f) => f.name).sort()).toEqual(['empty1', 'empty2'])
       expect(result.totalFoldersScanned).toBe(3)
@@ -244,7 +263,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('does not mark root scan directory as empty', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       expect(result.folders).toHaveLength(0)
       expect(result.totalFoldersScanned).toBe(1)
     })
@@ -259,7 +278,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return [{ name: 'file.txt', isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false }]
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       expect(result.folders).toHaveLength(0)
     })
 
@@ -273,7 +292,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return [{ name: 'link', isFile: () => false, isDirectory: () => false, isSymbolicLink: () => true }]
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       expect(result.folders).toHaveLength(0)
     })
 
@@ -290,11 +309,11 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return []
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       // .hidden is treated as non-empty (hasNonEmptySubdirs = true)
       // 'empty' is empty and not-root, so it gets flagged
       expect(result.folders).toHaveLength(1)
-      expect(result.folders[0].name).toBe('empty')
+      expect(result.folders[0]!.name).toBe('empty')
     })
 
     it('skips directories matching excludePatterns', async () => {
@@ -310,10 +329,14 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return []
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: ['build'] })
+      const result = (await handler(undefined, {
+        directory: ROOT,
+        maxDepth: 10,
+        excludePatterns: ['build'],
+      })) as ScanResult
       // 'build' is excluded (treated as non-empty), only 'src' is empty
       expect(result.folders).toHaveLength(1)
-      expect(result.folders[0].name).toBe('src')
+      expect(result.folders[0]!.name).toBe('src')
     })
 
     it('skips directories matching excludePatterns case-insensitively', async () => {
@@ -326,7 +349,11 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return []
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: ['BUILD'] })
+      const result = (await handler(undefined, {
+        directory: ROOT,
+        maxDepth: 10,
+        excludePatterns: ['BUILD'],
+      })) as ScanResult
       expect(result.folders).toHaveLength(0)
     })
 
@@ -348,7 +375,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return []
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 1, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 1, excludePatterns: [] })) as ScanResult
       // sub2 is at depth 2 > maxDepth 1, so findEmptyFolders returns false
       // sub1 has a subdir that returned false => hasNonEmptySubdirs = true
       // so no empty folders found
@@ -362,7 +389,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       registerEmptyFolderCleanerIpc(winNull)
       mocks.readdir.mockRejectedValue(new Error('EACCES: permission denied'))
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       expect(result.folders).toHaveLength(0)
       expect(result.totalFoldersScanned).toBe(0)
     })
@@ -380,11 +407,11 @@ describe('registerEmptyFolderCleanerIpc', () => {
         return []
       })
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       // a at depth 1 (empty), b at depth 2 (empty)
       expect(result.folders).toHaveLength(2)
-      expect(result.folders[0].depth).toBe(2)
-      expect(result.folders[1].depth).toBe(1)
+      expect(result.folders[0]!.depth).toBe(2)
+      expect(result.folders[1]!.depth).toBe(1)
     })
 
     it('progress is throttled (not sent for fast scans under 500ms)', async () => {
@@ -408,7 +435,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('handles cancelled flag during scan (reset per scan)', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:scan')
-      const result = await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })
+      const result = (await handler(undefined, { directory: ROOT, maxDepth: 10, excludePatterns: [] })) as ScanResult
       // cancelled flag is reset to false at the start of every scan
       expect(result.cancelled).toBe(false)
     })
@@ -571,7 +598,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
     it('returns zero counts for non-array paths', async () => {
       registerEmptyFolderCleanerIpc(winNull)
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, 'not-an-array')
+      const result = (await handler(undefined, 'not-an-array')) as DeleteResult
       expect(result).toEqual({ deleted: 0, failed: 0, errors: [] })
       expect(mocks.logger.warning).toHaveBeenCalledWith('empty-folder-cleaner', 'Delete called with non-array paths')
     })
@@ -581,7 +608,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockResolvedValue([])
       mocks.shellTrashItem.mockResolvedValue(undefined)
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/target`, 42, 'relative/path'])
+      const result = (await handler(undefined, [`${ROOT}/target`, 42, 'relative/path'])) as DeleteResult
       expect(result).toEqual({ deleted: 1, failed: 0, errors: [] })
       expect(mocks.logger.info).toHaveBeenCalledWith(
         'empty-folder-cleaner',
@@ -593,7 +620,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       registerEmptyFolderCleanerIpc(winNull)
       // .git is in PROTECTED_GENERIC
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/.git`])
+      const result = (await handler(undefined, [`${ROOT}/.git`])) as DeleteResult
       expect(result).toEqual({
         deleted: 0,
         failed: 1,
@@ -609,7 +636,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       registerEmptyFolderCleanerIpc(winNull)
       mocks.readdir.mockResolvedValue(['some-file.txt'])
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/target`])
+      const result = (await handler(undefined, [`${ROOT}/target`])) as DeleteResult
       expect(result).toEqual({
         deleted: 0,
         failed: 1,
@@ -626,7 +653,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockResolvedValue([])
       mocks.shellTrashItem.mockResolvedValue(undefined)
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/target`])
+      const result = (await handler(undefined, [`${ROOT}/target`])) as DeleteResult
       expect(result).toEqual({ deleted: 1, failed: 0, errors: [] })
       expect(mocks.shellTrashItem).toHaveBeenCalledWith(`${ROOT}/target`)
       expect(mocks.rmdir).not.toHaveBeenCalled()
@@ -637,7 +664,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockResolvedValue([])
       mocks.rmdir.mockResolvedValue(undefined)
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/target`], 'permanent')
+      const result = (await handler(undefined, [`${ROOT}/target`], 'permanent')) as DeleteResult
       expect(result).toEqual({ deleted: 1, failed: 0, errors: [] })
       expect(mocks.rmdir).toHaveBeenCalledWith(`${ROOT}/target`)
       expect(mocks.shellTrashItem).not.toHaveBeenCalled()
@@ -648,7 +675,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockResolvedValue([])
       mocks.shellTrashItem.mockRejectedValue(new Error('Access denied'))
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/target`])
+      const result = (await handler(undefined, [`${ROOT}/target`])) as DeleteResult
       expect(result).toEqual({
         deleted: 0,
         failed: 1,
@@ -665,7 +692,7 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.readdir.mockResolvedValue([])
       mocks.shellTrashItem.mockRejectedValue('some string error')
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, [`${ROOT}/target`])
+      const result = (await handler(undefined, [`${ROOT}/target`])) as DeleteResult
       expect(result).toEqual({
         deleted: 0,
         failed: 1,
@@ -679,12 +706,12 @@ describe('registerEmptyFolderCleanerIpc', () => {
       mocks.shellTrashItem.mockResolvedValue(undefined)
       const paths = [`${ROOT}/a`, `${ROOT}/a/b`, `${ROOT}/a/b/c`]
       const handler = getHandler('empty-folders:delete')
-      const result = await handler(undefined, paths)
+      const result = (await handler(undefined, paths)) as DeleteResult
       expect(result.deleted).toBe(3)
       // Should try deepest first: .../a/b/c, .../a/b, .../a
-      expect(mocks.shellTrashItem.mock.calls[0][0]).toBe(`${ROOT}/a/b/c`)
-      expect(mocks.shellTrashItem.mock.calls[1][0]).toBe(`${ROOT}/a/b`)
-      expect(mocks.shellTrashItem.mock.calls[2][0]).toBe(`${ROOT}/a`)
+      expect(mocks.shellTrashItem.mock.calls[0]![0]).toBe(`${ROOT}/a/b/c`)
+      expect(mocks.shellTrashItem.mock.calls[1]![0]).toBe(`${ROOT}/a/b`)
+      expect(mocks.shellTrashItem.mock.calls[2]![0]).toBe(`${ROOT}/a`)
     })
   })
 

@@ -105,8 +105,7 @@ describe('registerDuplicateFinderIpc', () => {
     win = makeBrowserWindowMock()
     getWindow = vi.fn(() => win as unknown as Electron.BrowserWindow)
 
-    // Sensible defaults so mocks return valid values unless overridden
-    mockReaddir.mockResolvedValue([])
+    // Sensible defaults so mocks return valid values unless overridden    mockReaddir.mockResolvedValue([])
     mockStat.mockResolvedValue({ size: 0, mtimeMs: 0 })
     mockCreateHash.mockReturnValue(makeHashObj('default'))
     mockCreateReadStream.mockReturnValue(makeHashStream())
@@ -114,7 +113,7 @@ describe('registerDuplicateFinderIpc', () => {
     mockTrashItem.mockResolvedValue(undefined)
     mockRm.mockResolvedValue(undefined)
 
-    registerDuplicateFinderIpc(getWindow)
+    registerDuplicateFinderIpc(getWindow as never)
   })
 
   afterEach(() => {
@@ -227,11 +226,11 @@ describe('registerDuplicateFinderIpc', () => {
       })
       const groups = result.groups as Array<Record<string, unknown>>
       expect(groups).toHaveLength(1)
-      expect(groups[0]).toMatchObject({
+      expect(groups[0]!).toMatchObject({
         fileSize: 2_000_000,
         reclaimableSpace: 4_000_000,
       })
-      const files = groups[0].files as Array<Record<string, unknown>>
+      const files = groups[0]!.files as Array<Record<string, unknown>>
       expect(files).toHaveLength(3)
 
       expect(win.webContents.send).toHaveBeenCalledWith(
@@ -520,11 +519,13 @@ describe('registerDuplicateFinderIpc', () => {
         paths: unknown,
         mode: unknown,
       ) => Promise<unknown>
-      const result = await handler(null, ['C:\\missing.txt'], 'permanent')
+      const result = (await handler(null, ['C:\\missing.txt'], 'permanent')) as {
+        errors: Array<{ path: string; reason: string }>
+      }
 
       expect(result).toMatchObject({ deleted: 0, failed: 1, spaceRecovered: 0 })
       expect(result.errors).toHaveLength(1)
-      expect(result.errors[0].path).toBe('C:\\missing.txt')
+      expect(result.errors[0]!.path).toBe('C:\\missing.txt')
     })
 
     it('handles trashItem errors gracefully', async () => {
@@ -536,10 +537,12 @@ describe('registerDuplicateFinderIpc', () => {
         paths: unknown,
         mode: unknown,
       ) => Promise<unknown>
-      const result = await handler(null, ['C:\\file.txt'], 'recycle')
+      const result = (await handler(null, ['C:\\file.txt'], 'recycle')) as {
+        errors: Array<{ path: string; reason: string }>
+      }
 
       expect(result).toMatchObject({ deleted: 0, failed: 1, spaceRecovered: 0 })
-      expect(result.errors[0].reason).toBe('Trash unavailable')
+      expect(result.errors[0]!.reason).toBe('Trash unavailable')
     })
 
     it('handles rm errors gracefully', async () => {
@@ -551,10 +554,12 @@ describe('registerDuplicateFinderIpc', () => {
         paths: unknown,
         mode: unknown,
       ) => Promise<unknown>
-      const result = await handler(null, ['C:\\file.txt'], 'permanent')
+      const result = (await handler(null, ['C:\\file.txt'], 'permanent')) as {
+        errors: Array<{ path: string; reason: string }>
+      }
 
       expect(result).toMatchObject({ deleted: 0, failed: 1, spaceRecovered: 0 })
-      expect(result.errors[0].reason).toBe('Access denied')
+      expect(result.errors[0]!.reason).toBe('Access denied')
     })
   })
 

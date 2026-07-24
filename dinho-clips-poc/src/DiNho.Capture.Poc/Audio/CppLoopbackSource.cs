@@ -120,7 +120,10 @@ public sealed class CppLoopbackSource : IAudioSource
         for (int i = 0; i < sampleCount; i++)
             samples[i] = _shortBuffer[i] / 32768f;
 
-        var buffer = new AudioBuffer(samples, _sampleRate, _channels);
+        var buffer = new AudioBuffer(samples, _sampleRate, _channels)
+        {
+            CaptureTimestamp = DateTime.UtcNow  // stamp at native capture time, not delivery
+        };
         lock (_lock)
         {
             if (_pendingBuffers.Count >= MaxPendingBuffers)

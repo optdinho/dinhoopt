@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // --- Mock exec-utf8 ---
 const mockExecNativeUtf8 = vi.fn()
@@ -37,7 +37,6 @@ vi.mock('node:fs', () => ({
   writeFileSync: vi.fn(),
 }))
 
-import type { RegistryEntry } from '@shared/types'
 import { collectBackupTargets, fixRegistryEntries, scanRegistry } from './registry-cleaner.service'
 import {
   clsidExists,
@@ -261,7 +260,7 @@ describe('scanRegistry', () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true)
 
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('App Paths')) {
         return {
           stdout: String.raw`
@@ -288,7 +287,7 @@ HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\test.exe
       return true
     })
 
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('App Paths')) {
         return {
           stdout:
@@ -693,7 +692,7 @@ describe('expandEnvVars (via scanRegistry)', () => {
       if (path.includes('LegacyApp.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('AppCompatFlags\\Layers') && args[1]?.startsWith('HKLM')) {
         return { stdout: '\r\n    C:\\Tools\\LegacyApp.exe    REG_SZ    WIN7RTM', stderr: '' }
       }
@@ -711,7 +710,7 @@ describe('expandEnvVars (via scanRegistry)', () => {
       if (path.includes('MissingApp.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('AppCompatFlags\\Layers') && args[1]?.startsWith('HKCU')) {
         return { stdout: '\r\n    C:\\Program Files\\MissingApp.exe    REG_SZ    WIN7RTM', stderr: '' }
       }
@@ -734,7 +733,7 @@ describe('extractExePath (via scanRegistry)', () => {
       if (path.includes('MissingQuoted.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    MyApp    REG_SZ    "C:\\Program Files\\MissingQuoted.exe" /silent', stderr: '' }
       }
@@ -752,7 +751,7 @@ describe('extractExePath (via scanRegistry)', () => {
       if (path.includes('missing.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    App    REG_SZ    C:\\Tools\\missing.exe', stderr: '' }
       }
@@ -779,7 +778,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('missing.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('SharedDLLs')) {
         return { stdout: '\r\n    C:\\Program Files\\MissingApp\\missing.dll    REG_DWORD    0x1', stderr: '' }
       }
@@ -798,7 +797,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('GhostApp')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('MuiCache')) {
         return { stdout: '\r\n    C:\\Tools\\GhostApp.exe.FriendlyAppName    REG_SZ    Ghost App', stderr: '' }
       }
@@ -816,7 +815,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('GhostRule.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('FirewallRules')) {
         return { stdout: '\r\n    Rule1    REG_SZ    App=C:\\Tools\\GhostRule.exe|Action=Allow', stderr: '' }
       }
@@ -834,7 +833,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('MissingFont')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Fonts')) {
         return { stdout: '\r\n    MyFont (TrueType)    REG_SZ    MissingFont.ttf', stderr: '' }
       }
@@ -852,7 +851,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('MissingCom.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('CLSID') && args.includes('/k')) {
         return {
           stdout:
@@ -874,7 +873,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('MissingTypeLib.tlb')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('TypeLib') && args.includes('/k')) {
         return {
           stdout:
@@ -896,7 +895,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('GhostSvc.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Services') && args.includes('/f')) {
         return {
           stdout:
@@ -912,7 +911,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects disabled UAC', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('EnableLUA')) {
         return { stdout: '    EnableLUA    REG_DWORD    0x0', stderr: '' }
       }
@@ -924,7 +923,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects disabled Windows Defender realtime monitoring', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('DisableRealtimeMonitoring')) {
         return { stdout: '    DisableRealtimeMonitoring    REG_DWORD    0x1', stderr: '' }
       }
@@ -936,7 +935,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects disabled Windows Defender antispyware', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('DisableAntiSpyware')) {
         return { stdout: '    DisableAntiSpyware    REG_DWORD    0x1', stderr: '' }
       }
@@ -948,7 +947,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects AutoRun not fully disabled', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('NoDriveTypeAutoRun')) {
         return { stdout: '    NoDriveTypeAutoRun    REG_DWORD    0x0', stderr: '' }
       }
@@ -960,7 +959,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects SMB1 enabled', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('SMB1')) {
         return { stdout: '    SMB1    REG_DWORD    0x1', stderr: '' }
       }
@@ -972,7 +971,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects PowerShell unrestricted policy', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('ExecutionPolicy')) {
         return { stdout: '    ExecutionPolicy    REG_SZ    Unrestricted', stderr: '' }
       }
@@ -984,7 +983,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects disabled firewall profiles', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('EnableFirewall')) {
         return { stdout: '    EnableFirewall    REG_DWORD    0x0', stderr: '' }
       }
@@ -996,7 +995,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects Remote Registry service enabled', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('RemoteRegistry')) {
         return { stdout: '    Start    REG_DWORD    0x3', stderr: '' }
       }
@@ -1008,11 +1007,11 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects SysMain on HDD (not selected)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('SysMain')) {
         return { stdout: '    Start    REG_DWORD    0x2', stderr: '' }
       }
-      if (args[0] === 'powershell' || cmd === 'powershell') {
+      if (args[0] === 'powershell' || _cmd === 'powershell') {
         return { stdout: '', stderr: '' }
       }
       return { stdout: '', stderr: '' }
@@ -1025,7 +1024,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects LLMNR enabled', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('EnableMulticast')) {
         return { stdout: '    EnableMulticast    REG_DWORD    0x1', stderr: '' }
       }
@@ -1037,7 +1036,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects WPAD enabled', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('WpadOverride')) {
         return { stdout: '    WpadOverride    REG_DWORD    0x0', stderr: '' }
       }
@@ -1049,7 +1048,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('detects Fax service enabled', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Fax')) {
         return { stdout: '    Start    REG_DWORD    0x3', stderr: '' }
       }
@@ -1061,7 +1060,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for NoDriveTypeAutoRun (catch branch)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('NoDriveTypeAutoRun')) {
         throw new Error('reg query failed')
       }
@@ -1073,7 +1072,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for LLMNR (catch branch)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('EnableMulticast')) {
         throw new Error('reg query failed')
       }
@@ -1085,7 +1084,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for WPAD (catch branch)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args.includes('WpadOverride')) {
         throw new Error('reg query failed')
       }
@@ -1097,7 +1096,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for AppCompatLM query', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('AppCompatFlags\\Layers') && args[1]?.startsWith('HKCU')) {
         throw new Error('query failed')
       }
@@ -1108,7 +1107,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for services query', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Services') && args.includes('/f')) {
         throw new Error('query failed')
       }
@@ -1119,7 +1118,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for FileExts OpenWithList query', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('FileExts') && !args[1]?.includes('UserChoice')) {
         throw new Error('query failed')
       }
@@ -1130,8 +1129,8 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles error path for scheduled tasks scan', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      if (cmd === 'powershell.exe' || args[0] === 'powershell.exe') {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (_cmd === 'powershell.exe' || args[0] === 'powershell.exe') {
         throw new Error('powershell failed')
       }
       return { stdout: '', stderr: '' }
@@ -1141,7 +1140,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('scans Browser Helper Objects with missing CLSID', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
         return {
           stdout:
@@ -1166,7 +1165,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('GhostBrowser.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1] === 'HKLM\\SOFTWARE\\Clients\\StartMenuInternet') {
         return { stdout: '\r\nHKLM\\SOFTWARE\\Clients\\StartMenuInternet\\GhostBrowser\r\n', stderr: '' }
       }
@@ -1181,7 +1180,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('scans FileExts UserChoice for missing ProgID', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('FileExts') && args.includes('UserChoice')) {
         return {
           stdout:
@@ -1200,7 +1199,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('scans MIME types for missing CLSID handler', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('MIME\\Database')) {
         return {
           stdout:
@@ -1228,7 +1227,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('GhostEvent.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1] === 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application') {
         return {
           stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\GhostSource\r\n',
@@ -1246,7 +1245,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('scans RDP with NLA check (RDP enabled, NLA disabled)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args.includes('fDenyTSConnections')) {
         return { stdout: '    fDenyTSConnections    REG_DWORD    0x0', stderr: '' }
       }
@@ -1267,7 +1266,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('uninstall.exe') || path.includes('GhostApp')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Uninstall')) {
         return {
           stdout:
@@ -1284,7 +1283,7 @@ describe('scanRegistry additional scan paths', () => {
 
   it('detects SysMain on SSD (selected)', async () => {
     mockExecFileAsync.mockResolvedValue({ stdout: 'SSD', stderr: '' })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('SysMain')) {
         return { stdout: '    Start    REG_DWORD    0x2', stderr: '' }
       }
@@ -1306,7 +1305,7 @@ describe('scanRegistry additional scan paths', () => {
       if (path.includes('MissingWithSpace.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    App    REG_SZ    C:\\Program Files\\MissingWithSpace.exe --flag', stderr: '' }
       }
@@ -1336,7 +1335,7 @@ describe('scanRegistry additional scan paths', () => {
   })
 
   it('handles pruneOldBackups via fixRegistryEntries with stale backups', async () => {
-    const { readdirSync, existsSync } = await import('node:fs')
+    const { readdirSync } = await import('node:fs')
     ;(readdirSync as ReturnType<typeof vi.fn>).mockReturnValue([
       'registry-backup-2026-01-01T00-00-00-000Z.reg',
       'registry-backup-2026-01-02T00-00-00-000Z.reg',
@@ -1532,7 +1531,7 @@ describe('clsidExists (via shell extensions)', () => {
   })
 
   it('finds CLSID in native view (first query succeeds)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (
         args[0] === 'query' &&
         args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000001') &&
@@ -1570,7 +1569,7 @@ describe('clsidExists (via shell extensions)', () => {
   })
 
   it('finds CLSID in WOW64 view (second query succeeds)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.startsWith('HKCR\\CLSID\\{A0000000-0000-0000-C000-000000000002')) {
         throw new Error('not in native')
       }
@@ -1648,7 +1647,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
       if (path.includes('missing.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       const query = args.join(' ')
       if (query.includes('ContextMenuHandlers') && !query.includes('CLSID')) {
         return {
@@ -1671,7 +1670,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
   })
 
   it('detects no-inproc (COM object has neither server type)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000004') && args[1]?.includes('InprocServer32')) {
         throw new Error('no inproc')
       }
@@ -1693,7 +1692,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
   })
 
   it('detects InprocServer32 exists with DLL path starting with % env var', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000005') && args[1]?.includes('InprocServer32')) {
         return { stdout: '    (Default)    REG_SZ    %SystemRoot%\\system32\\existing.dll', stderr: '' }
       }
@@ -1724,7 +1723,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
   it('detects InprocServer32 exists with LocalServer32 (returns null)', async () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('\\CLSID\\{A0000000-0000-0000-C000-000000000006') && args[1]?.includes('InprocServer32')) {
         return { stdout: '    (Default)    REG_SZ    C:\\Program Files\\existing.dll', stderr: '' }
       }
@@ -1818,7 +1817,7 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
   })
 
   it('detects interface with missing proxy stub CLSID', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (
         args[0] === 'query' &&
         args[1]?.includes('HKCR\\Interface') &&
@@ -1848,7 +1847,7 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
       if (path.includes('StubMissing.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (
         args[0] === 'query' &&
         args[1]?.includes('HKCR\\Interface') &&
@@ -1882,7 +1881,7 @@ describe('scanRegistry Interface scan (ProxyStubClsid32)', () => {
   })
 
   it('skips known good proxy CLSIDs', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (
         args[0] === 'query' &&
         args[1]?.includes('HKCR\\Interface') &&
@@ -1912,7 +1911,7 @@ describe('scanRegistry AutoPlay handlers', () => {
   })
 
   it('detects AutoPlay handler with missing ProgID', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('AutoplayHandlers\\Handlers')) {
         return {
           stdout:
@@ -1931,7 +1930,7 @@ describe('scanRegistry AutoPlay handlers', () => {
   })
 
   it('skips AutoPlay handler when key equals base key', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('AutoplayHandlers\\Handlers')) {
         return {
           stdout: '\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers\\Handlers\r\n',
@@ -1955,7 +1954,7 @@ describe('scanRegistry BHO with existing CLSID', () => {
   })
 
   it('detects BHO with existing CLSID but missing DLL (no-inproc)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
         return {
           stdout:
@@ -1990,7 +1989,7 @@ describe('scanRegistry BHO with existing CLSID', () => {
       if (path.includes('BhoMissing.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
         return {
           stdout:
@@ -2021,7 +2020,7 @@ describe('scanRegistry BHO with existing CLSID', () => {
   it('skips BHO with existing CLSID and valid DLL', async () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('Browser Helper Objects')) {
         return {
           stdout:
@@ -2061,19 +2060,23 @@ describe('scanRegistry third-party scheduled tasks', () => {
   it('detects third-party update task for uninstalled software', async () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      if (cmd === 'powershell.exe' && args[3]?.includes('Get-ScheduledTask') && !args[3]?.includes('thirdPartyTasks')) {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (
+        _cmd === 'powershell.exe' &&
+        args[3]?.includes('Get-ScheduledTask') &&
+        !args[3]?.includes('thirdPartyTasks')
+      ) {
         return { stdout: '', stderr: '' }
       }
       if (
-        cmd === 'powershell.exe' &&
+        _cmd === 'powershell.exe' &&
         args[3]?.includes('Get-ScheduledTask') &&
         args[3]?.includes('thirdPartyTasks') !== false
       ) {
         // Return with no third-party for the first call, matching tasks for second
         return { stdout: '', stderr: '' }
       }
-      if (cmd === 'powershell.exe') {
+      if (_cmd === 'powershell.exe') {
         const command = args[3] || ''
         if (!command.includes('thirdParty')) {
           // First task query returns nothing
@@ -2106,7 +2109,7 @@ describe('extractExePath edge cases (via Run keys)', () => {
       if (path.includes('FallbackApp.bat')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    App    REG_SZ    C:\\CustomBin\\FallbackApp.bat --quiet', stderr: '' }
       }
@@ -2127,7 +2130,7 @@ describe('extractExePath edge cases (via Run keys)', () => {
       if (path.includes('NoExtBinary')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    App    REG_SZ    C:\\CustomBin\\NoExtBinary --flag', stderr: '' }
       }
@@ -2232,7 +2235,7 @@ describe('expandEnvVars additional variables', () => {
       if (path.includes('GhostFolder')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('Installer\\Folders')) {
         return { stdout: '\r\n    %ProgramData%\\GhostFolder    REG_SZ    ', stderr: '' }
       }
@@ -2250,7 +2253,7 @@ describe('expandEnvVars additional variables', () => {
       if (path.includes('LocalAppMissing.dll')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('SharedDLLs')) {
         return { stdout: '\r\n    %LOCALAPPDATA%\\LocalAppMissing.dll    REG_DWORD    0x1', stderr: '' }
       }
@@ -2268,7 +2271,7 @@ describe('expandEnvVars additional variables', () => {
       if (path.includes('RoamingApp.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    App    REG_SZ    %APPDATA%\\RoamingApp.exe', stderr: '' }
       }
@@ -2286,7 +2289,7 @@ describe('expandEnvVars additional variables', () => {
       if (path.includes('UserProfileApp.exe')) return false
       return true
     })
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('MuiCache')) {
         return { stdout: '\r\n    %USERPROFILE%\\UserProfileApp.exe.FriendlyAppName    REG_SZ    Test', stderr: '' }
       }
@@ -2326,7 +2329,7 @@ describe('expandEnvVars additional variables', () => {
 // ----------------------------------------------------------------
 describe('negative vulnerability tests (no entries)', () => {
   beforeEach(() => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args.includes('EnableLUA')) {
         return { stdout: '    EnableLUA    REG_DWORD    0x1', stderr: '' }
       }
@@ -2421,7 +2424,7 @@ describe('additional edge cases', () => {
   })
 
   it('handles extractExePath with empty trimmed command', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    App    REG_SZ    ', stderr: '' }
       }
@@ -2433,7 +2436,7 @@ describe('additional edge cases', () => {
   })
 
   it('handles MIME CLSID that exists (no entry)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('MIME\\Database')) {
         return {
           stdout:
@@ -2454,7 +2457,7 @@ describe('additional edge cases', () => {
   it('handles EventLog with PrimaryModule (no entry)', async () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1] === 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application') {
         return {
           stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\TestWithPrimary\r\n',
@@ -2484,7 +2487,7 @@ describe('additional edge cases', () => {
   it('handles EventLog with % prefixed paths (skip via startsWith)', async () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1] === 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application') {
         return {
           stdout: '\r\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\PctSource\r\n',
@@ -2507,7 +2510,7 @@ describe('additional edge cases', () => {
   it('handles Run key with entry that has no exec path (just a DLL)', async () => {
     const { existsSync } = await import('node:fs')
     ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[0] === 'query' && args[1]?.includes('\\Run')) {
         return { stdout: '\r\n    RundllEntry    REG_SZ    rundll32.exe shell32.dll,Control_RunDLL', stderr: '' }
       }
@@ -2538,7 +2541,7 @@ describe('additional edge cases', () => {
   })
 
   it('handles AutoPlay handler with empty ProgID (skips)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('AutoplayHandlers\\Handlers')) {
         return {
           stdout:
@@ -2554,7 +2557,7 @@ describe('additional edge cases', () => {
   })
 
   it('handles clients with missing shell command to skip', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1] === 'HKLM\\SOFTWARE\\Clients\\StartMenuInternet') {
         return { stdout: '\r\nHKLM\\SOFTWARE\\Clients\\StartMenuInternet\\TestBrowser\r\n', stderr: '' }
       }
@@ -2569,7 +2572,7 @@ describe('additional edge cases', () => {
   })
 
   it('handles FileExts OpenWithList with path that does not include \\', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('FileExts') && !args[1]?.includes('UserChoice')) {
         return {
           stdout:

@@ -190,7 +190,7 @@ internal static class Program
             : MonitorHelper.GetMonitorFromWindowHandle(hwnd);
         Console.WriteLine($"  HMONITOR do jogo:  0x{gameMonitor:X8}");
 
-        for (int i = 0; adapter.EnumOutputs(i, out var output).Success; i++)
+        for (uint i = 0; adapter.EnumOutputs(i, out var output).Success; i++)
         {
             using var output1 = output.QueryInterface<IDXGIOutput1>();
             var desc = output1.Description;
@@ -468,7 +468,7 @@ internal static class Program
     {
         var list = new List<IDXGIAdapter1>();
         using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-        for (int i = 0; ; i++)
+        for (uint i = 0; ; i++)
         {
             var result = factory.EnumAdapters1(i, out var adapter);
             if (result.Failure || adapter == null) break;

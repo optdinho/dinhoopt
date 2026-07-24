@@ -504,6 +504,17 @@ public sealed class ClipExporterIntegrationTests
             var codec = RunFfprobe(resultPath, "stream=codec_name");
             Assert.NotNull(codec);
             Assert.Contains("h264", codec, StringComparison.OrdinalIgnoreCase);
+
+            // Verify audio stream exists and is AAC (regression: previously aac_adtstoasc BSF
+            // or missing CodecPrivate could silently drop audio from MP4)
+            var audioCodec = RunFfprobe(resultPath, "-select_streams a -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1");
+            Assert.NotNull(audioCodec);
+            Assert.Contains("aac", audioCodec, StringComparison.OrdinalIgnoreCase);
+
+            // Verify audio stream count is exactly 1
+            var audioStreamCount = RunFfprobe(resultPath, "-select_streams a -show_entries stream=index -of default=noprint_wrappers=1:nokey=1");
+            Assert.NotNull(audioStreamCount);
+            Assert.Single(audioStreamCount.Split('\n', StringSplitOptions.RemoveEmptyEntries));
         }
         finally
         {

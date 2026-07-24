@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type ImportDescriptor, parsePeImports } from './pe-parser'
+import { parsePeImports } from './pe-parser'
 
 // ─── Synthetic PE builder ──────────────────────────────────────────
 
@@ -16,23 +16,6 @@ interface ImportSpec {
   dllName: string
   functions: string[]
   ordinals: number[]
-}
-
-function computeImportDataSize(imports: ImportSpec[], is64: boolean): number {
-  const thunkSize = is64 ? 8 : 4
-  let size = (imports.length + 1) * 20 // descriptors + null terminator
-  for (const imp of imports) {
-    size += (imp.functions.length + imp.ordinals.length + 1) * thunkSize
-  }
-  for (const imp of imports) {
-    size += imp.dllName.length + 1
-  }
-  for (const imp of imports) {
-    for (const fn of imp.functions) {
-      size += 2 + fn.length + 1
-    }
-  }
-  return size
 }
 
 /**
@@ -82,8 +65,6 @@ function buildPe(imports: ImportSpec[], is64 = false): Buffer {
   const sectionHeaderStart = optionalHeaderStart + optHdrSize
   const headersEnd = sectionHeaderStart + SECTION_HEADER_SIZE
   const rawDataStart = Math.ceil(headersEnd / FILE_ALIGN) * FILE_ALIGN
-
-  const rvaToRaw = (rva: number): number => rawDataStart + (rva - SECTION_VA)
 
   const totalSize = rawDataStart + importDataTotal + 0x100
   const buf = Buffer.alloc(totalSize, 0)
@@ -158,7 +139,6 @@ function buildPe(imports: ImportSpec[], is64 = false): Buffer {
   let rawPos = rawDataStart
 
   for (let dllIdx = 0; dllIdx < imports.length; dllIdx++) {
-    const imp = imports[dllIdx]!
     const thunkRel = thunkRelOffsets[dllIdx]!
     const thunkRVA = SECTION_VA + thunkRel
     const nameRVA = SECTION_VA + dllNameRelOffsets[dllIdx]!
@@ -180,8 +160,7 @@ function buildPe(imports: ImportSpec[], is64 = false): Buffer {
     const imp = imports[dllIdx]!
     const byNameOffsets = importByNameRelOffsets[dllIdx]!
 
-    let fnIdx = 0
-    for (const fn of imp.functions) {
+    for (let fnIdx = 0; fnIdx < imp.functions.length; fnIdx++) {
       const fnRVA = SECTION_VA + byNameOffsets[fnIdx]!
       if (is64Bit) {
         buf.writeBigUInt64LE(BigInt(fnRVA), rawPos)
@@ -189,7 +168,6 @@ function buildPe(imports: ImportSpec[], is64 = false): Buffer {
         buf.writeUInt32LE(fnRVA, rawPos)
       }
       rawPos += thunkSize
-      fnIdx++
     }
 
     for (const ord of imp.ordinals) {
