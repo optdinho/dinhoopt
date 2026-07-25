@@ -12,13 +12,16 @@ export function AboutPage() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title={t('aboutUpdates')} />
+      <PageHeader title={t('sectionAbout')} />
 
       <div className="glass-card rounded-2xl p-6">
         <div className="flex items-center gap-4">
           <img src={logoSrc} alt="DiNho Optimizer" className="h-14 w-14 rounded-xl" />
           <div>
-            <p className="text-[16px] font-semibold text-white">{t('appVersion', { version: __APP_VERSION__ })}</p>
+            <p className="text-[16px] font-semibold text-white">DiNho Optimizer</p>
+            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+              {t('appVersion', { version: __APP_VERSION__ })}
+            </p>
           </div>
         </div>
 
