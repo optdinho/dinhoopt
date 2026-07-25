@@ -1,5 +1,5 @@
 {
-  "pageTitle": "Fortalecimento do Sistema",
+  "pageTitle": "Segurança e Privacidade",
   "descriptionWindows": "Reduza o Windows — remova telemetria, bloatware e serviços desnecessários",
   "descriptionOther": "Fortaleça o seu sistema — gerencie definições de privacidade e serviços desnecessários",
   "tabs": {
@@ -225,7 +225,7 @@
     "alreadyDisabled": "{{count}} já desativado(s)",
     "selectedCount": "{{count}} selecionado(s)",
     "columnService": "Serviço",
-    "columnStartupType": "Tipo de Arranque",
+    "columnStartupType": "Tipo de Inicialização",
     "columnStatus": "Estado",
     "columnDeps": "Depend.",
     "criticalBadge": "CRÍTICO",
@@ -236,7 +236,7 @@
     "confirmDescription": "Isto irá desativar {{count}} serviço(s) e parar quaisquer serviços atualmente em execução. Isto exige privilégios de administrador.",
     "confirmLabel": "Desativar Serviços",
     "confirmEnableTitle": "Reativar Serviços Selecionados",
-    "confirmEnableDescription": "Isto irá reativar {{count}} serviço(s) — o tipo de arranque será restaurado para o valor original ou definido como Manual.",
+    "confirmEnableDescription": "Isto irá reativar {{count}} serviço(s) — o tipo de inicialização será restaurado para o valor original ou definido como Manual.",
     "confirmEnableLabel": "Reativar Serviços",
     "scanFailedToast": "A análise de serviços falhou",
     "scanFailedError": "Falha ao analisar serviços",
