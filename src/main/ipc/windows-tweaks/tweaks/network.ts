@@ -276,7 +276,6 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
           action === 'apply'
             ? `
           $e = $null
-          try { netsh int tcp set global autotuning=normal } catch { $e = $_ }
           try { netsh int tcp set global chimney=disabled } catch { $e = $_ }
           try { netsh int tcp set global rss=enabled } catch { $e = $_ }
           try { netsh int tcp set global timestamps=disabled } catch { $e = $_ }
@@ -284,7 +283,6 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
           if ($e) { Write-Output "ERROR: $e" } else { Write-Output "OK" }
         `
             : `
-          try { netsh int tcp set global autotuning=normal } catch {}
           try { netsh int tcp set global chimney=enabled } catch {}
           try { netsh int tcp set global rss=default } catch {}
           try { netsh int tcp set global timestamps=default } catch {}

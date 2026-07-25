@@ -50,7 +50,6 @@ export function WindowsTweaksPage() {
   const gamingTimer = useWindowsTweaksStore((s) => s.gamingTimer)
   const gamingTimerLoading = useWindowsTweaksStore((s) => s.gamingTimerLoading)
   const [dnsStatus, setDnsStatus] = useState<string | null>(null)
-  const [timerStatus, setTimerStatus] = useState<string | null>(null)
 
   const CATEGORIES: CategoryDef[] = [
     { id: 'mouse', label: t('categories.mouse', 'Mouse'), icon: Mouse, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
@@ -525,8 +524,6 @@ export function WindowsTweaksPage() {
             >
               {t('revertTimerDefaults', 'Revert Timer to Defaults')}
             </button>
-
-            {timerStatus && <p className="text-xs text-zinc-500">{timerStatus}</p>}
           </div>
         ) : (
           <p className="text-xs text-zinc-500">{t('timerLoadFailed', 'Failed to load timer status.')}</p>

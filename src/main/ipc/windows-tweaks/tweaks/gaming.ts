@@ -11,9 +11,9 @@ export interface GamingTimerStatus {
   autoTuningDisabled: boolean
 }
 
-async function queryBcdEdit(query: string): Promise<string> {
+async function queryBcdEditEnum(): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('bcdedit', ['/enum', query], {
+    const { stdout } = await execFileAsync('bcdedit', ['/enum'], {
       timeout: 10000,
       windowsHide: true,
     })
@@ -23,23 +23,33 @@ async function queryBcdEdit(query: string): Promise<string> {
   }
 }
 
+function parseBcdValue(output: string, key: string): string | null {
+  const regex = new RegExp(`^\\s*${key}\\s+(.+?)\\s*$`, 'im')
+  const match = output.match(regex)
+  return match?.[1]?.trim() ?? null
+}
+
 async function getTimerStatus(): Promise<GamingTimerStatus> {
   try {
-    const [hpetOut, tscOut, tickOut, tuningOut] = await Promise.all([
-      queryBcdEdit('useplatformclock'),
-      queryBcdEdit('tscsyncpolicy'),
-      queryBcdEdit('disabledynamictick'),
+    const [bcdOut, tuningOut] = await Promise.all([
+      queryBcdEditEnum(),
       execFileAsync('netsh', ['int', 'tcp', 'show', 'global'], { timeout: 10000, windowsHide: true })
         .then((r) => r.stdout)
         .catch(() => ''),
     ])
 
-    const hpetOff = /No/i.test(hpetOut)
-    const dynamicTickDisabled = /Yes/i.test(tickOut)
+    const hpetValue = parseBcdValue(bcdOut, 'useplatformclock')
+    const hpetOff = hpetValue !== null ? /No/i.test(hpetValue) : false
 
+    const tickValue = parseBcdValue(bcdOut, 'disabledynamictick')
+    const dynamicTickDisabled = tickValue !== null ? /Yes/i.test(tickValue) : false
+
+    const tscValue = parseBcdValue(bcdOut, 'tscsyncpolicy')
     let tscSyncPolicy: GamingTimerStatus['tscSyncPolicy'] = 'default'
-    if (/legacy/i.test(tscOut)) tscSyncPolicy = 'legacy'
-    else if (/enhanced/i.test(tscOut)) tscSyncPolicy = 'enhanced'
+    if (tscValue) {
+      if (/legacy/i.test(tscValue)) tscSyncPolicy = 'legacy'
+      else if (/enhanced/i.test(tscValue)) tscSyncPolicy = 'enhanced'
+    }
 
     const autoTuningDisabled = /disabled/i.test(tuningOut) && !/normal/i.test(tuningOut)
 
@@ -182,6 +192,9 @@ export function registerGamingTweaks(_getWindow: WindowGetter): void {
 
       const r3 = await setDynamicTick(false)
       if (!r3.success) errors.push(`Dynamic Tick revert: ${r3.error}`)
+
+      const r4 = await setAutoTuning(false)
+      if (!r4.success) errors.push(`TCP AutoTuning revert: ${r4.error}`)
 
       if (errors.length > 0) {
         getLogger().error('windows-tweaks', `Gaming timer revert errors: ${errors.join('; ')}`)
