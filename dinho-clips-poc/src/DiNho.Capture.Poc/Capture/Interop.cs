@@ -397,9 +397,10 @@ namespace DiNho.Capture.Poc.Capture
     }
 
     /// <summary>
-    /// Detecção WDA (Window Display Affinity).
+    /// Detecção e configuração WDA (Window Display Affinity).
     /// Jogos que usam SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) não podem ser capturados.
     /// O WGC retorna frames pretos nesse caso.
+    /// Usamos WDA_EXCLUDEFROMCAPTURE para esconder a janela DnHo do próprio recording.
     /// </summary>
     internal static class WdaHelper
     {
@@ -407,13 +408,18 @@ namespace DiNho.Capture.Poc.Capture
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwFlags);
 
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
         public const uint WDA_NONE = 0x00;
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x01;
         public const uint WDA_EXCLUEFROMCAPTURE_WIN11 = 0x11; // Win11 name variant
+        public const uint WDA_EXCLUDEFROMCAPTURE_MODERN = 0x11; // Win11+ variant
 
         /// <summary>
-        /// Retorna true se a janela está excluída de captura (WDA_EXCLUDEFROMCAPTURE).
-        /// Nesse caso, WGC retorna frames pretos — deve-se fazer fallback para Hybrid/DDA.
+        /// Returns true if the window is excluded from capture (WDA_EXCLUDEFROMCAPTURE).
+        /// In that case, WGC returns black frames — must fallback to Hybrid/DDA.
         /// </summary>
         public static bool IsExcludedFromCapture(IntPtr hwnd)
         {
@@ -425,6 +431,60 @@ namespace DiNho.Capture.Poc.Capture
             }
             catch
             {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Sets WDA_EXCLUDEFROMCAPTURE on a window — hides it from WGC/DXGI capture.
+        /// Used to exclude the DnHo app window from recorded gameplay footage.
+        /// Returns true on success.
+        /// </summary>
+        public static bool ExcludeWindowFromCapture(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return false;
+            try
+            {
+                // Try Win10 constant (0x01) first — works on all Windows versions
+                var ok = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                if (!ok)
+                {
+                    // Fallback to Win11 constant (0x11) — some Win11 builds need this
+                    ok = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE_MODERN);
+                    if (ok)
+                        Log.I("WDA", $"SetWindowDisplayAffinity(0x{WDA_EXCLUDEFROMCAPTURE_MODERN:X}) OK (Win11 variant) on hwnd=0x{hwnd:X}");
+                }
+                else
+                {
+                    Log.I("WDA", $"SetWindowDisplayAffinity(0x{WDA_EXCLUDEFROMCAPTURE:X}) OK on hwnd=0x{hwnd:X}");
+                }
+                if (!ok)
+                    Log.W("WDA", $"SetWindowDisplayAffinity failed: Win32 error={Marshal.GetLastWin32Error()}");
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                Log.W("WDA", $"SetWindowDisplayAffinity exception: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Restores WDA_NONE on a window — makes it visible in capture again.
+        /// </summary>
+        public static bool RestoreWindowCapture(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return false;
+            try
+            {
+                var ok = SetWindowDisplayAffinity(hwnd, WDA_NONE);
+                if (ok)
+                    Log.I("WDA", $"SetWindowDisplayAffinity(WDA_NONE) OK — window visible in capture again");
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                Log.W("WDA", $"RestoreWindowCapture exception: {ex.Message}");
                 return false;
             }
         }

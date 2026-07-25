@@ -93,7 +93,10 @@ public sealed partial class EngineCoordinator
             var name = processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                 ? processName[..^4]
                 : processName;
-            return Process.GetProcessesByName(name).Length > 0;
+            var procs = Process.GetProcessesByName(name);
+            bool alive = procs.Length > 0;
+            foreach (var p in procs) p.Dispose();
+            return alive;
         }
         catch { return false; }
     }
@@ -111,7 +114,11 @@ public sealed partial class EngineCoordinator
             // 1) Exact match first
             var procs = System.Diagnostics.Process.GetProcessesByName(baseName);
             if (procs.Length > 0)
-                return BuildGameInfoFromProcess(procs[0]);
+            {
+                var info = BuildGameInfoFromProcess(procs[0]);
+                for (int i = 1; i < procs.Length; i++) procs[i].Dispose();
+                return info;
+            }
 
             // 2) Fuzzy match: strip build-number segments (e.g. _b3258_) then compare
             //    "FiveM_b3258_GTAProcess" → "FiveM_GTAProcess" after normalization
@@ -123,8 +130,9 @@ public sealed partial class EngineCoordinator
                     var normalizedProc = System.Text.RegularExpressions.Regex.Replace(proc.ProcessName, @"_b\d+_", "_", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (normalizedProc.Contains(normalizedBase, StringComparison.OrdinalIgnoreCase))
                         return BuildGameInfoFromProcess(proc);
+                    proc.Dispose();
                 }
-                catch { }
+                catch { try { proc.Dispose(); } catch { } }
             }
         }
         catch { }
@@ -323,7 +331,9 @@ public sealed partial class EngineCoordinator
             {
                 // Verifica se o processo do jogo ainda existe
                 var procs = Process.GetProcessesByName(_capturedGameProcess);
-                if (procs.Length == 0)
+                bool alive = procs.Length > 0;
+                foreach (var p in procs) p.Dispose();
+                if (!alive)
                 {
                     Log.I("EngineCoordinator", $"Jogo '{_capturedGameProcess}' fechou — parando captura");
                     _capturedGameProcess = null;

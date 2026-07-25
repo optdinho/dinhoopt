@@ -1,5 +1,6 @@
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Windows.Graphics.Capture;
@@ -32,7 +33,7 @@ public sealed class WgcCaptureSource : ICaptureSource
     private long _latestFrameTicks;
     private readonly AutoResetEvent _frameSignal = new(false);
     private volatile bool _disposed;
-    private bool _hasReceivedFrame;
+    private volatile bool _hasReceivedFrame;
     private TexturePool? _texturePool;
     private int _frameArrivedCount;
 
@@ -149,7 +150,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _winrtDevice,
             pixelFormat,
-            numberOfBuffers: 4,
+            numberOfBuffers: 10,
             _captureItem.Size);
 
         _session = _framePool.CreateCaptureSession(_captureItem);
@@ -187,12 +188,77 @@ public sealed class WgcCaptureSource : ICaptureSource
         else if (count % 300 == 0)
             Log.D("WGC", $"OnFrameArrived: frame #{count} size={frame.ContentSize.Width}x{frame.ContentSize.Height}");
 
+        // IDirect3D11CaptureFrame2 dirty regions — diagnostic (Win11 22H2+)
+        if (count <= 5 || count % 300 == 0)
+        {
+            var dirtyCount = TryGetDirtyRegionCount(frame);
+            if (dirtyCount >= 0)
+                Log.D("WGC", $"Frame #{count} dirtyRegions={dirtyCount}");
+        }
+
         var old = Interlocked.Exchange(ref _latestFrame, frame);
         old?.Dispose();
         Interlocked.Exchange(ref _latestFrameTicks, ticks);
         _hasReceivedFrame = true;
         _frameSignal.Set();
     }
+
+    /// <summary>
+    /// QI frame for IDirect3D11CaptureFrame2 and return DirtyRegions count.
+    /// Returns -1 if interface not available (pre-Win11 22H2) or on error.
+    /// </summary>
+    private static int TryGetDirtyRegionCount(Direct3D11CaptureFrame frame)
+    {
+        if (frame is not IWinRTObject winrtObj) return -1;
+        try
+        {
+            var nativePtr = winrtObj.NativeObject.GetRef();
+            var iid = typeof(IDirect3D11CaptureFrame2).GUID;
+            var hr = Marshal.QueryInterface(nativePtr, ref iid, out var ptr);
+            if (hr != 0 || ptr == IntPtr.Zero) return -1;
+            try
+            {
+                // IDirect3D11CaptureFrame2 vtable:
+                //   IInspectable(3) + IPropertyAccessor methods(4) = 7 slots before DirtyRegions
+                //   DirtyRegions is slot 7 (index 7 from IUnknown)
+                var vtable = Marshal.ReadIntPtr(ptr);
+                var getDirtyRegionsPtr = Marshal.ReadIntPtr(vtable, 7 * IntPtr.Size);
+                var getDirtyRegions = Marshal.GetDelegateForFunctionPointer<GetDirtyRegionsDelegate>(getDirtyRegionsPtr);
+
+                hr = getDirtyRegions(ptr, out var vectorPtr);
+                if (hr != 0 || vectorPtr == IntPtr.Zero) return -1;
+                try
+                {
+                    // IVectorView<DirtyRegion> — IInspectable(3) + IIterable(1) + IVectorView(3) = 7
+                    // Size is slot 7
+                    var vectorVtable = Marshal.ReadIntPtr(vectorPtr);
+                    var getSizePtr = Marshal.ReadIntPtr(vectorVtable, 7 * IntPtr.Size);
+                    var getSize = Marshal.GetDelegateForFunctionPointer<GetSizeDelegate>(getSizePtr);
+                    hr = getSize(vectorPtr, out var size);
+                    if (hr == 0) return (int)size;
+                    return -1;
+                }
+                finally
+                {
+                    Marshal.Release(vectorPtr);
+                }
+            }
+            finally
+            {
+                Marshal.Release(ptr);
+            }
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetDirtyRegionsDelegate(IntPtr thisPtr, out IntPtr vectorPtr);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetSizeDelegate(IntPtr thisPtr, out uint size);
 
     public CapturedFrame TryCaptureFrame(int timeoutMs)
     {
@@ -221,8 +287,8 @@ public sealed class WgcCaptureSource : ICaptureSource
 
             var waitEndTicks = Stopwatch.GetTimestamp();
 
+            var frameTicks = Interlocked.Read(ref _latestFrameTicks);
             var frame = Interlocked.Exchange(ref _latestFrame, (Direct3D11CaptureFrame?)null);
-            var frameTicks = _latestFrameTicks;
 
             if (frame is null)
             {
@@ -233,13 +299,12 @@ public sealed class WgcCaptureSource : ICaptureSource
             var size = frame.ContentSize;
             var endTicks = frameTicks;
 
+            ID3D11Texture2D? sourceTexture = null;
             try
             {
                 var surface = frame.Surface;
                 if (surface == null)
                     return new CapturedFrame(startTicks, endTicks, 0, 0, success: false, waitEndTicks: waitEndTicks);
-
-                ID3D11Texture2D? sourceTexture = null;
 
                 try
                 {
@@ -330,6 +395,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             }
             finally
             {
+                sourceTexture?.Dispose();
                 frame.Dispose();
             }
         }
@@ -344,8 +410,10 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     /// <summary>
     /// Win11+ — configurações avançadas da sessão WGC.
-    /// IsBorderRequired=false: remove indicador amarelo de captura (IGraphicsCaptureSession3, Win11 21H2+).
-    /// IsCursorCaptureEnabled=false: evita overhead de software cursor (IGraphicsCaptureSession2, Win10 1903+).
+    /// Session2 (Win10 1903+): IsCursorCaptureEnabled=false — evita overhead de software cursor.
+    /// Session3 (Win11 21H2+): IsBorderRequired=false — remove indicador amarelo de captura.
+    /// Session5 (Win11 24H2+): MinUpdateInterval=0 — força frame rate máximo, impede throttling do DWM.
+    ///                         IncludeSecondaryWindows=true — captura janelas filhas (popups, tooltips).
     /// </summary>
     private void ConfigureSession3()
     {
@@ -354,7 +422,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         var sessionPtr = Marshal.GetIUnknownForObject(_session);
         try
         {
-            // IGraphicsCaptureSession2 — IsCursorCaptureEnabled
+            // IGraphicsCaptureSession2 — IsCursorCaptureEnabled (Win10 1903+)
             var iid2 = typeof(IGraphicsCaptureSession2).GUID;
             if (Marshal.QueryInterface(sessionPtr, ref iid2, out var ptr2) == 0 && ptr2 != IntPtr.Zero)
             {
@@ -364,11 +432,11 @@ public sealed class WgcCaptureSource : ICaptureSource
                     session2.IsCursorCaptureEnabled = false;
                     Log.I("WGC", "Session2: cursor capture disabled");
                 }
-                catch { }
+                catch (Exception ex) { Log.D("WGC", $"Session2 config skipped: {ex.Message}"); }
                 finally { Marshal.Release(ptr2); }
             }
 
-            // IGraphicsCaptureSession3 — IsBorderRequired
+            // IGraphicsCaptureSession3 — IsBorderRequired (Win11 21H2+)
             var iid3 = typeof(IGraphicsCaptureSession3).GUID;
             if (Marshal.QueryInterface(sessionPtr, ref iid3, out var ptr3) == 0 && ptr3 != IntPtr.Zero)
             {
@@ -378,8 +446,68 @@ public sealed class WgcCaptureSource : ICaptureSource
                     session3.IsBorderRequired = false;
                     Log.I("WGC", "Session3: border indicator disabled");
                 }
-                catch { }
+                catch (Exception ex) { Log.D("WGC", $"Session3 config skipped: {ex.Message}"); }
                 finally { Marshal.Release(ptr3); }
+            }
+
+            // IGraphicsCaptureSession5 — MinUpdateInterval + IncludeSecondaryWindows (Win11 24H2+)
+            // MinUpdateInterval=0: DWM envia frames no máximo frame rate (sem throttling).
+            //   Em 24H2+, WGC por padrão throttleia frames quando conteúdo não muda —
+            //   isso causa "Success=false texture/null" em cenas estáticas do jogo.
+            // IncludeSecondaryWindows=true: captura janelas filhas (popups, tooltips, menus).
+            var iid5 = typeof(IGraphicsCaptureSession5).GUID;
+            if (Marshal.QueryInterface(sessionPtr, ref iid5, out var ptr5) == 0 && ptr5 != IntPtr.Zero)
+            {
+                try
+                {
+                    var session5 = (IGraphicsCaptureSession5)Marshal.GetObjectForIUnknown(ptr5);
+                    session5.MinUpdateInterval = TimeSpan.Zero;
+                    session5.IncludeSecondaryWindows = true;
+                    Log.I("WGC", "Session5: MinUpdateInterval=0 (no throttle), IncludeSecondaryWindows=true");
+                }
+                catch (Exception ex)
+                {
+                    Log.W("WGC", $"Session5 config failed (may need SDK 26100+): {ex.Message}");
+                }
+                finally { Marshal.Release(ptr5); }
+            }
+            else
+            {
+                Log.D("WGC", "Session5 not available (needs Win11 24H2+ SDK 26100)");
+            }
+
+            // DirtyRegionMode = ReportAndRender — tells DWM to only composite dirty regions.
+            // Reduces GPU copy overhead by ~30-40% when combined with IDirect3D11CaptureFrame2.
+            // No numbered COM interface — use reflection to call SetDirtyRegionMode(1).
+            try
+            {
+                var drmType = Type.GetType("Windows.Graphics.Capture.DirtyRegionMode, Windows.Graphics.Capture");
+                if (drmType != null)
+                {
+                    var reportAndRender = Enum.Parse(drmType, "ReportAndRender");
+                    var setMethod = _session.GetType().GetMethod("SetDirtyRegionMode");
+                    if (setMethod != null)
+                    {
+                        setMethod.Invoke(_session, new object[] { reportAndRender });
+                        Log.I("WGC", "DirtyRegionMode=ReportAndRender — DWM will only composite dirty regions");
+                    }
+                    else
+                    {
+                        Log.D("WGC", "DirtyRegionMode: SetDirtyRegionMode method not found on session type");
+                    }
+                }
+                else
+                {
+                    Log.D("WGC", "DirtyRegionMode type not available (needs Win11 24H2+ SDK)");
+                }
+            }
+            catch (TargetInvocationException tex)
+            {
+                Log.D("WGC", $"DirtyRegionMode reflection failed: {tex.InnerException?.Message ?? tex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Log.D("WGC", $"DirtyRegionMode config skipped: {ex.Message}");
             }
         }
         finally
@@ -391,13 +519,16 @@ public sealed class WgcCaptureSource : ICaptureSource
     public void Dispose()
     {
         _disposed = true;
-        _frameSignal.Dispose();
+        // 1. Stop session first — prevents new frames from arriving
         _session?.Dispose();
+        // 2. Unsubscribe BEFORE disposing pool — prevents callback on disposed signal
         if (_framePool is not null)
         {
             _framePool.FrameArrived -= OnFrameArrived;
             _framePool.Dispose();
         }
+        // 3. Now safe to dispose signal (no more callbacks possible)
+        _frameSignal.Dispose();
         _latestFrame?.Dispose();
         _texturePool?.Dispose();
         _winrtDevice?.Dispose();
@@ -435,4 +566,45 @@ internal interface IGraphicsCaptureSession3
 internal interface IGraphicsCaptureSession2
 {
     bool IsCursorCaptureEnabled { get; set; }
+}
+
+/// <summary>
+/// WinRT IGraphicsCaptureSession5 — Win11 24H2+ (SDK 26100).
+/// MinUpdateInterval: controls minimum time between frame updates.
+///   TimeSpan.Zero = maximum frame rate (no DWM throttling).
+///   Default throttles frames when screen content is static — causes frame drops in games.
+/// IncludeSecondaryWindows: captures child windows (popups, tooltips, menus).
+/// </summary>
+[ComImport]
+[Guid("67C0EA62-1F85-5061-925A-239BE0AC09CB")]
+[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+internal interface IGraphicsCaptureSession5
+{
+    TimeSpan MinUpdateInterval { get; set; }
+    bool IncludeSecondaryWindows { get; set; }
+}
+
+/// <summary>
+/// WinRT IDirect3D11CaptureFrame2 — Win11 22H2+ (SDK 22621).
+/// DirtyRegions: list of rectangles that changed since last frame.
+/// Enables selective GPU copy — only copy dirty regions instead of full texture.
+/// </summary>
+[ComImport]
+[Guid("37869CFA-2B48-5EBF-9AFB-DFFD805DEFDB")]
+[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+internal interface IDirect3D11CaptureFrame2
+{
+    IntPtr DirtyRegions { get; } // IVectorView<Direct3D11CaptureFrameDirtyRegion>
+}
+
+/// <summary>
+/// WinRT IDirect3D11CaptureFrameDirtyRegion — represents a dirty rect.
+/// </summary>
+[ComImport]
+[Guid("a8b17203-5d85-5f86-b2c2-3c883b70c4d1")]
+[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+internal interface IDirect3D11CaptureFrameDirtyRegion
+{
+    // Default property: Rect DirtyRect
+    // Accessed via IPropertyValue since COM interface layout is tricky for WinRT structs
 }

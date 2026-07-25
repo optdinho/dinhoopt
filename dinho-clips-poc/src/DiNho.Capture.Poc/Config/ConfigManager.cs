@@ -53,9 +53,9 @@ public sealed class AppConfig
     public int BitrateKbps { get; set; } = 20000;
 
     // CRF+VBV quality params (usados por NVENC/AV1)
-    public int Cq { get; set; } = 24;
-    public int MaxrateKbps { get; set; } = 50000;
-    public int BufsizeKbps { get; set; } = 100000;
+    public int Cq { get; set; } = 22;
+    public int MaxrateKbps { get; set; } = 30000;
+    public int BufsizeKbps { get; set; } = 60000;
     public int Bframes { get; set; } = 2;
     public int Lookahead { get; set; } = 4;
     public string EncoderPreset { get; set; } = "p4";

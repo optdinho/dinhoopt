@@ -1,0 +1,335 @@
+import { type Socket, connect as netConnect } from 'node:net'
+import { IPC } from '@shared/channels'
+import type { ClipsEngineStatus } from '@shared/types'
+import { BrowserWindow } from 'electron'
+import { config as C, buildEngineConfig } from '../services/clips-config-manager'
+import { getLogger } from '../services/logger.service'
+
+export const ENGINE_PIPE = '\\\\.\\pipe\\dinho-clips-engine'
+const PIPE_CONNECT_TIMEOUT = 10_000
+const PIPE_RECONNECT_DELAY = 3_000
+
+// ─── Pipe types ──────────────────────────────────────────────
+
+export interface PipeEnvelope {
+  v: number
+  cmd: string
+  payload?: Record<string, unknown>
+}
+
+export interface PipeMessage {
+  cmd: string
+  payload?: Record<string, unknown>
+}
+
+export type PendingRequest = {
+  resolve: (value: PipeMessage) => void
+  reject: (err: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
+// ─── State (owned by clips-engine-connection, accessed via getters/setters) ──
+
+let _pipeSocket: Socket | null = null
+let _pipeConnected = false
+let _pipeBuffer = ''
+
+export function getPipeSocket(): Socket | null {
+  return _pipeSocket
+}
+
+export function isPipeConnected(): boolean {
+  return _pipeConnected
+}
+
+export function setPipeConnected(v: boolean): void {
+  _pipeConnected = v
+}
+
+export function getPipeBuffer(): string {
+  return _pipeBuffer
+}
+
+export function setPipeBuffer(v: string): void {
+  _pipeBuffer = v
+}
+
+// ─── Request maps ────────────────────────────────────────────
+
+export const pendingRequests = new Map<string, PendingRequest>()
+export const longRunningPending = new Map<string, PendingRequest>()
+
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+// ─── Status getters (called from handlePipeMessage) ──────────
+
+// These are mutable references from clips-engine-connection
+type StatusUpdater = (src: Record<string, unknown>) => void
+
+let _statusUpdater: StatusUpdater | null = null
+let _getCurrentStatus: (() => ClipsEngineStatus) | null = null
+
+export function setStatusCallbacks(updater: StatusUpdater, getter: () => ClipsEngineStatus): void {
+  _statusUpdater = updater
+  _getCurrentStatus = getter
+}
+
+// ─── Pipe commands ───────────────────────────────────────────
+
+export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>): Promise<PipeMessage> {
+  return new Promise((resolve, reject) => {
+    if (!_pipeSocket || !_pipeConnected) {
+      reject(new Error('Pipe not connected'))
+      return
+    }
+    const existing = pendingRequests.get(cmd)
+    if (existing) {
+      clearTimeout(existing.timer)
+      pendingRequests.delete(cmd)
+    }
+
+    const envelope: PipeEnvelope = { v: 1, cmd, ...(payload !== undefined ? { payload } : {}) }
+    const line = `${JSON.stringify(envelope)}\n`
+    getLogger().info('clips-pipe', `Sending: cmd=${cmd} payload=${JSON.stringify(payload ?? null)}`)
+
+    const timer = setTimeout(() => {
+      pendingRequests.delete(cmd)
+      reject(new Error(`Command "${cmd}" timed out`))
+    }, 5000)
+
+    pendingRequests.set(cmd, { resolve, reject, timer })
+
+    try {
+      _pipeSocket.write(line)
+    } catch (err) {
+      pendingRequests.delete(cmd)
+      clearTimeout(timer)
+      reject(err instanceof Error ? err : new Error(String(err)))
+    }
+  })
+}
+
+export function sendPipeCommandLongRunning(
+  cmd: string,
+  payload?: Record<string, unknown>,
+  timeoutMs = 120_000,
+): Promise<PipeMessage> {
+  return new Promise((resolve, reject) => {
+    sendPipeCommand(cmd, payload)
+      .then((accepted) => {
+        if (accepted.payload?.status === 'accepted') {
+          const timer = setTimeout(() => {
+            longRunningPending.delete(cmd)
+            reject(new Error(`Long-running command "${cmd}" timed out after ${timeoutMs}ms`))
+          }, timeoutMs)
+          longRunningPending.set(cmd, { resolve, reject, timer })
+        } else {
+          resolve(accepted)
+        }
+      })
+      .catch(reject)
+  })
+}
+
+export async function sendWithFallback(
+  cmd: string,
+  payload?: Record<string, unknown>,
+): Promise<{ success: boolean; error?: string }> {
+  if (!_pipeConnected) {
+    return { success: false, error: 'Engine pipe not connected' }
+  }
+  try {
+    const resp = await sendPipeCommand(cmd, payload)
+    const p = resp.payload as Record<string, unknown> | undefined
+    if (p && typeof p === 'object' && 'Action' in p) {
+      if (p.Action === 'error') {
+        const val = p.Value as Record<string, unknown> | undefined
+        const errMsg = typeof val?.error === 'string' ? val.error : 'Command failed'
+        getLogger().warning('clips-pipe', `sendWithFallback cmd="${cmd}" engine error: ${errMsg}`)
+        return { success: false, error: errMsg }
+      }
+      return { success: true }
+    }
+    if (p?.success === false || p?.error) {
+      return { success: false, error: (p.error as string) || 'Command failed' }
+    }
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+// ─── Data handling ───────────────────────────────────────────
+
+export function onPipeData(chunk: Buffer): void {
+  _pipeBuffer += chunk.toString('utf-8')
+  const lines = _pipeBuffer.split('\n')
+  _pipeBuffer = lines.pop() || ''
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      const msg: PipeMessage = JSON.parse(trimmed)
+      handlePipeMessage(msg)
+    } catch {
+      getLogger().warning('clips-pipe', `Unparseable line: ${trimmed.slice(0, 200)}`)
+    }
+  }
+}
+
+function handlePipeMessage(msg: PipeMessage): void {
+  if (msg.cmd === '_event' && msg.payload?.type === 'commandResult') {
+    const originalCmd = String(msg.payload.originalCmd ?? '')
+    const pending = longRunningPending.get(originalCmd)
+    if (pending) {
+      longRunningPending.delete(originalCmd)
+      clearTimeout(pending.timer)
+      if (msg.payload.error) {
+        getLogger().warning('clips-pipe', `Long-running command "${originalCmd}" failed: ${msg.payload.error}`)
+        pending.reject(new Error(String(msg.payload.error)))
+      } else {
+        pending.resolve({ cmd: originalCmd, payload: msg.payload.value as Record<string, unknown> | undefined })
+      }
+    } else {
+      getLogger().warning('clips-pipe', `No pending long-running request for cmd="${originalCmd}"`)
+    }
+    return
+  }
+
+  if (msg.cmd === '_event' && msg.payload?.type === 'engineStatus') {
+    const p = msg.payload as Record<string, unknown>
+    const d = p.data as Record<string, unknown> | undefined
+    const src = d ?? p
+    getLogger().info(
+      'clips-pipe',
+      `Engine status: game="${src.game}" recording=${src.recording} fps=${src.fps} backend=${src.captureBackend}`,
+    )
+
+    _statusUpdater?.(src)
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (win && _getCurrentStatus) {
+      win.webContents.send(IPC.CLIPS_ENGINE_STATUS, _getCurrentStatus())
+    }
+    return
+  }
+
+  const pending = pendingRequests.get(msg.cmd)
+  if (pending) {
+    pendingRequests.delete(msg.cmd)
+    clearTimeout(pending.timer)
+    getLogger().info(
+      'clips-pipe',
+      `Received response for cmd="${msg.cmd}" payload=${JSON.stringify(msg.payload ?? null)}`,
+    )
+    pending.resolve(msg)
+  } else {
+    getLogger().info('clips-pipe', `No pending request for cmd="${msg.cmd}" (maybe late response)`)
+  }
+}
+
+// ─── Connection management ───────────────────────────────────
+
+let _onReconnect: (() => void) | null = null
+let _isEngineRunning: (() => boolean) | null = null
+
+export function setOnReconnect(cb: () => void): void {
+  _onReconnect = cb
+}
+
+export function setOnEngineRunning(cb: () => boolean): void {
+  _isEngineRunning = cb
+}
+
+export function connectPipe(): void {
+  if (_pipeSocket) {
+    _pipeSocket.destroy()
+    _pipeSocket = null
+  }
+  _pipeConnected = false
+
+  getLogger().info('clips-pipe', `Connecting to ${ENGINE_PIPE}...`)
+  const sock = netConnect(ENGINE_PIPE)
+  _pipeSocket = sock
+
+  sock.setTimeout(PIPE_CONNECT_TIMEOUT)
+
+  sock.on('connect', () => {
+    _pipeConnected = true
+    getLogger().info('clips-pipe', 'Connected to engine pipe')
+    _onReconnect?.()
+  })
+
+  sock.on('data', onPipeData)
+
+  sock.on('error', (err) => {
+    getLogger().warning('clips-pipe', `Pipe error: ${err.message}`)
+    _pipeConnected = false
+  })
+
+  sock.on('close', () => {
+    _pipeConnected = false
+    _pipeSocket = null
+    scheduleReconnect()
+  })
+
+  sock.on('timeout', () => {
+    getLogger().warning('clips-pipe', 'Pipe connect timeout')
+    sock.destroy()
+    _pipeConnected = false
+    scheduleReconnect()
+  })
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer) return
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    if (_isEngineRunning?.()) {
+      connectPipe()
+    }
+  }, PIPE_RECONNECT_DELAY)
+}
+
+export function disconnectPipe(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  for (const [, pending] of pendingRequests) {
+    clearTimeout(pending.timer)
+    pending.reject(new Error('Pipe disconnected'))
+  }
+  pendingRequests.clear()
+  for (const [, pending] of longRunningPending) {
+    clearTimeout(pending.timer)
+    pending.reject(new Error('Pipe disconnected'))
+  }
+  longRunningPending.clear()
+  if (_pipeSocket) {
+    _pipeSocket.destroy()
+    _pipeSocket = null
+  }
+  _pipeConnected = false
+}
+
+export async function waitForPipeConnection(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  let attempts = 0
+  while (Date.now() < deadline) {
+    if (_pipeConnected) {
+      getLogger().info('clips-pipe', `Pipe connected after ${attempts * 200}ms`)
+      return true
+    }
+    attempts++
+    if (attempts % 10 === 0) {
+      getLogger().info('clips-pipe', `Waiting for pipe... attempt ${attempts}/${Math.floor(timeoutMs / 200)}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  getLogger().error(
+    'clips-pipe',
+    `Pipe wait timeout after ${attempts * 200}ms (pipeSocket=${!!_pipeSocket}, pipeConnected=${_pipeConnected})`,
+  )
+  return _pipeConnected
+}

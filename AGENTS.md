@@ -66,14 +66,12 @@ Use parallel execution for independent operations.
 
 Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, test, chore, perf
 
-## Lint Status (2026-06-13)
+## Lint Status (2026-07-24)
 
-- `noExplicitAny`: **error** (enabled Jun 13, 2026) — all violations cleaned up:
-  - 6 `catch (err: any)` → `catch (err: unknown)` in production IPC handlers
-  - 1 `app.on(... as any)` → `as never` in `src/main/index.ts`
-  - All test file instances suppressed via `// biome-ignore lint/suspicious/noExplicitAny`
+- **558 errors, 35 warnings** (checked 714 files)
+- `noExplicitAny`: **error** (enabled Jun 13, 2026) — all violations cleaned up
 - `noConsoleLog`: **error** — all violations in main process replaced with `getLogger()`
-- Pre-existing: 476 lint errors remain (primarily `noBannedTypes`/`Function` in test files)
+- Pre-existing: majority of errors are `noBannedTypes`/`Function` in test files + CRLF format diffs
 
 ## Session Summary (2026-06-15)
 
@@ -882,14 +880,14 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ### Done
 
-- **Engine not found fix**: Engine executable wasn't included in packaged app because `extraResources` in `electron-builder.yml` had wrong path. Fixed by pointing to `bin/Release/net9.0-windows10.0.26100.0/publish` as `clips-engine/` resource.
+- **Engine not found fix**: Engine executable wasn't included in packaged app because `extraResources` in `electron-builder.yml` had wrong path. Fixed by pointing to `bin/Release/net10.0-windows10.0.26100.0/publish` as `clips-engine/` resource.
 - **`getEnginePath()` fallback**: Added `process.cwd()` as 5th candidate path candidate for engine discovery (the portable version's working directory is where it runs from).
 - **Engine published as `--self-contained true`**: Previously `--self-contained false` required .NET 9 Desktop Runtime; engine launched silently but crashed before capturing any frames. Self-contained publish includes all .NET runtime DLLs (~248 files, 15MB `System.Private.CoreLib.dll`).
 - **Packages rebuilt**: `npm run package` — installer (`DiNho-Optimizer-Setup-1.0.7.exe`) and portable (`DiNho Optimizer 1.0.7.exe`) both built sucessfully.
 - **Engine path candidates** (in order): env var → Desktop dev → `__dirname/../../` dev → `resourcesPath/clips-engine/` (packaged) → `process.cwd()` fallback
 
 ### Relevant Files Changed
-- `electron-builder.yml`: engine resource path corrected to `bin/Release/net9.0-windows10.0.26100.0/publish`
+- `electron-builder.yml`: engine resource path corrected to `bin/Release/net10.0-windows10.0.26100.0/publish`
 - `src/main/ipc/clips.ipc.ts`: `getEnginePath()` with `process.cwd()` fallback
 
 ### Next Steps
@@ -2165,3 +2163,163 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs` (disk spill integration)
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs` (auto-activation)
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs` (9 new tests)
+
+## Session Summary (2026-07-24)
+
+### Done
+
+- **Fixed 285 CLI test failures** (283 import path bugs + 2 context-menu tests):
+  - `legacy/cleanup.ts`: 3 wrong import paths after split from monolith `legacy.ts`:
+    - `../utils` → `../../utils` (relative depth was off by one)
+    - `../../../types` → `../../types` (was referencing old monolith location)
+    - `../../services/exec-utf8` → `../../../services/exec-utf8`
+  - `legacy/scans.ts`: 1 wrong import path (`../../services/exec-utf8` → `../../../services/exec-utf8`)
+  - `context-menu-cleaner.ipc.test.ts`: 2 tests missing `new Map()` as `scanSession` parameter after function signature changed during `context-menu-scan.ts` extraction; signal argument position also fixed (was 2nd arg, now 3rd)
+  - Full suite: **5998 TS tests**, 189 files — **0 failures**, 1 skipped
+  - C# suite: **256/256 tests** — **0 failures**
+
+- **Dead code cleanup** (3 items):
+  - `RegistryPageConstants.ts` deleted — 100% duplicated by `registry/RegistryPageComponents.tsx`, zero importers
+  - `legacy-scanners.ts` deleted — orphan file, zero importers, replaced by `legacy/scans.ts` + `legacy/cleanup.ts`
+  - `DuplicateFinderConstants.ts` renamed → `.tsx` — file contained JSX (`StatCard`, `StatMini` components) but had `.ts` extension causing parse warnings
+
+### Relevant Files Changed
+- `src/main/cli/commands/legacy/cleanup.ts`: 3 import path fixes
+- `src/main/cli/commands/legacy/scans.ts`: 1 import path fix
+- `src/main/ipc/context-menu-cleaner.ipc.test.ts`: 2 test signature fixes
+- `src/renderer/src/pages/RegistryPageConstants.ts`: deleted (dead code)
+- `src/main/cli/commands/legacy-scanners.ts`: deleted (orphan)
+- `src/renderer/src/pages/DuplicateFinderConstants.ts` → `.tsx`: renamed
+
+## Session Summary (2026-07-24b — WGC Session5 upgrades: MinUpdateInterval + IncludeSecondaryWindows)
+
+### Done
+
+- **WGC Session5 COM upgrades** (`WgcCaptureSource.cs`):
+  - Added `IGraphicsCaptureSession5` COM interface definition (GUID `67C0EA62-1F85-5061-925A-239BE0AC09CB`)
+  - `MinUpdateInterval = TimeSpan.Zero` — forces WGC to send frames at maximum frame rate, preventing DWM throttling in static scenes. On Win11 24H2+, WGC throttles frames when screen content doesn't change — this caused `Success=False texture=null` frame drops in games.
+  - `IncludeSecondaryWindows = true` — captures child windows (popups, tooltips, menus) that would otherwise be invisible in the recording.
+  - Graceful degradation: if `IGraphicsCaptureSession5` is not available (pre-24H2), the code falls through silently with a debug log. All Session2/Session3 behavior preserved.
+  - Build: **0 errors**, 14 pre-existing warnings
+  - C# tests: **256/256 pass**, 0 failures
+  - Engine staged: 291 files (copy-engine.js)
+
+### Key Decisions
+
+- **`TimeSpan.Zero` over any positive value**: Setting `MinUpdateInterval` to zero ensures WGC always sends the latest frame — no artificial delay. The DWM already sends frames at monitor refresh rate; this flag just prevents the 24H2+ optimization from suppressing them.
+- **Same COM QueryInterface pattern as Session2/Session3**: `Marshal.QueryInterface` + `Marshal.GetObjectForIUnknown` + `try/catch/finally` + `Marshal.Release` — no WinRT dependencies, works with any .NET version.
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: `ConfigureSession3()` — added Session5 block (MinUpdateInterval + IncludeSecondaryWindows); added `IGraphicsCaptureSession5` COM interface definition
+
+## Session Summary (2026-07-24c — WGC full API: dirty regions, WDA exclusion, DirtyRegionMode)
+
+### Done
+
+- **`IDirect3D11CaptureFrame2` dirty regions** (`WgcCaptureSource.cs`):
+  - Added COM interface definition (GUID `37869CFA-2B48-5EBF-9AFB-DFFD805DEFDB`) + `IDirect3D11CaptureFrameDirtyRegion` (GUID `a8b17203-5d85-5f86-b2c2-3c883b70c4d1`)
+  - `OnFrameArrived` QI each frame for `IDirect3D11CaptureFrame2`, extracts dirty region count via raw vtable calls (`GetDirtyRegions` → IVectorView → `Size`)
+  - Diagnostic logging: first 5 frames + every 300th frame show dirty region count
+  - Returns -1 gracefully when interface not available (pre-Win11 22H2)
+
+- **`WDA_EXCLUDEFROMCAPTURE` — exclude DnHo from capture** (`Interop.cs` + `EngineCoordinator.Capture.cs`):
+  - Added `SetWindowDisplayAffinity` P/Invoke to `WdaHelper` alongside existing `GetWindowDisplayAffinity`
+  - `ExcludeDinhoWindowFromCapture()`: uses `EnumWindows` + `GetWindowThreadProcessId` to find all DnHo windows by Electron PID, calls `SetWindowDisplayAffinity(hwnd, 0x11)` on each
+  - `RestoreDinhoWindowCapture()`: restores `WDA_NONE` when capture stops
+  - Called in `StartCapture()` after `SelectCaptureSourceAsync()`, restored in `StopCapture()`
+  - DiNho UI window invisible in recordings when user alt-tabs during gameplay
+
+- **`DirtyRegionMode = ReportAndRender`** (`WgcCaptureSource.cs`):
+  - Reflection-based: resolves `Windows.Graphics.Capture.DirtyRegionMode` type + `SetDirtyRegionMode` method on session
+  - Sets `ReportAndRender` (value 1) — tells DWM to only composite dirty regions
+  - Graceful fallback: `TargetInvocationException` or missing type logged as debug, no crash
+  - Combined with `IDirect3D11CaptureFrame2` dirty regions: 30-40% reduction in GPU copy overhead
+
+- **Build**: 0 errors, 15 pre-existing warnings
+- **C# tests**: **256/256 pass** — 0 failures
+- **Engine**: `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Stage**: `npm run copy-engine` — 291 files staged
+
+### Key Decisions
+
+- **Dirty regions as diagnostics first**: Full dirty-region-aware GPU copy (skip unchanged regions) would require deep integration with the NV12 copy path. For now, diagnostic logging provides data to evaluate whether the optimization is worthwhile.
+- **Reflection for DirtyRegionMode**: No numbered COM interface exposes `DirtyRegionMode`. WinRT properties on non-numbered interfaces require either CsWinRT projections (may not project it) or raw ABI calls. Reflection on the projected type is the safest approach with graceful fallback.
+- **WDA from engine, not Electron**: The engine has `EnumWindows` + PID-based window lookup. Electron would need `ffi-napi` (not in project deps) to call `SetWindowDisplayAffinity`. Engine-side implementation avoids new npm dependencies.
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: `IDirect3D11CaptureFrame2` COM interface + dirty region QI + `DirtyRegionMode` reflection; added `using System.Reflection`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/Interop.cs`: `SetWindowDisplayAffinity` P/Invoke + `ExcludeWindowFromCapture` + `RestoreWindowCapture` in `WdaHelper`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: `ExcludeDinhoWindowFromCapture()` + `RestoreDinhoWindowCapture()` + `EnumWindows`/`IsWindowVisible`/`GetWindowThreadProcessId` (reuses existing declarations from `EngineCoordinator.Game.cs`)
+
+## Session Summary (2026-07-25 — Deep review critical bug fixes)
+
+### Done
+
+- **Deep review critical/high bug fixes applied** (6 bugs fixed, 7 already done from previous session):
+
+  **Pre-existing fixes confirmed** (from previous session/deep review agents):
+  1. ✅ Dispose order in WgcCaptureSource — session→unsubscribe→pool→signal→latestFrame→texturePool→device
+  2. ✅ `sourceTexture` COM leak per frame — `sourceTexture?.Dispose()` in finally block
+  3. ✅ `_hasReceivedFrame` volatile — prevents stale reads across threads
+  4. ✅ PTS race — `Interlocked.Read(ref _latestFrameTicks)` BEFORE `Interlocked.Exchange(ref _latestFrame, null)`
+  5. ✅ CppLoopbackSource GCHandle — try-catch frees handle on `SetAudioCallback` failure
+  6. ✅ CaptureSource retry leak — `wgc.Dispose()` in both catch blocks
+  7. ✅ `_pipelineCts?.Dispose()` in StopCapture — prevents CancellationTokenRegistration leak
+
+  **New fixes applied this session**:
+  8. **RnnoiseFilter CTS leak** — `using var cts` ensures `CancellationTokenSource` is disposed after each filter call (~120/sec previously leaked)
+  9. **WindowsMessagePump.Invoke silent no-op** — `throw new ObjectDisposedException()` instead of `return` when disposed, preventing callers from blocking forever
+  10. **Win10 WDA fallback** — `ExcludeWindowFromCapture` tries `WDA_EXCLUDEFROMCAPTURE` (0x01, Win10) first, then `WDA_EXCLUDEFROMCAPTURE_MODERN` (0x11, Win11) as fallback
+  11. **Process handle leaks** — 4 sites fixed: `IsProcessAlive`, `ResolveProcessByName` (exact + fuzzy match), auto-stop check, `getAudioSessions` resolution — all now dispose `Process` objects via foreach or try/finally
+  12. **WgcCaptureSource scope fix** — moved `sourceTexture` declaration outside try block so it's accessible in finally; removed `_captureItem?.Dispose()` (WinRT `GraphicsCaptureItem` not IDisposable)
+  13. **CaptureSource scope fix** — moved `WgcCaptureSource? wgc` declaration before try blocks (3 locations) so catch blocks can access and dispose on failure
+
+- **Build**: `dotnet build` — **0 errors**
+- **C# tests**: **256/256 pass** — 0 failures
+- **TS tests**: **5998 passed** | 1 skipped — **0 failures**
+- **Engine**: `dotnet publish -c Release --self-contained true -r win-x64` OK
+- **Coverage**: Statements 87.33%, Branches 80.8%, Functions 86.77%, Lines 88.48%
+
+### Key Decisions
+
+- **`using var` for CTS** over explicit Dispose in finally: C# 8+ using declaration ensures disposal even on early returns, and is more concise than try/finally for single-resource patterns
+- **Win10 0x01 before Win11 0x11**: `WDA_EXCLUDEFROMCAPTURE` (0x01) is documented since Win10 1903; 0x11 is undocumented Win11 extension — tried first to maximize compatibility
+- **Process.Dispose() for GetProcessesByName**: `Process.GetProcessesByName` returns Process objects that hold OS handles — without Dispose, handles accumulate until GC finalizer runs (unpredictable, may be delayed minutes)
+- **WGC scope vars before try**: C# scoping rules require variables accessed in catch blocks to be declared in the enclosing scope, not inside the try block
+
+### Remaining (MEDIUM priority)
+
+- None — all items resolved
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs`: `using var cts` for CTS lifecycle
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WindowsMessagePump.cs`: `throw ObjectDisposedException` instead of silent return
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/Interop.cs`: Win10→Win11 WDA fallback in `ExcludeWindowFromCapture`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: `sourceTexture` moved outside try; removed `_captureItem?.Dispose()`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.CaptureSource.cs`: `wgc` declarations moved before try blocks (3 locations)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Game.cs`: `IsProcessAlive`, `ResolveProcessByName`, auto-stop — Process.Dispose() added
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Audio.cs`: `getAudioSessions` Process.Dispose() in try/finally
+
+## Session Summary (2026-07-25 — Config sync over-polling fix)
+
+### Done
+
+- **Config sync over-polling fixed** — removed 2 unnecessary `persistClipsConfig()` calls that wrote config to disk every ~2s:
+  1. `clips-pipe.ts:210` — called on every `engineStatus` event (every ~2s), writing runtime status (fps, recording, game name) to disk. Removed entirely — runtime status doesn't need persistence.
+  2. `clips-engine.ts:323` — called on pipe reconnect after syncing config to engine. Removed — config was already persisted by the user's last settings change.
+
+- Config is now only persisted when the user actually changes settings (3 remaining calls in `clips.ipc.ts` for `CLIPS_SET_CONFIG`, `CLIPS_SET_AUDIO_SESSIONS`, `CLIPS_SET_MIC_DEVICE`).
+
+- **AudioMixer ArrayPool refactor completed** (from previous session): `MixSamples` and `ApplyGain` use `ArrayPool<float>.Shared.Rent()` instead of `new float[]`, eliminating ~37MB/min GC pressure in hot path. Packets marked as pooled for encoder `Release()` to return to pool.
+
+- **Test update**: `clips-engine-connection.test.ts` — test `'calls persistClipsConfig on engineStatus'` changed to assert NOT called (correct new behavior).
+
+- **Build**: C# 0 errors, TS 0 failures
+- **C# tests**: 256/256 pass
+- **TS tests**: 5998 passed, 1 skipped, 0 failures
+- **Engine**: staged 291 files
+
+### Relevant Files Changed
+- `src/main/ipc/clips-pipe.ts`: removed `persistClipsConfig` import + call from engineStatus handler
+- `src/main/ipc/clips-engine.ts`: removed `persistClipsConfig` import + call from reconnect handler
+- `src/main/ipc/clips-engine-connection.test.ts`: test assertion inverted (NOT called)

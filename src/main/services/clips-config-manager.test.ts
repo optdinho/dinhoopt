@@ -11,9 +11,9 @@ vi.mock('./clips-config-store', () => ({
     width: 1920,
     height: 1080,
     bitrateKbps: 40000,
-    cq: 16,
-    maxrateKbps: 80000,
-    bufsizeKbps: 160000,
+    cq: 22,
+    maxrateKbps: 30000,
+    bufsizeKbps: 60000,
     bframes: 3,
     lookahead: 32,
     encoderPreset: 'p4',
@@ -97,9 +97,9 @@ describe('clips-config-manager', () => {
       expect(result.width).toBe(1920)
       expect(result.height).toBe(1080)
       expect(result.bitrateKbps).toBe(40000)
-      expect(result.cq).toBe(16)
-      expect(result.maxrateKbps).toBe(80000)
-      expect(result.bufsizeKbps).toBe(160000)
+      expect(result.cq).toBe(22)
+      expect(result.maxrateKbps).toBe(30000)
+      expect(result.bufsizeKbps).toBe(60000)
       expect(result.bframes).toBe(3)
       expect(result.lookahead).toBe(32)
       expect(result.encoderPreset).toBe('p4')
@@ -314,11 +314,11 @@ describe('clips-config-manager', () => {
         adaptiveQuality: undefined as unknown as boolean,
       })
       loadPersistedClipsConfig()
-      expect(config.cq).toBe(24)
-      expect(config.maxrateKbps).toBe(50000)
-      expect(config.bufsizeKbps).toBe(100000)
-      expect(config.bframes).toBe(2)
-      expect(config.lookahead).toBe(4)
+      expect(config.cq).toBe(22)
+      expect(config.maxrateKbps).toBe(30000)
+      expect(config.bufsizeKbps).toBe(60000)
+      expect(config.bframes).toBe(3)
+      expect(config.lookahead).toBe(32)
       expect(config.encoderPreset).toBe('p4')
       expect(config.codec).toBe('auto')
       expect(config.adapterIndex).toBe(-1)
@@ -345,9 +345,9 @@ describe('clips-config-manager', () => {
         width: 1920,
         height: 1080,
         bitrateKbps: 40000,
-        cq: 16,
-        maxrateKbps: 80000,
-        bufsizeKbps: 160000,
+        cq: 22,
+        maxrateKbps: 30000,
+        bufsizeKbps: 60000,
         bframes: 3,
         lookahead: 32,
         encoderPreset: 'p4',

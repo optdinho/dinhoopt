@@ -10,7 +10,6 @@ import type { OneClickPhase, OneClickResult } from '@/components/dashboard/types
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import { Skeleton } from '@/components/shared/Skeleton'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
@@ -23,51 +22,14 @@ import { useStartupStore } from '@/stores/startup-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { useUpdaterStore } from '@/stores/updater-store'
 import { CleanerType } from '@shared/enums'
-import type { CleanResult, DriveInfo, PerfQuickStats, ScanResult } from '@shared/types'
+import type { DriveInfo, PerfQuickStats } from '@shared/types'
 import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Zap } from 'lucide-react'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-const CLEANER_SCAN_FNS: {
-  type: CleanerType
-  scan: () => Promise<ScanResult[]>
-  clean: (ids: string[]) => Promise<CleanResult>
-}[] = [
-  { type: CleanerType.System, scan: () => window.dinho.systemScan(), clean: (ids) => window.dinho.systemClean(ids) },
-  { type: CleanerType.WinSxS, scan: () => window.dinho.winSxSScan(), clean: () => window.dinho.winSxSClean() },
-  { type: CleanerType.Browser, scan: () => window.dinho.browserScan(), clean: (ids) => window.dinho.browserClean(ids) },
-  { type: CleanerType.App, scan: () => window.dinho.appScan(), clean: (ids) => window.dinho.appClean(ids) },
-  { type: CleanerType.Gaming, scan: () => window.dinho.gamingScan(), clean: (ids) => window.dinho.gamingClean(ids) },
-  {
-    type: CleanerType.RecycleBin,
-    scan: () => window.dinho.recycleBinScan(),
-    clean: () => window.dinho.recycleBinClean(),
-  },
-  {
-    type: CleanerType.Shortcut,
-    scan: () => window.dinho.shortcutScan(),
-    clean: (ids) => window.dinho.shortcutClean(ids),
-  },
-  {
-    type: CleanerType.Environment,
-    scan: () => window.dinho.environmentScan(),
-    clean: (ids) => window.dinho.environmentClean(ids),
-  },
-  {
-    type: CleanerType.Database,
-    scan: () => window.dinho.databaseScan(),
-    clean: (ids) => window.dinho.databaseClean(ids),
-  },
-  {
-    type: CleanerType.UninstallLeftovers,
-    scan: () => window.dinho.uninstallLeftoversScan(),
-    clean: (ids) => window.dinho.uninstallLeftoversClean(ids),
-  },
-]
-
-// ── Component ────────────────────────────────────────────────
+import { CLEANER_SCAN_FNS, MiniGaugeSkeleton } from './dashboard/DashboardComponents'
 
 export function DashboardPage() {
   const { t } = useTranslation('dashboard')
@@ -475,8 +437,6 @@ export function DashboardPage() {
       ? Math.round((drives.reduce((s, d) => s + d.usedSpace, 0) / drives.reduce((s, d) => s + d.totalSize, 0)) * 100)
       : 0
 
-  // ── Helpers ────────────────────────────────────────────────
-
   const loading = !statsLoaded && drives.length === 0
 
   // ── Render ─────────────────────────────────────────────────
@@ -601,16 +561,6 @@ export function DashboardPage() {
         confirmLabel={t('fullCleanConfirmLabel')}
         variant="warning"
       />
-    </div>
-  )
-}
-
-function MiniGaugeSkeleton() {
-  return (
-    <div className="glass-card flex flex-col items-center gap-2 rounded-xl px-3 py-4">
-      <Skeleton className="h-10 w-10 rounded-lg" />
-      <Skeleton className="h-4 w-14" />
-      <Skeleton className="h-3 w-20" />
     </div>
   )
 }

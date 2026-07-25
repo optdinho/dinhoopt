@@ -10,175 +10,16 @@ import { usePrivacyStore } from '@/stores/privacy-store'
 import type { PrivacySetting } from '@shared/types'
 import {
   AlertTriangle,
-  BrainCircuit,
-  CalendarClock,
   CheckCircle2,
-  Compass,
-  Cpu,
   Eye,
-  Globe,
   Loader2,
-  Lock,
-  Megaphone,
-  Radio,
-  RefreshCw,
-  Search,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-
-interface CategoryDef {
-  id: PrivacySetting['category']
-  labelKey: string
-  descriptionKey: string
-  icon: LucideIcon
-  color: string
-  bg: string
-  border: string
-}
-
-const categories: CategoryDef[] = [
-  {
-    id: 'telemetry',
-    labelKey: 'privacyCategories.telemetryLabel',
-    descriptionKey: 'privacyCategories.telemetryDescription',
-    icon: Radio,
-    color: '#ef4444',
-    bg: 'rgba(239,68,68,0.08)',
-    border: 'rgba(239,68,68,0.15)',
-  },
-  {
-    id: 'ads',
-    labelKey: 'privacyCategories.adsLabel',
-    descriptionKey: 'privacyCategories.adsDescription',
-    icon: Megaphone,
-    color: '#f59e0b',
-    bg: 'rgba(245,158,11,0.08)',
-    border: 'rgba(245,158,11,0.15)',
-  },
-  {
-    id: 'search',
-    labelKey: 'privacyCategories.searchLabel',
-    descriptionKey: 'privacyCategories.searchDescription',
-    icon: Search,
-    color: '#3b82f6',
-    bg: 'rgba(59,130,246,0.08)',
-    border: 'rgba(59,130,246,0.15)',
-  },
-  {
-    id: 'sync',
-    labelKey: 'privacyCategories.syncLabel',
-    descriptionKey: 'privacyCategories.syncDescription',
-    icon: RefreshCw,
-    color: '#8b5cf6',
-    bg: 'rgba(139,92,246,0.08)',
-    border: 'rgba(139,92,246,0.15)',
-  },
-  {
-    id: 'services',
-    labelKey: 'privacyCategories.servicesLabel',
-    descriptionKey: 'privacyCategories.servicesDescription',
-    icon: Eye,
-    color: '#14b8a6',
-    bg: 'rgba(20,184,166,0.08)',
-    border: 'rgba(20,184,166,0.15)',
-  },
-  {
-    id: 'tasks',
-    labelKey: 'privacyCategories.tasksLabel',
-    descriptionKey: 'privacyCategories.tasksDescription',
-    icon: CalendarClock,
-    color: '#a3e635',
-    bg: 'rgba(163,230,53,0.08)',
-    border: 'rgba(163,230,53,0.15)',
-  },
-  {
-    id: 'kernel',
-    labelKey: 'privacyCategories.kernelLabel',
-    descriptionKey: 'privacyCategories.kernelDescription',
-    icon: Cpu,
-    color: '#a855f7',
-    bg: 'rgba(168,85,247,0.08)',
-    border: 'rgba(168,85,247,0.15)',
-  },
-  {
-    id: 'network',
-    labelKey: 'privacyCategories.networkLabel',
-    descriptionKey: 'privacyCategories.networkDescription',
-    icon: Globe,
-    color: '#06b6d4',
-    bg: 'rgba(6,182,212,0.08)',
-    border: 'rgba(6,182,212,0.15)',
-  },
-  {
-    id: 'access',
-    labelKey: 'privacyCategories.accessLabel',
-    descriptionKey: 'privacyCategories.accessDescription',
-    icon: Lock,
-    color: '#f97316',
-    bg: 'rgba(249,115,22,0.08)',
-    border: 'rgba(249,115,22,0.15)',
-  },
-  {
-    id: 'ai',
-    labelKey: 'privacyCategories.aiLabel',
-    descriptionKey: 'privacyCategories.aiDescription',
-    icon: BrainCircuit,
-    color: '#ec4899',
-    bg: 'rgba(236,72,153,0.08)',
-    border: 'rgba(236,72,153,0.15)',
-  },
-  {
-    id: 'browser',
-    labelKey: 'privacyCategories.browserLabel',
-    descriptionKey: 'privacyCategories.browserDescription',
-    icon: Compass,
-    color: '#0ea5e9',
-    bg: 'rgba(14,165,233,0.08)',
-    border: 'rgba(14,165,233,0.15)',
-  },
-]
-
-function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
-  const { t } = useTranslation('hardening')
-  const r = (size - 6) / 2
-  const circumference = 2 * Math.PI * r
-  const offset = circumference - (score / 100) * circumference
-  const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90" role="img" aria-label={t('scoreGaugeAria')}>
-        <title>{t('scoreGaugeAria')}</title>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--gauge-track)" strokeWidth={4} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={4}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          className="transition-all duration-700"
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className="text-[20px] font-bold" style={{ color }}>
-          {score}
-        </span>
-        <span className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>
-          / 100
-        </span>
-      </div>
-    </div>
-  )
-}
+import { categories, ScoreRing } from './privacy/PrivacyShieldComponents'
 
 export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('hardening')
@@ -235,12 +76,10 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
     try {
       const result = await window.dinho.privacyApply(unprotectedIds)
       usePrivacyStore.getState().setApplyResult(result)
-      // Re-scan to get updated state
       const updated = await window.dinho.privacyScan()
       usePrivacyStore.getState().setState(updated)
       usePrivacyStore.getState().setStatus('done')
 
-      // Log to history
       const catMap: Record<string, { found: number; applied: number }> = {}
       for (const id of unprotectedIds) {
         const setting = store.state!.settings.find((s) => s.id === id)
@@ -250,7 +89,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
           if (cat) cat.found++
         }
       }
-      // Mark succeeded ones
       const failedIds = new Set(result.errors.map((e) => e.id))
       for (const id of unprotectedIds) {
         const setting = store.state!.settings.find((s) => s.id === id)
@@ -370,7 +208,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
             { description: reason },
           )
         } else if (!actuallyChanged) {
-          // Operation reported success but system state didn't change (e.g. needs admin)
           toast.error(
             t(isEnabling ? 'privacy.settingApplyFailed' : 'privacy.settingRevertFailed', { label: setting.label }),
             { description: t('privacy.adminRequired') },
@@ -438,7 +275,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
       {/* Score + stats cards */}
       {state && !isScanning && (
         <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Privacy score */}
           <div
             className="rounded-2xl p-5 flex items-center gap-5"
             style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
@@ -456,7 +292,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
             </div>
           </div>
 
-          {/* Protection status */}
           <div
             className="rounded-2xl p-5"
             style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
@@ -489,7 +324,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
             </div>
           </div>
 
-          {/* Category breakdown */}
           <div
             className="rounded-2xl p-5"
             style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
@@ -546,7 +380,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
             )}
           </div>
 
-          {/* Progress bar */}
           <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: 'var(--bg-hover-2)' }}>
             <div
               className="h-full rounded-full transition-all duration-300"
@@ -557,7 +390,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
             />
           </div>
 
-          {/* Category pills showing which categories have been checked */}
           {progress && (
             <div className="flex flex-wrap gap-1.5">
               {categories.map((cat) => {
@@ -676,7 +508,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
                   pointerEvents: isApplying ? 'none' : 'auto',
                 }}
               >
-                {/* Category header */}
                 <button
                   type="button"
                   onClick={() => usePrivacyStore.getState().toggleCategory(cat.id)}
@@ -757,7 +588,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
                   </div>
                 </button>
 
-                {/* Expanded settings */}
                 {isExpanded && (
                   <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
                     {catSettings.map((setting, i) => {
@@ -797,7 +627,6 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
                             )}
                           </div>
 
-                          {/* Toggle switch */}
                           <button
                             type="button"
                             onClick={() => handleToggleSingle(setting.id)}

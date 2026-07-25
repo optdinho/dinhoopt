@@ -1,0 +1,344 @@
+using DiNho.Capture.Poc.Logging;
+using System.Text;
+using DiNho.Capture.Poc.Encoders;
+
+namespace DiNho.Capture.Poc.Export;
+
+public sealed partial class ClipExporter
+{
+    private static void WriteEbmlMaster(BinaryWriter bw, uint id, Action<BinaryWriter> body)
+    {
+        var ms = new MemoryStream();
+        using (var inner = new BinaryWriter(ms))
+        {
+            body(inner);
+        }
+        var data = ms.ToArray();
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, (ulong)data.Length);
+        bw.Write(data);
+    }
+
+    private static void WriteEbmlMasterBegin(BinaryWriter bw, uint id)
+    {
+        WriteEbmlId(bw, id);
+        bw.Write((byte)0xFF); // 1-byte VINT → all 7 data bits = 1 = unknown size
+    }
+
+    private static void WriteEbmlId(BinaryWriter bw, uint id)
+    {
+        if (id >= 0x10000000) bw.Write((byte)(id >> 24));
+        if (id >= 0x100000) bw.Write((byte)(id >> 16));
+        if (id >= 0x100) bw.Write((byte)(id >> 8));
+        bw.Write((byte)id);
+    }
+
+    private static void WriteEbmlVint(BinaryWriter bw, ulong value)
+    {
+        if (value < 0x7F) { bw.Write((byte)(0x80 | value)); return; }
+        if (value < 0x3FFF) { bw.Write((byte)(0x40 | (byte)(value >> 8))); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x1FFFFF) { bw.Write((byte)(0x20 | (byte)(value >> 16))); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x0FFFFFFF) { bw.Write((byte)(0x10 | (byte)(value >> 24))); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x07FFFFFFFF) { bw.Write((byte)(0x08 | (byte)(value >> 32))); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x03FFFFFFFFFFF) { bw.Write((byte)(0x04 | (byte)(value >> 40))); bw.Write((byte)((value >> 32) & 0xFF)); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        if (value < 0x01FFFFFFFFFFFFF) { bw.Write((byte)(0x02 | (byte)(value >> 48))); bw.Write((byte)((value >> 40) & 0xFF)); bw.Write((byte)((value >> 32) & 0xFF)); bw.Write((byte)((value >> 24) & 0xFF)); bw.Write((byte)((value >> 16) & 0xFF)); bw.Write((byte)((value >> 8) & 0xFF)); bw.Write((byte)(value & 0xFF)); return; }
+        bw.Write((byte)(0x01 | (byte)(value >> 56)));
+        bw.Write((byte)((value >> 48) & 0xFF));
+        bw.Write((byte)((value >> 40) & 0xFF));
+        bw.Write((byte)((value >> 32) & 0xFF));
+        bw.Write((byte)((value >> 24) & 0xFF));
+        bw.Write((byte)((value >> 16) & 0xFF));
+        bw.Write((byte)((value >> 8) & 0xFF));
+        bw.Write((byte)(value & 0xFF));
+    }
+
+    private static void WriteEbmlUnsignedInt(BinaryWriter bw, uint id, ulong value)
+    {
+        WriteEbmlId(bw, id);
+        if (value <= 0xFF) { WriteEbmlVint(bw, 1); bw.Write((byte)value); }
+        else if (value <= 0xFFFF) { WriteEbmlVint(bw, 2); var b = BitConverter.GetBytes((ushort)value); Array.Reverse(b); bw.Write(b); }
+        else if (value <= 0xFFFFFFFF) { WriteEbmlVint(bw, 4); var b = BitConverter.GetBytes((uint)value); Array.Reverse(b); bw.Write(b); }
+        else { WriteEbmlVint(bw, 8); var b = BitConverter.GetBytes(value); Array.Reverse(b); bw.Write(b); }
+    }
+
+    private static void WriteEbmlFloat(BinaryWriter bw, uint id, double value)
+    {
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, 4); // Matroska "float" = 32-bit IEEE 754 (4 bytes)
+        var b = BitConverter.GetBytes((float)value);
+        Array.Reverse(b);
+        bw.Write(b);
+    }
+
+    private static void WriteEbmlString(BinaryWriter bw, uint id, string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, (ulong)bytes.Length);
+        bw.Write(bytes);
+    }
+
+    private static void WriteEbmlBinary(BinaryWriter bw, uint id, byte[] data)
+    {
+        WriteEbmlId(bw, id);
+        WriteEbmlVint(bw, (ulong)data.Length);
+        bw.Write(data);
+    }
+
+    private static void WriteSimpleBlock(BinaryWriter bw, int trackNumber, int timecode, bool keyframe, byte[] data, int dataLength, int dataOffset = 0)
+    {
+        int payloadSize = 0;
+        int trackSize = trackNumber < 0x7F ? 1 : 2;
+        payloadSize += trackSize + 2 + 1 + dataLength; // track + timecode + flags + data
+        WriteEbmlId(bw, 0xA3);
+        WriteEbmlVint(bw, (ulong)payloadSize);
+
+        if (trackNumber < 0x7F)
+            bw.Write((byte)(0x80 | trackNumber));
+        else
+        {
+            bw.Write((byte)(0xC0 | (trackNumber >> 8)));
+            bw.Write((byte)(trackNumber & 0xFF));
+        }
+
+        var tcBytes = BitConverter.GetBytes((short)timecode);
+        Array.Reverse(tcBytes);
+        bw.Write(tcBytes);
+
+        byte flags = 0;
+        if (keyframe) flags |= 0x80;
+        bw.Write(flags);
+
+        bw.Write(data, dataOffset, dataLength);
+    }
+
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null, List<EncodedPacket>? audioPackets = null)
+    {
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
+            FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+        using var bw = new BinaryWriter(fs);
+
+        // Re-baseline PTS so the first frame starts at 0
+        var minPts = packets.Count > 0 ? packets[0].Pts : TimeSpan.Zero;
+        for (int i = 1; i < packets.Count; i++)
+            if (packets[i].Pts < minPts)
+                minPts = packets[i].Pts;
+        if (audioPackets != null)
+            foreach (var pkt in audioPackets)
+                if (pkt.Pts < minPts)
+                    minPts = pkt.Pts;
+
+        // EBML Header (known-size — ffmpeg must be able to skip it cleanly)
+        WriteEbmlMaster(bw, 0x1A45DFA3, (w) =>
+        {
+            WriteEbmlUnsignedInt(w, 0x4286, 1);  // EBMLVersion
+            WriteEbmlUnsignedInt(w, 0x42F7, 1);  // EBMLReadVersion
+            WriteEbmlUnsignedInt(w, 0x42F2, 4);  // EBMLMaxIDLength
+            WriteEbmlUnsignedInt(w, 0x42F3, 8);  // EBMLMaxSizeLength
+            WriteEbmlString(w, 0x4282, "matroska"); // DocType
+            WriteEbmlUnsignedInt(w, 0x4287, 4);  // DocTypeVersion
+            WriteEbmlUnsignedInt(w, 0x4285, 2);  // DocTypeReadVersion
+        });
+
+        // Segment (unknown size — ffmpeg doesn't need it for demux)
+        WriteEbmlMasterBegin(bw, 0x18538067); // Segment
+
+        // ── Info (known-size — required for ffmpeg when Segment has unknown size) ──
+        WriteEbmlMaster(bw, 0x1549A966, (w) =>
+        {
+            WriteEbmlUnsignedInt(w, 0x2AD7B1, 1_000_000); // TimecodeScale (1ms)
+            double totalSec = 0;
+            if (packets.Count >= 2)
+                totalSec = (packets[^1].Pts - minPts).TotalSeconds + packets[^1].Duration.TotalSeconds;
+            if (audioPackets?.Count >= 2)
+            {
+                double audioEnd = (audioPackets[^1].Pts - minPts).TotalSeconds + audioPackets[^1].Duration.TotalSeconds;
+                if (audioEnd > totalSec) totalSec = audioEnd;
+            }
+            if (totalSec > 0)
+                WriteEbmlFloat(w, 0x4489, totalSec * 1_000_000.0);
+            WriteEbmlString(w, 0x4D80, "DiNho Capture"); // MuxingApp
+            WriteEbmlString(w, 0x5741, "DiNho Capture"); // WritingApp
+        });
+
+        // ── Tracks (known-size) ──
+        WriteEbmlMaster(bw, 0x1654AE6B, (w) =>
+        {
+            // Track 1: Video
+            WriteEbmlMaster(w, 0xAE, (tw) =>
+        {
+            WriteEbmlUnsignedInt(tw, 0xD7, 1);  // TrackNumber
+            WriteEbmlUnsignedInt(tw, 0x73C5, 1); // TrackUID
+            WriteEbmlUnsignedInt(tw, 0x83, 1);  // TrackType (1=video)
+            WriteEbmlUnsignedInt(tw, 0x9A, 0);  // FlagDefault (audio é o default)
+            WriteEbmlUnsignedInt(tw, 0x9C, 1);  // FlagLacing
+            WriteEbmlString(tw, 0x437E, "und"); // Language (undetermined)
+            WriteEbmlString(tw, 0x86, rawFormat switch
+            {
+                "hevc" => "V_MPEG4/ISO/HEVC",
+                "av1" => "V_AV1",
+                _ => "V_MPEG4/ISO/AVC"
+            }); // CodecID
+
+            // CodecPrivate (avcC for H264, hvcC for HEVC, AV1CodecConfigurationRecord for AV1)
+            if (rawFormat == "h264")
+            {
+                var avcc = avccFallback ?? ExtractAvccExtradata(packets);
+                if (avcc != null)
+                {
+                    Log.I("Exporter", $"avcC len={avcc.Length} source={(avcc == avccFallback ? "encoder" : "packets")}");
+                    WriteEbmlBinary(tw, 0x63A2, avcc);
+                }
+                else
+                    Log.W("Exporter", "avcC CodecPrivate not found — MKV may not mux correctly");
+            }
+            else if (rawFormat == "hevc")
+            {
+                var hvcc = ExtractHvccExtradata(packets);
+                if (hvcc != null)
+                {
+                    Log.I("Exporter", $"hvcC len={hvcc.Length}");
+                    WriteEbmlBinary(tw, 0x63A2, hvcc);
+                }
+                else
+                    Log.W("Exporter", "hvcC CodecPrivate not found — MKV may not mux correctly");
+            }
+            else if (rawFormat == "av1")
+            {
+                var av1c = ExtractAv1Extradata(packets);
+                if (av1c != null)
+                {
+                    Log.I("Exporter", $"AV1CodecConfigurationRecord len={av1c.Length}");
+                    WriteEbmlBinary(tw, 0x63A2, av1c);
+                }
+                else
+                    Log.W("Exporter", "AV1CodecConfigurationRecord not found — MKV may not mux correctly");
+            }
+
+            WriteEbmlMaster(tw, 0xE0, (vw) => // Video
+            {
+                var vw_ = packets.Count > 0 ? (uint)packets[0].Width : 1920u;
+                var vh_ = packets.Count > 0 ? (uint)packets[0].Height : 1080u;
+                WriteEbmlUnsignedInt(vw, 0xB0, vw_);  // PixelWidth (mandatory)
+                WriteEbmlUnsignedInt(vw, 0xB2, vh_);  // PixelHeight (mandatory)
+                WriteEbmlUnsignedInt(vw, 0xB4, vw_);  // DisplayWidth
+                WriteEbmlUnsignedInt(vw, 0xBA, vh_);  // DisplayHeight
+            });
+        });
+
+            // Track 2: Audio (AAC) — only if audio packets are provided
+            if (audioPackets?.Count > 0)
+            {
+                var asc = BuildAudioSpecificConfig(audioPackets[0]);
+                var adtsProfile = (audioPackets[0].Data[2] >> 6) & 0x03;
+                var adtsSampleRateIdx = (audioPackets[0].Data[2] >> 2) & 0x0F;
+                var adtsChanConfig = ((audioPackets[0].Data[2] & 0x01) << 2) | ((audioPackets[0].Data[3] >> 6) & 0x03);
+                int[] sampleRates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000];
+                int sampleRate = adtsSampleRateIdx < sampleRates.Length ? sampleRates[adtsSampleRateIdx] : 48000;
+
+            WriteEbmlMaster(w, 0xAE, (tw) =>
+            {
+                WriteEbmlUnsignedInt(tw, 0xD7, 2);   // TrackNumber
+                WriteEbmlUnsignedInt(tw, 0x73C5, 2); // TrackUID
+                WriteEbmlUnsignedInt(tw, 0x83, 2);   // TrackType (2=audio)
+                WriteEbmlUnsignedInt(tw, 0x9A, 1);   // FlagDefault
+                WriteEbmlUnsignedInt(tw, 0x9C, 1);   // FlagLacing
+                WriteEbmlString(tw, 0x86, "A_AAC");  // CodecID
+                WriteEbmlString(tw, 0x437E, "und"); // Language (undetermined)
+                if (asc != null)
+                    WriteEbmlBinary(tw, 0x63A2, asc); // CodecPrivate (AudioSpecificConfig)
+                // AAC-LC encoder delay: 1024 samples — CodecDelay in nanoseconds
+                WriteEbmlUnsignedInt(tw, 0x56AA, (ulong)(1024L * 1_000_000_000 / sampleRate)); // CodecDelay
+                WriteEbmlMaster(tw, 0xE1, (aw) => // Audio
+                {
+                    WriteEbmlFloat(aw, 0xB5, sampleRate); // SamplingFrequency (float per Matroska spec)
+                    WriteEbmlUnsignedInt(aw, 0x9F, (uint)adtsChanConfig); // Channels
+                });
+            });
+            }
+
+        });
+
+        // ── Diagnostics: log first frame hex ──
+        bool loggedFirstFrame = false;
+
+        // ── Clusters (PTS re-baselined to minPts) ──
+        int clusterSize = 0;
+        const int maxClusterFrames = 1000;
+        long clusterBaseTimecode = 0;
+
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+
+            if (!loggedFirstFrame)
+            {
+                loggedFirstFrame = true;
+                var hex = new StringBuilder();
+                int dumpLen = Math.Min(pkt.DataLength, 128);
+                for (int i = 0; i < dumpLen; i++)
+                    hex.Append($"{pkt.Data[i]:X2} ");
+                Log.I("Exporter", $"first frame: pts={pkt.Pts.TotalMilliseconds:F0}ms len={pkt.DataLength}B key={pkt.IsKeyFrame} hex={hex.ToString().Trim()}");
+            }
+
+            long ptsMs = (pkt.Pts - minPts).Ticks / 10_000; // 100ns → ms, re-baselined
+
+            bool startNew = clusterSize == 0 ||
+                            clusterSize >= maxClusterFrames ||
+                            ptsMs - clusterBaseTimecode > 30000 ||
+                            ptsMs - clusterBaseTimecode > short.MaxValue;
+
+            if (startNew)
+            {
+                clusterSize = 0;
+                clusterBaseTimecode = ptsMs;
+                WriteEbmlMasterBegin(bw, 0x1F43B675); // Cluster
+                WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode (re-baselined ms)
+                clusterSize = 1;
+            }
+            else
+            {
+                clusterSize++;
+            }
+
+            int relTc = (int)(ptsMs - clusterBaseTimecode);
+            WriteSimpleBlock(bw, 1, relTc, pkt.IsKeyFrame, pkt.Data, pkt.DataLength);
+        }
+
+        // ── Audio Clusters ──
+        if (audioPackets?.Count > 0)
+        {
+            int audioClusterSize = 0;
+            long audioClusterBaseTimecode = 0;
+
+            foreach (var pkt in audioPackets)
+            {
+                if (pkt.Type != MediaType.Audio) continue;
+
+                long ptsMs = (pkt.Pts - minPts).Ticks / 10_000;
+
+                bool startNew = audioClusterSize == 0 ||
+                                audioClusterSize >= maxClusterFrames ||
+                                ptsMs - audioClusterBaseTimecode > 30000 ||
+                                ptsMs - audioClusterBaseTimecode > short.MaxValue;
+
+                if (startNew)
+                {
+                    audioClusterSize = 0;
+                    audioClusterBaseTimecode = ptsMs;
+                    WriteEbmlMasterBegin(bw, 0x1F43B675); // Cluster
+                    WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode
+                    audioClusterSize = 1;
+                }
+                else
+                {
+                    audioClusterSize++;
+                }
+
+                int relTc = (int)(ptsMs - audioClusterBaseTimecode);
+                WriteSimpleBlock(bw, 2, relTc, false, pkt.Data, pkt.DataLength);
+            }
+        }
+
+    }
+}

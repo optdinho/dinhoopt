@@ -52,9 +52,9 @@ export const config: ConfigState = {
   width: 1920,
   height: 1080,
   bitrateKbps: 40000,
-  cq: 16,
-  maxrateKbps: 80000,
-  bufsizeKbps: 160000,
+  cq: 22,
+  maxrateKbps: 30000,
+  bufsizeKbps: 60000,
   bframes: 3,
   lookahead: 32,
   encoderPreset: 'p4',
@@ -176,11 +176,11 @@ export function loadPersistedClipsConfig(): void {
   config.width = saved.width
   config.height = saved.height
   config.bitrateKbps = saved.bitrateKbps
-  config.cq = saved.cq ?? 24
-  config.maxrateKbps = saved.maxrateKbps ?? 50000
-  config.bufsizeKbps = saved.bufsizeKbps ?? 100000
-  config.bframes = saved.bframes ?? 2
-  config.lookahead = saved.lookahead ?? 4
+  config.cq = saved.cq ?? 22
+  config.maxrateKbps = saved.maxrateKbps ?? 30000
+  config.bufsizeKbps = saved.bufsizeKbps ?? 60000
+  config.bframes = saved.bframes ?? 3
+  config.lookahead = saved.lookahead ?? 32
   config.encoderPreset = saved.encoderPreset ?? 'p4'
   config.codec = saved.codec ?? 'auto'
   config.adapterIndex = saved.adapterIndex ?? -1

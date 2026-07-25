@@ -1,0 +1,477 @@
+using DiNho.Capture.Poc.Logging;
+using DiNho.Capture.Poc.Encoders;
+
+namespace DiNho.Capture.Poc.Export;
+
+public sealed partial class ClipExporter
+{
+    internal static List<EncodedPacket> GenerateSilentAacFrames(int count, TimeSpan startPts, int sampleRate, int channels = 2)
+    {
+        var frames = new List<EncodedPacket>(count);
+        long durTicks = 1024L * 10_000_000 / sampleRate;
+        var dur = TimeSpan.FromTicks(durTicks);
+
+        for (int i = 0; i < count; i++)
+        {
+            int frameLen = 9;
+            var data = new byte[frameLen];
+
+            int profile = 1; // AAC-LC
+            int sampleRateIdx = sampleRate switch
+            {
+                96000 => 0, 88200 => 1, 64000 => 2, 48000 => 3,
+                44100 => 4, 32000 => 5, 24000 => 6, 22050 => 7,
+                16000 => 8, 12000 => 9, 11025 => 10, 8000 => 11, _ => 3
+            };
+            int chanConfig = channels;
+
+            int h1 = 0xFFF1; // syncword=0xFFF, ID=0(MPEG4), layer=0, protection_absent=1
+            int h2 = (profile << 6) | (sampleRateIdx << 2) | (chanConfig >> 2);
+            int h3 = ((chanConfig & 3) << 6) | ((frameLen >> 11) & 0x03);
+            int h4 = (frameLen >> 3) & 0xFF;
+            int h5 = ((frameLen & 7) << 5) | 0x1F;
+            int h6 = 0xFC;
+
+            data[0] = (byte)(h1 >> 8);
+            data[1] = (byte)(h1 & 0xFF);
+            data[2] = (byte)h2;
+            data[3] = (byte)h3;
+            data[4] = (byte)h4;
+            data[5] = (byte)h5;
+            data[6] = (byte)h6;
+            data[7] = 0;
+            data[8] = 0;
+
+            var pts = startPts + TimeSpan.FromTicks(durTicks * i);
+            frames.Add(new EncodedPacket(data, MediaType.Audio, pts, dur, false));
+        }
+        return frames;
+    }
+
+    internal static List<(TimeSpan start, TimeSpan end)> GetVideoIntervals(List<EncodedPacket> videoPackets, TimeSpan gapThreshold)
+    {
+        var intervals = new List<(TimeSpan start, TimeSpan end)>();
+        if (videoPackets.Count == 0) return intervals;
+
+        for (int vi = 0; vi < videoPackets.Count; vi++)
+        {
+            var pkt = videoPackets[vi];
+            var s = pkt.Pts;
+            var e = s + pkt.Duration;
+            if (intervals.Count == 0 || s - intervals[^1].end > gapThreshold)
+                intervals.Add((s, e));
+            else
+                intervals[^1] = (intervals[^1].start, e);
+        }
+
+        return intervals;
+    }
+
+    internal static List<EncodedPacket> FilterAudioByIntervals(List<EncodedPacket> audioPackets, List<(TimeSpan start, TimeSpan end)> intervals)
+    {
+        if (audioPackets.Count == 0 || intervals.Count == 0) return audioPackets;
+
+        int intervalIdx = 0;
+        var result = new List<EncodedPacket>(audioPackets.Count);
+        foreach (var pkt in audioPackets)
+        {
+            while (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].end)
+                intervalIdx++;
+            if (intervalIdx < intervals.Count && pkt.Pts >= intervals[intervalIdx].start)
+                result.Add(pkt);
+        }
+
+        return result;
+    }
+
+    internal static double ComputeIntervalsDuration(List<(TimeSpan start, TimeSpan end)> intervals)
+    {
+        double total = 0;
+        foreach (var (start, end) in intervals)
+            total += (end - start).TotalSeconds;
+        return total;
+    }
+
+    internal static List<EncodedPacket> TrimAudioStart(List<EncodedPacket> audioPackets, TimeSpan firstVideoPts)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+
+        int skip = 0;
+        for (int i = 0; i < audioPackets.Count; i++)
+        {
+            if (audioPackets[i].Pts + audioPackets[i].Duration < firstVideoPts)
+                skip = i + 1;
+            else
+                break;
+        }
+
+        return skip > 0 ? audioPackets.GetRange(skip, audioPackets.Count - skip) : audioPackets;
+    }
+
+    internal static List<EncodedPacket> TrimAudioEnd(List<EncodedPacket> audioPackets, TimeSpan lastVideoPts)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+
+        int trimAt = audioPackets.Count;
+        for (int i = 0; i < audioPackets.Count; i++)
+        {
+            if (audioPackets[i].Pts + audioPackets[i].Duration > lastVideoPts)
+            {
+                trimAt = i;
+                break;
+            }
+        }
+
+        return trimAt < audioPackets.Count ? audioPackets.GetRange(0, trimAt) : audioPackets;
+    }
+
+    internal static int FindTrailingFrozenFrames(List<EncodedPacket> videoPackets, TimeSpan minFreezeDuration, int nominalFps)
+    {
+        for (int i = videoPackets.Count - 1; i > 0; i--)
+        {
+            var gap = videoPackets[i].Pts - (videoPackets[i - 1].Pts + videoPackets[i - 1].Duration);
+            if (gap >= minFreezeDuration)
+            {
+                int trailingFrames = videoPackets.Count - i;
+                if (trailingFrames > videoPackets.Count / 2)
+                {
+                    Log.W("PTS", $"FindTrailingFrozenFrames: gap at frame #{i} of {gap.TotalSeconds:F3}s but {trailingFrames}/{videoPackets.Count} frames would be discarded — assuming buffer boundary, keeping all frames");
+                    return videoPackets.Count;
+                }
+                Log.I("PTS", $"FindTrailingFrozenFrames: gap at frame #{i} of {gap.TotalSeconds:F3}s — truncating {trailingFrames} trailing frames");
+                return i;
+            }
+        }
+
+        return videoPackets.Count;
+    }
+
+    internal static List<EncodedPacket> PadAudioWithSilence(List<EncodedPacket> audioPackets, int sampleRate, int channels = 2, TimeSpan? expectedStart = null)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+
+        long durTicks = 1024L * 10_000_000 / sampleRate;
+        var gapThreshold = TimeSpan.FromMilliseconds(30);
+
+        var result = new List<EncodedPacket>(audioPackets.Count * 2);
+
+        // If expectedStart is set and audio starts later (e.g. WASAPI init delay), pad silence upfront
+        var expectedPts = expectedStart ?? audioPackets[0].Pts;
+        if (expectedStart.HasValue && audioPackets[0].Pts > expectedStart.Value + gapThreshold)
+        {
+            var gapSec = (audioPackets[0].Pts - expectedStart.Value).TotalSeconds;
+            int silentFrames = (int)(gapSec * sampleRate / 1024.0); // floor — remaining sub-frame gap handled by in-loop check
+            if (silentFrames > 0)
+            {
+                Log.I("PTS", $"PadAudioWithSilence: inserting {silentFrames} silent frames at start for init delay gap of {gapSec:F3}s");
+                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedStart.Value, sampleRate, channels));
+                expectedPts = expectedStart.Value + TimeSpan.FromTicks(durTicks * silentFrames);
+            }
+        }
+
+        foreach (var pkt in audioPackets)
+        {
+            // Insert silence at any PTS gap > 30ms (e.g. alt-tab gaps, buffer eviction gaps)
+            if (pkt.Pts > expectedPts + gapThreshold)
+            {
+                var gapSec = (pkt.Pts - expectedPts).TotalSeconds;
+                int silentFrames = (int)Math.Ceiling(gapSec * sampleRate / 1024.0);
+                result.AddRange(GenerateSilentAacFrames(silentFrames, expectedPts, sampleRate, channels));
+            }
+            result.Add(pkt);
+            expectedPts = pkt.Pts + pkt.Duration;
+        }
+
+        return result;
+    }
+
+    internal static byte[] ConvertAvccToAnnexB(byte[] avccData, int dataLength)
+    {
+        // Count NALUs to allocate exact buffer size
+        int nalCount = 0;
+        int pos = 0;
+        while (pos + 4 <= dataLength)
+        {
+            int nalLen = (avccData[pos] << 24) | (avccData[pos + 1] << 16) | (avccData[pos + 2] << 8) | avccData[pos + 3];
+            if (nalLen <= 0 || pos + 4 + nalLen > dataLength) break;
+            nalCount++;
+            pos += 4 + nalLen;
+        }
+
+        if (nalCount == 0) return avccData[..dataLength];
+
+        int annexBSize = dataLength - nalCount * 4 + nalCount * 3; // replace 4-byte len with 3-byte sc
+        var result = new byte[annexBSize];
+        int srcPos = 0;
+        int dstPos = 0;
+
+        while (srcPos + 4 <= dataLength)
+        {
+            int nalLen = (avccData[srcPos] << 24) | (avccData[srcPos + 1] << 16) | (avccData[srcPos + 2] << 8) | avccData[srcPos + 3];
+            if (nalLen <= 0 || srcPos + 4 + nalLen > dataLength) break;
+
+            // Write start code (0x00 0x00 0x01) instead of 4-byte length
+            result[dstPos] = 0;
+            result[dstPos + 1] = 0;
+            result[dstPos + 2] = 1;
+            dstPos += 3;
+
+            // Copy NAL data
+            System.Buffer.BlockCopy(avccData, srcPos + 4, result, dstPos, nalLen);
+            srcPos += 4 + nalLen;
+            dstPos += nalLen;
+        }
+
+        return result;
+    }
+
+    internal static byte[]? ExtractAvccExtradata(List<EncodedPacket> packets)
+    {
+        // Scan video packets for SPS (type 7) and PPS (type 8) NAL units.
+        // Data is in AVCC format: 4-byte big-endian length prefix + NAL unit.
+        byte[]? sps = null, pps = null;
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+            var data = pkt.Data;
+            int len = pkt.DataLength;
+            int pos = 0;
+            while (pos + 4 <= len)
+            {
+                int nalLen = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
+                if (nalLen <= 0 || pos + 4 + nalLen > len) break;
+                int nalStart = pos + 4;
+                int nalType = data[nalStart] & 0x1F;
+
+                if (nalType == 7 && sps == null)
+                {
+                    sps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, sps, 0, nalLen);
+                }
+                else if (nalType == 8 && pps == null)
+                {
+                    pps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, pps, 0, nalLen);
+                }
+
+                pos = nalStart + nalLen;
+            }
+            if (sps != null && pps != null) break;
+        }
+
+        if (sps == null || pps == null) return null;
+
+        return BuildAvcc(sps, pps);
+    }
+
+    internal static byte[]? BuildAvcc(byte[] sps, byte[] pps)
+    {
+        if (sps.Length < 4 || pps.Length == 0) return null;
+
+        byte[] cleanSps = RemoveEmulationPrevention(sps);
+        byte[] cleanPps = RemoveEmulationPrevention(pps);
+
+        int avccLen = 5 + 1 + 2 + cleanSps.Length + 1 + 2 + cleanPps.Length;
+        var avcc = new byte[avccLen];
+        avcc[0] = 1;
+        avcc[1] = cleanSps[1];
+        avcc[2] = cleanSps[2];
+        avcc[3] = cleanSps[3];
+        avcc[4] = 0xFC | 3;
+        avcc[5] = 0xE0 | 1;
+        avcc[6] = (byte)(cleanSps.Length >> 8);
+        avcc[7] = (byte)(cleanSps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanSps, 0, avcc, 8, cleanSps.Length);
+        int off = 8 + cleanSps.Length;
+        avcc[off] = 1;
+        avcc[off + 1] = (byte)(cleanPps.Length >> 8);
+        avcc[off + 2] = (byte)(cleanPps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanPps, 0, avcc, off + 3, cleanPps.Length);
+        return avcc;
+    }
+
+    internal static byte[] RemoveEmulationPrevention(byte[] nal)
+    {
+        int count = 0;
+        for (int i = 2; i < nal.Length; i++)
+            if (nal[i - 2] == 0 && nal[i - 1] == 0 && nal[i] == 3)
+                count++;
+
+        if (count == 0) return nal;
+
+        var result = new byte[nal.Length - count];
+        int ri = 0;
+        for (int i = 0; i < nal.Length; i++)
+        {
+            if (i >= 2 && nal[i - 2] == 0 && nal[i - 1] == 0 && nal[i] == 3)
+                continue;
+            result[ri++] = nal[i];
+        }
+        return result;
+    }
+
+    internal static byte[]? ExtractHvccExtradata(List<EncodedPacket> packets)
+    {
+        byte[]? vps = null, sps = null, pps = null;
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+            var data = pkt.Data;
+            int len = pkt.DataLength;
+            int pos = 0;
+            while (pos + 4 <= len)
+            {
+                int nalLen = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
+                if (nalLen <= 0 || pos + 4 + nalLen > len) break;
+                int nalStart = pos + 4;
+                int nalType = (data[nalStart] >> 1) & 0x3F;
+
+                if (nalType == 32 && vps == null)
+                {
+                    vps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, vps, 0, nalLen);
+                }
+                else if (nalType == 33 && sps == null)
+                {
+                    sps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, sps, 0, nalLen);
+                }
+                else if (nalType == 34 && pps == null)
+                {
+                    pps = new byte[nalLen];
+                    System.Buffer.BlockCopy(data, nalStart, pps, 0, nalLen);
+                }
+
+                pos = nalStart + nalLen;
+            }
+            if (vps != null && sps != null && pps != null) break;
+        }
+
+        if (vps == null || sps == null || pps == null) return null;
+        return BuildHvcc(vps, sps, pps);
+    }
+
+    internal static byte[] BuildHvcc(byte[] vps, byte[] sps, byte[] pps)
+    {
+        var cleanVps = RemoveEmulationPrevention(vps);
+        var cleanSps = RemoveEmulationPrevention(sps);
+        var cleanPps = RemoveEmulationPrevention(pps);
+
+        int profileSpace = (cleanSps[0] >> 6) & 0x03;
+        bool tierFlag = (cleanSps[0] & 0x20) != 0;
+        int profileIdc = cleanSps[0] & 0x1F;
+        int generalProfileCompat = (cleanSps[1] << 24) | (cleanSps[2] << 16) | (cleanSps[3] << 8) | cleanSps[4];
+        int generalLevelIdc = cleanSps[12];
+
+        int len = 23 + 2 + cleanVps.Length + 2 + cleanSps.Length + 2 + cleanPps.Length;
+        var hvcc = new byte[len];
+        hvcc[0] = 1;
+        hvcc[1] = (byte)((profileSpace << 6) | (tierFlag ? 0x20 : 0) | profileIdc);
+        hvcc[2] = (byte)(generalProfileCompat >> 24);
+        hvcc[3] = (byte)(generalProfileCompat >> 16);
+        hvcc[4] = (byte)(generalProfileCompat >> 8);
+        hvcc[5] = (byte)generalProfileCompat;
+        hvcc[10] = (byte)generalLevelIdc;
+        hvcc[11] = 0xF0;
+        hvcc[12] = 0xFC;
+        hvcc[13] = 0xFC;
+        hvcc[14] = 0xF8;
+        hvcc[15] = 0xF8;
+        hvcc[16] = 0; hvcc[17] = 0;
+        hvcc[18] = 0x0F;
+        hvcc[19] = 3;
+
+        int off = 20;
+        hvcc[off++] = 0x20;
+        hvcc[off++] = 0; hvcc[off++] = 1;
+        hvcc[off++] = (byte)(cleanVps.Length >> 8);
+        hvcc[off++] = (byte)(cleanVps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanVps, 0, hvcc, off, cleanVps.Length);
+        off += cleanVps.Length;
+
+        hvcc[off++] = 0x21;
+        hvcc[off++] = 0; hvcc[off++] = 1;
+        hvcc[off++] = (byte)(cleanSps.Length >> 8);
+        hvcc[off++] = (byte)(cleanSps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanSps, 0, hvcc, off, cleanSps.Length);
+        off += cleanSps.Length;
+
+        hvcc[off++] = 0x22;
+        hvcc[off++] = 0; hvcc[off++] = 1;
+        hvcc[off++] = (byte)(cleanPps.Length >> 8);
+        hvcc[off++] = (byte)(cleanPps.Length & 0xFF);
+        System.Buffer.BlockCopy(cleanPps, 0, hvcc, off, cleanPps.Length);
+
+        return hvcc;
+    }
+
+    internal static byte[]? ExtractAv1Extradata(List<EncodedPacket> packets)
+    {
+        foreach (var pkt in packets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+            var data = pkt.Data;
+            int len = pkt.DataLength;
+            int pos = 0;
+
+            while (pos < len)
+            {
+                if (pos + 2 > len) break;
+                int headerByte = data[pos];
+                int obuType = (headerByte >> 3) & 0x0F;
+                bool obuExtension = (headerByte & 0x04) != 0;
+                int headerLen = 1 + (obuExtension ? 1 : 0);
+
+                int sizeStart = pos + headerLen;
+                if (sizeStart >= len) break;
+                ulong obuSize = 0;
+                int shift = 0;
+                int sizeIdx = sizeStart;
+                while (sizeIdx < len && shift < 64)
+                {
+                    byte b = data[sizeIdx++];
+                    obuSize |= (ulong)(b & 0x7F) << shift;
+                    shift += 7;
+                    if ((b & 0x80) == 0) break;
+                }
+
+                int obuStart = sizeIdx;
+                int obuEnd = obuStart + (int)obuSize;
+                if (obuEnd > len) break;
+
+                if (obuType == 1)
+                {
+                    int seqHeaderLen = obuEnd - obuStart;
+                    var seqHeader = new byte[seqHeaderLen];
+                    System.Buffer.BlockCopy(data, obuStart, seqHeader, 0, seqHeaderLen);
+                    int seqProfile = seqHeader.Length > 0 ? (seqHeader[0] >> 5) & 0x07 : 0;
+
+                    return [
+                        0,
+                        (byte)((seqProfile << 5) | 0x1F),
+                        0x0C,
+                        0
+                    ];
+                }
+
+                pos = obuEnd;
+            }
+        }
+        return null;
+    }
+
+    internal static byte[]? BuildAudioSpecificConfig(EncodedPacket audioPkt)
+    {
+        if (audioPkt.Data == null || audioPkt.DataLength < 5) return null;
+        var data = audioPkt.Data;
+        if (data[0] != 0xFF || (data[1] & 0xF0) != 0xF0) return null; // not ADTS
+
+        int profile = (data[2] >> 6) & 0x03;
+        int sampleRateIdx = (data[2] >> 2) & 0x0F;
+        int channelConfig = ((data[2] & 0x01) << 2) | ((data[3] >> 6) & 0x03);
+        int audioObjectType = profile + 1;
+
+        return [ (byte)((audioObjectType << 3) | (sampleRateIdx >> 1)),
+                 (byte)(((sampleRateIdx & 0x01) << 7) | (channelConfig << 3)) ];
+    }
+}

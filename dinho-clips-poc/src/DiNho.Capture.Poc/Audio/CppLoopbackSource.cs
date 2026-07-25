@@ -39,6 +39,7 @@ public sealed class CppLoopbackSource : IAudioSource
     private readonly object _lock = new();
     private Thread? _pumpThread;
     private short[]? _shortBuffer;
+    private float[]? _floatBuffer;
 
     public int SampleRate => _sampleRate;
     public int Channels => _channels;
@@ -60,7 +61,16 @@ public sealed class CppLoopbackSource : IAudioSource
         _managedCallback = OnAudioCallback;
         _callbackHandle = GCHandle.Alloc(_managedCallback);
 
-        NativeMethods.SetAudioCallback(_managedCallback);
+        try
+        {
+            NativeMethods.SetAudioCallback(_managedCallback);
+        }
+        catch
+        {
+            _callbackHandle.Free();
+            _running = false;
+            throw;
+        }
 
         _captureThread = new Thread(CaptureThreadProc)
         {
@@ -116,7 +126,9 @@ public sealed class CppLoopbackSource : IAudioSource
 
         Marshal.Copy(data, _shortBuffer, 0, sampleCount);
 
-        var samples = new float[sampleCount];
+        var samples = _floatBuffer ?? new float[sampleCount];
+        if (samples.Length < sampleCount) samples = new float[sampleCount];
+        _floatBuffer = samples;
         for (int i = 0; i < sampleCount; i++)
             samples[i] = _shortBuffer[i] / 32768f;
 

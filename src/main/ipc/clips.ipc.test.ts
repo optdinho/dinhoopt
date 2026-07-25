@@ -432,8 +432,8 @@ describe('CLIPS_GET_CONFIG', () => {
     expect(cfg.height).toBe(1080)
     expect(cfg.bitrateKbps).toBe(40000)
 
-    expect(cfg.maxrateKbps).toBe(80000)
-    expect(cfg.bufsizeKbps).toBe(160000)
+    expect(cfg.maxrateKbps).toBe(30000)
+    expect(cfg.bufsizeKbps).toBe(60000)
     expect(cfg.bframes).toBe(3)
     expect(cfg.lookahead).toBe(32)
     expect(cfg.encoderPreset).toBe('p4')
@@ -621,9 +621,9 @@ describe('CLIPS_SET_CONFIG', () => {
         width: 1920,
         height: 1080,
         bitrateKbps: 15000,
-        cq: 24,
-        maxrateKbps: 50000,
-        bufsizeKbps: 100000,
+        cq: 22,
+        maxrateKbps: 30000,
+        bufsizeKbps: 60000,
         bframes: 2,
         lookahead: 4,
         encoderPreset: 'p4',
@@ -647,7 +647,7 @@ describe('CLIPS_SET_CONFIG', () => {
     const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
     expect(cfg.fps).toBe(60)
     expect(cfg.width).toBe(1920)
-    expect(cfg.cq).toBe(24)
+    expect(cfg.cq).toBe(22)
     expect(cfg.adapterIndex).toBe(0)
     expect(cfg.micEnabled).toBe(true)
     expect(cfg.forceSoftware).toBe(false)

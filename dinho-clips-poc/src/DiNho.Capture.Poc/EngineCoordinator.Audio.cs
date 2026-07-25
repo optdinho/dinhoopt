@@ -150,21 +150,28 @@ public sealed partial class EngineCoordinator
             else
             {
                 var matches = Process.GetProcessesByName(name.Replace(".exe", ""));
-                var found = matches.FirstOrDefault(p => !p.HasExited);
-                if (found != null)
+                try
                 {
-                    Log.I("EngineCoordinator", $"PID {pid} ({name}) morto na resolução — resolvido para PID {found.Id}");
-                    resolved[found.Id] = name;
-                    // Também inclui subprocessos do PID resolvido
-                    var children = GetChildProcesses(found.Id);
-                    foreach (var childPid in children)
+                    var found = matches.FirstOrDefault(p => !p.HasExited);
+                    if (found != null)
                     {
-                        if (!resolved.ContainsKey(childPid))
+                        Log.I("EngineCoordinator", $"PID {pid} ({name}) morto na resolução — resolvido para PID {found.Id}");
+                        resolved[found.Id] = name;
+                        // Também inclui subprocessos do PID resolvido
+                        var children = GetChildProcesses(found.Id);
+                        foreach (var childPid in children)
                         {
-                            resolved[childPid] = $"{name}>child#{childPid}";
-                            Log.I("EngineCoordinator", $"Subprocesso {childPid} de {name} (resolvido)");
+                            if (!resolved.ContainsKey(childPid))
+                            {
+                                resolved[childPid] = $"{name}>child#{childPid}";
+                                Log.I("EngineCoordinator", $"Subprocesso {childPid} de {name} (resolvido)");
+                            }
                         }
                     }
+                }
+                finally
+                {
+                    foreach (var m in matches) m.Dispose();
                 }
             }
         }

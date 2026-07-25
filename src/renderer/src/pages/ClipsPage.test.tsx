@@ -108,11 +108,11 @@ describe('ClipsPage', () => {
       width: 1920,
       height: 1080,
       bitrateKbps: 50000,
-      cq: 24,
-      maxrateKbps: 50000,
-      bufsizeKbps: 100000,
+      cq: 22,
+      maxrateKbps: 30000,
+      bufsizeKbps: 60000,
       bframes: 2,
-      lookahead: 32,
+      lookahead: 16,
       encoderPreset: 'p4',
       outputDirectory: 'C:\\Users\\Test\\Desktop\\DiNhoClips',
       forceSoftware: false,
@@ -314,11 +314,11 @@ describe('ClipsPage', () => {
       width: 1920,
       height: 1080,
       bitrateKbps: 50000,
-      cq: 24,
-      maxrateKbps: 50000,
-      bufsizeKbps: 100000,
+      cq: 22,
+      maxrateKbps: 30000,
+      bufsizeKbps: 60000,
       bframes: 2,
-      lookahead: 32,
+      lookahead: 16,
       encoderPreset: 'p4',
       outputDirectory: 'C:\\Users\\Test\\Desktop\\DiNhoClips',
       forceSoftware: false,
@@ -348,7 +348,7 @@ describe('ClipsPage', () => {
     showSettings()
     await screen.findByText('recordingQuality')
     screen.getByText('Alta').click()
-    expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ cq: 16, maxrateKbps: 80000 }))
+    expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ cq: 22, maxrateKbps: 30000 }))
   })
 
   it('renders force software toggle', async () => {

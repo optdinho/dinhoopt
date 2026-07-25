@@ -490,14 +490,14 @@ describe('applyContextMenu', () => {
   })
 
   it('returns empty result for empty requests', async () => {
-    const result = await applyContextMenu([])
+    const result = await applyContextMenu([], new Map())
     expect(result).toEqual({ succeeded: 0, failed: 0, errors: [], updates: [] })
   })
 
   it('returns entry-not-found for unknown entryId', async () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
     const requests: ContextMenuApplyRequest[] = [{ entryId: 'nonexistent', action: 'disable' }]
-    const result = await applyContextMenu(requests)
+    const result = await applyContextMenu(requests, new Map())
     expect(result.failed).toBe(1)
     expect(result.errors[0]!.reason).toBe('Entry not found — re-scan and try again.')
     expect(result.errors[0]!.entryId).toBe('nonexistent')
@@ -885,7 +885,7 @@ describe('applyContextMenu', () => {
     // Pass an abort signal by calling applyContextMenu directly with it
     // (the IPC handler doesn't forward signal, so we call the internal fn)
     const { applyContextMenu: acm } = await import('./context-menu-cleaner.ipc')
-    const result = await acm(reqs, undefined, controller.signal)
+    const result = await acm(reqs, new Map(), undefined, controller.signal)
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(0)
   })

@@ -19,28 +19,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-
-const SIZE_PRESETS = [
-  { label: '100 KB', value: 102_400 },
-  { label: '1 MB', value: 1_048_576 },
-  { label: '10 MB', value: 10_485_760 },
-  { label: '100 MB', value: 104_857_600 },
-]
-
-const EXT_PRESETS: Record<string, string[]> = {
-  images: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff'],
-  videos: ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'],
-  audio: ['.mp3', '.flac', '.wav', '.aac', '.ogg', '.wma', '.m4a'],
-  documents: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'],
-}
-
-const PHASE_LABELS: Record<string, string> = {
-  walking: 'phaseWalking',
-  grouping: 'phaseGrouping',
-  'partial-hash': 'phasePartialHash',
-  'full-hash': 'phaseFullHash',
-  complete: 'phaseComplete',
-}
+import { EXT_PRESETS, PHASE_LABELS, SIZE_PRESETS, SettingsPanel, StatCard, StatMini } from './duplicate-finder/DuplicateFinderComponents'
 
 export function DuplicateFinderPage() {
   const { t } = useTranslation('duplicates')
@@ -234,179 +213,24 @@ export function DuplicateFinderPage() {
 
       {/* Settings panel */}
       {showSettings && (
-        <div
-          className="mb-5 rounded-2xl p-5"
-          style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
-        >
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-            {/* Min file size */}
-            <fieldset>
-              <legend
-                className="mb-2 block text-[11px] font-semibold tracking-wide"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {t('minFileSize')}
-              </legend>
-              <div className="flex flex-wrap gap-1.5">
-                {SIZE_PRESETS.map((p) => (
-                  <button
-                    type="button"
-                    key={p.value}
-                    onClick={() => store.setMinFileSize(p.value)}
-                    className={cn(
-                      'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      store.minFileSize === p.value ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
-                    )}
-                    style={{
-                      background: store.minFileSize === p.value ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Max file size */}
-            <fieldset>
-              <legend
-                className="mb-2 block text-[11px] font-semibold tracking-wide"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {t('maxFileSize')}
-              </legend>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => store.setMaxFileSize(null)}
-                  className={cn(
-                    'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                    store.maxFileSize === null ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
-                  )}
-                  style={{
-                    background: store.maxFileSize === null ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
-                  }}
-                >
-                  {t('noLimit')}
-                </button>
-                {[104_857_600, 1_073_741_824, 5_368_709_120].map((v) => (
-                  <button
-                    type="button"
-                    key={v}
-                    onClick={() => store.setMaxFileSize(v)}
-                    className={cn(
-                      'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      store.maxFileSize === v ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
-                    )}
-                    style={{
-                      background: store.maxFileSize === v ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
-                    }}
-                  >
-                    {formatBytes(v, 0)}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Extension filter */}
-            <fieldset>
-              <legend
-                className="mb-2 block text-[11px] font-semibold tracking-wide"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {t('extensionFilter')}
-              </legend>
-              <div className="flex flex-wrap gap-1.5">
-                {(['all', 'images', 'videos', 'audio', 'documents'] as const).map((preset) => (
-                  <button
-                    type="button"
-                    key={preset}
-                    onClick={() => store.setExtensionFilter(preset === 'all' ? [] : (EXT_PRESETS[preset] ?? []))}
-                    className={cn(
-                      'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-                      activeExtPreset === preset ? 'text-amber-400' : 'text-zinc-500 hover:text-zinc-300',
-                    )}
-                    style={{
-                      background: activeExtPreset === preset ? 'rgba(245,158,11,0.1)' : 'var(--bg-subtle-2)',
-                    }}
-                  >
-                    {t(preset === 'all' ? 'allFiles' : preset)}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Max depth */}
-            <div>
-              <label
-                htmlFor="dup-max-depth"
-                className="mb-2 block text-[11px] font-semibold tracking-wide"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {t('maxDepth')}
-              </label>
-              <input
-                id="dup-max-depth"
-                type="number"
-                min={1}
-                max={50}
-                value={store.maxDepth}
-                onChange={(e) => store.setMaxDepth(Math.max(1, Math.min(50, Number.parseInt(e.target.value) || 20)))}
-                className="w-20 rounded-lg px-3 py-1.5 text-[13px] text-white"
-                style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
-              />
-            </div>
-
-            {/* Exclude patterns */}
-            <div className="col-span-2">
-              <label
-                htmlFor="dup-exclude-input"
-                className="mb-2 block text-[11px] font-semibold tracking-wide"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {t('excludePatterns')}
-              </label>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {store.excludePatterns.map((p) => (
-                  <span
-                    key={p}
-                    className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[12px] font-medium"
-                    style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}
-                  >
-                    {p}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveExclude(p)}
-                      className="text-zinc-600 hover:text-zinc-400"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                <div className="flex items-center gap-1">
-                  <input
-                    id="dup-exclude-input"
-                    type="text"
-                    value={excludeInput}
-                    onChange={(e) => setExcludeInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddExclude()}
-                    placeholder={t('excludePlaceholder')}
-                    className="w-48 rounded-lg px-2.5 py-1 text-[12px] text-white placeholder-zinc-600"
-                    style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddExclude}
-                    aria-label={t('addExcludeAria')}
-                    className="text-zinc-500 hover:text-zinc-300"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SettingsPanel
+          minFileSize={store.minFileSize}
+          maxFileSize={store.maxFileSize}
+          extensionFilter={store.extensionFilter}
+          maxDepth={store.maxDepth}
+          excludePatterns={store.excludePatterns}
+          activeExtPreset={activeExtPreset}
+          excludeInput={excludeInput}
+          setMinFileSize={store.setMinFileSize}
+          setMaxFileSize={store.setMaxFileSize}
+          setExtensionFilter={store.setExtensionFilter}
+          setMaxDepth={store.setMaxDepth}
+          setExcludePatterns={store.setExcludePatterns}
+          setExcludeInput={setExcludeInput}
+          onAddExclude={handleAddExclude}
+          onRemoveExclude={handleRemoveExclude}
+          t={t}
+        />
       )}
 
       {/* Scanning progress */}
@@ -682,31 +506,4 @@ export function DuplicateFinderPage() {
   )
 }
 
-// ── Small components ──
 
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div
-      className="rounded-xl px-4 py-3"
-      style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
-    >
-      <div className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-        {label}
-      </div>
-      <div className="mt-1 text-[18px] font-bold" style={{ color: accent ? 'var(--accent)' : 'var(--text-primary)' }}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
-function StatMini({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-        {label}:{' '}
-      </span>
-      <span className="text-[12px] font-medium text-white">{value}</span>
-    </div>
-  )
-}

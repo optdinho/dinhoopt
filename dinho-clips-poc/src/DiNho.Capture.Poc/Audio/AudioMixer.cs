@@ -265,12 +265,14 @@ public sealed class AudioMixer : IDisposable
         }
 
         float[] outSamples;
+        bool pooled = false;
         if (micOut != null)
         {
             try
             {
                 outSamples = MixSamples(loopback.Buffer.Samples, micOut,
                     loopback.Buffer.Samples.Length, _gameGain, _micGain);
+                pooled = true;
             }
             finally
             {
@@ -280,13 +282,19 @@ public sealed class AudioMixer : IDisposable
         else
         {
             // Só jogo — aplicar gain sem alocar novo array quando gain == 1.0
-            outSamples = _gameGain == 1.0f
-                ? loopback.Buffer.Samples
-                : ApplyGain(loopback.Buffer.Samples, _gameGain);
+            if (_gameGain == 1.0f)
+            {
+                outSamples = loopback.Buffer.Samples;
+            }
+            else
+            {
+                outSamples = ApplyGain(loopback.Buffer.Samples, _gameGain);
+                pooled = true;
+            }
         }
 
         EmitPacket(outSamples, loopback.Pts,
-            micOut != null ? AudioStreamKind.Mixed : AudioStreamKind.Game);
+            micOut != null ? AudioStreamKind.Mixed : AudioStreamKind.Game, pooled);
     }
 
     /// <summary>
@@ -315,7 +323,7 @@ public sealed class AudioMixer : IDisposable
     internal static float[] MixSamples(float[] game, float[] mic, int length,
                                         float gameGain, float micGain)
     {
-        var result = new float[length];
+        var result = ArrayPool<float>.Shared.Rent(length);
         for (int i = 0; i < length; i++)
         {
             float g = i < game.Length ? game[i] : 0f;
@@ -328,7 +336,7 @@ public sealed class AudioMixer : IDisposable
 
     private static float[] ApplyGain(float[] samples, float gain)
     {
-        var result = new float[samples.Length];
+        var result = ArrayPool<float>.Shared.Rent(samples.Length);
         for (int i = 0; i < samples.Length; i++)
             result[i] = SoftClip(samples[i] * gain);
         return result;
@@ -339,11 +347,11 @@ public sealed class AudioMixer : IDisposable
         return x / (1f + Math.Abs(x));
     }
 
-    private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind)
+    private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind, bool isPooled = false)
     {
         _emittedPackets++;
         var duration = TimeSpan.FromSeconds((double)samples.Length / (_sampleRate * _channels));
-        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration, isPooled: false);
+        var packet = new EncodedPacket(samples, MediaType.Audio, pts, duration, isPooled: isPooled);
 
         var now = Stopwatch.GetTimestamp();
         if (_emittedPackets <= 5 || now - _lastEmitLogTick >= LogThrottleTicks)

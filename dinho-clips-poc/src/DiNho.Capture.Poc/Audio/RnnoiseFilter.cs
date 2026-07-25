@@ -64,9 +64,9 @@ public sealed class RnnoiseFilter : IDisposable
         var inBytes = new byte[byteLen];
         System.Buffer.BlockCopy(input, 0, inBytes, 0, byteLen);
 
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
         try
         {
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             cts.CancelAfter(5000);
 
             var writeTask = stdin.WriteAsync(inBytes, 0, byteLen, cts.Token);
@@ -139,6 +139,7 @@ public sealed class RnnoiseFilter : IDisposable
         {
             return input;
         }
+        finally { cts.Dispose(); }
     }
 
     public void Dispose()

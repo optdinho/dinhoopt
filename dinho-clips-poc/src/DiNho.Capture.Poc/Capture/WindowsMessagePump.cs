@@ -34,7 +34,7 @@ internal sealed class WindowsMessagePump : IDisposable
     /// <summary>Marshal an action to the pump thread and wait for completion.</summary>
     public void Invoke(Action action)
     {
-        if (_disposed) return;
+        if (_disposed) throw new ObjectDisposedException(nameof(WindowsMessagePump));
         var done = new ManualResetEventSlim(false);
         Exception? error = null;
         _queue.Enqueue(() =>
@@ -60,13 +60,11 @@ internal sealed class WindowsMessagePump : IDisposable
 
             while (!_disposed)
             {
-                _workAvailable.Wait(TimeSpan.FromMilliseconds(100));
-                _workAvailable.Reset();
-
+                // Drain queued actions (Invoke calls from other threads)
                 while (_queue.TryDequeue(out var action))
                     action();
 
-                // Pump Windows messages (DWM delivers FrameArrived via message pump)
+                // Pump ALL pending Windows messages (DWM delivers FrameArrived via COM → PostMessage)
                 while (PeekMessage(out var msg, IntPtr.Zero, 0, 0, PM_REMOVE))
                 {
                     TranslateMessage(ref msg);
@@ -77,6 +75,12 @@ internal sealed class WindowsMessagePump : IDisposable
                 loopCount++;
                 if (loopCount % 500 == 0)
                     Log.D("WGC-Pump", $"Pump alive: loops={loopCount} msgs={msgCount} queueLen={_queue.Count}");
+
+                // Wait ≤4ms: fast enough for 60fps (16.67ms/frame), minimal CPU waste.
+                // Previous 100ms sleep caused ~6 frames lost per cycle because DWM
+                // frame delivery via COM was stuck in the queue while pump slept.
+                _workAvailable.Wait(TimeSpan.FromMilliseconds(4));
+                _workAvailable.Reset();
             }
 
             Log.I("WGC-Pump", $"Pump exiting: loops={loopCount} msgs={msgCount}");

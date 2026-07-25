@@ -724,14 +724,14 @@ describe('handlePipeMessage (via pipe data)', () => {
     // Should not throw
   })
 
-  it('calls persistClipsConfig on engineStatus', () => {
+  it('does NOT call persistClipsConfig on engineStatus (over-polling fix)', () => {
     triggerPipeData(
       JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus' },
       }) + '\n',
     )
-    expect(persistClipsConfig).toHaveBeenCalled()
+    expect(persistClipsConfig).not.toHaveBeenCalled()
   })
 
   it('resolves pending request with matching cmd', async () => {
