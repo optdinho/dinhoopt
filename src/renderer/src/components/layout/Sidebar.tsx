@@ -49,7 +49,6 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { BottomNav } from './BottomNav'
 import { NavItem } from './NavItem'
 import type { NavGroup, SectionColor } from './NavTypes'
 
@@ -131,6 +130,9 @@ const navGroups: NavGroup[] = [
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
       { icon: Wifi, labelKey: 'network', path: '/network' },
       { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
+      { icon: Settings, labelKey: 'settings', path: '/settings' },
+      { icon: History, labelKey: 'history', path: '/history' },
+      { icon: Info, labelKey: 'aboutUpdates', path: '/about' },
     ],
   },
 ]
@@ -524,23 +526,13 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         ))}
       </nav>
 
-      {/* ── Bottom: Settings + Status ── */}
-      <BottomNav
-        openSubmenu={openSubmenu}
-        isPathActive={isPathActive}
-        badgeCounts={effectiveBadgeCounts}
-        collapsed={collapsed}
-        onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
-        onCloseSubmenu={() => setOpenSubmenu(null)}
-      />
-
       {/* ── Status bar ── */}
       {!collapsed && (
         <div
-          className="flex items-center gap-2 px-4 py-2 text-[11px]"
+          className="flex items-center gap-1.5 px-3 py-1 text-[10px]"
           style={{ borderTop: '1px solid var(--border-subtle)', color: 'var(--text-faint)' }}
         >
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <div className="h-1 w-1 rounded-full bg-emerald-500" />
           <span className="flex-1">{t('systemHealthy', 'Sistema saudável')}</span>
         </div>
       )}
