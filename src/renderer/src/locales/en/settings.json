@@ -64,7 +64,7 @@
   "addButton": "Add",
   "sectionAbout": "About",
   "appVersion": "DiNho Optimizer v{{version}}",
-  "license": "MIT License · Open Source",
+  "license": "",
   "checkForUpdates": "Check for updates",
   "checkingForUpdates": "Checking for updates...",
   "upToDate": "You're up to date",

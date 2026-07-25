@@ -64,7 +64,7 @@
   "addButton": "Agregar",
   "sectionAbout": "Acerca de",
   "appVersion": "DiNho Optimizer v{{version}}",
-  "license": "Licencia MIT · Código abierto",
+  "license": "",
   "checkForUpdates": "Buscar actualizaciones",
   "checkingForUpdates": "Buscando actualizaciones...",
   "upToDate": "Está actualizado",
