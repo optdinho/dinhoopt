@@ -1,5 +1,4 @@
 import logoSrc from '@/assets/logo.png'
-import { PageHeader } from '@/components/layout/PageHeader'
 import { useAppUpdateStore } from '@/stores/app-update-store'
 import { AlertCircle, CheckCircle, Download, Loader, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -12,8 +11,6 @@ export function AboutPage() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title={t('sectionAbout')} />
-
       <div className="glass-card rounded-2xl p-6">
         <div className="flex items-center gap-4">
           <img src={logoSrc} alt="DiNho Optimizer" className="h-14 w-14 rounded-xl" />
