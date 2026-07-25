@@ -130,9 +130,16 @@ const navGroups: NavGroup[] = [
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
       { icon: Wifi, labelKey: 'network', path: '/network' },
       { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
-      { icon: Settings, labelKey: 'settings', path: '/settings' },
-      { icon: History, labelKey: 'history', path: '/history' },
-      { icon: Info, labelKey: 'aboutUpdates', path: '/about' },
+      {
+        icon: Settings,
+        labelKey: 'settings',
+        path: '/settings',
+        children: [
+          { icon: Settings, labelKey: 'preferences', path: '/settings' },
+          { icon: History, labelKey: 'history', path: '/history' },
+          { icon: Info, labelKey: 'aboutUpdates', path: '/about' },
+        ],
+      },
     ],
   },
 ]
@@ -232,9 +239,6 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         }
       }
     }
-    pages.push({ icon: Settings, labelKey: 'settings', path: '/settings', section: t('sectionOther') })
-    pages.push({ icon: History, labelKey: 'history', path: '/history', section: t('sectionOther') })
-    pages.push({ icon: Info, labelKey: 'aboutUpdates', path: '/about', section: t('sectionOther') })
     return pages
   }, [t, i18n.language])
 
