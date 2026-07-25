@@ -3,7 +3,7 @@
   "pageDescription": "Analise e otimize o uso de memória RAM do sistema. Liberte memória ocupada por processos e caches desnecessários.",
   "memoryUsage": "Uso de Memória",
   "healthScore": "Pontuação de Saúde",
-  "topProcesses": "Top Processos",
+  "topProcesses": "Principais Processos",
   "allProcesses": "Todos os Processos",
   "processName": "Processo",
   "memory": "Memória",

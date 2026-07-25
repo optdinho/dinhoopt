@@ -26,6 +26,10 @@ interface DriverState {
   installResult: DriverUpdateInstallResult | null
   updateError: string | null
 
+  // All installed drivers (with isUpToDate flag)
+  allDrivers: DriverUpdate[]
+  showUpToDateDrivers: boolean
+
   // Combined
   applying: boolean
   hasScanned: boolean
@@ -52,6 +56,9 @@ interface DriverState {
   selectAllUpdates: () => void
   deselectAllUpdates: () => void
 
+  setAllDrivers: (drivers: DriverUpdate[]) => void
+  setShowUpToDateDrivers: (show: boolean) => void
+
   setApplying: (applying: boolean) => void
   setHasScanned: (hasScanned: boolean) => void
   reset: () => void
@@ -75,6 +82,8 @@ export const useDriverStore = create<DriverState>((set, get) => ({
   installing: false,
   installResult: null,
   updateError: null,
+  allDrivers: [],
+  showUpToDateDrivers: false,
   applying: false,
   hasScanned: false,
 
@@ -117,6 +126,9 @@ export const useDriverStore = create<DriverState>((set, get) => ({
       updates: s.updates.map((u) => ({ ...u, selected: false })),
     })),
 
+  setAllDrivers: (allDrivers) => set({ allDrivers }),
+  setShowUpToDateDrivers: (showUpToDateDrivers) => set({ showUpToDateDrivers }),
+
   setApplying: (applying) => set({ applying }),
   setHasScanned: (hasScanned) => set({ hasScanned }),
   reset: () =>
@@ -134,6 +146,8 @@ export const useDriverStore = create<DriverState>((set, get) => ({
       installing: false,
       installResult: null,
       updateError: null,
+      allDrivers: [],
+      showUpToDateDrivers: false,
       applying: false,
       hasScanned: false,
     }),
@@ -148,7 +162,7 @@ export const useDriverStore = create<DriverState>((set, get) => ({
     try {
       const result = await window.dinho.driverScan()
       set({
-        packages: result.packages.map((p) => ({ ...p, selected: false })),
+        packages: result.packages.map((p) => ({ ...p, selected: p.isCurrent ? false : p.selected })),
         totalStaleSize: result.totalStaleSize,
         scanning: false,
         hasScanned: true,
@@ -187,6 +201,7 @@ export const useDriverStore = create<DriverState>((set, get) => ({
       const result = await window.dinho.driverUpdateScan()
       set({
         updates: result.updates.map((u) => ({ ...u, selected: false })),
+        allDrivers: result.allDrivers || [],
         updateScanning: false,
         hasScanned: true,
       })
@@ -199,7 +214,7 @@ export const useDriverStore = create<DriverState>((set, get) => ({
 
   updateInstall: async () => {
     const s = get()
-    const selectedIds = s.updates.filter((u) => u.selected).map((u) => u.id)
+    const selectedIds = s.updates.filter((u) => u.selected).map((u) => u.updateId)
     if (selectedIds.length === 0) return
 
     set({ installing: true, installResult: null, updateError: null })

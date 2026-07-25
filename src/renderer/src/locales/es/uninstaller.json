@@ -77,7 +77,7 @@
   "sortBySafety": "Ordenar por seguridad",
   "forceRemoveButton": "Forzar eliminación",
   "confirmForceRemoveTitle": "¿Forzar la eliminación de {{programName}}?",
-  "confirmForceRemoveDescription": "Esto eliminará la entrada del programa en el registry y limpiará los archivos restantes. Esta acción no se puede deshacer.",
+  "confirmForceRemoveDescription": "Esto eliminará la entrada del programa en el registro y limpiará los archivos restantes. Esta acción no se puede deshacer.",
   "confirmForceRemoveLabel": "Forzar eliminación",
   "progressForceRemoving": "Forzando la eliminación de {{programName}}...",
   "forceRemoveSuccess": "Eliminado a la fuerza"

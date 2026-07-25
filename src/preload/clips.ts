@@ -22,6 +22,8 @@ export const clipsMethods = {
     ipcRenderer.invoke(IPC.CLIPS_GET_DURATIONS, paths),
   clipsDelete: (name: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.CLIPS_DELETE_CLIP, name),
+  clipsRename: (oldName: string, newName: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_RENAME_CLIP, oldName, newName),
   clipsOpen: (path: string): Promise<void> => ipcRenderer.invoke(IPC.CLIPS_OPEN_CLIP, path),
   clipsGetConfig: (): Promise<ClipsConfig> => ipcRenderer.invoke(IPC.CLIPS_GET_CONFIG),
   clipsSetConfig: (config: Partial<ClipsConfig>): Promise<{ success: boolean; error?: string }> =>

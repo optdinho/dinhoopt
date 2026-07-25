@@ -108,6 +108,10 @@
     "emptyStateDescription": "Analice para encontrar actualizaciones disponibles y paquetes de controladores obsoletos para limpiar.",
     "allUpToDateTitle": "Todos los controladores están actualizados",
     "allUpToDateDescription": "No hay actualizaciones disponibles ni se encontraron paquetes obsoletos.",
+    "allInstalledSection": "Todos los controladores instalados ({{count}})",
+    "allInstalledDescription": "{{count}} controlador(es) encontrado(s) en su sistema.",
+    "currentBadge": "Actual",
+    "updateAvailableBadge": "Actualización disponible",
     "updatesAvailable": "Actualizaciones disponibles ({{count}})",
     "stalePackages": "Paquetes obsoletos ({{count}})",
     "selectAll": "Seleccionar todo",
@@ -133,6 +137,7 @@
     "cleanFailedToast": "Error al limpiar controladores",
     "cleanFailedDescription": "Se requieren privilegios de administrador",
     "cleanFailedError": "No se pudieron eliminar los paquetes de controladores. Se requieren privilegios de administrador.",
+    "applyFailedToast": "Error al actualizar y limpiar controladores",
 
     "agent": {
       "evaluateButton": "Evaluar con Agentes",

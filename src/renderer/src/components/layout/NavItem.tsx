@@ -4,7 +4,15 @@ import { memo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { FlyoutMenu } from './FlyoutMenu'
-import type { NavItemDef } from './NavTypes'
+import type { NavItemDef, SectionColor } from './NavTypes'
+
+const sectionStyles: Record<SectionColor, { bg: string; bar: string; icon: string }> = {
+  amber: { bg: 'bg-amber-500/[0.08]', bar: 'bg-amber-500', icon: 'text-amber-400' },
+  red: { bg: 'bg-red-500/[0.08]', bar: 'bg-red-500', icon: 'text-red-400' },
+  blue: { bg: 'bg-blue-500/[0.08]', bar: 'bg-blue-500', icon: 'text-blue-400' },
+  green: { bg: 'bg-emerald-500/[0.08]', bar: 'bg-emerald-500', icon: 'text-emerald-400' },
+  purple: { bg: 'bg-purple-500/[0.08]', bar: 'bg-purple-500', icon: 'text-purple-400' },
+}
 
 export const NavItem = memo(function NavItem({
   item,
@@ -17,6 +25,7 @@ export const NavItem = memo(function NavItem({
   onToggleSubmenu,
   onCloseSubmenu,
   collapsed,
+  sectionColor = 'amber',
 }: {
   item: NavItemDef
   badge?: boolean
@@ -29,7 +38,9 @@ export const NavItem = memo(function NavItem({
   onToggleSubmenu?: (path: string) => void
   onCloseSubmenu?: () => void
   collapsed?: boolean
+  sectionColor?: SectionColor
 }) {
+  const highlight = item.highlight
   const { t } = useTranslation('sidebar')
   const location = useLocation()
   const navigate = useNavigate()
@@ -37,6 +48,7 @@ export const NavItem = memo(function NavItem({
   const hasChildren = item.children && item.children.length > 0
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const styles = sectionStyles[sectionColor]
 
   useEffect(() => {
     if (!submenuOpen) return
@@ -75,31 +87,26 @@ export const NavItem = memo(function NavItem({
           'group relative flex w-full items-center rounded-lg px-3 py-2 font-medium transition-all duration-200',
           collapsed ? 'justify-center gap-0' : 'gap-2.5',
           'text-[13px]',
-          isActive ? 'text-white' : 'text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300',
+          isActive ? cn(styles.bg, 'text-white') : 'text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300',
         )}
-        style={
-          isActive
-            ? {
-                background: 'var(--accent-muted-bg)',
-                boxShadow: '0 0 20px rgba(245,158,11,0.05)',
-              }
-            : undefined
-        }
-        title={collapsed ? (item.labelKey ? t(item.labelKey) : item.label) : undefined}
       >
         {isActive && (
           <div
-            className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full transition-all duration-200"
-            style={{
-              background: 'linear-gradient(180deg, #fbbf24, #f59e0b)',
-              boxShadow: '0 0 8px rgba(245,158,11,0.4)',
-            }}
+            className={cn(
+              'absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full transition-all duration-200',
+              styles.bar,
+            )}
+            style={{ boxShadow: `0 0 8px currentColor` }}
           />
         )}
         <item.icon
           className={cn(
             'h-[15px] w-[15px] shrink-0 transition-colors duration-200',
-            isActive ? 'text-amber-400' : 'text-zinc-600 group-hover:text-zinc-400',
+            isActive
+              ? styles.icon
+              : highlight
+                ? 'text-cyan-400 drop-shadow-[0_0_4px_rgba(34,211,238,0.35)]'
+                : 'text-zinc-600 group-hover:text-zinc-400',
           )}
           strokeWidth={1.7}
           aria-hidden="true"

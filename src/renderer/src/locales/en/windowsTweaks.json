@@ -27,7 +27,7 @@
     "gaming": "Gaming",
     "privacy": "Privacy",
     "mmcss": "MMCSS",
-    "power": "Power"
+    "power": "Energy"
   },
   "toastAppliedSuccess": "Tweaks applied successfully!",
   "toastRevertedSuccess": "Tweaks reverted!",
@@ -54,5 +54,23 @@
   "dnsPresets": "DNS Presets",
   "categoryStats": "{{applied}}/{{total}} active",
   "emptyStateTitle": "No tweaks available",
-  "emptyStateDescription": "No Windows tweaks were found for your system configuration."
+  "emptyStateDescription": "No Windows tweaks were found for your system configuration.",
+  "timerTweaks": "Timer & Gaming Tweaks",
+  "timerTweaksDescription": "Optimize Windows timer resolution and CPU scheduling for competitive gaming. Requires reboot to take effect.",
+  "loadingTimer": "Loading timer status...",
+  "timerLoadFailed": "Failed to load timer status.",
+  "hpetTitle": "HPET (High Precision Event Timer)",
+  "hpetDescription": "Disable platform clock for lower timer latency on Intel CPUs. May help on AMD Ryzen too.",
+  "tscSyncTitle": "TSC Sync Policy",
+  "tscSyncDescription": "Legacy = lower input lag, slightly less FPS. Enhanced = more FPS, slightly more input lag.",
+  "tscDefault": "Default",
+  "tscLegacy": "Legacy (Low Latency)",
+  "tscEnhanced": "Enhanced (High FPS)",
+  "dynamicTickTitle": "Disable Dynamic Tick",
+  "dynamicTickDescription": "Prevents Windows from suspending the system timer tick in idle. Reduces micro-stutters.",
+  "autoTuningTitle": "TCP AutoTuning — Disabled",
+  "autoTuningDescription": "Reduces bufferbloat and jitter during gaming. Recommended for competitive gaming. May slow large downloads.",
+  "timerApplied": "Timer setting applied!",
+  "timerReverted": "Timer settings reverted to defaults!",
+  "revertTimerDefaults": "Revert Timer to Defaults"
 }

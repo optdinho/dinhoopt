@@ -47,8 +47,8 @@ export interface ConfigState {
 }
 
 export const config: ConfigState = {
-  engineFps: 60,
-  engineReplayTimeSeconds: 300,
+  engineFps: 30,
+  engineReplayTimeSeconds: 120,
   width: 1920,
   height: 1080,
   bitrateKbps: 40000,

@@ -13,6 +13,7 @@ import { getLogger } from '../../services/logger.service'
 import type { WindowGetter } from '../index'
 import { CONTEXT_MENU_TWEAKS } from './tweaks/context-menu'
 import { registerContextMenuTweaks } from './tweaks/context-menu'
+import { registerGamingTweaks } from './tweaks/gaming'
 import { NETWORK_TWEAKS, registerNetworkTweaks } from './tweaks/network'
 import { PERFORMANCE_TWEAKS } from './tweaks/performance'
 import { registerPerformanceTweaks } from './tweaks/performance'
@@ -424,4 +425,5 @@ export function registerWindowsTweaksIpc(getWindow: WindowGetter): void {
   registerSecurityTweaks(getWindow)
   registerContextMenuTweaks(getWindow)
   registerSystemTweaks(getWindow)
+  registerGamingTweaks(getWindow)
 }

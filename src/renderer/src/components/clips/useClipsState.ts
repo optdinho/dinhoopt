@@ -59,6 +59,7 @@ export interface ClipsState {
   handleDeleteClip: (name: string) => Promise<void>
   handleDeleteSelected: () => Promise<void>
   handleOpenClip: (path: string) => Promise<void>
+  handleRenameClip: (oldName: string) => Promise<void>
   handleConfigUpdate: (partial: Partial<ClipsConfig>) => Promise<void>
   handleSelectOutputDir: () => Promise<void>
   toggleFavorite: (name: string) => void
@@ -408,6 +409,7 @@ export function useClipsState(): ClipsState {
     handleDeleteClip: actions.handleDeleteClip,
     handleDeleteSelected: actions.handleDeleteSelected,
     handleOpenClip: actions.handleOpenClip,
+    handleRenameClip: actions.handleRenameClip,
     handleConfigUpdate: actions.handleConfigUpdate,
     handleSelectOutputDir: actions.handleSelectOutputDir,
     toggleFavorite: actions.toggleFavorite,

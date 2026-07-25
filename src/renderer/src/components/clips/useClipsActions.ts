@@ -135,6 +135,24 @@ export function useClipsActions(deps: ClipsActionDeps) {
     await refreshClips()
   }, [selectedClips, setSelectedClips, refreshClips, t])
 
+  const handleRenameClip = useCallback(
+    async (oldName: string) => {
+      const newName = window.prompt(t('renamePrompt'), oldName)
+      if (!newName || newName === oldName) return
+      try {
+        const result = await window.dinho?.clipsRename(oldName, newName)
+        if (result?.success) {
+          await refreshClips()
+        } else {
+          toast.error(result?.error || 'Failed to rename clip')
+        }
+      } catch (err) {
+        toast.error(String(err))
+      }
+    },
+    [refreshClips, t],
+  )
+
   const handleOpenClip = useCallback(async (path: string) => {
     try {
       await window.dinho?.clipsOpen(path)
@@ -265,6 +283,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
     handleDeleteClip,
     handleDeleteSelected,
     handleOpenClip,
+    handleRenameClip,
     handleConfigUpdate,
     handleSelectOutputDir,
     toggleFavorite,

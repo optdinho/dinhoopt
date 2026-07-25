@@ -3,6 +3,47 @@ import { isAdmin } from '../../elevation'
 import { execFileAsync, psUtf8 } from '../../exec-utf8'
 import { cleanOutput, computeSeverity, emptyResult, stripTrailingVersion } from '../utils'
 
+/**
+ * Detect column positions from a winget header line.
+ * Works with localized headers (EN "Version", PT "Versão", ES "Versión", etc.)
+ * by matching substrings rather than exact names.
+ */
+function findColumnPositions(header: string): { id: number; version: number; available: number; source: number } {
+  const upperHeader = header.toUpperCase()
+  const idStart = upperHeader.indexOf('ID')
+  if (idStart < 0) return { id: -1, version: -1, available: -1, source: -1 }
+
+  let versionStart = -1
+  let availableStart = -1
+  let sourceStart = -1
+
+  // After "Id", find the next word (should be Version/Versão/Versión)
+  const afterId = header.substring(idStart + 2)
+  const versionMatch = afterId.match(/\S+/)
+  if (versionMatch && /vers/i.test(versionMatch[0])) {
+    versionStart = idStart + 2 + afterId.indexOf(versionMatch[0])
+  }
+
+  if (versionStart >= 0) {
+    // Skip past the version word to find Available/Disponível/Disponible
+    const afterVerWord = header.substring(versionStart + (versionMatch?.[0]?.length ?? 0))
+    const availMatch = afterVerWord.match(/\S+/)
+    if (availMatch && /ispo|vaila|ponível|ponible/i.test(availMatch[0])) {
+      availableStart = versionStart + (versionMatch?.[0]?.length ?? 0) + afterVerWord.indexOf(availMatch[0])
+    }
+  }
+
+  const tail = header.trimEnd()
+  const lastWord = tail.match(/\S+$/)?.[0] ?? ''
+  if (lastWord && /ource|igem|igen/i.test(lastWord)) {
+    sourceStart = tail.length - lastWord.length
+  }
+
+  return { id: idStart, version: versionStart, available: availableStart, source: sourceStart }
+}
+
+const WINGET_HEADER_RE = /(Name|Nome|Nombre)\s+Id\s+(Version|Vers)/i
+
 export function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
   const lines = cleanOutput(stdout).split(/\r?\n/)
 
@@ -10,7 +51,7 @@ export function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
   for (let i = 0; i < lines.length; i++) {
     const headerLine = lines[i]
     if (!headerLine) continue
-    if (/Name\s+Id\s+Version\s+Available\s+Source/i.test(headerLine)) {
+    if (WINGET_HEADER_RE.test(headerLine)) {
       headerIdx = i
       break
     }
@@ -22,12 +63,8 @@ export function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
 
   const header = lines[headerIdx]
   if (!header) return []
-  const idStart = header.indexOf('Id')
-  const versionStart = header.indexOf('Version')
-  const availableStart = header.indexOf('Available')
-  const sourceStart = header.indexOf('Source')
-
-  if (idStart < 0 || versionStart < 0 || availableStart < 0 || sourceStart < 0) return []
+  const col = findColumnPositions(header)
+  if (col.id < 0 || col.version < 0) return []
 
   const apps: UpdatableApp[] = []
   for (let i = separatorIdx + 1; i < lines.length; i++) {
@@ -36,15 +73,21 @@ export function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
     if (!line.trim()) continue
     if (/^\d+\s+upgrade/i.test(line.trim())) break
 
-    const name = line.substring(0, idStart).trim()
-    const id = line.substring(idStart, versionStart).trim()
-    let version = line.substring(versionStart, availableStart).trim()
-    let available = line.substring(availableStart, sourceStart).trim()
+    const name = line.substring(0, col.id).trim()
+    const id = col.version > 0 ? line.substring(col.id, col.version).trim() : line.substring(col.id).trim()
+    let version = col.available > 0
+      ? line.substring(col.version, col.available).trim()
+      : line.substring(col.version).trim()
+    let available = col.source > 0
+      ? line.substring(col.available, col.source).trim()
+      : col.available > 0
+        ? line.substring(col.available).trim()
+        : ''
     if (version.startsWith('> ')) version = version.slice(2)
     if (version.startsWith('< ')) version = version.slice(2)
     if (available.startsWith('> ')) available = available.slice(2)
     if (available.startsWith('< ')) available = available.slice(2)
-    const source = line.substring(sourceStart).trim()
+    const source = col.source > 0 ? line.substring(col.source).trim() : ''
 
     if (!id || !version || !available) continue
     if (version === available) continue
@@ -69,7 +112,7 @@ export function parseWingetListOutput(stdout: string): UpdatableApp[] {
   for (let i = 0; i < lines.length; i++) {
     const headerLine = lines[i]
     if (!headerLine) continue
-    if (/Name\s+Id\s+Version/i.test(headerLine)) {
+    if (WINGET_HEADER_RE.test(headerLine)) {
       headerIdx = i
       break
     }
@@ -81,14 +124,9 @@ export function parseWingetListOutput(stdout: string): UpdatableApp[] {
 
   const header = lines[headerIdx]
   if (!header) return []
-  const idStart = header.indexOf('Id')
-  const versionStart = header.indexOf('Version')
-  const availableStart = header.indexOf('Available')
-  const sourceStart = header.indexOf('Source')
+  const col = findColumnPositions(header)
 
-  if (idStart < 0 || versionStart < 0) return []
-
-  const versionEnd = availableStart > 0 ? availableStart : sourceStart > 0 ? sourceStart : -1
+  if (col.id < 0 || col.version < 0) return []
 
   const apps: UpdatableApp[] = []
   for (let i = separatorIdx + 1; i < lines.length; i++) {
@@ -97,12 +135,14 @@ export function parseWingetListOutput(stdout: string): UpdatableApp[] {
     if (!line.trim()) continue
     if (/^\d+\s+package/i.test(line.trim())) break
 
-    const name = line.substring(0, idStart).trim()
-    const id = line.substring(idStart, versionStart).trim()
-    let version = versionEnd > 0 ? line.substring(versionStart, versionEnd).trim() : line.substring(versionStart).trim()
+    const name = line.substring(0, col.id).trim()
+    const id = col.version > 0 ? line.substring(col.id, col.version).trim() : line.substring(col.id).trim()
+    let version = col.available > 0
+      ? line.substring(col.version, col.available).trim()
+      : line.substring(col.version).trim()
     if (version.startsWith('> ')) version = version.slice(2)
     if (version.startsWith('< ')) version = version.slice(2)
-    const source = sourceStart > 0 ? line.substring(sourceStart).trim() : ''
+    const source = col.source > 0 ? line.substring(col.source).trim() : ''
 
     if (!id || !version || version === 'Unknown') continue
     if (id.startsWith('ARP\\')) continue
@@ -165,7 +205,7 @@ export async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
       try {
         const listResult = await execFileAsync(
           'winget',
-          ['list', '--source', 'winget', '--accept-source-agreements', '--disable-interactivity'],
+          ['list', '--accept-source-agreements', '--disable-interactivity'],
           { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
         )
         listStdout = listResult.stdout

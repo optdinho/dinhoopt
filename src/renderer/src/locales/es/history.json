@@ -46,9 +46,9 @@
   },
   "timeline": {
     "filterAll": "Todos",
-    "filterCleaner": "Cleaner",
-    "filterRegistry": "Registry",
-    "filterDebloater": "Debloater",
+    "filterCleaner": "Limpiador",
+    "filterRegistry": "Registro",
+    "filterDebloater": "Desbloat",
     "filterNetwork": "Red",
     "filterDrivers": "Controladores",
     "filterMalware": "Malware",

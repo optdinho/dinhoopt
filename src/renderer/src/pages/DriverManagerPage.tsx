@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   ArrowUpCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Cpu,
   Loader2,
   Search,
@@ -27,7 +29,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { StaleItemRow, UpdateItemRow } from './driver-manager/DriverManagerComponents'
+import { InstalledDriverRow, StaleItemRow, UpdateItemRow } from './driver-manager/DriverManagerComponents'
 
 export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('updates')
@@ -46,6 +48,8 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
   const updateError = useDriverStore((s) => s.updateError)
   const applying = useDriverStore((s) => s.applying)
   const hasScanned = useDriverStore((s) => s.hasScanned)
+  const allDrivers = useDriverStore((s) => s.allDrivers)
+  const showUpToDateDrivers = useDriverStore((s) => s.showUpToDateDrivers)
 
   const [showConfirm, setShowConfirm] = useState(false)
   const cleanStartRef = useRef<number>(0)
@@ -105,6 +109,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
       let updateCount = 0
       if (updateResult.status === 'fulfilled') {
         s.setUpdates(updateResult.value.updates)
+        s.setAllDrivers(updateResult.value.allDrivers || [])
         updateCount = updateResult.value.updates.length
       } else {
         logger.error('DriverManagerPage', 'Driver update scan failed', updateResult.reason)
@@ -249,6 +254,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
         }
         if (updateResult.status === 'fulfilled') {
           s.setUpdates(updateResult.value.updates)
+          s.setAllDrivers(updateResult.value.allDrivers || [])
         }
         s.setScanning(false)
         s.setUpdateScanning(false)
@@ -472,15 +478,14 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
       )}
 
       {/* All up to date state */}
-      {hasScanned && !isScanning && updates.length === 0 && stalePackages.length === 0 && (
+      {hasScanned && !isScanning && updates.length === 0 && stalePackages.length === 0 && allDrivers.length > 0 && (
         <div
-          className="flex flex-col items-center justify-center py-16 rounded-2xl"
+          className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
           style={{ background: 'rgba(34,197,94,0.03)', border: '1px solid rgba(34,197,94,0.08)' }}
         >
-          <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" strokeWidth={1.5} />
-          <p className="text-[15px] font-medium text-zinc-200">{t('driverManager.allUpToDateTitle')}</p>
-          <p className="mt-1 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-            {t('driverManager.allUpToDateDescription')}
+          <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
+          <p className="text-[13px] text-zinc-200">
+            {t('driverManager.allUpToDateTitle')} — {t('driverManager.allInstalledDescription', { count: allDrivers.length })}
           </p>
         </div>
       )}
@@ -558,6 +563,33 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
               <StaleItemRow key={pkg.id} pkg={pkg} onToggle={(id) => useDriverStore.getState().togglePackage(id)} />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ─── All Installed Drivers Section (collapsible) ───── */}
+      {allDrivers.length > 0 && !isScanning && (
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => useDriverStore.getState().setShowUpToDateDrivers(!showUpToDateDrivers)}
+            className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            {showUpToDateDrivers ? (
+              <ChevronDown className="h-4 w-4" strokeWidth={2} />
+            ) : (
+              <ChevronRight className="h-4 w-4" strokeWidth={2} />
+            )}
+            <CheckCircle2 className="h-4 w-4 text-green-500" strokeWidth={1.8} />
+            {t('driverManager.allInstalledSection', { count: allDrivers.length })}
+          </button>
+
+          {showUpToDateDrivers && (
+            <div className="grid grid-cols-1 gap-1.5">
+              {allDrivers.map((drv) => (
+                <InstalledDriverRow key={drv.id} drv={drv} t={t} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

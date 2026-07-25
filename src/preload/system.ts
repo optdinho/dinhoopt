@@ -359,6 +359,17 @@ export const systemMethods = {
   windowsTweaksNetshTcp: (action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_NETSH_TCP, action),
 
+  gamingTimerGet: (): Promise<import('../main/ipc/windows-tweaks/tweaks/gaming').GamingTimerStatus> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_TIMER_GET),
+  gamingTimerSet: (
+    settings: Partial<Pick<import('../main/ipc/windows-tweaks/tweaks/gaming').GamingTimerStatus, 'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'>>,
+  ): Promise<{ success: boolean; errors: string[] }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_TIMER_SET, settings),
+  gamingTimerRevert: (): Promise<{ success: boolean; errors: string[] }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_TIMER_REVERT),
+  gamingAutoTuning: (action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_AUTOTUNING, action),
+
   hostsRead: (): Promise<import('@shared/types').HostsFileData> => ipcRenderer.invoke(IPC.HOSTS_READ),
   hostsWrite: (request: import('@shared/types').HostsWriteRequest): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.HOSTS_WRITE, request),

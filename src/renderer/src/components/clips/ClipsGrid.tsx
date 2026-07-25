@@ -5,6 +5,7 @@ import {
   Combine,
   Film,
   FolderOpen,
+  Pencil,
   RefreshCw,
   Search,
   Star,
@@ -28,6 +29,7 @@ export function ClipsGrid({
   setMergeModePaths,
   handleOpenClip,
   setEditingClip,
+  handleRenameClip,
   handleDeleteClip,
   toggleFavorite,
   formatSize,
@@ -283,6 +285,15 @@ export function ClipsGrid({
                   >
                     <Film className="h-3 w-3" />
                     {t('edit')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRenameClip(clip.name)}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10"
+                    style={{ color: 'var(--text-dim)' }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                    {t('rename')}
                   </button>
                   <button
                     type="button"

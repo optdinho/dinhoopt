@@ -158,10 +158,12 @@ export interface DriverUpdate {
   updateTitle: string // Windows Update title string
   downloadSize: string // human-readable size from WU
   selected: boolean
+  isUpToDate?: boolean // true = driver is current, no update needed
 }
 
 export interface DriverUpdateScanResult {
   updates: DriverUpdate[]
+  allDrivers: DriverUpdate[] // ALL installed drivers (with isUpToDate flag)
   totalAvailable: number
   scanDuration: number
 }

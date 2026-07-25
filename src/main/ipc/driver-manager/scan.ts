@@ -95,8 +95,72 @@ async function parseEnumDrivers(): Promise<RawDriver[]> {
 }
 
 /**
+ * Multi-language label map: canonical English → list of localized equivalents.
+ * pnputil localizes its output labels based on the OS UI language.
+ */
+const PNPUTIL_LABELS: Record<string, string[]> = {
+  'published name': [
+    'published name', 'nome publicado', 'veröffentlichter name', 'nom publié',
+    'nombre publicado', 'publicado', 'publicerat namn',
+  ],
+  'original name': [
+    'original name', 'nome original', 'ursprünglicher name', 'nom original',
+    'nombre original', 'originalt namn',
+  ],
+  'original inf': [
+    'original inf', 'inf original',
+  ],
+  'driver package provider': [
+    'driver package provider', 'provider name', 'provider',
+    'nome do provedor', 'provedor', 'anbieter', 'fournisseur',
+    'proveedor', 'provider för drivrutinen',
+  ],
+  'class name': [
+    'class name', 'class', 'device class',
+    'nome da classe', 'classe', 'klasse', 'deviceklasse',
+  ],
+  'driver version': [
+    'driver version', 'version',
+    'versão do driver', 'treiberversion', 'version du pilote',
+    'versión del controlador', 'versionsinformation för drivrutin',
+  ],
+  'driver date': [
+    'driver date', 'date',
+    'data do driver', 'treiberdatum', 'date du pilote',
+    'fecha del controlador', 'datum för drivrutin',
+  ],
+  'driver date and version': [
+    'driver date and version', 'data e versão do driver',
+    'treiberdatum und version', 'date et version du pilote',
+    'fecha y versión del controlador',
+  ],
+  'signer name': [
+    'signer name', 'signer',
+    'nome do signatário', 'signaturname', 'nom du signataire',
+    'nombre del firmante', 'signatärnamn',
+  ],
+  'attributes': [
+    'attributes', 'atributos', 'attribute', 'attributter',
+  ],
+}
+
+/**
+ * Resolve a localized pnputil label to its canonical English key.
+ * Returns null if no known label matches.
+ */
+export function resolveLabel(localizedKey: string): string | null {
+  const lower = localizedKey.toLowerCase()
+  for (const [canonical, variants] of Object.entries(PNPUTIL_LABELS)) {
+    if (variants.some((v) => lower === v.toLowerCase())) {
+      return canonical
+    }
+  }
+  return null
+}
+
+/**
  * Fallback: parse pnputil -e output with multi-lingual label patterns.
- * pnputil localizes its output labels, so we try common translations.
+ * pnputil localizes its output labels, so we resolve them via PNPUTIL_LABELS.
  */
 async function parseEnumDriversPnpUtil(): Promise<RawDriver[]> {
   const drivers: RawDriver[] = []
@@ -116,27 +180,38 @@ async function parseEnumDriversPnpUtil(): Promise<RawDriver[]> {
   const blocks = stdout.split(/\n\s*\n/)
 
   for (const block of blocks) {
-    const lines = block.trim().split('\n')
-    const fields: Record<string, string> = {}
-    for (const line of lines) {
+    const rawFields: Record<string, string> = {}
+    for (const line of block.trim().split('\n')) {
       const match = line.match(/^\s*(.+?)\s*:\s+(.+)$/)
       if (match) {
-        const key = match[1].trim().toLowerCase()
-        fields[key] = match[2].trim()
+        rawFields[match[1].trim()] = match[2].trim()
       }
     }
 
-    const publishedName = fields['published name'] || fields['oem inf'] || ''
+    // Resolve localized labels to canonical English keys
+    const fields: Record<string, string> = {}
+    for (const [key, value] of Object.entries(rawFields)) {
+      const canonical = resolveLabel(key)
+      if (canonical && !fields[canonical]) {
+        fields[canonical] = value
+      }
+    }
+
+    const publishedName = fields['published name'] || fields['original inf'] || ''
     if (!publishedName.toLowerCase().startsWith('oem')) continue
 
-    let version = fields['driver version'] || fields.version || ''
-    let date = fields['driver date'] || fields.date || ''
+    let version = fields['driver version'] || ''
+    let date = fields['driver date'] || ''
+
+    // Some locales combine date + version in a single field (e.g. PT: "Versão do Driver: 01/26/2016 10.1.2.19")
+    // or expose it as a separate "Driver Date and Version" key.
     const dateAndVersion = fields['driver date and version'] || ''
-    if (dateAndVersion && (!version || !date)) {
-      const dvMatch = dateAndVersion.match(/^(\S+)\s+(\S+)$/)
+    const combined = dateAndVersion || version
+    if (combined && (!version || !date)) {
+      const dvMatch = combined.match(/^(\d{4}[-/]\d{2}[-/]\d{2}|\d{2}\/\d{2}\/\d{4})\s+(\S+)$/)
       if (dvMatch) {
         if (!date) date = dvMatch[1]
-        if (!version) version = dvMatch[2]
+        if (!version || version === combined) version = dvMatch[2]
       }
     }
 
@@ -144,11 +219,11 @@ async function parseEnumDriversPnpUtil(): Promise<RawDriver[]> {
       publishedName,
       originalName:
         fields['original name'] || fields['original inf'] || fields['driver package provider'] || publishedName,
-      provider: fields['driver package provider'] || fields['provider name'] || fields.provider || 'Unknown',
-      className: fields['class name'] || fields.class || fields['device class'] || 'Unknown',
+      provider: fields['driver package provider'] || 'Unknown',
+      className: fields['class name'] || 'Unknown',
       version,
       date,
-      signer: fields['signer name'] || fields.signer || '',
+      signer: fields['signer name'] || '',
     })
   }
 

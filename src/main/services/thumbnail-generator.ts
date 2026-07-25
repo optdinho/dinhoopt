@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import type { ExecFileException } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join, parse } from 'node:path'
 import { getLogger } from './logger.service'
 
@@ -90,6 +90,10 @@ function thumbPathFor(outputDir: string, clipName: string): string {
   return join(getCacheDir(outputDir), `${parse(clipName).name}.jpg`)
 }
 
+function engineThumbPath(outputDir: string, clipName: string): string {
+  return join(outputDir, `${parse(clipName).name}.thumb.jpg`)
+}
+
 export function getCachedThumbnailPath(outputDir: string, clipName: string): string | null {
   const p = thumbPathFor(outputDir, clipName)
   return existsSync(p) ? p : null
@@ -97,7 +101,6 @@ export function getCachedThumbnailPath(outputDir: string, clipName: string): str
 
 export async function generateThumbnail(outputDir: string, clipName: string): Promise<string | null> {
   await scanFfmpeg()
-  if (!_ffmpegPath) return null
 
   const videoPath = join(outputDir, clipName)
   if (!existsSync(videoPath)) return null
@@ -107,6 +110,18 @@ export async function generateThumbnail(outputDir: string, clipName: string): Pr
 
   ensureDir(getCacheDir(outputDir))
   const thumbPath = thumbPathFor(outputDir, clipName)
+
+  const engineThumb = engineThumbPath(outputDir, clipName)
+  if (existsSync(engineThumb)) {
+    try {
+      copyFileSync(engineThumb, thumbPath)
+      if (existsSync(thumbPath) && statSync(thumbPath).size > 0) return thumbPath
+    } catch {
+      /* fall through to ffmpeg generation */
+    }
+  }
+
+  if (!_ffmpegPath) return null
 
   try {
     let seekSec = DEFAULT_SEEK_SEC

@@ -65,11 +65,18 @@ describe('parseWingetUpgradeOutput', () => {
     expect(parseWingetUpgradeOutput(output)).toEqual([])
   })
 
-  it('returns empty when a column is missing from header', () => {
-    const badHeader = 'Name               Id                   Version           Available'
-    const output = [badHeader, upgradeSeparator, padUpgradeCols('App', 'Some.App', '1.0.0', '2.0.0', 'winget')].join(
-      '\r\n',
-    )
+  it('handles header without Source column (localized output)', () => {
+    const headerNoSource = 'Name               Id                   Version           Available'
+    const line = `${'App'.padEnd(19)}${'Some.App'.padEnd(21)}${'1.0.0'.padEnd(18)}2.0.0`
+    const output = [headerNoSource, upgradeSeparator, line].join('\r\n')
+    const result = parseWingetUpgradeOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.source).toBe('winget')
+  })
+
+  it('returns empty when Id column is missing from header', () => {
+    const badHeader = 'Name               Version              Available         Source'
+    const output = [badHeader, upgradeSeparator].join('\r\n')
     expect(parseWingetUpgradeOutput(output)).toEqual([])
   })
 
@@ -141,6 +148,41 @@ describe('parseWingetUpgradeOutput', () => {
     ].join('\r\n')
     const result = parseWingetUpgradeOutput(output)
     expect(result[0]?.name).toBe('Some.App')
+  })
+
+  it('parses Portuguese (PT-BR) localized header', () => {
+    const ptHeader = 'Nome                 Id                   Vers\u00e3o              Dispon\u00edvel         Origem'
+    const dataLine = 'App                  Some.App             1.0.0               2.0.0               winget'
+    const output = [ptHeader, upgradeSeparator, dataLine].join('\r\n')
+    const result = parseWingetUpgradeOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.id).toBe('Some.App')
+    expect(result[0]?.currentVersion).toBe('1.0.0')
+    expect(result[0]?.availableVersion).toBe('2.0.0')
+    expect(result[0]?.source).toBe('winget')
+  })
+
+  it('parses Portuguese header with uppercase ID (real winget output)', () => {
+    const ptHeader = 'Nome                                                               ID                            Vers\u00e3o                        Dispon\u00edvel                    Origem'
+    const sep = '-'.repeat(191)
+    const dataLine = '7-Zip 24.08 (x64)                                                  7zip.7zip                     24.08                         26.02                         winget'
+    const output = [ptHeader, sep, dataLine].join('\r\n')
+    const result = parseWingetUpgradeOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.id).toBe('7zip.7zip')
+    expect(result[0]?.currentVersion).toBe('24.08')
+    expect(result[0]?.availableVersion).toBe('26.02')
+    expect(result[0]?.source).toBe('winget')
+  })
+
+  it('parses Spanish (ES) localized header', () => {
+    const esHeader = 'Nombre               Id                   Versi\u00f3n             Disponible          Origen'
+    const dataLine = 'App                  Some.App             1.0.0               2.0.0               winget'
+    const output = [esHeader, upgradeSeparator, dataLine].join('\r\n')
+    const result = parseWingetUpgradeOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.id).toBe('Some.App')
+    expect(result[0]?.availableVersion).toBe('2.0.0')
   })
 })
 
@@ -242,6 +284,39 @@ describe('parseWingetListOutput', () => {
     const output = [listHeader, listSeparator, padListCols('SomeName', 'Some.App', '2.0.0', 'winget')].join('\r\n')
     const result = parseWingetListOutput(output)
     expect(result[0]?.name).toBe('Some.App')
+  })
+
+  it('parses Portuguese (PT-BR) localized list header', () => {
+    const ptHeader = 'Nome                 Id                   Vers\u00e3o              Dispon\u00edvel         Origem'
+    const dataLine = 'App                  Some.App             2.0.0                                        winget'
+    const output = [ptHeader, listSeparator, dataLine].join('\r\n')
+    const result = parseWingetListOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.id).toBe('Some.App')
+    expect(result[0]?.currentVersion).toBe('2.0.0')
+    expect(result[0]?.source).toBe('winget')
+  })
+
+  it('parses Portuguese list header with uppercase ID (real winget output)', () => {
+    const ptHeader = 'Nome                                                                ID                                                                                  Vers\u00e3o                        Dispon\u00edvel                    Origem'
+    const sep = '-'.repeat(219)
+    const dataLine = '7-Zip 24.08 (x64)                                                   7zip.7zip                                                                           24.08                         26.02                         winget'
+    const output = [ptHeader, sep, dataLine].join('\r\n')
+    const result = parseWingetListOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.id).toBe('7zip.7zip')
+    expect(result[0]?.currentVersion).toBe('24.08')
+    expect(result[0]?.source).toBe('winget')
+  })
+
+  it('parses header without Available or Source columns', () => {
+    const headerMinimal = 'Name               Id                   Version'
+    const line = `${'App'.padEnd(19)}${'Some.App'.padEnd(21)}2.0.0`
+    const output = [headerMinimal, listSeparator, line].join('\r\n')
+    const result = parseWingetListOutput(output)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.currentVersion).toBe('2.0.0')
+    expect(result[0]?.source).toBe('winget')
   })
 })
 

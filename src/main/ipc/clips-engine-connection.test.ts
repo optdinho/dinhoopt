@@ -54,8 +54,8 @@ vi.mock('../services/clips-config-manager', () => ({
     Hotkeys: [{ vk: 49, modifiers: [18], action: 'ToggleCapture', replayDurationSeconds: 60, enabled: true }],
   })),
   config: {
-    engineFps: 60,
-    engineReplayTimeSeconds: 300,
+    engineFps: 30,
+    engineReplayTimeSeconds: 120,
     width: 1920,
     height: 1080,
     bitrateKbps: 40000,
@@ -431,8 +431,8 @@ describe('getCurrentStatus', () => {
     expect(s.running).toBe(false)
     expect(s.capturing).toBe(false)
     expect(s.uptime).toBe(0)
-    expect(s.fps).toBe(60)
-    expect(s.replayTimeSeconds).toBe(300)
+    expect(s.fps).toBe(30)
+    expect(s.replayTimeSeconds).toBe(120)
     expect(s.captureBackend).toBeUndefined()
     expect(s.encoder).toBeUndefined()
     expect(s.estimatedRamMB).toBeUndefined()

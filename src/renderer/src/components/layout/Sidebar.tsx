@@ -24,18 +24,21 @@ import {
   Gauge,
   Globe,
   HardDrive,
+  History,
+  Info,
   LayoutDashboard,
   MemoryStick,
   Menu,
   MousePointerClick,
   Package,
   PackageMinus,
-  Radar,
-  RotateCcw,
+  Scan,
+  Search,
   Server,
+  Settings,
+  X,
   Shield,
   ShieldAlert,
-  ShieldAlert as ShieldAlertIcon,
   Sliders,
   Sparkles,
   Trash2,
@@ -43,19 +46,26 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react'
-import { memo, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
 import { NavItem } from './NavItem'
-import type { NavGroup } from './NavTypes'
+import type { NavGroup, SectionColor } from './NavTypes'
 
 const navGroups: NavGroup[] = [
+  // ── Acesso rápido (pinned) ──
   {
-    items: [{ icon: LayoutDashboard, labelKey: 'dashboard', path: '/' }],
+    items: [
+      { icon: LayoutDashboard, labelKey: 'dashboard', path: '/' },
+      { icon: Gamepad2, labelKey: 'gameMode', path: '/game-mode', highlight: true },
+      { icon: Clapperboard, labelKey: 'clips', path: '/clips', badgeLabel: 'Beta', highlight: true },
+    ],
   },
+  // ── Proteger ──
   {
-    headingKey: 'securityHeading',
+    headingKey: 'sectionProtect',
+    color: 'red',
     items: [
       { icon: ShieldAlert, labelKey: 'malwareScanner', path: '/malware' },
       {
@@ -68,26 +78,19 @@ const navGroups: NavGroup[] = [
           { icon: Flame, labelKey: 'firewallAudit', path: '/firewall' },
           { icon: BatteryCharging, labelKey: 'powerPlans', path: '/power-plans' },
           { icon: Globe, labelKey: 'hostsEditor', path: '/hosts-editor' },
-        ],
-      },
-      {
-        icon: Radar,
-        labelKey: 'monitoring',
-        path: '/monitoring',
-        children: [
           { icon: ClipboardCheck, labelKey: 'compliance', path: '/compliance' },
           { icon: Bug, labelKey: 'vulnerability', path: '/vulnerability' },
         ],
       },
     ],
   },
+  // ── Limpar ──
   {
-    headingKey: 'maintainHeading',
+    headingKey: 'sectionClean',
+    color: 'blue',
     items: [
       { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner' },
       { icon: Database, labelKey: 'registry', path: '/registry' },
-      { icon: Zap, labelKey: 'startup', path: '/startup' },
-      { icon: Wifi, labelKey: 'network', path: '/network' },
       {
         icon: Package,
         labelKey: 'software',
@@ -100,18 +103,6 @@ const navGroups: NavGroup[] = [
           { icon: MousePointerClick, labelKey: 'contextMenu', path: '/context-menu' },
         ],
       },
-      { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
-    ],
-  },
-  {
-    headingKey: 'toolsHeading',
-    items: [
-      { icon: Gamepad2, labelKey: 'gameMode', path: '/game-mode' },
-      { icon: Clapperboard, labelKey: 'clips', path: '/clips', badgeLabel: 'Beta' },
-      { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
-      { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
-      { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
-      { icon: Activity, labelKey: 'performance', path: '/performance' },
       {
         icon: HardDrive,
         labelKey: 'diskTools',
@@ -121,11 +112,25 @@ const navGroups: NavGroup[] = [
           { icon: CopyCheck, labelKey: 'duplicateFinder', path: '/duplicates' },
           { icon: FileUp, labelKey: 'largeFileFinder', path: '/large-files' },
           { icon: FolderX, labelKey: 'emptyFolderCleaner', path: '/empty-folders' },
-          { icon: ShieldAlertIcon, labelKey: 'fileShredder', path: '/file-shredder' },
+          { icon: ShieldAlert, labelKey: 'fileShredder', path: '/file-shredder' },
           { icon: Wrench, labelKey: 'diskRepair', path: '/disk-repair' },
           { icon: Eraser, labelKey: 'diskMaintenance', path: '/disk-maintenance' },
         ],
       },
+    ],
+  },
+  // ── Otimizar ──
+  {
+    headingKey: 'sectionOptimize',
+    color: 'green',
+    items: [
+      { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
+      { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
+      { icon: Zap, labelKey: 'startup', path: '/startup' },
+      { icon: Activity, labelKey: 'performance', path: '/performance' },
+      { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
+      { icon: Wifi, labelKey: 'network', path: '/network' },
+      { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
     ],
   },
 ]
@@ -146,11 +151,17 @@ function useBadgeCounts(): Record<string, number> {
 }
 
 export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { t } = useTranslation('sidebar')
+  const { t, i18n } = useTranslation('sidebar')
   const location = useLocation()
+  const navigate = useNavigate()
   const badgeCounts = useBadgeCounts()
   const { features } = usePlatform()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: navGroups is a module-level const
   const filteredNavGroups = useMemo(
@@ -205,28 +216,138 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
     return location.pathname === item.path
   }
 
+  // ── Search: flatten all pages ──
+  const allPages = useMemo(() => {
+    const pages: { icon: typeof Shield; labelKey: string; path: string; section: string }[] = []
+    for (const group of navGroups) {
+      const section = group.headingKey ? t(group.headingKey) : t('sectionQuick')
+      for (const item of group.items) {
+        if (item.path) pages.push({ icon: item.icon, labelKey: item.labelKey, path: item.path, section })
+        if (item.children) {
+          for (const child of item.children) {
+            pages.push({ icon: child.icon, labelKey: child.labelKey, path: child.path, section })
+          }
+        }
+      }
+    }
+    pages.push({ icon: Settings, labelKey: 'settings', path: '/settings', section: t('sectionOther') })
+    pages.push({ icon: History, labelKey: 'history', path: '/history', section: t('sectionOther') })
+    pages.push({ icon: Info, labelKey: 'aboutUpdates', path: '/about', section: t('sectionOther') })
+    return pages
+  }, [t, i18n.language])
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return allPages
+    const q = searchQuery.toLowerCase()
+    return allPages.filter((p) => {
+      const label = t(p.labelKey).toLowerCase()
+      return label.includes(q) || p.labelKey.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
+    })
+  }, [searchQuery, allPages, t])
+
+  const openSearch = useCallback(() => {
+    setSearchOpen(true)
+    setSearchQuery('')
+    setSelectedIndex(0)
+  }, [])
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setSelectedIndex(0)
+  }, [])
+
+  const navigateToResult = useCallback(
+    (path: string) => {
+      navigate(path)
+      closeSearch()
+    },
+    [navigate, closeSearch],
+  )
+
+  // Ctrl+K / Cmd+K global shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        if (searchOpen) closeSearch()
+        else openSearch()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [searchOpen, openSearch, closeSearch])
+
+  // Focus input when search opens
+  useEffect(() => {
+    if (searchOpen) {
+      requestAnimationFrame(() => searchInputRef.current?.focus())
+    }
+  }, [searchOpen])
+
+  // Click outside to close
+  useEffect(() => {
+    if (!searchOpen) return
+    const handler = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        closeSearch()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [searchOpen, closeSearch])
+
+  // Keyboard navigation inside search
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeSearch()
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.min(prev + 1, searchResults.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.max(prev - 1, 0))
+      } else if (e.key === 'Enter' && searchResults[selectedIndex]) {
+        navigateToResult(searchResults[selectedIndex].path)
+      }
+    },
+    [closeSearch, searchResults, selectedIndex, navigateToResult],
+  )
+
+  // The first group (Acesso rápido) has no heading, render items directly
+  const [quickAccessGroup, ...sectionGroups] = filteredNavGroups
+
   return (
     <div
-      className={cn('flex h-full shrink-0 flex-col transition-all duration-300', collapsed ? 'w-[60px]' : 'w-[240px]')}
+      className={cn('flex h-full shrink-0 flex-col transition-all duration-300', collapsed ? 'w-[60px]' : 'w-[260px]')}
       style={{
         background: 'var(--sidebar-bg)',
         borderRight: '1px solid var(--border-medium)',
       }}
     >
+      {/* ── Logo ── */}
       <div
-        className={cn('drag-region relative flex items-center gap-3 px-3 pb-3 pt-4', collapsed ? 'justify-center' : '')}
+        className={cn('drag-region relative flex items-center gap-3 px-4 pb-3 pt-4', collapsed ? 'justify-center' : '')}
       >
+        {/* Purple glow behind logo */}
         <div
-          className="absolute h-8 w-8 rounded-xl opacity-25 blur-xl"
+          className="absolute rounded-full"
           style={{
-            background: 'var(--accent)',
-            ...(collapsed ? { left: '50%', marginLeft: '-16px' } : { left: '12px', top: '20px' }),
+            width: '48px',
+            height: '48px',
+            background: 'radial-gradient(circle, rgba(168,85,247,0.45) 0%, rgba(139,92,246,0.2) 40%, transparent 70%)',
+            filter: 'blur(10px)',
+            animation: 'logo-glow 3s ease-in-out infinite alternate',
+            ...(collapsed
+              ? { left: '50%', top: '50%', marginLeft: '-24px', marginTop: '-24px' }
+              : { left: '8px', top: '12px' }),
           }}
         />
         <img src={logoSrc} alt="DiNho Optimizer" className="relative h-8 w-8 shrink-0 rounded-xl" />
         {!collapsed && (
           <div>
-            <div className="text-[13px] font-semibold text-white">{t('appName')}</div>
+            <div className="text-[14px] font-bold tracking-tight text-white">{t('appName')}</div>
             <div className="text-[9px] font-medium tracking-wide" style={{ color: 'var(--text-dim)' }}>
               {t('subtitle')}
             </div>
@@ -234,29 +355,155 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         )}
       </div>
 
-      <nav className="mt-1 min-h-0 flex-1 overflow-y-auto px-3" aria-label={t('mainNavigation', 'Main navigation')}>
-        {filteredNavGroups.map((group) => (
+      {/* ── Search ── */}
+      {!collapsed && (
+        <div ref={searchContainerRef} className="relative mx-2 mb-2">
+          {searchOpen ? (
+            <div
+              className="flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{
+                background: 'var(--surface-2, rgba(255,255,255,0.06))',
+                border: '1px solid var(--accent, #3b82f6)',
+              }}
+            >
+              <Search className="h-3.5 w-3.5 shrink-0 text-zinc-400" strokeWidth={1.7} />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setSelectedIndex(0)
+                }}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={t('searchPlaceholder', 'Buscar página...')}
+                className="flex-1 bg-transparent text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600"
+              />
+              <button type="button" onClick={closeSearch} className="shrink-0 text-zinc-500 hover:text-zinc-300">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={openSearch}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-white/5"
+              style={{
+                background: 'var(--surface-2, rgba(255,255,255,0.03))',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              <Scan className="h-3.5 w-3.5 text-zinc-600" strokeWidth={1.7} />
+              <span className="flex-1 text-left text-[12px] text-zinc-600">{t('searchHint', 'Pesquisar...')}</span>
+              <kbd
+                className="rounded border px-1.5 py-0.5 text-[9px] text-zinc-600"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
+                ⌘K
+              </kbd>
+            </button>
+          )}
+
+          {/* ── Search results ── */}
+          {searchOpen && searchResults.length > 0 && (
+            <div
+              className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[280px] overflow-y-auto rounded-lg py-1"
+              style={{
+                background: 'var(--sidebar-bg)',
+                border: '1px solid var(--border-medium)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              {searchResults.map((page, i) => {
+                const Icon = page.icon
+                return (
+                  <button
+                    key={page.path}
+                    type="button"
+                    onClick={() => navigateToResult(page.path)}
+                    onMouseEnter={() => setSelectedIndex(i)}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors',
+                      i === selectedIndex ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
+                    <span className="flex-1 truncate">{t(page.labelKey)}</span>
+                    <span className="shrink-0 text-[10px] text-zinc-600">{page.section}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {searchOpen && searchQuery && searchResults.length === 0 && (
+            <div
+              className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg px-3 py-4 text-center text-[12px] text-zinc-600"
+              style={{
+                background: 'var(--sidebar-bg)',
+                border: '1px solid var(--border-medium)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              {t('searchEmpty', 'Nenhum resultado')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Scrollable nav ── */}
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2" aria-label={t('mainNavigation', 'Main navigation')}>
+        {/* Quick access (no heading) */}
+        {quickAccessGroup && (
+          <div className="mb-1">
+            <div className="space-y-0.5">
+              {quickAccessGroup.items.map((item) => (
+                <NavItem
+                  key={item.path}
+                  item={item}
+                  badgeCount={effectiveBadgeCounts[item.path] ?? 0}
+                  badgeCounts={effectiveBadgeCounts}
+                  badgeLabel={item.badgeLabel}
+                  isActive={isPathActive(item)}
+                  submenuOpen={openSubmenu === item.path}
+                  collapsed={collapsed}
+                  sectionColor="amber"
+                  onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
+                  onCloseSubmenu={() => setOpenSubmenu(null)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Section groups */}
+        {sectionGroups.map((group) => (
           <div
-            key={group.headingKey || group.items.map((i: { id?: string; label?: string }) => i.id || i.label).join(',')}
-            className={group.headingKey ? 'mt-3' : ''}
-            role={group.headingKey ? 'group' : undefined}
+            key={group.headingKey || 'section'}
+            className="mt-2"
+            role="group"
             aria-labelledby={group.headingKey ? `nav-group-${group.headingKey}` : undefined}
           >
             {group.headingKey && (
               <div
-                className={cn('flex items-center pt-0.5', collapsed ? 'justify-center px-0' : 'mb-1.5 gap-2.5 px-3')}
+                className={cn('flex items-center', collapsed ? 'justify-center px-0' : 'mb-1 gap-2 px-3')}
               >
-                <span
-                  id={`nav-group-${group.headingKey}`}
-                  className={cn('text-[10px] font-semibold uppercase tracking-[0.15em]', collapsed ? 'text-[8px]' : '')}
-                  style={{ color: 'var(--text-faint)' }}
-                >
-                  {collapsed ? t(group.headingKey).charAt(0) : t(group.headingKey)}
-                </span>
-                {!collapsed && <div className="h-px flex-1" style={{ background: 'var(--border-subtle)' }} />}
+                <div
+                  className="h-1.5 w-1.5 rounded-full shrink-0"
+                  style={{ background: group.color === 'red' ? '#ef4444' : group.color === 'blue' ? '#3b82f6' : group.color === 'green' ? '#22c55e' : group.color === 'purple' ? '#a78bfa' : '#f59e0b' }}
+                />
+                {!collapsed && (
+                  <span
+                    id={`nav-group-${group.headingKey}`}
+                    className="text-[10px] font-semibold uppercase tracking-[0.12em]"
+                    style={{ color: 'var(--text-faint)' }}
+                  >
+                    {t(group.headingKey)}
+                  </span>
+                )}
               </div>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {group.items.map((item) => (
                 <NavItem
                   key={item.path}
@@ -267,6 +514,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
                   isActive={isPathActive(item)}
                   submenuOpen={openSubmenu === item.path}
                   collapsed={collapsed}
+                  sectionColor={(group.color ?? 'amber') as SectionColor}
                   onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
                   onCloseSubmenu={() => setOpenSubmenu(null)}
                 />
@@ -276,6 +524,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         ))}
       </nav>
 
+      {/* ── Bottom: Settings + Status ── */}
       <BottomNav
         openSubmenu={openSubmenu}
         isPathActive={isPathActive}
@@ -284,6 +533,19 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
         onCloseSubmenu={() => setOpenSubmenu(null)}
       />
+
+      {/* ── Status bar ── */}
+      {!collapsed && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 text-[11px]"
+          style={{ borderTop: '1px solid var(--border-subtle)', color: 'var(--text-faint)' }}
+        >
+          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span className="flex-1">{t('systemHealthy', 'Sistema saudável')}</span>
+        </div>
+      )}
+
+      {/* ── Collapse toggle ── */}
       <button
         type="button"
         onClick={onToggle}

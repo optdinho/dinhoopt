@@ -39,7 +39,7 @@
   "permissionDenied": "permiso denegado (requiere administrador)",
   "andMore": "... y {{count}} más",
   "noScanResultsTitle": "No hay resultados del análisis",
-  "noScanResultsDescription": "Analiza tu sistema para encontrar archivos que se puedan eliminar de forma segura.",
+  "noScanResultsDescription": "Analice su sistema para encontrar archivos que se puedan eliminar de forma segura.",
   "startScan": "Iniciar análisis",
   "categoryItemsHeading": "Elementos de {{category}}",
   "toggleAll": "Alternar todo",

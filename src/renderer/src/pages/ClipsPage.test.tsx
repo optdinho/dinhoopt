@@ -49,6 +49,7 @@ vi.mock('lucide-react', () => {
     'HardDrive',
     'Mic',
     'Microscope',
+    'Pencil',
     'Plus',
     'Power',
     'PowerOff',
@@ -97,14 +98,14 @@ describe('ClipsPage', () => {
       running: false,
       capturing: false,
       uptime: 0,
-      fps: 60,
-      replayTimeSeconds: 60,
+      fps: 30,
+      replayTimeSeconds: 120,
     })
     mockGetConfig.mockResolvedValue({
-      replayTimeSeconds: 60,
+      replayTimeSeconds: 120,
       micEnabled: true,
       audioLoopback: false,
-      fps: 60,
+      fps: 30,
       width: 1920,
       height: 1080,
       bitrateKbps: 50000,
@@ -150,8 +151,8 @@ describe('ClipsPage', () => {
       running: true,
       capturing: false,
       uptime: 120,
-      fps: 60,
-      replayTimeSeconds: 60,
+      fps: 30,
+      replayTimeSeconds: 120,
     })
     render(<ClipsPage />)
     expect(await screen.findByText('idle')).toBeTruthy()
@@ -162,8 +163,8 @@ describe('ClipsPage', () => {
       running: true,
       capturing: true,
       uptime: 120,
-      fps: 60,
-      replayTimeSeconds: 60,
+      fps: 30,
+      replayTimeSeconds: 120,
     })
     render(<ClipsPage />)
     expect(await screen.findByText('recording')).toBeTruthy()
@@ -179,8 +180,8 @@ describe('ClipsPage', () => {
       running: true,
       capturing: false,
       uptime: 120,
-      fps: 60,
-      replayTimeSeconds: 60,
+      fps: 30,
+      replayTimeSeconds: 120,
     })
     render(<ClipsPage />)
     expect(await screen.findByText('startRecording')).toBeTruthy()
@@ -223,8 +224,8 @@ describe('ClipsPage', () => {
       running: true,
       capturing: true,
       uptime: 300,
-      fps: 60,
-      replayTimeSeconds: 60,
+      fps: 30,
+      replayTimeSeconds: 120,
       captureBackend: 'nvenc',
       encoder: 'h264',
       replayBufferBytes: 536870912,
@@ -245,8 +246,8 @@ describe('ClipsPage', () => {
       running: true,
       capturing: false,
       uptime: 120,
-      fps: 60,
-      replayTimeSeconds: 60,
+      fps: 30,
+      replayTimeSeconds: 120,
       diskSpaceOk: false,
     })
     render(<ClipsPage />)
@@ -307,10 +308,10 @@ describe('ClipsPage', () => {
 
   it('renders pushToTalk as a hotkey action option', async () => {
     mockGetConfig.mockResolvedValue({
-      replayTimeSeconds: 60,
+      replayTimeSeconds: 120,
       micEnabled: true,
       audioLoopback: false,
-      fps: 60,
+      fps: 30,
       width: 1920,
       height: 1080,
       bitrateKbps: 50000,

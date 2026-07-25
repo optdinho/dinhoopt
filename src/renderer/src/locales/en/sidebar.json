@@ -3,6 +3,9 @@
   "subtitle": "COMPLETE OPTIMIZATION & MAINTENANCE",
   "dashboard": "Dashboard",
   "securityHeading": "SECURITY",
+  "sectionProtect": "Protect",
+  "sectionClean": "Clean",
+  "sectionOptimize": "Optimize",
   "malwareScanner": "Malware Scanner",
   "threatMonitor": "Threat Monitor",
   "systemHardening": "System Hardening",
@@ -43,7 +46,6 @@
   "diskRepair": "Disk Repair",
   "diskMaintenance": "Disk Maintenance",
   "preferences": "Preferences",
-  "history": "History",
   "aboutUpdates": "About & Updates",
   "activation": "Activation",
   "clips": "Game Clips",
@@ -52,5 +54,12 @@
   "logs": "Logs",
   "hostsEditor": "Hosts Editor",
   "collapseSidebar": "Collapse sidebar",
-  "expandSidebar": "Expand sidebar"
+  "expandSidebar": "Expand sidebar",
+  "systemHealthy": "System healthy",
+  "searchHint": "Search...",
+  "searchPlaceholder": "Search page...",
+  "searchEmpty": "No results",
+  "sectionQuick": "Quick Access",
+  "sectionOther": "Other",
+  "settingsHeading": "SETTINGS"
 }

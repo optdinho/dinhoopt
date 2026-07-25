@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils'
 import { useAppUpdateStore } from '@/stores/app-update-store'
 import { History, Info, Settings, ShieldCheck } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { NavItem } from './NavItem'
 import type { NavItemDef } from './NavTypes'
 
@@ -39,7 +38,6 @@ export function BottomNav({
   onToggleSubmenu: (path: string) => void
   onCloseSubmenu: () => void
 }) {
-  const { t } = useTranslation('sidebar')
   const bottomNavItems = useBottomNavItems()
 
   return (
@@ -47,14 +45,6 @@ export function BottomNav({
       className={cn(collapsed ? 'px-1 pb-1 pt-1' : 'px-3 pb-3 pt-2')}
       style={{ borderTop: '1px solid var(--border-subtle)' }}
     >
-      <div className={cn('mb-1', collapsed ? 'px-0 text-center' : 'px-3')}>
-        <span
-          className={cn('text-[10px] font-semibold uppercase tracking-[0.15em]', collapsed ? 'text-[8px]' : '')}
-          style={{ color: 'var(--text-faint)' }}
-        >
-          {collapsed ? t('settingsHeading').charAt(0) : t('settingsHeading')}
-        </span>
-      </div>
       {bottomNavItems.map((item) => (
         <NavItem
           key={item.path}

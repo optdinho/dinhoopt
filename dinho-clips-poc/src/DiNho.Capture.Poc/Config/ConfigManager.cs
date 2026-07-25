@@ -34,7 +34,7 @@ public sealed class AppConfig
     public List<int> PushToTalkKeys { get; set; } = new() { 0x77 }; // F8 default
 
     // Replay (fallback global, sobrescrito por binding.DurationSeconds se existir)
-    public int ReplayTimeSeconds { get; set; } = 300; // 5 min
+    public int ReplayTimeSeconds { get; set; } = 120; // 2 min
 
     // Post-clip buffer: continua gravando N segundos após o save trigger
     // para garantir que o momento não seja cortado (ex: Medal/ShadowPlay)
@@ -47,17 +47,17 @@ public sealed class AppConfig
     public float GameVolume { get; set; } = 1.0f;
 
     // Video
-    public int Fps { get; set; } = 60;
+    public int Fps { get; set; } = 30;
     public int Width { get; set; } = 1920;
     public int Height { get; set; } = 1080;
-    public int BitrateKbps { get; set; } = 20000;
+    public int BitrateKbps { get; set; } = 40000;
 
     // CRF+VBV quality params (usados por NVENC/AV1)
     public int Cq { get; set; } = 22;
     public int MaxrateKbps { get; set; } = 30000;
     public int BufsizeKbps { get; set; } = 60000;
-    public int Bframes { get; set; } = 2;
-    public int Lookahead { get; set; } = 4;
+    public int Bframes { get; set; } = 3;
+    public int Lookahead { get; set; } = 32;
     public string EncoderPreset { get; set; } = "p4";
     public string Codec { get; set; } = "auto";
     /// <summary>GPU adapter index for multi-GPU systems (-1 = auto).</summary>
@@ -80,7 +80,7 @@ public sealed class AppConfig
     public string MicDeviceId { get; set; } = "";
 
     // Auto-start capture when game is detected
-    public bool AutoStartCapture { get; set; } = false;
+    public bool AutoStartCapture { get; set; } = true;
 
     // EXCLUDE mode: captura TODO áudio do sistema exceto ExcludeProcessId
     public bool UseExcludeMode { get; set; } = false;
@@ -89,10 +89,10 @@ public sealed class AppConfig
     public int ExcludeProcessId { get; set; } = 0;
 
     // Game Audio Only: captura apenas áudio do jogo detectado + microfone
-    public bool GameAudioOnly { get; set; } = false;
+    public bool GameAudioOnly { get; set; } = true;
 
     // Audio Loopback: captura áudio do sistema (true) ou apenas microfone (false)
-    public bool AudioLoopback { get; set; } = true;
+    public bool AudioLoopback { get; set; } = false;
 
     // RAM-aware adaptive quality (true = RamManager ajusta CQ/resolução/replay conforme RAM disponível)
     [JsonPropertyName("adaptiveQuality")]

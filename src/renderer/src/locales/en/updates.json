@@ -108,6 +108,10 @@
     "emptyStateDescription": "Scan to find available updates and stale driver packages to clean up.",
     "allUpToDateTitle": "All drivers are up to date",
     "allUpToDateDescription": "No updates available and no stale packages found.",
+    "allInstalledSection": "All installed drivers ({{count}})",
+    "allInstalledDescription": "{{count}} driver(s) found on your system.",
+    "currentBadge": "Current",
+    "updateAvailableBadge": "Update available",
     "updatesAvailable": "Updates Available ({{count}})",
     "stalePackages": "Stale Packages ({{count}})",
     "selectAll": "Select All",
@@ -133,6 +137,7 @@
     "cleanFailedToast": "Driver cleanup failed",
     "cleanFailedDescription": "Administrator privileges are required",
     "cleanFailedError": "Failed to remove driver packages. Administrator privileges are required.",
+    "applyFailedToast": "Update & clean operation failed",
 
     "agent": {
       "evaluateButton": "Evaluate with Agents",

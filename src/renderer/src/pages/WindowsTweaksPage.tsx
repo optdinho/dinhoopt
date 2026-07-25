@@ -17,6 +17,7 @@ import {
   MonitorCog,
   Mouse,
   Shield,
+  Timer,
   Wifi,
   XCircle,
   Zap,
@@ -46,7 +47,10 @@ export function WindowsTweaksPage() {
   const lastResult = useWindowsTweaksStore((s) => s.lastResult)
   const revertResult = useWindowsTweaksStore((s) => s.revertResult)
   const expandedCategories = useWindowsTweaksStore((s) => s.expandedCategories)
+  const gamingTimer = useWindowsTweaksStore((s) => s.gamingTimer)
+  const gamingTimerLoading = useWindowsTweaksStore((s) => s.gamingTimerLoading)
   const [dnsStatus, setDnsStatus] = useState<string | null>(null)
+  const [timerStatus, setTimerStatus] = useState<string | null>(null)
 
   const CATEGORIES: CategoryDef[] = [
     { id: 'mouse', label: t('categories.mouse', 'Mouse'), icon: Mouse, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
@@ -106,7 +110,7 @@ export function WindowsTweaksPage() {
   )
 
   useEffect(() => {
-    Promise.all([store.getState().load(), store.getState().loadDnsPresets()])
+    Promise.all([store.getState().load(), store.getState().loadDnsPresets(), store.getState().loadGamingTimer()])
   }, [store])
 
   const appliedCount = tweaks.filter((t) => t.applied).length
@@ -367,6 +371,166 @@ export function WindowsTweaksPage() {
             {t('revertTcpTweaks', 'Revert TCP Tweaks')}
           </button>
         </div>
+      </div>
+
+      {/* Timer & Gaming Tweaks */}
+      <div className="mb-6">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-300">
+          <Timer className="h-4 w-4 text-orange-400" />
+          {t('timerTweaks', 'Timer & Gaming Tweaks')}
+        </h3>
+        <p className="mb-3 text-xs text-zinc-500">
+          {t('timerTweaksDescription', 'Optimize Windows timer resolution and CPU scheduling for competitive gaming. Requires reboot to take effect.')}
+        </p>
+        {gamingTimerLoading ? (
+          <div className="flex items-center gap-2 py-4">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-600 border-t-orange-400" />
+            <span className="text-xs text-zinc-500">{t('loadingTimer', 'Loading timer status...')}</span>
+          </div>
+        ) : gamingTimer ? (
+          <div className="space-y-3">
+            {/* HPET */}
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+              <div>
+                <div className="text-sm font-medium text-zinc-200">
+                  {t('hpetTitle', 'HPET (High Precision Event Timer)')}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {t('hpetDescription', 'Disable platform clock for lower timer latency on Intel CPUs. May help on AMD Ryzen too.')}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  store.getState().setGamingTimer({ hpetOff: !gamingTimer.hpetOff }).then((r) => {
+                    if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                    else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                  gamingTimer.hpetOff ? 'bg-orange-500' : 'bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    gamingTimer.hpetOff ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* TSC Sync Policy */}
+            <div className="rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+              <div className="mb-2">
+                <div className="text-sm font-medium text-zinc-200">
+                  {t('tscSyncTitle', 'TSC Sync Policy')}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {t('tscSyncDescription', 'Legacy = lower input lag, slightly less FPS. Enhanced = more FPS, slightly more input lag.')}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {(['default', 'legacy', 'enhanced'] as const).map((policy) => (
+                  <button
+                    type="button"
+                    key={policy}
+                    onClick={() =>
+                      store.getState().setGamingTimer({ tscSyncPolicy: policy }).then((r) => {
+                        if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                        else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                      })
+                    }
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                      gamingTimer.tscSyncPolicy === policy
+                        ? 'bg-orange-500/20 text-orange-400 ring-1 ring-orange-500/40'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-zinc-300'
+                    }`}
+                  >
+                    {policy === 'default' ? t('tscDefault', 'Default') : policy === 'legacy' ? t('tscLegacy', 'Legacy (Low Latency)') : t('tscEnhanced', 'Enhanced (High FPS)')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Dynamic Tick */}
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+              <div>
+                <div className="text-sm font-medium text-zinc-200">
+                  {t('dynamicTickTitle', 'Disable Dynamic Tick')}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {t('dynamicTickDescription', 'Prevents Windows from suspending the system timer tick in idle. Reduces micro-stutters.')}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  store.getState().setGamingTimer({ dynamicTickDisabled: !gamingTimer.dynamicTickDisabled }).then((r) => {
+                    if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                    else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                  gamingTimer.dynamicTickDisabled ? 'bg-orange-500' : 'bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    gamingTimer.dynamicTickDisabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* AutoTuning */}
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+              <div>
+                <div className="text-sm font-medium text-zinc-200">
+                  {t('autoTuningTitle', 'TCP AutoTuning — Disabled')}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {t('autoTuningDescription', 'Reduces bufferbloat and jitter during gaming. Recommended for competitive gaming. May slow large downloads.')}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  store.getState().setAutoTuning(gamingTimer.autoTuningDisabled ? 'revert' : 'apply').then((r) => {
+                    if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                    else toast.error(r.error ?? t('failed', 'Failed'))
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                  gamingTimer.autoTuningDisabled ? 'bg-orange-500' : 'bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    gamingTimer.autoTuningDisabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Revert All */}
+            <button
+              type="button"
+              onClick={() =>
+                store.getState().revertGamingTimer().then((r) => {
+                  if (r.success) toast.success(t('timerReverted', 'Timer settings reverted to defaults!'))
+                  else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                })
+              }
+              className="rounded-lg border border-red-800 px-4 py-2 text-xs font-medium text-red-400 transition-all hover:bg-red-900/20"
+            >
+              {t('revertTimerDefaults', 'Revert Timer to Defaults')}
+            </button>
+
+            {timerStatus && <p className="text-xs text-zinc-500">{timerStatus}</p>}
+          </div>
+        ) : (
+          <p className="text-xs text-zinc-500">{t('timerLoadFailed', 'Failed to load timer status.')}</p>
+        )}
       </div>
 
       {/* DNS Presets */}

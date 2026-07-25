@@ -1,6 +1,8 @@
 import type { DnsPreset, WindowsTweakApplyProgress, WindowsTweakResult, WindowsTweakState } from '@shared/types'
 import { create } from 'zustand'
 
+type GamingTimerStatus = import('../../main/ipc/windows-tweaks/tweaks/gaming').GamingTimerStatus
+
 interface WindowsTweaksStoreState {
   tweaks: WindowsTweakState[]
   dnsPresets: DnsPreset[]
@@ -11,6 +13,8 @@ interface WindowsTweaksStoreState {
   lastResult: WindowsTweakResult | null
   revertResult: WindowsTweakResult | null
   expandedCategories: Set<string>
+  gamingTimer: GamingTimerStatus | null
+  gamingTimerLoading: boolean
 
   load: () => Promise<void>
   loadDnsPresets: () => Promise<void>
@@ -23,6 +27,10 @@ interface WindowsTweaksStoreState {
   setDns: (primary: string, secondary?: string) => Promise<boolean>
   netshTcpApply: () => Promise<{ success: boolean; error?: string }>
   netshTcpRevert: () => Promise<{ success: boolean; error?: string }>
+  loadGamingTimer: () => Promise<void>
+  setGamingTimer: (settings: Partial<Pick<GamingTimerStatus, 'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'>>) => Promise<{ success: boolean; errors: string[] }>
+  revertGamingTimer: () => Promise<{ success: boolean; errors: string[] }>
+  setAutoTuning: (action: 'apply' | 'revert') => Promise<{ success: boolean; error?: string }>
 }
 
 const defaultProgress: WindowsTweakApplyProgress = { current: 0, total: 0, currentTweak: '' }
@@ -37,6 +45,8 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
   lastResult: null,
   revertResult: null,
   expandedCategories: new Set(['mouse', 'network', 'system', 'gaming']),
+  gamingTimer: null,
+  gamingTimerLoading: false,
 
   load: async () => {
     set({ scanning: true })
@@ -143,6 +153,49 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
       return await window.dinho.windowsTweaksNetshTcp('revert')
     } catch {
       return { success: false, error: 'Failed to revert netsh TCP tweaks' }
+    }
+  },
+
+  loadGamingTimer: async () => {
+    set({ gamingTimerLoading: true })
+    try {
+      const gamingTimer = await window.dinho.gamingTimerGet()
+      set({ gamingTimer, gamingTimerLoading: false })
+    } catch {
+      set({
+        gamingTimer: { hpetOff: false, tscSyncPolicy: 'default', dynamicTickDisabled: false, autoTuningDisabled: false },
+        gamingTimerLoading: false,
+      })
+    }
+  },
+
+  setGamingTimer: async (settings) => {
+    try {
+      const result = await window.dinho.gamingTimerSet(settings)
+      if (result.success) get().loadGamingTimer()
+      return result
+    } catch {
+      return { success: false, errors: ['IPC call failed'] }
+    }
+  },
+
+  revertGamingTimer: async () => {
+    try {
+      const result = await window.dinho.gamingTimerRevert()
+      if (result.success) get().loadGamingTimer()
+      return result
+    } catch {
+      return { success: false, errors: ['IPC call failed'] }
+    }
+  },
+
+  setAutoTuning: async (action) => {
+    try {
+      const result = await window.dinho.gamingAutoTuning(action)
+      if (result.success) get().loadGamingTimer()
+      return result
+    } catch {
+      return { success: false, error: 'IPC call failed' }
     }
   },
 }))

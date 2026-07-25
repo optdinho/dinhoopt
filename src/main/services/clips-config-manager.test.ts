@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./clips-config-store', () => ({
   loadClipsConfig: vi.fn(() => ({
-    replayTimeSeconds: 300,
+    replayTimeSeconds: 120,
     micEnabled: true,
     noiseSuppression: undefined as unknown as boolean,
     audioLoopback: false,
-    fps: 60,
+    fps: 30,
     width: 1920,
     height: 1080,
     bitrateKbps: 40000,
@@ -90,10 +90,10 @@ describe('clips-config-manager', () => {
   describe('buildEngineConfig', () => {
     it('returns all expected fields with values from loaded config', () => {
       const result = buildEngineConfig()
-      expect(result.replayTimeSeconds).toBe(300)
+      expect(result.replayTimeSeconds).toBe(120)
       expect(result.micEnabled).toBe(true)
       expect(result.audioLoopback).toBe(false)
-      expect(result.fps).toBe(60)
+      expect(result.fps).toBe(30)
       expect(result.width).toBe(1920)
       expect(result.height).toBe(1080)
       expect(result.bitrateKbps).toBe(40000)
@@ -256,7 +256,7 @@ describe('clips-config-manager', () => {
 
     it('preserves all engine config fields', () => {
       const result = getCurrentConfigPayload()
-      expect(result.replayTimeSeconds).toBe(300)
+      expect(result.replayTimeSeconds).toBe(120)
       expect(result.width).toBe(1920)
       expect(result.bitrateKbps).toBe(40000)
     })

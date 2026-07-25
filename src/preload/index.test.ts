@@ -714,6 +714,7 @@ describe('preload API bridge', () => {
       'clipsSaveClip',
       'clipsList',
       'clipsDelete',
+      'clipsRename',
       'clipsOpen',
       'clipsGetConfig',
       'clipsSetConfig',

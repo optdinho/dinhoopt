@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { stat as fsStat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { IPC } from '@shared/channels'
@@ -195,6 +195,86 @@ export function registerClipsIpc(): void {
             unlinkSync(thumbPath)
           } catch {
             /* ignore thumbnail cleanup failure */
+          }
+        }
+        const engineThumb = join(outputDir, clipName.replace(/\.mp4$/, '') + '.thumb.jpg')
+        if (existsSync(engineThumb)) {
+          try {
+            unlinkSync(engineThumb)
+          } catch {
+            /* ignore engine thumbnail cleanup failure */
+          }
+        }
+        return { success: true }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { success: false, error: msg }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    IPC.CLIPS_RENAME_CLIP,
+    async (
+      _event,
+      clipName: unknown,
+      newName: unknown,
+    ): Promise<{ success: boolean; error?: string }> => {
+      if (typeof clipName !== 'string' || !clipName) {
+        return { success: false, error: 'Invalid clip name' }
+      }
+      if (typeof newName !== 'string' || !newName) {
+        return { success: false, error: 'Invalid new name' }
+      }
+      if (newName.endsWith('.mp4')) {
+        newName = newName.slice(0, -4)
+      }
+      if (!newName) {
+        return { success: false, error: 'Invalid new name' }
+      }
+      newName = newName + '.mp4'
+      const oldPath = clipPathInOutputDir(clipName)
+      if (!oldPath) {
+        return { success: false, error: 'Invalid old clip name' }
+      }
+      const newPath = clipPathInOutputDir(newName)
+      if (!newPath) {
+        return { success: false, error: 'Invalid new clip name' }
+      }
+      try {
+        if (!existsSync(oldPath)) {
+          return { success: false, error: 'Clip not found' }
+        }
+        if (existsSync(newPath)) {
+          return { success: false, error: 'A clip with that name already exists' }
+        }
+        renameSync(oldPath, newPath)
+        const outputDir = getDefaultOutputDir()
+        const oldThumbPath = getCachedThumbnailPath(outputDir, clipName)
+        if (oldThumbPath && existsSync(oldThumbPath)) {
+          const newThumbPath = join(outputDir, '.thumbnails', newName.replace(/\.mp4$/, '') + '.jpg')
+          try {
+            renameSync(oldThumbPath, newThumbPath)
+          } catch {
+            /* ignore thumbnail rename failure */
+          }
+        }
+        const oldEngineThumb = join(outputDir, clipName.replace(/\.mp4$/, '') + '.thumb.jpg')
+        if (existsSync(oldEngineThumb)) {
+          const newEngineThumb = join(outputDir, newName.replace(/\.mp4$/, '') + '.thumb.jpg')
+          try {
+            renameSync(oldEngineThumb, newEngineThumb)
+          } catch {
+            /* ignore engine thumbnail rename failure */
+          }
+        }
+        const oldFavPath = join(outputDir, '.' + clipName + '.favorite')
+        if (existsSync(oldFavPath)) {
+          const newFavPath = join(outputDir, '.' + newName + '.favorite')
+          try {
+            renameSync(oldFavPath, newFavPath)
+          } catch {
+            /* ignore favorite rename failure */
           }
         }
         return { success: true }

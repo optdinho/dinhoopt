@@ -315,7 +315,7 @@ describe('driver-store', () => {
 
       await store.updateInstall()
 
-      expect(kudu.driverUpdateInstall!).toHaveBeenCalledWith(['a'])
+      expect(kudu.driverUpdateInstall!).toHaveBeenCalledWith(['update-a'])
       expect(useDriverStore.getState().installing).toBe(false)
     })
 

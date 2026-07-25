@@ -12,8 +12,11 @@ const mockStore = {
   lastResult: null,
   revertResult: null,
   expandedCategories: new Set<string>(['mouse', 'network', 'system', 'gaming']),
+  gamingTimer: null,
+  gamingTimerLoading: false,
   load: vi.fn(),
   loadDnsPresets: vi.fn(),
+  loadGamingTimer: vi.fn(),
   toggle: vi.fn(),
   apply: vi.fn(),
   revert: vi.fn(),
@@ -21,6 +24,11 @@ const mockStore = {
   deselectAll: vi.fn(),
   setDns: vi.fn(),
   toggleCategory: vi.fn(),
+  netshTcpApply: vi.fn(),
+  netshTcpRevert: vi.fn(),
+  setGamingTimer: vi.fn(),
+  revertGamingTimer: vi.fn(),
+  setAutoTuning: vi.fn(),
 }
 
 vi.mock('@/stores/windows-tweaks-store', () => ({
@@ -64,6 +72,7 @@ vi.mock('lucide-react', () => {
     'MonitorCog',
     'Mouse',
     'Shield',
+    'Timer',
     'Wifi',
     'XCircle',
     'Zap',

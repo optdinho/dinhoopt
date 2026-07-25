@@ -267,7 +267,7 @@ describe('registerDriverManagerIpc', () => {
       setPlatform('linux')
       const handler = getHandler('driver:update:scan')
       const result = await handler()
-      expect(result).toEqual({ updates: [], totalAvailable: 0, scanDuration: expect.any(Number) })
+      expect(result).toEqual({ updates: [], allDrivers: [], totalAvailable: 0, scanDuration: expect.any(Number) })
     })
   })
 
@@ -763,6 +763,7 @@ describe('scanDriverUpdates', () => {
     expect(result.updates[0]!.deviceName).toBe('Intel Graphics')
     expect(result.updates[0]!.updateId).toBe('upd-001')
     expect(result.updates[0]!.selected).toBe(true)
+    expect(Array.isArray(result.allDrivers)).toBe(true)
   })
 
   it('returns empty when no updates found', async () => {
@@ -771,13 +772,17 @@ describe('scanDriverUpdates', () => {
     const result = await scanDriverUpdates()
     expect(result.updates).toHaveLength(0)
     expect(result.totalAvailable).toBe(0)
+    expect(result.allDrivers).toBeDefined()
+    expect(Array.isArray(result.allDrivers)).toBe(true)
   })
 
-  it('handles PowerShell error', async () => {
+  it('handles PowerShell error — falls back to catalog and driverstore, returns empty when all fail', async () => {
     mocks.execFileAsync.mockRejectedValue({ stderr: 'COM error', message: 'Update search failed' })
 
-    await expect(scanDriverUpdates()).rejects.toThrow('COM error')
-    expect(mocks.logger.error).toHaveBeenCalled()
+    const result = await scanDriverUpdates()
+    expect(result.updates).toHaveLength(0)
+    expect(result.totalAvailable).toBe(0)
+    expect(mocks.logger.warning).toHaveBeenCalled()
   })
 
   it('reports progress when onProgress provided', async () => {
@@ -837,11 +842,13 @@ describe('scanDriverUpdates', () => {
     expect(result.updates[0].updateTitle).toBe('Realtek Audio')
   })
 
-  it('handles error with only message property', async () => {
+  it('handles error with only message property — falls back gracefully', async () => {
     mocks.execFileAsync.mockRejectedValue(new Error('Search timeout'))
 
-    await expect(scanDriverUpdates()).rejects.toThrow('Search timeout')
-    expect(mocks.logger.error).toHaveBeenCalled()
+    const result = await scanDriverUpdates()
+    expect(result.updates).toHaveLength(0)
+    expect(result.totalAvailable).toBe(0)
+    expect(mocks.logger.warning).toHaveBeenCalled()
   })
 
   it('sorts same-device updates by descending version', async () => {

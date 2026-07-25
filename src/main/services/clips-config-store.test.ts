@@ -25,10 +25,10 @@ describe('clips-config-store', () => {
   it('loads defaults when no file exists', () => {
     vi.mocked(existsSync).mockReturnValue(false)
     const cfg = loadClipsConfig()
-    expect(cfg.replayTimeSeconds).toBe(300)
+    expect(cfg.replayTimeSeconds).toBe(120)
     expect(cfg.micEnabled).toBe(true)
     expect(cfg.audioLoopback).toBe(false)
-    expect(cfg.fps).toBe(60)
+    expect(cfg.fps).toBe(30)
     expect(cfg.width).toBe(1920)
     expect(cfg.height).toBe(1080)
     expect(cfg.bitrateKbps).toBe(40000)
@@ -104,7 +104,7 @@ describe('clips-config-store', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readFileSync).mockReturnValue('not-json')
     const cfg = loadClipsConfig()
-    expect(cfg.replayTimeSeconds).toBe(300)
+    expect(cfg.replayTimeSeconds).toBe(120)
   })
 
   it('saves config with partial update', () => {
@@ -112,7 +112,7 @@ describe('clips-config-store', () => {
     const saved = saveClipsConfig({ fps: 120, gameAudioOnly: true })
     expect(saved.fps).toBe(120)
     expect(saved.gameAudioOnly).toBe(true)
-    expect(saved.replayTimeSeconds).toBe(300)
+    expect(saved.replayTimeSeconds).toBe(120)
     expect(writeFileSync).toHaveBeenCalledTimes(1)
   })
 

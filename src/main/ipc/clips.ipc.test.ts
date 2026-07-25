@@ -27,6 +27,7 @@ vi.mock('node:fs', () => ({
   readdirSync: vi.fn(),
   statSync: vi.fn(),
   unlinkSync: vi.fn(),
+  renameSync: vi.fn(),
   mkdirSync: vi.fn(),
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
@@ -89,7 +90,7 @@ function resetEngineMocks(): void {
 }
 
 import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { connect } from 'node:net'
 import { IPC } from '@shared/channels'
@@ -138,7 +139,7 @@ describe('registerClipsIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 18 clip handlers', () => {
+  it('registers all 19 clip handlers', () => {
     const handlers = captureHandlers()
     const expectedChannels = [
       IPC.CLIPS_GET_STATUS,
@@ -164,11 +165,12 @@ describe('registerClipsIpc', () => {
       IPC.CLIPS_TRIM_CLIP,
       IPC.CLIPS_MERGE_CLIPS,
       IPC.CLIPS_GET_DURATIONS,
+      IPC.CLIPS_RENAME_CLIP,
     ]
     for (const ch of expectedChannels) {
       expect(handlers.has(ch)).toBe(true)
     }
-    expect(handlers.size).toBe(23)
+    expect(handlers.size).toBe(24)
   })
 })
 
@@ -183,8 +185,8 @@ describe('CLIPS_GET_STATUS', () => {
     expect(status.running).toBe(false)
     expect(status.capturing).toBe(false)
     expect(status.uptime).toBe(0)
-    expect(status.fps).toBe(60)
-    expect(status.replayTimeSeconds).toBe(300)
+    expect(status.fps).toBe(30)
+    expect(status.replayTimeSeconds).toBe(120)
     expect(status.captureBackend).toBeUndefined()
     expect(status.encoder).toBeUndefined()
     expect(status.estimatedRamMB).toBeUndefined()
@@ -424,10 +426,10 @@ describe('CLIPS_GET_CONFIG', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     const handlers = captureHandlers()
     const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
-    expect(cfg.replayTimeSeconds).toBe(300)
+    expect(cfg.replayTimeSeconds).toBe(120)
     expect(cfg.micEnabled).toBe(true)
     expect(cfg.audioLoopback).toBe(false)
-    expect(cfg.fps).toBe(60)
+    expect(cfg.fps).toBe(30)
     expect(cfg.width).toBe(1920)
     expect(cfg.height).toBe(1080)
     expect(cfg.bitrateKbps).toBe(40000)
@@ -616,7 +618,7 @@ describe('CLIPS_SET_CONFIG', () => {
     await handler(
       {},
       {
-        replayTimeSeconds: 300,
+        replayTimeSeconds: 120,
         fps: 60,
         width: 1920,
         height: 1080,
@@ -1517,5 +1519,128 @@ describe('CLIPS_MERGE_CLIPS', () => {
     const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
     expect(result.success).toBe(false)
     expect(result.error).toBe('write-error')
+  })
+})
+
+describe('CLIPS_RENAME_CLIP', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    resetEngineMocks()
+  })
+
+  it('rejects non-string clipName', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 123, 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid clip name')
+    expect(renameSync).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-string newName', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 456)) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid new name')
+    expect(renameSync).not.toHaveBeenCalled()
+  })
+
+  it('rejects old name that escapes output directory', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, '../../../Windows/system.ini', 'newclip')) as {
+      success: boolean
+      error?: string
+    }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid old clip name')
+  })
+
+  it('rejects new name that escapes output directory', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', '../outside')) as {
+      success: boolean
+      error?: string
+    }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid new clip name')
+  })
+
+  it('returns error when old clip does not exist', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Clip not found')
+    expect(renameSync).not.toHaveBeenCalled()
+  })
+
+  it('returns error when new clip already exists', async () => {
+    vi.mocked(existsSync)
+      .mockReturnValueOnce(true) // old clip exists
+      .mockReturnValueOnce(true) // new clip exists
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('A clip with that name already exists')
+    expect(renameSync).not.toHaveBeenCalled()
+  })
+
+  it('renames the .mp4 file successfully', async () => {
+    vi.mocked(existsSync)
+      .mockReturnValueOnce(true) // old clip exists
+      .mockReturnValueOnce(false) // new clip doesn't exist
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(renameSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('renames the cached thumbnail when present', async () => {
+    vi.mocked(existsSync).mockImplementation((p) => {
+      if (typeof p !== 'string') return false
+      if (p.endsWith('oldclip.mp4')) return true // old clip exists
+      if (p.endsWith('newclip.mp4')) return false // new clip doesn't exist
+      if (p.includes('.thumbnails') && p.includes('oldclip.jpg')) return true // cached thumbnail
+      return false
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    // renameSync called twice: once for .mp4, once for thumbnail
+    expect(renameSync).toHaveBeenCalledTimes(2)
+  })
+
+  it('renames the .favorite marker when present', async () => {
+    vi.mocked(existsSync).mockImplementation((p) => {
+      if (typeof p !== 'string') return false
+      if (p.endsWith('oldclip.mp4')) return true // old clip exists
+      if (p.endsWith('newclip.mp4')) return false // new clip doesn't exist
+      if (p.includes('.oldclip.mp4.favorite')) return true // favorite marker
+      return false
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    // renameSync called twice: once for .mp4, once for .favorite
+    expect(renameSync).toHaveBeenCalledTimes(2)
+  })
+
+  it('strips .mp4 suffix from newName if user included it', async () => {
+    vi.mocked(existsSync)
+      .mockReturnValueOnce(true) // old clip exists
+      .mockReturnValueOnce(false) // new clip doesn't exist (after .mp4 stripped and re-added)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip.mp4')) as { success: boolean; error?: string }
+    expect(result.success).toBe(true)
+    expect(renameSync).toHaveBeenCalledTimes(1)
   })
 })

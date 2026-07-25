@@ -275,6 +275,12 @@ export const IPC = {
   WINDOWS_TWEAKS_GET_DNS: 'windows-tweaks:get-dns',
   WINDOWS_TWEAKS_NETSH_TCP: 'windows-tweaks:netsh-tcp',
 
+  // Gaming Timer Tweaks (HPET, tscsyncpolicy, disabledynamictick, autotuning)
+  WINDOWS_TWEAKS_GAMING_TIMER_GET: 'windows-tweaks:gaming-timer-get',
+  WINDOWS_TWEAKS_GAMING_TIMER_SET: 'windows-tweaks:gaming-timer-set',
+  WINDOWS_TWEAKS_GAMING_TIMER_REVERT: 'windows-tweaks:gaming-timer-revert',
+  WINDOWS_TWEAKS_GAMING_AUTOTUNING: 'windows-tweaks:gaming-autotuning',
+
   // Benchmark
   BENCHMARK_RUN: 'benchmark:run',
   BENCHMARK_PROGRESS: 'benchmark:progress',
@@ -376,4 +382,5 @@ export const IPC = {
   CLIPS_TRIM_CLIP: 'clips:trim-clip',
   CLIPS_MERGE_CLIPS: 'clips:merge-clips',
   CLIPS_GET_DURATIONS: 'clips:get-durations',
+  CLIPS_RENAME_CLIP: 'clips:rename-clip',
 } as const
