@@ -41,6 +41,8 @@
   "optProcChatDesc": "Finaliza Discord, Slack, Teams y otras aplicaciones de chat",
   "optProcUpdaters": "Detener actualizadores en segundo plano",
   "optProcUpdatersDesc": "Finaliza agentes de actualización de software que se ejecutan en segundo plano",
+  "optProcBackground": "Matar bloat en segundo plano",
+  "optProcBackgroundDesc": "Finaliza OneDrive, Edge en segundo plano, Teams en segundo plano, Xbox y otros procesos pesados",
   "optProcCustom": "Lista de procesos personalizada",
   "optProcCustomDesc": "Finaliza los procesos que especifique por nombre",
   "customProcessPlaceholder": "Nombre del proceso (p. ej. spotify.exe)",
