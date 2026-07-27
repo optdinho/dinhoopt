@@ -292,7 +292,12 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         }
       }
     }
-    return pages
+    const seen = new Set<string>()
+    return pages.filter((p) => {
+      if (seen.has(p.path)) return false
+      seen.add(p.path)
+      return true
+    })
   }, [t])
 
   // ── Actions available in the command palette ──
