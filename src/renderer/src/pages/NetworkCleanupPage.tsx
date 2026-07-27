@@ -10,7 +10,7 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useNetworkStore } from '@/stores/network-store'
 import { useStatsStore } from '@/stores/stats-store'
 import type { NetworkItem, ProgressData } from '@shared/types'
-import { CheckCircle2, Globe, History, Network, Search, Sparkles, Wifi } from 'lucide-react'
+import { CircleCheckBig, Globe, History, Network, Search, Sparkles, Wifi } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -315,7 +315,7 @@ export function NetworkCleanupPage() {
               style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.1)' }}
             >
               <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
+                <CircleCheckBig className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
                 <div>
                   <p className="text-[13px] font-medium text-zinc-200">{t('cleanupComplete')}</p>
                   <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>

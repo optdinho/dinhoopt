@@ -13,9 +13,9 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
 import type { DriverScanProgress, DriverUpdateProgress } from '@shared/types'
 import {
-  AlertTriangle,
-  ArrowUpCircle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleArrowUp,
+  CircleCheckBig,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -414,7 +414,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
           className="mb-5 flex items-center gap-3 rounded-2xl p-4"
           style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.1)' }}
         >
-          <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+          <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
           <div className="text-[13px] text-zinc-200">
             <p>
               {installResult.installed !== 1
@@ -435,7 +435,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
           className="mb-5 flex items-center gap-3 rounded-2xl p-4"
           style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.1)' }}
         >
-          <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+          <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
           <p className="text-[13px] text-zinc-200">
             {cleanResult.removed !== 1
               ? t('driverManager.removedStalePackagesPlural', { count: cleanResult.removed })
@@ -483,7 +483,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
           className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
           style={{ background: 'rgba(34,197,94,0.03)', border: '1px solid rgba(34,197,94,0.08)' }}
         >
-          <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
+          <CircleCheckBig className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
           <p className="text-[13px] text-zinc-200">
             {t('driverManager.allUpToDateTitle')} — {t('driverManager.allInstalledDescription', { count: allDrivers.length })}
           </p>
@@ -495,7 +495,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
         <div className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <ArrowUpCircle className="h-4.5 w-4.5 text-blue-400" strokeWidth={1.8} />
+              <CircleArrowUp className="h-4.5 w-4.5 text-blue-400" strokeWidth={1.8} />
               <span className="text-[13px] font-semibold text-zinc-200">
                 {t('driverManager.updatesAvailable', { count: updates.length })}
               </span>
@@ -579,7 +579,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
             ) : (
               <ChevronRight className="h-4 w-4" strokeWidth={2} />
             )}
-            <CheckCircle2 className="h-4 w-4 text-green-500" strokeWidth={1.8} />
+            <CircleCheckBig className="h-4 w-4 text-green-500" strokeWidth={1.8} />
             {t('driverManager.allInstalledSection', { count: allDrivers.length })}
           </button>
 

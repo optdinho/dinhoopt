@@ -4,14 +4,14 @@ import { usePlatform } from '@/hooks/usePlatform'
 import logger from '@/lib/renderer-logger'
 import { useDiskStore } from '@/stores/disk-store'
 import {
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   HardDrive,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
   Wrench,
-  XCircle,
+  CircleX,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -220,17 +220,17 @@ export function DiskRepairPage() {
             >
               <div className="flex items-center gap-2">
                 {dismResult.success ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" strokeWidth={1.8} />
+                  <CircleCheckBig className="h-4 w-4 text-green-500 shrink-0" strokeWidth={1.8} />
                 ) : dismResult.needsAdmin ? (
                   <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" strokeWidth={1.8} />
                 ) : (
-                  <XCircle className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
+                  <CircleX className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
                 )}
                 <p className="text-[12px] text-zinc-300">{dismResult.summary}</p>
               </div>
               {dismResult.requiresReboot && (
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
-                  <AlertTriangle className="h-3 w-3" strokeWidth={2} /> {t('restartRecommended')}
+                  <TriangleAlert className="h-3 w-3" strokeWidth={2} /> {t('restartRecommended')}
                 </p>
               )}
               {dismResult.log && (
@@ -308,17 +308,17 @@ export function DiskRepairPage() {
             >
               <div className="flex items-center gap-2">
                 {sfcResult.success ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" strokeWidth={1.8} />
+                  <CircleCheckBig className="h-4 w-4 text-green-500 shrink-0" strokeWidth={1.8} />
                 ) : sfcResult.needsAdmin ? (
                   <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" strokeWidth={1.8} />
                 ) : (
-                  <XCircle className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
+                  <CircleX className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
                 )}
                 <p className="text-[12px] text-zinc-300">{sfcResult.summary}</p>
               </div>
               {sfcResult.requiresReboot && (
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
-                  <AlertTriangle className="h-3 w-3" strokeWidth={2} /> {t('restartRecommended')}
+                  <TriangleAlert className="h-3 w-3" strokeWidth={2} /> {t('restartRecommended')}
                 </p>
               )}
               {sfcResult.log && (
@@ -396,17 +396,17 @@ export function DiskRepairPage() {
             >
               <div className="flex items-center gap-2">
                 {chkdskResult.success ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" strokeWidth={1.8} />
+                  <CircleCheckBig className="h-4 w-4 text-green-500 shrink-0" strokeWidth={1.8} />
                 ) : chkdskResult.needsAdmin ? (
                   <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" strokeWidth={1.8} />
                 ) : (
-                  <XCircle className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
+                  <CircleX className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
                 )}
                 <p className="text-[12px] text-zinc-300">{chkdskResult.summary}</p>
               </div>
               {chkdskResult.requiresReboot && (
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
-                  <AlertTriangle className="h-3 w-3" strokeWidth={2} /> {t('restartRecommended')}
+                  <TriangleAlert className="h-3 w-3" strokeWidth={2} /> {t('restartRecommended')}
                 </p>
               )}
               {chkdskResult.log && (

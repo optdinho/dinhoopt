@@ -1,6 +1,6 @@
 import type { GameModeAuditReport } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, AlertTriangle, CheckCircle2, Shield, X } from 'lucide-react'
+import { Activity, TriangleAlert, CircleCheckBig, Shield, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const CYAN = '#06b6d4'
@@ -123,15 +123,15 @@ export function GameModeAudit({
               </div>
               <div className="flex gap-4 border-b px-6 py-3" style={{ borderColor: 'var(--border-subtle)' }}>
                 <div className="flex items-center gap-1.5 text-[12px]">
-                  <CheckCircle2 className="h-3.5 w-3.5" style={{ color: '#22c55e' }} />
+                  <CircleCheckBig className="h-3.5 w-3.5" style={{ color: '#22c55e' }} />
                   <span style={{ color: '#22c55e' }}>{auditReport.summary.passed}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-[12px]">
-                  <AlertTriangle className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
+                  <TriangleAlert className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
                   <span style={{ color: '#f59e0b' }}>{auditReport.summary.warnings}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-[12px]">
-                  <AlertTriangle className="h-3.5 w-3.5" style={{ color: '#ef4444' }} />
+                  <TriangleAlert className="h-3.5 w-3.5" style={{ color: '#ef4444' }} />
                   <span style={{ color: '#ef4444' }}>{auditReport.summary.errors}</span>
                 </div>
                 <span className="ml-auto text-[11px] text-zinc-600">
@@ -160,9 +160,9 @@ export function GameModeAudit({
                       >
                         <div className="flex items-start gap-3">
                           {check.passed ? (
-                            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#22c55e' }} />
+                            <CircleCheckBig className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#22c55e' }} />
                           ) : (
-                            <AlertTriangle
+                            <TriangleAlert
                               className="mt-0.5 h-3.5 w-3.5 shrink-0"
                               style={{ color: check.severity === 'error' ? '#ef4444' : '#f59e0b' }}
                             />

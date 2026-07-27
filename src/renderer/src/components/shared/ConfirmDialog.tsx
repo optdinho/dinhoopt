@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -108,7 +108,7 @@ export function ConfirmDialog({
                     background: variant === 'danger' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
                   }}
                 >
-                  <AlertTriangle
+                  <TriangleAlert
                     className="h-5 w-5"
                     style={{ color: variant === 'danger' ? '#ef4444' : '#f59e0b' }}
                     strokeWidth={1.8}

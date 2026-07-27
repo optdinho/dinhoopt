@@ -61,8 +61,8 @@ vi.mock('lucide-react', () => {
   const Icon = ({ children, ...props }: { children?: React.ReactNode }) => <div {...props}>{children}</div>
   const icons = [
     'Accessibility',
-    'AlertTriangle',
-    'CheckCircle2',
+    'TriangleAlert',
+    'CircleCheckBig',
     'ChevronDown',
     'Cpu',
     'Gamepad2',
@@ -74,7 +74,7 @@ vi.mock('lucide-react', () => {
     'Shield',
     'Timer',
     'Wifi',
-    'XCircle',
+    'CircleX',
     'Zap',
   ]
   // biome-ignore lint/suspicious/noExplicitAny: test mock

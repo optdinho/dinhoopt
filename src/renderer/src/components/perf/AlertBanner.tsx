@@ -1,6 +1,6 @@
 import type { PerfSnapshot } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, X } from 'lucide-react'
+import { TriangleAlert, X } from 'lucide-react'
 import { memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -43,7 +43,7 @@ export const AlertBanner = memo(function AlertBanner({ snapshot, history }: Aler
             className="flex items-center gap-3 rounded-xl px-4 py-3"
             style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
           >
-            <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#ef4444' }} strokeWidth={2} />
+            <TriangleAlert className="h-4 w-4 shrink-0" style={{ color: '#ef4444' }} strokeWidth={2} />
             <span className="flex-1 text-[12px] font-medium" style={{ color: '#fca5a5' }}>
               {alert.message}
             </span>

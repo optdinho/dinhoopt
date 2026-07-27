@@ -4,7 +4,7 @@ import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { HealthScore } from '@/components/shared/HealthScore'
 import { formatBytes } from '@/lib/utils'
 import { useMemoryStore } from '@/stores/memory-store'
-import { CheckCircle2, Cpu, Gauge, Loader2, MemoryStick, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { CircleCheckBig, Cpu, Gauge, Loader2, MemoryStick, RefreshCw, Trash2, CircleX } from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -43,7 +43,7 @@ export function MemoryOptimizerPage() {
           className="flex items-center gap-3 rounded-xl px-5 py-3 text-sm"
           style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}
         >
-          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <CircleCheckBig className="h-5 w-5 shrink-0" />
           {success}
         </div>
       )}
@@ -177,12 +177,12 @@ export function MemoryOptimizerPage() {
                       <td className="px-5 py-3">
                         {s.success ? (
                           <span className="flex items-center gap-1.5 text-green-500">
-                            <CheckCircle2 className="h-4 w-4" />
+                            <CircleCheckBig className="h-4 w-4" />
                             {t('success')}
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-red-400" title={s.error}>
-                            <XCircle className="h-4 w-4" />
+                            <CircleX className="h-4 w-4" />
                             {t('failed')}
                           </span>
                         )}

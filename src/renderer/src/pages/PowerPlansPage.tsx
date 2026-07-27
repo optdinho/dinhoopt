@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/layout/PageHeader'
 import { usePowerPlansStore } from '@/stores/power-plans-store'
 import type { PowerPlanInfo } from '@shared/types'
-import { AlertCircle, Check, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CircleAlert, Check, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -70,7 +70,7 @@ export function PowerPlansPage() {
       {/* Error */}
       {error && (
         <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+          <CircleAlert className="h-4 w-4 shrink-0" />
           <span className="flex-1">{error}</span>
           <button type="button" onClick={clearError} className="text-zinc-500 transition-colors hover:text-zinc-300">
             &times;

@@ -1,7 +1,7 @@
 import { Checkbox } from '@/components/shared/Checkbox'
 import { formatBytes } from '@/lib/utils'
 import type { DriverPackage, DriverUpdate } from '@shared/types'
-import { AlertTriangle, ArrowUpCircle, CheckCircle2, Cpu } from 'lucide-react'
+import { TriangleAlert, CircleArrowUp, CircleCheckBig, Cpu } from 'lucide-react'
 
 export function UpdateItemRow({
   upd,
@@ -29,7 +29,7 @@ export function UpdateItemRow({
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         style={{ background: 'rgba(59,130,246,0.1)' }}
       >
-        <ArrowUpCircle className="h-5 w-5" style={{ color: '#3b82f6' }} strokeWidth={1.8} />
+        <CircleArrowUp className="h-5 w-5" style={{ color: '#3b82f6' }} strokeWidth={1.8} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2.5">
@@ -84,7 +84,7 @@ export function StaleItemRow({
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         style={{ background: 'rgba(245,158,11,0.1)' }}
       >
-        <AlertTriangle className="h-5 w-5" style={{ color: '#f59e0b' }} strokeWidth={1.8} />
+        <TriangleAlert className="h-5 w-5" style={{ color: '#f59e0b' }} strokeWidth={1.8} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2.5">
@@ -132,7 +132,7 @@ export function InstalledDriverRow({
         style={{ background: isUpToDate ? 'rgba(34,197,94,0.08)' : 'rgba(59,130,246,0.08)' }}
       >
         {isUpToDate ? (
-          <CheckCircle2 className="h-4 w-4 text-green-500" strokeWidth={1.8} />
+          <CircleCheckBig className="h-4 w-4 text-green-500" strokeWidth={1.8} />
         ) : (
           <Cpu className="h-4 w-4 text-blue-400" strokeWidth={1.8} />
         )}

@@ -12,8 +12,8 @@ import { useStatsStore } from '@/stores/stats-store'
 import { UNUSED_THRESHOLD_DAYS, useUninstallerStore } from '@/stores/uninstaller-store'
 import type { InstalledProgram } from '@shared/types'
 import {
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   CheckSquare,
   Loader2,
   MinusSquare,
@@ -396,7 +396,7 @@ export function UninstallerPage() {
 
       {hasLoaded && !loading && programs.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
-          <CheckCircle2 className="h-10 w-10 text-green-500 mb-4" strokeWidth={1.5} />
+          <CircleCheckBig className="h-10 w-10 text-green-500 mb-4" strokeWidth={1.5} />
           <p className="text-[13px] text-zinc-400">{t('noInstalledProgramsFound')}</p>
         </div>
       )}
@@ -426,7 +426,7 @@ export function UninstallerPage() {
               )}
             </button>
             {filterMode === 'unused' ? (
-              <AlertTriangle className="h-4.5 w-4.5 text-amber-400" strokeWidth={1.8} />
+              <TriangleAlert className="h-4.5 w-4.5 text-amber-400" strokeWidth={1.8} />
             ) : (
               <Package className="h-4.5 w-4.5 text-amber-400" strokeWidth={1.8} />
             )}

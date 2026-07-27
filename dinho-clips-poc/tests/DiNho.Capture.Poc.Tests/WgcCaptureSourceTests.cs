@@ -1,0 +1,168 @@
+using DiNho.Capture.Poc.Capture;
+
+namespace DiNho.Capture.Poc.Tests;
+
+public sealed class WgcCaptureSourceTests
+{
+    // ═══════════════════════════════════════════════════════════════
+    //  CapturedFrame — constructor & properties
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void CapturedFrame_Success_HasCorrectDimensions()
+    {
+        var frame = new CapturedFrame(100, 200, 1920, 1080, success: true);
+        Assert.Equal(1920, frame.Width);
+        Assert.Equal(1080, frame.Height);
+        Assert.True(frame.Success);
+    }
+
+    [Fact]
+    public void CapturedFrame_Failure_HasZeroDimensions()
+    {
+        var frame = new CapturedFrame(100, 200, 0, 0, success: false);
+        Assert.Equal(0, frame.Width);
+        Assert.Equal(0, frame.Height);
+        Assert.False(frame.Success);
+    }
+
+    [Fact]
+    public void CapturedFrame_PreservesTicks()
+    {
+        var frame = new CapturedFrame(startTicks: 1000, endTicks: 2000, width: 100, height: 100, success: true);
+        Assert.Equal(1000, frame.CaptureStartTicks);
+        Assert.Equal(2000, frame.CaptureEndTicks);
+    }
+
+    [Fact]
+    public void CapturedFrame_WaitEndTicks_DefaultsToZero()
+    {
+        var frame = new CapturedFrame(0, 0, 0, 0, success: false);
+        Assert.Equal(0, frame.WaitEndTicks);
+        Assert.Equal(0, frame.CopyEndTicks);
+    }
+
+    [Fact]
+    public void CapturedFrame_WaitEndTicks_CanBeSet()
+    {
+        var frame = new CapturedFrame(0, 0, 100, 100, success: true, waitEndTicks: 500, copyEndTicks: 600);
+        Assert.Equal(500, frame.WaitEndTicks);
+        Assert.Equal(600, frame.CopyEndTicks);
+    }
+
+    [Fact]
+    public void CapturedFrame_TextureDefaultsToNull()
+    {
+        var frame = new CapturedFrame(0, 0, 100, 100, success: true);
+        Assert.Null(frame.Texture);
+        Assert.Null(frame.Device);
+    }
+
+    [Fact]
+    public void CapturedFrame_OwnsTexture_DefaultsTrue()
+    {
+        var frame = new CapturedFrame(0, 0, 100, 100, success: true);
+        Assert.True(frame.OwnsTexture);
+    }
+
+    [Fact]
+    public void CapturedFrame_OwnsTexture_CanBeSetFalse()
+    {
+        var frame = new CapturedFrame(0, 0, 100, 100, success: true, ownsTexture: false);
+        Assert.False(frame.OwnsTexture);
+    }
+
+    // ── Dispose behavior ────────────────────────────────────────────
+
+    [Fact]
+    public void CapturedFrame_Dispose_WithNullTexture_DoesNotThrow()
+    {
+        var frame = new CapturedFrame(0, 0, 100, 100, success: true);
+        frame.Dispose(); // no exception
+    }
+
+    [Fact]
+    public void CapturedFrame_Dispose_CanBeCalledMultipleTimes()
+    {
+        var frame = new CapturedFrame(0, 0, 100, 100, success: true);
+        frame.Dispose();
+        frame.Dispose(); // no exception
+    }
+
+    // ── Failure frame scenarios ─────────────────────────────────────
+
+    [Fact]
+    public void CapturedFrame_Timeout_HasZeroSize()
+    {
+        // Simulates timeout from TryCaptureFrame
+        var frame = new CapturedFrame(100, 300, 0, 0, success: false, waitEndTicks: 300);
+        Assert.False(frame.Success);
+        Assert.Equal(0, frame.Width);
+        Assert.Equal(0, frame.Height);
+        Assert.Equal(300, frame.WaitEndTicks);
+    }
+
+    [Fact]
+    public void CapturedFrame_DisposedSignal_HasZeroSize()
+    {
+        // Simulates ObjectDisposedException from TryCaptureFrame
+        var frame = new CapturedFrame(100, 400, 0, 0, success: false, waitEndTicks: 400);
+        Assert.False(frame.Success);
+        Assert.Equal(400, frame.WaitEndTicks);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  WgcCaptureSource — Name property (comparable without GPU init)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Note: WgcCaptureSource cannot be constructed without D3D11/WGC APIs.
+    // These tests verify the Name via the ICaptureSource interface contract.
+    // The actual name is "Windows Graphics Capture" (hardcoded).
+
+    [Fact]
+    public void CapturedFrame_LargeDimensions_Preserved()
+    {
+        var frame = new CapturedFrame(0, 0, 3840, 2160, success: true);
+        Assert.Equal(3840, frame.Width);
+        Assert.Equal(2160, frame.Height);
+    }
+
+    [Fact]
+    public void CapturedFrame_ZeroTicks_IsValid()
+    {
+        var frame = new CapturedFrame(0, 0, 1920, 1080, success: true);
+        Assert.Equal(0, frame.CaptureStartTicks);
+        Assert.Equal(0, frame.CaptureEndTicks);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CapturedFrame — timing sequence invariant
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void CapturedFrame_TimingSequence_StartLessThanWaitLessThanCopy()
+    {
+        // Typical timing: start < waitEnd < copyEnd
+        var frame = new CapturedFrame(
+            startTicks: 100,
+            endTicks: 300,
+            width: 1920,
+            height: 1080,
+            success: true,
+            waitEndTicks: 200,
+            copyEndTicks: 300);
+
+        Assert.True(frame.CaptureStartTicks <= frame.WaitEndTicks);
+        Assert.True(frame.WaitEndTicks <= frame.CaptureEndTicks);
+    }
+
+    [Fact]
+    public void CapturedFrame_TimingSequence_AllZero_ForFailure()
+    {
+        var frame = new CapturedFrame(0, 0, 0, 0, success: false);
+        Assert.Equal(0, frame.CaptureStartTicks);
+        Assert.Equal(0, frame.CaptureEndTicks);
+        Assert.Equal(0, frame.WaitEndTicks);
+        Assert.Equal(0, frame.CopyEndTicks);
+    }
+}

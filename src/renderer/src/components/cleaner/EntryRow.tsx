@@ -1,6 +1,6 @@
 import { Checkbox } from '@/components/shared/Checkbox'
 import type { ContextMenuAction, ContextMenuEntry } from '@shared/types'
-import { CheckCircle2, Lock, Power, Trash2 } from 'lucide-react'
+import { CircleCheckBig, Lock, Power, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SCOPE_LABEL_KEY, SOURCE_PILL_COLOR } from './constants'
 
@@ -107,7 +107,7 @@ export function EntryRow({ entry, isLast, onToggle, onAction }: EntryRowProps) {
                 className="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
                 style={{ background: 'rgba(34,197,94,0.10)' }}
               >
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" strokeWidth={2} />
+                <CircleCheckBig className="h-3.5 w-3.5 text-emerald-400" strokeWidth={2} />
               </button>
             )}
             <button

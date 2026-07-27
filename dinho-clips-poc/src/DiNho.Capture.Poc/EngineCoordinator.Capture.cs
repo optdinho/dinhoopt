@@ -10,6 +10,9 @@ using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.MediaFoundation;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace DiNho.Capture.Poc;
 
@@ -323,23 +326,24 @@ public sealed partial class EngineCoordinator
     /// Finds DnHo windows by Electron PID and sets WDA_EXCLUDEFROMCAPTURE.
     /// This hides the DiNho UI from recording footage when the user alt-tabs.
     /// </summary>
-    private void ExcludeDinhoWindowFromCapture()
+    private unsafe void ExcludeDinhoWindowFromCapture()
     {
         var electronPid = _config.Config.ElectronPid;
         if (electronPid <= 0) return;
         try
         {
             _dinhoHwnds.Clear();
-            EnumWindows((hwnd, _) =>
+            PInvoke.EnumWindows((hwnd, _) =>
             {
-                GetWindowThreadProcessId(hwnd, out var pid);
-                if (pid == electronPid && IsWindowVisible(hwnd))
+                uint pid;
+                PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+                if (pid == electronPid && PInvoke.IsWindowVisible(hwnd))
                 {
-                    _dinhoHwnds.Add(hwnd);
+                    _dinhoHwnds.Add((IntPtr)hwnd);
                     WdaHelper.ExcludeWindowFromCapture(hwnd);
                 }
                 return true;
-            }, IntPtr.Zero);
+            }, default);
             if (_dinhoHwnds.Count > 0)
                 Log.I("EngineCoordinator", $"WDA: excluded {_dinhoHwnds.Count} DnHo window(s) from capture (PID={electronPid})");
         }

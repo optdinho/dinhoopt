@@ -1,5 +1,5 @@
 import { type SortField, useUninstallerStore } from '@/stores/uninstaller-store'
-import { AlertTriangle, ArrowUpDown, ChevronDown, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { TriangleAlert, ArrowUpDown, ChevronDown, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SORT_LABEL_KEYS } from './constants'
@@ -94,7 +94,7 @@ export function UninstallerToolbar({
               borderLeft: '1px solid var(--border-medium)',
             }}
           >
-            <AlertTriangle className="h-3 w-3" strokeWidth={2} />
+            <TriangleAlert className="h-3 w-3" strokeWidth={2} />
             {t('filterUnused', { count: unusedPrograms.length })}
           </button>
         </div>

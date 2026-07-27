@@ -2,7 +2,7 @@ import { formatBytes } from '@/lib/utils'
 import { useUninstallerStore } from '@/stores/uninstaller-store'
 import type { InstalledProgram, StartupSafetyRating } from '@shared/types'
 import type { TFunction } from 'i18next'
-import { AlertTriangle, CheckSquare, Clock, Loader2, Package, Square, Trash2 } from 'lucide-react'
+import { TriangleAlert, CheckSquare, Clock, Loader2, Package, Square, Trash2 } from 'lucide-react'
 import { Fragment, memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDate, formatLastUsed, isUnused, safetyIcon, safetyScoreColor } from './constants'
@@ -56,7 +56,7 @@ const UninstallerProgramCard = memo(function UninstallerProgramCard({
           style={{ background: unused ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)' }}
         >
           {unused ? (
-            <AlertTriangle className="h-5 w-5" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
+            <TriangleAlert className="h-5 w-5" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
           ) : (
             <Package className="h-5 w-5" style={{ color: '#a78bfa' }} strokeWidth={1.8} />
           )}

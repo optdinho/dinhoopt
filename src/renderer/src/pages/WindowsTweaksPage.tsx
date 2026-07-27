@@ -6,8 +6,8 @@ import type { WindowsTweakCategory } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Accessibility,
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   ChevronDown,
   Cpu,
   Gamepad2,
@@ -19,7 +19,7 @@ import {
   Shield,
   Timer,
   Wifi,
-  XCircle,
+  CircleX,
   Zap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -179,7 +179,7 @@ export function WindowsTweaksPage() {
         style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
       >
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-green-400" />
+          <CircleCheckBig className="h-4 w-4 text-green-400" />
           <span className="text-sm text-zinc-300">
             {t('tweaksActive', { count: appliedCount, total: tweaks.length })}
           </span>
@@ -262,7 +262,7 @@ export function WindowsTweaksPage() {
       {lastResult && (
         <div className="mb-6 space-y-2">
           <div className="flex items-center gap-2 rounded-lg border border-green-800 bg-green-900/10 px-4 py-3 text-sm text-green-400">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <CircleCheckBig className="h-4 w-4 shrink-0" />
             {t('tweaksAppliedResult', { count: lastResult.succeeded })}
             {lastResult.failed > 0 && `, ${t('tweaksFailedResult', { count: lastResult.failed })}`}
           </div>
@@ -270,7 +270,7 @@ export function WindowsTweaksPage() {
             <div className="space-y-1 rounded-lg border border-red-800 bg-red-900/10 px-4 py-3 text-sm">
               {lastResult.errors.map((e) => (
                 <div key={e.id} className="flex items-start gap-2 text-red-400">
-                  <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <CircleX className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <div>
                     <span className="font-medium">{e.name}</span>
                     <span className="ml-2 text-red-300/80">{e.reason}</span>
@@ -281,7 +281,7 @@ export function WindowsTweaksPage() {
           )}
           {lastResult.rebootRequired.length > 0 && (
             <div className="flex items-start gap-2 rounded-lg border border-yellow-800 bg-yellow-900/10 px-4 py-3 text-sm text-yellow-400">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <span className="font-medium">{t('restartRequired', 'Restart required')}</span>
                 <ul className="mt-1 list-inside list-disc text-yellow-300/80">
@@ -294,7 +294,7 @@ export function WindowsTweaksPage() {
           )}
           {lastResult.logoffRequired.length > 0 && (
             <div className="flex items-start gap-2 rounded-lg border border-blue-800 bg-blue-900/10 px-4 py-3 text-sm text-blue-400">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <span className="font-medium">{t('relogRequired', 'Re-login required')}</span>
                 <ul className="mt-1 list-inside list-disc text-blue-300/80">
@@ -310,7 +310,7 @@ export function WindowsTweaksPage() {
       {revertResult && (
         <div className="mb-6 space-y-2">
           <div className="flex items-center gap-2 rounded-lg border border-yellow-800 bg-yellow-900/10 px-4 py-3 text-sm text-yellow-400">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <TriangleAlert className="h-4 w-4 shrink-0" />
             {t('tweaksRevertedResult', { count: revertResult.succeeded })}
             {revertResult.failed > 0 && `, ${t('tweaksFailedResult', { count: revertResult.failed })}`}
           </div>
@@ -318,7 +318,7 @@ export function WindowsTweaksPage() {
             <div className="space-y-1 rounded-lg border border-red-800 bg-red-900/10 px-4 py-3 text-sm">
               {revertResult.errors.map((e) => (
                 <div key={e.id} className="flex items-start gap-2 text-red-400">
-                  <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <CircleX className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <div>
                     <span className="font-medium">{e.name}</span>
                     <span className="ml-2 text-red-300/80">{e.reason}</span>

@@ -17,7 +17,8 @@
     "noUncheckedIndexedAccess": true,
     "sourceMap": true,
     "outDir": "./out",
-    "baseUrl": ".",
+    "rootDir": "./src",
+    "types": ["node"],
     "paths": {
       "@/*": ["src/renderer/src/*"],
       "@shared/*": ["src/shared/*"]

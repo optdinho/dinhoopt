@@ -1,6 +1,6 @@
 import type { ClipsState } from './useClipsState'
 import {
-  AlertTriangle,
+  TriangleAlert,
   CircleStop,
   Cpu,
   Download,
@@ -155,7 +155,7 @@ export function ClipsStatusBar({
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
                 style={{ background: 'rgba(234,179,8,0.12)', color: '#eab308' }}
               >
-                <AlertTriangle className="h-3 w-3" />
+                <TriangleAlert className="h-3 w-3" />
                 <span title={t('audioFallbackDesc')}>{t('audioFallbackWarning')}</span>
               </div>
             )}

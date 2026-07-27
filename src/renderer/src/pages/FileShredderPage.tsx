@@ -3,7 +3,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { formatBytes, formatDuration } from '@/lib/utils'
 import { useFileShredderStore } from '@/stores/file-shredder-store'
-import { ExternalLink, File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, X } from 'lucide-react'
+import { SquareArrowOutUpRight, File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -253,7 +253,7 @@ export function FileShredderPage() {
                   className="shrink-0 text-zinc-600 hover:text-zinc-400"
                   title={t('openLocation')}
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <SquareArrowOutUpRight className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"

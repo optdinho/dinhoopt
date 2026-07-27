@@ -12,7 +12,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { CleanerType, ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
-import { AlertTriangle, Loader2, Search, ShieldAlert, Sparkles } from 'lucide-react'
+import { TriangleAlert, Loader2, Search, ShieldAlert, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -363,7 +363,7 @@ export function CleanerPage() {
               className="mb-5 flex items-center gap-3 rounded-2xl px-4 py-3"
               style={{ background: 'var(--accent-muted-bg)', border: '1px solid rgba(245,158,11,0.12)' }}
             >
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
+              <TriangleAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
               <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
                 {t('scannersFailed')} <span className="text-amber-400 font-medium">{failedCategories.join(', ')}</span>
               </p>

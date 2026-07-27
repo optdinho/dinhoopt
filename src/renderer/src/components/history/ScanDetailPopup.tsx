@@ -2,7 +2,7 @@ import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContai
 import { formatBytes } from '@/lib/utils'
 import type { ScanHistoryEntry } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertCircle, Clock, XCircle } from 'lucide-react'
+import { CircleAlert, Clock, CircleX } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { DetailStat } from './DetailStat'
 import { PIE_COLORS } from './constants'
@@ -83,7 +83,7 @@ export function ScanDetailPopup({ entry, onClose }: { entry: ScanHistoryEntry | 
                       className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/[0.04]"
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      <XCircle className="h-4 w-4" strokeWidth={1.8} />
+                      <CircleX className="h-4 w-4" strokeWidth={1.8} />
                     </button>
                   </div>
 
@@ -114,7 +114,7 @@ export function ScanDetailPopup({ entry, onClose }: { entry: ScanHistoryEntry | 
                     </div>
                     {entry.errorCount > 0 && (
                       <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#ef4444' }}>
-                        <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        <CircleAlert className="h-3.5 w-3.5" strokeWidth={1.8} />
                         {entry.errorCount !== 1
                           ? t('detail.errorCountPlural', { count: entry.errorCount })
                           : t('detail.errorCount', { count: entry.errorCount })}

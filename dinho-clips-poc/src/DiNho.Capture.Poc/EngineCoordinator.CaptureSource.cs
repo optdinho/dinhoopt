@@ -1,6 +1,10 @@
 using DiNho.Capture.Poc.Capture;
 using DiNho.Capture.Poc.Logging;
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dwm;
 
 namespace DiNho.Capture.Poc;
 
@@ -266,29 +270,30 @@ public sealed partial class EngineCoordinator
 
     private int _lastCropX, _lastCropY, _lastCropW, _lastCropH;
 
-    private void UpdateDxgiCropRect()
+    private unsafe void UpdateDxgiCropRect()
     {
         var game = ResolveTargetGame();
         int cropX = 0, cropY = 0, cropW = 0, cropH = 0;
 
-        if (game.IsValid && game.Hwnd != IntPtr.Zero && DwmGetWindowAttribute(game.Hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out var rect, Marshal.SizeOf<RECT>()) == 0)
+        var rect = new RECT();
+        if (game.IsValid && game.Hwnd != IntPtr.Zero && PInvoke.DwmGetWindowAttribute((HWND)game.Hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &rect, (uint)sizeof(RECT)).Succeeded)
         {
             var hMon = MonitorHelper.GetMonitorFromWindowHandle(game.Hwnd);
             var (mLeft, mTop, mRight, mBottom) = MonitorHelper.GetMonitorRect(hMon);
 
-            cropW = rect.Right - rect.Left;
-            cropH = rect.Bottom - rect.Top;
+            cropW = rect.right - rect.left;
+            cropH = rect.bottom - rect.top;
             if (cropW > 0 && cropH > 0)
             {
-                var clampedLeft = Math.Max(rect.Left, mLeft);
-                var clampedTop = Math.Max(rect.Top, mTop);
-                var clampedRight = Math.Min(rect.Right, mRight);
-                var clampedBottom = Math.Min(rect.Bottom, mBottom);
+                var clampedLeft = Math.Max(rect.left, mLeft);
+                var clampedTop = Math.Max(rect.top, mTop);
+                var clampedRight = Math.Min(rect.right, mRight);
+                var clampedBottom = Math.Min(rect.bottom, mBottom);
                 cropW = (clampedRight - clampedLeft) & ~1;
                 cropH = (clampedBottom - clampedTop) & ~1;
                 cropX = clampedLeft - mLeft;
                 cropY = clampedTop - mTop;
-                Log.I("UpdateDxgiCropRect", $"window={rect.Left}:{rect.Top}:{rect.Right}:{rect.Bottom} monitor={mLeft}:{mTop}:{mRight}:{mBottom} clamped={clampedLeft}:{clampedTop}:{clampedRight}:{clampedBottom} crop={cropX}:{cropY}:{cropW}:{cropH}");
+                Log.I("UpdateDxgiCropRect", $"window={rect.left}:{rect.top}:{rect.right}:{rect.bottom} monitor={mLeft}:{mTop}:{mRight}:{mBottom} clamped={clampedLeft}:{clampedTop}:{clampedRight}:{clampedBottom} crop={cropX}:{cropY}:{cropW}:{cropH}");
 
                 // Crop muito pequeno: GpuVideoConverter falha com E_INVALIDARG e ffmpeg produz output vazio.
                 // Ignora crop e usa quadro completo quando abaixo de 320x240.
@@ -321,34 +326,13 @@ public sealed partial class EngineCoordinator
         }
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
-
-    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [DllImport("avrt.dll", SetLastError = true)]
-    private static extern IntPtr AvSetMmThreadCharacteristicsW([MarshalAs(UnmanagedType.LPWStr)] string taskName, out uint taskIndex);
-
-    [DllImport("avrt.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AvRevertMmThreadCharacteristics(IntPtr handle);
-
-    private IntPtr _mmThreadHandle = IntPtr.Zero;
+    private AvRevertMmThreadCharacteristicsSafeHandle? _mmThreadHandle;
 
     private void SetMmThreadPriority()
     {
         uint index = 0;
-        var ret = AvSetMmThreadCharacteristicsW("Capture", out index);
-        if (ret == IntPtr.Zero)
+        var ret = PInvoke.AvSetMmThreadCharacteristics("Capture", ref index);
+        if (ret.IsInvalid)
             Log.D("EngineCoordinator", $"AvSetMmThreadCharacteristics('Capture') failed: {Marshal.GetLastWin32Error()}");
         else
             _mmThreadHandle = ret;
@@ -356,10 +340,10 @@ public sealed partial class EngineCoordinator
 
     private void RevertMmThreadPriority()
     {
-        if (_mmThreadHandle != IntPtr.Zero)
+        if (_mmThreadHandle is { IsInvalid: false })
         {
-            AvRevertMmThreadCharacteristics(_mmThreadHandle);
-            _mmThreadHandle = IntPtr.Zero;
+            _mmThreadHandle.Dispose();
+            _mmThreadHandle = null;
         }
     }
 }

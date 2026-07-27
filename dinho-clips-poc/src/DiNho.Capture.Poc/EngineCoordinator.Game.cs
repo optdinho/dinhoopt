@@ -2,6 +2,10 @@ using DiNho.Capture.Poc.GameDetection;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.System.Diagnostics.ToolHelp;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace DiNho.Capture.Poc;
 
@@ -160,27 +164,26 @@ public sealed partial class EngineCoordinator
         );
     }
 
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    private static IntPtr FindWindowByProcessId(int processId)
+    private static unsafe IntPtr FindWindowByProcessId(int processId)
     {
         IntPtr foundVisible = IntPtr.Zero;
         IntPtr foundAny = IntPtr.Zero;
-        EnumWindows((hwnd, _) =>
+        PInvoke.EnumWindows((hwnd, _) =>
         {
-            GetWindowThreadProcessId(hwnd, out uint pid);
-            if (pid == processId)
+            uint pid;
+            PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == (uint)processId)
             {
-                if (IsWindowVisible(hwnd))
+                if (PInvoke.IsWindowVisible(hwnd))
                 {
-                    foundVisible = hwnd;
-                    return false; // visible é preferencial, para aqui
+                    foundVisible = (IntPtr)hwnd;
+                    return false;
                 }
                 if (foundAny == IntPtr.Zero)
-                    foundAny = hwnd; // guarda primeira janela qualquer como fallback
+                    foundAny = (IntPtr)hwnd;
             }
             return true;
-        }, IntPtr.Zero);
+        }, default);
         return foundVisible != IntPtr.Zero ? foundVisible : foundAny;
     }
 
@@ -264,18 +267,22 @@ public sealed partial class EngineCoordinator
         return false;
     }
 
+    private static IntPtr GetDesktopWindow()
+    {
+        return (IntPtr)PInvoke.GetDesktopWindow();
+    }
+
     private static bool IsWindowValidForWgc(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return false;
-        // Desktop window pseudo-HWND (0x00010010) não funciona com WGC per-window
-        if (hwnd == GetDesktopWindow())
+        if (hwnd == (IntPtr)PInvoke.GetDesktopWindow())
         {
             Log.I("EngineCoordinator", "Desktop window — WGC per-window não funcionará, pulando para desktop capture");
             return false;
         }
-        if (!IsWindowVisible(hwnd)) return false;
-        if (IsIconic(hwnd)) return false;
-        var exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        if (!PInvoke.IsWindowVisible((HWND)hwnd)) return false;
+        if (PInvoke.IsIconic((HWND)hwnd)) return false;
+        var exStyle = PInvoke.GetWindowLong((HWND)hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
         if ((exStyle & WS_EX_NOREDIRECTIONBITMAP) != 0)
         {
             Log.I("EngineCoordinator", $"Janela 0x{hwnd:X8} tem WS_EX_NOREDIRECTIONBITMAP — WGC per-window não funcionará");
@@ -378,30 +385,30 @@ public sealed partial class EngineCoordinator
     }
 
     // Find all direct child processes of a given PID using CreateToolhelp32Snapshot
-    private static HashSet<int> GetChildProcesses(int parentPid)
+    private static unsafe HashSet<int> GetChildProcesses(int parentPid)
     {
         var children = new HashSet<int>();
-        IntPtr snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (snapshot == INVALID_HANDLE_VALUE)
+        HANDLE snapshot = PInvoke.CreateToolhelp32Snapshot(CREATE_TOOLHELP_SNAPSHOT_FLAGS.TH32CS_SNAPPROCESS, 0);
+        if (snapshot == (HANDLE)(nint)(-1))
             return children;
 
         try
         {
-            var entry = new PROCESSENTRY32();
-            entry.dwSize = Marshal.SizeOf<PROCESSENTRY32>();
+            var entry = new PROCESSENTRY32W();
+            entry.dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32W>();
 
-            if (Process32First(snapshot, ref entry))
+            if (PInvoke.Process32FirstW(snapshot, &entry))
             {
                 do
                 {
                     if (entry.th32ParentProcessID == parentPid && entry.th32ProcessID != parentPid)
-                        children.Add(entry.th32ProcessID);
-                } while (Process32Next(snapshot, ref entry));
+                        children.Add((int)entry.th32ProcessID);
+                } while (PInvoke.Process32NextW(snapshot, &entry));
             }
         }
         finally
         {
-            CloseHandle(snapshot);
+            PInvoke.CloseHandle(snapshot);
         }
 
         return children;
@@ -495,57 +502,5 @@ public sealed partial class EngineCoordinator
         "minecraft launcher",
     };
 
-    // Win32 P/Invoke declarations
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsIconic(IntPtr hWnd);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLongW(IntPtr hWnd, int nIndex);
-
-    private const int GWL_EXSTYLE = -20;
     private const uint WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetDesktopWindow();
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PROCESSENTRY32
-    {
-        public int dwSize;
-        public int cntUsage;
-        public int th32ProcessID;
-        public nint th32DefaultHeapID;
-        public int th32ModuleID;
-        public int cntThreads;
-        public int th32ParentProcessID;
-        public int pcPriClassBase;
-        public int dwFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string szExeFile;
-    }
-
-    private const uint TH32CS_SNAPPROCESS = 0x00000002;
-    private static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool Process32First(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool Process32Next(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr hObject);
 }

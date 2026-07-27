@@ -2,6 +2,11 @@ using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.Accessibility;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace DiNho.Capture.Poc.GameDetection;
 
@@ -60,12 +65,12 @@ public enum DisplayMode
 
 public sealed class GameDetector : IDisposable
 {
-    private IntPtr _winEventHook;
+    private HWINEVENTHOOK _winEventHook;
     private Thread? _hookThread;
     private volatile bool _running;
     private IntPtr _lastForegroundHwnd;
     private Timer? _fallbackTimer;
-    private WinEventDelegate? _winEventDelegate; // Mantido como field para evitar GC
+    private WINEVENTPROC? _winEventDelegate; // Mantido como field para evitar GC
     private int _electronPid;
 
     // Eventos
@@ -79,6 +84,7 @@ public sealed class GameDetector : IDisposable
     private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     private const uint WINEVENT_OUTOFCONTEXT = 0;
     private const uint WINEVENT_SKIPOWNPROCESS = 2;
+    private const uint WS_CAPTION = 0x00C00000;
 
     public GameDetector()
     {
@@ -108,10 +114,10 @@ public sealed class GameDetector : IDisposable
     {
         _running = false;
 
-        if (_winEventHook != IntPtr.Zero)
+        if (!_winEventHook.IsNull)
         {
-            UnhookWinEvent(_winEventHook);
-            _winEventHook = IntPtr.Zero;
+            PInvoke.UnhookWinEvent(_winEventHook);
+            _winEventHook = default;
         }
 
         _hookThread?.Join(1000);
@@ -126,16 +132,16 @@ public sealed class GameDetector : IDisposable
         // Salva como field para evitar GC do delegate nativo
         _winEventDelegate = OnForegroundChangedNative;
 
-        _winEventHook = SetWinEventHook(
+        _winEventHook = PInvoke.SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
             EVENT_SYSTEM_FOREGROUND,
-            IntPtr.Zero,
+            (HMODULE)IntPtr.Zero,
             _winEventDelegate,
             0, 0,
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
         );
 
-        if (_winEventHook == IntPtr.Zero)
+        if (_winEventHook.IsNull)
         {
             // Hook falhou — fallback para polling
             Log.W("GameDetector", "SetWinEventHook falhou, usando polling fallback");
@@ -143,20 +149,20 @@ public sealed class GameDetector : IDisposable
             return;
         }
 
-        Log.I("GameDetector", $"SetWinEventHook OK ({(long)_winEventHook:X})");
+        Log.I("GameDetector", $"SetWinEventHook OK ({_winEventHook})");
 
         // Detecção inicial na hora
-        var hwnd = GetForegroundWindow();
-        if (hwnd != IntPtr.Zero)
-            OnForegroundChanged(hwnd);
+        var hwnd = PInvoke.GetForegroundWindow();
+        if (!hwnd.IsNull)
+            OnForegroundChanged((IntPtr)hwnd);
 
         // Message pump — necessário para o hook entregar callbacks
         while (_running)
         {
-            while (PeekMessage(out var msg, IntPtr.Zero, 0, 0, PM_REMOVE) != 0)
+            while (PInvoke.PeekMessage(out var msg, HWND.Null, 0, 0, PEEK_MESSAGE_REMOVE_TYPE.PM_REMOVE))
             {
-                TranslateMessage(ref msg);
-                DispatchMessage(ref msg);
+                PInvoke.TranslateMessage(in msg);
+                PInvoke.DispatchMessage(in msg);
             }
             // Evita busy-wait
             if (_running)
@@ -164,22 +170,22 @@ public sealed class GameDetector : IDisposable
         }
 
         // Limpeza do hook
-        if (_winEventHook != IntPtr.Zero)
+        if (!_winEventHook.IsNull)
         {
-            UnhookWinEvent(_winEventHook);
-            _winEventHook = IntPtr.Zero;
+            PInvoke.UnhookWinEvent(_winEventHook);
+            _winEventHook = default;
         }
     }
 
     // Callback nativo do SetWinEventHook — converte para managed call
     private void OnForegroundChangedNative(
-        IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        HWINEVENTHOOK hWinEventHook, uint eventType, HWND hwnd,
         int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
     {
-        OnForegroundChanged(hwnd);
+        OnForegroundChanged((IntPtr)hwnd);
     }
 
-    private void OnForegroundChanged(IntPtr hwnd)
+    private unsafe void OnForegroundChanged(IntPtr hwnd)
     {
         if (hwnd == Interlocked.CompareExchange(ref _lastForegroundHwnd, IntPtr.Zero, IntPtr.Zero) && hwnd != IntPtr.Zero)
             return;
@@ -195,7 +201,8 @@ public sealed class GameDetector : IDisposable
         // Ignora foreground changes do próprio Electron (que rouba foco indevidamente)
         if (_electronPid > 0)
         {
-            GetWindowThreadProcessId(hwnd, out var foregroundPid);
+            uint foregroundPid;
+            PInvoke.GetWindowThreadProcessId((HWND)hwnd, &foregroundPid);
             if (foregroundPid == _electronPid)
                 return;
         }
@@ -206,10 +213,10 @@ public sealed class GameDetector : IDisposable
     }
 
     // Polling fallback (usado se SetWinEventHook falhar)
-    private void PollForeground(object? state)
+    private unsafe void PollForeground(object? state)
     {
         if (!_running) return;
-        var hwnd = GetForegroundWindow();
+        var hwnd = (IntPtr)PInvoke.GetForegroundWindow();
         if (hwnd == Interlocked.CompareExchange(ref _lastForegroundHwnd, IntPtr.Zero, IntPtr.Zero) && hwnd != IntPtr.Zero)
             return;
 
@@ -223,7 +230,8 @@ public sealed class GameDetector : IDisposable
 
         if (_electronPid > 0)
         {
-            GetWindowThreadProcessId(hwnd, out var foregroundPid);
+            uint foregroundPid;
+            PInvoke.GetWindowThreadProcessId((HWND)hwnd, &foregroundPid);
             if (foregroundPid == _electronPid)
                 return;
         }
@@ -233,10 +241,11 @@ public sealed class GameDetector : IDisposable
         OnGameChanged?.Invoke(gameInfo);
     }
 
-    private static GameInfo DetectGame(IntPtr hwnd)
+    private static unsafe GameInfo DetectGame(IntPtr hwnd)
     {
         // 1. Pega o PID da janela
-        GetWindowThreadProcessId(hwnd, out var pid);
+        uint pid;
+        PInvoke.GetWindowThreadProcessId((HWND)hwnd, &pid);
         if (pid == 0)
             return new GameInfo();
 
@@ -255,18 +264,18 @@ public sealed class GameDetector : IDisposable
         }
 
         // 3. Window class (útil para detectar FiveM, Roblox, etc.)
-        var classBuilder = new System.Text.StringBuilder(256);
-        GetClassName(hwnd, classBuilder, classBuilder.Capacity);
-        var windowClass = classBuilder.ToString();
+        char* classNameBuf = stackalloc char[256];
+        int classNameLen = PInvoke.GetClassName((HWND)hwnd, classNameBuf, 256);
+        var windowClass = new string(classNameBuf, 0, classNameLen);
 
         // 4. Detecta modo de exibição
         var displayMode = DetectDisplayMode(hwnd);
 
         // 5. Título da janela
-        int titleLen = GetWindowTextLength(hwnd);
-        var titleBuilder = new System.Text.StringBuilder(titleLen + 1);
-        GetWindowText(hwnd, titleBuilder, titleBuilder.Capacity);
-        var windowTitle = titleBuilder.ToString();
+        int titleLen = PInvoke.GetWindowTextLength((HWND)hwnd);
+        char* titleBuf = stackalloc char[titleLen + 1];
+        int titleWritten = PInvoke.GetWindowText((HWND)hwnd, titleBuf, titleLen + 1);
+        var windowTitle = new string(titleBuf, 0, titleWritten);
 
         return new GameInfo(
             processName: processName,
@@ -287,23 +296,23 @@ public sealed class GameDetector : IDisposable
     private static DisplayMode DetectDisplayMode(IntPtr hwnd)
     {
         // Pega o monitor onde a janela está
-        var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        var monitor = PInvoke.MonitorFromWindow((HWND)hwnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
         var monitorInfo = new MONITORINFO();
-        monitorInfo.cbSize = Marshal.SizeOf<MONITORINFO>();
-        GetMonitorInfo(monitor, ref monitorInfo);
+        monitorInfo.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
+        PInvoke.GetMonitorInfo(monitor, ref monitorInfo);
 
         // Pega rect da janela
-        GetWindowRect(hwnd, out var windowRect);
+        PInvoke.GetWindowRect((HWND)hwnd, out var windowRect);
 
         var monitorRect = monitorInfo.rcMonitor;
-        var style = GetWindowLong(hwnd, GWL_STYLE);
+        var style = PInvoke.GetWindowLong((HWND)hwnd, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
 
         bool hasBorder = (style & WS_CAPTION) != 0;
         bool coversMonitor =
-            windowRect.Left <= monitorRect.Left &&
-            windowRect.Top <= monitorRect.Top &&
-            windowRect.Right >= monitorRect.Right &&
-            windowRect.Bottom >= monitorRect.Bottom;
+            windowRect.left <= monitorRect.left &&
+            windowRect.top <= monitorRect.top &&
+            windowRect.right >= monitorRect.right &&
+            windowRect.bottom >= monitorRect.bottom;
 
         if (coversMonitor && !hasBorder)
             return DisplayMode.FullscreenExclusive;
@@ -311,90 +320,6 @@ public sealed class GameDetector : IDisposable
             return DisplayMode.FullscreenOptimized;
 
         return DisplayMode.Windowed;
-    }
-
-    // --- P/Invokes (WinEvent) ---
-    private delegate void WinEventDelegate(
-        IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
-        int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetWinEventHook(
-        uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
-        WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
-
-    // --- P/Invokes (Message Pump) ---
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int PeekMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint DispatchMessage(ref MSG lpMsg);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int TranslateMessage(ref MSG lpMsg);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MSG
-    {
-        public IntPtr hwnd;
-        public uint message;
-        public IntPtr wParam;
-        public IntPtr lParam;
-        public uint time;
-        public int ptX;
-        public int ptY;
-    }
-
-    private const uint PM_REMOVE = 1;
-
-    // --- P/Invokes (originais) ---
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowTextLength(IntPtr hWnd);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    private const int GWL_STYLE = -16;
-    private const uint WS_CAPTION = 0x00C00000;
-    private const uint MONITOR_DEFAULTTONEAREST = 2;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    private struct MONITORINFO
-    {
-        public int cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
-        public uint dwFlags;
     }
 
     public void Dispose()

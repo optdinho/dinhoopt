@@ -3,7 +3,7 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
 import type { HistoryEntryType, ScanHistoryEntry } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertCircle, CheckCircle2, Clock, Info, XCircle } from 'lucide-react'
+import { CircleAlert, CircleCheckBig, Clock, Info, CircleX } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { DetailStat } from './DetailStat'
@@ -173,11 +173,11 @@ export function TimelineView({
                         className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
                         style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
                       >
-                        <AlertCircle className="h-3 w-3" strokeWidth={2} />
+                        <CircleAlert className="h-3 w-3" strokeWidth={2} />
                         {entry.errorCount}
                       </span>
                     ) : (
-                      <CheckCircle2 className="inline h-4 w-4" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+                      <CircleCheckBig className="inline h-4 w-4" style={{ color: '#22c55e' }} strokeWidth={1.8} />
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -273,7 +273,7 @@ function ScanDetailPopup({
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/[0.04]"
               style={{ color: 'var(--text-muted)' }}
             >
-              <XCircle className="h-4 w-4" strokeWidth={1.8} />
+              <CircleX className="h-4 w-4" strokeWidth={1.8} />
             </button>
           </div>
 
@@ -302,7 +302,7 @@ function ScanDetailPopup({
             </div>
             {entry.errorCount > 0 && (
               <div className="flex items-center gap-1.5 text-[12px]" style={{ color: '#ef4444' }}>
-                <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.8} />
+                <CircleAlert className="h-3.5 w-3.5" strokeWidth={1.8} />
                 {entry.errorCount !== 1
                   ? t('detail.errorCountPlural', { count: entry.errorCount })
                   : t('detail.errorCount', { count: entry.errorCount })}

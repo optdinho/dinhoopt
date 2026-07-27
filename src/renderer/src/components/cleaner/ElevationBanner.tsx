@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface ElevationBannerProps {
@@ -13,7 +13,7 @@ export function ElevationBanner({ show }: ElevationBannerProps) {
       className="mb-3 flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-[12px]"
       style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)' }}
     >
-      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
+      <TriangleAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
       <span className="flex-1 text-zinc-300">{t('elevationPrompt')}</span>
       <button
         type="button"

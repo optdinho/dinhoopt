@@ -589,68 +589,6 @@ public sealed partial class EngineCoordinator
         }
     }
 
-    // ── Save Clip ──
-
-    private async Task<IpcMessage?> SaveClipAndRespondAsync()
-    {
-        try
-        {
-            await SaveClipAsync();
-            return new IpcMessage { Action = "ok" };
-        }
-        catch (Exception ex)
-        {
-            Log.E("EngineCoordinator", $"Export falhou: {ex.Message}");
-            return new IpcMessage
-            {
-                Action = "error",
-                Value = JsonSerializer.SerializeToElement(new { error = $"Export failed: {ex.Message}" })
-            };
-        }
-    }
-
-    // ── Audio Session Management ──
-
-    private void ApplyGameAudioOnly()
-    {
-        if (_config.Config.GameAudioOnly)
-        {
-            var game = _lastDetectedGame.IsValid ? _lastDetectedGame : _gameDetector.CurrentGame;
-            if (game.IsValid && game.ProcessId > 0)
-            {
-                // Skip restart if already applied to the same PID
-                if (_appliedGameAudioOnly && _appliedGameAudioPid == game.ProcessId)
-                {
-                    Log.I("EngineCoordinator", $"GameAudioOnly já aplicado para PID {game.ProcessId} — sem restart");
-                    return;
-                }
-
-                Log.I("EngineCoordinator", $"GameAudioOnly ON — filtrando áudio para '{game.ProcessName}' PID={game.ProcessId}");
-                _appliedGameAudioOnly = true;
-                _appliedGameAudioPid = game.ProcessId;
-                ApplyAudioSessionsInternal([game.ProcessId]);
-            }
-            else
-            {
-                Log.I("EngineCoordinator", "GameAudioOnly ON mas nenhum jogo detectado — mantendo áudio atual");
-            }
-        }
-        else
-        {
-            // Skip restart if GameAudioOnly was already OFF
-            if (!_appliedGameAudioOnly)
-            {
-                Log.I("EngineCoordinator", "GameAudioOnly já estava OFF — sem restart");
-                return;
-            }
-
-            Log.I("EngineCoordinator", "GameAudioOnly OFF — restaurando áudio completo do sistema");
-            _appliedGameAudioOnly = false;
-            _appliedGameAudioPid = 0;
-            ApplyAudioSessionsInternal([]);
-        }
-    }
-
     // ── Microphone Enumeration ──
 
     /// <summary>
@@ -733,57 +671,5 @@ public sealed partial class EngineCoordinator
         }
         Log.I("EngineCoordinator", $"EnumerateMicDevices: returning {list.Count} devices");
         return list;
-    }
-
-    // ── Process Helpers ──
-
-    /// <summary>
-    /// Expande uma lista de PIDs incluindo processos filhos via Toolhelp32Snapshot.
-    /// Retorna (todos os PIDs, mapeamento child→parent para resolver nomes sem abrir handles).
-    /// </summary>
-    private static (HashSet<int>, Dictionary<int, int>) ExpandWithChildProcesses(IEnumerable<int> pids)
-    {
-        var result = new HashSet<int>(pids);
-        var childToParent = new Dictionary<int, int>();
-        try
-        {
-            var snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if (snapshot == INVALID_HANDLE_VALUE) return (result, childToParent);
-
-            try
-            {
-                var entry = new PROCESSENTRY32 { dwSize = Marshal.SizeOf<PROCESSENTRY32>() };
-                if (!Process32First(snapshot, ref entry))
-                    return (result, childToParent);
-
-                var parentMap = new Dictionary<int, int>();
-                do
-                {
-                    parentMap[entry.th32ProcessID] = entry.th32ParentProcessID;
-                }
-                while (Process32Next(snapshot, ref entry));
-
-                // BFS: para cada PID selecionado, adiciona todos os descendentes
-                var queue = new Queue<int>(result);
-                while (queue.Count > 0)
-                {
-                    var pid = queue.Dequeue();
-                    foreach (var (child, parent) in parentMap)
-                    {
-                        if (parent == pid && result.Add(child))
-                        {
-                            childToParent[child] = pid;
-                            queue.Enqueue(child);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                CloseHandle(snapshot);
-            }
-        }
-        catch { }
-        return (result, childToParent);
     }
 }

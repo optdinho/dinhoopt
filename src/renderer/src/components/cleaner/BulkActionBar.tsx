@@ -1,4 +1,4 @@
-import { CheckCircle2, Power, Trash2 } from 'lucide-react'
+import { CircleCheckBig, Power, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface BulkActionBarProps {
@@ -36,7 +36,7 @@ export function BulkActionBar({ selectedCount, onDisable, onEnable, onDelete }: 
         className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-medium text-emerald-400 transition-colors"
         style={{ background: 'rgba(34,197,94,0.08)' }}
       >
-        <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} /> {t('enableSelected')}
+        <CircleCheckBig className="h-3.5 w-3.5" strokeWidth={2} /> {t('enableSelected')}
       </button>
       <button
         type="button"

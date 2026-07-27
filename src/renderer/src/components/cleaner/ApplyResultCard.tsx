@@ -1,6 +1,6 @@
 import { useContextMenuStore } from '@/stores/context-menu-store'
 import type { ContextMenuApplyResult } from '@shared/types'
-import { CheckCircle2 } from 'lucide-react'
+import { CircleCheckBig } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface ApplyResultCardProps {
@@ -24,7 +24,7 @@ export function ApplyResultCard({ result, showErrors }: ApplyResultCardProps) {
           background: result.failed > 0 ? 'rgba(239,68,68,0.04)' : 'rgba(34,197,94,0.06)',
         }}
       >
-        <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+        <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
         <p className="flex-1 text-[13px] text-zinc-200">
           {result.succeeded === 1
             ? t('applyDoneSuccess', { count: result.succeeded })

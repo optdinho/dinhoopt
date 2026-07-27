@@ -9,8 +9,8 @@ import { useProgressListener } from '@/hooks/useProgressListener'
 import { useFirewallStore } from '@/stores/firewall-store'
 import type { FirewallAction, FirewallScanProgress } from '@shared/types'
 import {
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   Globe,
   Inbox,
   Loader2,
@@ -293,9 +293,9 @@ export function FirewallAuditPage() {
         >
           <div className="flex items-center gap-2">
             {applyResult.failed > 0 ? (
-              <AlertTriangle className="h-4 w-4" style={{ color: '#f59e0b' }} />
+              <TriangleAlert className="h-4 w-4" style={{ color: '#f59e0b' }} />
             ) : (
-              <CheckCircle2 className="h-4 w-4" style={{ color: '#22c55e' }} />
+              <CircleCheckBig className="h-4 w-4" style={{ color: '#22c55e' }} />
             )}
             <span className="text-[13px] font-medium text-white">
               {t('resultSucceeded', { count: applyResult.succeeded })}

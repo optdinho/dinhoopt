@@ -1,7 +1,7 @@
 import { useGameModeStore } from '@/stores/game-mode-store'
 import { lookupServiceSafety } from '@shared/service-safety-kb'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ChevronDown, Plus, X } from 'lucide-react'
+import { TriangleAlert, ChevronDown, Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { OPTIMIZATIONS, OPTIMIZATION_SERVICE_MAP } from './constants'
 import type { CategoryDef } from './types'
@@ -114,7 +114,7 @@ export function GameModeCategoryCard({
                           className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide"
                           style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
                         >
-                          <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.5} />
+                          <TriangleAlert className="h-2.5 w-2.5" strokeWidth={2.5} />
                           {t('notRecommendedForGames')}
                         </span>
                       )}

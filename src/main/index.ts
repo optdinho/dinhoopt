@@ -17,7 +17,7 @@ protocol.registerSchemesAsPrivileged([
 if (!app.isPackaged) {
   const envPath = join(__dirname, '../../.env')
   if (existsSync(envPath)) {
-    dotenv.config({ path: envPath })
+    dotenv.config({ path: envPath, quiet: true })
   }
 }
 

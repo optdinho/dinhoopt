@@ -1,5 +1,5 @@
 import type { UpdatableApp } from '@shared/types'
-import { ArrowRight, CheckCircle2, Download, Eye, EyeOff, Package } from 'lucide-react'
+import { ArrowRight, CircleCheckBig, Download, Eye, EyeOff, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SEVERITY_STYLES_BASE } from './updater-constants'
 
@@ -39,7 +39,7 @@ export function AppRow({
           }}
         >
           {app.selected && (
-            <CheckCircle2 className="h-3 w-3" style={{ color: 'var(--text-on-accent)' }} strokeWidth={3} />
+            <CircleCheckBig className="h-3 w-3" style={{ color: 'var(--text-on-accent)' }} strokeWidth={3} />
           )}
         </div>
       </button>
@@ -168,7 +168,7 @@ export function UpToDateRow({ app }: { app: UpdatableApp }) {
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
         style={{ background: 'rgba(34,197,94,0.08)' }}
       >
-        <CheckCircle2 className="h-4 w-4 text-green-500" strokeWidth={1.8} />
+        <CircleCheckBig className="h-4 w-4 text-green-500" strokeWidth={1.8} />
       </div>
       <div className="flex-1 min-w-0">
         <span className="text-[12px] font-medium text-zinc-400 truncate block">{app.name}</span>

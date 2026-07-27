@@ -5,8 +5,8 @@ import { useComplianceStore } from '@/stores/compliance-store'
 import { useHistoryStore } from '@/stores/history-store'
 import type { ComplianceCheck } from '@shared/types'
 import {
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   Eye,
   Globe,
   HardDrive,
@@ -370,9 +370,9 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             {check.compliant ? (
-                              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
+                              <CircleCheckBig className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
                             ) : (
-                              <AlertTriangle
+                              <TriangleAlert
                                 className="h-4 w-4 shrink-0"
                                 style={{ color: severityColor(check.severity) }}
                               />

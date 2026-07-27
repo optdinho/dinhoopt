@@ -10,9 +10,9 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { type SeverityFilter, type SortField, useUpdaterStore } from '@/stores/updater-store'
 import type { UpdatableApp, UpdateProgress } from '@shared/types'
 import {
-  AlertTriangle,
+  TriangleAlert,
   ArrowUpDown,
-  CheckCircle2,
+  CircleCheckBig,
   ChevronDown,
   ChevronRight,
   Download,
@@ -22,7 +22,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-  XCircle,
+  CircleX,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -294,7 +294,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                   >
                     {t(labelKey)}
                     {severityFilter === key && (
-                      <CheckCircle2 className="ml-auto h-3 w-3 text-amber-400" strokeWidth={2} />
+                      <CircleCheckBig className="ml-auto h-3 w-3 text-amber-400" strokeWidth={2} />
                     )}
                   </button>
                 ))}
@@ -367,7 +367,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             border: '1px solid rgba(239,68,68,0.1)',
           }}
         >
-          <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" strokeWidth={1.8} />
+          <TriangleAlert className="h-5 w-5 shrink-0 text-red-400" strokeWidth={1.8} />
           <p className="text-[12px] text-zinc-400">
             {packageManagerName === 'brew' ? (
               <>
@@ -434,18 +434,18 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatCard icon={Package} label={t('softwareUpdater.statOutdatedApps')} value={apps.length} variant="accent" />
           <StatCard
-            icon={AlertTriangle}
+            icon={TriangleAlert}
             label={t('softwareUpdater.statMajorUpdates')}
             value={majorCount}
             variant="danger"
           />
           <StatCard
-            icon={AlertTriangle}
+            icon={TriangleAlert}
             label={t('softwareUpdater.statMinorUpdates')}
             value={minorCount}
             variant="default"
           />
-          <StatCard icon={CheckCircle2} label={t('softwareUpdater.statPatches')} value={patchCount} variant="success" />
+          <StatCard icon={CircleCheckBig} label={t('softwareUpdater.statPatches')} value={patchCount} variant="success" />
         </div>
       )}
 
@@ -500,9 +500,9 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
           }}
         >
           {updateResult.failed === 0 ? (
-            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
+            <CircleCheckBig className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
           ) : (
-            <XCircle className="h-5 w-5 text-red-500 shrink-0" strokeWidth={1.8} />
+            <CircleX className="h-5 w-5 text-red-500 shrink-0" strokeWidth={1.8} />
           )}
           <div className="text-[13px] text-zinc-200">
             {updateResult.succeeded > 0 && (
@@ -566,7 +566,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
               }}
             >
               {allSelected && (
-                <CheckCircle2 className="h-3 w-3" style={{ color: 'var(--text-on-accent)' }} strokeWidth={3} />
+                <CircleCheckBig className="h-3 w-3" style={{ color: 'var(--text-on-accent)' }} strokeWidth={3} />
               )}
             </div>
             {allSelected ? t('softwareUpdater.deselectAll') : t('softwareUpdater.selectAll')}
@@ -707,7 +707,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             ) : (
               <ChevronRight className="h-4 w-4" strokeWidth={2} />
             )}
-            <CheckCircle2 className="h-4 w-4 text-green-500" strokeWidth={1.8} />
+            <CircleCheckBig className="h-4 w-4 text-green-500" strokeWidth={1.8} />
             {t('softwareUpdater.upToDateSection', { count: upToDate.length })}
           </button>
 

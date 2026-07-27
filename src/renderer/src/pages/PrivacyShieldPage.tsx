@@ -9,8 +9,8 @@ import { useHistoryStore } from '@/stores/history-store'
 import { usePrivacyStore } from '@/stores/privacy-store'
 import type { PrivacySetting } from '@shared/types'
 import {
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   Eye,
   Loader2,
   ShieldAlert,
@@ -413,7 +413,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
                     }}
                   >
                     {isDone ? (
-                      <CheckCircle2 className="h-3 w-3 text-green-500" strokeWidth={2} />
+                      <CircleCheckBig className="h-3 w-3 text-green-500" strokeWidth={2} />
                     ) : isCurrent ? (
                       <div className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-green-400 border-t-transparent" />
                     ) : (
@@ -454,7 +454,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
           }}
         >
           <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
+            <CircleCheckBig className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
             <div>
               <p className="text-[13px] font-medium text-zinc-200">
                 {t(applyResult.succeeded !== 1 ? 'privacy.settingsAppliedPlural' : 'privacy.settingsApplied', {
@@ -569,7 +569,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
                         className="flex h-8 w-8 items-center justify-center rounded-full"
                         style={{ background: 'rgba(34,197,94,0.1)' }}
                       >
-                        <CheckCircle2 className="h-4 w-4 text-green-500" strokeWidth={2.5} />
+                        <CircleCheckBig className="h-4 w-4 text-green-500" strokeWidth={2.5} />
                       </div>
                     )}
                     <div

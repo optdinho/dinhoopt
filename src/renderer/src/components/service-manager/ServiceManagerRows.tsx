@@ -1,8 +1,8 @@
 import { useServiceStore } from '@/stores/service-store'
 import type { WindowsService } from '@shared/types'
 import {
-  AlertTriangle,
-  CheckCircle2,
+  TriangleAlert,
+  CircleCheckBig,
   ChevronDown,
   ChevronRight,
   Circle,
@@ -150,7 +150,7 @@ function ServiceRow({ service: svc }: { service: WindowsService }) {
             opacity: isUnsafe ? 0.4 : 1,
           }}
         >
-          {svc.selected && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
+          {svc.selected && <CircleCheckBig className="h-3 w-3 text-white" strokeWidth={3} />}
         </div>
       </div>
 
@@ -172,7 +172,7 @@ function ServiceRow({ service: svc }: { service: WindowsService }) {
               style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
               title={svc.incompatibleGames.join(', ')}
             >
-              <AlertTriangle className="-ml-0.5 mr-0.5 inline h-2.5 w-2.5" strokeWidth={2.5} />
+              <TriangleAlert className="-ml-0.5 mr-0.5 inline h-2.5 w-2.5" strokeWidth={2.5} />
               {t('serviceManager.notRecommendedForGames')}
             </span>
           )}

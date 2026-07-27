@@ -10,7 +10,7 @@ import { formatBytes } from '@/lib/utils'
 import { type DriveFilter, applyFilter, isSelectable, useDiskMaintenanceStore } from '@/stores/disk-maintenance-store'
 import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
 import {
-  CheckCircle2,
+  CircleCheckBig,
   Cpu,
   Database,
   Eraser,
@@ -19,7 +19,7 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
-  XCircle,
+  CircleX,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -391,11 +391,11 @@ function DriveRow({
         >
           <div className="flex items-center gap-2">
             {result.success ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" strokeWidth={1.8} />
+              <CircleCheckBig className="h-4 w-4 shrink-0 text-green-500" strokeWidth={1.8} />
             ) : result.needsAdmin ? (
               <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={1.8} />
             ) : (
-              <XCircle className="h-4 w-4 shrink-0 text-red-400" strokeWidth={1.8} />
+              <CircleX className="h-4 w-4 shrink-0 text-red-400" strokeWidth={1.8} />
             )}
             <p className="text-[12px] text-zinc-300">{result.summary}</p>
           </div>

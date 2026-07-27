@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Copy, Info, KeyRound, ShieldCheck, XCircle } from 'lucide-react'
+import { TriangleAlert, CircleCheck, Copy, Info, KeyRound, ShieldCheck, CircleX } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLicenseStore } from '../stores/license-store'
@@ -85,7 +85,7 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
         {!activationSuccess && !reason && (
           <div className="rounded-xl border border-amber-700/50 bg-amber-900/30 p-4">
             <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              <TriangleAlert className="h-5 w-5 text-amber-400" />
               <span className="text-amber-300 font-semibold">{t('noActiveLicense')}</span>
             </div>
             <p className="text-gray-400 text-sm">{t('enterKeyPrompt')}</p>
@@ -95,7 +95,7 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
         {reason && (
           <div className="rounded-xl border border-red-700/50 bg-red-900/30 p-4">
             <div className="flex items-center gap-2 mb-1">
-              <XCircle className="h-5 w-5 text-red-400" />
+              <CircleX className="h-5 w-5 text-red-400" />
               <span className="text-red-300 font-semibold">{t('activationFailed')}</span>
             </div>
             <p className="text-gray-400 text-sm">{reason}</p>
@@ -105,7 +105,7 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
         {activationSuccess && (
           <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/30 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="h-5 w-5 text-emerald-400" />
+              <CircleCheck className="h-5 w-5 text-emerald-400" />
               <span className="text-emerald-300 font-semibold">{t('activationSuccess')}</span>
             </div>
             <p className="text-gray-400 text-sm">{t('redirecting')}</p>

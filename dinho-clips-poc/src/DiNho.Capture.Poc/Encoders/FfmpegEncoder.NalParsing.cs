@@ -339,7 +339,7 @@ internal partial class FfmpegEncoder
         }
     }
 
-    private void ParseAvcc(ReadOnlySpan<byte> data)
+    internal void ParseAvcc(ReadOnlySpan<byte> data)
     {
         _pendingTooLarge = false;
         int pos = 0;
@@ -436,7 +436,7 @@ internal partial class FfmpegEncoder
             EmitPacket();
     }
 
-    private void AppendPending(ReadOnlySpan<byte> chunk)
+    internal void AppendPending(ReadOnlySpan<byte> chunk)
     {
         if (_pendingBuf == null)
         {

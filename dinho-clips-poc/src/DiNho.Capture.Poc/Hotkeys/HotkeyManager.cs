@@ -3,6 +3,9 @@ using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using DiNho.Capture.Poc.Config;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace DiNho.Capture.Poc.Hotkeys;
 
@@ -24,10 +27,10 @@ public sealed class HotkeyManager : IDisposable
 {
     private readonly List<HotkeyBinding> _bindings = new();
     private readonly ConcurrentDictionary<int, byte> _keysDown = new();
-    private WindowsHookDelegate? _hookDelegate;
-    private WindowsHookDelegate? _mouseHookDelegate;
-    private IntPtr _hookId = IntPtr.Zero;
-    private IntPtr _mouseHookId = IntPtr.Zero;
+    private HOOKPROC? _hookDelegate;
+    private HOOKPROC? _mouseHookDelegate;
+    private HHOOK _hookId = HHOOK.Null;
+    private HHOOK _mouseHookId = HHOOK.Null;
     private Thread? _hookThread;
     private bool _disposed;
     private readonly object _lock = new();
@@ -74,7 +77,7 @@ public sealed class HotkeyManager : IDisposable
 
     public void Start()
     {
-        if (_hookId != IntPtr.Zero) return;
+        if (!_hookId.IsNull) return;
 
         _hookThread = new Thread(() =>
         {
@@ -83,24 +86,31 @@ public sealed class HotkeyManager : IDisposable
             using var process = Process.GetCurrentProcess();
             using var module = process.MainModule;
             if (module == null) return;
-            var moduleHandle = GetModuleHandle(module.ModuleName);
-            _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _hookDelegate, moduleHandle, 0);
-            Log.I("HotkeyManager", $"WH_KEYBOARD_LL hook: {(long)_hookId:X} (0=falhou)");
-            _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookDelegate, moduleHandle, 0);
-            Log.I("HotkeyManager", $"WH_MOUSE_LL hook: {(long)_mouseHookId:X} (0=falhou)");
+
+            unsafe
+            {
+                fixed (char* pModuleName = module.ModuleName)
+                {
+                    var moduleHandle = PInvoke.GetModuleHandle(pModuleName);
+                    _hookId = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_KEYBOARD_LL, _hookDelegate, moduleHandle, 0);
+                    Log.I("HotkeyManager", $"WH_KEYBOARD_LL hook: {(long)_hookId.Value:X} (0=falhou)");
+                    _mouseHookId = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_MOUSE_LL, _mouseHookDelegate, moduleHandle, 0);
+                    Log.I("HotkeyManager", $"WH_MOUSE_LL hook: {(long)_mouseHookId.Value:X} (0=falhou)");
+                }
+            }
 
             while (!_disposed)
             {
-                if (GetMessage(out var msg, IntPtr.Zero, 0, 0) == -1)
+                if (PInvoke.GetMessage(out var msg, HWND.Null, 0, 0).Value == -1)
                     break;
-                TranslateMessage(ref msg);
-                DispatchMessage(ref msg);
+                PInvoke.TranslateMessage(in msg);
+                PInvoke.DispatchMessage(in msg);
             }
 
-            if (_hookId != IntPtr.Zero)
-                UnhookWindowsHookEx(_hookId);
-            if (_mouseHookId != IntPtr.Zero)
-                UnhookWindowsHookEx(_mouseHookId);
+            if (!_hookId.IsNull)
+                PInvoke.UnhookWindowsHookEx(_hookId);
+            if (!_mouseHookId.IsNull)
+                PInvoke.UnhookWindowsHookEx(_mouseHookId);
         })
         {
             Name = "HotkeyHook",
@@ -112,11 +122,9 @@ public sealed class HotkeyManager : IDisposable
     public void Stop()
     {
         _disposed = true;
-        // Post a thread message to wake up GetMessage() so the hook thread
-        // can exit cleanly instead of hanging indefinitely.
         if (_hookThread is { IsAlive: true })
         {
-            PostThreadMessage((uint)_hookThread.ManagedThreadId, 0x0012, IntPtr.Zero, IntPtr.Zero); // WM_QUIT
+            PInvoke.PostThreadMessage((uint)_hookThread.ManagedThreadId, 0x0012, default, default);
             if (!_hookThread.Join(1000))
             {
                 Log.W("HotkeyManager", "Hook thread did not exit within 1s — continuing");
@@ -126,17 +134,17 @@ public sealed class HotkeyManager : IDisposable
     }
 
     private int _kbdCounter;
-    private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private LRESULT KeyboardHookCallback(int nCode, WPARAM wParam, LPARAM lParam)
     {
         try
         {
             if (nCode >= 0)
             {
                 var vkCode = Marshal.ReadInt32(lParam);
-                var isKeyDown = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
-                var isKeyUp = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
+                var wMsg = wParam.Value;
+                var isKeyDown = wMsg == WM_KEYDOWN || wMsg == (uint)WM_SYSKEYDOWN;
+                var isKeyUp = wMsg == WM_KEYUP || wMsg == (uint)WM_SYSKEYUP;
 
-                // Diagnóstico: loga CapsLock (0x14) sempre, e toda tecla a cada 50 eventos
                 _kbdCounter++;
                 if (vkCode == 0x14 || (_kbdCounter % 50 == 0))
                     Log.D("KbdHook", $"vk=0x{vkCode:X2} down={isKeyDown} up={isKeyUp} nCode={nCode}");
@@ -144,7 +152,7 @@ public sealed class HotkeyManager : IDisposable
                 if (isKeyDown)
                 {
                     if (_keysDown.ContainsKey(vkCode))
-                        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+                        return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
 
                     _keysDown.TryAdd(vkCode, 0);
                     var generic = MapToGenericVk(vkCode);
@@ -168,20 +176,21 @@ public sealed class HotkeyManager : IDisposable
             Log.E("HotkeyManager", $"Erro no callback: {ex.GetType().Name}: {ex.Message}");
         }
 
-        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+        return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
     }
 
-    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private LRESULT MouseHookCallback(int nCode, WPARAM wParam, LPARAM lParam)
     {
         try
         {
-            if (nCode < 0) return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+            if (nCode < 0) return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
 
-            var isDown = wParam == WM_XBUTTONDOWN || wParam == WM_NCXBUTTONDOWN;
-            var isUp = wParam == WM_XBUTTONUP || wParam == WM_NCXBUTTONUP;
-            if (!isDown && !isUp) return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+            var wMsg = wParam.Value;
+            var isDown = wMsg == (uint)WM_XBUTTONDOWN || wMsg == (uint)WM_NCXBUTTONDOWN;
+            var isUp = wMsg == (uint)WM_XBUTTONUP || wMsg == (uint)WM_NCXBUTTONUP;
+            if (!isDown && !isUp) return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
 
-            var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+            var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>((nint)lParam);
             var xButton = (int)(hookStruct.mouseData >> 16);
             int vkCode = xButton switch
             {
@@ -189,12 +198,12 @@ public sealed class HotkeyManager : IDisposable
                 XBUTTON2 => VK_XBUTTON2,
                 _ => 0,
             };
-            if (vkCode == 0) return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+            if (vkCode == 0) return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
 
             if (isDown)
             {
                 if (_keysDown.ContainsKey(vkCode))
-                    return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+                    return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
                 _keysDown.TryAdd(vkCode, 0);
                 OnRawKeyEvent?.Invoke(vkCode, true);
                 MatchAndFireHotkey(vkCode);
@@ -210,7 +219,7 @@ public sealed class HotkeyManager : IDisposable
             Log.E("HotkeyManager", $"Erro no callback mouse: {ex.GetType().Name}: {ex.Message}");
         }
 
-        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+        return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
     }
 
     internal void MatchAndFireHotkey(int vkCode)
@@ -275,63 +284,6 @@ public sealed class HotkeyManager : IDisposable
                 return false;
         }
         return true;
-    }
-
-    private delegate IntPtr WindowsHookDelegate(int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, WindowsHookDelegate lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
-
-    [DllImport("user32.dll")]
-    private static extern bool TranslateMessage(ref MSG lpMsg);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr DispatchMessage(ref MSG lpMsg);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MSG
-    {
-        public IntPtr hwnd;
-        public uint message;
-        public IntPtr wParam;
-        public IntPtr lParam;
-        public uint time;
-        public int ptX;
-        public int ptY;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
-    {
-        public int x;
-        public int y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MSLLHOOKSTRUCT
-    {
-        public POINT pt;
-        public uint mouseData;
-        public uint flags;
-        public uint time;
-        public IntPtr dwExtraInfo;
     }
 
     public void Dispose()

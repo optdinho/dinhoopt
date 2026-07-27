@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { useGameModeStore } from '@/stores/game-mode-store'
 import type { GameModeOptimizationId } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, AlertTriangle, CheckCircle2, Radar, Shield, Timer, Zap } from 'lucide-react'
+import { Activity, TriangleAlert, CircleCheckBig, Radar, Shield, Timer, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -292,9 +292,9 @@ export function GameModePage() {
               }}
             >
               {lastResult.failed > 0 ? (
-                <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: 'var(--accent)' }} />
+                <TriangleAlert className="h-4 w-4 shrink-0" style={{ color: 'var(--accent)' }} />
               ) : (
-                <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
+                <CircleCheckBig className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
               )}
               <span
                 className="text-[13px]"
@@ -328,7 +328,7 @@ export function GameModePage() {
             className="flex items-center gap-3 rounded-lg px-4 py-3 text-[12px]"
             style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}
           >
-            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <TriangleAlert className="h-4 w-4 shrink-0" />
             <span className="flex-1">{t('pendingRestoreMessage')}</span>
             <button
               type="button"

@@ -6,7 +6,7 @@ import { useDuplicateStore } from '@/stores/duplicate-store'
 import {
   ChevronDown,
   ChevronRight,
-  ExternalLink,
+  SquareArrowOutUpRight,
   FolderOpen,
   Plus,
   RotateCcw,
@@ -454,7 +454,7 @@ export function DuplicateFinderPage() {
                                   className="shrink-0 text-zinc-600 hover:text-zinc-400"
                                   title={t('openLocation')}
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  <SquareArrowOutUpRight className="h-3.5 w-3.5" />
                                 </button>
                               </div>
                             )

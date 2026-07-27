@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { getNextRunTime } from '@/pages/schedules-utils'
 import type { ScheduleEntry } from '@shared/types'
-import { AlertTriangle, CheckCircle2, Clock, Copy, Minus, Pencil, Trash2, XCircle } from 'lucide-react'
+import { TriangleAlert, CircleCheckBig, Clock, Copy, Minus, Pencil, Trash2, CircleX } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toggle } from './Toggle'
@@ -95,13 +95,13 @@ const ScheduleCard = memo(function ScheduleCard({
         )}
         <div className="flex items-center gap-2">
           {entry.lastRunStatus === 'success' && (
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color: '#22c55e' }} strokeWidth={1.8} />
+            <CircleCheckBig className="h-3.5 w-3.5 shrink-0" style={{ color: '#22c55e' }} strokeWidth={1.8} />
           )}
           {entry.lastRunStatus === 'partial' && (
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: '#eab308' }} strokeWidth={1.8} />
+            <TriangleAlert className="h-3.5 w-3.5 shrink-0" style={{ color: '#eab308' }} strokeWidth={1.8} />
           )}
           {entry.lastRunStatus === 'failed' && (
-            <XCircle className="h-3.5 w-3.5 shrink-0" style={{ color: '#ef4444' }} strokeWidth={1.8} />
+            <CircleX className="h-3.5 w-3.5 shrink-0" style={{ color: '#ef4444' }} strokeWidth={1.8} />
           )}
           {entry.lastRunStatus === 'never' && (
             <Minus className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--text-faint)' }} strokeWidth={1.8} />

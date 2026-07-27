@@ -3,6 +3,11 @@ using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.Storage.Xps;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace DiNho.Capture.Poc.Capture;
 
@@ -12,8 +17,6 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
     public int Width => _windowWidth;
     public int Height => _windowHeight;
     public ID3D11Device? Device => _device;
-
-    private const uint PWM_CAPTUREWINDOW = 0x80000000;
 
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
@@ -90,7 +93,7 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
         }
 
         // Window still valid?
-        if (!IsWindow(_targetHwnd))
+        if (!PInvoke.IsWindow((HWND)_targetHwnd))
             return new CapturedFrame(startTicks, Stopwatch.GetTimestamp(), 0, 0, success: false);
 
         // Check for dimension change
@@ -177,29 +180,29 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
         }
     }
 
-    private byte[]? CaptureBitmap()
+    private unsafe byte[]? CaptureBitmap()
     {
         if (_windowWidth <= 0 || _windowHeight <= 0)
             return null;
 
-        var hdcScreen = GetDC(IntPtr.Zero);
-        if (hdcScreen == IntPtr.Zero)
+        var hdcScreen = PInvoke.GetDC(default);
+        if (hdcScreen.Value == null)
             return null;
 
-        var hdcMem = CreateCompatibleDC(hdcScreen);
-        var hBitmap = CreateCompatibleBitmap(hdcScreen, _windowWidth, _windowHeight);
-        if (hBitmap == IntPtr.Zero)
+        var hdcMem = PInvoke.CreateCompatibleDC(hdcScreen);
+        var hBitmap = PInvoke.CreateCompatibleBitmap(hdcScreen, _windowWidth, _windowHeight);
+        if (hBitmap.Value == null)
         {
-            DeleteDC(hdcMem);
-            ReleaseDC(IntPtr.Zero, hdcScreen);
+            PInvoke.DeleteDC(hdcMem);
+            PInvoke.ReleaseDC(default, hdcScreen);
             return null;
         }
 
-        var hOld = SelectObject(hdcMem, hBitmap);
+        var hOld = PInvoke.SelectObject(hdcMem, new HGDIOBJ((IntPtr)hBitmap.Value));
 
         try
         {
-            bool printed = PrintWindow(_targetHwnd, hdcMem, PWM_CAPTUREWINDOW);
+            bool printed = PInvoke.PrintWindow((HWND)_targetHwnd, hdcMem, (PRINT_WINDOW_FLAGS)0x80000000u);
             if (!printed)
                 return null;
 
@@ -211,24 +214,27 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
 
             try
             {
-                var bmi = new BITMAPINFO
+                unsafe
                 {
-                    bmiHeader = new BITMAPINFOHEADER
+                    var bmi = new BITMAPINFO
                     {
-                        biSize = Marshal.SizeOf<BITMAPINFOHEADER>(),
-                        biWidth = _windowWidth,
-                        biHeight = -_windowHeight, // top-down
-                        biPlanes = 1,
-                        biBitCount = 32,
-                        biCompression = 0, // BI_RGB
-                        biSizeImage = pixelSize,
-                    }
-                };
+                        bmiHeader = new BITMAPINFOHEADER
+                        {
+                            biSize = (uint)sizeof(BITMAPINFOHEADER),
+                            biWidth = _windowWidth,
+                            biHeight = -_windowHeight, // top-down
+                            biPlanes = 1,
+                            biBitCount = 32,
+                            biCompression = 0, // BI_RGB
+                            biSizeImage = (uint)pixelSize,
+                        }
+                    };
 
-                int lines = GetDIBits(hdcMem, hBitmap, 0, (uint)_windowHeight,
-                    gcHandle.AddrOfPinnedObject(), ref bmi, 0);
-                if (lines == 0)
-                    return null;
+                    int lines = RawGetDIBits((IntPtr)hdcMem.Value, (IntPtr)hBitmap.Value, 0, (uint)_windowHeight,
+                        (void*)gcHandle.AddrOfPinnedObject(), &bmi, 0);
+                    if (lines == 0)
+                        return null;
+                }
             }
             finally
             {
@@ -239,32 +245,32 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
         }
         finally
         {
-            SelectObject(hdcMem, hOld);
-            DeleteObject(hBitmap);
-            DeleteDC(hdcMem);
-            ReleaseDC(IntPtr.Zero, hdcScreen);
+            PInvoke.SelectObject(hdcMem, hOld);
+            PInvoke.DeleteObject(new HGDIOBJ((IntPtr)hBitmap.Value));
+            PInvoke.DeleteDC(hdcMem);
+            PInvoke.ReleaseDC(default, hdcScreen);
         }
     }
 
     private void RefreshWindowDimensions()
     {
-        if (!IsWindow(_targetHwnd))
+        if (!PInvoke.IsWindow((HWND)_targetHwnd))
         {
             _windowWidth = 0;
             _windowHeight = 0;
             return;
         }
 
-        if (IsIconic(_targetHwnd))
+        if (PInvoke.IsIconic((HWND)_targetHwnd))
         {
             // Minimized: use normal-position dimensions from WINDOWPLACEMENT
             var placement = new WINDOWPLACEMENT();
-            placement.length = Marshal.SizeOf<WINDOWPLACEMENT>();
-            if (GetWindowPlacement(_targetHwnd, ref placement))
+            placement.length = (uint)Marshal.SizeOf<WINDOWPLACEMENT>();
+            if (PInvoke.GetWindowPlacement((HWND)_targetHwnd, ref placement))
             {
                 var rc = placement.rcNormalPosition;
-                int w = rc.Right - rc.Left;
-                int h = rc.Bottom - rc.Top;
+                int w = rc.right - rc.left;
+                int h = rc.bottom - rc.top;
                 // Clamp to reasonable values (minimized windows may report 0)
                 _windowWidth = Math.Max(1, w & ~1);
                 _windowHeight = Math.Max(1, h & ~1);
@@ -273,7 +279,7 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
         }
 
         var rect = new RECT();
-        if (!GetClientRect(_targetHwnd, ref rect))
+        if (!PInvoke.GetClientRect((HWND)_targetHwnd, out rect))
         {
             _windowWidth = 0;
             _windowHeight = 0;
@@ -281,8 +287,8 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
         }
 
         // GetClientRect returns right=width, bottom=height
-        _windowWidth = Math.Max(1, rect.Right & ~1);
-        _windowHeight = Math.Max(1, rect.Bottom & ~1);
+        _windowWidth = Math.Max(1, rect.right & ~1);
+        _windowHeight = Math.Max(1, rect.bottom & ~1);
     }
 
     private void AllocateTextures(int width, int height)
@@ -340,115 +346,18 @@ public sealed class PrintWindowCaptureSource : ICaptureSource
     public static bool IsWindowForeground(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return false;
-        return GetForegroundWindow() == hwnd;
+        return PInvoke.GetForegroundWindow() == (HWND)hwnd;
     }
 
     public static bool IsWindowMinimized(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return false;
-        return IsIconic(hwnd);
+        return PInvoke.IsIconic((HWND)hwnd);
     }
 
-    // --- Win32 P/Invokes ---
-
-    [DllImport("user32.dll")]
-    private static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetDC(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    private static extern bool ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
-    [DllImport("gdi32.dll")]
-    private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
-
-    [DllImport("gdi32.dll")]
-    private static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int nWidth, int nHeight);
-
-    [DllImport("gdi32.dll")]
-    private static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteObject(IntPtr hObject);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteDC(IntPtr hdc);
-
-    [DllImport("gdi32.dll")]
-    private static extern int GetDIBits(IntPtr hdc, IntPtr hbmp, uint uStartScan,
-        uint cScanLines, IntPtr lpvBits, ref BITMAPINFO lpbmi, uint uUsage);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsIconic(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetClientRect(IntPtr hWnd, ref RECT lpRect);
-
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
-
-    // --- Structs ---
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BITMAPINFOHEADER
-    {
-        public int biSize;
-        public int biWidth;
-        public int biHeight;
-        public short biPlanes;
-        public short biBitCount;
-        public int biCompression;
-        public int biSizeImage;
-        public int biXPelsPerMeter;
-        public int biYPelsPerMeter;
-        public int biClrUsed;
-        public int biClrImportant;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BITMAPINFO
-    {
-        public BITMAPINFOHEADER bmiHeader;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WINDOWPLACEMENT
-    {
-        public int length;
-        public int flags;
-        public int showCmd;
-        public POINT ptMinPosition;
-        public POINT ptMaxPosition;
-        public RECT rcNormalPosition;
-    }
+    // CsWin32 GetDIBits SafeHandle overload has [OverloadResolutionPriority(1)]
+    // which prevents calling the raw HBITMAP overload. Keep manual DllImport.
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern unsafe int RawGetDIBits(IntPtr hdc, IntPtr hbmp, uint uStartScan,
+        uint cScanLines, void* lpvBits, BITMAPINFO* lpbmi, uint uUsage);
 }

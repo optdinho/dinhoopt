@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { ScheduleEntry, ScheduleTaskType } from '@shared/types'
 import { motion } from 'framer-motion'
-import { AlertTriangle, X } from 'lucide-react'
+import { TriangleAlert, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toggle } from './Toggle'
@@ -399,7 +399,7 @@ export function ScheduleDialog({
             className="mb-6 flex items-start gap-3 rounded-xl p-3"
             style={{ background: 'var(--accent-muted-bg)', border: '1px solid rgba(245,158,11,0.12)' }}
           >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--accent)' }} strokeWidth={1.8} />
             <p className="text-[12px] leading-relaxed" style={{ color: '#d97706' }}>
               {t('dialog.autoApplyWarning')}
             </p>

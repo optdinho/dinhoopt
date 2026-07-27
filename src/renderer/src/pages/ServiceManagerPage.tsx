@@ -8,7 +8,7 @@ import { useProgressListener } from '@/hooks/useProgressListener'
 import { useHistoryStore } from '@/stores/history-store'
 import { useServiceStore } from '@/stores/service-store'
 import type { ServiceCategory, ServiceSafety, ServiceScanProgress } from '@shared/types'
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Search, Server, Shield, Sparkles } from 'lucide-react'
+import { TriangleAlert, CircleCheckBig, Loader2, RefreshCw, Search, Server, Shield, Sparkles } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -377,9 +377,9 @@ export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
         >
           <div className="flex items-center gap-2">
             {applyResult.failed > 0 ? (
-              <AlertTriangle className="h-4 w-4" style={{ color: '#f59e0b' }} />
+              <TriangleAlert className="h-4 w-4" style={{ color: '#f59e0b' }} />
             ) : (
-              <CheckCircle2 className="h-4 w-4" style={{ color: '#22c55e' }} />
+              <CircleCheckBig className="h-4 w-4" style={{ color: '#22c55e' }} />
             )}
             <span className="text-[13px] font-medium text-white">
               {t(

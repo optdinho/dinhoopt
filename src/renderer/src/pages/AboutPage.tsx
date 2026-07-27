@@ -1,6 +1,6 @@
 import logoSrc from '@/assets/logo.png'
 import { useAppUpdateStore } from '@/stores/app-update-store'
-import { AlertCircle, CheckCircle, Download, Loader, RefreshCw } from 'lucide-react'
+import { CircleAlert, CircleCheck, Download, Loader, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 declare const __APP_VERSION__: string
@@ -41,7 +41,7 @@ export function AboutPage() {
           {updateStatus.state === 'not-available' && (
             <>
               <span className="flex items-center gap-2 text-[12px] text-zinc-500">
-                <CheckCircle className="h-3.5 w-3.5" style={{ color: '#22c55e' }} strokeWidth={1.8} /> {t('upToDate')}
+                <CircleCheck className="h-3.5 w-3.5" style={{ color: '#22c55e' }} strokeWidth={1.8} /> {t('upToDate')}
               </span>
               <button
                 type="button"
@@ -98,7 +98,7 @@ export function AboutPage() {
           {updateStatus.state === 'error' && (
             <>
               <span className="flex items-center gap-2 text-[12px] text-red-400">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
                 {updateStatus.error}
               </span>
               <button

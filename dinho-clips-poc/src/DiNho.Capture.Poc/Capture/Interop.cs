@@ -191,89 +191,67 @@ namespace DiNho.Capture.Poc.Capture
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct NativePoint
-    {
-        public int X;
-        public int Y;
-        public NativePoint(int x, int y) { X = x; Y = y; }
-    }
-
     internal static class MonitorHelper
     {
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(NativePoint pt, uint dwFlags);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, EnumMonitorsDelegate lpfnEnum, IntPtr dwData);
-
-        private delegate bool EnumMonitorsDelegate(IntPtr hMonitor, IntPtr hdcMonitor, IntPtr lprcMonitor, IntPtr dwData);
-
-        private const uint MONITOR_DEFAULTTOPRIMARY = 1;
-        private const uint MONITOR_DEFAULTTONEAREST = 2;
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        private struct MONITORINFOEX
-        {
-            public int cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-            public string szDevice;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left; public int Top; public int Right; public int Bottom;
-        }
-
         public static IntPtr GetPrimaryMonitorHandle()
         {
-            return MonitorFromPoint(new NativePoint(0, 0), MONITOR_DEFAULTTOPRIMARY);
+            return (IntPtr)Windows.Win32.PInvoke.MonitorFromPoint(
+                new System.Drawing.Point(0, 0),
+                Windows.Win32.Graphics.Gdi.MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
         }
 
         public static int GetMonitorCount()
         {
             var count = 0;
-            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (_, _, _, _) => { count++; return true; }, IntPtr.Zero);
+            unsafe
+            {
+                Windows.Win32.PInvoke.EnumDisplayMonitors(
+                    default,
+                    (Windows.Win32.Foundation.RECT?)null,
+                    (_, _, _, _) => { count++; return (Windows.Win32.Foundation.BOOL)true; },
+                    default);
+            }
             return count;
         }
 
         public static int GetMonitorFromWindow(IntPtr hwnd)
         {
             if (hwnd == IntPtr.Zero) return 0;
-            var hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            var mi = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
-            if (!GetMonitorInfo(hMonitor, ref mi))
-                return 0;
-            return hMonitor.GetHashCode();
+            var hMonitor = Windows.Win32.PInvoke.MonitorFromWindow(
+                (Windows.Win32.Foundation.HWND)hwnd,
+                Windows.Win32.Graphics.Gdi.MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+            unsafe
+            {
+                var mi = new Windows.Win32.Graphics.Gdi.MONITORINFO { cbSize = (uint)sizeof(Windows.Win32.Graphics.Gdi.MONITORINFO) };
+                if (!Windows.Win32.PInvoke.GetMonitorInfo(hMonitor, ref mi))
+                    return 0;
+                return ((nint)hMonitor.Value).GetHashCode();
+            }
         }
 
         public static IntPtr GetMonitorFromWindowHandle(IntPtr hwnd)
         {
-            return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            return (IntPtr)Windows.Win32.PInvoke.MonitorFromWindow(
+                (Windows.Win32.Foundation.HWND)hwnd,
+                Windows.Win32.Graphics.Gdi.MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
         }
 
         public static IntPtr MonitorFromPoint(int x, int y)
         {
-            return MonitorFromPoint(new NativePoint(x, y), MONITOR_DEFAULTTONEAREST);
+            return (IntPtr)Windows.Win32.PInvoke.MonitorFromPoint(
+                new System.Drawing.Point(x, y),
+                Windows.Win32.Graphics.Gdi.MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
         }
 
         public static (int left, int top, int right, int bottom) GetMonitorRect(IntPtr hMonitor)
         {
-            var mi = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
-            if (!GetMonitorInfo(hMonitor, ref mi))
-                return (0, 0, 0, 0);
-            return (mi.rcMonitor.Left, mi.rcMonitor.Top, mi.rcMonitor.Right, mi.rcMonitor.Bottom);
+            unsafe
+            {
+                var mi = new Windows.Win32.Graphics.Gdi.MONITORINFO { cbSize = (uint)sizeof(Windows.Win32.Graphics.Gdi.MONITORINFO) };
+                if (!Windows.Win32.PInvoke.GetMonitorInfo((Windows.Win32.Graphics.Gdi.HMONITOR)hMonitor, ref mi))
+                    return (0, 0, 0, 0);
+                return (mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom);
+            }
         }
     }
 
@@ -330,64 +308,23 @@ namespace DiNho.Capture.Poc.Capture
     /// <summary>
     /// Detecção HDR via DisplayConfigGetDeviceInfo (Win10 1703+).
     /// Retorna true se o monitor alvo estiver em modo HDR.
-    /// Com BGRA8, o DWM faz HDR→SDR automaticamente (resultado visual correto).
-    /// Com R16G16B16A16_FLOAT, preserva faixa HDR mas requer tone mapping manual.
     /// </summary>
     internal static class HdrHelper
     {
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO requestPacket);
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
-        {
-            public uint type;
-            public uint size;
-            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
-            public uint advancedColorInfoFlags;
-            public uint advancedColorMode;
-            public uint bitsPerChannel;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct DISPLAYCONFIG_DEVICE_INFO_HEADER
-        {
-            public uint type;
-            public uint size;
-            public LUID adapterId;
-            public uint id;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct LUID
-        {
-            public uint LowPart;
-            public int HighPart;
-        }
-
-        private const uint DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO = 0x00000047;
-        private const uint DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_FLAG_ADVANCED_COLOR_ACTIVE = 0x1;
-
         public static bool IsHdrActive()
         {
             try
             {
-                // Query primary display (adapterId=0, id=0)
-                var request = new DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+                unsafe
                 {
-                    type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                    size = (uint)Marshal.SizeOf<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>(),
-                    header = new DISPLAYCONFIG_DEVICE_INFO_HEADER
-                    {
-                        type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                        size = (uint)Marshal.SizeOf<DISPLAYCONFIG_DEVICE_INFO_HEADER>(),
-                    }
-                };
-
-                var hr = DisplayConfigGetDeviceInfo(ref request);
-                if (hr != 0) return false;
-
-                return (request.advancedColorInfoFlags & DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_FLAG_ADVANCED_COLOR_ACTIVE) != 0;
+                    var request = new Windows.Win32.Devices.Display.DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO();
+                    request.header.type = Windows.Win32.Devices.Display.DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+                    request.header.size = (uint)sizeof(Windows.Win32.Devices.Display.DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO);
+                    var hr = Windows.Win32.PInvoke.DisplayConfigGetDeviceInfo(
+                        (Windows.Win32.Devices.Display.DISPLAYCONFIG_DEVICE_INFO_HEADER*)&request);
+                    if (hr != 0) return false;
+                    return request.Anonymous.Anonymous.advancedColorEnabled;
+                }
             }
             catch
             {
@@ -399,34 +336,22 @@ namespace DiNho.Capture.Poc.Capture
     /// <summary>
     /// Detecção e configuração WDA (Window Display Affinity).
     /// Jogos que usam SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) não podem ser capturados.
-    /// O WGC retorna frames pretos nesse caso.
     /// Usamos WDA_EXCLUDEFROMCAPTURE para esconder a janela DnHo do próprio recording.
     /// </summary>
     internal static class WdaHelper
     {
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwFlags);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
-
         public const uint WDA_NONE = 0x00;
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x01;
-        public const uint WDA_EXCLUEFROMCAPTURE_WIN11 = 0x11; // Win11 name variant
-        public const uint WDA_EXCLUDEFROMCAPTURE_MODERN = 0x11; // Win11+ variant
+        public const uint WDA_EXCLUEFROMCAPTURE_WIN11 = 0x11;
+        public const uint WDA_EXCLUDEFROMCAPTURE_MODERN = 0x11;
 
-        /// <summary>
-        /// Returns true if the window is excluded from capture (WDA_EXCLUDEFROMCAPTURE).
-        /// In that case, WGC returns black frames — must fallback to Hybrid/DDA.
-        /// </summary>
         public static bool IsExcludedFromCapture(IntPtr hwnd)
         {
             if (hwnd == IntPtr.Zero) return false;
             try
             {
-                if (!GetWindowDisplayAffinity(hwnd, out var affinity)) return false;
+                if (!Windows.Win32.PInvoke.GetWindowDisplayAffinity((Windows.Win32.Foundation.HWND)hwnd, out var affinity))
+                    return false;
                 return affinity == WDA_EXCLUDEFROMCAPTURE || affinity == WDA_EXCLUEFROMCAPTURE_WIN11;
             }
             catch
@@ -435,22 +360,19 @@ namespace DiNho.Capture.Poc.Capture
             }
         }
 
-        /// <summary>
-        /// Sets WDA_EXCLUDEFROMCAPTURE on a window — hides it from WGC/DXGI capture.
-        /// Used to exclude the DnHo app window from recorded gameplay footage.
-        /// Returns true on success.
-        /// </summary>
         public static bool ExcludeWindowFromCapture(IntPtr hwnd)
         {
             if (hwnd == IntPtr.Zero) return false;
             try
             {
-                // Try Win10 constant (0x01) first — works on all Windows versions
-                var ok = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                var ok = Windows.Win32.PInvoke.SetWindowDisplayAffinity(
+                    (Windows.Win32.Foundation.HWND)hwnd,
+                    (Windows.Win32.UI.WindowsAndMessaging.WINDOW_DISPLAY_AFFINITY)WDA_EXCLUDEFROMCAPTURE);
                 if (!ok)
                 {
-                    // Fallback to Win11 constant (0x11) — some Win11 builds need this
-                    ok = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE_MODERN);
+                    ok = Windows.Win32.PInvoke.SetWindowDisplayAffinity(
+                        (Windows.Win32.Foundation.HWND)hwnd,
+                        (Windows.Win32.UI.WindowsAndMessaging.WINDOW_DISPLAY_AFFINITY)WDA_EXCLUDEFROMCAPTURE_MODERN);
                     if (ok)
                         Log.I("WDA", $"SetWindowDisplayAffinity(0x{WDA_EXCLUDEFROMCAPTURE_MODERN:X}) OK (Win11 variant) on hwnd=0x{hwnd:X}");
                 }
@@ -459,7 +381,7 @@ namespace DiNho.Capture.Poc.Capture
                     Log.I("WDA", $"SetWindowDisplayAffinity(0x{WDA_EXCLUDEFROMCAPTURE:X}) OK on hwnd=0x{hwnd:X}");
                 }
                 if (!ok)
-                    Log.W("WDA", $"SetWindowDisplayAffinity failed: Win32 error={Marshal.GetLastWin32Error()}");
+                    Log.W("WDA", "SetWindowDisplayAffinity failed");
                 return ok;
             }
             catch (Exception ex)
@@ -469,17 +391,16 @@ namespace DiNho.Capture.Poc.Capture
             }
         }
 
-        /// <summary>
-        /// Restores WDA_NONE on a window — makes it visible in capture again.
-        /// </summary>
         public static bool RestoreWindowCapture(IntPtr hwnd)
         {
             if (hwnd == IntPtr.Zero) return false;
             try
             {
-                var ok = SetWindowDisplayAffinity(hwnd, WDA_NONE);
+                var ok = Windows.Win32.PInvoke.SetWindowDisplayAffinity(
+                    (Windows.Win32.Foundation.HWND)hwnd,
+                    Windows.Win32.UI.WindowsAndMessaging.WINDOW_DISPLAY_AFFINITY.WDA_NONE);
                 if (ok)
-                    Log.I("WDA", $"SetWindowDisplayAffinity(WDA_NONE) OK — window visible in capture again");
+                    Log.I("WDA", "SetWindowDisplayAffinity(WDA_NONE) OK — window visible in capture again");
                 return ok;
             }
             catch (Exception ex)

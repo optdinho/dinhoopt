@@ -2,7 +2,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { useBenchmarkStore } from '@/stores/benchmark-store'
 import type { BenchmarkScoreClass } from '@shared/types'
 import { motion } from 'framer-motion'
-import { CheckCircle2, Cpu, Gauge, MemoryStick, RefreshCw, Star, Thermometer, Timer, Wifi, Zap } from 'lucide-react'
+import { CircleCheckBig, Cpu, Gauge, MemoryStick, RefreshCw, Star, Thermometer, Timer, Wifi, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const SCORE_COLORS: Record<BenchmarkScoreClass, string> = {
@@ -193,7 +193,7 @@ export function BenchmarkPage() {
                   }`}
                 >
                   {isDone ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                    <CircleCheckBig className="h-4 w-4 shrink-0 text-green-500" />
                   ) : isActive ? (
                     <motion.div
                       className="h-4 w-4 shrink-0 rounded-full border-2 border-cyan-400"

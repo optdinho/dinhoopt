@@ -13,7 +13,7 @@ import { useRegistryStore } from '@/stores/registry-store'
 import { useStatsStore } from '@/stores/stats-store'
 import type { RegistryEntry } from '@shared/types'
 import {
-  CheckCircle2,
+  CircleCheckBig,
   Database,
   Loader2,
   Search,
@@ -274,7 +274,7 @@ function RegistryPageContent() {
             className="flex items-center gap-3 p-4"
             style={{ background: fixResult.failed > 0 ? 'rgba(239,68,68,0.04)' : 'rgba(34,197,94,0.06)' }}
           >
-            <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+            <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
             <p className="flex-1 text-[13px] text-zinc-200">
               {t('fixedEntries', { count: fixResult.fixed })}
               {fixResult.failed > 0 && (

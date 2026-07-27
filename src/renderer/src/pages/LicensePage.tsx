@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Copy, Info, KeyRound, ShieldCheck, XCircle } from 'lucide-react'
+import { TriangleAlert, CircleCheck, Copy, Info, KeyRound, ShieldCheck, CircleX } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLicenseStore } from '../stores/license-store'
@@ -52,7 +52,7 @@ export function LicensePage() {
       {alreadyActivated && (
         <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-xl p-5 mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <CheckCircle className="w-6 h-6 text-emerald-400" />
+            <CircleCheck className="w-6 h-6 text-emerald-400" />
             <span className="text-emerald-300 font-semibold">{t('activeLicense')}</span>
           </div>
           <p className="text-gray-400 text-sm">{t('activeLicenseDescription')}</p>
@@ -62,7 +62,7 @@ export function LicensePage() {
       {!activationSuccess && !reason && !alreadyActivated && (
         <div className="bg-amber-900/30 border border-amber-700/50 rounded-xl p-5 mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <AlertTriangle className="w-6 h-6 text-amber-400" />
+            <TriangleAlert className="w-6 h-6 text-amber-400" />
             <span className="text-amber-300 font-semibold">{t('noActiveLicense')}</span>
           </div>
           <p className="text-gray-400 text-sm">{t('enterKeyPrompt')}</p>
@@ -72,7 +72,7 @@ export function LicensePage() {
       {reason && (
         <div className="bg-red-900/30 border border-red-700/50 rounded-xl p-5 mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <XCircle className="w-6 h-6 text-red-400" />
+            <CircleX className="w-6 h-6 text-red-400" />
             <span className="text-red-300 font-semibold">{t('activationFailed')}</span>
           </div>
           <p className="text-gray-400 text-sm">{reason}</p>
@@ -82,7 +82,7 @@ export function LicensePage() {
       {activationSuccess && (
         <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-xl p-5 mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <CheckCircle className="w-6 h-6 text-emerald-400" />
+            <CircleCheck className="w-6 h-6 text-emerald-400" />
             <span className="text-emerald-300 font-semibold">{t('activationSuccess')}</span>
           </div>
           <p className="text-gray-400 text-sm">{t('activationSuccessDescription')}</p>

@@ -5,7 +5,7 @@ import type { DuplicateScanResult } from '@shared/types'
 import {
   ChevronDown,
   ChevronRight,
-  ExternalLink,
+  SquareArrowOutUpRight,
   FolderOpen,
   RotateCcw,
   Shield,
@@ -235,7 +235,7 @@ export function ResultsPanel({
                               className="shrink-0 text-zinc-600 hover:text-zinc-400"
                               title={t('openLocation')}
                             >
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <SquareArrowOutUpRight className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         )

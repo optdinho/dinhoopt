@@ -1,5 +1,5 @@
 import type { WindowsTweakDef } from '@shared/types'
-import { Check, CheckCircle2 } from 'lucide-react'
+import { Check, CircleCheckBig } from 'lucide-react'
 import { memo } from 'react'
 
 interface TweakRowProps {
@@ -57,7 +57,7 @@ export const TweakRow = memo(function TweakRow({
         {selected ? (
           <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
         ) : applied ? (
-          <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+          <CircleCheckBig className="h-3.5 w-3.5 text-green-400" />
         ) : null}
       </div>
 

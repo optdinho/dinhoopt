@@ -1,6 +1,6 @@
 import { formatBytes } from '@/lib/utils'
 import type { DiskSmartInfo } from '@shared/types'
-import { AlertTriangle, CheckCircle, HardDrive, HelpCircle, ShieldAlert, Thermometer, XCircle } from 'lucide-react'
+import { TriangleAlert, CircleCheck, HardDrive, CircleHelp, ShieldAlert, Thermometer, CircleX } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface DiskHealthPanelProps {
@@ -8,10 +8,10 @@ interface DiskHealthPanelProps {
 }
 
 const statusConfig = {
-  Healthy: { icon: CheckCircle, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
-  Caution: { icon: AlertTriangle, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-  Bad: { icon: XCircle, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
-  Unknown: { icon: HelpCircle, color: 'var(--text-muted)', bg: 'rgba(110,110,118,0.1)' },
+  Healthy: { icon: CircleCheck, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+  Caution: { icon: TriangleAlert, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+  Bad: { icon: CircleX, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+  Unknown: { icon: CircleHelp, color: 'var(--text-muted)', bg: 'rgba(110,110,118,0.1)' },
 }
 
 const statusI18nKeys = {

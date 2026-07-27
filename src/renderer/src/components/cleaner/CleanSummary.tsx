@@ -4,7 +4,7 @@ import type { CleanSummaryData } from '@/stores/scan-store'
 import { motion } from 'framer-motion'
 import {
   AppWindow,
-  CheckCircle2,
+  CircleCheckBig,
   ChevronDown,
   Clock,
   Database,
@@ -169,7 +169,7 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
               animate={{ scale: 1 }}
               transition={{ delay: 0.15, type: 'spring', stiffness: 400, damping: 15 }}
             >
-              <CheckCircle2 className="h-6 w-6 text-green-500" strokeWidth={1.8} />
+              <CircleCheckBig className="h-6 w-6 text-green-500" strokeWidth={1.8} />
             </motion.div>
             <h3 className="text-[15px] font-semibold text-zinc-100">{t('summaryTitle')}</h3>
           </div>

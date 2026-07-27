@@ -1,4 +1,4 @@
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { TriangleAlert, RefreshCw } from 'lucide-react'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { withTranslation } from 'react-i18next'
 import type { WithTranslation } from 'react-i18next'
@@ -38,7 +38,7 @@ class ErrorBoundaryInternal extends Component<ErrorBoundaryProps, ErrorBoundaryS
 
       return (
         <div role="alert" className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <AlertTriangle className="h-12 w-12 text-destructive mb-4" aria-hidden="true" />
+          <TriangleAlert className="h-12 w-12 text-destructive mb-4" aria-hidden="true" />
           <h2 className="text-lg font-semibold mb-2">{t('common:errorTitle')}</h2>
           <p className="text-sm text-muted-foreground mb-6 max-w-md">
             {this.state.error.message || t('common:errorTitle')}

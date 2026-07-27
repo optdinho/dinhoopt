@@ -2,7 +2,7 @@ import type { PrivacySetting } from '@shared/types'
 import {
   BrainCircuit,
   CalendarClock,
-  CheckCircle2,
+  CircleCheckBig,
   Compass,
   Cpu,
   Eye,

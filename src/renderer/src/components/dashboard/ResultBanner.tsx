@@ -1,7 +1,7 @@
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { formatBytes, formatNumber } from '@/lib/utils'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2 } from 'lucide-react'
+import { CircleCheckBig } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import type { OneClickResult } from './types'
@@ -37,7 +37,7 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
               transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
               className="shrink-0"
             >
-              <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+              <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
             </motion.div>
             <div>
               <p className="text-sm font-medium text-zinc-200">{t('resultCleanupComplete')}</p>

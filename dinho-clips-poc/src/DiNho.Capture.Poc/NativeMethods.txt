@@ -1,0 +1,85 @@
+// CsWin32 — Lista de APIs Win32 para gerar bindings automáticos
+// Documentação: https://microsoft.github.io/CsWin32/docs/getting-started.html
+
+// === user32.dll — Janelas, mensagens, monitores ===
+CreateFileW
+GetWindowTextW
+GetWindowTextLengthW
+GetClassNameW
+GetWindowRect
+GetClientRect
+GetWindowPlacement
+GetWindowLongW
+SetWindowLongW
+GetForegroundWindow
+GetDesktopWindow
+GetWindowThreadProcessId
+IsWindowVisible
+IsWindow
+IsIconic
+EnumWindows
+MonitorFromWindow
+MonitorFromPoint
+EnumDisplayMonitors
+GetMonitorInfoW
+PrintWindow
+GetDC
+ReleaseDC
+DisplayConfigGetDeviceInfo
+GetWindowDisplayAffinity
+SetWindowDisplayAffinity
+
+// user32.dll — Mensagens e hooks
+PeekMessageW
+TranslateMessage
+DispatchMessageW
+GetMessageW
+PostThreadMessageW
+SetWindowsHookExW
+UnhookWindowsHookEx
+CallNextHookEx
+SetWinEventHook
+UnhookWinEvent
+
+// === kernel32.dll — Processos, memória ===
+CreateToolhelp32Snapshot
+Process32FirstW
+Process32NextW
+CloseHandle
+GetModuleHandleW
+GlobalMemoryStatusEx
+
+// === gdi32.dll — Device context, bitmaps ===
+CreateCompatibleDC
+CreateCompatibleBitmap
+SelectObject
+DeleteObject
+DeleteDC
+GetDIBits
+
+// === dwmapi.dll — Desktop Window Manager ===
+DwmGetWindowAttribute
+
+// === avrt.dll — Multimedia timer scheduling ===
+AvSetMmThreadCharacteristicsW
+AvRevertMmThreadCharacteristics
+
+// === winmm.dll — Multimedia timer ===
+timeBeginPeriod
+timeEndPeriod
+
+// === shell32.dll — Shell ===
+SetCurrentProcessExplicitAppUserModelID
+
+// === Structs necessárias (geradas automaticamente pelo CsWin32) ===
+RECT
+MSG
+MONITORINFO
+MONITORINFOEXW
+WINDOWPLACEMENT
+PROCESSENTRY32W
+MEMORYSTATUSEX
+BITMAPINFO
+DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+MSLLHOOKSTRUCT
+KBDLLHOOKSTRUCT

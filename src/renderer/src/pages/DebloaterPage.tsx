@@ -11,7 +11,7 @@ import { useDebloaterStore } from '@/stores/debloater-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
 import type { BloatwareApp } from '@shared/types'
-import { CheckCircle2, Loader2, Package, PackageMinus, Search, Shield, Trash2 } from 'lucide-react'
+import { CircleCheckBig, Loader2, Package, PackageMinus, Search, Shield, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -236,7 +236,7 @@ export function DebloaterPage({ embedded }: { embedded?: boolean }) {
           className="mb-5 flex items-center gap-3 rounded-2xl p-4"
           style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.1)' }}
         >
-          <CheckCircle2 className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+          <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
           <p className="text-[13px] text-zinc-200">
             {t(removeResult.removed !== 1 ? 'debloater.removedAppsPlural' : 'debloater.removedApps', {
               count: removeResult.removed,

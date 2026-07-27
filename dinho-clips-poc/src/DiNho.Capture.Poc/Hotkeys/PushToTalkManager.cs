@@ -52,6 +52,16 @@ public sealed class PushToTalkManager : IDisposable
             }
         }
 
+        public void ReplaceKeys(IEnumerable<int> vkCodes)
+        {
+            lock (_pttLock)
+            {
+                _pttKeys.Clear();
+                foreach (var vk in vkCodes)
+                    _pttKeys.Add(vk);
+            }
+        }
+
         private void OnRawKey(int vkCode, bool isKeyDown)
         {
             bool isPtt;
