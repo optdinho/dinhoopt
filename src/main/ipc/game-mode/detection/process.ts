@@ -28,6 +28,7 @@ export const UPDATER_PROCESSES = [
 ]
 
 export const BACKGROUND_PROCESSES = [
+  // Microsoft bloat
   'OneDrive.exe',
   'OneDriveStandaloneUpdater.exe',
   'Teams.exe',
@@ -37,14 +38,35 @@ export const BACKGROUND_PROCESSES = [
   'SkypeBackgroundHost.exe',
   'YourPhone.exe',
   'PhoneExperienceHost.exe',
-  'SecurityHealthSystray.exe',
   'SearchUI.exe',
   'SearchApp.exe',
-  'StartMenuExperienceHost.exe',
-  'ShellExperienceHost.exe',
   'GameBarPresenceWriter.exe',
   'XboxAppServices.exe',
   'XboxGameOverlay.exe',
+  // Windows Copilot + Widgets
+  'WindowsCopilot.exe',
+  'Widgets.exe',
+  'WidgetsExperienceHost.exe',
+  // Cortana
+  'Cortana.exe',
+  'CortanaBackgroundHost.exe',
+  // Office
+  'ONENOTEM.EXE',
+  'OneNoteClipper.exe',
+  // Windows Tips / News
+  'NewsAndInterests.exe',
+  'NewsAndInterestHost.exe',
+  // ClipChamp / Media
+  'ClipChamp.exe',
+  'ClipchampClipboardService.exe',
+  'ClipchampCompressionService.exe',
+  // Solitaire
+  'Microsoft.SolitaireCollection.exe',
+  // Weather
+  'Microsoft.Windowsweathermap.exe',
+  // Third-party optional
+  'Spotify.exe',
+  'SpotifyWebHelper.exe',
 ]
 
 const PROTECTED_PROCESSES = new Set([
