@@ -80,9 +80,6 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
   const [showUpToDate, setShowUpToDate] = useState(false)
   const [showIgnored, setShowIgnored] = useState(false)
 
-  useUpdaterProgress()
-  useInitialLoader(handleCheck)
-
   const { filteredApps, upToDate, selectedCount, allSelected, isBusy, majorCount, minorCount, patchCount } =
     useFilteredAndSortedApps()
 
@@ -135,6 +132,9 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         useUpdaterStore.getState().setLoading(false)
       })
   }, [])
+
+  useUpdaterProgress()
+  useInitialLoader(handleCheck)
 
   // ─── Run updates ────────────────────────────────────────────
   const handleUpdate = useCallback(

@@ -1,4 +1,4 @@
-import { Activity, Pause, Play } from 'lucide-react'
+import { Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -9,7 +9,6 @@ import { GaugeCard } from '@/components/perf/GaugeCard'
 import { ProcessTable } from '@/components/perf/ProcessTable'
 import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
 import { TimeSeriesChart } from '@/components/perf/TimeSeriesChart'
-import { EmptyState } from '@/components/shared/EmptyState'
 import { cn, formatBytes, formatSpeed } from '@/lib/utils'
 import { usePerfStore } from '@/stores/perf-store'
 
@@ -30,17 +29,15 @@ export function PerformanceMonitorPage() {
 
   const [paused, setPaused] = useState(false)
 
-  // Start monitoring on mount
+  // Start monitoring on mount — subscribe + start first, load systemInfo/diskHealth in background
   useEffect(() => {
     let snapshotUnsub: (() => void) | undefined
     let processUnsub: (() => void) | undefined
+    let cancelled = false
 
     const start = async () => {
       try {
-        const [info, disks] = await Promise.all([window.dinho.perfGetSystemInfo(), window.dinho.perfGetDiskHealth()])
-        setSystemInfo(info)
-        setDiskHealth(disks)
-
+        // 1. Subscribe to events + start monitoring immediately — gauges appear in ~1s
         snapshotUnsub = window.dinho.onPerfSnapshot((data) => {
           pushSnapshot(data)
         })
@@ -51,14 +48,24 @@ export function PerformanceMonitorPage() {
 
         await window.dinho.perfStartMonitoring()
         setMonitoring(true)
+
+        // 2. Load system info + disk health in background (non-blocking, ~2-5s)
+        window.dinho.perfGetSystemInfo().then((info) => {
+          if (!cancelled) setSystemInfo(info)
+        }).catch(() => {})
+
+        window.dinho.perfGetDiskHealth().then((disks) => {
+          if (!cancelled) setDiskHealth(disks)
+        }).catch(() => {})
       } catch {
-        toast.error(t('failedToStartToast'))
+        if (!cancelled) toast.error(t('failedToStartToast'))
       }
     }
 
     start()
 
     return () => {
+      cancelled = true
       snapshotUnsub?.()
       processUnsub?.()
       window.dinho.perfStopMonitoring().catch(() => {})
@@ -81,17 +88,6 @@ export function PerformanceMonitorPage() {
     { value: '5m', label: '5m' },
     { value: '15m', label: '15m' },
   ]
-
-  const noData = !snapshot && !systemInfo
-
-  if (noData) {
-    return (
-      <div className="mx-auto max-w-[1200px]">
-        <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
-        <EmptyState icon={Activity} title={t('noDataTitle')} description={t('noDataDescription')} />
-      </div>
-    )
-  }
 
   return (
     <div className="mx-auto max-w-[1200px]">
