@@ -30,6 +30,17 @@ vi.mock('../services/perf-monitor', () => ({
   PerfMonitorService: mocks.perfMonitorService,
 }))
 
+vi.mock('systeminformation', () => ({
+  default: {
+    currentLoad: vi.fn().mockResolvedValue({ cpus: [{ load: 42 }] }),
+    networkStats: vi.fn().mockResolvedValue([{ rx_sec: 1000, tx_sec: 500 }]),
+    graphics: vi.fn().mockResolvedValue({ controllers: [{ model: 'Test GPU' }] }),
+  },
+  currentLoad: vi.fn().mockResolvedValue({ cpus: [{ load: 42 }] }),
+  networkStats: vi.fn().mockResolvedValue([{ rx_sec: 1000, tx_sec: 500 }]),
+  graphics: vi.fn().mockResolvedValue({ controllers: [{ model: 'Test GPU' }] }),
+}))
+
 import { registerPerfMonitorIpc } from './perf-monitor.ipc'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
@@ -57,10 +68,10 @@ describe('registerPerfMonitorIpc', () => {
   })
 
   describe('PERF_QUICK_STATS handler', () => {
-    it('returns CPU and memory stats', () => {
+    it('returns CPU and memory stats', async () => {
       registerPerfMonitorIpc(() => null)
       const handler = getHandler('perf:quick-stats')
-      const result = handler() as {
+      const result = (await handler()) as {
         cpuPercent: number
         memUsedBytes: number
         memTotalBytes: number
@@ -74,13 +85,13 @@ describe('registerPerfMonitorIpc', () => {
       expect(typeof result.memPercent).toBe('number')
     })
 
-    it('computes CPU percent correctly on second call', () => {
+    it('computes CPU percent correctly on second call', async () => {
       registerPerfMonitorIpc(() => null)
       const handler = getHandler('perf:quick-stats')
       // First call sets prevCpuTimes, returns 0
-      handler()
+      await handler()
       // Second call uses prevCpuTimes to compute delta
-      const result = handler() as { cpuPercent: number }
+      const result = (await handler()) as { cpuPercent: number }
       expect(typeof result.cpuPercent).toBe('number')
       expect(result.cpuPercent).toBeGreaterThanOrEqual(0)
     })
@@ -124,10 +135,8 @@ describe('registerPerfMonitorIpc', () => {
         }
       })
       const sender = { id: 1 }
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerPerfMonitorIpc(() => ({ id: 1, on: vi.fn(), webContents: { isDestroyed: () => false } }) as any)
       const handler = getHandler('perf:start')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
       expect(mockStart).toHaveBeenCalledWith(sender)
     })
@@ -149,7 +158,6 @@ describe('registerPerfMonitorIpc', () => {
       const sender = { id: 1 }
       registerPerfMonitorIpc(() => null)
       const handler = getHandler('perf:start')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
       expect(mockStart).toHaveBeenCalledWith(sender)
     })
@@ -174,7 +182,6 @@ describe('registerPerfMonitorIpc', () => {
       const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => false } } as never
       registerPerfMonitorIpc(() => win)
       const handler = getHandler('perf:start')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
 
       // Should have registered 'hide' and 'show' listeners
@@ -198,10 +205,8 @@ describe('registerPerfMonitorIpc', () => {
       const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => false } } as never
       registerPerfMonitorIpc(() => win)
       const handler = getHandler('perf:start')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
       // Call start again with the same window — should not attach new listeners
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
 
       // 'hide' should only be registered once (2 calls: 'hide' + 'show')
@@ -214,7 +219,6 @@ describe('registerPerfMonitorIpc', () => {
       const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => true } } as never
       registerPerfMonitorIpc(() => win)
       const handler = getHandler('perf:start')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       handler({ sender } as any)
 
       const showHandler = mockOn.mock.calls.find((c: string[]) => c[0] === 'show')![1]
@@ -244,7 +248,6 @@ describe('registerPerfMonitorIpc', () => {
 
       // Start monitoring (attaches listeners, sets rendererRequestedMonitoring = true)
       const startHandler = getHandler('perf:start')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       startHandler({ sender } as any)
 
       // Stop monitoring (sets rendererRequestedMonitoring = false)

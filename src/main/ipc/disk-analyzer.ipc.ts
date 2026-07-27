@@ -142,8 +142,8 @@ export async function getDrives(): Promise<DriveInfo[]> {
     for (const line of stdout.trim().split('\n')) {
       const [letter, label, used, free] = line.trim().split('|')
       if (letter && used && free) {
-        const usedSpace = Number.parseInt(used) || 0
-        const freeSpace = Number.parseInt(free) || 0
+        const usedSpace = Number.parseInt(used, 10) || 0
+        const freeSpace = Number.parseInt(free, 10) || 0
         drives.push({
           letter: letter.trim(),
           label: label?.trim() || letter.trim(),
@@ -249,7 +249,7 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
       // Parse progress from SFC output like "Verification 42% complete."
       const match = text.match(/(\d+)\s*%/i)
       if (match) {
-        const pct = Number.parseInt(match[1] ?? '0')
+        const pct = Number.parseInt(match[1] ?? '0', 10)
         if (pct > lastPercent) {
           lastPercent = pct
           sendRepairProgress(getWindow(), {
@@ -441,7 +441,7 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
       stdout += text
       const match = text.match(/(\d+)\s*percent/i) || text.match(/(\d+)\s*%/i)
       if (match) {
-        const pct = Number.parseInt(match[1] ?? '0')
+        const pct = Number.parseInt(match[1] ?? '0', 10)
         if (pct > lastPercent) {
           lastPercent = pct
           sendRepairProgress(getWindow(), {

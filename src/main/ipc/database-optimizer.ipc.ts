@@ -23,6 +23,7 @@ async function getDatabase(): Promise<DatabaseConstructor | null> {
   })()
   return databasePromise
 }
+
 import { CleanerType } from '@shared/enums'
 import type { CleanError, CleanResult, ScanItem, ScanResult } from '@shared/types'
 import { getPlatform } from '../platform'

@@ -1,8 +1,7 @@
-import type { ClipInfo, ClipsConfig, HotkeyBinding } from '@shared/types'
+import type { ClipsConfig, HotkeyBinding } from '@shared/types'
 import { useCallback } from 'react'
 import { toast } from 'sonner'
 import { MODIFIER_KEYS } from './clips-utils'
-import type { FilterTab } from './clips-utils'
 
 interface ClipsActionDeps {
   config: ClipsConfig | null
@@ -237,9 +236,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         if (e.ctrlKey) modifiers.push('Ctrl')
         if (e.shiftKey) modifiers.push('Shift')
         if (e.altKey) modifiers.push('Alt')
-        const updated = config.hotkeys.map((h) =>
-          h.id === rebindingId ? { ...h, vk: e.keyCode, modifiers } : h,
-        )
+        const updated = config.hotkeys.map((h) => (h.id === rebindingId ? { ...h, vk: e.keyCode, modifiers } : h))
         handleConfigUpdate({ hotkeys: updated })
         setRebindingId(null)
       }
@@ -260,9 +257,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         if (e.ctrlKey) modifiers.push('Ctrl')
         if (e.shiftKey) modifiers.push('Shift')
         if (e.altKey) modifiers.push('Alt')
-        const updated = config.hotkeys.map((h) =>
-          h.id === rebindingId ? { ...h, vk, modifiers } : h,
-        )
+        const updated = config.hotkeys.map((h) => (h.id === rebindingId ? { ...h, vk, modifiers } : h))
         handleConfigUpdate({ hotkeys: updated })
         setRebindingId(null)
       }

@@ -1,6 +1,6 @@
+import { useEffect, useRef } from 'react'
 import { useDriverStore } from '@/stores/driver-store'
 import { useUpdaterStore } from '@/stores/updater-store'
-import { useEffect, useRef } from 'react'
 
 /**
  * Runs software-update and driver-update scans silently in the background

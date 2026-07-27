@@ -11,10 +11,8 @@ function mockKudu() {
     logsConfigSet: vi.fn(),
   }
   if (typeof window === 'undefined') {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(globalThis as any).window = {}
   }
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(window as any).dinho = mock
   return mock
 }

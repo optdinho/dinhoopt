@@ -90,8 +90,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p.includes('Existing') || p.includes('SystemRoot') || p.includes('system32')
       })
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const handler = getHandler('cleaner:environment:scan')
       const result = (await handler()) as {
@@ -114,8 +112,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p === 'C:\\Existing'
       })
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const handler = getHandler('cleaner:environment:scan')
       const result = (await handler()) as {
@@ -145,8 +141,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p === 'C:\\Windows'
       })
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const handler = getHandler('cleaner:environment:scan')
       const result = (await handler()) as {
@@ -219,7 +213,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       mocks.existsSync.mockReturnValue(false)
       registerEnvironmentCleanerIpc(() => null)
       const handler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await handler()) as { subcategory: string; items: { path: string }[] }[]
       expect(result.length).toBeGreaterThan(0)
       const pathResult = result.find((r) => r.subcategory.includes('PATH'))
@@ -250,7 +243,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       })
       registerEnvironmentCleanerIpc(() => null)
       const handler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await handler()) as { subcategory: string; items: { path: string }[] }[]
       expect(result.length).toBeGreaterThan(0)
       const envResult = result.find((r) => r.subcategory.includes('Environment Variables'))
@@ -270,7 +262,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       })
       registerEnvironmentCleanerIpc(() => null)
       const handler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await handler()) as { subcategory: string; items: unknown[]; itemCount: number }[]
       expect(result.length).toBeGreaterThan(0)
       const userResult = result.find((r) => r.subcategory.includes('user'))
@@ -286,7 +277,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
       mocks.existsSync.mockReturnValue(false)
       const send = vi.fn()
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => true, webContents: { send } }) as any)
       const handler = getHandler('cleaner:environment:scan')
       const result = await handler()
@@ -328,10 +318,8 @@ describe('registerEnvironmentCleanerIpc', () => {
     async function runScanAndGetPathId(
       getWindow: () => unknown = () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }),
     ): Promise<string> {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(getWindow as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const pathResult = scanResults.find((r) => r.subcategory.includes('PATH'))
       return pathResult!.items[0]!.id
@@ -348,7 +336,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as {
         filesDeleted: number
         filesSkipped: number
@@ -368,10 +355,8 @@ describe('registerEnvironmentCleanerIpc', () => {
           stdout: 'HKEY_CURRENT_USER\\Environment\n    JAVA_HOME    REG_SZ    C:\\Java',
         })
       mocks.existsSync.mockReturnValue(false)
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const envResult = scanResults.find((r) => r.subcategory.includes('Environment Variables'))
       const id = envResult!.items[0]!.id
@@ -381,7 +366,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       mocks.execNativeUtf8.mockResolvedValueOnce({ stdout: '' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesDeleted: number; errors: unknown[] }
       expect(result.filesDeleted).toBe(1)
       expect(result.errors).toHaveLength(0)
@@ -397,10 +381,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p === 'C:\\existing'
       })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('PATH'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -411,7 +393,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockRejectedValueOnce(new Error('Access is denied'))
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as {
         filesDeleted: number
         filesSkipped: number
@@ -432,10 +413,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p === 'C:\\existing'
       })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('PATH'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -446,7 +425,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockRejectedValueOnce(new Error('Some unexpected error'))
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesDeleted: number; errors: { reason: string }[] }
       expect(result.filesDeleted).toBe(0)
       expect(result.errors[0]!.reason).toBe('Some unexpected error')
@@ -459,10 +437,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
         .mockResolvedValueOnce({ stdout: '' })
       mocks.existsSync.mockReturnValue(false)
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('PATH'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -471,7 +447,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       mocks.execNativeUtf8.mockResolvedValueOnce({ stdout: '    Path    REG_SZ    C:\\only' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesSkipped: number; errors: { reason: string }[] }
       expect(result.filesSkipped).toBe(1)
       expect(result.errors[0]!.reason).toContain('Refusing to remove the last PATH entry')
@@ -521,10 +496,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         return p === 'C:\\existing'
       })
       const send = vi.fn()
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('PATH'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -549,10 +522,8 @@ describe('registerEnvironmentCleanerIpc', () => {
           stdout: 'HKEY_CURRENT_USER\\Environment\n    JAVA_HOME    REG_SZ    C:\\Java',
         })
       mocks.existsSync.mockReturnValue(false)
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('Environment Variables'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -561,7 +532,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       mocks.execNativeUtf8.mockRejectedValue('raw-string-error')
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { errors: { reason: string }[] }
       expect(result.errors[0]!.reason).toBe('unknown error')
     })
@@ -577,10 +547,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
       mocks.existsSync.mockReturnValue(false)
       const send = vi.fn()
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const ids = scanResults.find((r) => r.subcategory.includes('PATH'))!.items.map((i) => i.id)
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -612,10 +580,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         return p === 'C:\\existing'
       })
       const send = vi.fn()
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => true, webContents: { send } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('PATH'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -642,7 +608,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       })
       registerEnvironmentCleanerIpc(() => null)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const id = scanResults.find((r) => r.subcategory.includes('PATH'))!.items[0]!.id
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -653,7 +618,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesDeleted: number }
       expect(result.filesDeleted).toBe(1)
     })
@@ -668,10 +632,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
         .mockResolvedValueOnce({ stdout: '' })
       mocks.existsSync.mockReturnValue(false)
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const ids = scanResults.find((r) => r.subcategory.includes('PATH'))!.items.map((i) => i.id)
       mocks.validateStringArray.mockImplementation((arr: string[]) => arr)
@@ -686,7 +648,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       }
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, ids)) as { filesDeleted: number }
       expect(result.filesDeleted).toBe(3)
     })
@@ -711,10 +672,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '    JAVA_HOME    REG_SZ    C:\\Java' })
         .mockResolvedValueOnce({ stdout: '' })
       mocks.existsSync.mockReturnValue(false)
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const envResult = scanResults.find((r) => r.subcategory.includes('Environment Variables'))
       expect(envResult!.subcategory).toContain('system')
@@ -725,7 +684,6 @@ describe('registerEnvironmentCleanerIpc', () => {
       mocks.execNativeUtf8.mockResolvedValueOnce({ stdout: '' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesDeleted: number }
       expect(result.filesDeleted).toBe(1)
     })
@@ -740,10 +698,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p === 'C:\\system_existing'
       })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const pathResult = scanResults.find((r) => r.subcategory.includes('PATH'))
       expect(pathResult).toBeDefined()
@@ -757,7 +713,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesDeleted: number }
       expect(result.filesDeleted).toBe(1)
     })
@@ -772,10 +727,8 @@ describe('registerEnvironmentCleanerIpc', () => {
         if (typeof p !== 'string') return false
         return p === 'C:\\existing'
       })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerEnvironmentCleanerIpc(() => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any)
       const scanHandler = getHandler('cleaner:environment:scan')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const scanResults = (await scanHandler()) as { items: { id: string }[]; subcategory: string }[]
       const pathResult = scanResults.find((r) => r.subcategory.includes('PATH'))
       expect(pathResult).toBeDefined()
@@ -788,7 +741,6 @@ describe('registerEnvironmentCleanerIpc', () => {
         .mockResolvedValueOnce({ stdout: '' })
 
       const cleanHandler = getHandler('cleaner:environment:clean')
-      // biome-ignore lint/suspicious/noExplicitAny: test
       const result = (await cleanHandler(null, [id])) as { filesDeleted: number }
       expect(result.filesDeleted).toBe(1)
     })

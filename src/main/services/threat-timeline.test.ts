@@ -33,7 +33,7 @@ vi.mock('./logger.service', () => ({
   }),
 }))
 
-import { ThreatTimelineService, getThreatTimelineService } from './threat-timeline.service'
+import { ThreatTimelineService } from './threat-timeline.service'
 
 describe('ThreatTimelineService', () => {
   let service: ThreatTimelineService

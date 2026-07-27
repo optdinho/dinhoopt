@@ -1,9 +1,12 @@
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
 import type { CleanResult } from '@shared/types'
+import { logAudit } from '../../services/audit-log'
 import { cleanItems } from '../../services/file-utils'
 import { validateStringArray } from '../../services/ipc-validation'
 import { getLogger } from '../../services/logger.service'
+import { notifyScanComplete } from '../../services/notification-manager'
+import { getSettings } from '../../services/settings-store'
 import type { WindowGetter } from '../index'
 
 export async function handleSystemClean(getWindow: WindowGetter, itemIds: string[]): Promise<CleanResult> {
@@ -30,5 +33,20 @@ export async function handleSystemClean(getWindow: WindowGetter, itemIds: string
     'system-cleaner',
     `Cleaned ${result.filesDeleted} file(s) (${(result.totalCleaned / 1024 / 1024).toFixed(1)} MB)`,
   )
+
+  if (result.filesDeleted > 0) {
+    const sizeMB = (result.totalCleaned / (1024 * 1024)).toFixed(1)
+    notifyScanComplete('System Clean Complete', `Freed ${sizeMB} MB — ${result.filesDeleted} file(s) cleaned`, {
+      notifications: getSettings().showNotificationOnComplete,
+    })
+  }
+
+  logAudit('SYSTEM_CLEAN', 'cleaner', {
+    itemCount: valid.length,
+    filesDeleted: result.filesDeleted,
+    spaceFreedBytes: result.totalCleaned,
+    errors: result.errors.length,
+  })
+
   return result
 }

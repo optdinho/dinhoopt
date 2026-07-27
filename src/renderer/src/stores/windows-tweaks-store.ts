@@ -28,7 +28,9 @@ interface WindowsTweaksStoreState {
   netshTcpApply: () => Promise<{ success: boolean; error?: string }>
   netshTcpRevert: () => Promise<{ success: boolean; error?: string }>
   loadGamingTimer: () => Promise<void>
-  setGamingTimer: (settings: Partial<Pick<GamingTimerStatus, 'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'>>) => Promise<{ success: boolean; errors: string[] }>
+  setGamingTimer: (
+    settings: Partial<Pick<GamingTimerStatus, 'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'>>,
+  ) => Promise<{ success: boolean; errors: string[] }>
   revertGamingTimer: () => Promise<{ success: boolean; errors: string[] }>
   setAutoTuning: (action: 'apply' | 'revert') => Promise<{ success: boolean; error?: string }>
 }
@@ -163,7 +165,12 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
       set({ gamingTimer, gamingTimerLoading: false })
     } catch {
       set({
-        gamingTimer: { hpetOff: false, tscSyncPolicy: 'default', dynamicTickDisabled: false, autoTuningDisabled: false },
+        gamingTimer: {
+          hpetOff: false,
+          tscSyncPolicy: 'default',
+          dynamicTickDisabled: false,
+          autoTuningDisabled: false,
+        },
         gamingTimerLoading: false,
       })
     }

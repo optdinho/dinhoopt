@@ -1,5 +1,5 @@
 import type { ScanItem } from '@shared/types'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { cacheItems, clearCache, getCachedItem, getCachedItems, setMaxCacheSize } from './scan-cache'
 
 function makeItem(id: string): ScanItem {
@@ -139,7 +139,6 @@ describe('scan-cache', () => {
     // keys.next().value returns undefined, exercising the else path
     // of `if (key !== undefined)` in the incremental removal branch.
     setMaxCacheSize(10)
-    // biome-ignore lint/suspicious/noExplicitAny: testing defensive guard with undefined key
     const itemWithUndefinedId = { ...makeItem('ignored'), id: undefined as any }
     const fill = Array.from({ length: 9 }, (_, i) => makeItem(`fill-${i}`))
     // Insert the undefined-key item first (Map preserves insertion order)

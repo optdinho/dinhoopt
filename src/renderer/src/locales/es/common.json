@@ -23,5 +23,15 @@
   "dismissError": "Descartar error",
   "windowControls": "Controles de ventana",
   "errorTitle": "Algo salió mal",
-  "errorTryAgain": "Intentar de nuevo"
+  "errorTryAgain": "Intentar de nuevo",
+  "shortcutsTitle": "Atajos de Teclado",
+  "shortcutsNavigation": "Navegación",
+  "shortcutsActions": "Acciones",
+  "shortcutsGeneral": "General",
+  "shortcutsCommandPalette": "Paleta de Comandos",
+  "shortcutsNavigateSections": "Navegar a sección",
+  "shortcutsShowHelp": "Mostrar esta ayuda",
+  "shortcutsCloseModal": "Cerrar modal / Volver",
+  "itemsSelected": "elementos seleccionados",
+  "lastScan": "Último análisis"
 }

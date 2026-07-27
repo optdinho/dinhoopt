@@ -161,7 +161,7 @@ public sealed class CppLoopbackSource : IAudioSource
             if (buffer != null && OnAudioData != null)
             {
                 try { OnAudioData(buffer); }
-                catch { /* ignore consumer errors */ }
+                catch (Exception ex) { Log.D("CppLoopbackSource", $"Audio callback consumer error: {ex.Message}"); }
             }
         }
     }
@@ -187,16 +187,14 @@ public sealed class CppLoopbackSource : IAudioSource
                 _captureThread.Interrupt();
                 _captureThread.Join(3000);
             }
-            catch { }
+            catch (Exception ex) { Log.D("CppLoopbackSource", $"Capture thread stop error: {ex.Message}"); }
         }
 
         if (_pumpThread != null && _pumpThread.IsAlive)
         {
             try { _pumpThread.Join(2000); }
-            catch { }
+            catch (Exception ex) { Log.D("CppLoopbackSource", $"Pump thread stop error: {ex.Message}"); }
         }
-
-        _captureThread = null;
         _pumpThread = null;
 
         if (_callbackHandle.IsAllocated)

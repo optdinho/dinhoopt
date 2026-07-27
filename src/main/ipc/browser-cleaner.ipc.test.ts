@@ -192,7 +192,6 @@ describe('BROWSER_SCAN handler', () => {
   it('returns empty results when no browser directories exist', async () => {
     mockExistsSync.mockReturnValue(false)
     const win = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = await handler()
@@ -222,7 +221,6 @@ describe('BROWSER_SCAN handler', () => {
     })
 
     const win = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = await handler()
@@ -249,8 +247,6 @@ describe('BROWSER_SCAN handler', () => {
       itemCount: 1,
     })
     mockReaddir.mockResolvedValue([])
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     await handler()
@@ -281,8 +277,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 200,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ length: number }>
@@ -300,8 +294,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 0,
       itemCount: 0,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = await handler()
@@ -311,7 +303,6 @@ describe('BROWSER_SCAN handler', () => {
   it('sends scan progress to the window', async () => {
     mockExistsSync.mockReturnValue(false)
     const win = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:browser:scan')
     await handler()
@@ -341,8 +332,6 @@ describe('BROWSER_SCAN handler', () => {
       return false
     })
     mockReaddir.mockRejectedValue(new Error('EACCES'))
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = await handler()
@@ -366,8 +355,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 100,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     await handler()
@@ -388,8 +375,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 100,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ length: number }>
@@ -427,8 +412,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 100,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ group: string; subcategory: string }>
@@ -450,8 +433,6 @@ describe('BROWSER_SCAN handler', () => {
       if (p === '/fake/firefox-cache') return Promise.resolve([])
       return Promise.reject(new Error('EACCES'))
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ length: number }>
@@ -475,8 +456,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 50,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ group: string; subcategory: string }>
@@ -497,8 +476,6 @@ describe('BROWSER_SCAN handler', () => {
       return false
     })
     mockReaddir.mockRejectedValue(new Error('EACCES'))
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ length: number }>
@@ -518,8 +495,6 @@ describe('BROWSER_SCAN handler', () => {
       return false
     })
     mockReaddir.mockRejectedValue(new Error('EACCES'))
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ length: number }>
@@ -543,8 +518,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 300,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     await handler()
@@ -558,7 +531,6 @@ describe('BROWSER_SCAN handler', () => {
   it('does not send progress when window is destroyed', async () => {
     mockExistsSync.mockReturnValue(false)
     const win = { isDestroyed: () => true, webContents: { send: mockSend } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:browser:scan')
     await handler()
@@ -580,8 +552,6 @@ describe('BROWSER_SCAN handler', () => {
       totalSize: 100,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     await handler()
@@ -686,7 +656,6 @@ describe('BROWSER_CLEAN handler', () => {
     })
 
     const mockWin = { isDestroyed: () => false, webContents: { send: mockSend } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWin as any)
     const handler = getHandler('cleaner:browser:clean')
     await handler({}, ['id-1'])
@@ -716,7 +685,6 @@ describe('BROWSER_CLEAN handler', () => {
     })
 
     const mockWin = { isDestroyed: () => true, webContents: { send: mockSend } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerBrowserCleanerIpc(() => mockWin as any)
     const handler = getHandler('cleaner:browser:clean')
     await handler({}, ['id-1'])

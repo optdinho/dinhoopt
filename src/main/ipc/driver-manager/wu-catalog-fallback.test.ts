@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { parseCatalogHtml, searchCatalogForDrivers } from './wu-catalog-fallback'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StaleDriver } from './wu-catalog-fallback'
+import { parseCatalogHtml, searchCatalogForDrivers } from './wu-catalog-fallback'
 
 vi.mock('../../services/exec-utf8', () => ({
   execFileAsync: vi.fn(),

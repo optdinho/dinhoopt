@@ -1,9 +1,9 @@
-import { PageHeader } from '@/components/layout/PageHeader'
-import { useBenchmarkStore } from '@/stores/benchmark-store'
 import type { BenchmarkScoreClass } from '@shared/types'
 import { motion } from 'framer-motion'
 import { CircleCheckBig, Cpu, Gauge, MemoryStick, RefreshCw, Star, Thermometer, Timer, Wifi, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { useBenchmarkStore } from '@/stores/benchmark-store'
 
 const SCORE_COLORS: Record<BenchmarkScoreClass, string> = {
   S: '#00FF87',

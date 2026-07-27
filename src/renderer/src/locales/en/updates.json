@@ -79,7 +79,12 @@
     "toastUpdateFailed": "{{count}} update failed",
     "toastUpdateFailedPlural": "{{count}} updates failed",
     "errorCheckFailed": "Failed to check for updates.",
-    "errorUpdateFailed": "Update operation failed unexpectedly."
+    "errorUpdateFailed": "Update operation failed unexpectedly.",
+    "autoInstallLabel": "Auto-install",
+    "autoInstallScheduleLabel": "Check schedule",
+    "scheduleDaily": "Daily",
+    "scheduleWeekly": "Weekly",
+    "autoInstalling": "Auto-installing {{count}} update(s)..."
   },
   "driverManager": {
     "pageTitle": "Driver Manager",

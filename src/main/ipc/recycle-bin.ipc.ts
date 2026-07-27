@@ -54,8 +54,8 @@ export function registerRecycleBinIpc(): void {
       )
 
       const [countStr, sizeStr] = stdout.trim().split('|')
-      const count = Number.parseInt(countStr!) || 0
-      const size = Number.parseInt(sizeStr!) || 0
+      const count = Number.parseInt(countStr!, 10) || 0
+      const size = Number.parseInt(sizeStr!, 10) || 0
 
       lastScannedSize = size
 
@@ -144,8 +144,8 @@ export function registerRecycleBinIpc(): void {
         { windowsHide: true },
       )
       const [remainingStr, afterSizeStr] = stdout.trim().split('|')
-      const remaining = Number.parseInt(remainingStr!) || 0
-      const afterSize = Number.parseInt(afterSizeStr!) || 0
+      const remaining = Number.parseInt(remainingStr!, 10) || 0
+      const afterSize = Number.parseInt(afterSizeStr!, 10) || 0
       const actualCleaned = Math.max(0, sizeBeforeClean - afterSize)
 
       lastScannedSize = afterSize

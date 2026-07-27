@@ -13,6 +13,12 @@ export async function checkWindowsRecall(): Promise<boolean> {
   return val === 1
 }
 
+export async function checkRecallBlocker(): Promise<boolean> {
+  const enableVal = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'AllowRecallEnable')
+  const saveVal = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'AllowRecallSaveState')
+  return enableVal === 0 && saveVal === 0
+}
+
 export async function checkClickToDo(): Promise<boolean> {
   const val = await regQueryDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableClickToDo')
   return val === 1

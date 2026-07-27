@@ -1,7 +1,7 @@
-import { formatBytes } from '@/lib/utils'
 import type { DiskSmartInfo } from '@shared/types'
-import { TriangleAlert, CircleCheck, HardDrive, CircleHelp, ShieldAlert, Thermometer, CircleX } from 'lucide-react'
+import { CircleCheck, CircleHelp, CircleX, HardDrive, ShieldAlert, Thermometer, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatBytes } from '@/lib/utils'
 
 interface DiskHealthPanelProps {
   disks: DiskSmartInfo[]

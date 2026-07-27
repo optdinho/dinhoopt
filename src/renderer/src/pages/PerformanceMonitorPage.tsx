@@ -1,3 +1,7 @@
+import { Activity, Pause, Play } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { AlertBanner } from '@/components/perf/AlertBanner'
 import { DiskHealthPanel } from '@/components/perf/DiskHealthPanel'
@@ -6,13 +10,8 @@ import { ProcessTable } from '@/components/perf/ProcessTable'
 import { SystemInfoHeader } from '@/components/perf/SystemInfoHeader'
 import { TimeSeriesChart } from '@/components/perf/TimeSeriesChart'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { formatBytes, formatSpeed } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { cn, formatBytes, formatSpeed } from '@/lib/utils'
 import { usePerfStore } from '@/stores/perf-store'
-import { Activity, Pause, Play } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 export function PerformanceMonitorPage() {
   const { t } = useTranslation('performance')

@@ -53,7 +53,6 @@ beforeEach(() => {
 
 describe('attachRendererDiagnostics', () => {
   it('attaches event listeners to webContents', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     expect(mocks.webContentsOn).toHaveBeenCalledWith('render-process-gone', expect.any(Function))
@@ -64,7 +63,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('attaches unresponsive handlers to the window', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     expect(mocks.winOn).toHaveBeenCalledWith('unresponsive', expect.any(Function))
@@ -72,7 +70,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs render-process-gone event', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
@@ -82,7 +79,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('ignores did-fail-load with error code -3 (ABORTED)', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'did-fail-load')?.[1]
@@ -92,7 +88,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs non-aborted did-fail-load errors', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'did-fail-load')?.[1]
@@ -102,7 +97,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('opens DevTools on renderer crash in packaged build', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
@@ -113,7 +107,6 @@ describe('attachRendererDiagnostics', () => {
 
   it('does not open DevTools if already opened', () => {
     mocks.isDevToolsOpened.mockReturnValue(true)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
@@ -124,7 +117,6 @@ describe('attachRendererDiagnostics', () => {
 
   it('does not open DevTools if webContents is destroyed', () => {
     mocks.isDestroyed.mockReturnValue(true)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
@@ -137,7 +129,6 @@ describe('attachRendererDiagnostics', () => {
     mocks.openDevTools.mockImplementation(() => {
       throw new Error('DevTools unavailable')
     })
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
@@ -146,7 +137,6 @@ describe('attachRendererDiagnostics', () => {
 
   it('does not open DevTools when app is not packaged', () => {
     Object.defineProperty(app, 'isPackaged', { value: false, writable: true, configurable: true })
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'render-process-gone')?.[1]
@@ -156,7 +146,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs preload-error event', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'preload-error')?.[1]
@@ -170,7 +159,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs did-finish-load event', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'did-finish-load')?.[1]
@@ -180,7 +168,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs unresponsive event', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.winOn.mock.calls.find((c: string[]) => c[0] === 'unresponsive')?.[1]
@@ -190,7 +177,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs responsive event', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.winOn.mock.calls.find((c: string[]) => c[0] === 'responsive')?.[1]
@@ -200,7 +186,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs renderer console errors (level 3)', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]
@@ -213,7 +198,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('logs renderer console warnings (level 2)', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]
@@ -226,7 +210,6 @@ describe('attachRendererDiagnostics', () => {
   })
 
   it('ignores console-message with level < 2', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]

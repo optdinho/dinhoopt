@@ -49,10 +49,8 @@ vi.mock('framer-motion', () => ({
     {
       get:
         () =>
-        // biome-ignore lint/suspicious/noExplicitAny: test
         ({ children, ...props }: any) => <div {...props}>{children}</div>,
     },
-    // biome-ignore lint/suspicious/noExplicitAny: test
   ) as any,
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))
@@ -77,7 +75,6 @@ vi.mock('lucide-react', () => {
     'CircleX',
     'Zap',
   ]
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const iconMap: Record<string, any> = {}
   for (const name of icons) iconMap[name] = Icon
   return iconMap
@@ -88,12 +85,10 @@ vi.mock('sonner', () => ({
 }))
 
 vi.mock('@/components/TweakRow', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   TweakRow: (_props: any) => null,
 }))
 
 vi.mock('@/components/layout/PageHeader', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   PageHeader: ({ title, description }: any) => (
     <div data-testid="page-header">
       <div>{title}</div>
@@ -103,7 +98,6 @@ vi.mock('@/components/layout/PageHeader', () => ({
 }))
 
 vi.mock('@/components/shared/EmptyState', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   EmptyState: ({ title, description }: any) => (
     <div data-testid="empty-state">
       <div>{title}</div>

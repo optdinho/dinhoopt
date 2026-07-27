@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { REGISTRY_UNINSTALL_PATHS, execReg, extractRegistryKey, parseRegDword, parseRegValue } from './registry-utils'
+import { execReg, extractRegistryKey, parseRegDword, parseRegValue, REGISTRY_UNINSTALL_PATHS } from './registry-utils'
 
 vi.mock('./exec-utf8', () => ({
   execNativeUtf8: vi.fn((_cmd: string, args: string[], _opts?: unknown) =>

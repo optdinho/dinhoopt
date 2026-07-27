@@ -33,8 +33,6 @@ beforeEach(() => {
   })
 
   mockSettingsSet.mockResolvedValue(undefined)
-
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(globalThis as any).window = {
     dinho: {
       gameModeRunAudit: mockGameModeRunAudit,
@@ -95,7 +93,6 @@ describe('game-mode-store - audit', () => {
   })
 
   it('runAudit sets auditPhase to running during fetch', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     let resolvePromise!: (v: any) => void
     mockGameModeRunAudit.mockReturnValue(
       new Promise((resolve) => {
@@ -322,7 +319,6 @@ describe('game-mode-store - initGameModeStore', () => {
   })
 
   it('does not throw when kudu is undefined', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(globalThis as any).window = {}
     expect(() => initGameModeStore()).not.toThrow()
   })

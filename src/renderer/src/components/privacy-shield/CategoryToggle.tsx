@@ -2,8 +2,8 @@ import type { PrivacySetting } from '@shared/types'
 import { CircleCheckBig } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { usePrivacyStore } from '@/stores/privacy-store'
 import type { CategoryDef } from '@/pages/privacy/PrivacyShieldComponents'
+import { usePrivacyStore } from '@/stores/privacy-store'
 import { PrivacySettingRow } from './PrivacySettingRow'
 
 export interface CategoryToggleProps {
@@ -127,9 +127,7 @@ export function CategoryToggle({
       {isExpanded && (
         <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
           {catSettings.map((setting, i) => {
-            const depSetting = setting.dependsOn
-              ? state.settings.find((s) => s.id === setting.dependsOn)
-              : undefined
+            const depSetting = setting.dependsOn ? state.settings.find((s) => s.id === setting.dependsOn) : undefined
             const depMissing = depSetting !== undefined && !depSetting.enabled
             const toggleDisabled = busy || depMissing || (setting.enabled && !setting.reversible)
 

@@ -6,6 +6,7 @@ vi.mock('node:fs', () => ({
 }))
 
 import { watch } from 'node:fs'
+
 const mockWatch = vi.mocked(watch)
 
 describe('FileWatcherService', () => {

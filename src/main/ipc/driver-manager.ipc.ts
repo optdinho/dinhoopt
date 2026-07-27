@@ -1,13 +1,9 @@
+export { registerDriverManagerIpc } from './driver-manager/index'
 export {
-  scanDrivers,
   cleanDrivers,
+  scanDrivers,
 } from './driver-manager/scan'
-
 export {
-  scanDriverUpdates,
   installDriverUpdates,
+  scanDriverUpdates,
 } from './driver-manager/updates'
-
-export {
-  registerDriverManagerIpc,
-} from './driver-manager/index'

@@ -1,6 +1,5 @@
-import { getSettings } from './services/settings-store'
-
 import pt from '../renderer/src/locales/pt/tray.json'
+import { getSettings } from './services/settings-store'
 
 const resources: Record<string, Record<string, string>> = { pt }
 

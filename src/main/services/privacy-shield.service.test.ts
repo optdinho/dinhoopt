@@ -42,7 +42,7 @@ vi.mock('./exec-utf8', () => ({
   execNativeUtf8: (...args: unknown[]) => mocks.execNativeUtf8Mock(...args),
 }))
 
-import { PRIVACY_SETTINGS, applyPrivacySettings, revertPrivacySettings, scanPrivacy } from './privacy-shield.service'
+import { applyPrivacySettings, PRIVACY_SETTINGS, revertPrivacySettings, scanPrivacy } from './privacy-shield.service'
 
 const SETTING_COUNT = PRIVACY_SETTINGS.length
 
@@ -78,7 +78,7 @@ describe('PRIVACY_SETTINGS', () => {
   })
 
   it('all categories are valid', () => {
-    const valid = new Set(['telemetry', 'ads', 'search', 'services', 'tasks', 'sync', 'ai', 'browser'])
+    const valid = new Set(['telemetry', 'ads', 'search', 'services', 'tasks', 'sync', 'ai', 'browser', 'recall'])
     for (const s of PRIVACY_SETTINGS) {
       expect(valid.has(s.category)).toBe(true)
     }
@@ -448,9 +448,9 @@ describe('enableService edge cases', () => {
 
 describe('regDeleteValue error paths', () => {
   it('throws when delete fails and value still exists (query succeeds)', async () => {
-    let callIndex = 0
+    let _callIndex = 0
     mocks.execNativeUtf8Mock.mockImplementation(async (tool: string, args: string[]) => {
-      callIndex++
+      _callIndex++
       if (tool === 'reg' && args[0] === 'delete') {
         throw new Error('Access is denied')
       }
@@ -848,9 +848,9 @@ describe('browser-conditional settings', () => {
   })
 
   it('chrome check returns false when installed but policy not set', async () => {
-    let callCount = 0
+    let _callCount = 0
     mocks.execNativeUtf8Mock.mockImplementation(async (tool: string, args: string[]) => {
-      callCount++
+      _callCount++
       if (tool === 'reg' && args[0] === 'query' && args.includes('/ve')) {
         const key = args[1] as string
         if (key.includes('chrome.exe')) {
@@ -1016,9 +1016,9 @@ describe('enableTask / disableTask edge cases', () => {
   })
 
   it('enableTask propagates error when schtasks fails on revert', async () => {
-    let callCount = 0
+    let _callCount = 0
     mocks.execNativeUtf8Mock.mockImplementation(async (tool: string) => {
-      callCount++
+      _callCount++
       if (tool === 'schtasks') {
         throw new Error('Schtasks access denied')
       }

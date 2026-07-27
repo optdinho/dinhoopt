@@ -1,14 +1,14 @@
-import { UNUSED_THRESHOLD_DAYS } from '@/stores/uninstaller-store'
 import type { InstalledProgram } from '@shared/types'
 import type { TFunction } from 'i18next'
 import { Shield, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { UNUSED_THRESHOLD_DAYS } from '@/stores/uninstaller-store'
 
 const UNUSED_THRESHOLD_MS = UNUSED_THRESHOLD_DAYS * 24 * 60 * 60 * 1000
 
 export { UNUSED_THRESHOLD_DAYS }
 
 export function formatDate(raw: string): string {
-  if (!raw || raw.length !== 8) return ''
+  if (raw?.length !== 8) return ''
   const year = raw.substring(0, 4)
   const month = raw.substring(4, 6)
   const day = raw.substring(6, 8)

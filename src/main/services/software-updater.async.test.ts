@@ -134,10 +134,8 @@ describe('runUpdates (win32)', () => {
     const { execFileAsync } = await import('./exec-utf8')
     vi.mocked(execFileAsync)
       .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       .mockRejectedValueOnce({ stdout: 'installer failed', message: 'installer failed', code: 1 } as any)
       .mockRejectedValueOnce(new Error('elevation failed'))
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       .mockRejectedValueOnce({ stdout: 'installer failed', message: 'installer failed', code: 1 } as any)
 
     const result = await mod.runUpdates(['Google.Chrome'], vi.fn())
@@ -190,7 +188,6 @@ describe('runUpdates (win32)', () => {
 // ─── unknown platform ─────────────────────────────────────
 
 describe('checkForUpdates (unknown)', () => {
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   beforeEach(() => setPlatform('android' as any))
 
   it('returns empty result', async () => {
@@ -202,7 +199,6 @@ describe('checkForUpdates (unknown)', () => {
 })
 
 describe('runUpdates (unknown)', () => {
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   beforeEach(() => setPlatform('android' as any))
 
   it('returns empty result', async () => {

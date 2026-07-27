@@ -28,7 +28,6 @@ describe('privacy-store', () => {
   })
 
   it('setState stores privacy shield state', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const mockState = { categories: [], score: 75 } as any
     usePrivacyStore.getState().setState(mockState)
     expect(usePrivacyStore.getState().state).toEqual(mockState)
@@ -58,14 +57,12 @@ describe('privacy-store', () => {
   })
 
   it('setApplyResult stores the apply result', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = { applied: 5, failed: 0, failures: [] } as any
     usePrivacyStore.getState().setApplyResult(result)
     expect(usePrivacyStore.getState().applyResult).toEqual(result)
   })
 
   it('setProgress tracks scan progress', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const progress = { current: 3, total: 10, currentSetting: 'Telemetry' } as any
     usePrivacyStore.getState().setProgress(progress)
     expect(usePrivacyStore.getState().progress).toEqual(progress)
@@ -83,10 +80,8 @@ describe('privacy-store', () => {
 
   it('reset clears all state back to defaults', () => {
     usePrivacyStore.getState().setStatus('done')
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     usePrivacyStore.getState().setState({ categories: [] } as any)
     usePrivacyStore.getState().toggleCategory('telemetry')
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     usePrivacyStore.getState().setApplyResult({ applied: 1 } as any)
 
     usePrivacyStore.getState().reset()

@@ -1,3 +1,20 @@
+import type { DriverScanProgress, DriverUpdateProgress } from '@shared/types'
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleArrowUp,
+  CircleCheckBig,
+  Cpu,
+  Loader2,
+  Search,
+  Shield,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { useShallow } from 'zustand/react/shallow'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -11,45 +28,50 @@ import { formatBytes } from '@/lib/utils'
 import { useDriverStore } from '@/stores/driver-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
-import type { DriverScanProgress, DriverUpdateProgress } from '@shared/types'
-import {
-  TriangleAlert,
-  CircleArrowUp,
-  CircleCheckBig,
-  ChevronDown,
-  ChevronRight,
-  Cpu,
-  Loader2,
-  Search,
-  Shield,
-  Sparkles,
-  Trash2,
-} from 'lucide-react'
-import { useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 import { InstalledDriverRow, StaleItemRow, UpdateItemRow } from './driver-manager/DriverManagerComponents'
 
 export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('updates')
-  const packages = useDriverStore((s) => s.packages)
-  const scanning = useDriverStore((s) => s.scanning)
-  const scanProgress = useDriverStore((s) => s.scanProgress)
-  const cleaning = useDriverStore((s) => s.cleaning)
-  const cleanResult = useDriverStore((s) => s.cleanResult)
-  const error = useDriverStore((s) => s.error)
-  const totalStaleSize = useDriverStore((s) => s.totalStaleSize)
-  const updates = useDriverStore((s) => s.updates)
-  const updateScanning = useDriverStore((s) => s.updateScanning)
-  const updateProgress = useDriverStore((s) => s.updateProgress)
-  const installing = useDriverStore((s) => s.installing)
-  const installResult = useDriverStore((s) => s.installResult)
-  const updateError = useDriverStore((s) => s.updateError)
-  const applying = useDriverStore((s) => s.applying)
-  const hasScanned = useDriverStore((s) => s.hasScanned)
-  const allDrivers = useDriverStore((s) => s.allDrivers)
-  const showUpToDateDrivers = useDriverStore((s) => s.showUpToDateDrivers)
+  const {
+    packages,
+    scanning,
+    scanProgress,
+    cleaning,
+    cleanResult,
+    error,
+    totalStaleSize,
+    updates,
+    updateScanning,
+    updateProgress,
+    installing,
+    installResult,
+    updateError,
+    applying,
+    hasScanned,
+    allDrivers,
+    showUpToDateDrivers,
+  } = useDriverStore(
+    useShallow((s) => ({
+      packages: s.packages,
+      scanning: s.scanning,
+      scanProgress: s.scanProgress,
+      cleaning: s.cleaning,
+      cleanResult: s.cleanResult,
+      error: s.error,
+      totalStaleSize: s.totalStaleSize,
+      updates: s.updates,
+      updateScanning: s.updateScanning,
+      updateProgress: s.updateProgress,
+      installing: s.installing,
+      installResult: s.installResult,
+      updateError: s.updateError,
+      applying: s.applying,
+      hasScanned: s.hasScanned,
+      allDrivers: s.allDrivers,
+      showUpToDateDrivers: s.showUpToDateDrivers,
+    })),
+  )
 
   const [showConfirm, setShowConfirm] = useState(false)
   const cleanStartRef = useRef<number>(0)
@@ -272,22 +294,54 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
     },
   })
 
-  const stalePackages = packages.filter((p) => !p.isCurrent)
-  const selectedStaleCount = stalePackages.filter((p) => p.selected).length
-  const selectedUpdateCount = updates.filter((u) => u.selected).length
+  const stalePackages = useMemo(() => packages.filter((p) => !p.isCurrent), [packages])
+  const selectedStaleCount = useMemo(() => stalePackages.filter((p) => p.selected).length, [stalePackages])
+  const selectedUpdateCount = useMemo(() => updates.filter((u) => u.selected).length, [updates])
   const totalSelected = selectedStaleCount + selectedUpdateCount
   const allStaleSelected = stalePackages.length > 0 && stalePackages.every((p) => p.selected)
   const allUpdatesSelected = updates.length > 0 && updates.every((u) => u.selected)
 
   // Build confirmation description
-  const confirmParts: string[] = []
-  if (selectedUpdateCount > 0) {
-    confirmParts.push(t('driverManager.confirmDescriptionInstall', { count: selectedUpdateCount }))
-  }
-  if (selectedStaleCount > 0) {
-    confirmParts.push(t('driverManager.confirmDescriptionRemove', { count: selectedStaleCount }))
-  }
-  const confirmDesc = `${t('driverManager.confirmDescriptionPrefix')} ${confirmParts.join(` ${t('driverManager.confirmDescriptionAnd')} `)}. ${selectedUpdateCount > 0 ? `${t('driverManager.confirmDescriptionRebootNote')} ` : ''}${t('driverManager.confirmDescriptionSuffix')}`
+  const confirmDesc = useMemo(() => {
+    const confirmParts: string[] = []
+    if (selectedUpdateCount > 0) {
+      confirmParts.push(t('driverManager.confirmDescriptionInstall', { count: selectedUpdateCount }))
+    }
+    if (selectedStaleCount > 0) {
+      confirmParts.push(t('driverManager.confirmDescriptionRemove', { count: selectedStaleCount }))
+    }
+    return `${t('driverManager.confirmDescriptionPrefix')} ${confirmParts.join(` ${t('driverManager.confirmDescriptionAnd')} `)}. ${selectedUpdateCount > 0 ? `${t('driverManager.confirmDescriptionRebootNote')} ` : ''}${t('driverManager.confirmDescriptionSuffix')}`
+  }, [selectedUpdateCount, selectedStaleCount, t])
+
+  const handleToggleUpdates = useCallback(() => {
+    const store = useDriverStore.getState()
+    allUpdatesSelected ? store.deselectAllUpdates() : store.selectAllUpdates()
+  }, [allUpdatesSelected])
+
+  const handleToggleStale = useCallback(() => {
+    const store = useDriverStore.getState()
+    allStaleSelected ? store.deselectAllStale() : store.selectAllStale()
+  }, [allStaleSelected])
+
+  const handleToggleUpdateItem = useCallback((id: string) => {
+    useDriverStore.getState().toggleUpdate(id)
+  }, [])
+
+  const handleTogglePackageItem = useCallback((id: string) => {
+    useDriverStore.getState().togglePackage(id)
+  }, [])
+
+  const handleShowAllDrivers = useCallback(() => {
+    useDriverStore.getState().setShowUpToDateDrivers(!showUpToDateDrivers)
+  }, [showUpToDateDrivers])
+
+  const handleDismissError = useCallback(() => {
+    useDriverStore.getState().setError(null)
+  }, [])
+
+  const handleDismissUpdateError = useCallback(() => {
+    useDriverStore.getState().setUpdateError(null)
+  }, [])
 
   return (
     <div className={embedded ? '' : 'animate-fade-in'}>
@@ -342,8 +396,8 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
       </div>
 
       {/* Errors */}
-      {error && <ErrorAlert message={error} onDismiss={() => useDriverStore.getState().setError(null)} className="mb-5" />}
-      {updateError && <ErrorAlert message={updateError} onDismiss={() => useDriverStore.getState().setUpdateError(null)} className="mb-5" />}
+      {error && <ErrorAlert message={error} onDismiss={handleDismissError} className="mb-5" />}
+      {updateError && <ErrorAlert message={updateError} onDismiss={handleDismissUpdateError} className="mb-5" />}
 
       {/* Scan progress */}
       {scanning && scanProgress && (
@@ -485,7 +539,8 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
         >
           <CircleCheckBig className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
           <p className="text-[13px] text-zinc-200">
-            {t('driverManager.allUpToDateTitle')} — {t('driverManager.allInstalledDescription', { count: allDrivers.length })}
+            {t('driverManager.allUpToDateTitle')} —{' '}
+            {t('driverManager.allInstalledDescription', { count: allDrivers.length })}
           </p>
         </div>
       )}
@@ -503,11 +558,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  allUpdatesSelected
-                    ? useDriverStore.getState().deselectAllUpdates()
-                    : useDriverStore.getState().selectAllUpdates()
-                }
+                onClick={handleToggleUpdates}
                 className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors"
                 style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}
               >
@@ -518,7 +569,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
 
           <div className="grid grid-cols-1 gap-2">
             {updates.map((upd) => (
-              <UpdateItemRow key={upd.id} upd={upd} t={t} onToggle={(id) => useDriverStore.getState().toggleUpdate(id)} />
+              <UpdateItemRow key={upd.id} upd={upd} t={t} onToggle={handleToggleUpdateItem} />
             ))}
           </div>
         </div>
@@ -545,11 +596,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  allStaleSelected
-                    ? useDriverStore.getState().deselectAllStale()
-                    : useDriverStore.getState().selectAllStale()
-                }
+                onClick={handleToggleStale}
                 className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors"
                 style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}
               >
@@ -560,7 +607,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
 
           <div className="grid grid-cols-1 gap-2">
             {stalePackages.map((pkg) => (
-              <StaleItemRow key={pkg.id} pkg={pkg} onToggle={(id) => useDriverStore.getState().togglePackage(id)} />
+              <StaleItemRow key={pkg.id} pkg={pkg} onToggle={handleTogglePackageItem} />
             ))}
           </div>
         </div>
@@ -571,7 +618,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
         <div className="mb-6">
           <button
             type="button"
-            onClick={() => useDriverStore.getState().setShowUpToDateDrivers(!showUpToDateDrivers)}
+            onClick={handleShowAllDrivers}
             className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
           >
             {showUpToDateDrivers ? (

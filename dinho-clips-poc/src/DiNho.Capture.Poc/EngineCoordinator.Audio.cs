@@ -220,11 +220,12 @@ public sealed partial class EngineCoordinator
                 {
                     try
                     {
-                        var proc = Process.GetProcessById(pid);
+                        using var proc = Process.GetProcessById(pid);
                         selectedPids[pid] = proc.ProcessName;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Log.W("EngineCoordinator", $"ApplyAudioSessionsInternal: PID {pid} lookup failed: {ex.Message}");
                         selectedPids[pid] = $"PID:{pid}";
                     }
                 }

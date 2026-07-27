@@ -70,7 +70,7 @@ public sealed partial class EngineCoordinator
                 _customGameProcess = processName;
                 Log.I("EngineCoordinator", $"Custom game process set to '{processName}'");
             }
-            catch { /* ignore malformed */ }
+            catch (Exception ex) { Log.W("IpcMessageHandler", $"setCustomGameProcess: malformed payload: {ex.Message}"); }
         }
         return new IpcMessage { Action = "ok" };
     }

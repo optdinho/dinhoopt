@@ -1,11 +1,11 @@
-import { cn } from '@/lib/utils'
 import type { ScheduleEntry, ScheduleTaskType } from '@shared/types'
 import { motion } from 'framer-motion'
 import { TriangleAlert, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
+import { CLEANER_TASKS, DAY_NAME_KEYS, ordinal, type Preset, type TaskDef } from './constants'
 import { Toggle } from './Toggle'
-import { CLEANER_TASKS, DAY_NAME_KEYS, type Preset, type TaskDef, ordinal } from './constants'
 
 export function PresetPicker({
   presets,

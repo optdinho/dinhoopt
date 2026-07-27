@@ -85,6 +85,7 @@
       "edge-ai-features": "Disable Edge AI text composition and rewriting features",
       "paint-ai": "Disable AI image generation features in Microsoft Paint",
       "notepad-ai": "Disable AI text rewriting features in Microsoft Notepad",
+      "recall-blocker": "Blocks Windows AI Recall from saving snapshots of your screen",
       "service-diagtrack": "Disable Connected User Experiences and Telemetry service — not recommended for FiveM/Minecraft",
       "service-dmwappush": "Disable WAP Push Message routing service used for telemetry",
       "service-delivery-optimization": "Disable Windows Update P2P sharing — stops your PC from uploading update data to other devices",
@@ -134,6 +135,8 @@
     "accessDescription": "Access control policies, SSH hardening, and system restrictions",
     "aiLabel": "AI Features",
     "aiDescription": "Disable Copilot, Recall, and other AI features that analyze your data",
+    "recallLabel": "Windows Recall",
+    "recallDescription": "Block Windows AI Recall from capturing screen snapshots",
     "browserLabel": "Browser Telemetry",
     "browserDescription": "Stop browsers from reporting usage data to Microsoft, Google, and Mozilla"
   },
@@ -272,5 +275,6 @@
     "statusUnknown": "Unknown"
   },
   "expandAria": "Expand",
-  "scoreGaugeAria": "Privacy score gauge"
+  "scoreGaugeAria": "Privacy score gauge",
+  "itemsSelected": "items selected"
 }

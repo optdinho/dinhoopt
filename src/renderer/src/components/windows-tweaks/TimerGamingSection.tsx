@@ -1,8 +1,8 @@
-import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 import type { GamingTimer } from '@shared/types'
 import { Timer } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 
 interface TimerGamingSectionProps {
   gamingTimer: GamingTimer | null
@@ -65,17 +65,26 @@ export function TimerGamingSection({ gamingTimer, loading }: TimerGamingSectionP
         {t('timerTweaks', 'Timer & Gaming Tweaks')}
       </h3>
       <p className="mb-3 text-xs text-zinc-500">
-        {t('timerTweaksDescription', 'Optimize Windows timer resolution and CPU scheduling for competitive gaming. Requires reboot to take effect.')}
+        {t(
+          'timerTweaksDescription',
+          'Optimize Windows timer resolution and CPU scheduling for competitive gaming. Requires reboot to take effect.',
+        )}
       </p>
       <div className="space-y-3">
         {/* HPET */}
-        <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+        <div
+          className="flex items-center justify-between rounded-lg border px-4 py-3"
+          style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+        >
           <div>
             <div className="text-sm font-medium text-zinc-200">
               {t('hpetTitle', 'HPET (High Precision Event Timer)')}
             </div>
             <div className="text-xs text-zinc-500">
-              {t('hpetDescription', 'Disable platform clock for lower timer latency on Intel CPUs. May help on AMD Ryzen too.')}
+              {t(
+                'hpetDescription',
+                'Disable platform clock for lower timer latency on Intel CPUs. May help on AMD Ryzen too.',
+              )}
             </div>
           </div>
           <ToggleSwitch
@@ -85,13 +94,17 @@ export function TimerGamingSection({ gamingTimer, loading }: TimerGamingSectionP
         </div>
 
         {/* TSC Sync Policy */}
-        <div className="rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+        <div
+          className="rounded-lg border px-4 py-3"
+          style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+        >
           <div className="mb-2">
-            <div className="text-sm font-medium text-zinc-200">
-              {t('tscSyncTitle', 'TSC Sync Policy')}
-            </div>
+            <div className="text-sm font-medium text-zinc-200">{t('tscSyncTitle', 'TSC Sync Policy')}</div>
             <div className="text-xs text-zinc-500">
-              {t('tscSyncDescription', 'Legacy = lower input lag, slightly less FPS. Enhanced = more FPS, slightly more input lag.')}
+              {t(
+                'tscSyncDescription',
+                'Legacy = lower input lag, slightly less FPS. Enhanced = more FPS, slightly more input lag.',
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -106,20 +119,28 @@ export function TimerGamingSection({ gamingTimer, loading }: TimerGamingSectionP
                     : 'bg-zinc-800 text-zinc-400 hover:text-zinc-300'
                 }`}
               >
-                {policy === 'default' ? t('tscDefault', 'Default') : policy === 'legacy' ? t('tscLegacy', 'Legacy (Low Latency)') : t('tscEnhanced', 'Enhanced (High FPS)')}
+                {policy === 'default'
+                  ? t('tscDefault', 'Default')
+                  : policy === 'legacy'
+                    ? t('tscLegacy', 'Legacy (Low Latency)')
+                    : t('tscEnhanced', 'Enhanced (High FPS)')}
               </button>
             ))}
           </div>
         </div>
 
         {/* Dynamic Tick */}
-        <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+        <div
+          className="flex items-center justify-between rounded-lg border px-4 py-3"
+          style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+        >
           <div>
-            <div className="text-sm font-medium text-zinc-200">
-              {t('dynamicTickTitle', 'Disable Dynamic Tick')}
-            </div>
+            <div className="text-sm font-medium text-zinc-200">{t('dynamicTickTitle', 'Disable Dynamic Tick')}</div>
             <div className="text-xs text-zinc-500">
-              {t('dynamicTickDescription', 'Prevents Windows from suspending the system timer tick in idle. Reduces micro-stutters.')}
+              {t(
+                'dynamicTickDescription',
+                'Prevents Windows from suspending the system timer tick in idle. Reduces micro-stutters.',
+              )}
             </div>
           </div>
           <ToggleSwitch
@@ -129,13 +150,17 @@ export function TimerGamingSection({ gamingTimer, loading }: TimerGamingSectionP
         </div>
 
         {/* AutoTuning */}
-        <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+        <div
+          className="flex items-center justify-between rounded-lg border px-4 py-3"
+          style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+        >
           <div>
-            <div className="text-sm font-medium text-zinc-200">
-              {t('autoTuningTitle', 'TCP AutoTuning — Disabled')}
-            </div>
+            <div className="text-sm font-medium text-zinc-200">{t('autoTuningTitle', 'TCP AutoTuning — Disabled')}</div>
             <div className="text-xs text-zinc-500">
-              {t('autoTuningDescription', 'Reduces bufferbloat and jitter during gaming. Recommended for competitive gaming. May slow large downloads.')}
+              {t(
+                'autoTuningDescription',
+                'Reduces bufferbloat and jitter during gaming. Recommended for competitive gaming. May slow large downloads.',
+              )}
             </div>
           </div>
           <ToggleSwitch

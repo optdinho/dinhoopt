@@ -1,11 +1,9 @@
 import path from 'node:path'
+
 const { join } = path.win32
+
 import fs from 'node:fs'
 import { homedir } from 'node:os'
-import { buildCleanerPaths } from '../../rules/loader'
-import type { RulesJsonSet } from '../../rules/loader'
-import type { PlatformPaths, UninstallLeftoverDir } from '../types'
-
 import appsJson from '../../../../rules/win32/apps.json'
 import browsersJson from '../../../../rules/win32/browsers.json'
 import databasesJson from '../../../../rules/win32/databases.json'
@@ -15,6 +13,9 @@ import miscJson from '../../../../rules/win32/misc.json'
 import steamJson from '../../../../rules/win32/steam.json'
 // JSON rule files — statically imported, bundled by Vite
 import systemJson from '../../../../rules/win32/system.json'
+import type { RulesJsonSet } from '../../rules/loader'
+import { buildCleanerPaths } from '../../rules/loader'
+import type { PlatformPaths, UninstallLeftoverDir } from '../types'
 
 const HOME = homedir()
 const LOCALAPPDATA = process.env.LOCALAPPDATA || join(HOME, 'AppData', 'Local')

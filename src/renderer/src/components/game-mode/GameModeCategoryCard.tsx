@@ -1,9 +1,9 @@
-import { useGameModeStore } from '@/stores/game-mode-store'
 import { lookupServiceSafety } from '@shared/service-safety-kb'
 import { AnimatePresence, motion } from 'framer-motion'
-import { TriangleAlert, ChevronDown, Plus, X } from 'lucide-react'
+import { ChevronDown, Plus, TriangleAlert, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { OPTIMIZATIONS, OPTIMIZATION_SERVICE_MAP } from './constants'
+import { useGameModeStore } from '@/stores/game-mode-store'
+import { OPTIMIZATION_SERVICE_MAP, OPTIMIZATIONS } from './constants'
 import type { CategoryDef } from './types'
 
 interface GameModeCategoryCardProps {

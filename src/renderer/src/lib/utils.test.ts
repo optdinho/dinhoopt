@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 // Initialize i18next with English translations so formatDate's i18next.t() calls work
 import i18next from 'i18next'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
 i18next.init({
   lng: 'en',
   resources: {

@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileAsyncMock = vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>()
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 const execFileMockFn: any = vi.fn()
 execFileMockFn[Symbol.for('nodejs.util.promisify.custom')] = execFileAsyncMock
 

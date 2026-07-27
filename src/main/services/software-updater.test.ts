@@ -312,7 +312,7 @@ describe('isValidAppId', () => {
 
 // ─── Helper: fresh module load (for tests needing clean state) ──
 
-async function freshMod() {
+async function _freshMod() {
   vi.resetModules()
   const mod = await import('./software-updater')
   return mod

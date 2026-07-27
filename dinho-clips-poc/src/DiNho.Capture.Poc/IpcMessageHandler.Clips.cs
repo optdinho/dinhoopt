@@ -76,9 +76,9 @@ public sealed partial class EngineCoordinator
 
             // Remove associated files (thumbnail, favorite marker)
             var thumbPath = Path.ChangeExtension(fullPath, ".thumb.jpg");
-            if (File.Exists(thumbPath)) try { File.Delete(thumbPath); } catch { }
+            if (File.Exists(thumbPath)) try { File.Delete(thumbPath); } catch (Exception ex) { Log.D("EngineCoordinator", $"deleteClip: thumbnail cleanup failed: {ex.Message}"); }
             var markerPath = Path.Combine(dir, $".{clipName}.favorite");
-            if (File.Exists(markerPath)) try { File.Delete(markerPath); } catch { }
+            if (File.Exists(markerPath)) try { File.Delete(markerPath); } catch (Exception ex) { Log.D("EngineCoordinator", $"deleteClip: favorite marker cleanup failed: {ex.Message}"); }
 
             Log.I("EngineCoordinator", $"Clip deleted: {clipName}");
             return new IpcMessage { Action = "ok" };
@@ -126,7 +126,7 @@ public sealed partial class EngineCoordinator
             // Rename associated thumbnail
             var oldThumb = Path.ChangeExtension(oldPath, ".thumb.jpg");
             var newThumb = Path.ChangeExtension(newPath, ".thumb.jpg");
-            if (File.Exists(oldThumb)) try { File.Move(oldThumb, newThumb); } catch { }
+            if (File.Exists(oldThumb)) try { File.Move(oldThumb, newThumb); } catch (Exception ex) { Log.D("EngineCoordinator", $"renameClip: thumbnail rename failed: {ex.Message}"); }
 
             Log.I("EngineCoordinator", $"Clip renamed: {oldName} → {newName}");
             return new IpcMessage { Action = "ok" };

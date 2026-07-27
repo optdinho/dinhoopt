@@ -1,4 +1,4 @@
-import { type BrowserWindow, app } from 'electron'
+import { app, type BrowserWindow } from 'electron'
 import { getLogger } from './logger.service'
 
 /**

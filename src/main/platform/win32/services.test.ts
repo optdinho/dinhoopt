@@ -11,7 +11,6 @@ const MOCK_KEY = '/mock/service-manager.ipc'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const NativeModule = require('node:module')
 const origResolve = NativeModule._resolveFilename
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 NativeModule._resolveFilename = function (request: string, parent: any, ...args: any[]) {
   if (request === '../../ipc/service-manager.ipc') {
     return MOCK_KEY
@@ -30,7 +29,6 @@ require.cache[MOCK_KEY] = {
     applyServiceChanges: mockApplyServiceChanges,
   },
   path: '/mock',
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
 } as any
 
 const { createWin32Services } = await import('./services')

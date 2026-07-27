@@ -1,7 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { hostname } from 'node:os'
-import { userInfo } from 'node:os'
+import { hostname, userInfo } from 'node:os'
 
 export interface StoreOpts {
   keyFile: string

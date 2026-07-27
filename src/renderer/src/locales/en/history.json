@@ -12,6 +12,7 @@
   "confirmClearCloudDescription": "This will permanently delete all cloud action history entries. This action cannot be undone.",
   "confirmClearScanDescription": "This will permanently delete all scan history entries. This action cannot be undone.",
   "confirmClearLabel": "Clear All",
+  "emptyStateScanAction": "Run Your First Scan",
   "typeLabels": {
     "cleaner": "System Clean",
     "registry": "Registry Fix",

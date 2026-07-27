@@ -66,6 +66,10 @@ export interface DiNhoSettings {
   autoRestart: boolean
   /** How often (in hours) to check for updates in the background */
   updateCheckIntervalHours: number
+  /** Automatically download and install software updates after check */
+  autoInstallUpdates: boolean
+  /** Schedule for automatic software update checks: null = disabled */
+  autoInstallSchedule: 'daily' | 'weekly' | null
   cleaner: {
     skipRecentMinutes: number
     secureDelete: boolean
@@ -107,6 +111,11 @@ export interface DiNhoSettings {
    * even if moved, while a different binary at the same path is still scanned.
    */
   malwareAllowlist: MalwareAllowlistEntry[]
+  /**
+   * User profile selected during onboarding. Used to personalize the UI
+   * (e.g. highlight GameMode for gamers, Privacy for professionals).
+   */
+  userProfile?: 'gamer' | 'professional' | 'general'
 }
 
 // ─── License ────────────────────────────────────────────────

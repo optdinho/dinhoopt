@@ -41,7 +41,6 @@ import {
   setOnboardingComplete,
   setSettings,
   updateRegistryIgnoredTweaks,
-  updateScheduleEntry,
 } from './settings-store'
 
 const defaults: Record<string, unknown> = {

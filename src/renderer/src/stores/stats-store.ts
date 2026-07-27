@@ -1,6 +1,6 @@
-import { formatBytes } from '@/lib/utils'
 import type { AppStats } from '@shared/types'
 import { create } from 'zustand'
+import { formatBytes } from '@/lib/utils'
 import { useHistoryStore } from './history-store'
 
 interface StatsState {

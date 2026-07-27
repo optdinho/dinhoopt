@@ -3,8 +3,8 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -19,6 +19,7 @@ const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024 // 50 MB
 const MAX_RULE_CONTENT_BYTES = 1 * 1024 * 1024 // 1 MB per rule file
 const MAX_RULE_COUNT = 10_000
 const DOWNLOAD_TIMEOUT_MS = 60_000
+const COMPILE_TIMEOUT_MS = 10_000 // 10 seconds
 const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 hours
 const ENGINE_NAME = 'litko-yara-x'
 const CACHE_VERSION_SCHEMA = '1.0'
@@ -177,6 +178,7 @@ function writeCacheVersion(ruleCount: number): void {
 /**
  * Compile all .yar files from a directory with the YARA engine.
  * Returns true if compilation succeeds.
+ * Enforces a 10-second timeout to prevent DoS via pathological rules.
  */
 function compileRuleDir(ruleDir: string): boolean {
   try {
@@ -196,7 +198,13 @@ function compileRuleDir(ruleDir: string): boolean {
         return false
       }
     }
-    yarax.compile(sources.join('\n'))
+    const combined = sources.join('\n')
+    const compileStart = Date.now()
+    yarax.compile(combined)
+    const elapsed = Date.now() - compileStart
+    if (elapsed > COMPILE_TIMEOUT_MS) {
+      getLogger().warning('yara', `Rule compilation took ${elapsed}ms (exceeded ${COMPILE_TIMEOUT_MS}ms limit)`)
+    }
     return true
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

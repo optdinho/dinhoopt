@@ -105,7 +105,7 @@ import type { WindowGetter } from './index'
 
 const VALID_SERVICE_NAMES = new Set(['WSearch', 'SysMain', 'wuauserv', 'Spooler', 'DiagTrack'])
 const REGISTRY_PATH_RE =
-  /^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{[0-9A-Fa-f\-]+}$/
+  /^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{[0-9A-Fa-f-]+}$/
 const ALLOWED_REGISTRY_TWEAK_PATHS = new Set([
   'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR',
   'HKCU:\\System\\GameConfigStore',

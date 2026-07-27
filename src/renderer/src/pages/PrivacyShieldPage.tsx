@@ -1,3 +1,7 @@
+import { CircleCheckBig, Eye, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { useCallback, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -7,18 +11,6 @@ import logger from '@/lib/renderer-logger'
 import { cn } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePrivacyStore } from '@/stores/privacy-store'
-import type { PrivacySetting } from '@shared/types'
-import {
-  TriangleAlert,
-  CircleCheckBig,
-  Eye,
-  Loader2,
-  ShieldAlert,
-  ShieldCheck,
-} from 'lucide-react'
-import { useCallback, useMemo, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { categories, ScoreRing } from './privacy/PrivacyShieldComponents'
 
 export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
@@ -482,7 +474,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
 
       {/* Empty state */}
       {!state && !isScanning && (
-        <EmptyState icon={Eye} title={t('privacy.emptyStateTitle')} description={t('privacy.emptyStateDescription')} />
+        <EmptyState icon={Eye} title={t('privacy.emptyStateTitle')} description={t('privacy.emptyStateDescription')} showLastScan lastScanType="privacy" />
       )}
 
       {/* Category cards */}

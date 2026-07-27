@@ -1,16 +1,6 @@
-import type { ClipsState } from './useClipsState'
 import { AnimatePresence, motion } from 'framer-motion'
-import {
-  Clapperboard,
-  Combine,
-  Film,
-  FolderOpen,
-  Pencil,
-  RefreshCw,
-  Search,
-  Star,
-  Trash2,
-} from 'lucide-react'
+import { Clapperboard, Combine, Film, FolderOpen, Pencil, RefreshCw, Search, Star, Trash2 } from 'lucide-react'
+import type { ClipsState } from './useClipsState'
 
 export function ClipsGrid({
   clipsLoaded,
@@ -57,10 +47,7 @@ export function ClipsGrid({
           disabled={refreshing}
           className="rounded-lg p-1.5 transition-colors hover:bg-white/5 disabled:opacity-50"
         >
-          <RefreshCw
-            className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
-            style={{ color: 'var(--text-dim)' }}
-          />
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} style={{ color: 'var(--text-dim)' }} />
         </button>
       </div>
 
@@ -102,9 +89,7 @@ export function ClipsGrid({
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
-              checked={
-                filteredClips.length > 0 && filteredClips.every((c) => selectedClips.has(c.name))
-              }
+              checked={filteredClips.length > 0 && filteredClips.every((c) => selectedClips.has(c.name))}
               onChange={() => {
                 if (filteredClips.every((c) => selectedClips.has(c.name))) {
                   setSelectedClips(new Set())
@@ -115,9 +100,7 @@ export function ClipsGrid({
               className="h-3.5 w-3.5 rounded"
             />
             <span className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-              {selectedClips.size > 0
-                ? t('selectedCount', { count: selectedClips.size })
-                : t('selectAll')}
+              {selectedClips.size > 0 ? t('selectedCount', { count: selectedClips.size }) : t('selectAll')}
             </span>
           </label>
           {selectedClips.size > 0 && (
@@ -126,9 +109,7 @@ export function ClipsGrid({
                 <button
                   type="button"
                   onClick={() => {
-                    const paths = filteredClips
-                      .filter((c) => selectedClips.has(c.name))
-                      .map((c) => c.path)
+                    const paths = filteredClips.filter((c) => selectedClips.has(c.name)).map((c) => c.path)
                     setMergeModePaths(paths)
                   }}
                   className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-all hover:bg-blue-500/15"
@@ -161,19 +142,10 @@ export function ClipsGrid({
               className="rounded-xl border overflow-hidden"
               style={{ borderColor: 'var(--border-subtle)' }}
             >
-              <div
-                className="aspect-video animate-pulse"
-                style={{ background: 'rgba(113,113,122,0.1)' }}
-              />
+              <div className="aspect-video animate-pulse" style={{ background: 'rgba(113,113,122,0.1)' }} />
               <div className="p-2.5 space-y-1.5">
-                <div
-                  className="h-3 w-3/4 rounded animate-pulse"
-                  style={{ background: 'rgba(113,113,122,0.12)' }}
-                />
-                <div
-                  className="h-2.5 w-1/2 rounded animate-pulse"
-                  style={{ background: 'rgba(113,113,122,0.08)' }}
-                />
+                <div className="h-3 w-3/4 rounded animate-pulse" style={{ background: 'rgba(113,113,122,0.12)' }} />
+                <div className="h-2.5 w-1/2 rounded animate-pulse" style={{ background: 'rgba(113,113,122,0.08)' }} />
               </div>
             </div>
           ))}
@@ -222,16 +194,9 @@ export function ClipsGrid({
                   style={{ background: 'rgba(113,113,122,0.08)' }}
                 >
                   {thumbnails[clip.name] ? (
-                    <img
-                      src={thumbnails[clip.name]}
-                      alt={clip.name}
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={thumbnails[clip.name]} alt={clip.name} className="h-full w-full object-cover" />
                   ) : (
-                    <Clapperboard
-                      className="h-8 w-8"
-                      style={{ color: 'var(--text-dim)', opacity: 0.4 }}
-                    />
+                    <Clapperboard className="h-8 w-8" style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
                   )}
                 </div>
 
@@ -264,10 +229,7 @@ export function ClipsGrid({
                 </div>
 
                 {/* Bottom actions */}
-                <div
-                  className="flex border-t px-2.5 py-1.5"
-                  style={{ borderColor: 'var(--border-subtle)' }}
-                >
+                <div className="flex border-t px-2.5 py-1.5" style={{ borderColor: 'var(--border-subtle)' }}>
                   <button
                     type="button"
                     onClick={() => handleOpenClip(clip.path)}

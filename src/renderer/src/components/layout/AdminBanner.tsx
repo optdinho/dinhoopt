@@ -1,7 +1,7 @@
-import { usePlatform } from '@/hooks/usePlatform'
 import { ShieldAlert, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { usePlatform } from '@/hooks/usePlatform'
 
 export function AdminBanner() {
   const { t } = useTranslation('common')

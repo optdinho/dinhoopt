@@ -19,7 +19,7 @@ import { handleStartup } from './commands/startup'
 import { handleUpdates } from './commands/updates'
 import type { CliContext, ParsedCliArgs } from './types'
 import { ExitCode } from './types'
-import { cliLog, log, printHelp, showProgress } from './utils'
+import { log, printHelp } from './utils'
 
 const GLOBAL_FLAGS = new Set(['--json', '--verbose', '--quiet', '-q', '--help', '-h', '--version', '-v'])
 

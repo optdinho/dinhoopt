@@ -1,5 +1,7 @@
+import { CircleCheckBig, Database, Loader2, Search, Shield, StopCircle, Wrench } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -11,18 +13,6 @@ import { useProgressListener } from '@/hooks/useProgressListener'
 import { useHistoryStore } from '@/stores/history-store'
 import { useRegistryStore } from '@/stores/registry-store'
 import { useStatsStore } from '@/stores/stats-store'
-import type { RegistryEntry } from '@shared/types'
-import {
-  CircleCheckBig,
-  Database,
-  Loader2,
-  Search,
-  Shield,
-  StopCircle,
-  Wrench,
-} from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { RegistryCardsSection } from './registry/RegistryPageComponents'
 
 export function RegistryPage() {

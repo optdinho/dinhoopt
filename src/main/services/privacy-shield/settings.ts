@@ -1,3 +1,4 @@
+import { BROWSER_SETTINGS } from './browser-settings'
 import {
   applyAdvertisingId,
   applyLockScreenSpotlight,
@@ -21,6 +22,7 @@ import {
   applyEdgeAiFeatures,
   applyNotepadAi,
   applyPaintAi,
+  applyRecallBlocker,
   applyWindowsRecall,
   revertAiServiceAutostart,
   revertClickToDo,
@@ -28,6 +30,7 @@ import {
   revertEdgeAiFeatures,
   revertNotepadAi,
   revertPaintAi,
+  revertRecallBlocker,
   revertWindowsRecall,
 } from './fixes/ai'
 import {
@@ -118,6 +121,7 @@ import {
   checkEdgeAiFeatures,
   checkNotepadAi,
   checkPaintAi,
+  checkRecallBlocker,
   checkWindowsRecall,
 } from './scanners/ai'
 import {
@@ -167,7 +171,6 @@ import {
   checkTailoredExperiences,
   checkTelemetryLevel,
 } from './scanners/telemetry'
-import { BROWSER_SETTINGS } from './browser-settings'
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -480,6 +483,16 @@ export const SETTINGS: SettingDef[] = [
     check: checkNotepadAi,
     apply: applyNotepadAi,
     revert: revertNotepadAi,
+  },
+  {
+    id: 'recall-blocker',
+    category: 'recall',
+    label: 'Windows Recall',
+    description: 'Blocks Windows AI Recall from saving snapshots of your screen',
+    requiresAdmin: true,
+    check: checkRecallBlocker,
+    apply: applyRecallBlocker,
+    revert: revertRecallBlocker,
   },
   {
     id: 'service-diagtrack',

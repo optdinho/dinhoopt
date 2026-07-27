@@ -156,7 +156,6 @@ describe('updater-store', () => {
   it('deselectAll deselects all apps', () => {
     useUpdaterStore.setState({ apps: [makeApp('1'), makeApp('2')] })
     for (const a of useUpdaterStore.getState().apps) {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(a as any).selected = true
     }
     useUpdaterStore.getState().deselectAll()

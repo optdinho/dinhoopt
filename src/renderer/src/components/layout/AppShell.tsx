@@ -1,11 +1,13 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { KeyboardShortcutsModal } from '@/components/shared/KeyboardShortcutsModal'
 import { AdminBanner } from './AdminBanner'
 import { Sidebar } from './Sidebar'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation('common')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const handleSkip = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault()
     const el = document.getElementById('main-content')
@@ -13,6 +15,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       el.focus()
       el.scrollIntoView()
     }
+  }, [])
+
+  // ? key to open shortcuts modal (Shift+/)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+        e.preventDefault()
+        setShowShortcuts((prev) => !prev)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [])
 
   return (
@@ -55,6 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
     </div>
   )
 }

@@ -1,9 +1,5 @@
 import { IPC } from '@shared/channels'
-import type {
-  BloatwareApp,
-  CleanResult,
-  ScanResult,
-} from '@shared/types'
+import type { BloatwareApp, CleanResult, ScanResult } from '@shared/types'
 import { ipcRenderer } from 'electron'
 
 function onEvent<T>(channel: string, callback: (data: T) => void): () => void {

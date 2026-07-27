@@ -1,15 +1,17 @@
 import { IPC } from '@shared/channels'
-import type { GameModeAuditReport, GameModeConfig, GameModeProgress } from '@shared/types'
+import type { DirectStorageStatus, GameModeAuditReport, GameModeConfig, GameModeProgress } from '@shared/types'
 import { ipcMain } from 'electron'
 import { loadClipsConfig } from '../../services/clips-config-store'
+import type { GameAutoEvent } from '../../services/game-detector'
 import {
   isDetectorRunning,
   startGameDetector,
   stopGameDetector,
   suppressCurrentGame,
 } from '../../services/game-detector'
-import type { GameAutoEvent } from '../../services/game-detector'
 import { runGameModeAudit } from '../../services/game-mode-audit'
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { getLogger } from '../../services/logger.service'
 import { getSettings } from '../../services/settings-store'
 import { startClipCapture } from '../clips-engine-connection'
@@ -102,7 +104,80 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
     })
   })
 
+  ipcMain.handle(IPC.GAME_MODE_DIRECTSTORAGE_CHECK, async (): Promise<DirectStorageStatus> => {
+    getLogger().info('game-mode', 'DirectStorage check requested')
+    return checkDirectStorage()
+  })
+
   initGameDetector(getWindow, sendProgress, sendAutoEvent)
+}
+
+async function checkDirectStorage(): Promise<DirectStorageStatus> {
+  const steamPaths = [
+    'C:\\Program Files (x86)\\Steam\\steamapps\\common',
+    'C:\\Program Files\\Steam\\steamapps\\common',
+    'D:\\SteamLibrary\\steamapps\\common',
+    'E:\\SteamLibrary\\steamapps\\common',
+    'F:\\SteamLibrary\\steamapps\\common',
+  ]
+
+  let supported = false
+  for (const basePath of steamPaths) {
+    if (supported) break
+    try {
+      if (!existsSync(basePath)) continue
+      const games = readdirSync(basePath, { withFileTypes: true }).filter((d) => d.isDirectory())
+      for (const game of games) {
+        const gameDir = join(basePath, game.name)
+        try {
+          const files = readdirSync(gameDir)
+          if (files.some((f) => f.toLowerCase() === 'directstorage.dll')) {
+            supported = true
+            break
+          }
+        } catch {
+          /* skip inaccessible game dirs */
+        }
+      }
+    } catch {
+      /* skip inaccessible base dirs */
+    }
+  }
+
+  let nvmeHealthy = true
+  const nvmeDrives: DirectStorageStatus['nvmeDrives'] = []
+  try {
+    const { execFileAsync } = await import('../../services/exec-utf8')
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Get-PhysicalDisk | Where-Object { $_.BusType -eq "NVMe" } | Select-Object FriendlyName,HealthStatus | ConvertTo-Json -Compress',
+      ],
+      { timeout: 15000, windowsHide: true },
+    )
+    const parsed = JSON.parse(stdout)
+    const drives = Array.isArray(parsed) ? parsed : [parsed]
+    for (const d of drives) {
+      const health = String(d.HealthStatus ?? 'Unknown')
+      const mapped =
+        health === 'Healthy'
+          ? ('Healthy' as const)
+          : health === 'Caution'
+            ? ('Caution' as const)
+            : health === 'Unhealthy'
+              ? ('Bad' as const)
+              : ('Unknown' as const)
+      nvmeDrives.push({ model: String(d.FriendlyName ?? 'Unknown'), health: mapped, type: 'NVMe' })
+      if (mapped !== 'Healthy') nvmeHealthy = false
+    }
+  } catch {
+    nvmeHealthy = false
+  }
+
+  return { supported, nvmeHealthy, nvmeDrives }
 }
 
 export function initGameDetector(

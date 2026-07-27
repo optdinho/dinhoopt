@@ -72,11 +72,7 @@ export function ServiceBulkActions({
                 opacity: isBusy ? 0.5 : 1,
               }}
             >
-              {applying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Shield className="h-4 w-4" strokeWidth={2} />
-              )}
+              {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" strokeWidth={2} />}
               {applying ? 'Applying...' : `Disable (${selectedActiveCount})`}
             </button>
           )}

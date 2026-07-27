@@ -1,9 +1,3 @@
-import logoSrc from '@/assets/logo.png'
-import { usePlatform } from '@/hooks/usePlatform'
-import { cn } from '@/lib/utils'
-import { useDriverStore } from '@/stores/driver-store'
-import { useGameModeStore } from '@/stores/game-mode-store'
-import { useUpdaterStore } from '@/stores/updater-store'
 import {
   Activity,
   BatteryCharging,
@@ -11,6 +5,7 @@ import {
   CalendarClock,
   Clapperboard,
   ClipboardCheck,
+  Clock,
   CopyCheck,
   Cpu,
   Database,
@@ -32,23 +27,31 @@ import {
   MousePointerClick,
   Package,
   PackageMinus,
+  Rocket,
   Scan,
   Search,
   Server,
   Settings,
-  X,
   Shield,
   ShieldAlert,
   Sliders,
   Sparkles,
   Trash2,
+  Upload,
   Wifi,
   Wrench,
+  X,
   Zap,
 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
+import logoSrc from '@/assets/logo.png'
+import { usePlatform } from '@/hooks/usePlatform'
+import { cn } from '@/lib/utils'
+import { useDriverStore } from '@/stores/driver-store'
+import { useGameModeStore } from '@/stores/game-mode-store'
+import { useUpdaterStore } from '@/stores/updater-store'
 import { NavItem } from './NavItem'
 import type { NavGroup, SectionColor } from './NavTypes'
 
@@ -143,6 +146,56 @@ const navGroups: NavGroup[] = [
     ],
   },
 ]
+
+// ── Command Palette: Actions ─────────────────────────────
+interface PaletteAction {
+  id: string
+  labelKey: string
+  icon: typeof Shield
+  group: 'actions'
+  run: () => void
+}
+
+const RECENT_KEY = 'dinho-recent-pages'
+const MAX_RECENT = 5
+
+function getRecentPages(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function addRecentPage(path: string): void {
+  const recent = getRecentPages().filter((p) => p !== path)
+  recent.unshift(path)
+  localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
+}
+
+/** Simple fuzzy score: earlier match positions and longer contiguous matches score higher */
+function fuzzyScore(query: string, target: string): number {
+  const q = query.toLowerCase()
+  const t = target.toLowerCase()
+  if (t === q) return 1000
+  if (t.startsWith(q)) return 800
+  if (t.includes(q)) return 600
+  // Character-by-character subsequence match
+  let qi = 0
+  let score = 0
+  let consecutive = 0
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) {
+      qi++
+      consecutive++
+      score += consecutive * 10
+    } else {
+      consecutive = 0
+    }
+  }
+  return qi === q.length ? score : 0
+}
 
 function useBadgeCounts(): Record<string, number> {
   const updaterApps = useUpdaterStore((s) => s.apps)
@@ -240,16 +293,118 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
       }
     }
     return pages
-  }, [t, i18n.language])
+  }, [t])
 
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return allPages
-    const q = searchQuery.toLowerCase()
-    return allPages.filter((p) => {
-      const label = t(p.labelKey).toLowerCase()
-      return label.includes(q) || p.labelKey.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
-    })
-  }, [searchQuery, allPages, t])
+  // ── Actions available in the command palette ──
+  const paletteActions = useMemo<PaletteAction[]>(
+    () => [
+      {
+        id: 'quick-clean',
+        labelKey: 'actionQuickClean',
+        icon: Sparkles,
+        group: 'actions',
+        run: () => navigate('/cleaner'),
+      },
+      {
+        id: 'scan-malware',
+        labelKey: 'actionScanMalware',
+        icon: ShieldAlert,
+        group: 'actions',
+        run: () => navigate('/malware'),
+      },
+      {
+        id: 'check-updates',
+        labelKey: 'actionCheckUpdates',
+        icon: Download,
+        group: 'actions',
+        run: () => navigate('/updates'),
+      },
+      {
+        id: 'game-mode',
+        labelKey: 'actionGameMode',
+        icon: Gamepad2,
+        group: 'actions',
+        run: () => navigate('/game-mode'),
+      },
+      {
+        id: 'export-settings',
+        labelKey: 'actionExportSettings',
+        icon: Settings,
+        group: 'actions',
+        run: () => navigate('/settings'),
+      },
+    ],
+    [navigate],
+  )
+
+  interface SearchResult {
+    kind: 'page' | 'action' | 'recent'
+    key: string
+    icon: typeof Shield
+    label: string
+    path: string
+    section: string
+    score: number
+    run?: () => void
+  }
+
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const q = searchQuery.trim().toLowerCase()
+
+    // Score & filter pages
+    const pageResults: SearchResult[] = allPages
+      .map((p) => {
+        const label = t(p.labelKey)
+        const score = q ? fuzzyScore(q, label) : 500
+        return {
+          kind: 'page' as const,
+          key: `page-${p.path}`,
+          icon: p.icon,
+          label,
+          path: p.path,
+          section: t('searchGroupPages'),
+          score,
+        }
+      })
+      .filter((r) => (q ? r.score > 0 : true))
+
+    // Score & filter actions
+    const actionResults: SearchResult[] = paletteActions
+      .map((a) => {
+        const label = t(a.labelKey)
+        const score = q ? fuzzyScore(q, label) : 500
+        return {
+          kind: 'action' as const,
+          key: `action-${a.id}`,
+          icon: a.icon,
+          label,
+          path: '',
+          section: t('searchGroupActions'),
+          score,
+          run: a.run,
+        }
+      })
+      .filter((r) => (q ? r.score > 0 : true))
+
+    // Recent pages (only shown when query is empty)
+    const recentResults: SearchResult[] = (!q ? getRecentPages() : [])
+      .map((path) => {
+        const page = allPages.find((p) => p.path === path)
+        if (!page) return null
+        return {
+          kind: 'recent' as const,
+          key: `recent-${path}`,
+          icon: Clock,
+          label: t(page.labelKey),
+          path: page.path,
+          section: t('searchGroupRecent'),
+          score: 700,
+        }
+      })
+      .filter((r): r is SearchResult => r !== null)
+
+    return [...recentResults, ...pageResults, ...actionResults].sort((a, b) => b.score - a.score)
+  }, [searchQuery, allPages, paletteActions, t])
 
   const openSearch = useCallback(() => {
     setSearchOpen(true)
@@ -264,8 +419,13 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
   }, [])
 
   const navigateToResult = useCallback(
-    (path: string) => {
-      navigate(path)
+    (result: SearchResult) => {
+      if (result.run) {
+        result.run()
+      } else {
+        addRecentPage(result.path)
+        navigate(result.path)
+      }
       closeSearch()
     },
     [navigate, closeSearch],
@@ -315,7 +475,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         e.preventDefault()
         setSelectedIndex((prev) => Math.max(prev - 1, 0))
       } else if (e.key === 'Enter' && searchResults[selectedIndex]) {
-        navigateToResult(searchResults[selectedIndex].path)
+        navigateToResult(searchResults[selectedIndex])
       }
     },
     [closeSearch, searchResults, selectedIndex, navigateToResult],
@@ -382,7 +542,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
                   setSelectedIndex(0)
                 }}
                 onKeyDown={handleSearchKeyDown}
-                placeholder={t('searchPlaceholder', 'Buscar página...')}
+                placeholder={t('searchPlaceholder', 'Search pages & actions...')}
                 className="flex-1 bg-transparent text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600"
               />
               <button type="button" onClick={closeSearch} className="shrink-0 text-zinc-500 hover:text-zinc-300">
@@ -413,32 +573,56 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
           {/* ── Search results ── */}
           {searchOpen && searchResults.length > 0 && (
             <div
-              className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[280px] overflow-y-auto rounded-lg py-1"
+              className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[360px] overflow-y-auto rounded-lg py-1"
               style={{
                 background: 'var(--sidebar-bg)',
                 border: '1px solid var(--border-medium)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
               }}
             >
-              {searchResults.map((page, i) => {
-                const Icon = page.icon
-                return (
-                  <button
-                    key={page.path}
-                    type="button"
-                    onClick={() => navigateToResult(page.path)}
-                    onMouseEnter={() => setSelectedIndex(i)}
-                    className={cn(
-                      'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors',
-                      i === selectedIndex ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200',
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
-                    <span className="flex-1 truncate">{t(page.labelKey)}</span>
-                    <span className="shrink-0 text-[10px] text-zinc-600">{page.section}</span>
-                  </button>
-                )
-              })}
+              {(() => {
+                let runningIndex = 0
+                let lastSection = ''
+                const elements: React.ReactNode[] = []
+                for (const result of searchResults) {
+                  if (result.section !== lastSection) {
+                    lastSection = result.section
+                    elements.push(
+                      <div
+                        key={`section-${result.section}`}
+                        className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                        style={{ color: 'var(--text-faint)' }}
+                      >
+                        {result.section}
+                      </div>,
+                    )
+                  }
+                  const Icon = result.icon
+                  const idx = runningIndex
+                  elements.push(
+                    <button
+                      key={result.key}
+                      type="button"
+                      onClick={() => navigateToResult(result)}
+                      onMouseEnter={() => setSelectedIndex(idx)}
+                      className={cn(
+                        'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors',
+                        idx === selectedIndex
+                          ? 'bg-white/10 text-white'
+                          : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200',
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
+                      <span className="flex-1 truncate">{result.label}</span>
+                      {result.kind === 'action' && (
+                        <Rocket className="h-3 w-3 shrink-0 text-amber-500/70" strokeWidth={1.7} />
+                      )}
+                    </button>,
+                  )
+                  runningIndex++
+                }
+                return elements
+              })()}
             </div>
           )}
 
@@ -491,12 +675,21 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
             aria-labelledby={group.headingKey ? `nav-group-${group.headingKey}` : undefined}
           >
             {group.headingKey && (
-              <div
-                className={cn('flex items-center', collapsed ? 'justify-center px-0' : 'mb-1 gap-2 px-3')}
-              >
+              <div className={cn('flex items-center', collapsed ? 'justify-center px-0' : 'mb-1 gap-2 px-3')}>
                 <div
                   className="h-1.5 w-1.5 rounded-full shrink-0"
-                  style={{ background: group.color === 'red' ? '#ef4444' : group.color === 'blue' ? '#3b82f6' : group.color === 'green' ? '#22c55e' : group.color === 'purple' ? '#a78bfa' : '#f59e0b' }}
+                  style={{
+                    background:
+                      group.color === 'red'
+                        ? '#ef4444'
+                        : group.color === 'blue'
+                          ? '#3b82f6'
+                          : group.color === 'green'
+                            ? '#22c55e'
+                            : group.color === 'purple'
+                              ? '#a78bfa'
+                              : '#f59e0b',
+                  }}
                 />
                 {!collapsed && (
                   <span

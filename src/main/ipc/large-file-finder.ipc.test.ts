@@ -32,12 +32,9 @@ vi.mock('../services/logger.service', () => ({
 }))
 
 import { registerLargeFileFinderIpc } from './large-file-finder.ipc'
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 function getHandler(channel: string): (...args: unknown[]) => any {
   const call = mocks.ipcHandle.mock.calls.find((c) => c[0] === channel)
   if (!call) throw new Error(`No handler for ${channel}`)
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   return call[1] as (...args: unknown[]) => any
 }
 
@@ -69,7 +66,6 @@ describe('registerLargeFileFinderIpc', () => {
   describe('LARGE_FILES_SELECT_DIR handler', () => {
     it('returns selected directory path', async () => {
       mocks.dialogShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\Users\\Test'] })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerLargeFileFinderIpc(() => ({ isDestroyed: () => false }) as any)
       const handler = getHandler('large-files:select-dir')
       const result = await handler()
@@ -78,7 +74,6 @@ describe('registerLargeFileFinderIpc', () => {
 
     it('returns null when dialog is cancelled', async () => {
       mocks.dialogShowOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerLargeFileFinderIpc(() => ({ isDestroyed: () => false }) as any)
       const handler = getHandler('large-files:select-dir')
       const result = await handler()
@@ -96,7 +91,6 @@ describe('registerLargeFileFinderIpc', () => {
         if (p.includes('small.txt')) return { size: 100, mtimeMs: Date.now() - 60000 }
         return { size: 20 * 1024 * 1024, mtimeMs: Date.now() - 60000 }
       })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerLargeFileFinderIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('large-files:scan')
       const result = await handler(null, { directory: 'C:\\Test', minFileSize: 10_485_760 })
@@ -130,7 +124,6 @@ describe('registerLargeFileFinderIpc', () => {
 
     it('returns empty result when directory is unreadable', async () => {
       mocks.readdir.mockRejectedValue(new Error('ENOENT'))
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerLargeFileFinderIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('large-files:scan')
       const result = await handler(null, { directory: 'C:\\NoAccess', minFileSize: 1000 })
@@ -141,7 +134,6 @@ describe('registerLargeFileFinderIpc', () => {
       const entries = Array.from({ length: 600 }, (_, i) => makeEntry(`file${i}.bin`, true, 50 * 1024 * 1024))
       mocks.readdir.mockResolvedValue(entries)
       mocks.stat.mockResolvedValue({ size: 50 * 1024 * 1024, mtimeMs: Date.now() - 60000 })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerLargeFileFinderIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('large-files:scan')
       const result = await handler(null, { directory: 'C:\\Test', minFileSize: 1000 })
@@ -155,7 +147,6 @@ describe('registerLargeFileFinderIpc', () => {
         return Promise.resolve([])
       })
       mocks.stat.mockResolvedValue({ size: 100, mtimeMs: Date.now() - 60000 })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerLargeFileFinderIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('large-files:scan')
       const result = await handler(null, {

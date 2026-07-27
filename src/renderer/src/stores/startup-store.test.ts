@@ -82,7 +82,6 @@ describe('startup-store', () => {
   })
 
   it('setBootTrace stores trace data', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const trace = { totalBootTimeMs: 5000, items: [] } as any
     useStartupStore.getState().setBootTrace(trace)
     expect(useStartupStore.getState().bootTrace).toEqual(trace)

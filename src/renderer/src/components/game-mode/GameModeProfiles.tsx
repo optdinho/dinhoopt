@@ -1,9 +1,9 @@
-import { useGameModeStore } from '@/stores/game-mode-store'
 import type { GameModeOptimizationId } from '@shared/types'
 import { motion } from 'framer-motion'
 import { Plus, X } from 'lucide-react'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useGameModeStore } from '@/stores/game-mode-store'
 import { OPTIMIZATIONS } from './constants'
 
 interface GameModeProfilesProps {
@@ -54,7 +54,7 @@ export function GameModeProfiles({
       }
     }
     onCancelProfile()
-  }, [editingProfile, profileGameName, profileProcessName, profileOpts, store, onCancelProfile])
+  }, [editingProfile, profileGameName, profileProcessName, profileOpts, onCancelProfile])
 
   return (
     <motion.div

@@ -1,7 +1,7 @@
-import { formatBytes } from '@/lib/utils'
 import type { ScanHistoryEntry } from '@shared/types'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatBytes } from '@/lib/utils'
 import { useTypeConfig } from './useTypeConfig'
 
 const RecentScanRow = memo(function RecentScanRow({ entry }: { entry: ScanHistoryEntry }) {

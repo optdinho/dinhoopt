@@ -9,10 +9,8 @@ function mockKudu() {
     licenseStatus: vi.fn(),
   }
   if (typeof window === 'undefined') {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(globalThis as any).window = {}
   }
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(window as any).dinho = mock
   return mock
 }
@@ -62,7 +60,6 @@ describe('license-store', () => {
 
   it('getHwid falls back when method is undefined', async () => {
     mockKudu()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     delete (window as any).dinho.licenseGetHwid
     const hwid = await useLicenseStore.getState().getHwid()
     expect(hwid).toBe('')
@@ -98,7 +95,6 @@ describe('license-store', () => {
 
   it('activate falls back when method is undefined', async () => {
     mockKudu()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     delete (window as any).dinho.licenseActivate
     const result = await useLicenseStore.getState().activate('KEY')
     expect(result.valid).toBe(false)

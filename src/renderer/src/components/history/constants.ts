@@ -1,4 +1,5 @@
 import type { HistoryEntryType } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
 import {
   Bug,
   ClipboardCheck,
@@ -14,7 +15,6 @@ import {
   Wifi,
   Zap,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 
 export type ViewMode = 'overview' | 'timeline'
 

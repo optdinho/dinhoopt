@@ -75,14 +75,14 @@ export function parseWingetUpgradeOutput(stdout: string): UpdatableApp[] {
 
     const name = line.substring(0, col.id).trim()
     const id = col.version > 0 ? line.substring(col.id, col.version).trim() : line.substring(col.id).trim()
-    let version = col.available > 0
-      ? line.substring(col.version, col.available).trim()
-      : line.substring(col.version).trim()
-    let available = col.source > 0
-      ? line.substring(col.available, col.source).trim()
-      : col.available > 0
-        ? line.substring(col.available).trim()
-        : ''
+    let version =
+      col.available > 0 ? line.substring(col.version, col.available).trim() : line.substring(col.version).trim()
+    let available =
+      col.source > 0
+        ? line.substring(col.available, col.source).trim()
+        : col.available > 0
+          ? line.substring(col.available).trim()
+          : ''
     if (version.startsWith('> ')) version = version.slice(2)
     if (version.startsWith('< ')) version = version.slice(2)
     if (available.startsWith('> ')) available = available.slice(2)
@@ -137,9 +137,8 @@ export function parseWingetListOutput(stdout: string): UpdatableApp[] {
 
     const name = line.substring(0, col.id).trim()
     const id = col.version > 0 ? line.substring(col.id, col.version).trim() : line.substring(col.id).trim()
-    let version = col.available > 0
-      ? line.substring(col.version, col.available).trim()
-      : line.substring(col.version).trim()
+    let version =
+      col.available > 0 ? line.substring(col.version, col.available).trim() : line.substring(col.version).trim()
     if (version.startsWith('> ')) version = version.slice(2)
     if (version.startsWith('< ')) version = version.slice(2)
     const source = col.source > 0 ? line.substring(col.source).trim() : ''
@@ -278,7 +277,7 @@ async function attemptWingetUpgrade(
   appId: string,
   extraArgs: string[] = [],
 ): Promise<{ success: boolean; output: string; errorType?: string }> {
-  if (!/^[\w][\w.\-]{0,200}$/.test(appId)) {
+  if (!/^[\w][\w.-]{0,200}$/.test(appId)) {
     return { success: false, output: 'Invalid app ID format' }
   }
   let upgradeStdout = ''
@@ -328,7 +327,7 @@ async function attemptWingetUpgrade(
 }
 
 async function attemptElevatedUpgrade(appId: string): Promise<{ success: boolean; output: string }> {
-  if (!/^[\w][\w.\-]{0,200}$/.test(appId)) {
+  if (!/^[\w][\w.-]{0,200}$/.test(appId)) {
     return { success: false, output: 'Invalid app ID format' }
   }
 

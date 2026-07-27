@@ -1,29 +1,19 @@
+import type { InstalledProgram } from '@shared/types'
+import { CheckSquare, CircleCheckBig, Loader2, MinusSquare, Package, Search, Square, TriangleAlert } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { isUnused } from '@/components/uninstaller/constants'
 import { UninstallerProgramCard } from '@/components/uninstaller/UninstallerProgramCard'
 import { UninstallerToolbar } from '@/components/uninstaller/UninstallerToolbar'
-import { isUnused } from '@/components/uninstaller/constants'
 import logger from '@/lib/renderer-logger'
-import { formatBytes } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { UNUSED_THRESHOLD_DAYS, useUninstallerStore } from '@/stores/uninstaller-store'
-import type { InstalledProgram } from '@shared/types'
-import {
-  TriangleAlert,
-  CircleCheckBig,
-  CheckSquare,
-  Loader2,
-  MinusSquare,
-  Package,
-  Search,
-  Square,
-} from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 import {
   SafeUninstallBanner,

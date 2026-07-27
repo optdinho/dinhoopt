@@ -1,9 +1,9 @@
-import { useContextMenuStore } from '@/stores/context-menu-store'
 import type { ContextMenuAction, ContextMenuEntry } from '@shared/types'
 import { ChevronDown, MousePointerClick } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { EntryRow } from './EntryRow'
+import { useContextMenuStore } from '@/stores/context-menu-store'
 import { colorForBinary } from './constants'
+import { EntryRow } from './EntryRow'
 
 interface EntryGroupCardProps {
   group: { binary: string; entries: ContextMenuEntry[] }

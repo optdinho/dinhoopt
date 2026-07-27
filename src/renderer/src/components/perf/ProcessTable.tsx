@@ -1,11 +1,11 @@
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { cn, formatBytes } from '@/lib/utils'
-import { usePerfStore } from '@/stores/perf-store'
 import type { PerfProcess } from '@shared/types'
 import { ArrowUpDown, Search, X, Zap } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { cn, formatBytes } from '@/lib/utils'
+import { usePerfStore } from '@/stores/perf-store'
 
 export function ProcessTable() {
   const { t } = useTranslation('performance')

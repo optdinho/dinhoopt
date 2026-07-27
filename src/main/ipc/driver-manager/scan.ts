@@ -1,11 +1,6 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import type {
-  DriverCleanResult,
-  DriverPackage,
-  DriverScanProgress,
-  DriverScanResult,
-} from '@shared/types'
+import type { DriverCleanResult, DriverPackage, DriverScanProgress, DriverScanResult } from '@shared/types'
 import { execFileAsync, execNativeUtf8, psArgs } from '../../services/exec-utf8'
 import { getLogger } from '../../services/logger.service'
 import { compareVersions, makeId } from './utils'
@@ -73,7 +68,7 @@ async function parseEnumDrivers(): Promise<RawDriver[]> {
     const drivers: RawDriver[] = []
 
     for (const item of items) {
-      if (!item.PublishedName || !item.PublishedName.toString().toLowerCase().startsWith('oem')) continue
+      if (!item.PublishedName?.toString().toLowerCase().startsWith('oem')) continue
       drivers.push({
         publishedName: item.PublishedName,
         originalName: item.OriginalName || item.PublishedName,
@@ -100,48 +95,70 @@ async function parseEnumDrivers(): Promise<RawDriver[]> {
  */
 const PNPUTIL_LABELS: Record<string, string[]> = {
   'published name': [
-    'published name', 'nome publicado', 'veröffentlichter name', 'nom publié',
-    'nombre publicado', 'publicado', 'publicerat namn',
+    'published name',
+    'nome publicado',
+    'veröffentlichter name',
+    'nom publié',
+    'nombre publicado',
+    'publicado',
+    'publicerat namn',
   ],
   'original name': [
-    'original name', 'nome original', 'ursprünglicher name', 'nom original',
-    'nombre original', 'originalt namn',
+    'original name',
+    'nome original',
+    'ursprünglicher name',
+    'nom original',
+    'nombre original',
+    'originalt namn',
   ],
-  'original inf': [
-    'original inf', 'inf original',
-  ],
+  'original inf': ['original inf', 'inf original'],
   'driver package provider': [
-    'driver package provider', 'provider name', 'provider',
-    'nome do provedor', 'provedor', 'anbieter', 'fournisseur',
-    'proveedor', 'provider för drivrutinen',
+    'driver package provider',
+    'provider name',
+    'provider',
+    'nome do provedor',
+    'provedor',
+    'anbieter',
+    'fournisseur',
+    'proveedor',
+    'provider för drivrutinen',
   ],
-  'class name': [
-    'class name', 'class', 'device class',
-    'nome da classe', 'classe', 'klasse', 'deviceklasse',
-  ],
+  'class name': ['class name', 'class', 'device class', 'nome da classe', 'classe', 'klasse', 'deviceklasse'],
   'driver version': [
-    'driver version', 'version',
-    'versão do driver', 'treiberversion', 'version du pilote',
-    'versión del controlador', 'versionsinformation för drivrutin',
+    'driver version',
+    'version',
+    'versão do driver',
+    'treiberversion',
+    'version du pilote',
+    'versión del controlador',
+    'versionsinformation för drivrutin',
   ],
   'driver date': [
-    'driver date', 'date',
-    'data do driver', 'treiberdatum', 'date du pilote',
-    'fecha del controlador', 'datum för drivrutin',
+    'driver date',
+    'date',
+    'data do driver',
+    'treiberdatum',
+    'date du pilote',
+    'fecha del controlador',
+    'datum för drivrutin',
   ],
   'driver date and version': [
-    'driver date and version', 'data e versão do driver',
-    'treiberdatum und version', 'date et version du pilote',
+    'driver date and version',
+    'data e versão do driver',
+    'treiberdatum und version',
+    'date et version du pilote',
     'fecha y versión del controlador',
   ],
   'signer name': [
-    'signer name', 'signer',
-    'nome do signatário', 'signaturname', 'nom du signataire',
-    'nombre del firmante', 'signatärnamn',
+    'signer name',
+    'signer',
+    'nome do signatário',
+    'signaturname',
+    'nom du signataire',
+    'nombre del firmante',
+    'signatärnamn',
   ],
-  'attributes': [
-    'attributes', 'atributos', 'attribute', 'attributter',
-  ],
+  attributes: ['attributes', 'atributos', 'attribute', 'attributter'],
 }
 
 /**

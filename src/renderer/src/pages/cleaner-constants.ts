@@ -4,7 +4,6 @@ import {
   AppWindow,
   Archive,
   Database,
-  Folder,
   Gamepad2,
   Globe,
   Link2Off,

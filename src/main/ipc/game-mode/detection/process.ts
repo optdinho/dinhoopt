@@ -27,6 +27,26 @@ export const UPDATER_PROCESSES = [
   'ZoomUpdateAgent.exe',
 ]
 
+export const BACKGROUND_PROCESSES = [
+  'OneDrive.exe',
+  'OneDriveStandaloneUpdater.exe',
+  'Teams.exe',
+  'ms-teams.exe',
+  'msedgewebview2.exe',
+  'EdgeUpdate.exe',
+  'SkypeBackgroundHost.exe',
+  'YourPhone.exe',
+  'PhoneExperienceHost.exe',
+  'SecurityHealthSystray.exe',
+  'SearchUI.exe',
+  'SearchApp.exe',
+  'StartMenuExperienceHost.exe',
+  'ShellExperienceHost.exe',
+  'GameBarPresenceWriter.exe',
+  'XboxAppServices.exe',
+  'XboxGameOverlay.exe',
+]
+
 const PROTECTED_PROCESSES = new Set([
   'csrss.exe',
   'smss.exe',

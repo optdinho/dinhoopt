@@ -90,7 +90,7 @@ export function validateSnapshot(raw: unknown): GameModeSnapshot | null {
 
   if (!Array.isArray(s.nagleInterfaces)) return null
   const REGISTRY_PATH_RE =
-    /^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{[0-9A-Fa-f\-]+}$/
+    /^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{[0-9A-Fa-f-]+}$/
   for (const iface of s.nagleInterfaces) {
     if (typeof iface !== 'object' || iface === null) return null
     const iv = iface as Record<string, unknown>

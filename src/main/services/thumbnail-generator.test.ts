@@ -24,7 +24,7 @@ vi.mock('./logger.service', () => ({
 }))
 
 import { execFile } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 
 const execFileMock = vi.mocked(execFile)
 

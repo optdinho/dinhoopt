@@ -79,7 +79,6 @@ describe('settings-store', () => {
   it('updateSettings deep-merges cleaner settings', () => {
     useSettingsStore.getState().updateSettings({
       cleaner: { secureDelete: true },
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
 
     const { cleaner } = useSettingsStore.getState().settings
@@ -92,7 +91,6 @@ describe('settings-store', () => {
   it('updateSettings deep-merges schedule settings', () => {
     useSettingsStore.getState().updateSettings({
       schedule: { enabled: true, hour: 22 },
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
 
     const { schedule } = useSettingsStore.getState().settings

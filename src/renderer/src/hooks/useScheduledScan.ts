@@ -1,11 +1,11 @@
-import { formatBytes, formatNumber } from '@/lib/utils'
-import { useHistoryStore } from '@/stores/history-store'
-import { useScanStore } from '@/stores/scan-store'
-import { refreshSettings, useSettingsStore } from '@/stores/settings-store'
 import { ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { formatBytes, formatNumber } from '@/lib/utils'
+import { useHistoryStore } from '@/stores/history-store'
+import { useScanStore } from '@/stores/scan-store'
+import { refreshSettings, useSettingsStore } from '@/stores/settings-store'
 
 interface ScheduleRunPayload {
   scheduleId: string

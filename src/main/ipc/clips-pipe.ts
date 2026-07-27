@@ -1,8 +1,7 @@
-import { type Socket, connect as netConnect } from 'node:net'
+import { connect as netConnect, type Socket } from 'node:net'
 import { IPC } from '@shared/channels'
 import type { ClipsEngineStatus } from '@shared/types'
 import { BrowserWindow } from 'electron'
-import { config as C, buildEngineConfig } from '../services/clips-config-manager'
 import { getLogger } from '../services/logger.service'
 
 export const ENGINE_PIPE = '\\\\.\\pipe\\dinho-clips-engine'

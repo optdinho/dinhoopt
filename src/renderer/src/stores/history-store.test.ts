@@ -1,7 +1,6 @@
+import type { HistoryEntryType, ScanHistoryEntry } from '@shared/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useHistoryStore } from './history-store'
-
-import type { HistoryEntryType, ScanHistoryEntry } from '@shared/types'
 
 function makeEntry(overrides: Partial<ScanHistoryEntry> = {}): ScanHistoryEntry {
   return {

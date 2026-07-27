@@ -1,16 +1,28 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { IPC } from '@shared/channels'
 import type { HostsEntry, HostsFileData, HostsWriteRequest } from '@shared/types'
 import { ipcMain } from 'electron'
+import { logAudit } from '../services/audit-log'
+import { backupFile } from '../services/backup-manager'
 import { isAdmin } from '../services/elevation'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 const execFileAsync = promisify(execFile)
 
-const HOSTS_PATH = `${process.env.SystemRoot || 'C:\\Windows'}\\System32\\drivers\\etc\\hosts`
+export function getHostsPath(): string {
+  const systemRoot = process.env.SystemRoot
+  if (!systemRoot || typeof systemRoot !== 'string' || !systemRoot.match(/^[A-Z]:\\Windows$/i)) {
+    throw new Error('Invalid SystemRoot path')
+  }
+  return `${systemRoot}\\System32\\drivers\\etc\\hosts`
+}
+
+const HOSTS_PATH = getHostsPath()
 
 export function parseHostsForTest(content: string): HostsFileData {
   const lines = content.split(/\r?\n/)
@@ -75,7 +87,8 @@ export function registerHostsEditorIpc(_getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.HOSTS_WRITE, async (_event, request: unknown): Promise<{ success: boolean; error?: string }> => {
+  ipcMain.handle(IPC.HOSTS_WRITE, async (event, request: unknown): Promise<IpcResult> => {
+    if (!validateSender(event, _getWindow())) return { success: false, error: 'Invalid sender' }
     getLogger().info('hosts-editor', 'Writing hosts file')
     if (!isAdmin()) {
       return { success: false, error: 'Acesso negado — execute o DiNho Optimizer como administrador.' }
@@ -105,7 +118,28 @@ export function registerHostsEditorIpc(_getWindow: WindowGetter): void {
       }
       const data = request as HostsWriteRequest
       const content = serializeHostsForTest(data)
+
+      // Backup before write
+      backupFile(HOSTS_PATH)
+
+      // Compute hash of old content for audit
+      let oldContentHash = ''
+      try {
+        const oldContent = readFileSync(HOSTS_PATH, 'utf-8')
+        oldContentHash = createHash('sha256').update(oldContent).digest('hex').slice(0, 16)
+      } catch {
+        /* file may not exist yet */
+      }
+
       writeFileSync(HOSTS_PATH, content, 'utf-8')
+      const newContentHash = createHash('sha256').update(content).digest('hex').slice(0, 16)
+
+      logAudit('HOSTS_WRITE', 'hosts', {
+        entryCount: data.entries.length,
+        oldContentHash,
+        newContentHash,
+      })
+
       getLogger().success('hosts-editor', 'Hosts file written successfully')
       return { success: true }
     } catch (err) {
@@ -114,7 +148,7 @@ export function registerHostsEditorIpc(_getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.HOSTS_FLUSH_DNS, async (): Promise<{ success: boolean; error?: string }> => {
+  ipcMain.handle(IPC.HOSTS_FLUSH_DNS, async (): Promise<IpcResult> => {
     getLogger().info('hosts-editor', 'Flushing DNS cache')
     try {
       await execFileAsync('ipconfig', ['/flushdns'], { timeout: 10000, windowsHide: true })

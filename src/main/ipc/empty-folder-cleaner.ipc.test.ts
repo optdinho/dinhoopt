@@ -505,9 +505,9 @@ describe('registerEmptyFolderCleanerIpc', () => {
       const scanHandler = getHandler('empty-folders:scan')
       const cancelHandler = getHandler('empty-folders:cancel')
 
-      let readdirCalls = 0
+      let _readdirCalls = 0
       mocks.readdir.mockImplementation(async (_dirPath: string) => {
-        readdirCalls++
+        _readdirCalls++
         const dir = n(_dirPath)
         if (dir === ROOT) {
           // Return 3 subdirectories; the 3rd will trigger a deeper recursion

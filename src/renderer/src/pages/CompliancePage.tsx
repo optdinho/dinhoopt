@@ -1,11 +1,6 @@
-import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { useComplianceStore } from '@/stores/compliance-store'
-import { useHistoryStore } from '@/stores/history-store'
 import type { ComplianceCheck } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
 import {
-  TriangleAlert,
   CircleCheckBig,
   Eye,
   Globe,
@@ -15,11 +10,17 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
+  TriangleAlert,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { toastGroup } from '@/lib/toast-utils'
+import { useComplianceStore } from '@/stores/compliance-store'
+import { useHistoryStore } from '@/stores/history-store'
 
 interface CatDef {
   id: ComplianceCheck['category']
@@ -152,8 +153,9 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
       try {
         const result = await window.dinho.complianceApply(ids)
         useComplianceStore.getState().setApplyResult(result)
-        if (result.succeeded > 0) toast.success(t('checksApplied', { count: result.succeeded }))
-        if (result.failed > 0) toast.error(t('applyFailed'))
+        const errors = result.failed > 0 ? [t('applyFailed')] : []
+        if (result.succeeded > 0) toastGroup(t('checksApplied', { count: result.succeeded }), errors)
+        else if (result.failed > 0) toast.error(t('applyFailed'))
         const updated = await window.dinho.complianceScan()
         useComplianceStore.getState().setState(updated)
         useComplianceStore.getState().setStatus('done')

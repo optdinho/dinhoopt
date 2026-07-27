@@ -1,6 +1,6 @@
+import type { LucideIcon } from 'lucide-react'
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
 import { cn } from '@/lib/utils'
-import type { LucideIcon } from 'lucide-react'
 import { Skeleton } from './Skeleton'
 
 interface StatCardProps {

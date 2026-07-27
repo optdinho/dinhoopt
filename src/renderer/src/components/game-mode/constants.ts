@@ -60,6 +60,13 @@ export const OPTIMIZATIONS: OptimizationDef[] = [
     requiresAdmin: false,
   },
   {
+    id: 'proc-kill-background' as GameModeOptimizationId,
+    category: 'processes' as GameModeCategory,
+    labelKey: 'optProcBackground',
+    descKey: 'optProcBackgroundDesc',
+    requiresAdmin: false,
+  },
+  {
     id: 'proc-kill-custom' as GameModeOptimizationId,
     category: 'processes' as GameModeCategory,
     labelKey: 'optProcCustom',
@@ -71,6 +78,13 @@ export const OPTIMIZATIONS: OptimizationDef[] = [
     category: 'memory' as GameModeCategory,
     labelKey: 'optMemStandby',
     descKey: 'optMemStandbyDesc',
+    requiresAdmin: false,
+  },
+  {
+    id: 'mem-empty-working-set' as GameModeOptimizationId,
+    category: 'memory' as GameModeCategory,
+    labelKey: 'optMemEmptyWorkingSet',
+    descKey: 'optMemEmptyWorkingSetDesc',
     requiresAdmin: false,
   },
   {

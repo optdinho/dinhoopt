@@ -1,9 +1,9 @@
-import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
-import { formatBytes, formatNumber } from '@/lib/utils'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CircleCheckBig } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
+import { formatBytes, formatNumber } from '@/lib/utils'
 import type { OneClickResult } from './types'
 
 export function ResultBanner({ result }: { result: OneClickResult | null }) {

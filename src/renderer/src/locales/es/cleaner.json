@@ -54,11 +54,19 @@
   "confirmCleanTitle": "Limpiar archivos seleccionados",
   "confirmCleanDescription": "Esto eliminará permanentemente {{count}} elementos ({{size}}). Esta acción no se puede deshacer.",
   "confirmCleanLabel": "Limpiar ahora",
+  "reportTitle": "Informe de limpieza",
+  "reportBefore": "Antes",
+  "reportAfter": "Después",
+  "reportFreed": "Liberado",
+  "reportFiles": "Archivos limpiados:",
+  "reportBreakdown": "Desglose",
+  "reportItems": "elementos",
   "summaryTitle": "¡Limpieza completada!",
   "summaryDuration": "Completado en {{duration}}",
   "summarySpaceReclaimed": "Espacio recuperado",
   "summaryFilesDeleted": "Archivos eliminados",
   "summaryDurationLabel": "Duración",
   "summaryBreakdown": "Desglose por categoría",
-  "summarySkipped": "{{count}} elementos omitidos (en uso o protegidos)"
+  "summarySkipped": "{{count}} elementos omitidos (en uso o protegidos)",
+  "itemsSelected": "elementos seleccionados"
 }

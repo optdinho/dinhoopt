@@ -37,7 +37,6 @@ vi.mock('node:fs', () => ({
   writeFileSync: vi.fn(),
 }))
 
-import { collectBackupTargets, fixRegistryEntries, scanRegistry } from './registry-cleaner.service'
 import {
   clsidExists,
   expandEnvVars,
@@ -45,6 +44,7 @@ import {
   findMissingClsidDll,
   splitTaskPath,
 } from './registry-cleaner/utils'
+import { collectBackupTargets, fixRegistryEntries, scanRegistry } from './registry-cleaner.service'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -1752,7 +1752,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
   })
 
   it('returns null when InprocServer32 has no (Default) value (lines 96, 103)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('InprocServer32') && args[1]?.startsWith('HKCR\\CLSID')) {
         return { stdout: '    SomeOther    REG_SZ    value', stderr: '' }
       }
@@ -1770,7 +1770,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
   })
 
   it('passes signal to execReg in findMissingClsidDll (lines 92, 109)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       if (args[1]?.includes('InprocServer32') && args[1]?.startsWith('HKCR\\CLSID')) {
         return { stdout: '    SomeOther    REG_SZ    value', stderr: '' }
       }
@@ -1792,7 +1792,7 @@ describe('findMissingClsidDll (via shell extensions)', () => {
   })
 
   it('passes signal to execReg on LocalServer32 query when InprocServer32 missing (line 109)', async () => {
-    mockExecNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
       const query = args.join(' ')
       if (query.includes('InprocServer32')) throw new Error('not found')
       if (query.includes('LocalServer32')) throw new Error('not found')

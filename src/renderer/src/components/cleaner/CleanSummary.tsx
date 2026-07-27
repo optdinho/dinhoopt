@@ -1,11 +1,9 @@
-import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
-import { formatBytes, formatDuration, formatNumber } from '@/lib/utils'
-import type { CleanSummaryData } from '@/stores/scan-store'
 import { motion } from 'framer-motion'
+import type { LucideIcon } from 'lucide-react'
 import {
   AppWindow,
-  CircleCheckBig,
   ChevronDown,
+  CircleCheckBig,
   Clock,
   Database,
   Files,
@@ -19,8 +17,10 @@ import {
   Trash2,
   Variable,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
+import { formatBytes, formatDuration, formatNumber } from '@/lib/utils'
+import type { CleanSummaryData } from '@/stores/scan-store'
 
 const categoryIcons: Record<string, LucideIcon> = {
   system: Monitor,

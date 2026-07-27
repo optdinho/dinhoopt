@@ -26,10 +26,8 @@ vi.mock('framer-motion', () => ({
     {
       get:
         () =>
-        // biome-ignore lint/suspicious/noExplicitAny: test
         ({ children, ...props }: any) => <div {...props}>{children}</div>,
     },
-    // biome-ignore lint/suspicious/noExplicitAny: test
   ) as any,
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))
@@ -61,7 +59,6 @@ vi.mock('lucide-react', () => {
     'Video',
     'X',
   ]
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const iconMap: Record<string, any> = {}
   for (const name of icons) iconMap[name] = Icon
   return iconMap
@@ -212,10 +209,8 @@ describe('ClipsPage', () => {
 
   it('handles missing window.dinho gracefully', () => {
     const savedDinho = window.dinho
-    // biome-ignore lint/suspicious/noExplicitAny: test - simulating missing API
     delete (window as any).dinho
     expect(() => render(<ClipsPage />)).not.toThrow()
-    // biome-ignore lint/suspicious/noExplicitAny: test - restore
     ;(window as any).dinho = savedDinho
   })
 

@@ -8,8 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // our promise-based mock directly.
 
 const execFileAsyncMock = vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>()
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 const execFileMockFn: any = vi.fn()
 // Node's promisify checks for this custom symbol first
 execFileMockFn[Symbol.for('nodejs.util.promisify.custom')] = execFileAsyncMock
@@ -19,7 +17,6 @@ vi.mock('child_process', () => ({
 }))
 
 vi.mock('../services/exec-utf8', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execNativeUtf8: (tool: string, args: string[], opts?: any) => execFileAsyncMock(tool, args, opts),
   psUtf8: (cmd: string) => cmd,
 }))
@@ -42,6 +39,8 @@ vi.mock('path', async () => {
 
 vi.mock('electron', () => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
+  function MockNotification() { return { show: vi.fn() } }
+  MockNotification.isSupported = vi.fn(() => false)
   return {
     app: {
       isPackaged: false,
@@ -54,6 +53,7 @@ vi.mock('electron', () => {
       _handlers: handlers,
     },
     BrowserWindow: vi.fn(),
+    Notification: MockNotification,
   }
 })
 
@@ -71,6 +71,10 @@ vi.mock('../services/ipc-validation', () => ({
     if (!input.every((v: unknown) => typeof v === 'string')) return null
     return input as string[]
   }),
+}))
+
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
 }))
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -167,6 +171,7 @@ describe('PRIVACY_SETTINGS definitions', () => {
       'network',
       'access',
       'ai',
+      'recall',
       'browser',
     ])
     for (const s of PRIVACY_SETTINGS) {
@@ -313,7 +318,6 @@ describe('registry operations via settings', () => {
 
     it('swallows "unable to find" errors (idempotent delete)', async () => {
       const err = new Error('unable to find the specified registry')
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(err as any).stderr = 'ERROR: unable to find the specified registry key or value'
       execFileAsyncMock.mockRejectedValue(err)
 
@@ -710,7 +714,6 @@ describe('scanPrivacy', () => {
     for (const s of result.settings) {
       const def = PRIVACY_SETTINGS.find((d) => d.id === s.id)!
       if (def.dependsOn) {
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
         expect((s as any).dependsOn).toBe(def.dependsOn)
       }
     }
@@ -901,8 +904,6 @@ describe('input validation via IPC handlers', () => {
     mockValidate.mockReturnValueOnce(null)
 
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     const applyHandler = handlers.get(IPC.PRIVACY_APPLY)!
 
@@ -915,8 +916,6 @@ describe('input validation via IPC handlers', () => {
     mockValidate.mockReturnValueOnce(null)
 
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     const revertHandler = handlers.get(IPC.PRIVACY_REVERT)!
 
@@ -931,8 +930,6 @@ describe('input validation via IPC handlers', () => {
 
     setupExecFile(() => ({ stdout: '' }))
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_APPLY)!({}, ['telemetry-level'])
 
@@ -946,8 +943,6 @@ describe('input validation via IPC handlers', () => {
 
     setupExecFile(() => ({ stdout: '' }))
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_REVERT)!({}, ['advertising-id'])
 
@@ -976,10 +971,7 @@ describe('registerPrivacyShieldIpc', () => {
     setupExecFileReject()
 
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = (await handlers.get(IPC.PRIVACY_SCAN)!()) as any
 
     expect(result).toHaveProperty('settings')
@@ -996,10 +988,7 @@ describe('registerPrivacyShieldIpc', () => {
     mockValidate.mockReturnValueOnce(['telemetry-level'])
 
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = (await handlers.get(IPC.PRIVACY_APPLY)!({}, ['telemetry-level'])) as any
 
     expect(result.succeeded).toBe(1)
@@ -1019,11 +1008,7 @@ describe('sendProgress', () => {
     }
 
     setupExecFileReject()
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerPrivacyShieldIpc(() => mockWindow as any)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_SCAN)!()
 
@@ -1040,8 +1025,6 @@ describe('sendProgress', () => {
     setupExecFileReject()
 
     registerPrivacyShieldIpc(() => null)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_SCAN)!()
     // no throw = pass
@@ -1055,11 +1038,7 @@ describe('sendProgress', () => {
     }
 
     setupExecFileReject()
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerPrivacyShieldIpc(() => mockWindow as any)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
     await handlers.get(IPC.PRIVACY_SCAN)!()
 

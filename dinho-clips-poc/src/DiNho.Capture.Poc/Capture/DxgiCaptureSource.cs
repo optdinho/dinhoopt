@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DiNho.Capture.Poc.Logging;
 using Vortice;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -119,13 +120,13 @@ public sealed class DxgiCaptureSource : ICaptureSource
                         }
                         continue;
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // DuplicateOutput1 não suportado — fallback para DuplicateOutput
+                        Log.D("DxgiCaptureSource", $"DuplicateOutput1 not supported on output {i}: {ex.Message}");
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.D("DxgiCaptureSource", $"IDXGIOutput5 QI failed on output {i}: {ex.Message}"); }
 
             // Fallback: IDXGIOutput1.DuplicateOutput() (Win8+)
             output1 = output.QueryInterface<IDXGIOutput1>();
@@ -228,8 +229,9 @@ public sealed class DxgiCaptureSource : ICaptureSource
             return new CapturedFrame(startTicks, copyEndTicks, (int)desc.Width, (int)desc.Height, success: true, poolTex, _device,
                 waitEndTicks, copyEndTicks, ownsTexture: false);
         }
-        catch
+        catch (Exception ex)
         {
+            Log.D("DxgiCaptureSource", $"CopyResource failed: {ex.Message}");
             return new CapturedFrame(startTicks, waitEndTicks, 0, 0, success: false);
         }
         finally
@@ -240,9 +242,9 @@ public sealed class DxgiCaptureSource : ICaptureSource
                 // ReleaseFrame may throw if duplication is in a bad state; swallow to avoid crashing capture loop.
                 _duplication?.ReleaseFrame();
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                Log.D("DxgiCaptureSource", $"ReleaseFrame failed: {ex.Message}");
             }
             finally
             {

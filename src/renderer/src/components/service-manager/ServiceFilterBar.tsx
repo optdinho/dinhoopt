@@ -1,7 +1,7 @@
-import { useServiceStore } from '@/stores/service-store'
 import type { ServiceCategory, ServiceSafety } from '@shared/types'
 import { Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useServiceStore } from '@/stores/service-store'
 import { CATEGORY_LABEL_KEYS, FilterDropdown } from './ServiceManagerRows'
 
 interface ServiceFilterBarProps {
@@ -67,9 +67,7 @@ export function ServiceFilterBar({
           { value: 'stopped', label: t('serviceManager.filterStopped') },
           { value: 'disabled', label: t('serviceManager.filterDisabled') },
         ]}
-        onChange={(v) =>
-          useServiceStore.getState().setStatusFilter(v as 'all' | 'running' | 'stopped' | 'disabled')
-        }
+        onChange={(v) => useServiceStore.getState().setStatusFilter(v as 'all' | 'running' | 'stopped' | 'disabled')}
       />
     </div>
   )

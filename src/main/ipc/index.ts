@@ -2,39 +2,7 @@ import { execFile } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { IPC, RENDERER_LOG } from '@shared/channels'
-import { type BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
-import { psUtf8 } from '../services/exec-utf8'
-import { registerAppCleanerIpc } from './app-cleaner.ipc'
-import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
-import { registerComplianceAuditorIpc } from './compliance-auditor.ipc'
-import { registerContextMenuCleanerIpc } from './context-menu-cleaner.ipc'
-import { registerDatabaseOptimizerIpc } from './database-optimizer.ipc'
-import { registerDebloaterIpc } from './debloater.ipc'
-import { registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
-import { registerDiskTrimIpc } from './disk-trim.ipc'
-import { registerDriverAgentIpc } from './driver-agent.ipc'
-import { registerDriverManagerIpc } from './driver-manager.ipc'
-import { registerDuplicateFinderIpc } from './duplicate-finder.ipc'
-import { registerEnvironmentCleanerIpc } from './environment-cleaner.ipc'
-import { registerFirewallAuditIpc } from './firewall-audit.ipc'
-import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
-import { registerMalwareScannerIpc } from './malware-scanner.ipc'
-import { registerNetworkCleanupIpc } from './network-cleanup.ipc'
-import { registerPerfMonitorIpc } from './perf-monitor.ipc'
-import { registerPowerPlansIpc } from './power-plans.ipc'
-import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
-import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
-import { registerRecycleBinIpc } from './recycle-bin.ipc'
-import { registerRegistryCleanerIpc } from './registry-cleaner.ipc'
-import { registerServiceManagerIpc } from './service-manager.ipc'
-import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
-import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
-import { registerStartupManagerIpc } from './startup-manager.ipc'
-import { registerSystemCleanerIpc } from './system-cleaner.ipc'
-import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
-import { registerVulnerabilityScannerIpc } from './vulnerability-scanner.ipc'
-import { registerWinSxSCleanerIpc } from './winsxs-cleaner.ipc'
-
+import { app, type BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import {
   checkForUpdates,
   downloadUpdate,
@@ -45,11 +13,12 @@ import {
 } from '../services/auto-updater'
 import { getBackupDir } from '../services/backup-dir'
 import { isAdmin } from '../services/elevation'
+import { psUtf8 } from '../services/exec-utf8'
 import { addHistoryEntry, clearHistory, getHistory } from '../services/history-store'
 import { validateHistoryEntry, validateSettingsPartial } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
-import { getMemoryInfo, getMemoryProcesses, optimizeMemory } from '../services/memory-optimizer'
 import type { MemoryOptimizeProgress } from '../services/memory-optimizer'
+import { getMemoryInfo, getMemoryProcesses, optimizeMemory } from '../services/memory-optimizer'
 import {
   flushSettings,
   getOnboardingComplete,
@@ -57,18 +26,49 @@ import {
   setOnboardingComplete,
   setSettings,
 } from '../services/settings-store'
+import { registerAppCleanerIpc } from './app-cleaner.ipc'
 import { registerBenchmarkIpc } from './benchmark.ipc'
+import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
 import { registerClipsIpc } from './clips.ipc'
+import { registerComplianceAuditorIpc } from './compliance-auditor.ipc'
+import { registerContextMenuCleanerIpc } from './context-menu-cleaner.ipc'
+import { registerDatabaseOptimizerIpc } from './database-optimizer.ipc'
+import { registerDebloaterIpc } from './debloater.ipc'
+import { registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
+import { registerDiskTrimIpc } from './disk-trim.ipc'
+import { registerDriverAgentIpc } from './driver-agent.ipc'
+import { registerDriverManagerIpc } from './driver-manager.ipc'
+import { registerDuplicateFinderIpc } from './duplicate-finder.ipc'
 import { registerEmptyFolderCleanerIpc } from './empty-folder-cleaner.ipc'
+import { registerEnvironmentCleanerIpc } from './environment-cleaner.ipc'
 import { registerFileShredderIpc } from './file-shredder.ipc'
+import { registerFirewallAuditIpc } from './firewall-audit.ipc'
 import { refreshGameDetector, registerGameModeIpc } from './game-mode.ipc'
+import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
 import { registerHostsEditorIpc } from './hosts-editor.ipc'
 import { registerLargeFileFinderIpc } from './large-file-finder.ipc'
 import { registerLicenseIpc } from './license.ipc'
 import { registerLoggerIpc } from './logger.ipc'
+import { registerMalwareScannerIpc } from './malware-scanner.ipc'
+import { registerNetworkCleanupIpc } from './network-cleanup.ipc'
+import { registerNetworkMonitorIpc } from './network-monitor.ipc'
+import { registerPerfMonitorIpc } from './perf-monitor.ipc'
+import { registerPowerPlansIpc } from './power-plans.ipc'
+import { registerPrivacyShieldIpc } from './privacy-shield.ipc'
 import { registerProgramSafetyIpc } from './program-safety.ipc'
+import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
+import { registerRecycleBinIpc } from './recycle-bin.ipc'
+import { registerRegistryCleanerIpc } from './registry-cleaner.ipc'
+import { registerServiceManagerIpc } from './service-manager.ipc'
+import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
+import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
+import { registerStartupManagerIpc } from './startup-manager.ipc'
 import { registerStartupSafetyIpc } from './startup-safety.ipc'
+import { registerSystemCleanerIpc } from './system-cleaner.ipc'
+import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
+import { registerVulnerabilityScannerIpc } from './vulnerability-scanner.ipc'
 import { registerWindowsTweaksIpc } from './windows-tweaks.ipc'
+import { registerWinSxSCleanerIpc } from './winsxs-cleaner.ipc'
 
 export type WindowGetter = () => BrowserWindow | null
 
@@ -91,6 +91,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerLargeFileFinderIpc(getWindow)
   registerEmptyFolderCleanerIpc(getWindow)
   registerNetworkCleanupIpc(getWindow)
+  registerNetworkMonitorIpc(getWindow)
   registerMalwareScannerIpc(getWindow)
   registerUninstallLeftoversIpc(getWindow)
   registerComplianceAuditorIpc(getWindow)
@@ -207,7 +208,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.ELEVATION_CHECK, () => isAdmin())
   ipcMain.handle(IPC.ELEVATION_RELAUNCH, () => {
     const exePath = app.getPath('exe')
-    const userDataDir = app.getPath('userData')
+    const _userDataDir = app.getPath('userData')
 
     if (process.platform === 'win32') {
       // Use execFile so we wait for PowerShell to finish (including the UAC

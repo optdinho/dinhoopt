@@ -4,8 +4,10 @@ import { basename, isAbsolute, join, normalize, resolve } from 'node:path'
 import { IPC } from '@shared/channels'
 import type { ShredderEntry, ShredderProgress, ShredderResult } from '@shared/types'
 import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { logAudit } from '../services/audit-log'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 let cancelled = false
 
@@ -273,7 +275,17 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
   })
 
   // Shred
-  ipcMain.handle(IPC.SHREDDER_SHRED, async (_event, paths: unknown): Promise<ShredderResult> => {
+  ipcMain.handle(IPC.SHREDDER_SHRED, async (event, paths: unknown): Promise<ShredderResult> => {
+    if (!validateSender(event, getWindow())) {
+      return {
+        shredded: 0,
+        failed: 0,
+        bytesShredded: 0,
+        duration: 0,
+        errors: [{ path: '', reason: 'Invalid sender' }],
+        cancelled: false,
+      }
+    }
     cancelled = false
     const startTime = Date.now()
     const win = getWindow()
@@ -413,6 +425,15 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
         `Shred complete: ${shredded} file(s), ${failed} failed, ${bytesShredded} bytes in ${Date.now() - startTime}ms`,
       )
     }
+
+    logAudit('FILE_SHRED', 'shredder', {
+      paths: safePaths,
+      shredded,
+      failed,
+      bytesShredded,
+      duration: Date.now() - startTime,
+      cancelled: wasCancelled,
+    })
 
     return {
       shredded,

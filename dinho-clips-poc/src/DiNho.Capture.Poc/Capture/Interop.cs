@@ -326,8 +326,9 @@ namespace DiNho.Capture.Poc.Capture
                     return request.Anonymous.Anonymous.advancedColorEnabled;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.D("HdrHelper", $"IsHdrActive failed: {ex.Message}");
                 return false;
             }
         }
@@ -354,8 +355,9 @@ namespace DiNho.Capture.Poc.Capture
                     return false;
                 return affinity == WDA_EXCLUDEFROMCAPTURE || affinity == WDA_EXCLUEFROMCAPTURE_WIN11;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.D("WdaHelper", $"IsExcludedFromCapture failed: {ex.Message}");
                 return false;
             }
         }

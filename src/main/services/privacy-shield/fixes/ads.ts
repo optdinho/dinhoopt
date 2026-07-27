@@ -1,4 +1,4 @@
-import { regDeleteValue, regSetDword } from '../helpers'
+import { regSetDword } from '../helpers'
 
 export async function applyAdvertisingId(): Promise<void> {
   await regSetDword('HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo', 'Enabled', 0)

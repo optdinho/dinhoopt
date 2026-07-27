@@ -1,15 +1,8 @@
-import { useServiceStore } from '@/stores/service-store'
 import type { WindowsService } from '@shared/types'
-import {
-  TriangleAlert,
-  CircleCheckBig,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  Link2,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Circle, CircleCheckBig, Link2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useServiceStore } from '@/stores/service-store'
 
 const SAFETY_COLORS = {
   safe: { dot: '#22c55e', bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.20)' },

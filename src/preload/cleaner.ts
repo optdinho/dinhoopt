@@ -1,8 +1,5 @@
 import { IPC } from '@shared/channels'
-import type {
-  CleanResult,
-  ScanResult,
-} from '@shared/types'
+import type { CleanResult, ScanResult } from '@shared/types'
 import { ipcRenderer } from 'electron'
 
 export const cleanerApi = {

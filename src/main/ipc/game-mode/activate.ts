@@ -11,7 +11,13 @@ import {
   disableGameBar,
   disableTransparency,
 } from './detection/library'
-import { BROWSER_PROCESSES, CHAT_PROCESSES, UPDATER_PROCESSES, killProcessesByName } from './detection/process'
+import {
+  BACKGROUND_PROCESSES,
+  BROWSER_PROCESSES,
+  CHAT_PROCESSES,
+  killProcessesByName,
+  UPDATER_PROCESSES,
+} from './detection/process'
 import { SERVICE_MAP, writeSnapshot } from './snapshot'
 import {
   applyTimerResolution,
@@ -19,6 +25,7 @@ import {
   capturePowerPlan,
   clearStandbyMemory,
   disableNagle,
+  emptyWorkingSetForBackground,
   enableFocusAssist,
   setHighPerformancePlan,
 } from './tweaks'
@@ -105,9 +112,20 @@ export async function activateGameMode(
         succeeded++
         continue
       }
+      if (id === 'proc-kill-background') {
+        const r = await killProcessesByName(BACKGROUND_PROCESSES, snapshot)
+        if (r.errors.length) throw new Error(r.errors[0])
+        succeeded++
+        continue
+      }
 
       if (id === 'mem-clear-standby') {
         await clearStandbyMemory()
+        succeeded++
+        continue
+      }
+      if (id === 'mem-empty-working-set') {
+        await emptyWorkingSetForBackground()
         succeeded++
         continue
       }

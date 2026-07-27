@@ -20,8 +20,6 @@ vi.mock('crypto', () => ({
     return buf
   },
 }))
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 let mockSettings: any
 
 vi.mock('./settings-store', () => ({
@@ -32,8 +30,7 @@ vi.mock('./scan-cache', () => ({
   getCachedItems: vi.fn(),
 }))
 
-import { existsSync } from 'node:fs'
-import { renameSync } from 'node:fs'
+import { existsSync, renameSync } from 'node:fs'
 import { open, readdir, rm, stat, writeFile } from 'node:fs/promises'
 
 import { CleanerType } from '../../shared/enums'
@@ -74,11 +71,8 @@ beforeEach(() => {
 })
 
 function mockDirEntry(name: string, isDir: boolean) {
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   return { name, isDirectory: () => isDir } as any
 }
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 function mockFileStats(size: number, mtimeMs = Date.now()): any {
   return {
     size,
@@ -87,8 +81,6 @@ function mockFileStats(size: number, mtimeMs = Date.now()): any {
     isDirectory: () => false,
   }
 }
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 function mockDirStats(): any {
   return {
     isFile: () => false,
@@ -202,7 +194,6 @@ describe('safeDelete', () => {
       stat: vi.fn().mockResolvedValue(mockFileStats(1024)),
     }
     const mockFileHandle = { ...mockFd, on: vi.fn() }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValue(mockFileHandle as any)
     mockedRm.mockResolvedValue(undefined)
 
@@ -225,7 +216,6 @@ describe('safeDelete', () => {
   })
 
   it('returns in-use for EBUSY error', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const err = new Error('file in use') as any
     err.code = 'EBUSY'
     mockedRm.mockRejectedValue(err)
@@ -235,7 +225,6 @@ describe('safeDelete', () => {
   })
 
   it('returns permission-denied for EACCES error', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const err = new Error('access denied') as any
     err.code = 'EACCES'
     mockedRm.mockRejectedValue(err)
@@ -245,7 +234,6 @@ describe('safeDelete', () => {
   })
 
   it('returns success for ENOENT error (file already gone)', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const err = new Error('not found') as any
     err.code = 'ENOENT'
     mockedRm.mockRejectedValue(err)
@@ -298,7 +286,6 @@ describe('cleanItems', () => {
 
   it('filters out non-string IDs', async () => {
     mockedGetCachedItems.mockReturnValue([])
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     await cleanItems([1, 'valid'] as any)
     expect(mockedGetCachedItems).toHaveBeenCalledWith(['valid'])
   })
@@ -600,9 +587,7 @@ describe('secureOverwrite (via safeDelete)', () => {
       close: vi.fn(),
       stat: vi.fn().mockResolvedValue(mockFileStats(50)),
     }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValueOnce(dirFd as any)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValueOnce(fileFd as any)
     mockedRm.mockResolvedValue(undefined)
 
@@ -619,7 +604,6 @@ describe('secureOverwrite (via safeDelete)', () => {
       close: vi.fn(),
       stat: vi.fn().mockResolvedValue(mockFileStats(0)),
     }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedOpen.mockResolvedValue(mockFd as any)
     mockedRm.mockResolvedValue(undefined)
 
@@ -638,13 +622,9 @@ describe('secureOverwrite (via safeDelete)', () => {
 describe('scanWithFileMask', () => {
   const OLD = Date.now() - 3600 * 1000 // 1 hour ago (past cutoff)
   const RECENT = Date.now() // too recent
-
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   function fileEntry(name: string): any {
     return { name, isDirectory: () => false, isFile: () => true }
   }
-
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   function dirEntry(name: string): any {
     return { name, isDirectory: () => true, isFile: () => false }
   }

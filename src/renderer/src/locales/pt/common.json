@@ -23,5 +23,15 @@
   "dismissError": "Dispensar erro",
   "windowControls": "Controlos da janela",
   "errorTitle": "Algo deu errado",
-  "errorTryAgain": "Tentar novamente"
+  "errorTryAgain": "Tentar novamente",
+  "shortcutsTitle": "Atalhos de Teclado",
+  "shortcutsNavigation": "Navegação",
+  "shortcutsActions": "Ações",
+  "shortcutsGeneral": "Geral",
+  "shortcutsCommandPalette": "Paleta de Comandos",
+  "shortcutsNavigateSections": "Navegar para secção",
+  "shortcutsShowHelp": "Mostrar esta ajuda",
+  "shortcutsCloseModal": "Fechar modal / Voltar",
+  "itemsSelected": "itens selecionados",
+  "lastScan": "Última verificação"
 }

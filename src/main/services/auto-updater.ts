@@ -1,7 +1,8 @@
 import { IPC } from '@shared/channels'
 import type { UpdateStatus } from '@shared/types'
-import { BrowserWindow, app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { getSecret } from './env-sanitize'
 import { getLogger } from './logger.service'
 import { getSettings } from './settings-store'
 
@@ -43,8 +44,11 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
 
   daemonMode = opts.daemon === true
 
-  // GH_TOKEN carregado via dotenv no index.ts — o providerFactory
-  // lê process.env.GH_TOKEN automaticamente se publish tiver private:true
+  // GH_TOKEN was sanitized out of process.env by env-sanitize.ts.
+  // electron-updater reads process.env.GH_TOKEN lazily at request time,
+  // so we restore it just before each check and clear it after.
+  const ghToken = getSecret('GH_TOKEN')
+  if (ghToken) process.env.GH_TOKEN = ghToken
 
   const settings = getSettings()
   autoUpdater.autoDownload = daemonMode || settings.autoUpdate
@@ -99,6 +103,8 @@ function startPeriodicChecks(intervalHours: number): void {
   if (intervalHours <= 0) return
   const ms = intervalHours * 60 * 60 * 1000
   checkInterval = setInterval(() => {
+    const ghToken = getSecret('GH_TOKEN')
+    if (ghToken) process.env.GH_TOKEN = ghToken
     const settings = getSettings()
     autoUpdater.autoDownload = daemonMode || settings.autoUpdate
     autoUpdater.checkForUpdates().catch((err) => {
@@ -115,6 +121,8 @@ export function updateCheckInterval(hours: number): void {
 
 export function checkForUpdates(): Promise<void> {
   if (!app.isPackaged) return Promise.resolve()
+  const ghToken = getSecret('GH_TOKEN')
+  if (ghToken) process.env.GH_TOKEN = ghToken
   return autoUpdater.checkForUpdates().then(() => {})
 }
 

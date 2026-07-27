@@ -1,17 +1,21 @@
 import { IPC } from '@shared/channels'
 import { type BrowserWindow, ipcMain } from 'electron'
+import { logAudit } from '../services/audit-log'
 import { isAdmin } from '../services/elevation'
 import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
+import { notifyScanComplete } from '../services/notification-manager'
 import {
-  PRIVACY_SETTINGS,
   applyPrivacySettings,
+  PRIVACY_SETTINGS,
   revertPrivacySettings,
   scanPrivacy,
 } from '../services/privacy-shield.service'
+import { getSettings } from '../services/settings-store'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
-export { PRIVACY_SETTINGS, scanPrivacy, applyPrivacySettings, revertPrivacySettings }
+export { applyPrivacySettings, PRIVACY_SETTINGS, revertPrivacySettings, scanPrivacy }
 
 function sendProgress(win: BrowserWindow | null, data: object): void {
   try {
@@ -34,7 +38,8 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
     })
   })
 
-  ipcMain.handle(IPC.PRIVACY_APPLY, async (_event, ids: string[]) => {
+  ipcMain.handle(IPC.PRIVACY_APPLY, async (event, ids: string[]) => {
+    if (!validateSender(event, getWindow())) return { succeeded: 0, failed: 0, errors: ['Invalid sender'] }
     getLogger().info('privacy-shield', `Starting privacy apply for ${ids.length} setting(s)...`)
     if (!isAdmin()) {
       getLogger().warning('privacy-shield', 'Admin elevation required for privacy apply')
@@ -45,17 +50,30 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
       getLogger().warning('privacy-shield', 'Invalid IDs received for privacy apply')
       return { succeeded: 0, failed: 0, errors: [] }
     }
-    return applyPrivacySettings(valid).then((result) => {
-      if (result.failed > 0) {
-        getLogger().error(
-          'privacy-shield',
-          `Privacy apply completed with ${result.failed} failure(s) — ${result.succeeded} succeeded`,
-        )
-      } else {
-        getLogger().success('privacy-shield', `Privacy apply completed — ${result.succeeded} setting(s) applied`)
-      }
-      return result
-    })
+      return applyPrivacySettings(valid).then((result) => {
+        if (result.failed > 0) {
+          getLogger().error(
+            'privacy-shield',
+            `Privacy apply completed with ${result.failed} failure(s) — ${result.succeeded} succeeded`,
+          )
+        } else {
+          getLogger().success('privacy-shield', `Privacy apply completed — ${result.succeeded} setting(s) applied`)
+        }
+
+        logAudit('PRIVACY_APPLY', 'privacy', {
+          settingIds: valid,
+          succeeded: result.succeeded,
+          failed: result.failed,
+        })
+
+        if (result.succeeded > 0) {
+          notifyScanComplete('Privacy Settings Applied', `${result.succeeded} setting(s) applied to protect your privacy`, {
+            notifications: getSettings().showNotificationOnComplete,
+          })
+        }
+
+        return result
+      })
   })
 
   ipcMain.handle(IPC.PRIVACY_REVERT, async (_event, ids: string[]) => {

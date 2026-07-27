@@ -1,14 +1,10 @@
-import type { UninstallProgress, UninstallResult } from '@shared/types'
-import { TriangleAlert, CircleCheckBig, Loader2, Shield, Trash2 } from 'lucide-react'
+import type { InstalledProgram, UninstallProgress, UninstallResult } from '@shared/types'
 import type { TFunction } from 'i18next'
+import { CircleCheckBig, Loader2, Shield, Trash2, TriangleAlert } from 'lucide-react'
 import { formatBytes } from '@/lib/utils'
-import { useUninstallerStore, UNUSED_THRESHOLD_DAYS } from '@/stores/uninstaller-store'
-import type { InstalledProgram } from '@shared/types'
+import { UNUSED_THRESHOLD_DAYS, useUninstallerStore } from '@/stores/uninstaller-store'
 
-export function UninstallProgressBanner({
-  progress,
-  t,
-}: { progress: UninstallProgress; t: TFunction }) {
+export function UninstallProgressBanner({ progress, t }: { progress: UninstallProgress; t: TFunction }) {
   return (
     <div
       className="mb-5 rounded-2xl p-4"
@@ -98,9 +94,7 @@ export function UninstallResultBanner({
         ) : (
           <p>
             {t('failedToUninstall')} <span className="font-medium">{uninstallResult.programName}</span>
-            {uninstallResult.error && (
-              <span style={{ color: 'var(--text-muted)' }}> — {uninstallResult.error}</span>
-            )}
+            {uninstallResult.error && <span style={{ color: 'var(--text-muted)' }}> — {uninstallResult.error}</span>}
           </p>
         )}
       </div>

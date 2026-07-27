@@ -1,18 +1,10 @@
+import type { DuplicateScanResult } from '@shared/types'
+import { ChevronDown, ChevronRight, FolderOpen, RotateCcw, Shield, SquareArrowOutUpRight, Trash2 } from 'lucide-react'
+import type { Dispatch, SetStateAction } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { cn, formatBytes, formatDuration } from '@/lib/utils'
-import type { DuplicateScanResult } from '@shared/types'
-import {
-  ChevronDown,
-  ChevronRight,
-  SquareArrowOutUpRight,
-  FolderOpen,
-  RotateCcw,
-  Shield,
-  Trash2,
-} from 'lucide-react'
-import type { Dispatch, SetStateAction } from 'react'
-import { useTranslation } from 'react-i18next'
 import { StatCard } from './DuplicateFinderConstants'
 
 interface DuplicateStore {

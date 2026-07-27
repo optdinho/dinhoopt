@@ -205,7 +205,7 @@ export async function applyServiceChanges(
     if (typeof c.name !== 'string' || typeof c.targetStartType !== 'string') {
       return { succeeded: 0, failed: 0, errors: [{ name: '', displayName: '', reason: 'Invalid change entry' }] }
     }
-    if (!/^[A-Za-z0-9_.\-]{1,256}$/.test(c.name)) {
+    if (!/^[A-Za-z0-9_.-]{1,256}$/.test(c.name)) {
       return {
         succeeded: 0,
         failed: 0,

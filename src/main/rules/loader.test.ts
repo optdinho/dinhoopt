@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { buildCleanerPaths } from './loader'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { RulesJsonSet } from './loader'
+import { buildCleanerPaths } from './loader'
 
 const mockRules: RulesJsonSet = {
   system: {

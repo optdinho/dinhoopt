@@ -56,7 +56,10 @@ export function parseCatalogHtml(html: string, driver: StaleDriver): DriverUpdat
     let cellMatch: RegExpExecArray | null
     while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
       // Strip HTML tags, collapse whitespace, trim
-      const text = cellMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+      const text = cellMatch[1]
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
       cells.push(text)
     }
 
@@ -67,7 +70,7 @@ export function parseCatalogHtml(html: string, driver: StaleDriver): DriverUpdat
     if (!title || title.length < 3) continue
 
     const products = cells[2] || ''
-    const classification = cells[3] || ''
+    const _classification = cells[3] || ''
     const lastUpdated = cells[4] || ''
     const size = cells[5] || ''
 
@@ -76,10 +79,7 @@ export function parseCatalogHtml(html: string, driver: StaleDriver): DriverUpdat
     //   "Realtek Semiconductor - 6.0.1.8638"
     //   "Intel(R) Corporation - 10.1.2.19"
     let version = ''
-    const versionPatterns = [
-      /(?:-\s*|version\s+)(\d+\.\d+\.\d+[\.\d]*)/i,
-      /(\d+\.\d+\.\d+\.\d+)/,
-    ]
+    const versionPatterns = [/(?:-\s*|version\s+)(\d+\.\d+\.\d+[.\d]*)/i, /(\d+\.\d+\.\d+\.\d+)/]
     for (const pat of versionPatterns) {
       const vm = title.match(pat)
       if (vm) {

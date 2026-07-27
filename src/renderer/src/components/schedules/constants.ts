@@ -1,9 +1,9 @@
-import { usePlatform } from '@/hooks/usePlatform'
 import type { ScheduleEntry, ScheduleTaskType } from '@shared/types'
 import type { TFunction } from 'i18next'
 import { AppWindow, Database, Download, Gamepad2, Globe, Monitor, Sparkles, Trash, Zap } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
+import { usePlatform } from '@/hooks/usePlatform'
 
 export const DAY_NAME_KEYS = [
   'dayNames.sunday',

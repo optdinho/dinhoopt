@@ -2,6 +2,7 @@ import os from 'node:os'
 import { IPC } from '@shared/channels'
 import type { PerfQuickStats } from '@shared/types'
 import { ipcMain } from 'electron'
+import * as si from 'systeminformation'
 import { getLogger } from '../services/logger.service'
 import { PerfMonitorService } from '../services/perf-monitor'
 
@@ -26,6 +27,43 @@ function sampleCpu(): number {
   const totalDiff = total - prevCpuTimes.total
   prevCpuTimes = { idle, total }
   return totalDiff > 0 ? Math.round((1 - idleDiff / totalDiff) * 100) : 0
+}
+
+// ── GPU + Network cache (polled every 5s, reused by quick-stats) ──
+let cachedGpu = { percent: 0, name: '' }
+let cachedNetwork = { down: 0, up: 0 }
+let gpuNetworkLastPoll = 0
+const GPU_NETWORK_POLL_MS = 5000
+
+async function pollGpuNetwork(): Promise<void> {
+  const now = Date.now()
+  if (now - gpuNetworkLastPoll < GPU_NETWORK_POLL_MS) return
+  gpuNetworkLastPoll = now
+
+  try {
+    const [gpuLoad, netStats] = await Promise.all([si.currentLoad(), si.networkStats()])
+    if (gpuLoad.cpus?.length) {
+      cachedGpu = {
+        percent: Math.round(gpuLoad.cpus[0]?.load ?? 0),
+        name: '',
+      }
+    }
+    // Cache GPU name once (expensive, only first time)
+    if (!cachedGpu.name) {
+      try {
+        const graphics = await si.graphics()
+        cachedGpu.name = graphics.controllers[0]?.model ?? 'GPU'
+      } catch {
+        cachedGpu.name = 'GPU'
+      }
+    }
+    cachedNetwork = {
+      down: Math.round(netStats.reduce((s, n) => s + (n.rx_sec ?? 0), 0)),
+      up: Math.round(netStats.reduce((s, n) => s + (n.tx_sec ?? 0), 0)),
+    }
+  } catch {
+    // Silently skip — cache values persist
+  }
 }
 
 // Critical Windows processes that must never be killed by the user.
@@ -82,16 +120,21 @@ export function registerPerfMonitorIpc(getWindow: () => Electron.BrowserWindow |
   }
 
   // Lightweight one-shot stats for dashboard gauges — no timers, no process list
-  ipcMain.handle(IPC.PERF_QUICK_STATS, (): PerfQuickStats => {
+  ipcMain.handle(IPC.PERF_QUICK_STATS, async (): Promise<PerfQuickStats> => {
     const totalMem = os.totalmem()
     const freeMem = os.freemem()
     const usedMem = totalMem - freeMem
     getLogger().info('perf-monitor', 'Fetching quick stats')
+    await pollGpuNetwork()
     return {
       cpuPercent: sampleCpu(),
       memUsedBytes: usedMem,
       memTotalBytes: totalMem,
       memPercent: Math.round((usedMem / totalMem) * 100),
+      gpuPercent: cachedGpu.percent,
+      gpuName: cachedGpu.name,
+      networkDown: cachedNetwork.down,
+      networkUp: cachedNetwork.up,
     }
   })
 

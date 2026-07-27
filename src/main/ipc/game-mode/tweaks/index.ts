@@ -1,19 +1,19 @@
 export {
+  applyTimerResolution,
+  captureTimerResolution,
+  clearStandbyMemory,
+  disableNagle,
+  emptyWorkingSetForBackground,
+  restoreNagle,
+  restoreTimerResolution,
+  setTimerResolution,
+} from './performance'
+export {
   captureAndDisableService,
-  restoreService,
   capturePowerPlan,
-  setHighPerformancePlan,
-  restorePowerPlan,
   enableFocusAssist,
   restoreFocusAssist,
+  restorePowerPlan,
+  restoreService,
+  setHighPerformancePlan,
 } from './system'
-
-export {
-  clearStandbyMemory,
-  captureTimerResolution,
-  setTimerResolution,
-  applyTimerResolution,
-  restoreTimerResolution,
-  disableNagle,
-  restoreNagle,
-} from './performance'

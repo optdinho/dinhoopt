@@ -38,6 +38,10 @@ vi.mock('@shared/registry-tweaks', () => ({
   applyIgnoredTweaks: (entries: unknown[]) => entries as [],
 }))
 
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
+}))
+
 import { IPC } from '@shared/channels'
 import type { RegistryEntry } from '@shared/types'
 import {

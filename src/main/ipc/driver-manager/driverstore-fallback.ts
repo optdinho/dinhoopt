@@ -5,12 +5,7 @@ import { execFileAsync, psArgs } from '../../services/exec-utf8'
 import { getLogger } from '../../services/logger.service'
 import { compareVersions, makeId } from './utils'
 
-const DRIVER_STORE = join(
-  process.env.SystemRoot || 'C:\\Windows',
-  'System32',
-  'DriverStore',
-  'FileRepository',
-)
+const DRIVER_STORE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'DriverStore', 'FileRepository')
 
 interface DriverStoreEntry {
   folderName: string
@@ -254,7 +249,7 @@ async function getActiveDriverMap(): Promise<Map<string, string>> {
 
     for (const line of stdout.split('\n')) {
       const trimmed = line.trim()
-      if (!trimmed || !trimmed.includes('|')) continue
+      if (!trimmed?.includes('|')) continue
       const [hwId, version] = trimmed.split('|', 2)
       if (hwId && version && !map.has(hwId)) {
         map.set(hwId, version)

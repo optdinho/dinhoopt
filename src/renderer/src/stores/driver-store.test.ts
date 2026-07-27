@@ -81,7 +81,6 @@ describe('driver-store', () => {
     })
 
     it('setScanProgress stores progress', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const progress = { current: 5, total: 10, currentDriver: 'test.inf' } as any
       useDriverStore.getState().setScanProgress(progress)
       expect(useDriverStore.getState().scanProgress).toEqual(progress)
@@ -95,7 +94,6 @@ describe('driver-store', () => {
     })
 
     it('setCleanResult stores clean result', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = { cleaned: 3, failed: 0, errors: [] } as any
       useDriverStore.getState().setCleanResult(result)
       expect(useDriverStore.getState().cleanResult).toEqual(result)
@@ -119,7 +117,6 @@ describe('driver-store', () => {
     })
 
     it('setUpdateProgress stores update progress', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const progress = { current: 1, total: 3, currentUpdate: 'Driver X' } as any
       useDriverStore.getState().setUpdateProgress(progress)
       expect(useDriverStore.getState().updateProgress).toEqual(progress)
@@ -131,7 +128,6 @@ describe('driver-store', () => {
     })
 
     it('setInstallResult stores install result', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = { installed: 2, failed: 0, errors: [] } as any
       useDriverStore.getState().setInstallResult(result)
       expect(useDriverStore.getState().installResult).toEqual(result)

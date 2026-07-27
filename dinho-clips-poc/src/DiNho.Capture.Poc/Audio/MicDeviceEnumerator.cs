@@ -21,7 +21,7 @@ internal static class MicDeviceEnumerator
         }
         catch
         {
-            // Unknown apartment state — run on dedicated STA thread
+            Log.D("MicDeviceEnumerator", "ApartmentState check failed or non-STA, falling back to dedicated STA thread");
         }
 
         var tcs = new TaskCompletionSource<List<object>>();

@@ -1,7 +1,7 @@
-import { formatBytes } from '@/lib/utils'
 import type { PerfSystemInfo } from '@shared/types'
 import { Clock, Cpu, MemoryStick, Monitor } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatBytes } from '@/lib/utils'
 
 interface SystemInfoHeaderProps {
   info: PerfSystemInfo | null

@@ -1,7 +1,7 @@
-import { EmptyState } from '@/components/shared/EmptyState'
-import { formatDuration } from '@/lib/utils'
 import { FolderX, RotateCcw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { formatDuration } from '@/lib/utils'
 import { EmptyFolderItem } from './EmptyFolderItem'
 
 export interface FolderScanResultData {
@@ -117,16 +117,8 @@ export function FolderScanResult({
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
       >
         {result.folders.map((folder, idx) => (
-          <div
-            key={folder.path}
-            className={idx > 0 ? 'border-t' : ''}
-            style={{ borderColor: 'var(--bg-subtle)' }}
-          >
-            <EmptyFolderItem
-              folder={folder}
-              selected={selectedPaths.has(folder.path)}
-              onToggle={onTogglePath}
-            />
+          <div key={folder.path} className={idx > 0 ? 'border-t' : ''} style={{ borderColor: 'var(--bg-subtle)' }}>
+            <EmptyFolderItem folder={folder} selected={selectedPaths.has(folder.path)} onToggle={onTogglePath} />
           </div>
         ))}
       </div>

@@ -1,7 +1,7 @@
-import { Checkbox } from '@/components/shared/Checkbox'
 import type { ContextMenuAction, ContextMenuEntry } from '@shared/types'
 import { CircleCheckBig, Lock, Power, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Checkbox } from '@/components/shared/Checkbox'
 import { SCOPE_LABEL_KEY, SOURCE_PILL_COLOR } from './constants'
 
 interface EntryRowProps {

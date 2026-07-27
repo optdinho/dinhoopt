@@ -1,3 +1,7 @@
+import type { ServiceCategory, ServiceSafety, ServiceScanProgress } from '@shared/types'
+import { CircleCheckBig, Loader2, RefreshCw, Search, Server, Shield, Sparkles, TriangleAlert } from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -7,16 +11,7 @@ import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
 import { useHistoryStore } from '@/stores/history-store'
 import { useServiceStore } from '@/stores/service-store'
-import type { ServiceCategory, ServiceSafety, ServiceScanProgress } from '@shared/types'
-import { TriangleAlert, CircleCheckBig, Loader2, RefreshCw, Search, Server, Shield, Sparkles } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import {
-  CATEGORY_LABEL_KEYS,
-  FilterDropdown,
-  SafetyGroup,
-  StatCard,
-} from './service-manager/ServiceManagerComponents'
+import { CATEGORY_LABEL_KEYS, FilterDropdown, SafetyGroup, StatCard } from './service-manager/ServiceManagerComponents'
 
 export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('hardening')

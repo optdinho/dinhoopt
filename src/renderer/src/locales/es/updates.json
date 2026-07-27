@@ -79,7 +79,12 @@
     "toastUpdateFailed": "{{count}} actualización falló",
     "toastUpdateFailedPlural": "{{count}} actualizaciones fallaron",
     "errorCheckFailed": "No se pudieron comprobar las actualizaciones.",
-    "errorUpdateFailed": "La operación de actualización falló inesperadamente."
+    "errorUpdateFailed": "La operación de actualización falló inesperadamente.",
+    "autoInstallLabel": "Instalación automática",
+    "autoInstallScheduleLabel": "Programación",
+    "scheduleDaily": "Diariamente",
+    "scheduleWeekly": "Semanalmente",
+    "autoInstalling": "Instalando automáticamente {{count}} actualización(es)..."
   },
   "driverManager": {
     "pageTitle": "Administrador de controladores",

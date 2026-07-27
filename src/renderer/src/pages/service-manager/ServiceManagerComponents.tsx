@@ -1,8 +1,8 @@
-import { TriangleAlert, CircleCheckBig, ChevronDown, ChevronRight, Circle, Link2 } from 'lucide-react'
+import type { ServiceCategory, WindowsService } from '@shared/types'
+import { ChevronDown, ChevronRight, Circle, CircleCheckBig, Link2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useServiceStore } from '@/stores/service-store'
-import type { ServiceCategory, ServiceSafety, WindowsService } from '@shared/types'
 
 // ── Constants ─────────────────────────────────────────────────────
 

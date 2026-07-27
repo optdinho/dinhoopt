@@ -16,7 +16,6 @@ const MOCK_KEY = '/mock/privacy-shield.ipc'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const NativeModule = require('node:module')
 const origResolve = NativeModule._resolveFilename
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 NativeModule._resolveFilename = function (request: string, parent: any, ...args: any[]) {
   if (request === '../../ipc/privacy-shield.ipc') {
     return MOCK_KEY
@@ -33,7 +32,6 @@ require.cache[MOCK_KEY] = {
   paths: [],
   exports: { PRIVACY_SETTINGS: mockPrivacySettings },
   path: '/mock',
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
 } as any
 
 const { createWin32Privacy } = await import('./privacy')

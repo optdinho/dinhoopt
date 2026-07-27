@@ -1,5 +1,5 @@
-import { TriangleAlert, CircleCheckBig, Loader2, Shield, Trash2 } from 'lucide-react'
 import type { InstalledProgram, UninstallProgress, UninstallResult } from '@shared/types'
+import { CircleCheckBig, Loader2, Shield, Trash2, TriangleAlert } from 'lucide-react'
 
 export function UnusedProgramsBanner({
   count,
@@ -27,9 +27,7 @@ export function UnusedProgramsBanner({
         <TriangleAlert className="h-5 w-5 shrink-0 text-amber-500" strokeWidth={1.8} />
         <div>
           <p className="text-[13px] font-medium text-zinc-200">
-            {count !== 1
-              ? t('unusedBannerTitlePlural', { count, days })
-              : t('unusedBannerTitle', { count, days })}
+            {count !== 1 ? t('unusedBannerTitlePlural', { count, days }) : t('unusedBannerTitle', { count, days })}
           </p>
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
             {totalSize > 0
@@ -159,9 +157,7 @@ export function UninstallResultBanner({
         ) : (
           <p>
             {t('failedToUninstall')} <span className="font-medium">{result.programName}</span>
-            {result.error && (
-              <span style={{ color: 'var(--text-muted)' }}> — {result.error}</span>
-            )}
+            {result.error && <span style={{ color: 'var(--text-muted)' }}> — {result.error}</span>}
           </p>
         )}
       </div>

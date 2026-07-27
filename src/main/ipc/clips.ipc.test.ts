@@ -89,31 +89,15 @@ function resetEngineMocks(): void {
   mockSetEngineCapturing.mockReset()
 }
 
-import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { execFile, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
-import { connect } from 'node:net'
 import { IPC } from '@shared/channels'
-import type {
-  AudioSessionInfo,
-  ClipInfo,
-  ClipMergeResult,
-  ClipTrimResult,
-  ClipsConfig,
-  MicDeviceInfo,
-} from '@shared/types'
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import type { AudioSessionInfo, ClipInfo, ClipMergeResult, ClipTrimResult, MicDeviceInfo } from '@shared/types'
+import { ipcMain, shell } from 'electron'
 import { config as clipsConfig } from '../services/clips-config-manager'
-import {
-  isEngineRunning,
-  isPipeConnected,
-  sendPipeCommand,
-  sendWithFallback,
-  setEngineCapturing,
-  stopEngineProcess,
-  invalidateDurationCache,
-} from './clips-engine-connection'
 import { registerClipsIpc } from './clips.ipc'
+import { invalidateDurationCache, stopEngineProcess } from './clips-engine-connection'
 
 function captureHandlers(): Map<string, (...args: unknown[]) => unknown> {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -230,12 +214,16 @@ describe('CLIPS_LIST_CLIPS', () => {
     mockDuration('Duration: 00:01:30.50, start: 0.000000, bitrate: 1000 kb/s\n')
 
     const statMock = vi.mocked(stat)
-    statMock.mockResolvedValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z'), mtime: new Date('2026-06-20T10:00:00Z') } as Awaited<
-      ReturnType<typeof stat>
-    >)
-    statMock.mockResolvedValueOnce({ size: 200, birthtime: new Date('2026-06-21T10:00:00Z'), mtime: new Date('2026-06-21T10:00:00Z') } as Awaited<
-      ReturnType<typeof stat>
-    >)
+    statMock.mockResolvedValueOnce({
+      size: 100,
+      birthtime: new Date('2026-06-20T10:00:00Z'),
+      mtime: new Date('2026-06-20T10:00:00Z'),
+    } as Awaited<ReturnType<typeof stat>>)
+    statMock.mockResolvedValueOnce({
+      size: 200,
+      birthtime: new Date('2026-06-21T10:00:00Z'),
+      mtime: new Date('2026-06-21T10:00:00Z'),
+    } as Awaited<ReturnType<typeof stat>>)
 
     const handlers = captureHandlers()
     const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
@@ -264,8 +252,12 @@ describe('CLIPS_LIST_CLIPS', () => {
 
   it('filters out non-mp4 files', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdir).mockResolvedValue(['clip.mp4', 'notes.txt', 'image.png'] as unknown as Awaited<ReturnType<typeof readdir>>)
-    vi.mocked(stat).mockResolvedValue({ size: 50, birthtime: new Date(), mtime: new Date() } as Awaited<ReturnType<typeof stat>>)
+    vi.mocked(readdir).mockResolvedValue(['clip.mp4', 'notes.txt', 'image.png'] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >)
+    vi.mocked(stat).mockResolvedValue({ size: 50, birthtime: new Date(), mtime: new Date() } as Awaited<
+      ReturnType<typeof stat>
+    >)
     mockDuration('Duration: 00:01:00.00\n')
 
     const handlers = captureHandlers()
@@ -291,7 +283,9 @@ describe('CLIPS_LIST_CLIPS', () => {
   it('populates duration from ffmpeg', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdir).mockResolvedValue(['clip.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
-    vi.mocked(stat).mockResolvedValue({ size: 100, birthtime: new Date(), mtime: new Date() } as Awaited<ReturnType<typeof stat>>)
+    vi.mocked(stat).mockResolvedValue({ size: 100, birthtime: new Date(), mtime: new Date() } as Awaited<
+      ReturnType<typeof stat>
+    >)
     mockDuration('Duration: 00:01:30.50, start: 0.000000, bitrate: 1000 kb/s\n')
 
     const handlers = captureHandlers()
@@ -304,7 +298,9 @@ describe('CLIPS_LIST_CLIPS', () => {
   it('returns 0 duration when ffmpeg fails', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdir).mockResolvedValue(['clip.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
-    vi.mocked(stat).mockResolvedValue({ size: 100, birthtime: new Date(), mtime: new Date() } as Awaited<ReturnType<typeof stat>>)
+    vi.mocked(stat).mockResolvedValue({ size: 100, birthtime: new Date(), mtime: new Date() } as Awaited<
+      ReturnType<typeof stat>
+    >)
     vi.mocked(execFile).mockImplementation(
       (
         _cmd: string,
@@ -894,7 +890,10 @@ describe('CLIPS_SAVE_CLIP', () => {
       .mockReturnValueOnce(false) // first check → enters wait loop
       .mockReturnValueOnce(false) // iteration 1
     mockIsPipeConnected.mockReturnValue(true) // iteration 2 → connected, stays true for post-loop check
-    mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'saveClip', payload: { success: true, path: '/clips/test.mp4' } })
+    mockSendPipeCommandLongRunning.mockResolvedValue({
+      cmd: 'saveClip',
+      payload: { success: true, path: '/clips/test.mp4' },
+    })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
     const result = (await handler()) as { success: boolean }

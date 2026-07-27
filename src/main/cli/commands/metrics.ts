@@ -20,7 +20,7 @@ export async function handleMetricsServer(args: string[], ctx: CliContext): Prom
   const { collectMetrics, formatPrometheus } = await import('../../services/metrics')
 
   const portIdx = args.indexOf('--port')
-  const port = portIdx !== -1 ? Number.parseInt(args[portIdx + 1]!) || 9100 : 9100
+  const port = portIdx !== -1 ? Number.parseInt(args[portIdx + 1]!, 10) || 9100 : 9100
 
   const server = http.createServer(async (req, res) => {
     if (req.url === '/metrics') {

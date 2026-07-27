@@ -240,8 +240,8 @@ export async function scanRecycleBin(): Promise<ScanResult[]> {
       windowsHide: true,
     })
     const [countStr, sizeStr] = stdout.trim().split('|')
-    const count = Number.parseInt(countStr!) || 0
-    const size = Number.parseInt(sizeStr!) || 0
+    const count = Number.parseInt(countStr!, 10) || 0
+    const size = Number.parseInt(sizeStr!, 10) || 0
     if (count === 0) return []
     const { randomUUID } = await import('node:crypto')
     const item = {

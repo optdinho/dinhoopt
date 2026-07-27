@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { type ReactNode, Suspense, lazy, useEffect, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
@@ -75,6 +75,7 @@ const VulnerabilityScannerPage = lazy(() =>
 const HostsEditorPage = lazy(() => import('./pages/HostsEditorPage').then((m) => ({ default: m.HostsEditorPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 const LicensePage = lazy(() => import('./pages/LicensePage').then((m) => ({ default: m.LicensePage })))
+
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import LicenseGate from './components/LicenseGate'
 import { Onboarding } from './components/Onboarding'

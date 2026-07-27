@@ -1,8 +1,8 @@
+import { CircleCheckBig, Download, Package, TriangleAlert } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { StatCard } from '@/components/shared/StatCard'
 import { useUpdaterStore } from '@/stores/updater-store'
-import { TriangleAlert, CircleCheckBig, Download, Package } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 
 export interface UpdateDetailProps {
   hasChecked: boolean
@@ -111,9 +111,24 @@ export function UpdateDetail({
       {hasChecked && packageManagerAvailable && appsCount > 0 && (
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatCard icon={Package} label={t('softwareUpdater.statOutdatedApps')} value={appsCount} variant="accent" />
-          <StatCard icon={TriangleAlert} label={t('softwareUpdater.statMajorUpdates')} value={majorCount} variant="danger" />
-          <StatCard icon={TriangleAlert} label={t('softwareUpdater.statMinorUpdates')} value={minorCount} variant="default" />
-          <StatCard icon={CircleCheckBig} label={t('softwareUpdater.statPatches')} value={patchCount} variant="success" />
+          <StatCard
+            icon={TriangleAlert}
+            label={t('softwareUpdater.statMajorUpdates')}
+            value={majorCount}
+            variant="danger"
+          />
+          <StatCard
+            icon={TriangleAlert}
+            label={t('softwareUpdater.statMinorUpdates')}
+            value={minorCount}
+            variant="default"
+          />
+          <StatCard
+            icon={CircleCheckBig}
+            label={t('softwareUpdater.statPatches')}
+            value={patchCount}
+            variant="success"
+          />
         </div>
       )}
 

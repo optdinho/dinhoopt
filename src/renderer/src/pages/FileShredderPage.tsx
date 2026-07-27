@@ -1,12 +1,12 @@
+import { File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, SquareArrowOutUpRight, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { formatBytes, formatDuration } from '@/lib/utils'
 import { useFileShredderStore } from '@/stores/file-shredder-store'
-import { SquareArrowOutUpRight, File, FilePlus2, Folder, FolderPlus, RotateCcw, ShieldAlert, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 export function FileShredderPage() {
   const { t } = useTranslation('fileShredder')

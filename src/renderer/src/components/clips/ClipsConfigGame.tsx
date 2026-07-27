@@ -1,13 +1,7 @@
-import type { ClipsState } from './useClipsState'
 import { Gamepad2, Plus, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import {
-  GamePickerBtn,
-  TogglePill,
-  CollapsibleMini,
-  REPLAY_DURATIONS,
-  formatKey,
-} from './clips-utils'
+import { CollapsibleMini, formatKey, GamePickerBtn, REPLAY_DURATIONS, TogglePill } from './clips-utils'
+import type { ClipsState } from './useClipsState'
 
 export function GameSection({
   config,
@@ -83,9 +77,7 @@ export function GameSection({
       {/* Custom Game */}
       <div className="flex items-center justify-between">
         <span className="text-xs truncate" style={{ color: 'var(--text-primary)' }}>
-          {config.customGameProcess || (
-            <span style={{ color: 'var(--text-dim)' }}>{t('noGameDetected')}</span>
-          )}
+          {config.customGameProcess || <span style={{ color: 'var(--text-dim)' }}>{t('noGameDetected')}</span>}
         </span>
         <GamePickerBtn
           config={config}
@@ -140,9 +132,7 @@ export function GameSection({
                 {hk.action === 'saveClip' && (
                   <select
                     value={hk.replayDurationSeconds || 60}
-                    onChange={(e) =>
-                      updateHotkey(hk.id, { replayDurationSeconds: Number(e.target.value) })
-                    }
+                    onChange={(e) => updateHotkey(hk.id, { replayDurationSeconds: Number(e.target.value) })}
                     className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
                     style={{
                       borderColor: 'var(--border-medium)',
@@ -172,10 +162,7 @@ export function GameSection({
                   </button>
                 </div>
               </div>
-              <p
-                className="mt-1 px-0.5 text-[9px] leading-tight"
-                style={{ color: 'var(--text-dim)', opacity: 0.7 }}
-              >
+              <p className="mt-1 px-0.5 text-[9px] leading-tight" style={{ color: 'var(--text-dim)', opacity: 0.7 }}>
                 {hk.action === 'saveClip' && t('saveClipDesc')}
                 {hk.action === 'toggleCapture' && t('toggleCaptureDesc')}
                 {hk.action === 'toggleMic' && t('toggleMicDesc')}
@@ -194,8 +181,7 @@ export function GameSection({
               {t('addHotkey')}
             </button>
             <span className="text-[9px]" style={{ color: 'var(--text-dim)' }}>
-              Buffer: {autoReplayTime < 60 ? `${autoReplayTime}s` : `${autoReplayTime / 60}min`} (
-              {t('autoBuffer')})
+              Buffer: {autoReplayTime < 60 ? `${autoReplayTime}s` : `${autoReplayTime / 60}min`} ({t('autoBuffer')})
             </span>
           </div>
         </div>
@@ -220,10 +206,7 @@ export function ProcessPicker({
   t: (key: string) => string
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
         className="w-80 max-h-96 rounded-xl border p-4 shadow-xl"
         style={{ background: 'var(--card-bg)', borderColor: 'var(--border-subtle)' }}
@@ -233,10 +216,7 @@ export function ProcessPicker({
           {t('selectProcess')}
         </div>
         <div className="relative mb-3">
-          <Search
-            className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2"
-            style={{ color: 'var(--text-dim)' }}
-          />
+          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2" style={{ color: 'var(--text-dim)' }} />
           <input
             type="text"
             value={procSearch}

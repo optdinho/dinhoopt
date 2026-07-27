@@ -21,7 +21,7 @@ export function computeSeverity(current: string, available: string): UpdateSever
   const parse = (v: string): [number, number, number] | null => {
     const m = v.match(/^(\d+)\.(\d+)(?:\.(\d+))?/)
     if (!m) return null
-    return [Number.parseInt(m[1] ?? '0'), Number.parseInt(m[2] ?? '0'), Number.parseInt(m[3] ?? '0')]
+    return [Number.parseInt(m[1] ?? '0', 10), Number.parseInt(m[2] ?? '0', 10), Number.parseInt(m[3] ?? '0', 10)]
   }
 
   const c = parse(current)

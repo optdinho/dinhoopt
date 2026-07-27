@@ -71,7 +71,7 @@ public sealed partial class EngineCoordinator
                         });
                     }
                 }
-                catch { }
+                catch (Exception ex) { Log.D("IpcMessageHandler", $"getAudioSessions: PID {pid} lookup failed: {ex.Message}"); }
             }
         }
 
@@ -84,12 +84,12 @@ public sealed partial class EngineCoordinator
                 try
                 {
                     // Pula system idle, sistema, e processos sem janela
-                    if (proc.Id < 10) { proc.Dispose(); continue; }
-                    if (proc.SessionId == 0) { proc.Dispose(); continue; }
-                    if (!proc.Responding) { proc.Dispose(); continue; }
-                    if (proc.MainWindowHandle == IntPtr.Zero) { proc.Dispose(); continue; }
-                    if (string.IsNullOrEmpty(proc.ProcessName)) { proc.Dispose(); continue; }
-                    if (sessionPids.Contains(proc.Id)) { proc.Dispose(); continue; }
+                    if (proc.Id < 10) continue;
+                    if (proc.SessionId == 0) continue;
+                    if (!proc.Responding) continue;
+                    if (proc.MainWindowHandle == IntPtr.Zero) continue;
+                    if (string.IsNullOrEmpty(proc.ProcessName)) continue;
+                    if (sessionPids.Contains(proc.Id)) continue;
 
                     sessionPids.Add(proc.Id);
                     list.Add(new
@@ -100,10 +100,14 @@ public sealed partial class EngineCoordinator
                         isSelected = selectedPids.Count == 0 || selectedPids.ContainsKey(proc.Id),
                     });
                 }
-                catch { try { proc.Dispose(); } catch { } }
+                catch (Exception ex)
+                {
+                    Log.D("IpcMessageHandler", $"getAudioSessions: error reading process: {ex.Message}");
+                }
+                finally { proc.Dispose(); }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.D("IpcMessageHandler", $"getAudioSessions: process enumeration failed: {ex.Message}"); }
 
         var rawJson = JsonSerializer.Serialize(new { sessions = list });
         _cachedAudioSessionsJson = rawJson;
@@ -135,11 +139,12 @@ public sealed partial class EngineCoordinator
                 {
                     try
                     {
-                        var proc = Process.GetProcessById(pid);
+                        using var proc = Process.GetProcessById(pid);
                         selectedPids[pid] = proc.ProcessName;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Log.W("IpcMessageHandler", $"setAudioSessions: PID {pid} lookup failed: {ex.Message}");
                         selectedPids[pid] = $"PID:{pid}";
                     }
                 }
@@ -257,7 +262,7 @@ public sealed partial class EngineCoordinator
                 PInvoke.CloseHandle(snapshot);
             }
         }
-        catch { }
+        catch (Exception ex) { Log.W("IpcMessageHandler", $"ExpandWithChildProcesses failed: {ex.Message}"); }
         return (result, childToParent);
     }
 }

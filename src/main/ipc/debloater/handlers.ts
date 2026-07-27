@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/channels'
 import type { BloatwareApp } from '@shared/types'
 import { ipcMain } from 'electron'
+import { logAudit } from '../../services/audit-log'
 import { execFileAsync, psArgs } from '../../services/exec-utf8'
 import { validateStringArray } from '../../services/ipc-validation'
+import { validateSender } from '../sender-validation'
 import { getLogger } from '../../services/logger.service'
 import type { WindowGetter } from '../index'
 import { clearWin32Cache, win32UninstallCommands } from './bloatware/registry'
@@ -280,15 +282,22 @@ export function registerDebloaterIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(
     IPC.DEBLOATER_REMOVE,
-    async (_event, packageNames: string[]): Promise<{ removed: number; failed: number }> => {
+    async (event, packageNames: string[]): Promise<{ removed: number; failed: number }> => {
+      if (!validateSender(event, getWindow())) return { removed: 0, failed: 0 }
       if (process.platform !== 'win32') return { removed: 0, failed: 0 }
       const valid = validateStringArray(packageNames, 500)
       if (!valid) return { removed: 0, failed: 0 }
-      return removeBloatware(valid, (current, total, currentApp, status) => {
+      const result = await removeBloatware(valid, (current, total, currentApp, status) => {
         const win = getWindow()
         if (win && !win.isDestroyed())
           win.webContents.send(IPC.DEBLOATER_REMOVE_PROGRESS, { current, total, currentApp, status })
       })
+      logAudit('DEBLOATER_REMOVE', 'debloater', {
+        packages: valid,
+        removed: result.removed,
+        failed: result.failed,
+      })
+      return result
     },
   )
 }

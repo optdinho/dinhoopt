@@ -8,6 +8,7 @@ import { getPlatform } from '../platform'
 import { execFileAsync, execNativeUtf8, psUtf8 } from './exec-utf8'
 import { getDirectorySize } from './file-utils'
 import { REGISTRY_UNINSTALL_PATHS } from './registry-utils'
+
 export { REGISTRY_UNINSTALL_PATHS }
 
 // Re-export with the original signatures expected by consumers

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import type { RegistryEntry } from '@shared/types'
-import { clsidExists, execReg, expandEnvVars, extractExePath, findMissingClsidDll } from './utils'
+import { clsidExists, execReg, extractExePath, findMissingClsidDll } from './utils'
 
 export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]> {
   const entries: RegistryEntry[] = []

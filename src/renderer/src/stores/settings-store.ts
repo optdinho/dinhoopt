@@ -57,6 +57,7 @@ const defaultSettings: DiNhoSettings = {
   },
   registryIgnoredTweaks: [],
   malwareAllowlist: [],
+  userProfile: 'general',
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({

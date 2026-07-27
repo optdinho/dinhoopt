@@ -1,5 +1,5 @@
-import { useUpdaterStore } from '@/stores/updater-store'
 import { useEffect } from 'react'
+import { useUpdaterStore } from '@/stores/updater-store'
 
 export function useInitialLoader(onAutoCheck: () => void) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect

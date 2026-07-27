@@ -1,19 +1,21 @@
-import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
 import type { LucideIcon } from 'lucide-react'
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
 
 export function MiniGauge({
   icon: Icon,
   label,
   percent,
   detail,
+  accentColor,
 }: {
   icon: LucideIcon
   label: string
   percent: number
   detail: string
+  accentColor?: string
 }) {
   const animatedPct = Math.round(useAnimatedCounter(percent))
-  const color = percent >= 85 ? '#ef4444' : percent >= 60 ? '#f59e0b' : '#22c55e'
+  const color = accentColor ?? (percent >= 85 ? '#ef4444' : percent >= 60 ? '#f59e0b' : '#22c55e')
 
   return (
     <div className="glass-card glass-card-hover group relative flex flex-col items-center gap-2 overflow-hidden rounded-xl px-2 py-3 sm:px-3 sm:py-4 transition-shadow duration-300 hover:shadow-[0_0_24px_rgba(139,92,246,0.06)]">

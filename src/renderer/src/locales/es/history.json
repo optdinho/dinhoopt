@@ -12,6 +12,7 @@
   "confirmClearCloudDescription": "Esto eliminará permanentemente todas las entradas del historial de acciones en la nube. Esta acción no se puede deshacer.",
   "confirmClearScanDescription": "Esto eliminará permanentemente todas las entradas del historial de análisis. Esta acción no se puede deshacer.",
   "confirmClearLabel": "Borrar todo",
+  "emptyStateScanAction": "Ejecutar su primer análisis",
   "typeLabels": {
     "cleaner": "Limpieza del sistema",
     "registry": "Reparación del registro",

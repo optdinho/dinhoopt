@@ -1,3 +1,19 @@
+import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
+import {
+  CircleCheckBig,
+  CircleX,
+  Cpu,
+  Database,
+  Eraser,
+  HardDrive,
+  Lock,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -7,23 +23,7 @@ import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
 import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
-import { type DriveFilter, applyFilter, isSelectable, useDiskMaintenanceStore } from '@/stores/disk-maintenance-store'
-import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
-import {
-  CircleCheckBig,
-  Cpu,
-  Database,
-  Eraser,
-  HardDrive,
-  Lock,
-  RefreshCw,
-  ShieldAlert,
-  ShieldCheck,
-  CircleX,
-} from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { applyFilter, type DriveFilter, isSelectable, useDiskMaintenanceStore } from '@/stores/disk-maintenance-store'
 
 function formatRelativeTime(ts: number | null, never: string): string {
   if (!ts) return never

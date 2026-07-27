@@ -1,5 +1,16 @@
 import type { StartupBootTrace, StartupItem } from '@shared/types'
-import { Activity, BarChart3, ChevronDown, ChevronUp, Clock, Shield, ShieldAlert, ShieldCheck, TrendingDown, Zap } from 'lucide-react'
+import {
+  Activity,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  TrendingDown,
+  Zap,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -96,7 +107,7 @@ export function BootTracePanel({ trace, loading }: { trace: StartupBootTrace | n
     )
   }
 
-  if (!trace || !trace.available) {
+  if (!trace?.available) {
     return (
       <div
         className="mb-5 rounded-2xl p-5"
@@ -333,7 +344,12 @@ export function StatMini({
   label,
   value,
   color,
-}: { icon: React.ElementType; label: string; value: string; color: string }) {
+}: {
+  icon: React.ElementType
+  label: string
+  value: string
+  color: string
+}) {
   return (
     <div
       className="rounded-xl p-3.5"

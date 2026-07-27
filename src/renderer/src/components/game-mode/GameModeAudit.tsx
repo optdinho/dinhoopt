@@ -1,6 +1,6 @@
 import type { GameModeAuditReport } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, TriangleAlert, CircleCheckBig, Shield, X } from 'lucide-react'
+import { Activity, CircleCheckBig, Shield, TriangleAlert, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const CYAN = '#06b6d4'

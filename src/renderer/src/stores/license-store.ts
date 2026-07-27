@@ -49,7 +49,7 @@ export const useLicenseStore = create<LicenseState>((set) => ({
       const result = (await window.dinho?.licenseStatus?.()) ?? { valid: false, reason: 'Sem conexão' }
       set({ status: result, loading: false })
       return result
-    } catch (e: unknown) {
+    } catch (_e: unknown) {
       set({ status: { valid: false, reason: 'Erro ao verificar licença' }, loading: false })
       return { valid: false, reason: 'Erro ao verificar licença' }
     }

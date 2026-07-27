@@ -1,1 +1,1 @@
-export { PRIVACY_SETTINGS, scanPrivacy, applyPrivacySettings, revertPrivacySettings } from './privacy-shield/index'
+export { applyPrivacySettings, PRIVACY_SETTINGS, revertPrivacySettings, scanPrivacy } from './privacy-shield/index'

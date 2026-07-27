@@ -1,15 +1,7 @@
-import { Checkbox } from '@/components/shared/Checkbox'
-import { Check, ChevronDown } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import {
-  CalendarClock,
-  Gauge,
-  Server,
-  ShieldAlert,
-  Trash2,
-  Wifi,
-} from 'lucide-react'
 import type { RegistryEntry } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
+import { CalendarClock, Check, ChevronDown, Gauge, Server, ShieldAlert, Trash2, Wifi } from 'lucide-react'
+import { Checkbox } from '@/components/shared/Checkbox'
 
 type CardType = RegistryEntry['type']
 

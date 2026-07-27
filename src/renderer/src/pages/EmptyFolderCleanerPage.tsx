@@ -1,10 +1,4 @@
-import { Checkbox } from '@/components/shared/Checkbox'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { cn, formatDuration } from '@/lib/utils'
-import { useEmptyFolderStore } from '@/stores/empty-folder-store'
 import {
-  SquareArrowOutUpRight,
   FolderOpen,
   FolderX,
   Plus,
@@ -12,12 +6,18 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  SquareArrowOutUpRight,
   Trash2,
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { Checkbox } from '@/components/shared/Checkbox'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { cn, formatDuration } from '@/lib/utils'
+import { useEmptyFolderStore } from '@/stores/empty-folder-store'
 
 export function EmptyFolderCleanerPage() {
   const { t } = useTranslation('emptyFolders')
@@ -200,7 +200,9 @@ export function EmptyFolderCleanerPage() {
                 min={1}
                 max={50}
                 value={store.maxDepth}
-                onChange={(e) => store.setMaxDepth(Math.max(1, Math.min(50, Number.parseInt(e.target.value) || 20)))}
+                onChange={(e) =>
+                  store.setMaxDepth(Math.max(1, Math.min(50, Number.parseInt(e.target.value, 10) || 20)))
+                }
                 className="w-20 rounded-lg px-3 py-1.5 text-[13px] text-white"
                 style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
               />

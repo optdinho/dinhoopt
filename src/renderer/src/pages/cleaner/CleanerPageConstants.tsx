@@ -1,4 +1,5 @@
 import { CleanerType } from '@shared/enums'
+import type { LucideIcon } from 'lucide-react'
 import {
   AppWindow,
   Archive,
@@ -11,7 +12,6 @@ import {
   Trash2,
   Variable,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 
 export interface CategoryDef {
   type: CleanerType

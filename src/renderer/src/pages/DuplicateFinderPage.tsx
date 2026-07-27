@@ -1,25 +1,30 @@
-import { Checkbox } from '@/components/shared/Checkbox'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { cn, formatBytes, formatDuration } from '@/lib/utils'
-import { useDuplicateStore } from '@/stores/duplicate-store'
 import {
   ChevronDown,
   ChevronRight,
-  SquareArrowOutUpRight,
   FolderOpen,
-  Plus,
   RotateCcw,
   Search,
   Settings2,
   Shield,
+  SquareArrowOutUpRight,
   Trash2,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { EXT_PRESETS, PHASE_LABELS, SIZE_PRESETS, SettingsPanel, StatCard, StatMini } from './duplicate-finder/DuplicateFinderComponents'
+import { Checkbox } from '@/components/shared/Checkbox'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { cn, formatBytes, formatDuration } from '@/lib/utils'
+import { useDuplicateStore } from '@/stores/duplicate-store'
+import {
+  EXT_PRESETS,
+  PHASE_LABELS,
+  SettingsPanel,
+  StatCard,
+  StatMini,
+} from './duplicate-finder/DuplicateFinderComponents'
 
 export function DuplicateFinderPage() {
   const { t } = useTranslation('duplicates')
@@ -505,5 +510,3 @@ export function DuplicateFinderPage() {
     </div>
   )
 }
-
-

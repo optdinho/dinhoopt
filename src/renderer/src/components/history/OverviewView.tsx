@@ -1,11 +1,8 @@
-import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
-import { formatBytes } from '@/lib/utils'
-import type { ScanHistoryEntry } from '@shared/types'
+import type { HistoryEntryType, ScanHistoryEntry } from '@shared/types'
 import { BarChart3, Clock, HardDrive, TrendingUp } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -17,10 +14,29 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
+import { formatBytes } from '@/lib/utils'
+import { PIE_COLORS, typeConfigBase } from './constants'
+import { formatDuration } from './formatDuration'
 import { MiniStat } from './MiniStat'
 import { RecentScanRow } from './RecentScanRow'
-import { PIE_COLORS } from './constants'
-import { formatDuration } from './formatDuration'
+
+const TYPE_COLORS: Record<string, string> = {
+  cleaner: '#f59e0b',
+  registry: '#3b82f6',
+  debloater: '#a855f7',
+  network: '#22c55e',
+  drivers: '#8b5cf6',
+  malware: '#ef4444',
+  privacy: '#14b8a6',
+  startup: '#f97316',
+  services: '#6366f1',
+  'software-update': '#06b6d4',
+  compliance: '#8b5cf6',
+  vulnerability: '#ef4444',
+  'delivery-optimization': '#0ea5e9',
+  cookie: '#f59e0b',
+}
 
 export function OverviewView({
   stats,
@@ -38,6 +54,29 @@ export function OverviewView({
   entries: ScanHistoryEntry[]
 }) {
   const { t } = useTranslation('history')
+
+  const activeTypes = useMemo(() => {
+    const set = new Set<HistoryEntryType>()
+    for (const e of entries) set.add(e.type)
+    return Array.from(set)
+  }, [entries])
+
+  const stackedData = useMemo(() => {
+    if (entries.length === 0) return []
+    const byDay: Record<string, Record<string, number>> = {}
+    for (const e of entries) {
+      const key = new Date(e.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      if (!byDay[key]) byDay[key] = {}
+      const bucket = byDay[key]
+      if (bucket) {
+        bucket[e.type] = (bucket[e.type] ?? 0) + e.totalSpaceSaved
+      }
+    }
+    return Object.entries(byDay)
+      .slice(-30)
+      .map(([date, types]) => ({ date, ...types }))
+  }, [entries])
+
   return (
     <>
       <StaggerContainer className="mb-5 grid grid-cols-4 gap-3">
@@ -80,53 +119,61 @@ export function OverviewView({
           className="col-span-2 rounded-2xl p-5"
           style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
         >
-          <h3 className="mb-4 text-[12px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-            {t('overview.spaceRecoveredOverTime')}
-          </h3>
-          {timelineData.length > 1 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={timelineData}>
-                <defs>
-                  <linearGradient id="spaceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-line)" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => formatBytes(v as number, 0)}
-                  width={60}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--card-bg)',
-                    border: '1px solid var(--border-stronger)',
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: 'var(--text-secondary)' }}
-                  formatter={(value) => [formatBytes(Number(value)), t('overview.tooltipSpace')]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="space"
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  fill="url(#spaceGrad)"
-                  dot={false}
-                  activeDot={{ r: 4, fill: '#f59e0b' }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-[12px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              {t('overview.spaceRecoveredOverTime')}
+            </h3>
+          </div>
+          {stackedData.length > 1 ? (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={stackedData} barSize={16}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-line)" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => formatBytes(v as number, 0)}
+                    width={60}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--card-bg)',
+                      border: '1px solid var(--border-stronger)',
+                      borderRadius: 12,
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: 'var(--text-secondary)' }}
+                    formatter={(value: number, name: string) => {
+                      const label = t(`typeLabels.${name}`, { defaultValue: name })
+                      return [formatBytes(value), label]
+                    }}
+                  />
+                  {activeTypes.map((tp) => (
+                    <Bar key={tp} dataKey={tp} stackId="stack" fill={TYPE_COLORS[tp] ?? '#888'} radius={[0, 0, 0, 0]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                {activeTypes.map((tp) => (
+                  <div key={tp} className="flex items-center gap-1.5">
+                    <div
+                      className="h-2 w-2 rounded-sm"
+                      style={{ background: TYPE_COLORS[tp] ?? '#888' }}
+                    />
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {t(`typeLabels.${tp}`, { defaultValue: tp })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             <div
               className="flex h-[220px] items-center justify-center text-[13px]"

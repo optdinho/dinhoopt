@@ -1,4 +1,4 @@
-import { TriangleAlert, CircleCheck, Copy, Info, KeyRound, ShieldCheck, CircleX } from 'lucide-react'
+import { CircleCheck, CircleX, Copy, Info, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLicenseStore } from '../stores/license-store'

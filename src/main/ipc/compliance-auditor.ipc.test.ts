@@ -27,7 +27,6 @@ describe('registerComplianceAuditorIpc', () => {
     registerComplianceAuditorIpc(getWindow)
 
     expect(mockHandle).toHaveBeenCalledTimes(3)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const channels = mockHandle.mock.calls.map((c: any[]) => c[0])
     expect(channels).toContain(IPC.COMPLIANCE_SCAN)
     expect(channels).toContain(IPC.COMPLIANCE_APPLY)
@@ -39,8 +38,6 @@ describe('registerComplianceAuditorIpc', () => {
     const { scanCompliance } = await import('../services/compliance-auditor.service')
     const getWindow = () => null
     registerComplianceAuditorIpc(getWindow)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const scanHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_SCAN)?.[1]
     await scanHandler()
 
@@ -52,8 +49,6 @@ describe('registerComplianceAuditorIpc', () => {
     const { applyComplianceSettings } = await import('../services/compliance-auditor.service')
     const getWindow = () => null
     registerComplianceAuditorIpc(getWindow)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const applyHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_APPLY)?.[1]
     const result = await applyHandler(null, 'not-an-array')
 
@@ -66,8 +61,6 @@ describe('registerComplianceAuditorIpc', () => {
     const { revertComplianceSettings } = await import('../services/compliance-auditor.service')
     const getWindow = () => null
     registerComplianceAuditorIpc(getWindow)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const revertHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_REVERT)?.[1]
     const result = await revertHandler(null, null)
 
@@ -80,8 +73,6 @@ describe('registerComplianceAuditorIpc', () => {
     const { applyComplianceSettings } = await import('../services/compliance-auditor.service')
     const getWindow = () => null
     registerComplianceAuditorIpc(getWindow)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const applyHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_APPLY)?.[1]
     await applyHandler(null, ['uac-enabled', 'smb1-disabled'])
 
@@ -102,7 +93,6 @@ describe('registerComplianceAuditorIpc', () => {
     })
 
     registerComplianceAuditorIpc(getWindow)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const scanHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_SCAN)?.[1]
     await scanHandler()
 
@@ -131,7 +121,6 @@ describe('registerComplianceAuditorIpc', () => {
     })
 
     registerComplianceAuditorIpc(getWindow)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const scanHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_SCAN)?.[1]
 
     await expect(scanHandler()).resolves.not.toThrow()
@@ -143,7 +132,6 @@ describe('registerComplianceAuditorIpc', () => {
     const getWindow = () => null
 
     registerComplianceAuditorIpc(getWindow)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const revertHandler = mockHandle.mock.calls.find((c: any[]) => c[0] === IPC.COMPLIANCE_REVERT)?.[1]
     await revertHandler(null, ['setting-1', 'setting-2'])
 

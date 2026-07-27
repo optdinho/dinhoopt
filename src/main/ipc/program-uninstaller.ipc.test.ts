@@ -41,6 +41,10 @@ vi.mock('../services/file-utils', () => ({
   safeDelete: (...args: unknown[]) => mockSafeDelete(...args),
 }))
 
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
+}))
+
 import type { InstalledProgram } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'

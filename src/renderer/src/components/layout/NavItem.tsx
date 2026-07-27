@@ -1,8 +1,8 @@
-import { cn } from '@/lib/utils'
 import { ChevronRight } from 'lucide-react'
 import { memo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { cn } from '@/lib/utils'
 import { FlyoutMenu } from './FlyoutMenu'
 import type { NavItemDef, SectionColor } from './NavTypes'
 

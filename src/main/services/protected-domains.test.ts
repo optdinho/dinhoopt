@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  PROTECTED_DOMAINS,
   getDomainSeverity,
   isHighImpactDomain,
   isProtectedDomain,
+  PROTECTED_DOMAINS,
   searchProtectedDomains,
 } from './protected-domains'
 

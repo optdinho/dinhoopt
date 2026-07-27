@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PERSISTENT_TWEAK_TYPES, applyIgnoredTweaks, isPersistentTweak, tweakSignature } from './registry-tweaks'
+import { applyIgnoredTweaks, isPersistentTweak, PERSISTENT_TWEAK_TYPES, tweakSignature } from './registry-tweaks'
 import type { RegistryEntry } from './types'
 
 function entry(over: Partial<RegistryEntry>): RegistryEntry {

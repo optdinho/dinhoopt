@@ -1,17 +1,8 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { open, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import dotenv from 'dotenv'
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, protocol, screen, shell } from 'electron'
-
-// Register custom privileged schemes BEFORE app.whenReady()
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'clip-video',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
-  },
-])
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
 
 // Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
 if (!app.isPackaged) {
@@ -21,13 +12,16 @@ if (!app.isPackaged) {
   }
 }
 
+// ─── Security: move secrets out of process.env ─────────────
+import { sanitizeEnvVars } from './services/env-sanitize'
+sanitizeEnvVars()
+
 // Disable GPU acceleration — Windows 25H2 (10.0.26200) crashes the GPU
 // process with error_code=18, making every renderer navigation fail
 // with ERR_FAILED (-2). Software rendering is the only reliable fallback.
 app.commandLine.appendSwitch('in-process-gpu')
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('enable-unsafe-swiftshader')
-app.commandLine.appendSwitch('no-sandbox')
 
 import { IPC } from '../shared/channels'
 import type { ScheduleRunStatus } from '../shared/types'
@@ -37,11 +31,12 @@ import { t } from './i18n'
 import { registerCleanerIpc } from './ipc'
 import { stopEngineProcess } from './ipc/clips-engine-connection'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
+import { initAuditLog } from './services/audit-log'
 import { initAutoUpdater } from './services/auto-updater'
+import { initBackupManager } from './services/backup-manager'
 import { isAdmin } from './services/elevation'
 import { execNativeUtf8, killAllChildren, psUtf8 } from './services/exec-utf8'
 import { getLogger } from './services/logger.service'
-import { clipPathInOutputDir } from './services/clips-config-manager'
 import { attachRendererDiagnostics } from './services/renderer-diagnostics'
 import {
   completeScheduleRun,
@@ -75,7 +70,7 @@ process.on('unhandledRejection', (reason) => {
 if (process.argv.includes('--daemon') || process.argv.includes('--cli')) {
   process.env.DISPLAY = undefined
   process.env.WAYLAND_DISPLAY = undefined
-  app.commandLine.appendSwitch('no-sandbox')
+
   app.commandLine.appendSwitch('ozone-platform', 'headless')
 }
 
@@ -86,7 +81,7 @@ if (process.argv.includes('--daemon') || process.argv.includes('--cli')) {
 const dataDirFlag = process.argv.find((a) => a.startsWith('--dinho-data-dir='))
 if (dataDirFlag) {
   const dir = dataDirFlag.slice('--dinho-data-dir='.length)
-  if (dir && require('node:path').isAbsolute(dir)) {
+  if (dir && isAbsolute(dir)) {
     app.setPath('userData', dir)
   }
 }
@@ -338,12 +333,6 @@ function initGui(): void {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        allowFileAccessFromFiles: true,
-        // Chromium's renderer sandbox uses Linux namespaces that fail
-        // when running as root (e.g. after pkexec relaunch).  The
-        // --no-sandbox switch only covers the browser/GPU processes;
-        // this flag must also be false to prevent a blank grey window.
-        sandbox: false,
       },
     })
     // abre em tela cheia
@@ -471,52 +460,9 @@ function initGui(): void {
 
     createWindow()
 
-    // Register clip-video:// protocol for in-app video preview
-    protocol.handle('clip-video', async (request) => {
-      try {
-        const url = new URL(request.url)
-        const path = url.searchParams.get('path')
-        if (!path) {
-          getLogger().warning('clip-video', `Missing path param in ${request.url}`)
-          return new Response('Missing path', { status: 400 })
-        }
-                // Validate against configured output dir to prevent path traversal / LFI
-                const safePath = clipPathInOutputDir(path)
-                if (!safePath) {
-                  getLogger().warning('clip-video', `clip-video attempted outside output dir: ${request.url}`)
-                  return new Response('Forbidden', { status: 403 })
-                }
-                const fileStat = await stat(safePath)
-                const fileSize = fileStat.size
-        const rangeHeader = request.headers.get('range')
-        const headers: Record<string, string> = {
-          'Content-Type': 'video/mp4',
-          'Accept-Ranges': 'bytes',
-        }
-
-        if (rangeHeader) {
-          const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
-          if (match) {
-            const start = Number.parseInt(match[1]!, 10)
-            const end = match[2] ? Number.parseInt(match[2], 10) : fileSize - 1
-            const chunkSize = end - start + 1
-            const fd = await open(safePath, 'r')
-            const buf = Buffer.alloc(chunkSize)
-            await fd.read(buf, 0, chunkSize, start)
-            await fd.close()
-            headers['Content-Range'] = `bytes ${start}-${end}/${fileSize}`
-            headers['Content-Length'] = String(chunkSize)
-            return new Response(buf, { status: 206, headers })
-          }
-        }
-        const buffer = await readFile(safePath)
-        headers['Content-Length'] = String(fileSize)
-        return new Response(buffer, { status: 200, headers })
-      } catch (err) {
-        getLogger().error('clip-video', `Failed to load ${request.url}: ${(err as Error).message}`)
-        return new Response('Not found', { status: 404 })
-      }
-    })
+    // Initialize audit log and backup manager
+    initAuditLog()
+    initBackupManager()
 
     // Initialize auto-updater
     initAutoUpdater()

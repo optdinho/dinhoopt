@@ -83,16 +83,10 @@ export function PrivacyScoreCard({ state, unprotectedCount }: PrivacyScoreCardPr
             return (
               <div key={cat.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <div
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: allGood ? '#22c55e' : cat.color }}
-                  />
+                  <div className="h-1.5 w-1.5 rounded-full" style={{ background: allGood ? '#22c55e' : cat.color }} />
                   <span className="text-[11px] text-zinc-400">{t(cat.labelKey).split(' ')[0]}</span>
                 </div>
-                <span
-                  className="text-[11px] font-mono"
-                  style={{ color: allGood ? '#22c55e' : 'var(--text-muted)' }}
-                >
+                <span className="text-[11px] font-mono" style={{ color: allGood ? '#22c55e' : 'var(--text-muted)' }}>
                   {protectedInCat}/{catSettings.length}
                 </span>
               </div>

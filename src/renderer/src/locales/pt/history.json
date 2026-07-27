@@ -12,6 +12,7 @@
   "confirmClearCloudDescription": "Isto excluirá permanentemente todas as entradas do histórico de ações do cloud. Esta ação não pode ser desfeita.",
   "confirmClearScanDescription": "Isto excluirá permanentemente todas as entradas do histórico de verificações. Esta ação não pode ser desfeita.",
   "confirmClearLabel": "Limpar tudo",
+  "emptyStateScanAction": "Executar a sua primeira verificação",
   "typeLabels": {
     "cleaner": "Limpeza do sistema",
     "registry": "Correção do Registro",

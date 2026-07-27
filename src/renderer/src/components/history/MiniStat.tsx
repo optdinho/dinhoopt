@@ -6,7 +6,12 @@ const MiniStat = memo(function MiniStat({
   label,
   value,
   color,
-}: { icon: LucideIcon; label: string; value: string; color: string }) {
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  color: string
+}) {
   return (
     <div
       className="rounded-2xl p-4"

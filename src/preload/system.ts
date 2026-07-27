@@ -75,12 +75,10 @@ import type {
   PrivacyApplyResult,
   PrivacyScanProgress,
   PrivacyShieldState,
-  ProgressData,
-  QuarantineMeta,
   QuarantinedItem,
+  QuarantineMeta,
   RegistryEntry,
   ScanHistoryEntry,
-  ScanResult,
   ServiceApplyResult,
   ServiceScanProgress,
   ServiceScanResult,
@@ -93,9 +91,9 @@ import type {
   TrimDriveInfo,
   TrimProgress,
   TrimRunResult,
+  UninstallerListResult,
   UninstallProgress,
   UninstallResult,
-  UninstallerListResult,
   UpdateCheckResult,
   UpdateProgress,
   UpdateResult,
@@ -161,6 +159,8 @@ export const systemMethods = {
 
   networkScan: (): Promise<NetworkItem[]> => ipcRenderer.invoke(IPC.NETWORK_SCAN),
   networkClean: (itemIds: string[]): Promise<NetworkCleanResult> => ipcRenderer.invoke(IPC.NETWORK_CLEAN, itemIds),
+  networkGetConnections: (): Promise<{ connections: NetworkConnection[]; suspicious: NetworkConnection[] }> =>
+    ipcRenderer.invoke(IPC.NETWORK_GET_CONNECTIONS),
 
   diskAnalyze: (driveLetter: string): Promise<DiskNode> => ipcRenderer.invoke(IPC.DISK_ANALYZE, driveLetter),
   diskDrives: (): Promise<DriveInfo[]> => ipcRenderer.invoke(IPC.DISK_DRIVES),
@@ -362,13 +362,28 @@ export const systemMethods = {
   gamingTimerGet: (): Promise<import('../main/ipc/windows-tweaks/tweaks/gaming').GamingTimerStatus> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_TIMER_GET),
   gamingTimerSet: (
-    settings: Partial<Pick<import('../main/ipc/windows-tweaks/tweaks/gaming').GamingTimerStatus, 'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'>>,
+    settings: Partial<
+      Pick<
+        import('../main/ipc/windows-tweaks/tweaks/gaming').GamingTimerStatus,
+        'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'
+      >
+    >,
   ): Promise<{ success: boolean; errors: string[] }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_TIMER_SET, settings),
   gamingTimerRevert: (): Promise<{ success: boolean; errors: string[] }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_TIMER_REVERT),
   gamingAutoTuning: (action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_AUTOTUNING, action),
+
+  gamingVbsGet: (): Promise<{ enabled: boolean }> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_VBS_GET),
+  gamingVbsSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_VBS_SET, enabled),
+  gamingHagsGet: (): Promise<{ enabled: boolean }> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET),
+  gamingHagsSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET, enabled),
+
+  directstorageCheck: (): Promise<import('@shared/types').DirectStorageStatus> =>
+    ipcRenderer.invoke(IPC.GAME_MODE_DIRECTSTORAGE_CHECK),
 
   hostsRead: (): Promise<import('@shared/types').HostsFileData> => ipcRenderer.invoke(IPC.HOSTS_READ),
   hostsWrite: (request: import('@shared/types').HostsWriteRequest): Promise<{ success: boolean; error?: string }> =>

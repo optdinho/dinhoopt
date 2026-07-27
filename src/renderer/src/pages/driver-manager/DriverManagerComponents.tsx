@@ -1,7 +1,7 @@
+import type { DriverPackage, DriverUpdate } from '@shared/types'
+import { CircleArrowUp, CircleCheckBig, Cpu, TriangleAlert } from 'lucide-react'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { formatBytes } from '@/lib/utils'
-import type { DriverPackage, DriverUpdate } from '@shared/types'
-import { TriangleAlert, CircleArrowUp, CircleCheckBig, Cpu } from 'lucide-react'
 
 export function UpdateItemRow({
   upd,
@@ -42,14 +42,12 @@ export function UpdateItemRow({
           </span>
         </div>
         <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-          {upd.provider} — {upd.currentVersion ? `v${upd.currentVersion}` : t('driverManager.versionUnknown')}{' '}
-          → v{upd.availableVersion}
+          {upd.provider} — {upd.currentVersion ? `v${upd.currentVersion}` : t('driverManager.versionUnknown')} → v
+          {upd.availableVersion}
         </p>
       </div>
       <div className="shrink-0 text-right">
-        {upd.downloadSize && (
-          <span className="text-[12px] font-medium text-zinc-400">{upd.downloadSize}</span>
-        )}
+        {upd.downloadSize && <span className="text-[12px] font-medium text-zinc-400">{upd.downloadSize}</span>}
         {upd.availableDate && (
           <div className="mt-0.5 text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
             {upd.availableDate}
@@ -60,13 +58,7 @@ export function UpdateItemRow({
   )
 }
 
-export function StaleItemRow({
-  pkg,
-  onToggle,
-}: {
-  pkg: DriverPackage
-  onToggle: (id: string) => void
-}) {
+export function StaleItemRow({ pkg, onToggle }: { pkg: DriverPackage; onToggle: (id: string) => void }) {
   return (
     <div
       onClick={() => onToggle(pkg.id)}

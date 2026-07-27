@@ -1,6 +1,6 @@
-import { cn, formatBytes, formatNumber } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn, formatBytes, formatNumber } from '@/lib/utils'
 
 interface ScanProgressProps {
   status: 'scanning' | 'cleaning'

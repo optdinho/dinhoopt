@@ -1,19 +1,20 @@
+import type { BloatwareApp } from '@shared/types'
+import { CircleCheckBig, Loader2, Package, PackageMinus, Search, Shield, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ScanProgress } from '@/components/shared/ScanProgress'
+import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { useIpcAction } from '@/hooks/useIpcAction'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
 import { useDebloaterStore } from '@/stores/debloater-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
-import type { BloatwareApp } from '@shared/types'
-import { CircleCheckBig, Loader2, Package, PackageMinus, Search, Shield, Trash2 } from 'lucide-react'
-import { useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 
 type FilterType = 'all' | BloatwareApp['category']
 
@@ -369,6 +370,14 @@ export function DebloaterPage({ embedded }: { embedded?: boolean }) {
           ))}
         </div>
       )}
+
+      <StickyActionBar
+        selectedCount={selectedCount}
+        totalLabel={t('itemsSelected')}
+        onAction={() => setShowConfirm(true)}
+        actionLabel={removing ? t('debloater.removingButton') : t('debloater.removeButton', { count: selectedCount })}
+        actionIcon={Trash2}
+      />
 
       <ConfirmDialog
         open={showConfirm}

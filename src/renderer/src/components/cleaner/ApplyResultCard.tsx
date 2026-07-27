@@ -1,7 +1,7 @@
-import { useContextMenuStore } from '@/stores/context-menu-store'
 import type { ContextMenuApplyResult } from '@shared/types'
 import { CircleCheckBig } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useContextMenuStore } from '@/stores/context-menu-store'
 
 interface ApplyResultCardProps {
   result: ContextMenuApplyResult | null

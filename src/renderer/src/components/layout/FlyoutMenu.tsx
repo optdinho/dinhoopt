@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
+import { cn } from '@/lib/utils'
 import type { SubItemDef } from './NavTypes'
 
 export const FlyoutMenu = memo(function FlyoutMenu({

@@ -85,6 +85,7 @@
       "edge-ai-features": "Desativa as funcionalidades de composição e reescrita de texto AI do Edge",
       "paint-ai": "Desativa as funcionalidades de geração de imagens AI no Microsoft Paint",
       "notepad-ai": "Desativa as funcionalidades de reescrita de texto AI no Microsoft Notepad",
+      "recall-blocker": "Impede o Windows AI Recall de guardar capturas de tela do seu ecrã",
       "service-diagtrack": "Desativa o serviço de Experiências do Usuário e Telemetria — não recomendado para FiveM/Minecraft",
       "service-dmwappush": "Desativa o serviço de encaminhamento de mensagens WAP Push usado para telemetria",
       "service-delivery-optimization": "Desativa a partilha P2P do Windows Update — impede o PC de enviar dados de atualização para outros dispositivos",
@@ -134,6 +135,8 @@
     "accessDescription": "Políticas de controlo de acesso, fortalecimento de SSH e restrições do sistema",
     "aiLabel": "Funcionalidades de IA",
     "aiDescription": "Desative Copilot, Recall e outras funcionalidades de IA que analisam os seus dados",
+    "recallLabel": "Windows Recall",
+    "recallDescription": "Bloquear o Windows AI Recall de capturar capturas de tela",
     "browserLabel": "Telemetria do Navegador",
     "browserDescription": "Impeça os navegadores de reportarem dados de utilização à Microsoft, Google e Mozilla"
   },
@@ -272,5 +275,6 @@
     "statusUnknown": "Desconhecido"
   },
   "expandAria": "Expandir",
-  "scoreGaugeAria": "Medidor de privacidade"
+  "scoreGaugeAria": "Medidor de privacidade",
+  "itemsSelected": "itens selecionados"
 }

@@ -1,5 +1,4 @@
 import { readdir } from 'node:fs/promises'
-import { join } from 'node:path'
 import { app } from 'electron'
 import { CleanerType } from '../../../../shared/enums'
 import type { CleanResult, ScanResult } from '../../../../shared/types'

@@ -54,7 +54,6 @@ describe('benchmark-store', () => {
 
   it('run registers progress listener and cleans up', async () => {
     vi.mocked(window.dinho.onBenchmarkProgress).mockReturnValue(vi.fn())
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     vi.mocked(window.dinho.benchmarkRun).mockResolvedValue({ score: 0 } as any)
     await useBenchmarkStore.getState().run()
     expect(window.dinho.onBenchmarkProgress).toHaveBeenCalled()
@@ -71,9 +70,7 @@ describe('benchmark-store', () => {
   it('reset restores initial state', () => {
     useBenchmarkStore.setState({
       status: 'done',
-      // biome-ignore lint/suspicious/noExplicitAny: test
       progress: { phase: 'cpu', percent: 50 } as any,
-      // biome-ignore lint/suspicious/noExplicitAny: test
       result: { score: 100 } as any,
     })
     useBenchmarkStore.getState().reset()

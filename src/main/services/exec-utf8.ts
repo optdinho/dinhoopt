@@ -14,6 +14,7 @@ import { type ChildProcess, type ExecFileOptions, execFile } from 'node:child_pr
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
+
 export { execFileAsync }
 
 /** Prefix that forces PowerShell to emit UTF-8 on stdout */

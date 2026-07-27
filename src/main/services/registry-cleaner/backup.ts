@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RegistryEntry } from '@shared/types'
@@ -156,4 +156,4 @@ async function createTargetedBackup(
   }
 }
 
-export { pruneOldBackups, createFullBackup, createTargetedBackup }
+export { createFullBackup, createTargetedBackup, pruneOldBackups }

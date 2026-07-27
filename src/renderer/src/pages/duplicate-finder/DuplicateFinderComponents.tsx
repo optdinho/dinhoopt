@@ -1,5 +1,5 @@
+import { Plus, X } from 'lucide-react'
 import { cn, formatBytes } from '@/lib/utils'
-import { Plus, Shield, X } from 'lucide-react'
 
 export const SIZE_PRESETS = [
   { label: '100 KB', value: 102_400 },
@@ -205,7 +205,7 @@ export function SettingsPanel({
             min={1}
             max={50}
             value={maxDepth}
-            onChange={(e) => setMaxDepth(Math.max(1, Math.min(50, Number.parseInt(e.target.value) || 20)))}
+            onChange={(e) => setMaxDepth(Math.max(1, Math.min(50, Number.parseInt(e.target.value, 10) || 20)))}
             className="w-20 rounded-lg px-3 py-1.5 text-[13px] text-white"
             style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
           />
@@ -228,11 +228,7 @@ export function SettingsPanel({
                 style={{ background: 'var(--bg-subtle-2)', color: 'var(--text-secondary)' }}
               >
                 {p}
-                <button
-                  type="button"
-                  onClick={() => onRemoveExclude(p)}
-                  className="text-zinc-600 hover:text-zinc-400"
-                >
+                <button type="button" onClick={() => onRemoveExclude(p)} className="text-zinc-600 hover:text-zinc-400">
                   <X className="h-3 w-3" />
                 </button>
               </span>

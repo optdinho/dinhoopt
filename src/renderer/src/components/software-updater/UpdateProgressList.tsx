@@ -1,6 +1,6 @@
-import { CircleCheckBig, Loader2, CircleX } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import type { UpdateProgress } from '@shared/types'
+import { CircleCheckBig, CircleX, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export interface UpdateProgressListProps {
   progress: UpdateProgress | null

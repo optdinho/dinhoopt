@@ -273,7 +273,6 @@ describe('analyzeDisk (exported)', () => {
   })
 
   it('returns empty node for null-like input', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test edge case
     const result = await analyzeDisk(null as any)
     expect(result).toEqual({ name: '', path: '', size: 0, children: [] })
   })
@@ -311,7 +310,6 @@ describe('getFileTypes (exported)', () => {
   })
 
   it('returns empty array for non-string drive', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test edge case
     const result = await getFileTypes(123 as any)
     expect(result).toEqual([])
   })
@@ -333,12 +331,10 @@ describe('getFileTypes (exported)', () => {
     mockStat.mockResolvedValue({ isDirectory: () => false, size: 2048, mtime: new Date(), birthtime: new Date() })
 
     const result = await getFileTypes('C')
-    // biome-ignore lint/suspicious/noExplicitAny: test callback
     const extensions = result.map((ft: any) => ft.extension)
     expect(extensions).toContain('.txt')
     expect(extensions).toContain('.jpg')
     expect(extensions).toContain('.ps1')
-    // biome-ignore lint/suspicious/noExplicitAny: test callback
     const txtInfo = result.find((ft: any) => ft.extension === '.txt')
     expect(txtInfo).toBeDefined()
     expect(txtInfo!.fileCount).toBe(2)
@@ -378,7 +374,6 @@ describe('drive input validation', () => {
   it('accepts Unix absolute paths on non-Windows', async () => {
     if (process.platform === 'win32') return
     mockReaddir.mockResolvedValue([])
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWindow() as any)
     const handler = getHandler('disk:analyze')
     const result = (await handler({}, '/')) as { path: string }
@@ -572,8 +567,6 @@ describe('scan progress via IPC handler', () => {
     mockReaddir.mockResolvedValue([makeEntry('file.txt', false)])
     mockStat.mockReset()
     mockStat.mockResolvedValue({ isDirectory: () => false, size: 1024, mtime: new Date(), birthtime: new Date() })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWindow() as any)
     const handler = getHandler('disk:analyze')
     await handler({}, 'C')
@@ -594,8 +587,6 @@ describe('scan progress via IPC handler', () => {
     mockReaddir.mockResolvedValue([makeEntry('doc.txt', false)])
     mockStat.mockReset()
     mockStat.mockResolvedValue({ isDirectory: () => false, size: 2048, mtime: new Date(), birthtime: new Date() })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWindow() as any)
     const handler = getHandler('disk:file-types')
     await handler({}, 'C')
@@ -702,9 +693,7 @@ function createMockChildProcess() {
   const child = new EventEmitter()
   const stdout = new EventEmitter()
   const stderr = new EventEmitter()
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(child as any).stdout = stdout
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(child as any).stderr = stderr
   return { child, stdout, stderr }
 }
@@ -814,7 +803,6 @@ describe('disk:repair:sfc spawn event handling', () => {
     mockSpawn.mockReturnValue(child)
 
     const mockWin = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWin as any)
     const handler = getHandler('disk:repair:sfc')
     const promise = handler({}, 'C')
@@ -922,7 +910,6 @@ describe('disk:repair:dism spawn event handling', () => {
     mockSpawn.mockReturnValue(child)
 
     const mockWin = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWin as any)
     const handler = getHandler('disk:repair:dism')
     const promise = handler()
@@ -1078,7 +1065,6 @@ describe('disk:repair:chkdsk spawn event handling', () => {
     mockSpawn.mockReturnValue(child)
 
     const mockWin = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWin as any)
     const handler = getHandler('disk:repair:chkdsk')
     const promise = handler({}, 'C')
@@ -1101,7 +1087,6 @@ describe('disk:repair:chkdsk spawn event handling', () => {
     mockSpawn.mockReturnValue(child)
 
     const mockWin = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWin as any)
     const handler = getHandler('disk:repair:chkdsk')
     const promise = handler({}, 'C')
@@ -1156,7 +1141,6 @@ describe('disk:repair:chkdsk spawn event handling', () => {
     mockSpawn.mockReturnValue(child)
 
     const mockWin = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDiskAnalyzerIpc(() => mockWin as any)
     const handler = getHandler('disk:repair:chkdsk')
     const promise = handler({}, 'C')

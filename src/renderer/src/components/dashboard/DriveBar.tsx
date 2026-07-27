@@ -1,7 +1,7 @@
-import { formatBytes } from '@/lib/utils'
 import type { DriveInfo } from '@shared/types'
 import { HardDrive } from 'lucide-react'
 import { memo } from 'react'
+import { formatBytes } from '@/lib/utils'
 
 const DriveBar = memo(function DriveBar({ drive, platform }: { drive: DriveInfo; platform: string }) {
   const usedPercent = (drive.usedSpace / drive.totalSize) * 100

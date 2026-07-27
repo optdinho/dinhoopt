@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto'
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
-
 // ── Mock child_process ──────────────────────────────────────────────
 // The real execFile has a util.promisify.custom symbol so that
 // promisify(execFile) returns { stdout, stderr }. We must replicate this
 // because without it, promisify resolves with only the first callback arg.
 import { promisify } from 'node:util'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockExecFile = vi.fn()
 
@@ -15,7 +14,6 @@ function createExecFileMock() {
   const fn = (...args: unknown[]) => mockExecFile(...args)
   // Custom promisify: returns a function that calls the mock and wraps
   // the callback result into { stdout, stderr }
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(fn as any)[promisify.custom] = (cmd: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(cmd, args, opts, (err: Error | null, stdout: string, stderr: string) => {
@@ -32,7 +30,6 @@ vi.mock('child_process', () => ({
 }))
 
 vi.mock('../services/exec-utf8', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execNativeUtf8: (tool: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(tool, args, opts, (err: Error | null, stdout: string, stderr: string) => {
@@ -41,7 +38,6 @@ vi.mock('../services/exec-utf8', () => ({
       })
     })
   },
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execFileAsync: (cmd: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(cmd, args, opts, (err: Error | null, stdout: string, stderr: string) => {
@@ -125,9 +121,7 @@ function setPlatform(p: string) {
  * Helper: sets up mockExecFile so that promisify(execFile) works.
  * `handler` receives (cmd, args, opts) and should return { stdout } or throw.
  */
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 function setupExecFileHandler(handler: (cmd: string, args: string[], opts: any) => { stdout: string }) {
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   mockExecFile.mockImplementation((cmd: string, args: string[], opts: any, cb: (...args: unknown[]) => unknown) => {
     try {
       const result = handler(cmd, args, opts)
@@ -165,7 +159,6 @@ function makeStableId(name: string, source: string): string {
 /** Collect all reg calls made during a test */
 function collectRegCalls(): Array<{ cmd: string; args: string[] }> {
   const calls: Array<{ cmd: string; args: string[] }> = []
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   mockExecFile.mockImplementation((cmd: string, args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
     calls.push({ cmd, args })
     cb(null, '', '')
@@ -186,7 +179,6 @@ beforeEach(() => {
   mockReadFileSync.mockReturnValue('[]')
   mockReaddirSync.mockReturnValue([])
   // Default: all execFile calls fail (registry keys don't exist)
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
     cb(new Error('not found'), '', '')
   })
@@ -685,7 +677,6 @@ describe('toggleStartupItem', () => {
 
       const lastWriteCall = mockWriteFileSync.mock.calls[mockWriteFileSync.mock.calls.length - 1]!
       const writtenData = JSON.parse(lastWriteCall[1] as string)
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const discordEntries = writtenData.filter((e: any) => e.name === 'Discord')
       expect(discordEntries.length).toBe(1)
     })
@@ -784,7 +775,6 @@ describe('toggleStartupItem', () => {
 
     it('returns false when PowerShell command fails', async () => {
       mockExecFile.mockImplementation(
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
         (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
           cb(new Error('Access denied'), '', '')
         },
@@ -878,7 +868,6 @@ describe('deleteStartupItem', () => {
 
     it('succeeds even if reg delete fails (entry already gone)', async () => {
       mockExecFile.mockImplementation(
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
         (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
           cb(new Error('Access denied'), '', '')
         },
@@ -932,7 +921,6 @@ describe('deleteStartupItem', () => {
 
     it('returns false when PowerShell unregister fails', async () => {
       mockExecFile.mockImplementation(
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
         (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
           cb(new Error('Access denied'), '', '')
         },
@@ -1247,7 +1235,6 @@ describe('error resilience', () => {
 
   it('toggleStartupItem continues when StartupApproved write fails', async () => {
     let callCount = 0
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
       callCount++
       if (args[0] === 'add' && JSON.stringify(args).includes('StartupApproved')) {

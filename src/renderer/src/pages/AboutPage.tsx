@@ -1,7 +1,7 @@
-import logoSrc from '@/assets/logo.png'
-import { useAppUpdateStore } from '@/stores/app-update-store'
 import { CircleAlert, CircleCheck, Download, Loader, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import logoSrc from '@/assets/logo.png'
+import { useAppUpdateStore } from '@/stores/app-update-store'
 
 declare const __APP_VERSION__: string
 

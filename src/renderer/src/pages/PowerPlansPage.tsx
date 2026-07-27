@@ -1,9 +1,9 @@
-import { PageHeader } from '@/components/layout/PageHeader'
-import { usePowerPlansStore } from '@/stores/power-plans-store'
 import type { PowerPlanInfo } from '@shared/types'
-import { CircleAlert, Check, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, CircleAlert, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { usePowerPlansStore } from '@/stores/power-plans-store'
 
 const PLAN_ICONS: Record<string, string> = {
   '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c': '⚡',

@@ -1,5 +1,4 @@
 import type {
-  ContextMenuAction,
   ContextMenuApplyProgress,
   ContextMenuApplyRequest,
   ContextMenuApplyResult,
@@ -7,12 +6,11 @@ import type {
 } from '@shared/types'
 import { getLogger } from '../../services/logger.service'
 import {
-  type DisabledStateFile,
+  applyOne,
+  backupShellExtensionHives,
+  labelForAction,
   readDisabledState,
   writeDisabledState,
-  backupShellExtensionHives,
-  applyOne,
-  labelForAction,
 } from './context-menu-constants'
 
 // ── Apply ────────────────────────────────────────────────────────────

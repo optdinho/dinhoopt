@@ -3,23 +3,21 @@ import { existsSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ClipInfo, ClipsEngineStatus } from '@shared/types'
-import { config as C, buildEngineConfig, getDefaultOutputDir } from '../services/clips-config-manager'
+import { buildEngineConfig, config as C, getDefaultOutputDir } from '../services/clips-config-manager'
 import { getLogger } from '../services/logger.service'
 import {
+  isEngineCapturing as _isEngineCapturing,
+  isEngineRunning as _isEngineRunning,
+  setEngineCapturing as _setEngineCapturing,
+  initEnginePipeIntegration,
   readEngineStatus,
   registerGetCurrentStatus,
-  isEngineRunning as _isEngineRunning,
-  isEngineCapturing as _isEngineCapturing,
-  setEngineCapturing as _setEngineCapturing,
-  startEngine as _startEngine,
-  stopEngineProcess as _stopEngineProcess,
-  initEnginePipeIntegration,
 } from './clips-engine'
 import {
-  connectPipe,
   isPipeConnected as _isPipeConnected,
   sendWithFallback as _sendWithFallback,
   waitForPipeConnection as _waitForPipeConnection,
+  connectPipe,
 } from './clips-pipe'
 
 // ─── Initialize pipe/engine integration (runs once) ───────────
@@ -31,17 +29,16 @@ registerGetCurrentStatus(getCurrentStatus)
 
 // ─── Re-exports ───────────────────────────────────────────────
 
-export { getEnginePath } from './clips-engine'
 export {
-  isEngineRunning,
-  isEngineCapturing,
+  getEnginePath,
   getEnginePid,
+  isEngineCapturing,
+  isEngineRunning,
   setEngineCapturing,
   startEngine,
   stopEngineProcess,
 } from './clips-engine'
-export { isPipeConnected } from './clips-pipe'
-export { sendPipeCommand, sendPipeCommandLongRunning, sendWithFallback } from './clips-pipe'
+export { isPipeConnected, sendPipeCommand, sendPipeCommandLongRunning, sendWithFallback } from './clips-pipe'
 
 // ─── Duration cache (LRU, 500 entries) ───────────────────────
 

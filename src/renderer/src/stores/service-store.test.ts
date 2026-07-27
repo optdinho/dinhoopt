@@ -9,10 +9,8 @@ function mockKudu() {
     onServiceProgress: vi.fn(() => vi.fn()),
   }
   if (typeof window === 'undefined') {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(globalThis as any).window = {}
   }
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   ;(window as any).dinho = mock
   return mock
 }
@@ -104,14 +102,12 @@ describe('service-store', () => {
     })
 
     it('setScanProgress stores progress', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const progress = { current: 5, total: 20, currentService: 'DiagTrack' } as any
       useServiceStore.getState().setScanProgress(progress)
       expect(useServiceStore.getState().scanProgress).toEqual(progress)
     })
 
     it('setApplyResult stores apply result', () => {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = { applied: 3, failed: 1, errors: [{ service: 'X', reason: 'access' }] } as any
       useServiceStore.getState().setApplyResult(result)
       expect(useServiceStore.getState().applyResult).toEqual(result)

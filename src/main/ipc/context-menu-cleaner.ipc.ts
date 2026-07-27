@@ -1,32 +1,27 @@
 import { IPC } from '@shared/channels'
-import type {
-  ContextMenuApplyResult,
-  ContextMenuScanResult,
-  ContextMenuApplyRequest,
-  ContextMenuApplyProgress,
-} from '@shared/types'
+import type { ContextMenuApplyRequest, ContextMenuApplyResult, ContextMenuScanResult } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getLogger } from '../services/logger.service'
-import type { WindowGetter } from './index'
-import { scanContextMenu, scanSession } from './context-menu-cleaner/context-menu-scan'
 import { applyContextMenu } from './context-menu-cleaner/context-menu-fix'
+import { scanContextMenu, scanSession } from './context-menu-cleaner/context-menu-scan'
+import type { WindowGetter } from './index'
 
 // ── Re-export for tests ─────────────────────────────────────────────
 
-export { scanContextMenu } from './context-menu-cleaner/context-menu-scan'
+export { CLSID_SAFELIST, SCAN_ROOTS, VERB_SAFELIST } from './context-menu-cleaner/context-menu-constants'
 export { applyContextMenu } from './context-menu-cleaner/context-menu-fix'
-export { SCAN_ROOTS, VERB_SAFELIST, CLSID_SAFELIST } from './context-menu-cleaner/context-menu-constants'
 export {
-  normalizeKeyPath,
-  parentKeyOf,
+  canonicalClsid,
   disabledNameFor,
-  isDisabledHandlerName,
-  isProtectedVerb,
-  isProtectedClsid,
   extractClsid,
   inferSource,
+  isDisabledHandlerName,
+  isProtectedClsid,
+  isProtectedVerb,
+  normalizeKeyPath,
+  parentKeyOf,
   parseRegQueryBlocks,
-  canonicalClsid,
+  scanContextMenu,
 } from './context-menu-cleaner/context-menu-scan'
 
 // ── Cancellable scan state ──────────────────────────────────────────

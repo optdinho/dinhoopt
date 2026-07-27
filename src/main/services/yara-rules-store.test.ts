@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -731,7 +731,7 @@ describe('yara-rules-store integration', () => {
       createExistingRules()
 
       const encoder = new TextEncoder()
-      const data = encoder.encode('small body')
+      const _data = encoder.encode('small body')
       const reader = {
         read: async () => ({ done: true as const, value: undefined as undefined }),
         cancel: vi.fn(),

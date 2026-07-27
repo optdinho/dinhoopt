@@ -37,7 +37,6 @@ import { registerLicenseIpc } from './license.ipc'
 function invoke(channel: string, ...args: unknown[]) {
   const handler = handleMap.get(channel)
   if (!handler) throw new Error(`No handler registered for ${channel}`)
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   return handler({} as any, ...args)
 }
 

@@ -65,8 +65,8 @@ function getHandler(channel: string): (...args: unknown[]) => unknown {
 
 function parseRecycleBinScanOutput(stdout: string): { count: number; size: number } {
   const [countStr, sizeStr] = stdout.trim().split('|')
-  const count = Number.parseInt(countStr!) || 0
-  const size = Number.parseInt(sizeStr!) || 0
+  const count = Number.parseInt(countStr!, 10) || 0
+  const size = Number.parseInt(sizeStr!, 10) || 0
   return { count, size }
 }
 
@@ -146,7 +146,7 @@ describe('recycle bin clean result structure', () => {
   it('reports success when remaining count is 0', () => {
     const sizeBeforeClean = 5000
     const remainingStdout = '0'
-    const remaining = Number.parseInt(remainingStdout.trim()) || 0
+    const remaining = Number.parseInt(remainingStdout.trim(), 10) || 0
 
     const result =
       remaining === 0
@@ -252,20 +252,20 @@ describe('recycle bin state tracking', () => {
 
 describe('remaining items count parsing', () => {
   it('parses valid integer', () => {
-    expect(Number.parseInt('0'.trim()) || 0).toBe(0)
-    expect(Number.parseInt('5'.trim()) || 0).toBe(5)
+    expect(Number.parseInt('0'.trim(), 10) || 0).toBe(0)
+    expect(Number.parseInt('5'.trim(), 10) || 0).toBe(5)
   })
 
   it('handles whitespace/newlines', () => {
-    expect(Number.parseInt('  3  \n'.trim()) || 0).toBe(3)
+    expect(Number.parseInt('  3  \n'.trim(), 10) || 0).toBe(3)
   })
 
   it('returns 0 for non-numeric output', () => {
-    expect(Number.parseInt('error'.trim()) || 0).toBe(0)
+    expect(Number.parseInt('error'.trim(), 10) || 0).toBe(0)
   })
 
   it('returns 0 for empty string', () => {
-    expect(Number.parseInt(''.trim()) || 0).toBe(0)
+    expect(Number.parseInt(''.trim(), 10) || 0).toBe(0)
   })
 })
 

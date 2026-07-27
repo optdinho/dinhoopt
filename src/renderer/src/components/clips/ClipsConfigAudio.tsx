@@ -1,6 +1,6 @@
-import type { ClipsState } from './useClipsState'
-import { CollapsibleMini, ToggleItem, TogglePill, VolumeSlider, VK_MAP } from './clips-utils'
 import { TipBadge } from './ClipsConfigQuality'
+import { CollapsibleMini, ToggleItem, TogglePill, VK_MAP, VolumeSlider } from './clips-utils'
+import type { ClipsState } from './useClipsState'
 
 export function AudioSection({
   config,
@@ -176,12 +176,8 @@ export function AudioSection({
               onClick={() => handleConfigUpdate({ audioSampleRate: rate })}
               className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
               style={{
-                background:
-                  (config.audioSampleRate ?? 48000) === rate
-                    ? 'var(--accent)'
-                    : 'rgba(113,113,122,0.08)',
-                color:
-                  (config.audioSampleRate ?? 48000) === rate ? '#fff' : 'var(--text-primary)',
+                background: (config.audioSampleRate ?? 48000) === rate ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
+                color: (config.audioSampleRate ?? 48000) === rate ? '#fff' : 'var(--text-primary)',
               }}
             >
               {rate / 1000}kHz
@@ -225,9 +221,7 @@ export function AudioSection({
           <TogglePill
             enabled={config.autoCleanupEnabled ?? true}
             accent="blue"
-            onToggle={() =>
-              handleConfigUpdate({ autoCleanupEnabled: !(config.autoCleanupEnabled ?? true) })
-            }
+            onToggle={() => handleConfigUpdate({ autoCleanupEnabled: !(config.autoCleanupEnabled ?? true) })}
           />
         </div>
         {(config.autoCleanupEnabled ?? true) && (
@@ -239,14 +233,8 @@ export function AudioSection({
                 onClick={() => handleConfigUpdate({ autoCleanupThresholdGB: gb })}
                 className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
                 style={{
-                  background:
-                    (config.autoCleanupThresholdGB ?? 20) === gb
-                      ? 'var(--accent)'
-                      : 'rgba(113,113,122,0.08)',
-                  color:
-                    (config.autoCleanupThresholdGB ?? 20) === gb
-                      ? '#fff'
-                      : 'var(--text-primary)',
+                  background: (config.autoCleanupThresholdGB ?? 20) === gb ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
+                  color: (config.autoCleanupThresholdGB ?? 20) === gb ? '#fff' : 'var(--text-primary)',
                 }}
               >
                 {gb} GB

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SERVICE_SAFETY_KB, isGameCompatible, lookupServiceSafety } from './service-safety-kb'
+import { isGameCompatible, lookupServiceSafety, SERVICE_SAFETY_KB } from './service-safety-kb'
 
 describe('lookupServiceSafety', () => {
   it('finds a known safe service', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { scanDriverStoreForUpdates } from './driverstore-fallback'
 
 vi.mock('../../services/exec-utf8', () => ({
@@ -26,7 +26,7 @@ vi.mock('node:fs', () => ({
   statSync: (...args: unknown[]) => mockStatSync(...args),
 }))
 
-function makeWmiDriver(hardwareId: string, version: string, infName: string): string {
+function makeWmiDriver(hardwareId: string, version: string, _infName: string): string {
   return `${hardwareId}|${version}`
 }
 
@@ -82,9 +82,7 @@ describe('scanDriverStoreForUpdates', () => {
 
   it('detects local update when FileRepository has newer version', async () => {
     // Folder listing
-    mockReaddirSync
-      .mockReturnValueOnce([makeDirEntry('nvidia_31.0.15.5135')])
-      .mockReturnValueOnce(['nvidia.inf'])
+    mockReaddirSync.mockReturnValueOnce([makeDirEntry('nvidia_31.0.15.5135')]).mockReturnValueOnce(['nvidia.inf'])
 
     // INF file content — must include a HardwareID pattern (PCI\, USB\, or %string%)
     mockReadFileSync.mockReturnValue(
@@ -108,9 +106,7 @@ describe('scanDriverStoreForUpdates', () => {
   })
 
   it('ignores when active driver is already latest', async () => {
-    mockReaddirSync
-      .mockReturnValueOnce([makeDirEntry('nvidia_31.0.15.5135')])
-      .mockReturnValueOnce(['nvidia.inf'])
+    mockReaddirSync.mockReturnValueOnce([makeDirEntry('nvidia_31.0.15.5135')]).mockReturnValueOnce(['nvidia.inf'])
 
     mockReadFileSync.mockReturnValue(
       '[Version]\nDriverVer=10/25/2024,31.0.15.5135\nProvider=NVIDIA\nClass=DISPLAY\n[Manufacturer]\n%NVIDIA% = NVIDIA, PCI\\VEN_10DE&DEV_2484\n',
@@ -128,9 +124,7 @@ describe('scanDriverStoreForUpdates', () => {
   })
 
   it('skips folders without INF files', async () => {
-    mockReaddirSync
-      .mockReturnValueOnce([makeDirEntry('driver_no_inf')])
-      .mockReturnValueOnce([]) // no .inf files
+    mockReaddirSync.mockReturnValueOnce([makeDirEntry('driver_no_inf')]).mockReturnValueOnce([]) // no .inf files
 
     const { execFileAsync } = await import('../../services/exec-utf8')
     vi.mocked(execFileAsync).mockResolvedValueOnce({
@@ -144,9 +138,7 @@ describe('scanDriverStoreForUpdates', () => {
   })
 
   it('skips folders where statSync fails (broken symlink)', async () => {
-    mockReaddirSync
-      .mockReturnValueOnce([makeDirEntry('broken_link')])
-      .mockReturnValueOnce([])
+    mockReaddirSync.mockReturnValueOnce([makeDirEntry('broken_link')]).mockReturnValueOnce([])
 
     mockStatSync.mockImplementation(() => {
       throw new Error('ENOENT')

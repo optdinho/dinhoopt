@@ -1,13 +1,9 @@
-import { useGameModeStore } from '@/stores/game-mode-store'
 import { Gamepad2, Loader2, Play, Square } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useGameModeStore } from '@/stores/game-mode-store'
 
-export function GameModeCard({
-  gameModeActive,
-}: {
-  gameModeActive: boolean
-}) {
+export function GameModeCard({ gameModeActive }: { gameModeActive: boolean }) {
   const { t } = useTranslation('dashboard')
   const storeConfig = useGameModeStore((s) => s.config)
   const [toggling, setToggling] = useState(false)

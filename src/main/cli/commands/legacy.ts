@@ -1,2 +1,2 @@
-export { scanSystem, scanBrowserCli, scanApp, scanGaming, scanRecycleBin, scanDatabaseCli } from './legacy/scans'
-export { getChromiumProfiles, cleanRecycleBin, cleanDatabasesCli, runLegacyScanClean } from './legacy/cleanup'
+export { cleanDatabasesCli, cleanRecycleBin, getChromiumProfiles, runLegacyScanClean } from './legacy/cleanup'
+export { scanApp, scanBrowserCli, scanDatabaseCli, scanGaming, scanRecycleBin, scanSystem } from './legacy/scans'

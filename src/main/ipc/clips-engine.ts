@@ -1,8 +1,8 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { BrowserWindow, app } from 'electron'
-import { config as C, buildEngineConfig } from '../services/clips-config-manager'
+import { app, BrowserWindow } from 'electron'
+import { buildEngineConfig, config as C } from '../services/clips-config-manager'
 import { getLogger } from '../services/logger.service'
 import {
   connectPipe,
@@ -10,9 +10,9 @@ import {
   isPipeConnected,
   sendPipeCommand,
   sendWithFallback,
-  setStatusCallbacks,
-  setOnReconnect,
   setOnEngineRunning,
+  setOnReconnect,
+  setStatusCallbacks,
   waitForPipeConnection,
 } from './clips-pipe'
 

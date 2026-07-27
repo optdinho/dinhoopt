@@ -65,7 +65,6 @@ describe('network-store', () => {
   })
 
   it('setCleanResult stores result', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = { cleaned: 3, failed: 0, details: [] } as any
     useNetworkStore.getState().setCleanResult(result)
     expect(useNetworkStore.getState().cleanResult).toEqual(result)

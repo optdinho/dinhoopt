@@ -1,4 +1,5 @@
 import type { PrivacySetting } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
 import {
   BrainCircuit,
   CalendarClock,
@@ -12,7 +13,6 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 export interface CategoryDef {

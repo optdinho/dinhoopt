@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, readdir, unlink } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { LogConfig, LogEntry, LogFilter, LogLevel, LogsListResult } from '@shared/types'
 import { app } from 'electron'

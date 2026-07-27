@@ -31,7 +31,7 @@ export async function handlePerf(args: string[], ctx: CliContext): Promise<numbe
       }
     }
   } else if (sub === 'kill') {
-    const pid = Number.parseInt(args[1]!)
+    const pid = Number.parseInt(args[1]!, 10)
     if (Number.isNaN(pid)) {
       cliUsage(ctx, 'dinho --cli perf kill <pid>')
       return ExitCode.INVALID_ARGS

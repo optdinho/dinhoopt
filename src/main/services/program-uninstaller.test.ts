@@ -12,16 +12,13 @@ vi.mock('child_process', () => {
     // biome-ignore lint/suspicious/noAssignInExpressions: test mock
     (mockExecFile(...args)(
       // Add custom promisify so that promisify(execFile) returns {stdout, stderr}
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       execFileFn as any,
     )[promisify.custom] = (...args: unknown[]) => {
       return new Promise((resolve, reject) => {
         mockExecFile(...args, (err: Error | null, stdout: string, stderr: string) => {
           if (err) {
             // Match Node's behavior: error object gets stdout/stderr properties
-            // biome-ignore lint/suspicious/noExplicitAny: test mock
             ;(err as any).stdout = stdout
-            // biome-ignore lint/suspicious/noExplicitAny: test mock
             ;(err as any).stderr = stderr
             reject(err)
           } else {
@@ -37,14 +34,11 @@ vi.mock('child_process', () => {
 })
 
 vi.mock('./exec-utf8', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execNativeUtf8: (tool: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(tool, args, opts, (err: Error | null, stdout: string, stderr: string) => {
         if (err) {
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
           ;(err as any).stdout = stdout
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
           ;(err as any).stderr = stderr
           reject(err)
         } else {
@@ -53,14 +47,11 @@ vi.mock('./exec-utf8', () => ({
       })
     })
   },
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   execFileAsync: (cmd: string, args: string[], opts?: any) => {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       mockExecFile(cmd, args, opts, (err: Error | null, stdout: string, stderr: string) => {
         if (err) {
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
           ;(err as any).stdout = stdout
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
           ;(err as any).stderr = stderr
           reject(err)
         } else {
@@ -545,7 +536,6 @@ describe('runUninstaller', () => {
 
   it('resolves with null on timeout (10 minutes)', async () => {
     const child = new EventEmitter()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(child as any).kill = vi.fn()
     mockSpawn.mockReturnValue(child)
 
@@ -560,13 +550,11 @@ describe('runUninstaller', () => {
 
     const result = await promise
     expect(result).toBeNull()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     expect((child as any).kill).toHaveBeenCalled()
   })
 
   it('clears timeout when process closes before timeout', async () => {
     const child = new EventEmitter()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(child as any).kill = vi.fn()
     mockSpawn.mockReturnValue(child)
 
@@ -582,7 +570,6 @@ describe('runUninstaller', () => {
 
     const result = await promise
     expect(result).toBe(0)
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     expect((child as any).kill).not.toHaveBeenCalled()
   })
 
@@ -631,7 +618,6 @@ describe('runUninstaller', () => {
 
   it('handles kill failure gracefully on timeout', async () => {
     const child = new EventEmitter()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     ;(child as any).kill = vi.fn(() => {
       throw new Error('already dead')
     })
@@ -826,9 +812,9 @@ describe('scanLeftoversForProgram', () => {
     mockReaddir.mockResolvedValue(['TestApp', 'OtherFolder'])
 
     // stat calls: first for the install location check, then for each candidate
-    let statCallCount = 0
+    let _statCallCount = 0
     mockStat.mockImplementation(() => {
-      statCallCount++
+      _statCallCount++
       return Promise.resolve({ isDirectory: () => true, mtimeMs: 2000 })
     })
 

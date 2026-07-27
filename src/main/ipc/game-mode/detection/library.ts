@@ -1,6 +1,5 @@
 import type { GameModeSnapshot } from '@shared/types'
 import { getDetectedGame } from '../../../services/game-detector'
-import { getLogger } from '../../../services/logger.service'
 import { ps } from '../utils'
 
 export async function captureAndSetGamePriority(snapshot: GameModeSnapshot): Promise<void> {

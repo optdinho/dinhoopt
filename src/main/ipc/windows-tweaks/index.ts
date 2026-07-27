@@ -1,7 +1,7 @@
-export { DNS_PRESETS } from './tweaks/network'
 export {
-  REG_TYPE_RE,
   getCatalog,
   getCatalogByCategory,
+  REG_TYPE_RE,
   registerWindowsTweaksIpc,
 } from './handlers'
+export { DNS_PRESETS } from './tweaks/network'

@@ -1,7 +1,7 @@
-import { TriangleAlert, RefreshCw } from 'lucide-react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { withTranslation } from 'react-i18next'
 import type { WithTranslation } from 'react-i18next'
+import { withTranslation } from 'react-i18next'
 import logger from '../../lib/renderer-logger'
 
 interface ErrorBoundaryProps extends WithTranslation {

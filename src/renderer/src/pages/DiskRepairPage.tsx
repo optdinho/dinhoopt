@@ -1,21 +1,21 @@
+import {
+  CircleCheckBig,
+  CircleX,
+  HardDrive,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  TriangleAlert,
+  Wrench,
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { usePlatform } from '@/hooks/usePlatform'
 import logger from '@/lib/renderer-logger'
 import { useDiskStore } from '@/stores/disk-store'
-import {
-  TriangleAlert,
-  CircleCheckBig,
-  HardDrive,
-  RefreshCw,
-  ShieldAlert,
-  ShieldCheck,
-  Wrench,
-  CircleX,
-} from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 export function DiskRepairPage() {
   const { t } = useTranslation('disk')

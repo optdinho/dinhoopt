@@ -53,11 +53,11 @@ let mockBetterSqlite3Error: Error | null = null
 vi.mock('better-sqlite3', () => {
   if (mockBetterSqlite3Error) {
     const err = mockBetterSqlite3Error
-    err.message = 'factory-throw:' + err.message
+    err.message = `factory-throw:${err.message}`
     throw err
   }
   return {
-    default: vi.fn(function() {
+    default: vi.fn(function () {
       return {
         pragma: vi.fn().mockReturnValue('wal'),
         exec: vi.fn(),
@@ -85,7 +85,7 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('./services/perf-monitor', () => ({
-  PerfMonitorService: vi.fn(function() {
+  PerfMonitorService: vi.fn(function () {
     return {
       getSystemInfo: vi.fn().mockResolvedValue({
         cpuModel: 'Test CPU',
@@ -3675,7 +3675,7 @@ describe('legacy scan functions', () => {
       const origDb = betterSqlite3.default
       const err = new Error('db locked') as Error & { code: string }
       err.code = 'SQLITE_BUSY'
-      betterSqlite3.default = vi.fn(function() {
+      betterSqlite3.default = vi.fn(function () {
         throw err
       })
 

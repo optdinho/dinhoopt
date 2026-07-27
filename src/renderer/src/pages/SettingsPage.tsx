@@ -1,14 +1,14 @@
+import i18next from 'i18next'
+import { FolderOpen, Monitor, Moon, Plus, RotateCcw, Sun, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { LogViewer } from '@/components/shared/LogViewer'
 import { usePlatform } from '@/hooks/usePlatform'
 import { LANGUAGES } from '@/lib/languages'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
-import i18next from 'i18next'
-import { FolderOpen, Monitor, Moon, Plus, RotateCcw, Sun, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 export function SettingsPage() {
   const { t } = useTranslation('settings')
@@ -295,7 +295,12 @@ function Row({
   desc,
   children,
   last,
-}: { label: string; desc?: string; children: React.ReactNode; last?: boolean }) {
+}: {
+  label: string
+  desc?: string
+  children: React.ReactNode
+  last?: boolean
+}) {
   return (
     <div
       className={cn('flex items-center justify-between py-3.5', !last && 'border-b')}
@@ -403,7 +408,10 @@ function BackupFolderRow({
 function ThemeSelector({
   value,
   onChange,
-}: { value: 'dark' | 'light' | 'system'; onChange: (v: 'dark' | 'light' | 'system') => void }) {
+}: {
+  value: 'dark' | 'light' | 'system'
+  onChange: (v: 'dark' | 'light' | 'system') => void
+}) {
   const { t } = useTranslation('settings')
   const options: { id: 'dark' | 'light' | 'system'; icon: typeof Sun; label: string }[] = [
     { id: 'dark', icon: Moon, label: t('themeDark') },

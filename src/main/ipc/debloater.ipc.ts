@@ -1,7 +1,7 @@
 export {
-  registerDebloaterIpc,
-  scanBloatware,
-  removeBloatware,
   clearWin32Cache,
   KNOWN_BLOATWARE,
+  registerDebloaterIpc,
+  removeBloatware,
+  scanBloatware,
 } from './debloater/index'

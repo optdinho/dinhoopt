@@ -36,4 +36,4 @@ function withDisabledFileLock<T>(fn: () => T): Promise<T> {
   return prev.then(fn).finally(() => resolve!())
 }
 
-export { getDisabledFilePath, readDisabledEntries, writeDisabledEntries, withDisabledFileLock }
+export { getDisabledFilePath, readDisabledEntries, withDisabledFileLock, writeDisabledEntries }

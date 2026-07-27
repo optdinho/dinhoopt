@@ -5,6 +5,8 @@
   "gaugeRam": "Memória",
   "gaugeDisk": "Disco",
   "gaugeDiskUsed": "usado",
+  "gaugeGpu": "GPU",
+  "gaugeNetwork": "Rede",
   "gaugeScans": "Verificações",
   "gaugeScansRun": "executadas",
   "gameModeActive": "ATIVO",

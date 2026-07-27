@@ -13,7 +13,7 @@ export function registerDriverAgentIpc(_getWindow: WindowGetter): void {
     try {
       const scanResult = await scanDriverUpdates()
 
-      if (!scanResult || !scanResult.updates || scanResult.updates.length === 0) {
+      if (!scanResult?.updates || scanResult.updates.length === 0) {
         getLogger().info('driver-agent', 'No driver updates found to evaluate')
         return {
           candidates: [],

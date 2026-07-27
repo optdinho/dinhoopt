@@ -1,7 +1,7 @@
-import { type SortField, useUninstallerStore } from '@/stores/uninstaller-store'
-import { TriangleAlert, ArrowUpDown, ChevronDown, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { ArrowUpDown, ChevronDown, Loader2, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { type SortField, useUninstallerStore } from '@/stores/uninstaller-store'
 import { SORT_LABEL_KEYS } from './constants'
 
 interface UninstallerToolbarProps {

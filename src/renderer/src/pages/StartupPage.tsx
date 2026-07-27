@@ -1,3 +1,8 @@
+import type { StartupItem } from '@shared/types'
+import { RefreshCw, Shield, Trash2, Zap } from 'lucide-react'
+import { Fragment, useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -6,12 +11,14 @@ import logger from '@/lib/renderer-logger'
 import { cn } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStartupStore } from '@/stores/startup-store'
-import type { StartupItem } from '@shared/types'
-import { RefreshCw, Shield, Trash2, Zap } from 'lucide-react'
-import { Fragment, useCallback, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import { BootTracePanel, impactStyles, safetyScoreColor, safetyIcon, SafetyTooltip, sourceKeys } from './startup/StartupComponents'
+import {
+  BootTracePanel,
+  impactStyles,
+  SafetyTooltip,
+  safetyIcon,
+  safetyScoreColor,
+  sourceKeys,
+} from './startup/StartupComponents'
 
 export function StartupPage() {
   const { t } = useTranslation('startup')
@@ -42,7 +49,7 @@ export function StartupPage() {
       store.getState().setError(t('errorFailedToLoad'))
     }
     store.getState().setLoading(false)
-  }, [store, t])
+  }, [t])
 
   const loadBootTrace = useCallback(async () => {
     store.getState().setTraceLoading(true)
@@ -53,7 +60,7 @@ export function StartupPage() {
       logger.error('StartupPage', 'Failed to load boot trace', err)
     }
     store.getState().setTraceLoading(false)
-  }, [store])
+  }, [])
 
   useEffect(() => {
     const tasks: Promise<void>[] = []
@@ -70,7 +77,7 @@ export function StartupPage() {
     if (Object.keys(safetyRatings).length === 0) {
       store.getState().fetchSafetyRatings()
     }
-  }, [store, safetyRatings])
+  }, [safetyRatings])
 
   const handleToggle = async (item: StartupItem, enabled: boolean) => {
     const startTime = Date.now()

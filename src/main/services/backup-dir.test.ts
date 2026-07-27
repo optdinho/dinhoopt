@@ -36,37 +36,31 @@ describe('getBackupDir', () => {
   it('returns configured backupPath when valid and absolute', () => {
     mockedGetSettings.mockReturnValue({
       backupPath: 'D:\\MyBackups',
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
     expect(getBackupDir()).toBe('D:\\MyBackups')
   })
 
   it('returns default when backupPath is empty string', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: '' } as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('returns default when backupPath is not a string', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: null } as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('returns default when backupPath is not absolute', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: 'relative\\path' } as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('returns default when backupPath is undefined', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({} as any)
     expect(getBackupDir()).toBe('C:\\Users\\testuser\\Documents\\DiNho Optimizer Backups')
   })
 
   it('calls getSettings once', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     mockedGetSettings.mockReturnValue({ backupPath: 'C:\\custom' } as any)
     getBackupDir()
     expect(getSettings).toHaveBeenCalledTimes(1)
@@ -75,7 +69,6 @@ describe('getBackupDir', () => {
   it('resolves relative segments in configured backupPath', () => {
     mockedGetSettings.mockReturnValue({
       backupPath: 'C:\\Users\\testuser\\Documents\\..\\..\\Windows\\System32',
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
     const result = getBackupDir()
     expect(result).toBe(path.resolve('C:\\Users\\testuser\\Documents\\..\\..\\Windows\\System32'))
@@ -85,7 +78,6 @@ describe('getBackupDir', () => {
   it('resolves dotted relative segments in configured backupPath', () => {
     mockedGetSettings.mockReturnValue({
       backupPath: 'C:\\Users\\.\\testuser\\.\\.\\Documents',
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
     const result = getBackupDir()
     expect(result).toBe(path.resolve('C:\\Users\\.\\testuser\\.\\.\\Documents'))
@@ -97,7 +89,6 @@ describe('resolveBackupPath', () => {
   beforeEach(() => {
     mockedGetSettings.mockReturnValue({
       backupPath: 'C:\\BackupDir',
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
   })
 
@@ -124,7 +115,6 @@ describe('resolveBackupPath', () => {
   it('uses current getBackupDir value on each call', () => {
     mockedGetSettings.mockReturnValue({
       backupPath: 'E:\\CustomBackup',
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
     expect(resolveBackupPath('safe.txt')).toBe('E:\\CustomBackup\\safe.txt')
   })

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { type Dirent, createReadStream } from 'node:fs'
+import { createReadStream, type Dirent } from 'node:fs'
 import { readdir, rm, stat } from 'node:fs/promises'
 import { extname, isAbsolute, join } from 'node:path'
 import { IPC } from '@shared/channels'

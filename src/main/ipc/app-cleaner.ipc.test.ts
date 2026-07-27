@@ -73,7 +73,6 @@ describe('APP_SCAN handler', () => {
 
   it('returns empty results when no apps are defined', async () => {
     mockAppPaths.mockReturnValue([])
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = await handler()
@@ -95,8 +94,6 @@ describe('APP_SCAN handler', () => {
         itemCount: 1,
       })
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = await handler()
@@ -116,8 +113,6 @@ describe('APP_SCAN handler', () => {
       totalSize: 0,
       itemCount: 0,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = await handler()
@@ -142,8 +137,6 @@ describe('APP_SCAN handler', () => {
       totalSize: 100,
       itemCount: 1,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:app:scan')
     const results = (await handler()) as Array<{ subcategory: string }>
@@ -156,7 +149,6 @@ describe('APP_SCAN handler', () => {
   it('sends scan progress to the window', async () => {
     mockAppPaths.mockReturnValue([])
     const win = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:app:scan')
     await handler()
@@ -183,7 +175,6 @@ describe('APP_SCAN handler', () => {
   it('does not send progress when window is destroyed', async () => {
     mockAppPaths.mockReturnValue([])
     const win = { isDestroyed: () => true, webContents: { send: mockSend } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:app:scan')
     await handler()
@@ -275,7 +266,6 @@ describe('APP_CLEAN handler', () => {
     )
 
     const win = { isDestroyed: () => false, webContents: { send: mockSend } }
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerAppCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:app:clean')
     await handler({}, ['uuid-1'])

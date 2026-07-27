@@ -1,10 +1,10 @@
-import { formatBytes } from '@/lib/utils'
-import { useUninstallerStore } from '@/stores/uninstaller-store'
 import type { InstalledProgram, StartupSafetyRating } from '@shared/types'
 import type { TFunction } from 'i18next'
-import { TriangleAlert, CheckSquare, Clock, Loader2, Package, Square, Trash2 } from 'lucide-react'
+import { CheckSquare, Clock, Loader2, Package, Square, Trash2, TriangleAlert } from 'lucide-react'
 import { Fragment, memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatBytes } from '@/lib/utils'
+import { useUninstallerStore } from '@/stores/uninstaller-store'
 import { formatDate, formatLastUsed, isUnused, safetyIcon, safetyScoreColor } from './constants'
 
 interface UninstallerProgramCardProps {
@@ -182,13 +182,7 @@ function SafetyBadgePending({ safetyLoading, t }: { safetyLoading: boolean; t: T
   )
 }
 
-function SafetyDetailPanel({
-  rating,
-  t,
-}: {
-  rating: StartupSafetyRating
-  t: TFunction<'uninstaller'>
-}) {
+function SafetyDetailPanel({ rating, t }: { rating: StartupSafetyRating; t: TFunction<'uninstaller'> }) {
   const colors = safetyScoreColor(rating.safetyScore)
   const DetailIcon = safetyIcon(rating.safetyScore)
 

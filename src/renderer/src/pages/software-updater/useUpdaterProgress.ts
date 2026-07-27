@@ -1,6 +1,6 @@
-import { useUpdaterStore } from '@/stores/updater-store'
 import type { UpdateProgress } from '@shared/types'
 import { useEffect } from 'react'
+import { useUpdaterStore } from '@/stores/updater-store'
 
 export function useUpdaterProgress() {
   useEffect(() => {

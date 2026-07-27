@@ -131,7 +131,6 @@ describe('activatePowerPlan', () => {
   })
 
   it('returns error for non-string input', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const result = await activatePowerPlan(123 as any)
     expect(result.success).toBe(false)
     expect(result.error).toMatch('Invalid GUID')

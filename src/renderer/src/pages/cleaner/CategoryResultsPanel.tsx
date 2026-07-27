@@ -1,10 +1,10 @@
-import { Checkbox } from '@/components/shared/Checkbox'
-import { cn, formatBytes, formatNumber } from '@/lib/utils'
-import { useScanStore } from '@/stores/scan-store'
-import { CleanerType } from '@shared/enums'
+import type { CleanerType } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Checkbox } from '@/components/shared/Checkbox'
+import { cn, formatBytes, formatNumber } from '@/lib/utils'
+import { useScanStore } from '@/stores/scan-store'
 import { categories, isAbsolutePath } from './CleanerPageConstants'
 
 export function CategoryResultsPanel({
@@ -39,10 +39,7 @@ export function CategoryResultsPanel({
   return (
     <div key={activeCategory} className="space-y-2">
       <div className="mb-3 flex items-center justify-between px-1">
-        <span
-          className="text-[11px] font-medium uppercase tracking-wider"
-          style={{ color: 'var(--text-muted)' }}
-        >
+        <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           {t('categoryItemsHeading', {
             category: t(categories.find((c) => c.type === activeCategory)?.labelKey ?? ''),
           })}
@@ -141,10 +138,7 @@ export function CategoryResultsPanel({
                           </svg>
                         )}
                         {someSelected && (
-                          <div
-                            className="h-[2px] w-2 rounded-full"
-                            style={{ background: 'var(--text-on-accent)' }}
-                          />
+                          <div className="h-[2px] w-2 rounded-full" style={{ background: 'var(--text-on-accent)' }} />
                         )}
                       </div>
                     </span>
@@ -177,10 +171,7 @@ export function CategoryResultsPanel({
                         count: formatNumber(result.itemCount),
                       })}
                     </span>
-                    <span
-                      className="font-mono text-[12px] font-medium shrink-0"
-                      style={{ color: 'var(--text-muted)' }}
-                    >
+                    <span className="font-mono text-[12px] font-medium shrink-0" style={{ color: 'var(--text-muted)' }}>
                       {formatBytes(result.totalSize)}
                     </span>
 
@@ -212,31 +203,20 @@ export function CategoryResultsPanel({
                             className="flex items-center gap-3 px-4 py-2 pl-14 cursor-pointer transition-colors"
                             style={{ background: checked ? 'rgba(245,158,11,0.03)' : 'transparent' }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = checked
-                                ? 'rgba(245,158,11,0.05)'
-                                : 'var(--bg-subtle)'
+                              e.currentTarget.style.background = checked ? 'rgba(245,158,11,0.05)' : 'var(--bg-subtle)'
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = checked
-                                ? 'rgba(245,158,11,0.03)'
-                                : 'transparent'
+                              e.currentTarget.style.background = checked ? 'rgba(245,158,11,0.03)' : 'transparent'
                             }}
                           >
-                            <Checkbox
-                              checked={checked}
-                              onChange={() => store.toggleItem(item.id)}
-                              size="sm"
-                            />
+                            <Checkbox checked={checked} onChange={() => store.toggleItem(item.id)} size="sm" />
                             <span
                               className="flex-1 min-w-0 truncate text-[12px] font-mono"
                               style={{ color: 'var(--text-secondary)' }}
                             >
                               {pathLabel}
                             </span>
-                            <span
-                              className="font-mono text-[11px] shrink-0"
-                              style={{ color: 'var(--text-muted)' }}
-                            >
+                            <span className="font-mono text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>
                               {formatBytes(item.size)}
                             </span>
                             {isAbsolutePath(item.path) && (

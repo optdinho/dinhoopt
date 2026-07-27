@@ -1,21 +1,22 @@
+import { CleanerType, ScanStatus } from '@shared/enums'
+import type { ScanResult } from '@shared/types'
+import { FileText, Loader2, Search, ShieldAlert, Sparkles, TriangleAlert } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CleanSummary } from '@/components/cleaner/CleanSummary'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { type ReportData, ReportCard, loadReport, saveReport } from '@/components/shared/ReportCard'
 import { ScanProgress } from '@/components/shared/ScanProgress'
+import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { usePlatform } from '@/hooks/usePlatform'
 import logger from '@/lib/renderer-logger'
-import { cn, formatBytes, formatNumber } from '@/lib/utils'
+import { formatBytes, formatNumber } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useStatsStore } from '@/stores/stats-store'
-import { CleanerType, ScanStatus } from '@shared/enums'
-import type { ScanResult } from '@shared/types'
-import { TriangleAlert, Loader2, Search, ShieldAlert, Sparkles } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { CategoryResultsPanel } from './cleaner/CategoryResultsPanel'
 import { categories } from './cleaner/CleanerPageConstants'
 
@@ -33,6 +34,7 @@ export function CleanerPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const cleanStartRef = useRef<number>(0)
   const [scanningCategory, setScanningCategory] = useState<CleanerType | null>(null)
+  const [report, setReport] = useState<ReportData | null>(() => loadReport())
 
   const scanIndexRef = useRef(0)
   const cleanIndexRef = useRef(0)
@@ -208,6 +210,7 @@ export function CleanerPage() {
       })
       recomputeStats()
 
+      const totalSizeBefore = store.getTotalSize()
       store.setCleanSummary({
         totalCleaned,
         filesDeleted: totalFiles,
@@ -216,8 +219,19 @@ export function CleanerPage() {
         needsElevation: anyNeedsElevation,
         categories: categoryBreakdown,
         duration,
-        totalSizeBefore: store.getTotalSize(),
+        totalSizeBefore,
       })
+      const reportData: ReportData = {
+        timestamp: new Date().toISOString(),
+        spaceBefore: totalSizeBefore,
+        spaceAfter: totalSizeBefore - totalCleaned,
+        spaceFreed: totalCleaned,
+        filesDeleted: totalFiles,
+        duration,
+        categories: categoryBreakdown,
+      }
+      saveReport(reportData)
+      setReport(reportData)
       store.setStatus(ScanStatus.Complete)
     } catch {
       store.setStatus(ScanStatus.Error)
@@ -237,6 +251,8 @@ export function CleanerPage() {
   const toggleSubcategorySelection = (result: ScanResult) => {
     store.toggleSubcategory(result)
   }
+
+  const selectedCount = useMemo(() => store.getSelectedIds().length, [store])
 
   const isScanning = store.status === ScanStatus.Scanning
   const isCleaning = store.status === ScanStatus.Cleaning
@@ -405,26 +421,24 @@ export function CleanerPage() {
             <CleanSummary summary={store.cleanSummary} onRelaunchAsAdmin={handleRelaunch} platform={platform} />
           )}
 
+          {report && !hasResults && !isScanning && (
+            <ReportCard report={report} icon={FileText} />
+          )}
+
           {!hasResults && !isScanning && (
             <EmptyState
               icon={Search}
               title={t('noScanResultsTitle')}
               description={t('noScanResultsDescription')}
-              action={
-                <button
-                  type="button"
-                  onClick={handleScan}
-                  disabled={isCleaning}
-                  className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
-                  style={{
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    color: 'var(--text-on-accent)',
-                  }}
-                >
-                  <Search className="h-4 w-4" strokeWidth={1.8} />
-                  {t('startScan')}
-                </button>
-              }
+              showLastScan
+              lastScanType="cleaner"
+              actions={[
+                {
+                  label: t('startScan'),
+                  onClick: handleScan,
+                  icon: Search,
+                },
+              ]}
             />
           )}
 
@@ -439,13 +453,21 @@ export function CleanerPage() {
         </div>
       </div>
 
+      <StickyActionBar
+        selectedCount={selectedCount}
+        totalLabel={t('itemsSelected')}
+        onAction={() => setShowConfirm(true)}
+        actionLabel={t('cleanButton')}
+        actionIcon={Sparkles}
+      />
+
       <ConfirmDialog
         open={showConfirm}
         onConfirm={handleClean}
         onCancel={() => setShowConfirm(false)}
         title={t('confirmCleanTitle')}
         description={t('confirmCleanDescription', {
-          count: formatNumber(store.getSelectedIds().length),
+          count: formatNumber(selectedCount),
           size: formatBytes(store.getSelectedSize()),
         })}
         confirmLabel={t('confirmCleanLabel')}

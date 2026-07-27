@@ -1,10 +1,10 @@
-import type { ClipsState } from './useClipsState'
 import { AnimatePresence, motion } from 'framer-motion'
 import { FolderOpen, Gamepad2, HardDrive, Mic, Video } from 'lucide-react'
-import { ConfigSection } from './clips-utils'
-import { TipBadge, QualitySection } from './ClipsConfigQuality'
 import { AudioSection } from './ClipsConfigAudio'
 import { GameSection, ProcessPicker } from './ClipsConfigGame'
+import { QualitySection, TipBadge } from './ClipsConfigQuality'
+import { ConfigSection } from './clips-utils'
+import type { ClipsState } from './useClipsState'
 
 export function ClipsConfigPanel({
   showConfig,

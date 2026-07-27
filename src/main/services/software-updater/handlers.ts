@@ -122,5 +122,5 @@ export async function runUpdates(
 }
 
 export function isValidAppId(id: string): boolean {
-  return /^[\w][\w.\-]{0,200}$/.test(id)
+  return /^[\w][\w.-]{0,200}$/.test(id)
 }

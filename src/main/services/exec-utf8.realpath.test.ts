@@ -13,10 +13,7 @@ const childMock = {
   stdio: [],
   killed: false,
 }
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 const execFileAsyncMock = vi.fn<any>()
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 const execFileMockFn: any = vi.fn()
 execFileMockFn[Symbol.for('nodejs.util.promisify.custom')] = execFileAsyncMock
 
@@ -33,7 +30,6 @@ describe('exec-utf8 real paths', () => {
     execFileAsyncMock.mockReset()
     execFileAsyncMock.mockImplementation(() => {
       const p = Promise.resolve({ stdout: '', stderr: '' })
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(p as any).child = childMock
       return p
     })
@@ -55,7 +51,6 @@ describe('exec-utf8 real paths', () => {
         setTimeout(() => reject(new Error('process timed out')), 10)
       })
       const mc = { pid: 8888, on: vi.fn(), kill: vi.fn() }
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(p as any).child = mc
       return p
     })
@@ -106,7 +101,6 @@ describe('exec-utf8 real paths', () => {
     execFileAsyncMock.mockImplementation(() => {
       const p = Promise.reject(new Error('direct exec error'))
       const mc = { pid: 7777, on: vi.fn(), kill: vi.fn() }
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       ;(p as any).child = mc
       return p
     })

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockExistsSync = vi.fn()
 const mockReadFileSync = vi.fn()
@@ -24,16 +24,7 @@ vi.mock('electron', () => ({
 }))
 
 import type { GameModeSnapshot } from '@shared/types'
-import {
-  ALLOWED_REGISTRY_TWEAK_NAMES,
-  ALLOWED_REGISTRY_TWEAK_PATHS,
-  SERVICE_MAP,
-  VALID_SERVICE_NAMES,
-  deleteSnapshot,
-  readSnapshot,
-  validateSnapshot,
-  writeSnapshot,
-} from './snapshot'
+import { deleteSnapshot, readSnapshot, validateSnapshot, writeSnapshot } from './snapshot'
 
 function validSnapshot(): GameModeSnapshot {
   return {

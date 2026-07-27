@@ -1,12 +1,12 @@
+import { CircleCheckBig, CircleX, Cpu, Gauge, Loader2, MemoryStick, RefreshCw, Trash2 } from 'lucide-react'
+import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { HealthScore } from '@/components/shared/HealthScore'
 import { formatBytes } from '@/lib/utils'
 import { useMemoryStore } from '@/stores/memory-store'
-import { CircleCheckBig, Cpu, Gauge, Loader2, MemoryStick, RefreshCw, Trash2, CircleX } from 'lucide-react'
-import { useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 
 export function MemoryOptimizerPage() {
   const { t } = useTranslation('memory')

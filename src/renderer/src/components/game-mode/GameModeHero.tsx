@@ -11,7 +11,12 @@ function OrbitRing({
   duration,
   delay,
   active,
-}: { radius: number; duration: number; delay: number; active: boolean }) {
+}: {
+  radius: number
+  duration: number
+  delay: number
+  active: boolean
+}) {
   return (
     <motion.div
       className="pointer-events-none absolute rounded-full"

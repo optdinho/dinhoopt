@@ -12,7 +12,6 @@ const MOCK_KEY = '/mock/startup-manager.ipc'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const NativeModule = require('node:module')
 const origResolve = NativeModule._resolveFilename
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 NativeModule._resolveFilename = function (request: string, parent: any, ...args: any[]) {
   if (request === '../../ipc/startup-manager.ipc') {
     return MOCK_KEY
@@ -32,7 +31,6 @@ require.cache[MOCK_KEY] = {
     getBootTrace: mockGetBootTrace,
   },
   path: '/mock',
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
 } as any
 
 const { createWin32Startup } = await import('./startup')
@@ -67,8 +65,6 @@ describe('win32 startup', () => {
   describe('toggleItem', () => {
     it('delegates to toggleStartupItem with all parameters', async () => {
       mockToggleStartupItem.mockResolvedValue(true)
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = await startup.toggleItem('Discord', 'HKCU\\...\\Run', 'discord.exe', 'registry' as any, false)
 
       expect(mockToggleStartupItem).toHaveBeenCalledWith('Discord', 'HKCU\\...\\Run', 'discord.exe', 'registry', false)
@@ -77,16 +73,12 @@ describe('win32 startup', () => {
 
     it('returns false when toggle fails', async () => {
       mockToggleStartupItem.mockResolvedValue(false)
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       const result = await startup.toggleItem('Test', 'loc', 'cmd', 'registry' as any, true)
       expect(result).toBe(false)
     })
 
     it('propagates errors from toggleStartupItem', async () => {
       mockToggleStartupItem.mockRejectedValue(new Error('access denied'))
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       await expect(startup.toggleItem('Test', 'loc', 'cmd', 'registry' as any, true)).rejects.toThrow('access denied')
     })
   })

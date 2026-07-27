@@ -1,9 +1,8 @@
-import { usePolling } from '@/hooks/usePolling'
+import type { ClipsEngineStatus } from '@shared/types'
 import { Clapperboard, Loader2, Play, Square } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import type { ClipsEngineStatus } from '@shared/types'
+import { usePolling } from '@/hooks/usePolling'
 
 const CLIPS_POLL_INTERVAL = 5000
 

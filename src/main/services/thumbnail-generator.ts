@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process'
 import type { ExecFileException } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join, parse } from 'node:path'
 import { getLogger } from './logger.service'
@@ -33,9 +33,9 @@ async function scanFfmpeg(): Promise<void> {
     const candidates = ['ffmpeg.exe', 'ffmpeg']
     const dirs: string[] = []
 
-    const pf = process.env['ProgramFiles']
+    const pf = process.env.ProgramFiles
     const pf86 = process.env['ProgramFiles(x86)']
-    const localAppData = process.env['LOCALAPPDATA']
+    const localAppData = process.env.LOCALAPPDATA
     if (pf) dirs.push(join(pf, 'ffmpeg', 'bin'), join(pf, 'FFmpeg', 'bin'))
     if (pf86) dirs.push(join(pf86, 'ffmpeg', 'bin'), join(pf86, 'FFmpeg', 'bin'))
     if (localAppData) {

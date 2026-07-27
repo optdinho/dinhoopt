@@ -1,19 +1,11 @@
-import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
-import { usePlatform } from '@/hooks/usePlatform'
-import { useSettingsStore } from '@/stores/settings-store'
-import { type SeverityFilter, type SortField, useUpdaterStore } from '@/stores/updater-store'
-import {
-  ArrowUpDown,
-  CircleCheckBig,
-  ChevronDown,
-  Filter,
-  Loader2,
-  RefreshCw,
-  Search,
-} from 'lucide-react'
+import { ArrowUpDown, ChevronDown, CircleCheckBig, Filter, Loader2, RefreshCw, Search } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
+import { usePlatform } from '@/hooks/usePlatform'
 import { FILTER_LABEL_KEYS, SORT_LABEL_KEYS } from '@/pages/software-updater/updater-constants'
+import { useSettingsStore } from '@/stores/settings-store'
+import { type SeverityFilter, type SortField, useUpdaterStore } from '@/stores/updater-store'
 
 export interface UpdateHeaderProps {
   isBusy: boolean

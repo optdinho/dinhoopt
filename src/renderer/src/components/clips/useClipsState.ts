@@ -2,12 +2,7 @@ import type { ClipInfo, ClipsConfig, ClipsEngineStatus, MicDeviceInfo } from '@s
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { FilterTab } from './clips-utils'
-import {
-  formatClipsDate,
-  formatClipsSeconds,
-  formatClipsSize,
-  useClipsActions,
-} from './useClipsActions'
+import { formatClipsDate, formatClipsSeconds, formatClipsSize, useClipsActions } from './useClipsActions'
 
 export interface ClipsState {
   status: ClipsEngineStatus
@@ -220,7 +215,7 @@ export function useClipsState(): ClipsState {
         /* ignore */
       }
     })()
-  }, [status.running, statusLoaded])
+  }, [statusLoaded, gpuList.length])
 
   const loadThumbnail = useCallback(async (clipName: string) => {
     try {
@@ -327,7 +322,7 @@ export function useClipsState(): ClipsState {
       60,
     )
     return maxDuration
-  }, [config?.hotkeys])
+  }, [config?.hotkeys, config])
 
   // Auto-increase buffer when a hotkey needs more than current
   useEffect(() => {
@@ -336,7 +331,7 @@ export function useClipsState(): ClipsState {
       actions.handleConfigUpdate({ replayTimeSeconds: autoReplayTime })
     }, 500)
     return () => clearTimeout(timer)
-  }, [autoReplayTime])
+  }, [autoReplayTime, config, actions.handleConfigUpdate])
 
   // Expose save trigger for E2E tests
   useEffect(() => {

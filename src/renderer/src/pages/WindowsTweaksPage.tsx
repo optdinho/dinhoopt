@@ -1,14 +1,11 @@
-import { TweakRow } from '@/components/TweakRow'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 import type { WindowsTweakCategory } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
+import type { LucideIcon } from 'lucide-react'
 import {
   Accessibility,
-  TriangleAlert,
-  CircleCheckBig,
   ChevronDown,
+  CircleCheckBig,
+  CircleX,
   Cpu,
   Gamepad2,
   Globe,
@@ -18,14 +15,18 @@ import {
   Mouse,
   Shield,
   Timer,
+  TriangleAlert,
   Wifi,
-  CircleX,
   Zap,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useShallow } from 'zustand/react/shallow'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { TweakRow } from '@/components/TweakRow'
+import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 
 interface CategoryDef {
   id: WindowsTweakCategory
@@ -38,115 +39,156 @@ interface CategoryDef {
 export function WindowsTweaksPage() {
   const { t } = useTranslation('windowsTweaks')
   const store = useWindowsTweaksStore
-  const tweaks = useWindowsTweaksStore((s) => s.tweaks)
-  const dnsPresets = useWindowsTweaksStore((s) => s.dnsPresets)
-  const selectedIds = useWindowsTweaksStore((s) => s.selectedIds)
-  const scanning = useWindowsTweaksStore((s) => s.scanning)
-  const applying = useWindowsTweaksStore((s) => s.applying)
-  const progress = useWindowsTweaksStore((s) => s.progress)
-  const lastResult = useWindowsTweaksStore((s) => s.lastResult)
-  const revertResult = useWindowsTweaksStore((s) => s.revertResult)
-  const expandedCategories = useWindowsTweaksStore((s) => s.expandedCategories)
-  const gamingTimer = useWindowsTweaksStore((s) => s.gamingTimer)
-  const gamingTimerLoading = useWindowsTweaksStore((s) => s.gamingTimerLoading)
+  const {
+    tweaks,
+    dnsPresets,
+    selectedIds,
+    scanning,
+    applying,
+    progress,
+    lastResult,
+    revertResult,
+    expandedCategories,
+    gamingTimer,
+    gamingTimerLoading,
+  } = useWindowsTweaksStore(
+    useShallow((s) => ({
+      tweaks: s.tweaks,
+      dnsPresets: s.dnsPresets,
+      selectedIds: s.selectedIds,
+      scanning: s.scanning,
+      applying: s.applying,
+      progress: s.progress,
+      lastResult: s.lastResult,
+      revertResult: s.revertResult,
+      expandedCategories: s.expandedCategories,
+      gamingTimer: s.gamingTimer,
+      gamingTimerLoading: s.gamingTimerLoading,
+    })),
+  )
   const [dnsStatus, setDnsStatus] = useState<string | null>(null)
 
-  const CATEGORIES: CategoryDef[] = [
-    { id: 'mouse', label: t('categories.mouse', 'Mouse'), icon: Mouse, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
-    {
-      id: 'keyboard',
-      label: t('categories.keyboard', 'Keyboard'),
-      icon: Keyboard,
-      color: '#8b5cf6',
-      glow: 'rgba(139,92,246,0.12)',
-    },
-    {
-      id: 'accessibility',
-      label: t('categories.accessibility', 'Accessibility'),
-      icon: Accessibility,
-      color: '#22c55e',
-      glow: 'rgba(34,197,94,0.12)',
-    },
-    {
-      id: 'network',
-      label: t('categories.network', 'Network'),
-      icon: Wifi,
-      color: '#ec4899',
-      glow: 'rgba(236,72,153,0.12)',
-    },
-    { id: 'gpu', label: t('categories.gpu', 'GPU'), icon: Monitor, color: '#f59e0b', glow: 'rgba(245,158,11,0.12)' },
-    {
-      id: 'system',
-      label: t('categories.system', 'System'),
-      icon: MonitorCog,
-      color: '#14b8a6',
-      glow: 'rgba(20,184,166,0.12)',
-    },
-    {
-      id: 'gaming',
-      label: t('categories.gaming', 'Gaming'),
-      icon: Gamepad2,
-      color: '#f97316',
-      glow: 'rgba(249,115,22,0.12)',
-    },
-    {
-      id: 'privacy',
-      label: t('categories.privacy', 'Privacy'),
-      icon: Shield,
-      color: '#a855f7',
-      glow: 'rgba(168,85,247,0.12)',
-    },
-    { id: 'mmcss', label: t('categories.mmcss', 'MMCSS'), icon: Cpu, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
-    { id: 'energy', label: t('categories.power', 'Power'), icon: Zap, color: '#eab308', glow: 'rgba(234,179,8,0.12)' },
-  ]
+  const CATEGORIES = useMemo<CategoryDef[]>(
+    () => [
+      {
+        id: 'mouse',
+        label: t('categories.mouse', 'Mouse'),
+        icon: Mouse,
+        color: '#06b6d4',
+        glow: 'rgba(6,182,212,0.12)',
+      },
+      {
+        id: 'keyboard',
+        label: t('categories.keyboard', 'Keyboard'),
+        icon: Keyboard,
+        color: '#8b5cf6',
+        glow: 'rgba(139,92,246,0.12)',
+      },
+      {
+        id: 'accessibility',
+        label: t('categories.accessibility', 'Accessibility'),
+        icon: Accessibility,
+        color: '#22c55e',
+        glow: 'rgba(34,197,94,0.12)',
+      },
+      {
+        id: 'network',
+        label: t('categories.network', 'Network'),
+        icon: Wifi,
+        color: '#ec4899',
+        glow: 'rgba(236,72,153,0.12)',
+      },
+      { id: 'gpu', label: t('categories.gpu', 'GPU'), icon: Monitor, color: '#f59e0b', glow: 'rgba(245,158,11,0.12)' },
+      {
+        id: 'system',
+        label: t('categories.system', 'System'),
+        icon: MonitorCog,
+        color: '#14b8a6',
+        glow: 'rgba(20,184,166,0.12)',
+      },
+      {
+        id: 'gaming',
+        label: t('categories.gaming', 'Gaming'),
+        icon: Gamepad2,
+        color: '#f97316',
+        glow: 'rgba(249,115,22,0.12)',
+      },
+      {
+        id: 'privacy',
+        label: t('categories.privacy', 'Privacy'),
+        icon: Shield,
+        color: '#a855f7',
+        glow: 'rgba(168,85,247,0.12)',
+      },
+      { id: 'mmcss', label: t('categories.mmcss', 'MMCSS'), icon: Cpu, color: '#06b6d4', glow: 'rgba(6,182,212,0.12)' },
+      {
+        id: 'energy',
+        label: t('categories.power', 'Power'),
+        icon: Zap,
+        color: '#eab308',
+        glow: 'rgba(234,179,8,0.12)',
+      },
+    ],
+    [t],
+  )
 
-  const CAT_COLORS = CATEGORIES.reduce(
-    (acc, c) => {
-      acc[c.id] = { color: c.color, glow: c.glow }
-      return acc
-    },
-    {} as Record<string, { color: string; glow: string }>,
+  const CAT_COLORS = useMemo(
+    () =>
+      CATEGORIES.reduce(
+        (acc, c) => {
+          acc[c.id] = { color: c.color, glow: c.glow }
+          return acc
+        },
+        {} as Record<string, { color: string; glow: string }>,
+      ),
+    [CATEGORIES],
   )
 
   useEffect(() => {
     Promise.all([store.getState().load(), store.getState().loadDnsPresets(), store.getState().loadGamingTimer()])
-  }, [store])
+  }, [])
 
-  const appliedCount = tweaks.filter((t) => t.applied).length
+  const appliedCount = useMemo(() => tweaks.filter((t) => t.applied).length, [tweaks])
 
-  const getCatStats = (cat: WindowsTweakCategory) => {
-    const catTweaks = tweaks.filter((t) => t.tweak.category === cat)
-    return {
-      total: catTweaks.length,
-      applied: catTweaks.filter((t) => t.applied).length,
-    }
-  }
+  const getCatStats = useCallback(
+    (cat: WindowsTweakCategory) => {
+      const catTweaks = tweaks.filter((t) => t.tweak.category === cat)
+      return {
+        total: catTweaks.length,
+        applied: catTweaks.filter((t) => t.applied).length,
+      }
+    },
+    [tweaks],
+  )
 
-  const handleToggle = (id: string) => {
+  const handleToggle = useCallback((id: string) => {
     store.getState().toggle(id)
-  }
+  }, [])
 
-  const handleApply = async () => {
+  const handleApply = useCallback(async () => {
     await store.getState().apply()
     toast.success(t('toastAppliedSuccess', 'Tweaks applied successfully!'))
-  }
+  }, [t])
 
-  const handleRevert = async () => {
+  const handleRevert = useCallback(async () => {
     await store.getState().revert()
     toast.success(t('toastRevertedSuccess', 'Tweaks reverted!'))
-  }
+  }, [t])
 
-  const handleSelectAll = () => store.getState().selectAll()
-  const handleDeselectAll = () => store.getState().deselectAll()
+  const handleSelectAll = useCallback(() => store.getState().selectAll(), [])
+  const handleDeselectAll = useCallback(() => store.getState().deselectAll(), [])
 
-  const handleSetDns = async (primary: string, secondary: string) => {
-    const ok = await store.getState().setDns(primary, secondary)
-    setDnsStatus(
-      ok ? t('dnsChangedSuccess', 'DNS changed successfully!') : t('dnsChangeFailed', 'Failed to change DNS'),
-    )
-    if (ok) toast.success(t('dnsChanged', 'DNS changed!'))
-    else toast.error(t('dnsChangeFailed', 'Failed to change DNS'))
-  }
+  const handleSetDns = useCallback(
+    async (primary: string, secondary: string) => {
+      const ok = await store.getState().setDns(primary, secondary)
+      setDnsStatus(
+        ok ? t('dnsChangedSuccess', 'DNS changed successfully!') : t('dnsChangeFailed', 'Failed to change DNS'),
+      )
+      if (ok) toast.success(t('dnsChanged', 'DNS changed!'))
+      else toast.error(t('dnsChangeFailed', 'Failed to change DNS'))
+    },
+    [t],
+  )
 
   if (scanning) {
     return (
@@ -379,7 +421,10 @@ export function WindowsTweaksPage() {
           {t('timerTweaks', 'Timer & Gaming Tweaks')}
         </h3>
         <p className="mb-3 text-xs text-zinc-500">
-          {t('timerTweaksDescription', 'Optimize Windows timer resolution and CPU scheduling for competitive gaming. Requires reboot to take effect.')}
+          {t(
+            'timerTweaksDescription',
+            'Optimize Windows timer resolution and CPU scheduling for competitive gaming. Requires reboot to take effect.',
+          )}
         </p>
         {gamingTimerLoading ? (
           <div className="flex items-center gap-2 py-4">
@@ -389,22 +434,31 @@ export function WindowsTweaksPage() {
         ) : gamingTimer ? (
           <div className="space-y-3">
             {/* HPET */}
-            <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+            <div
+              className="flex items-center justify-between rounded-lg border px-4 py-3"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+            >
               <div>
                 <div className="text-sm font-medium text-zinc-200">
                   {t('hpetTitle', 'HPET (High Precision Event Timer)')}
                 </div>
                 <div className="text-xs text-zinc-500">
-                  {t('hpetDescription', 'Disable platform clock for lower timer latency on Intel CPUs. May help on AMD Ryzen too.')}
+                  {t(
+                    'hpetDescription',
+                    'Disable platform clock for lower timer latency on Intel CPUs. May help on AMD Ryzen too.',
+                  )}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() =>
-                  store.getState().setGamingTimer({ hpetOff: !gamingTimer.hpetOff }).then((r) => {
-                    if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
-                    else toast.error(r.errors[0] ?? t('failed', 'Failed'))
-                  })
+                  store
+                    .getState()
+                    .setGamingTimer({ hpetOff: !gamingTimer.hpetOff })
+                    .then((r) => {
+                      if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                      else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                    })
                 }
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
                   gamingTimer.hpetOff ? 'bg-orange-500' : 'bg-zinc-700'
@@ -419,13 +473,17 @@ export function WindowsTweaksPage() {
             </div>
 
             {/* TSC Sync Policy */}
-            <div className="rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+            <div
+              className="rounded-lg border px-4 py-3"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+            >
               <div className="mb-2">
-                <div className="text-sm font-medium text-zinc-200">
-                  {t('tscSyncTitle', 'TSC Sync Policy')}
-                </div>
+                <div className="text-sm font-medium text-zinc-200">{t('tscSyncTitle', 'TSC Sync Policy')}</div>
                 <div className="text-xs text-zinc-500">
-                  {t('tscSyncDescription', 'Legacy = lower input lag, slightly less FPS. Enhanced = more FPS, slightly more input lag.')}
+                  {t(
+                    'tscSyncDescription',
+                    'Legacy = lower input lag, slightly less FPS. Enhanced = more FPS, slightly more input lag.',
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -434,10 +492,13 @@ export function WindowsTweaksPage() {
                     type="button"
                     key={policy}
                     onClick={() =>
-                      store.getState().setGamingTimer({ tscSyncPolicy: policy }).then((r) => {
-                        if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
-                        else toast.error(r.errors[0] ?? t('failed', 'Failed'))
-                      })
+                      store
+                        .getState()
+                        .setGamingTimer({ tscSyncPolicy: policy })
+                        .then((r) => {
+                          if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                          else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                        })
                     }
                     className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                       gamingTimer.tscSyncPolicy === policy
@@ -445,29 +506,40 @@ export function WindowsTweaksPage() {
                         : 'bg-zinc-800 text-zinc-400 hover:text-zinc-300'
                     }`}
                   >
-                    {policy === 'default' ? t('tscDefault', 'Default') : policy === 'legacy' ? t('tscLegacy', 'Legacy (Low Latency)') : t('tscEnhanced', 'Enhanced (High FPS)')}
+                    {policy === 'default'
+                      ? t('tscDefault', 'Default')
+                      : policy === 'legacy'
+                        ? t('tscLegacy', 'Legacy (Low Latency)')
+                        : t('tscEnhanced', 'Enhanced (High FPS)')}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Dynamic Tick */}
-            <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+            <div
+              className="flex items-center justify-between rounded-lg border px-4 py-3"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+            >
               <div>
-                <div className="text-sm font-medium text-zinc-200">
-                  {t('dynamicTickTitle', 'Disable Dynamic Tick')}
-                </div>
+                <div className="text-sm font-medium text-zinc-200">{t('dynamicTickTitle', 'Disable Dynamic Tick')}</div>
                 <div className="text-xs text-zinc-500">
-                  {t('dynamicTickDescription', 'Prevents Windows from suspending the system timer tick in idle. Reduces micro-stutters.')}
+                  {t(
+                    'dynamicTickDescription',
+                    'Prevents Windows from suspending the system timer tick in idle. Reduces micro-stutters.',
+                  )}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() =>
-                  store.getState().setGamingTimer({ dynamicTickDisabled: !gamingTimer.dynamicTickDisabled }).then((r) => {
-                    if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
-                    else toast.error(r.errors[0] ?? t('failed', 'Failed'))
-                  })
+                  store
+                    .getState()
+                    .setGamingTimer({ dynamicTickDisabled: !gamingTimer.dynamicTickDisabled })
+                    .then((r) => {
+                      if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                      else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                    })
                 }
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
                   gamingTimer.dynamicTickDisabled ? 'bg-orange-500' : 'bg-zinc-700'
@@ -482,22 +554,31 @@ export function WindowsTweaksPage() {
             </div>
 
             {/* AutoTuning */}
-            <div className="flex items-center justify-between rounded-lg border px-4 py-3" style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}>
+            <div
+              className="flex items-center justify-between rounded-lg border px-4 py-3"
+              style={{ borderColor: 'var(--border-strong)', background: 'var(--card-bg)' }}
+            >
               <div>
                 <div className="text-sm font-medium text-zinc-200">
                   {t('autoTuningTitle', 'TCP AutoTuning — Disabled')}
                 </div>
                 <div className="text-xs text-zinc-500">
-                  {t('autoTuningDescription', 'Reduces bufferbloat and jitter during gaming. Recommended for competitive gaming. May slow large downloads.')}
+                  {t(
+                    'autoTuningDescription',
+                    'Reduces bufferbloat and jitter during gaming. Recommended for competitive gaming. May slow large downloads.',
+                  )}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() =>
-                  store.getState().setAutoTuning(gamingTimer.autoTuningDisabled ? 'revert' : 'apply').then((r) => {
-                    if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
-                    else toast.error(r.error ?? t('failed', 'Failed'))
-                  })
+                  store
+                    .getState()
+                    .setAutoTuning(gamingTimer.autoTuningDisabled ? 'revert' : 'apply')
+                    .then((r) => {
+                      if (r.success) toast.success(t('timerApplied', 'Timer setting applied!'))
+                      else toast.error(r.error ?? t('failed', 'Failed'))
+                    })
                 }
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
                   gamingTimer.autoTuningDisabled ? 'bg-orange-500' : 'bg-zinc-700'
@@ -515,10 +596,13 @@ export function WindowsTweaksPage() {
             <button
               type="button"
               onClick={() =>
-                store.getState().revertGamingTimer().then((r) => {
-                  if (r.success) toast.success(t('timerReverted', 'Timer settings reverted to defaults!'))
-                  else toast.error(r.errors[0] ?? t('failed', 'Failed'))
-                })
+                store
+                  .getState()
+                  .revertGamingTimer()
+                  .then((r) => {
+                    if (r.success) toast.success(t('timerReverted', 'Timer settings reverted to defaults!'))
+                    else toast.error(r.errors[0] ?? t('failed', 'Failed'))
+                  })
               }
               className="rounded-lg border border-red-800 px-4 py-2 text-xs font-medium text-red-400 transition-all hover:bg-red-900/20"
             >

@@ -14,6 +14,19 @@ export function revertWindowsRecall(): Promise<void> {
   return regDeleteValue('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableAIDataAnalysis')
 }
 
+export async function applyRecallBlocker(): Promise<void> {
+  const key = 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI'
+  await Promise.all([
+    regSetDword(key, 'AllowRecallEnable', 0),
+    regSetDword(key, 'AllowRecallSaveState', 0),
+  ])
+}
+export async function revertRecallBlocker(): Promise<void> {
+  const key = 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI'
+  await regDeleteValue(key, 'AllowRecallEnable')
+  await regDeleteValue(key, 'AllowRecallSaveState')
+}
+
 export async function applyClickToDo(): Promise<void> {
   await regSetDword('HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', 'DisableClickToDo', 1)
 }

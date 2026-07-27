@@ -1,7 +1,7 @@
 import type { PrivacyApplyResult, PrivacySetting, PrivacyShieldState } from '@shared/types'
 import { getPlatform } from '../../platform'
-import { withTimeout } from './helpers'
 import type { SettingDef } from './helpers'
+import { withTimeout } from './helpers'
 import { SETTINGS } from './settings'
 
 function getSettingsForPlatform(): SettingDef[] {
@@ -74,7 +74,7 @@ export async function revertPrivacySettings(ids: string[]): Promise<PrivacyApply
   const errors: PrivacyApplyResult['errors'] = []
   for (const id of ids) {
     const def = settingDefs.find((s) => s.id === id)
-    if (!def || !def.revert) {
+    if (!def?.revert) {
       failed++
       errors.push({ id, label: id, reason: 'Revert not supported for this setting' })
       continue

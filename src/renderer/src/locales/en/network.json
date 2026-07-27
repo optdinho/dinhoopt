@@ -32,5 +32,18 @@
   "confirmNetworkHistoryWarning": "Network history entries will be permanently removed.",
   "confirmLabel": "Clean Now",
   "scanFailedToast": "Network scan failed",
-  "cleanupFailedToast": "Network cleanup failed"
+  "cleanupFailedToast": "Network cleanup failed",
+  "tabCleanup": "Cleanup",
+  "tabMonitor": "Monitor",
+  "monitorRefresh": "Refresh",
+  "monitorSuspiciousCount": "{{count}} Suspicious",
+  "monitorConnectionCount": "{{total}} connections ({{shown}} shown)",
+  "monitorFilterProcess": "Filter by process...",
+  "monitorAllStates": "All States",
+  "monitorLoading": "Loading connections...",
+  "monitorNoConnections": "No connections found",
+  "monitorColRemote": "Remote Address",
+  "monitorColPort": "Port",
+  "monitorColProcess": "Process",
+  "monitorColState": "State"
 }

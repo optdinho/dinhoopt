@@ -1,5 +1,5 @@
-import type { ClipsState } from './useClipsState'
 import { TogglePill } from './clips-utils'
+import type { ClipsState } from './useClipsState'
 
 export function TipBadge({
   id,
@@ -113,10 +113,7 @@ export function QualitySection({
               }}
             >
               <div className="flex items-center justify-between">
-                <span
-                  className="text-[11px] font-semibold"
-                  style={{ color: active ? '#fff' : 'var(--text-primary)' }}
-                >
+                <span className="text-[11px] font-semibold" style={{ color: active ? '#fff' : 'var(--text-primary)' }}>
                   {p.label}
                 </span>
                 <span
@@ -164,8 +161,7 @@ export function QualitySection({
               onClick={() => handleConfigUpdate({ codec: c.id })}
               className="rounded-lg py-1 px-2 text-[10px] font-medium transition-all"
               style={{
-                background:
-                  (config.codec ?? 'auto') === c.id ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
+                background: (config.codec ?? 'auto') === c.id ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
                 color: (config.codec ?? 'auto') === c.id ? '#fff' : 'var(--text-primary)',
               }}
             >
@@ -324,10 +320,7 @@ export function QualitySection({
                 : `~${estimatedRamMB} MB`}
             </span>
           </div>
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full"
-            style={{ background: 'rgba(113,113,122,0.12)' }}
-          >
+          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'rgba(113,113,122,0.12)' }}>
             <div
               className="h-full rounded-full transition-all"
               style={{
@@ -336,8 +329,7 @@ export function QualitySection({
                     ? Math.min((_status.replayBufferBytes / 1024 / 1024 / estimatedRamMB) * 100, 100)
                     : 0
                 }%`,
-                background:
-                  estimatedRamMB > 3000 ? '#ef4444' : estimatedRamMB > 1500 ? '#f59e0b' : '#3b82f6',
+                background: estimatedRamMB > 3000 ? '#ef4444' : estimatedRamMB > 1500 ? '#f59e0b' : '#3b82f6',
               }}
             />
           </div>

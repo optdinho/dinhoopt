@@ -395,7 +395,6 @@ vi.mock('../services/ipc-validation', () => ({
 }))
 
 vi.mock('../services/logger.service', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   getLogger: (...args: any[]) => mockGetLogger(...args),
 }))
 
@@ -419,9 +418,9 @@ function mockWindow() {
 const defaultPlatform = process.platform
 
 // Save original env
-const origEnv = { ...process.env }
+const _origEnv = { ...process.env }
 // Common homedir
-const HOME_DIR = '/home/user'
+const _HOME_DIR = '/home/user'
 const WIN_HOME = 'C:\\Users\\User'
 
 function setPlatform(p: string) {
@@ -731,8 +730,6 @@ describe('registerShortcutCleanerIpc: SHORTCUT_CLEAN', () => {
         } as CleanResult
       },
     )
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerShortcutCleanerIpc(() => win as any)
     const handler = getHandler('cleaner:shortcut:clean')
     await handler({}, ['uuid-1'])

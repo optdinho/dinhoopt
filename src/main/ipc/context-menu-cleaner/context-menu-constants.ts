@@ -1,9 +1,7 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   ContextMenuAction,
-  ContextMenuApplyProgress,
-  ContextMenuApplyResult,
   ContextMenuEntry,
   ContextMenuEntryKind,
   ContextMenuHive,
@@ -26,27 +24,106 @@ export interface ScanRoot {
 }
 
 export const SCAN_ROOTS: ReadonlyArray<ScanRoot> = [
-  { hive: 'HKCR', scope: 'AllFiles', shellPath: 'HKCR\\*\\shell', shellexPath: 'HKCR\\*\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCR', scope: 'Directory', shellPath: 'HKCR\\Directory\\shell', shellexPath: 'HKCR\\Directory\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCR', scope: 'DirectoryBackground', shellPath: 'HKCR\\Directory\\Background\\shell', shellexPath: 'HKCR\\Directory\\Background\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCR', scope: 'Folder', shellPath: 'HKCR\\Folder\\shell', shellexPath: 'HKCR\\Folder\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCR', scope: 'Drive', shellPath: 'HKCR\\Drive\\shell', shellexPath: 'HKCR\\Drive\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCR', scope: 'AllFilesystemObjects', shellPath: 'HKCR\\AllFilesystemObjects\\shell', shellexPath: 'HKCR\\AllFilesystemObjects\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCU', scope: 'AllFiles', shellPath: 'HKCU\\Software\\Classes\\*\\shell', shellexPath: 'HKCU\\Software\\Classes\\*\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCU', scope: 'Directory', shellPath: 'HKCU\\Software\\Classes\\Directory\\shell', shellexPath: 'HKCU\\Software\\Classes\\Directory\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCU', scope: 'DirectoryBackground', shellPath: 'HKCU\\Software\\Classes\\Directory\\Background\\shell', shellexPath: 'HKCU\\Software\\Classes\\Directory\\Background\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCU', scope: 'Folder', shellPath: 'HKCU\\Software\\Classes\\Folder\\shell', shellexPath: 'HKCU\\Software\\Classes\\Folder\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCU', scope: 'Drive', shellPath: 'HKCU\\Software\\Classes\\Drive\\shell', shellexPath: 'HKCU\\Software\\Classes\\Drive\\shellex\\ContextMenuHandlers' },
-  { hive: 'HKCU', scope: 'AllFilesystemObjects', shellPath: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell', shellexPath: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shellex\\ContextMenuHandlers' },
+  {
+    hive: 'HKCR',
+    scope: 'AllFiles',
+    shellPath: 'HKCR\\*\\shell',
+    shellexPath: 'HKCR\\*\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCR',
+    scope: 'Directory',
+    shellPath: 'HKCR\\Directory\\shell',
+    shellexPath: 'HKCR\\Directory\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCR',
+    scope: 'DirectoryBackground',
+    shellPath: 'HKCR\\Directory\\Background\\shell',
+    shellexPath: 'HKCR\\Directory\\Background\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCR',
+    scope: 'Folder',
+    shellPath: 'HKCR\\Folder\\shell',
+    shellexPath: 'HKCR\\Folder\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCR',
+    scope: 'Drive',
+    shellPath: 'HKCR\\Drive\\shell',
+    shellexPath: 'HKCR\\Drive\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCR',
+    scope: 'AllFilesystemObjects',
+    shellPath: 'HKCR\\AllFilesystemObjects\\shell',
+    shellexPath: 'HKCR\\AllFilesystemObjects\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCU',
+    scope: 'AllFiles',
+    shellPath: 'HKCU\\Software\\Classes\\*\\shell',
+    shellexPath: 'HKCU\\Software\\Classes\\*\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCU',
+    scope: 'Directory',
+    shellPath: 'HKCU\\Software\\Classes\\Directory\\shell',
+    shellexPath: 'HKCU\\Software\\Classes\\Directory\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCU',
+    scope: 'DirectoryBackground',
+    shellPath: 'HKCU\\Software\\Classes\\Directory\\Background\\shell',
+    shellexPath: 'HKCU\\Software\\Classes\\Directory\\Background\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCU',
+    scope: 'Folder',
+    shellPath: 'HKCU\\Software\\Classes\\Folder\\shell',
+    shellexPath: 'HKCU\\Software\\Classes\\Folder\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCU',
+    scope: 'Drive',
+    shellPath: 'HKCU\\Software\\Classes\\Drive\\shell',
+    shellexPath: 'HKCU\\Software\\Classes\\Drive\\shellex\\ContextMenuHandlers',
+  },
+  {
+    hive: 'HKCU',
+    scope: 'AllFilesystemObjects',
+    shellPath: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shell',
+    shellexPath: 'HKCU\\Software\\Classes\\AllFilesystemObjects\\shellex\\ContextMenuHandlers',
+  },
 ]
 
 // ── Safelists ───────────────────────────────────────────────────────
 
 export const VERB_SAFELIST: ReadonlyArray<string> = [
-  'open', 'edit', 'print', 'printto', 'runas', 'opennewwindow', 'opennewprocess',
-  'find', 'explore', 'cmd', 'properties', 'cut', 'copy', 'paste', 'link',
-  'rename', 'delete', 'sendto', 'pintohome', 'pintotaskbar', 'unpinfromtaskbar',
-  'pintostartscreen', 'unpinfromstartscreen',
+  'open',
+  'edit',
+  'print',
+  'printto',
+  'runas',
+  'opennewwindow',
+  'opennewprocess',
+  'find',
+  'explore',
+  'cmd',
+  'properties',
+  'cut',
+  'copy',
+  'paste',
+  'link',
+  'rename',
+  'delete',
+  'sendto',
+  'pintohome',
+  'pintotaskbar',
+  'unpinfromtaskbar',
+  'pintostartscreen',
+  'unpinfromstartscreen',
 ]
 
 export const CLSID_SAFELIST: ReadonlyArray<string> = [

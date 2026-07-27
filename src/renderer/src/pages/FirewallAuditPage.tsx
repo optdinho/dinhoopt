@@ -1,15 +1,5 @@
-import { PageHeader } from '@/components/layout/PageHeader'
-import { Checkbox } from '@/components/shared/Checkbox'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { ErrorAlert } from '@/components/shared/ErrorAlert'
-import { useIpcAction } from '@/hooks/useIpcAction'
-import { useIpcScan } from '@/hooks/useIpcScan'
-import { useProgressListener } from '@/hooks/useProgressListener'
-import { useFirewallStore } from '@/stores/firewall-store'
 import type { FirewallAction, FirewallScanProgress } from '@shared/types'
 import {
-  TriangleAlert,
   CircleCheckBig,
   Globe,
   Inbox,
@@ -20,10 +10,20 @@ import {
   ShieldOff,
   Sparkles,
   Trash2,
+  TriangleAlert,
 } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { useIpcAction } from '@/hooks/useIpcAction'
+import { useIpcScan } from '@/hooks/useIpcScan'
+import { useProgressListener } from '@/hooks/useProgressListener'
+import { useFirewallStore } from '@/stores/firewall-store'
 
 import { FilterSelect, RISK_COLORS, RuleRow, StatBox } from './firewall/FirewallComponents'
 

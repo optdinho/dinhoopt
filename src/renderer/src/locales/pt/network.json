@@ -32,5 +32,18 @@
   "confirmNetworkHistoryWarning": "As entradas do histórico de rede serão removidas permanentemente.",
   "confirmLabel": "Limpar Agora",
   "scanFailedToast": "Falha na análise da rede",
-  "cleanupFailedToast": "Falha na limpeza da rede"
+  "cleanupFailedToast": "Falha na limpeza da rede",
+  "tabCleanup": "Limpeza",
+  "tabMonitor": "Monitor",
+  "monitorRefresh": "Atualizar",
+  "monitorSuspiciousCount": "{{count}} Suspeitas",
+  "monitorConnectionCount": "{{total}} ligações ({{shown}} mostradas)",
+  "monitorFilterProcess": "Filtrar por processo...",
+  "monitorAllStates": "Todos os Estados",
+  "monitorLoading": "A carregar ligações...",
+  "monitorNoConnections": "Nenhuma ligação encontrada",
+  "monitorColRemote": "Endereço Remoto",
+  "monitorColPort": "Porta",
+  "monitorColProcess": "Processo",
+  "monitorColState": "Estado"
 }

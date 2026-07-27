@@ -30,7 +30,9 @@ export type GameModeOptimizationId =
   | 'proc-kill-chat'
   | 'proc-kill-updaters'
   | 'proc-kill-custom'
+  | 'proc-kill-background'
   | 'mem-clear-standby'
+  | 'mem-empty-working-set'
   | 'sys-focus-assist'
   | 'sys-power-plan'
   | 'sys-prevent-sleep'
@@ -43,6 +45,12 @@ export type GameModeOptimizationId =
   | 'net-disable-nagle'
 
 export type GameModeCategory = 'services' | 'processes' | 'memory' | 'system' | 'network'
+
+export interface DirectStorageStatus {
+  supported: boolean
+  nvmeHealthy: boolean
+  nvmeDrives: Array<{ model: string; health: 'Healthy' | 'Caution' | 'Bad' | 'Unknown'; type: string }>
+}
 
 export interface GameProfile {
   /** Display name for this profile (e.g. "CS2", "FiveM") */

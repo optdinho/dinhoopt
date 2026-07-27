@@ -1,8 +1,8 @@
-import type { ClipsConfig, HotkeyBinding } from '@shared/types'
+import type { ClipsConfig } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export type FilterTab = 'all' | 'today' | 'week' | 'favorites'
 
@@ -227,10 +227,7 @@ export function VolumeSlider({
           accentColor: 'var(--accent)',
         }}
       />
-      <span
-        className="w-8 text-right text-[10px] font-mono tabular-nums"
-        style={{ color: 'var(--text-primary)' }}
-      >
+      <span className="w-8 text-right text-[10px] font-mono tabular-nums" style={{ color: 'var(--text-primary)' }}>
         {pct}%
       </span>
     </div>

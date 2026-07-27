@@ -51,11 +51,11 @@ export function squarify(
     const rowLen = horizontal ? w * rowFrac : h * rowFrac
     // Compute worst aspect ratio in this row
     let worst = 0
-    let sub = 0
+    let _sub = 0
     for (let j = 0; j <= i; j++) {
       const subItem = items[j]
       if (!subItem) continue
-      sub += subItem.size
+      _sub += subItem.size
       const frac = subItem.size / rowSum
       const itemLen = side * frac
       const aspect = rowLen > itemLen ? rowLen / itemLen : itemLen / rowLen

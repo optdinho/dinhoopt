@@ -64,8 +64,6 @@ function mockBenchmarkRun(config: {
   mocks.execFileAsync.mockResolvedValueOnce({ stdout: config.tempLine })
   mocks.execFileAsync.mockResolvedValueOnce({ stdout: config.tweaksLine })
   mocks.execFileAsync.mockResolvedValueOnce({ stdout: config.powerPlanLine })
-
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
   const handler = getHandler('benchmark:run')
   return handler as () => Promise<unknown>
@@ -99,8 +97,6 @@ describe('registerBenchmarkIpc', () => {
       mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
       mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3' })
       mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Ultimate Performance (e9a42b02-...)' })
-
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('benchmark:run')
       const result = (await handler()) as {
@@ -119,7 +115,6 @@ describe('registerBenchmarkIpc', () => {
 
     it('handles errors gracefully and returns partial result', async () => {
       mocks.execFileAsync.mockRejectedValue(new Error('PowerShell not available'))
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('benchmark:run')
       const result = (await handler()) as { score: number; scoreClass: string }

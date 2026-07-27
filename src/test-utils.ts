@@ -160,10 +160,8 @@ export function mockKudu(): Record<string, Mock> {
   }
 
   if (typeof window === 'undefined') {
-    // biome-ignore lint/suspicious/noExplicitAny: test utils
     ;(globalThis as any).window = {}
   }
-  // biome-ignore lint/suspicious/noExplicitAny: test utils
   ;(window as any).dinho = mock
   return mock
 }

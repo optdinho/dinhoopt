@@ -1,11 +1,11 @@
-import { cn } from '@/lib/utils'
-import { getNextRunTime } from '@/pages/schedules-utils'
 import type { ScheduleEntry } from '@shared/types'
-import { TriangleAlert, CircleCheckBig, Clock, Copy, Minus, Pencil, Trash2, CircleX } from 'lucide-react'
+import { CircleCheckBig, CircleX, Clock, Copy, Minus, Pencil, Trash2, TriangleAlert } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Toggle } from './Toggle'
+import { cn } from '@/lib/utils'
+import { getNextRunTime } from '@/pages/schedules-utils'
 import { formatFrequency, formatLastRun, formatNextRun, useAllTasks } from './constants'
+import { Toggle } from './Toggle'
 
 const ScheduleCard = memo(function ScheduleCard({
   entry,
@@ -122,7 +122,12 @@ function IconBtn({
   title,
   onClick,
   color,
-}: { icon: typeof Pencil; title: string; onClick: () => void; color?: string }) {
+}: {
+  icon: typeof Pencil
+  title: string
+  onClick: () => void
+  color?: string
+}) {
   return (
     <button
       type="button"

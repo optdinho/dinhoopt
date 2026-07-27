@@ -2,7 +2,7 @@ export {
   activateGameMode,
   deactivateGameMode,
   getGameModeStatus,
-  registerGameModeIpc,
   initGameDetector,
   refreshGameDetector,
+  registerGameModeIpc,
 } from './game-mode/index'

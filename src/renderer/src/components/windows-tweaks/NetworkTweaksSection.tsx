@@ -1,7 +1,7 @@
-import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 import { Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useWindowsTweaksStore } from '@/stores/windows-tweaks-store'
 
 interface NetworkTweaksSectionProps {
   applying: boolean

@@ -14,6 +14,10 @@ export interface PerfQuickStats {
   memUsedBytes: number
   memTotalBytes: number
   memPercent: number
+  gpuPercent: number
+  gpuName: string
+  networkDown: number
+  networkUp: number
 }
 
 export interface PerfSnapshot {

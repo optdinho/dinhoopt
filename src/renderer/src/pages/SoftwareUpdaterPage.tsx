@@ -1,3 +1,23 @@
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  CircleCheckBig,
+  CircleX,
+  Download,
+  EyeOff,
+  Filter,
+  Loader2,
+  Package,
+  RefreshCw,
+  Search,
+  Sparkles,
+  TriangleAlert,
+} from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { useShallow } from 'zustand/react/shallow'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -8,50 +28,52 @@ import logger from '@/lib/renderer-logger'
 import { useHistoryStore } from '@/stores/history-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { type SeverityFilter, type SortField, useUpdaterStore } from '@/stores/updater-store'
-import type { UpdatableApp, UpdateProgress } from '@shared/types'
-import {
-  TriangleAlert,
-  ArrowUpDown,
-  CircleCheckBig,
-  ChevronDown,
-  ChevronRight,
-  Download,
-  Filter,
-  Loader2,
-  Package,
-  RefreshCw,
-  Search,
-  Sparkles,
-  CircleX,
-} from 'lucide-react'
-import { useCallback, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import { FILTER_LABEL_KEYS, SEVERITY_STYLES_BASE, SORT_LABEL_KEYS } from './software-updater/updater-constants'
+import { AppRow, IgnoredRow, UpToDateRow } from './software-updater/SoftwareUpdaterRows'
+import { FILTER_LABEL_KEYS, SORT_LABEL_KEYS } from './software-updater/updater-constants'
 import { useFilteredAndSortedApps } from './software-updater/useFilteredAndSortedApps'
 import { useInitialLoader } from './software-updater/useIgnoredUpdatesLoader'
 import { useUpdaterProgress } from './software-updater/useUpdaterProgress'
-import { AppRow, IgnoredRow, UpToDateRow } from './software-updater/SoftwareUpdaterRows'
 
 export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('updates')
-  const apps = useUpdaterStore((s) => s.apps)
-  const loading = useUpdaterStore((s) => s.loading)
-  const updating = useUpdaterStore((s) => s.updating)
-  const progress = useUpdaterStore((s) => s.progress)
-  const updateResult = useUpdaterStore((s) => s.updateResult)
-  const error = useUpdaterStore((s) => s.error)
-  const hasChecked = useUpdaterStore((s) => s.hasChecked)
-  const packageManagerAvailable = useUpdaterStore((s) => s.packageManagerAvailable)
-  const packageManagerName = useUpdaterStore((s) => s.packageManagerName)
-  const searchQuery = useUpdaterStore((s) => s.searchQuery)
-  const severityFilter = useUpdaterStore((s) => s.severityFilter)
-  const sortField = useUpdaterStore((s) => s.sortField)
-  const sortDirection = useUpdaterStore((s) => s.sortDirection)
-  const ignoredApps = useUpdaterStore((s) => s.ignoredApps)
+  const {
+    apps,
+    loading,
+    updating,
+    progress,
+    updateResult,
+    error,
+    hasChecked,
+    packageManagerAvailable,
+    packageManagerName,
+    searchQuery,
+    severityFilter,
+    sortField,
+    sortDirection,
+    ignoredApps,
+  } = useUpdaterStore(
+    useShallow((s) => ({
+      apps: s.apps,
+      loading: s.loading,
+      updating: s.updating,
+      progress: s.progress,
+      updateResult: s.updateResult,
+      error: s.error,
+      hasChecked: s.hasChecked,
+      packageManagerAvailable: s.packageManagerAvailable,
+      packageManagerName: s.packageManagerName,
+      searchQuery: s.searchQuery,
+      severityFilter: s.severityFilter,
+      sortField: s.sortField,
+      sortDirection: s.sortDirection,
+      ignoredApps: s.ignoredApps,
+    })),
+  )
 
   const { platform } = usePlatform()
   const windowsPackageManager = useSettingsStore((s) => s.settings.windowsPackageManager)
+  const autoInstallUpdates = useSettingsStore((s) => s.settings.autoInstallUpdates)
+  const autoInstallSchedule = useSettingsStore((s) => s.settings.autoInstallSchedule)
 
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [showFilterMenu, setShowFilterMenu] = useState(false)
@@ -65,7 +87,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
     useFilteredAndSortedApps()
 
   // ─── Check for updates ──────────────────────────────────────
-  function handleCheck() {
+  const handleCheck = useCallback(() => {
     const store = useUpdaterStore.getState()
     store.setLoading(true)
     store.setError(null)
@@ -94,6 +116,16 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
               : t('softwareUpdater.toastUpdatesFound', { count: visibleCount }),
           )
         }
+
+        // Auto-install: if enabled and updates found, install all visible apps
+        const settings = useSettingsStore.getState().settings
+        if (settings.autoInstallUpdates && visibleCount > 0 && result.packageManagerAvailable) {
+          const allIds = useUpdaterStore.getState().apps.map((a) => a.id)
+          if (allIds.length > 0) {
+            toast.info(t('softwareUpdater.autoInstalling', { count: allIds.length }))
+            handleUpdate(allIds)
+          }
+        }
       })
       .catch((err) => {
         logger.error('SoftwareUpdaterPage', 'Update check failed', err)
@@ -102,7 +134,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       .finally(() => {
         useUpdaterStore.getState().setLoading(false)
       })
-  }
+  }, [])
 
   // ─── Run updates ────────────────────────────────────────────
   const handleUpdate = useCallback(
@@ -236,6 +268,49 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             <option value="choco">Chocolatey</option>
           </select>
         )}
+
+        {/* Auto-install updates toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              const next = !autoInstallUpdates
+              useSettingsStore.getState().updateSettings({ autoInstallUpdates: next })
+              await window.dinho.settingsSet({ autoInstallUpdates: next })
+            }}
+            disabled={isBusy}
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-all disabled:opacity-40"
+            style={{
+              background: autoInstallUpdates ? 'rgba(34,197,94,0.1)' : 'var(--bg-subtle)',
+              border: autoInstallUpdates ? '1px solid rgba(34,197,94,0.3)' : '1px solid var(--border-medium)',
+              color: autoInstallUpdates ? '#4ade80' : 'var(--text-muted)',
+            }}
+          >
+            <Download className="h-3.5 w-3.5" strokeWidth={1.8} />
+            {t('softwareUpdater.autoInstallLabel')}
+          </button>
+
+          {autoInstallUpdates && (
+            <select
+              value={autoInstallSchedule ?? 'daily'}
+              onChange={async (e) => {
+                const value = e.target.value as 'daily' | 'weekly'
+                useSettingsStore.getState().updateSettings({ autoInstallSchedule: value })
+                await window.dinho.settingsSet({ autoInstallSchedule: value })
+              }}
+              disabled={isBusy}
+              aria-label={t('softwareUpdater.autoInstallScheduleLabel')}
+              className="rounded-xl px-3 py-2.5 text-[12px] font-medium text-zinc-400 outline-none transition-all disabled:opacity-40"
+              style={{
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border-medium)',
+              }}
+            >
+              <option value="daily">{t('softwareUpdater.scheduleDaily')}</option>
+              <option value="weekly">{t('softwareUpdater.scheduleWeekly')}</option>
+            </select>
+          )}
+        </div>
 
         {/* Search */}
         {hasChecked && apps.length > 0 && (
@@ -445,7 +520,12 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             value={minorCount}
             variant="default"
           />
-          <StatCard icon={CircleCheckBig} label={t('softwareUpdater.statPatches')} value={patchCount} variant="success" />
+          <StatCard
+            icon={CircleCheckBig}
+            label={t('softwareUpdater.statPatches')}
+            value={patchCount}
+            variant="success"
+          />
         </div>
       )}
 

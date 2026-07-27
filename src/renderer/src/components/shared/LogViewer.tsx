@@ -1,9 +1,9 @@
-import { useLoggerStore } from '@/stores/logger-store'
 import type { LogLevel } from '@shared/types'
 import { ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useLoggerStore } from '@/stores/logger-store'
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   info: '#3b82f6',

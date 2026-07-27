@@ -1,14 +1,14 @@
+import { History, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { ViewMode } from '@/components/history/constants'
 import { OverviewView } from '@/components/history/OverviewView'
 import { TimelineView } from '@/components/history/TimelineView'
-import type { ViewMode } from '@/components/history/constants'
 import { useTypeConfig } from '@/components/history/useTypeConfig'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useHistoryStore } from '@/stores/history-store'
-import { History, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 
 export function HistoryPage() {
   const { t } = useTranslation('history')
@@ -104,7 +104,18 @@ export function HistoryPage() {
     return (
       <div className="animate-fade-in">
         <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
-        <EmptyState icon={History} title={t('emptyStateTitle')} description={t('emptyStateDescription')} />
+        <EmptyState
+          icon={History}
+          title={t('emptyStateTitle')}
+          description={t('emptyStateDescription')}
+          actions={[
+            {
+              label: t('emptyStateScanAction'),
+              onClick: () => window.location.assign('/cleaner'),
+              icon: History,
+            },
+          ]}
+        />
       </div>
     )
   }

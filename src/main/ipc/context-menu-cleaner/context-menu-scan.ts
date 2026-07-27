@@ -3,31 +3,28 @@ import type {
   ContextMenuEntry,
   ContextMenuHive,
   ContextMenuScanResult,
-  ContextMenuScope,
   ContextMenuSource,
   ContextMenuStatus,
 } from '@shared/types'
 import { getLogger } from '../../services/logger.service'
 import { execReg } from '../../services/registry-utils'
+import type { ClsidInfo, ParsedKey } from './context-menu-constants'
 import {
+  CLSID_SAFELIST,
   type DisabledStateFile,
-  type ScanRoot,
-  DISABLED_STATE_VERSION,
+  readDisabledState,
   SCAN_ROOTS,
+  type ScanRoot,
   SOURCE_PATTERNS,
   VERB_SAFELIST,
-  CLSID_SAFELIST,
-  readDisabledState,
   writeDisabledState,
-  disabledStatePath,
 } from './context-menu-constants'
-import type { ParsedKey, ClsidInfo } from './context-menu-constants'
 
-export { type ScanRoot, SCAN_ROOTS }
+export { SCAN_ROOTS, type ScanRoot }
 
 // ── Cancellable scan state ──────────────────────────────────────────
 
-let scanAbort: AbortController | null = null
+const _scanAbort: AbortController | null = null
 
 // Session-scoped scan results so apply looks entries up by trusted in-memory
 // state rather than renderer-supplied paths.

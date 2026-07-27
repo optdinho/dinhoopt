@@ -167,4 +167,33 @@ describe('CustomYaraService', () => {
     service.addRule('b.yara', 'rule B { condition: true }')
     expect(service.getRuleCount()).toBe(2)
   })
+
+  it('addRule rejects content exceeding 1 MB file size limit', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    const largeContent = 'rule Large { condition: true } // ' + 'x'.repeat(1_048_576)
+    const result = service.addRule('large.yar', largeContent)
+    expect(result).toBe(false)
+    expect(service.getRuleCount()).toBe(0)
+  })
+
+  it('addRule accepts content at exactly 1 MB', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    const baseRule = 'rule Edge { condition: true } // '
+    const padding = 'x'.repeat(1_048_576 - Buffer.byteLength(baseRule, 'utf-8'))
+    const result = service.addRule('edge.yar', baseRule + padding)
+    expect(result).toBe(true)
+    expect(service.getRuleCount()).toBe(1)
+  })
+
+  it('addRule rejects when rule count reaches 100', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    for (let i = 0; i < 100; i++) {
+      service.addRule(`rule${i}.yar`, `rule R${i} { condition: true }`)
+    }
+    expect(service.getRuleCount()).toBe(100)
+
+    const result = service.addRule('rule100.yar', 'rule R100 { condition: true }')
+    expect(result).toBe(false)
+    expect(service.getRuleCount()).toBe(100)
+  })
 })

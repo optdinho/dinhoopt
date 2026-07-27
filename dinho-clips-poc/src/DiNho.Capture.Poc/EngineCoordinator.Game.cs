@@ -102,7 +102,7 @@ public sealed partial class EngineCoordinator
             foreach (var p in procs) p.Dispose();
             return alive;
         }
-        catch { return false; }
+        catch (Exception ex) { Log.D("EngineCoordinator", $"IsProcessAlive failed for '{processName}': {ex.Message}"); return false; }
     }
 
     private static GameInfo ResolveProcessByName(string processName)
@@ -120,7 +120,7 @@ public sealed partial class EngineCoordinator
             if (procs.Length > 0)
             {
                 var info = BuildGameInfoFromProcess(procs[0]);
-                for (int i = 1; i < procs.Length; i++) procs[i].Dispose();
+                for (int i = 0; i < procs.Length; i++) procs[i].Dispose();
                 return info;
             }
 
@@ -133,13 +133,17 @@ public sealed partial class EngineCoordinator
                 {
                     var normalizedProc = System.Text.RegularExpressions.Regex.Replace(proc.ProcessName, @"_b\d+_", "_", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (normalizedProc.Contains(normalizedBase, StringComparison.OrdinalIgnoreCase))
-                        return BuildGameInfoFromProcess(proc);
+                    {
+                        var info = BuildGameInfoFromProcess(proc);
+                        proc.Dispose();
+                        return info;
+                    }
                     proc.Dispose();
                 }
-                catch { try { proc.Dispose(); } catch { } }
+                    catch (Exception ex) { Log.D("EngineCoordinator", $"ResolveProcessByName: error inspecting process '{proc.ProcessName}': {ex.Message}"); try { proc.Dispose(); } catch { /* dispose failure is non-critical */ } }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.D("EngineCoordinator", $"ResolveProcessByName failed for '{processName}': {ex.Message}"); }
 
         return new GameInfo();
     }
@@ -262,7 +266,7 @@ public sealed partial class EngineCoordinator
                 return true;
             }
         }
-        catch { }
+        catch (Exception ex) { Log.D("EngineCoordinator", $"IsSystemExecutablePath failed: {ex.Message}"); }
 
         return false;
     }
@@ -347,8 +351,7 @@ public sealed partial class EngineCoordinator
                     StopCapture();
                 }
             }
-            catch { }
-        }
+            catch (Exception ex) { Log.D("EngineCoordinator", $"auto-stop check failed for '{_capturedGameProcess}': {ex.Message}"); }        }
 
         // Auto-start apenas quando um jogo REAL entra em foreground
         // e a captura ainda não está ativa. Enquanto captura estiver rodando

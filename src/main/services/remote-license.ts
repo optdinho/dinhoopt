@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { net, app } from 'electron'
+import { app, net } from 'electron'
 import { generateHwid } from './hwid'
 import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'
+import { getSecret } from './env-sanitize'
 import { getLogger } from './logger.service'
 
 const NETWORK_TIMEOUT = 20_000
@@ -22,8 +23,8 @@ function getLicenseConfig(): { url: string; token: string } {
     }
   } catch {}
   const url = process.env.LICENSE_API_URL || FALLBACK_URL
-  const token = process.env.LICENSE_API_TOKEN || FALLBACK_TOKEN
-  if (!process.env.LICENSE_API_TOKEN) {
+  const token = getSecret('LICENSE_API_TOKEN') || FALLBACK_TOKEN
+  if (!getSecret('LICENSE_API_TOKEN')) {
     getLogger().warning('license', 'Using hardcoded fallback token — set LICENSE_API_TOKEN env var for production')
   }
   return { url, token }

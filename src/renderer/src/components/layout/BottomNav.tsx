@@ -1,6 +1,6 @@
+import { History, Info, Settings, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppUpdateStore } from '@/stores/app-update-store'
-import { History, Info, Settings, ShieldCheck } from 'lucide-react'
 import { NavItem } from './NavItem'
 import type { NavItemDef } from './NavTypes'
 

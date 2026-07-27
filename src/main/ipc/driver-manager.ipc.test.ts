@@ -37,8 +37,8 @@ import {
   cleanDrivers,
   installDriverUpdates,
   registerDriverManagerIpc,
-  scanDriverUpdates,
   scanDrivers,
+  scanDriverUpdates,
 } from './driver-manager.ipc'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {

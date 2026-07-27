@@ -3,14 +3,16 @@ import { IPC } from '@shared/channels'
 import { applyIgnoredTweaks } from '@shared/registry-tweaks'
 import type { RegistryEntry } from '@shared/types'
 import { ipcMain } from 'electron'
+import { logAudit } from '../../services/audit-log'
 import { validateStringArray } from '../../services/ipc-validation'
+import { validateSender } from '../sender-validation'
 import { getLogger } from '../../services/logger.service'
 import { collectBackupTargets, fixRegistryEntries, scanRegistry } from '../../services/registry-cleaner.service'
 import { getSettings, updateRegistryIgnoredTweaks } from '../../services/settings-store'
 import type { WindowGetter } from '../index'
 import { cleanupScanSessions, state } from './state'
 
-export { scanRegistry, collectBackupTargets, fixRegistryEntries }
+export { collectBackupTargets, fixRegistryEntries, scanRegistry }
 
 export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
@@ -56,9 +58,10 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(
     IPC.REGISTRY_FIX,
     async (
-      _event,
+      event,
       entryIds: string[],
     ): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
+      if (!validateSender(event, getWindow())) return { fixed: 0, failed: 0, failures: [{ issue: 'Invalid sender', reason: '' }] }
       if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [] }
       const valid = validateStringArray(entryIds)
       if (!valid) {
@@ -92,6 +95,12 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
           },
           signal,
         )
+        logAudit('REGISTRY_FIX', 'registry', {
+          entryCount: entriesToFix.length,
+          fixed: result.fixed,
+          failed: result.failed,
+          keys: entriesToFix.slice(0, 20).map((e) => e.id),
+        })
         getLogger().success('registry-cleaner', `Fix complete — ${result.fixed} fixed, ${result.failed} failed`)
         return result
       } catch (err: unknown) {

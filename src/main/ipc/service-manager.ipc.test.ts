@@ -8,10 +8,7 @@ const mocks = vi.hoisted(() => ({
   lookupServiceSafety: vi.fn(),
   logger: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }))
-
-// biome-ignore lint/suspicious/noExplicitAny: vi.hoisted needs explicit type
 type ServiceScanResult = any
-// biome-ignore lint/suspicious/noExplicitAny: vi.hoisted needs explicit type
 type ServiceApplyResult = any
 
 vi.mock('electron', () => ({
@@ -39,7 +36,7 @@ vi.mock('@shared/service-safety-kb', () => ({
 
 import { IPC } from '@shared/channels'
 // biome-ignore lint/suspicious/noRedeclare: test
-import type { ServiceApplyResult, ServiceScanProgress, ServiceScanResult, WindowsService } from '@shared/types'
+import type { ServiceApplyResult, ServiceScanProgress, ServiceScanResult } from '@shared/types'
 import { applyServiceChanges, registerServiceManagerIpc, scanServices } from './service-manager.ipc'
 
 const ORIGINAL_PLATFORM = process.platform
@@ -185,7 +182,7 @@ describe('normalizeStatus', () => {
 
 // ── Service name validation (mirrors applyServiceChanges) ──
 
-const SERVICE_NAME_RE = /^[A-Za-z0-9_.\-]{1,256}$/
+const SERVICE_NAME_RE = /^[A-Za-z0-9_.-]{1,256}$/
 
 describe('service name validation', () => {
   it('accepts simple service names', () => {
@@ -238,7 +235,6 @@ describe('applyServiceChanges input validation', () => {
   })
 
   it('returns empty result for non-array input', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const changes = 'not an array' as any
     const result = !Array.isArray(changes) || changes.length === 0 ? { succeeded: 0, failed: 0, errors: [] } : null
     expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })
@@ -264,7 +260,6 @@ describe('applyServiceChanges input validation', () => {
   })
 
   it('rejects non-string name in change entry', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     const changes = [{ name: 123 as any, targetStartType: 'Manual' }]
     let error: string | null = null
     for (const c of changes) {
@@ -706,7 +701,6 @@ describe('applyServiceChanges', () => {
   })
 
   it('returns error for invalid change entry type', async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: testing invalid input
     const result = await applyServiceChanges([{ name: 123 as any, targetStartType: 'Manual' }])
 
     expect(result).toEqual({
@@ -807,7 +801,6 @@ describe('applyServiceChanges', () => {
 
   it('handles PowerShell exception with non-Error type', async () => {
     mocks.lookupServiceSafety.mockReturnValue({ safety: 'safe', category: 'misc', note: '' })
-    // biome-ignore lint/suspicious/noExplicitAny: testing unknown error type
     mocks.execFileAsync.mockRejectedValue('string error' as any)
 
     const result = await applyServiceChanges([validChange])
@@ -844,7 +837,6 @@ describe('applyServiceChanges', () => {
   it('handles non-string targetStartType as invalid entry', async () => {
     const result = await applyServiceChanges([
       { name: 'Svc', targetStartType: 'Manual' },
-      // biome-ignore lint/suspicious/noExplicitAny: testing invalid input
       { name: 42 as any, targetStartType: 'Disabled' },
     ])
 
@@ -909,8 +901,6 @@ describe('registerServiceManagerIpc', () => {
   it('SERVICE_APPLY handler validates changes is an array', async () => {
     registerServiceManagerIpc(() => null)
     const handler = getHandler(IPC.SERVICE_APPLY)
-
-    // biome-ignore lint/suspicious/noExplicitAny: testing invalid input
     const result = await handler(null, 'not-an-array' as any)
 
     expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })

@@ -1,10 +1,10 @@
-import type { RegistryEntry } from '@shared/types'
-import { execTracked, psUtf8 } from '../exec-utf8'
-import { getBackupDir } from '../backup-dir'
 import { mkdirSync } from 'node:fs'
+import type { RegistryEntry } from '@shared/types'
+import { getBackupDir } from '../backup-dir'
+import { execTracked, psUtf8 } from '../exec-utf8'
 import { getSettings } from '../settings-store'
-import { execReg, splitTaskPath } from './utils'
 import { createFullBackup, createTargetedBackup, pruneOldBackups } from './backup'
+import { execReg, splitTaskPath } from './utils'
 
 export async function fixRegistryEntries(
   entries: RegistryEntry[],
@@ -35,7 +35,7 @@ export async function fixRegistryEntries(
   for (let i = 0; i < entries.length; i++) {
     if (signal?.aborted) break
     const entry = entries[i]
-    if (!entry || !entry.fix) {
+    if (!entry?.fix) {
       failed++
       failures.push({ issue: 'Unknown entry', reason: 'Entry data not found — try scanning again before fixing' })
       continue

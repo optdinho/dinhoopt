@@ -1,6 +1,6 @@
-import { Checkbox } from '@/components/shared/Checkbox'
-import { SquareArrowOutUpRight, FolderX } from 'lucide-react'
+import { FolderX, SquareArrowOutUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Checkbox } from '@/components/shared/Checkbox'
 
 export interface FolderItem {
   path: string

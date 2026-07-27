@@ -1,7 +1,7 @@
+import type { FirewallIssue, FirewallRiskLevel, FirewallRule } from '@shared/types'
+import { FileWarning, FileX, Globe, type Inbox, Network } from 'lucide-react'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { useFirewallStore } from '@/stores/firewall-store'
-import type { FirewallIssue, FirewallRiskLevel, FirewallRule } from '@shared/types'
-import { FileWarning, FileX, Globe, Inbox, Network } from 'lucide-react'
 
 export const RISK_COLORS: Record<FirewallRiskLevel, { dot: string; bg: string; border: string; text: string }> = {
   high: { dot: '#ef4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.20)', text: '#ef4444' },
@@ -16,7 +16,13 @@ export const ISSUE_ICON: Record<FirewallIssue, typeof FileX> = {
   'any-remote': Network,
 }
 
-export function RuleRow({ rule, t }: { rule: FirewallRule; t: (key: string, options?: Record<string, unknown>) => string }) {
+export function RuleRow({
+  rule,
+  t,
+}: {
+  rule: FirewallRule
+  t: (key: string, options?: Record<string, unknown>) => string
+}) {
   const colors = RISK_COLORS[rule.risk]
   return (
     <div
@@ -95,7 +101,12 @@ export function StatBox({
   value,
   icon: Icon,
   color,
-}: { label: string; value: number; icon: typeof Inbox; color: string }) {
+}: {
+  label: string
+  value: number
+  icon: typeof Inbox
+  color: string
+}) {
   return (
     <div
       className="flex items-center gap-3 rounded-xl px-4 py-3"

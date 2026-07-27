@@ -1,6 +1,6 @@
-import { formatDate, formatNumber } from '@/lib/utils'
 import type { AppStats } from '@shared/types'
 import { useTranslation } from 'react-i18next'
+import { formatDate, formatNumber } from '@/lib/utils'
 
 export function StatusBlock({ stats }: { stats: AppStats }) {
   const { t } = useTranslation('dashboard')

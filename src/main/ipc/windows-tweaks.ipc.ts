@@ -1,7 +1,7 @@
 export {
   DNS_PRESETS,
-  REG_TYPE_RE,
   getCatalog,
   getCatalogByCategory,
+  REG_TYPE_RE,
   registerWindowsTweaksIpc,
 } from './windows-tweaks/index'

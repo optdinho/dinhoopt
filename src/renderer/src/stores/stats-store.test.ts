@@ -1,10 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.stubGlobal('window', { dinho: { onHistoryChanged: vi.fn() } })
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 let useStatsStore: any
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 let useHistoryStore: any
 
 async function setup() {
@@ -13,14 +10,9 @@ async function setup() {
   useStatsStore = mod.useStatsStore
   useHistoryStore = hist.useHistoryStore
 }
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 function mockHistory(entries: any[]) {
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   useHistoryStore.setState({ entries } as any)
 }
-
-// biome-ignore lint/suspicious/noExplicitAny: test mock
 function makeEntry(overrides: Partial<any> = {}) {
   return {
     id: '1',

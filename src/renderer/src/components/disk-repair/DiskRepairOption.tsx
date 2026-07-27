@@ -1,4 +1,4 @@
-import { TriangleAlert, CircleCheckBig, RefreshCw, ShieldAlert, CircleX } from 'lucide-react'
+import { CircleCheckBig, CircleX, RefreshCw, ShieldAlert, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface RepairResult {

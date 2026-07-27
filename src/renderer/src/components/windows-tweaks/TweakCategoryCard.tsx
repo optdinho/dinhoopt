@@ -1,9 +1,9 @@
-import { TweakRow } from '@/components/TweakRow'
 import type { WindowsTweakCategory, WindowsTweakWithState } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { TweakRow } from '@/components/TweakRow'
 
 export interface CategoryDef {
   id: WindowsTweakCategory
@@ -51,13 +51,9 @@ export function TweakCategoryCard({
         </div>
         <div className="flex-1">
           <div className="text-sm font-medium text-zinc-200">{category.label}</div>
-          <div className="text-xs text-zinc-500">
-            {t('categoryStats', { applied, total })}
-          </div>
+          <div className="text-xs text-zinc-500">{t('categoryStats', { applied, total })}</div>
         </div>
-        <ChevronDown
-          className={`h-4 w-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-        />
+        <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>

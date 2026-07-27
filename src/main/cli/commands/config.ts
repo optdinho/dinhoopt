@@ -1,6 +1,6 @@
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
-import { cliLog, cliOut, cliUsage, log } from '../utils'
+import { cliLog, cliOut, log } from '../utils'
 
 export async function handleConfig(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]

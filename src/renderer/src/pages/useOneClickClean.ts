@@ -1,13 +1,13 @@
-import type { OneClickResult } from '@/components/dashboard/types'
-import { useHistoryStore } from '@/stores/history-store'
-import { useScanStore } from '@/stores/scan-store'
-import { useSettingsStore } from '@/stores/settings-store'
-import { useStatsStore } from '@/stores/stats-store'
 import { CleanerType } from '@shared/enums'
 import type { CleanResult, ScanResult } from '@shared/types'
 import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import type { OneClickResult } from '@/components/dashboard/types'
+import { useHistoryStore } from '@/stores/history-store'
+import { useScanStore } from '@/stores/scan-store'
+import { useSettingsStore } from '@/stores/settings-store'
+import { useStatsStore } from '@/stores/stats-store'
 import type { OneClickPhase } from '../components/dashboard/types'
 
 const CLEANER_SCAN_FNS: {
@@ -230,7 +230,19 @@ export function useOneClickClean(deps: OneClickCleanDeps) {
     setPhase('done')
     setPhaseLabel('')
     refreshDrives()
-  }, [phase, runCleaners, runRegistry, addEntry, recomputeStats, features, refreshDrives, setPhase, setResult, setStepProgress, setPhaseLabel])
+  }, [
+    phase,
+    runCleaners,
+    runRegistry,
+    addEntry,
+    recomputeStats,
+    features,
+    refreshDrives,
+    setPhase,
+    setResult,
+    setStepProgress,
+    setPhaseLabel,
+  ])
 
   const handleFullClean = useCallback(async () => {
     if (phase !== 'idle' && phase !== 'done') return

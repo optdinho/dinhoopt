@@ -1,5 +1,5 @@
-import { formatBytes } from '@/lib/utils'
 import { CircleCheckBig } from 'lucide-react'
+import { formatBytes } from '@/lib/utils'
 
 interface InstallResult {
   installed: number
@@ -19,13 +19,7 @@ export interface ScanResultCardProps {
   t: (key: string, options?: Record<string, unknown>) => string
 }
 
-function ResultBanner({
-  icon,
-  children,
-}: {
-  icon: React.ReactNode
-  children: React.ReactNode
-}) {
+function ResultBanner({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div
       className="mb-5 flex items-center gap-3 rounded-2xl p-4"

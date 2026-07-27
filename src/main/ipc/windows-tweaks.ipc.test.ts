@@ -44,9 +44,9 @@ vi.mock('../platform', () => ({
 import type { WindowsTweakCategory } from '@shared/types'
 import {
   DNS_PRESETS,
-  REG_TYPE_RE,
   getCatalog,
   getCatalogByCategory,
+  REG_TYPE_RE,
   registerWindowsTweaksIpc,
 } from './windows-tweaks.ipc'
 
@@ -296,7 +296,7 @@ describe('registerWindowsTweaksIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 11 IPC handlers', () => {
+  it('registers all 15 IPC handlers', () => {
     registerWindowsTweaksIpc(() => null)
     const channels = mockHandle.mock.calls.map((c) => c[0])
     expect(channels).toContain('windows-tweaks:list')
@@ -310,7 +310,11 @@ describe('registerWindowsTweaksIpc', () => {
     expect(channels).toContain('windows-tweaks:gaming-timer-set')
     expect(channels).toContain('windows-tweaks:gaming-timer-revert')
     expect(channels).toContain('windows-tweaks:gaming-autotuning')
-    expect(channels.length).toBe(11)
+    expect(channels).toContain('windows-tweaks:gaming-vbs-get')
+    expect(channels).toContain('windows-tweaks:gaming-vbs-set')
+    expect(channels).toContain('windows-tweaks:gaming-hags-get')
+    expect(channels).toContain('windows-tweaks:gaming-hags-set')
+    expect(channels.length).toBe(15)
   })
 })
 
@@ -630,7 +634,6 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
 
   it('sends progress events during apply', async () => {
     stubExecFile({ stdout: 'The operation completed successfully.' })
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerWindowsTweaksIpc(() => mockWindow() as any)
     const handler = getHandler('windows-tweaks:apply')
 
@@ -835,7 +838,6 @@ describe('WINDOWS_TWEAKS_REVERT handler', () => {
 
   it('sends progress events during revert', async () => {
     stubExecFile({ stdout: 'The operation completed successfully.' })
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerWindowsTweaksIpc(() => mockWindow() as any)
     const handler = getHandler('windows-tweaks:revert')
 

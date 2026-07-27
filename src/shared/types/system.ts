@@ -259,6 +259,7 @@ export interface PrivacySetting {
     | 'access'
     | 'ai'
     | 'browser'
+    | 'recall'
   label: string
   description: string
   enabled: boolean // true = privacy-friendly (tracking disabled)

@@ -1,17 +1,19 @@
-import { GameModeAudit } from '@/components/game-mode/GameModeAudit'
-import { GameModeAutoDetect } from '@/components/game-mode/GameModeAutoDetect'
-import { GameModeCategoryCard } from '@/components/game-mode/GameModeCategoryCard'
-import { GameModeHero } from '@/components/game-mode/GameModeHero'
-import { GameModeProfiles } from '@/components/game-mode/GameModeProfiles'
-import { CATEGORIES, OPTIMIZATIONS, formatElapsed } from '@/components/game-mode/constants'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { useGameModeStore } from '@/stores/game-mode-store'
 import type { GameModeOptimizationId } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, TriangleAlert, CircleCheckBig, Radar, Shield, Timer, Zap } from 'lucide-react'
+import { Activity, CircleCheckBig, Radar, Shield, Timer, TriangleAlert, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { CATEGORIES, formatElapsed, OPTIMIZATIONS } from '@/components/game-mode/constants'
+import { GameModeAudit } from '@/components/game-mode/GameModeAudit'
+import { GameModeAutoDetect } from '@/components/game-mode/GameModeAutoDetect'
+import { GameModeCategoryCard } from '@/components/game-mode/GameModeCategoryCard'
+import { GameModeDirectStorage } from '@/components/game-mode/GameModeDirectStorage'
+import { GameModeGpuTweaks } from '@/components/game-mode/GameModeGpuTweaks'
+import { GameModeHero } from '@/components/game-mode/GameModeHero'
+import { GameModeProfiles } from '@/components/game-mode/GameModeProfiles'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { useGameModeStore } from '@/stores/game-mode-store'
 
 export function GameModePage() {
   const { t } = useTranslation('gameMode')
@@ -77,7 +79,7 @@ export function GameModePage() {
     if (!lastResult) return
     const timer = setTimeout(() => store.getState().setLastResult(null), 8000)
     return () => clearTimeout(timer)
-  }, [lastResult, store])
+  }, [lastResult])
 
   const isBusy = status !== 'idle'
 
@@ -112,7 +114,7 @@ export function GameModePage() {
       progressCleanupRef.current?.()
       progressCleanupRef.current = null
     }
-  }, [config, t, store])
+  }, [config, t])
 
   const handleDeactivate = useCallback(async () => {
     store.getState().setStatus('deactivating')
@@ -138,7 +140,7 @@ export function GameModePage() {
       progressCleanupRef.current?.()
       progressCleanupRef.current = null
     }
-  }, [store, t])
+  }, [t])
 
   const handleAddCustomProcess = useCallback(() => {
     const name = customInput.trim()
@@ -149,13 +151,13 @@ export function GameModePage() {
     }
     store.getState().setCustomProcessKillList([...config.customProcessKillList, name])
     setCustomInput('')
-  }, [customInput, config.customProcessKillList, store, t])
+  }, [customInput, config.customProcessKillList, t])
 
   const handleRemoveCustomProcess = useCallback(
     (name: string) => {
       store.getState().setCustomProcessKillList(config.customProcessKillList.filter((n) => n !== name))
     },
-    [config.customProcessKillList, store],
+    [config.customProcessKillList],
   )
 
   const handleAddGameProcess = useCallback(() => {
@@ -167,19 +169,19 @@ export function GameModePage() {
     }
     store.getState().setCustomGameProcesses([...(config.customGameProcesses ?? []), name])
     setGameInput('')
-  }, [gameInput, config.customGameProcesses, store, t])
+  }, [gameInput, config.customGameProcesses, t])
 
   const handleRemoveGameProcess = useCallback(
     (name: string) => {
       store.getState().setCustomGameProcesses((config.customGameProcesses ?? []).filter((n) => n !== name))
     },
-    [config.customGameProcesses, store],
+    [config.customGameProcesses],
   )
 
   const handleRunAudit = useCallback(async () => {
     await store.getState().runAudit('pre-activation')
     setShowAuditModal(true)
-  }, [store])
+  }, [])
 
   const enabledSet = new Set(config.enabledOptimizations)
   const enabledCount = config.enabledOptimizations.length
@@ -406,6 +408,10 @@ export function GameModePage() {
           }}
           onCancelProfile={() => setEditingProfile(null)}
         />
+
+        <GameModeGpuTweaks />
+
+        <GameModeDirectStorage />
 
         {CATEGORIES.map((cat, catIndex) => (
           <GameModeCategoryCard

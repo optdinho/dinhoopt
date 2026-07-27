@@ -125,5 +125,28 @@
   "pendingRestoreMessage": "Algunos ajustes de la última sesión no pudieron restaurarse automáticamente. Reintente una vez que se resuelva la causa (p. ej., derechos de administrador).",
   "retryCleanup": "Reintentar limpieza",
   "retrying": "Reintentando\u2026",
+  "gpuTweaksTitle": "Ajustes de GPU y Seguridad",
+  "gpuTweaksDesc": "Interruptores a nivel de hardware para rendimiento y seguridad",
+  "gpuTweaksApplyFailed": "Error al aplicar ajuste de GPU",
+  "vbsLabel": "Seguridad Basada en Virtualización (VBS)",
+  "vbsDesc": "Desactive VBS para mejorar FPS entre 5-15%, pero reduce la seguridad contra amenazas a nivel de kernel",
+  "vbsWarningBadge": "Riesgo de seguridad",
+  "hagsLabel": "Programación GPU Acelerada por Hardware (HAGS)",
+  "hagsDesc": "Permite que la GPU gestione su propia programación de memoria de video para menor latencia",
+
+  "directStorageTitle": "DirectStorage y Salud NVMe",
+  "directStorageDesc": "Verificar compatibilidad de juegos con carga de almacenamiento directo por GPU",
+  "directStorageChecking": "Verificando salud del almacenamiento...",
+  "directStorageRefresh": "Actualizar",
+  "directStorageGameSupport": "Soporte DirectStorage en Juegos",
+  "directStorageSupported": "Soportado",
+  "directStorageNotSupported": "No encontrado",
+  "nvmeHealth": "Salud del Disco NVMe",
+  "nvmeHealthy": "Saludable",
+  "nvmeCaution": "Precaución",
+  "nvmeBad": "Degradado",
+  "nvmeUnknown": "Desconocido",
+  "nvmeNotFound": "No se detectaron discos NVMe",
+
   "ariaHexGrid": "Fondo de cuadrícula hexagonal"
 }

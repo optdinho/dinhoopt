@@ -1,16 +1,6 @@
-import type { ClipsState } from './useClipsState'
-import {
-  TriangleAlert,
-  CircleStop,
-  Cpu,
-  Download,
-  Gamepad2,
-  HardDrive,
-  Loader2,
-  Microscope,
-  Video,
-} from 'lucide-react'
+import { CircleStop, Cpu, Download, Gamepad2, HardDrive, Loader2, Microscope, TriangleAlert, Video } from 'lucide-react'
 import { formatUptime } from './clips-utils'
+import type { ClipsState } from './useClipsState'
 
 export function ClipsStatusBar({
   status,
@@ -30,19 +20,10 @@ export function ClipsStatusBar({
     >
       {!statusLoaded ? (
         <div className="space-y-3">
-          <div
-            className="h-4 w-32 rounded-md animate-pulse"
-            style={{ background: 'rgba(113,113,122,0.15)' }}
-          />
+          <div className="h-4 w-32 rounded-md animate-pulse" style={{ background: 'rgba(113,113,122,0.15)' }} />
           <div className="flex gap-2">
-            <div
-              className="h-7 w-20 rounded-lg animate-pulse"
-              style={{ background: 'rgba(113,113,122,0.12)' }}
-            />
-            <div
-              className="h-7 w-24 rounded-lg animate-pulse"
-              style={{ background: 'rgba(113,113,122,0.12)' }}
-            />
+            <div className="h-7 w-20 rounded-lg animate-pulse" style={{ background: 'rgba(113,113,122,0.12)' }} />
+            <div className="h-7 w-24 rounded-lg animate-pulse" style={{ background: 'rgba(113,113,122,0.12)' }} />
           </div>
         </div>
       ) : (

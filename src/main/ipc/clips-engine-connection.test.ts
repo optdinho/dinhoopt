@@ -7,20 +7,20 @@ let dataHandlers: Array<(chunk: Buffer) => void> = []
 let errorHandlers: Array<(err: Error) => void> = []
 let closeHandlers: Array<() => void> = []
 let timeoutHandlers: Array<() => void> = []
-let connectHandler: (() => void) | null = null
+let _connectHandler: (() => void) | null = null
 
 function resetMockSocket(): void {
   dataHandlers = []
   errorHandlers = []
   closeHandlers = []
   timeoutHandlers = []
-  connectHandler = null
+  _connectHandler = null
 }
 
 const mockSocket = {
   on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
     if (event === 'connect') {
-      connectHandler = cb as () => void
+      _connectHandler = cb as () => void
       cb()
     } else if (event === 'data') {
       dataHandlers.push(cb as (chunk: Buffer) => void)
@@ -76,14 +76,8 @@ import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { connect } from 'node:net'
-import { BrowserWindow, app } from 'electron'
-import {
-  config as C,
-  buildEngineConfig,
-  getDefaultOutputDir,
-  persistClipsConfig,
-} from '../services/clips-config-manager'
-import { getLogger } from '../services/logger.service'
+import { app, BrowserWindow } from 'electron'
+import { buildEngineConfig, config as C, persistClipsConfig } from '../services/clips-config-manager'
 import {
   getCurrentStatus,
   getEnginePath,
@@ -364,8 +358,16 @@ describe('readClipsFromDisk', () => {
     vi.mocked(readdir).mockResolvedValue(['b.mp4', 'a.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
     mockFfmpegDuration('Duration: 00:01:00.00\n')
     vi.mocked(stat)
-      .mockResolvedValueOnce({ size: 100, birthtime: new Date('2026-06-20T10:00:00Z'), mtime: new Date('2026-06-20T10:00:00Z') } as Awaited<ReturnType<typeof stat>>)
-      .mockResolvedValueOnce({ size: 200, birthtime: new Date('2026-06-21T10:00:00Z'), mtime: new Date('2026-06-21T10:00:00Z') } as Awaited<ReturnType<typeof stat>>)
+      .mockResolvedValueOnce({
+        size: 100,
+        birthtime: new Date('2026-06-20T10:00:00Z'),
+        mtime: new Date('2026-06-20T10:00:00Z'),
+      } as Awaited<ReturnType<typeof stat>>)
+      .mockResolvedValueOnce({
+        size: 200,
+        birthtime: new Date('2026-06-21T10:00:00Z'),
+        mtime: new Date('2026-06-21T10:00:00Z'),
+      } as Awaited<ReturnType<typeof stat>>)
 
     const clips = await readClipsFromDisk()
     expect(clips).toHaveLength(2)
@@ -392,8 +394,12 @@ describe('readClipsFromDisk', () => {
 
   it('filters non-mp4 files', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readdir).mockResolvedValue(['clip.mp4', 'notes.txt', 'image.png'] as unknown as Awaited<ReturnType<typeof readdir>>)
-    vi.mocked(stat).mockResolvedValue({ size: 50, birthtime: new Date(), mtime: new Date() } as Awaited<ReturnType<typeof stat>>)
+    vi.mocked(readdir).mockResolvedValue(['clip.mp4', 'notes.txt', 'image.png'] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >)
+    vi.mocked(stat).mockResolvedValue({ size: 50, birthtime: new Date(), mtime: new Date() } as Awaited<
+      ReturnType<typeof stat>
+    >)
     mockFfmpegDuration('Duration: 00:01:00.00\n')
 
     const clips = await readClipsFromDisk()
@@ -563,10 +569,10 @@ describe('handlePipeMessage (via pipe data)', () => {
 
   it('updates engine state from engineStatus event with data wrapper', () => {
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', data: { recording: true, fps: 120, game: 'FiveM' } },
-      }) + '\n',
+      })}\n`,
     )
 
     expect(isEngineCapturing()).toBe(true)
@@ -575,10 +581,10 @@ describe('handlePipeMessage (via pipe data)', () => {
 
   it('updates engine state from engineStatus without data wrapper', () => {
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', recording: true, fps: 60, game: 'Fortnite' },
-      }) + '\n',
+      })}\n`,
     )
 
     expect(isEngineCapturing()).toBe(true)
@@ -587,7 +593,7 @@ describe('handlePipeMessage (via pipe data)', () => {
 
   it('updates all field types from engineStatus', () => {
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: {
           type: 'engineStatus',
@@ -615,7 +621,7 @@ describe('handlePipeMessage (via pipe data)', () => {
           replayBufferAudioBytes: 65536,
           outputDirectory: 'D:\\Clips',
         },
-      }) + '\n',
+      })}\n`,
     )
 
     expect(C.engineFps).toBe(90)
@@ -632,10 +638,10 @@ describe('handlePipeMessage (via pipe data)', () => {
 
   it('clamps volume values to [0, 2]', () => {
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', gameVolume: 5, micVolume: -1 },
-      }) + '\n',
+      })}\n`,
     )
     expect(C.gameVolume).toBe(2)
     expect(C.micVolume).toBe(0)
@@ -644,10 +650,10 @@ describe('handlePipeMessage (via pipe data)', () => {
   it('ignores non-matching types for number fields', () => {
     C.engineFps = 30
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', fps: 'not-a-number', game: 'Test' },
-      }) + '\n',
+      })}\n`,
     )
     // Should NOT have changed to NaN
     expect(C.engineFps).toBe(30)
@@ -656,7 +662,7 @@ describe('handlePipeMessage (via pipe data)', () => {
   it('ignores non-matching types for boolean fields', () => {
     C.engineReplayTimeSeconds = 300
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: {
           type: 'engineStatus',
@@ -665,7 +671,7 @@ describe('handlePipeMessage (via pipe data)', () => {
           audioLoopback: 'true',
           audioFallback: null,
         },
-      }) + '\n',
+      })}\n`,
     )
     // Default state checks — these boolean fields should not be truthy
   })
@@ -673,10 +679,10 @@ describe('handlePipeMessage (via pipe data)', () => {
   it('logs warning on outputDirectory mismatch', () => {
     C.outputDirectory = 'E:\\OldClips'
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', outputDirectory: 'F:\\NewClips' },
-      }) + '\n',
+      })}\n`,
     )
     expect(mockLogger.warning).toHaveBeenCalledWith('clips', expect.stringContaining('Output directory mismatch'))
     expect(C.outputDirectory).toBe('F:\\NewClips')
@@ -685,10 +691,10 @@ describe('handlePipeMessage (via pipe data)', () => {
   it('adopts engine outputDirectory when frontend is empty', () => {
     C.outputDirectory = ''
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', outputDirectory: 'G:\\EngineClips' },
-      }) + '\n',
+      })}\n`,
     )
     expect(C.outputDirectory).toBe('G:\\EngineClips')
   })
@@ -701,10 +707,10 @@ describe('handlePipeMessage (via pipe data)', () => {
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockWin as never])
 
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', recording: true },
-      }) + '\n',
+      })}\n`,
     )
 
     expect(mockWin.webContents.send).toHaveBeenCalledWith(
@@ -716,20 +722,20 @@ describe('handlePipeMessage (via pipe data)', () => {
   it('skips BrowserWindow send when no valid window', () => {
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', recording: false },
-      }) + '\n',
+      })}\n`,
     )
     // Should not throw
   })
 
   it('does NOT call persistClipsConfig on engineStatus (over-polling fix)', () => {
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus' },
-      }) + '\n',
+      })}\n`,
     )
     expect(persistClipsConfig).not.toHaveBeenCalled()
   })
@@ -790,7 +796,7 @@ describe('onPipeData (partial chunks / malformed)', () => {
 
   it('truncates long unparseable lines to 200 chars', () => {
     const long = 'x'.repeat(500)
-    triggerPipeData(long + '\n')
+    triggerPipeData(`${long}\n`)
     expect(mockLogger.warning).toHaveBeenCalledWith('clips-pipe', expect.stringContaining('x'.repeat(200)))
   })
 })
@@ -936,10 +942,10 @@ describe('startClipCapture', () => {
 
     // Set engineCurrentGame via pipe status
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', game: 'FiveM_GTAProcess.exe' },
-      }) + '\n',
+      })}\n`,
     )
 
     const promise = startClipCapture()
@@ -990,10 +996,10 @@ describe('startClipCapture', () => {
     await startEngine()
 
     triggerPipeData(
-      JSON.stringify({
+      `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', game: 'FiveM (Build 1234) [b1234]' },
-      }) + '\n',
+      })}\n`,
     )
 
     const promise = startClipCapture()

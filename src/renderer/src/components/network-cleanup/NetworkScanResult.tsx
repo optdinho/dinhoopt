@@ -1,7 +1,6 @@
-import { EmptyState } from '@/components/shared/EmptyState'
 import { CircleCheckBig, Search } from 'lucide-react'
-import type { ProgressData } from '@shared/types'
 import { useTranslation } from 'react-i18next'
+import { EmptyState } from '@/components/shared/EmptyState'
 
 interface CleanProgress {
   progress: number
@@ -50,9 +49,7 @@ export function NetworkScanResult({
         <div className="mb-3 flex items-center gap-3">
           <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
           <span className="text-[13px] text-zinc-300">
-            {cleanProgress?.currentPath
-              ? t('cleaningItem', { item: cleanProgress.currentPath })
-              : t('cleaningStatus')}
+            {cleanProgress?.currentPath ? t('cleaningItem', { item: cleanProgress.currentPath }) : t('cleaningStatus')}
           </span>
           {cleanProgress && (
             <span className="ml-auto font-mono text-[12px]" style={{ color: 'var(--text-muted)' }}>

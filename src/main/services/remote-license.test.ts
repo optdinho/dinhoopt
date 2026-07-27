@@ -16,16 +16,13 @@ const mockVars = vi.hoisted(() => {
 
 const mockNet = vi.hoisted(() => {
   let _status = 200
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   let _body: any = { valid: false, reason: 'test-blocked' }
   let _error: string | null = null
   let _capturedPayload = ''
   let _callIndex = 0
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   const _responses: Array<{ status?: number; body?: any; error?: string }> = []
 
   return {
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     setResponse: (body: any, status = 200) => {
       _status = status
       _body = body
@@ -38,7 +35,6 @@ const mockNet = vi.hoisted(() => {
       _responses.length = 0
       _callIndex = 0
     },
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     setSequence: (seq: Array<{ status?: number; body?: any; error?: string }>) => {
       _responses.splice(0, _responses.length, ...seq)
       _callIndex = 0
@@ -47,7 +43,6 @@ const mockNet = vi.hoisted(() => {
     _makeRequest: () => {
       _capturedPayload = ''
       return {
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
         on(ev: string, cb: any) {
           const idx = Math.min(_callIndex, _responses.length > 0 ? _responses.length - 1 : 0)
           let status = _status
@@ -68,7 +63,6 @@ const mockNet = vi.hoisted(() => {
                 cb({
                   statusCode: status,
                   response: {
-                    // biome-ignore lint/suspicious/noExplicitAny: test mock
                     on(dEv: string, dCb: any) {
                       if (dEv === 'data') dCb(Buffer.from(JSON.stringify(body)))
                       if (dEv === 'end') dCb(null)
@@ -106,9 +100,8 @@ vi.mock('electron', () => {
 
 vi.mock('./hwid', () => ({ generateHwid: async () => 'test-hwid-12345' }))
 
-import { __resetForTest, activateLicense, checkLicense, getHwid } from './remote-license'
-
 import { initStore, readSavedKey } from './license-store'
+import { __resetForTest, activateLicense, checkLicense, getHwid } from './remote-license'
 
 const KEYFILE = 'remote-license.key'
 let testRoot = ''

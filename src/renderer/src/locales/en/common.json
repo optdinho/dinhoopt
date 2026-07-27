@@ -23,5 +23,15 @@
   "dismissError": "Dismiss error",
   "windowControls": "Window controls",
   "errorTitle": "Something went wrong",
-  "errorTryAgain": "Try again"
+  "errorTryAgain": "Try again",
+  "shortcutsTitle": "Keyboard Shortcuts",
+  "shortcutsNavigation": "Navigation",
+  "shortcutsActions": "Actions",
+  "shortcutsGeneral": "General",
+  "shortcutsCommandPalette": "Command Palette",
+  "shortcutsNavigateSections": "Navigate to section",
+  "shortcutsShowHelp": "Show this help",
+  "shortcutsCloseModal": "Close modal / Go back",
+  "itemsSelected": "items selected",
+  "lastScan": "Last scan"
 }

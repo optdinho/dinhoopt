@@ -38,6 +38,10 @@ vi.mock('../services/ipc-validation', () => ({
   },
 }))
 
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
+}))
+
 import { KNOWN_BLOATWARE, registerDebloaterIpc, removeBloatware, scanBloatware } from './debloater.ipc'
 
 // ── Helpers ──
@@ -129,7 +133,6 @@ describe('DEBLOATER_REMOVE handler', () => {
 
   it('sends progress events to the window during removal', async () => {
     // On non-win32, the handler returns early before invoking PowerShell
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDebloaterIpc(() => mockWindow() as any)
     const handler = getHandler('debloater:remove')
     const result = await handler({}, ['Microsoft.BingNews'])
@@ -144,7 +147,6 @@ describe('DEBLOATER_REMOVE handler', () => {
         callback(null, { stdout: '' })
       }
     })
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDebloaterIpc(() => mockWindow() as any)
     const handler = getHandler('debloater:remove')
     const result = (await handler({}, ['Microsoft.BingNews'])) as { removed: number; failed: number }

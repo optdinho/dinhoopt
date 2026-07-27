@@ -31,6 +31,7 @@ vi.mock('systeminformation', () => ({
 }))
 
 import * as si from 'systeminformation'
+
 const mockedMem = vi.mocked(si.mem)
 const mockedProcesses = vi.mocked(si.processes)
 
@@ -82,7 +83,6 @@ describe('getMemoryInfo', () => {
       reclaimable: 0,
       writeback: null,
       dirty: null,
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any)
 
     const result = await getMemoryInfo()
@@ -113,7 +113,6 @@ describe('getMemoryProcesses', () => {
           started: '2026-01-01',
           parentPid: 0,
           command: 'chrome',
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
         } as any,
         {
           pid: 2,
@@ -125,7 +124,6 @@ describe('getMemoryProcesses', () => {
           started: '2026-01-01',
           parentPid: 0,
           command: 'node',
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
         } as any,
         {
           pid: 3,
@@ -137,7 +135,6 @@ describe('getMemoryProcesses', () => {
           started: '2026-01-01',
           parentPid: 0,
           command: 'code',
-          // biome-ignore lint/suspicious/noExplicitAny: test mock
         } as any,
       ],
     })
@@ -157,7 +154,6 @@ describe('getMemoryProcesses', () => {
       blocked: 0,
       sleeping: 0,
       unknown: 0,
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       list: [] as any,
     })
 

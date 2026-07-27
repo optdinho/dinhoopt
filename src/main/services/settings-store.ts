@@ -22,6 +22,8 @@ const defaults: StoreData = {
     autoUpdate: true,
     autoRestart: true,
     updateCheckIntervalHours: 4,
+    autoInstallUpdates: false,
+    autoInstallSchedule: null,
     cleaner: {
       skipRecentMinutes: 60,
       secureDelete: false,
@@ -78,8 +80,6 @@ const store = createJsonStore<StoreData>({
   defaults,
   devSuffix: 'DiNho-Dev',
 })
-
-// biome-ignore lint/suspicious/noExplicitAny: generic constraint for deep merge
 export function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
   const result = JSON.parse(JSON.stringify(target))
   for (const key of Object.keys(source) as Array<keyof T>) {
@@ -92,7 +92,6 @@ export function deepMerge<T extends Record<string, any>>(target: T, source: Part
       typeof result[key] === 'object' &&
       !Array.isArray(result[key])
     ) {
-      // biome-ignore lint/suspicious/noExplicitAny: recursive merge cast
       result[key] = deepMerge(result[key] as Record<string, any>, value as Record<string, any>)
     } else if (value !== undefined) {
       result[key] = value as T[keyof T]

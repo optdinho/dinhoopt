@@ -1,6 +1,6 @@
-import { ScanProgress } from '@/components/shared/ScanProgress'
 import { StopCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { ScanProgress } from '@/components/shared/ScanProgress'
 
 interface ScanProgressSectionProps {
   scanning: boolean

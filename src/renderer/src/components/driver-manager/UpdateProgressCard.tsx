@@ -1,6 +1,6 @@
-import { ScanProgress } from '@/components/shared/ScanProgress'
 import type { DriverUpdateProgress } from '@shared/types'
 import { Loader2 } from 'lucide-react'
+import { ScanProgress } from '@/components/shared/ScanProgress'
 
 export interface UpdateProgressCardProps {
   updateProgress: DriverUpdateProgress | null

@@ -1,8 +1,8 @@
+import type { NetworkItem } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
+import { Network } from 'lucide-react'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { cn } from '@/lib/utils'
-import type { NetworkItem } from '@shared/types'
-import { Network } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 
 interface DnsCacheEntryProps {
   item: NetworkItem

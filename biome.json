@@ -1,8 +1,5 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
-  "organizeImports": {
-    "enabled": true
-  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -37,5 +34,17 @@
   },
   "files": {
     "includes": ["**", "!node_modules", "!out", "!dist", "!coverage", "!**/*.json", "!**/*.md"]
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/test-utils.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    }
+  ]
 }

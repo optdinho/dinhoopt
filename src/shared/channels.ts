@@ -92,6 +92,7 @@ export const IPC = {
   // Network cleanup
   NETWORK_SCAN: 'cleaner:network:scan',
   NETWORK_CLEAN: 'cleaner:network:clean',
+  NETWORK_GET_CONNECTIONS: 'network:get-connections',
 
   // Progress events (main -> renderer)
   SCAN_PROGRESS: 'scan:progress',
@@ -280,6 +281,15 @@ export const IPC = {
   WINDOWS_TWEAKS_GAMING_TIMER_SET: 'windows-tweaks:gaming-timer-set',
   WINDOWS_TWEAKS_GAMING_TIMER_REVERT: 'windows-tweaks:gaming-timer-revert',
   WINDOWS_TWEAKS_GAMING_AUTOTUNING: 'windows-tweaks:gaming-autotuning',
+
+  // Gaming VBS / HAGS
+  WINDOWS_TWEAKS_GAMING_VBS_GET: 'windows-tweaks:gaming-vbs-get',
+  WINDOWS_TWEAKS_GAMING_VBS_SET: 'windows-tweaks:gaming-vbs-set',
+  WINDOWS_TWEAKS_GAMING_HAGS_GET: 'windows-tweaks:gaming-hags-get',
+  WINDOWS_TWEAKS_GAMING_HAGS_SET: 'windows-tweaks:gaming-hags-set',
+
+  // DirectStorage check
+  GAME_MODE_DIRECTSTORAGE_CHECK: 'game-mode:directstorage-check',
 
   // Benchmark
   BENCHMARK_RUN: 'benchmark:run',

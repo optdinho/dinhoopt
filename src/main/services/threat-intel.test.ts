@@ -37,8 +37,8 @@ vi.mock('./logger.service', () => ({
   })),
 }))
 
-import { ThreatIntelService, getThreatIntelService } from './threat-intel.service'
 import type { ThreatIntelEntry } from './threat-intel.service'
+import { getThreatIntelService, ThreatIntelService } from './threat-intel.service'
 
 describe('ThreatIntelService', () => {
   let service: ThreatIntelService

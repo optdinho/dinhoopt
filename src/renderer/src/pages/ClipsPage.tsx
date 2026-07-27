@@ -1,12 +1,12 @@
+import { motion } from 'framer-motion'
+import { Settings } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { ClipEditorModal } from '@/components/clips/ClipEditorModal'
 import { ClipsConfigPanel } from '@/components/clips/ClipsConfigPanel'
 import { ClipsGrid } from '@/components/clips/ClipsGrid'
 import { ClipsStatusBar } from '@/components/clips/ClipsStatusBar'
 import { useClipsState } from '@/components/clips/useClipsState'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { motion } from 'framer-motion'
-import { Settings } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 
 export function ClipsPage() {
   const state = useClipsState()

@@ -1,5 +1,5 @@
 import { IPC } from '@shared/channels'
-import type { InstalledProgram, UninstallProgress, UninstallResult, UninstallerListResult } from '@shared/types'
+import type { InstalledProgram, UninstallerListResult, UninstallProgress, UninstallResult } from '@shared/types'
 import { ipcMain } from 'electron'
 import { safeDelete } from '../services/file-utils'
 import { getLogger } from '../services/logger.service'
@@ -11,6 +11,7 @@ import {
   verifyUninstall,
 } from '../services/program-uninstaller'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 let cachedPrograms: InstalledProgram[] = []
 
@@ -28,7 +29,16 @@ export function registerProgramUninstallerIpc(getWindow: WindowGetter): void {
     return { programs, totalCount: programs.length }
   })
 
-  ipcMain.handle(IPC.UNINSTALLER_UNINSTALL, async (_event, programId: string): Promise<UninstallResult> => {
+  ipcMain.handle(IPC.UNINSTALLER_UNINSTALL, async (event, programId: string): Promise<UninstallResult> => {
+    if (!validateSender(event, getWindow())) return {
+      success: false,
+      programName: 'Unknown',
+      exitCode: null,
+      error: 'Invalid sender',
+      leftoversFound: 0,
+      leftoversCleaned: 0,
+      leftoversSize: 0,
+    }
     const program = cachedPrograms.find((p) => p.id === programId)
     if (!program) {
       getLogger().warning('program-uninstaller', `Program ${programId} not found in cache`)

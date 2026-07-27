@@ -1,8 +1,8 @@
 import type { PrivacySetting } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
 import {
   BrainCircuit,
   CalendarClock,
-  CircleCheckBig,
   Compass,
   Cpu,
   Eye,
@@ -12,8 +12,8 @@ import {
   Radio,
   RefreshCw,
   Search,
+  CameraOff,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 export interface CategoryDef {
@@ -116,6 +116,15 @@ export const categories: CategoryDef[] = [
     color: '#ec4899',
     bg: 'rgba(236,72,153,0.08)',
     border: 'rgba(236,72,153,0.15)',
+  },
+  {
+    id: 'recall',
+    labelKey: 'privacyCategories.recallLabel',
+    descriptionKey: 'privacyCategories.recallDescription',
+    icon: CameraOff,
+    color: '#f43f5e',
+    bg: 'rgba(244,63,94,0.08)',
+    border: 'rgba(244,63,94,0.15)',
   },
   {
     id: 'browser',

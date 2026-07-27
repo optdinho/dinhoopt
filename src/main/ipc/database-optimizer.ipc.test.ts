@@ -59,7 +59,6 @@ vi.mock('../services/scan-cache', () => ({
 
 vi.mock('better-sqlite3', () => {
   // Use a real function (not arrow) so it works with `new`
-  // biome-ignore lint/suspicious/noExplicitAny: mock constructor
   const DatabaseMock = function (this: any, ...args: unknown[]) {
     const result = mockDatabaseConstructor(...args)
     if (result instanceof Error) throw result
@@ -68,7 +67,6 @@ vi.mock('better-sqlite3', () => {
       pragma: (...a: unknown[]) => mockDbPragma(...a),
       close: () => mockDbClose(),
     }
-    // biome-ignore lint/suspicious/noExplicitAny: mock constructor
   } as any
   return { default: DatabaseMock }
 })
@@ -134,8 +132,6 @@ describe('DATABASE_SCAN handler', () => {
       { basePath: '/nonexistent', label: 'Test', dbFiles: ['test.db'], multiProfile: false },
     ])
     mockExistsSync.mockReturnValue(false)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -158,8 +154,6 @@ describe('DATABASE_SCAN handler', () => {
       buf.write('SQLite format 3\0', 0, 16, 'utf8')
       return 16
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = (await handler()) as Array<{ category: string; subcategory: string; items: Array<unknown> }>
@@ -177,8 +171,6 @@ describe('DATABASE_SCAN handler', () => {
     ])
     mockExistsSync.mockReturnValue(true)
     mockStatSync.mockReturnValue({ size: 0 })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -199,8 +191,6 @@ describe('DATABASE_SCAN handler', () => {
       buf.write('NOT A SQLITE DB!', 0, 16, 'utf8')
       return 16
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -221,8 +211,6 @@ describe('DATABASE_SCAN handler', () => {
       buf.write('SQLite format 3\0', 0, 16, 'utf8')
       return 16
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()
@@ -254,8 +242,6 @@ describe('DATABASE_SCAN handler', () => {
       buf.write('SQLite format 3\0', 0, 16, 'utf8')
       return 16
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = (await handler()) as Array<{ items: Array<unknown> }>
@@ -276,7 +262,6 @@ describe('DATABASE_SCAN handler', () => {
     })
 
     const win = mockWindow()
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => win as any)
     const handler = getHandler('cleaner:database:scan')
     await handler()
@@ -298,8 +283,6 @@ describe('DATABASE_SCAN handler', () => {
     mockExistsSync.mockImplementation(() => {
       throw new Error('EACCES')
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerDatabaseOptimizerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:database:scan')
     const results = await handler()

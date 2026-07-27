@@ -1,3 +1,9 @@
+import { CleanerType } from '@shared/enums'
+import type { DriveInfo, PerfQuickStats } from '@shared/types'
+import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Wifi, Zap } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { ActionButtons } from '@/components/dashboard/ActionButtons'
 import { GameClipsCard } from '@/components/dashboard/GameClipsCard'
 import { GameModeCard } from '@/components/dashboard/GameModeCard'
@@ -12,7 +18,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { usePlatform } from '@/hooks/usePlatform'
-import { formatBytes } from '@/lib/utils'
+import { formatBytes, formatSpeed } from '@/lib/utils'
 import { useGameModeStore } from '@/stores/game-mode-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
@@ -21,13 +27,6 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useStartupStore } from '@/stores/startup-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { useUpdaterStore } from '@/stores/updater-store'
-import { CleanerType } from '@shared/enums'
-import type { DriveInfo, PerfQuickStats } from '@shared/types'
-import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Zap } from 'lucide-react'
-
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 import { CLEANER_SCAN_FNS, MiniGaugeSkeleton } from './dashboard/DashboardComponents'
 
@@ -448,9 +447,9 @@ export function DashboardPage() {
       <StaggerContainer className="flex-1 space-y-4 px-0 pb-8">
         {/* ── Row 1: MiniGauges (PC State) ──────────────────── */}
         <StaggerItem>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {loading ? (
-              Array.from({ length: 3 }).map((_, i) => (
+              Array.from({ length: 5 }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder
                 <MiniGaugeSkeleton key={i} />
               ))
@@ -473,6 +472,20 @@ export function DashboardPage() {
                   label={t('gaugeDisk')}
                   percent={diskPct}
                   detail={`${diskPct}% ${t('gaugeDiskUsed')}`}
+                />
+                <MiniGauge
+                  icon={Zap}
+                  label={t('gaugeGpu')}
+                  percent={perf?.gpuPercent ?? 0}
+                  detail={perf?.gpuName ? (perf.gpuName.length > 14 ? `${perf.gpuName.slice(0, 12)}…` : perf.gpuName) : '—'}
+                  accentColor="#22c55e"
+                />
+                <MiniGauge
+                  icon={Wifi}
+                  label={t('gaugeNetwork')}
+                  percent={0}
+                  detail={`↓${formatSpeed(perf?.networkDown ?? 0)} ↑${formatSpeed(perf?.networkUp ?? 0)}`}
+                  accentColor="#3b82f6"
                 />
               </>
             )}

@@ -129,14 +129,17 @@ public sealed class RnnoiseFilter : IDisposable
         }
         catch (OperationCanceledException)
         {
+            Log.D("RnnoiseFilter", "Process: cancelled (timeout or disposed)");
             return input;
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Log.D("RnnoiseFilter", $"Process: IO error: {ex.Message}");
             return input;
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
+            Log.D("RnnoiseFilter", $"Process: invalid state: {ex.Message}");
             return input;
         }
         finally { cts.Dispose(); }
@@ -148,7 +151,7 @@ public sealed class RnnoiseFilter : IDisposable
         _disposed = true;
         _cts.Cancel();
 
-        try { _stdin?.Dispose(); } catch { }
+        try { _stdin?.Dispose(); } catch (Exception ex) { Log.D("RnnoiseFilter", $"stdin dispose error: {ex.Message}"); }
 
         var process = _process;
         var stdout = _stdout;
@@ -166,15 +169,15 @@ public sealed class RnnoiseFilter : IDisposable
                 {
                     if (!process.WaitForExit(5000))
                     {
-                        try { process.Kill(entireProcessTree: true); } catch { }
+                        try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Log.D("RnnoiseFilter", $"Kill error: {ex.Message}"); }
                         process.WaitForExit(1000);
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.D("RnnoiseFilter", $"Process stop error: {ex.Message}"); }
             finally
             {
-                try { stdout?.Dispose(); } catch { }
+                try { stdout?.Dispose(); } catch (Exception ex) { Log.D("RnnoiseFilter", $"stdout dispose error: {ex.Message}"); }
                 process.Dispose();
             }
         });

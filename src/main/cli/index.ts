@@ -1,4 +1,4 @@
+export { parseCliArgs, runCli } from './router'
 export type { CliContext, ParsedCliArgs, Verbosity } from './types'
 export { ExitCode } from './types'
-export { formatBytes, cliLog, cliVerbose, cliOut, cliUsage, cliNotFound, showProgress, printHelp } from './utils'
-export { parseCliArgs, runCli } from './router'
+export { cliLog, cliNotFound, cliOut, cliUsage, cliVerbose, formatBytes, printHelp, showProgress } from './utils'

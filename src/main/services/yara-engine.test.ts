@@ -38,16 +38,16 @@ vi.mock('./logger.service', () => ({
 
 import type { YaraMatch } from './yara-engine'
 import {
-  ReadWriteLock,
-  ScanCancelledError,
-  YaraEngine,
   checkCancelled,
   compileRulesWithLock,
   createYaraEngine,
   getActiveEngine,
+  ReadWriteLock,
+  ScanCancelledError,
   scanBufferWithLock,
   scanFileWithLock,
   setActiveEngine,
+  YaraEngine,
   yaraLock,
   yaraMatchToThreatFields,
 } from './yara-engine'
@@ -257,7 +257,6 @@ describe('yaraMatchToThreatFields', () => {
 
   it('clamps invalid severity', () => {
     expect(
-      // biome-ignore lint/suspicious/noExplicitAny: test
       yaraMatchToThreatFields({ ruleName: 'T', metadata: { severity: 'info' as any }, matchedStrings: [] }).severity,
     ).toBe('high')
   })

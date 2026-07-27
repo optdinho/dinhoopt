@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { checkForUpdatesWinget, parseWingetListOutput, parseWingetUpgradeOutput, runUpdatesWinget } from './winget'
 
 const execFileAsyncMock = vi.hoisted(() => vi.fn())
@@ -163,9 +163,11 @@ describe('parseWingetUpgradeOutput', () => {
   })
 
   it('parses Portuguese header with uppercase ID (real winget output)', () => {
-    const ptHeader = 'Nome                                                               ID                            Vers\u00e3o                        Dispon\u00edvel                    Origem'
+    const ptHeader =
+      'Nome                                                               ID                            Vers\u00e3o                        Dispon\u00edvel                    Origem'
     const sep = '-'.repeat(191)
-    const dataLine = '7-Zip 24.08 (x64)                                                  7zip.7zip                     24.08                         26.02                         winget'
+    const dataLine =
+      '7-Zip 24.08 (x64)                                                  7zip.7zip                     24.08                         26.02                         winget'
     const output = [ptHeader, sep, dataLine].join('\r\n')
     const result = parseWingetUpgradeOutput(output)
     expect(result).toHaveLength(1)
@@ -298,9 +300,11 @@ describe('parseWingetListOutput', () => {
   })
 
   it('parses Portuguese list header with uppercase ID (real winget output)', () => {
-    const ptHeader = 'Nome                                                                ID                                                                                  Vers\u00e3o                        Dispon\u00edvel                    Origem'
+    const ptHeader =
+      'Nome                                                                ID                                                                                  Vers\u00e3o                        Dispon\u00edvel                    Origem'
     const sep = '-'.repeat(219)
-    const dataLine = '7-Zip 24.08 (x64)                                                   7zip.7zip                                                                           24.08                         26.02                         winget'
+    const dataLine =
+      '7-Zip 24.08 (x64)                                                   7zip.7zip                                                                           24.08                         26.02                         winget'
     const output = [ptHeader, sep, dataLine].join('\r\n')
     const result = parseWingetListOutput(output)
     expect(result).toHaveLength(1)

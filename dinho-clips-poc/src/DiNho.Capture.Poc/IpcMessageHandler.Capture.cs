@@ -43,7 +43,7 @@ public sealed partial class EngineCoordinator
                     Log.I("EngineCoordinator", $"startCapture pending game process '{gameProcess}'");
                 }
             }
-            catch { /* gameProcess not provided */ }
+            catch (Exception ex) { Log.D("IpcMessageHandler", $"startCapture: gameProcess not provided or invalid: {ex.Message}"); }
         }
         StartCapture();
         return new IpcMessage

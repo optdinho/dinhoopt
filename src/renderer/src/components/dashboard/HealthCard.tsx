@@ -1,11 +1,11 @@
-import { HealthScore } from '@/components/shared/HealthScore'
-import { usePolling } from '@/hooks/usePolling'
-import { formatBytes } from '@/lib/utils'
 import type { DiskSmartInfo } from '@shared/types'
 import { BarChart3, Check, FileStack, HardDrive, MemoryStick } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { HealthScore } from '@/components/shared/HealthScore'
+import { usePolling } from '@/hooks/usePolling'
+import { formatBytes } from '@/lib/utils'
 import { toolRoutes } from './constants'
 import type { ToolCoverageItem } from './types'
 
@@ -71,7 +71,7 @@ export function HealthCard({
       { icon: FileStack, label: t('statFilesCleaned'), value: String(totalFilesCleaned), color: '#22c55e' },
       { icon: BarChart3, label: t('statTotalScans'), value: String(totalScans), color: '#a855f7' },
     ],
-    [memPercent, diskLabel, diskColor, totalSpaceSaved, totalFilesCleaned, totalScans, t],
+    [memPercent, diskLabel, diskColor, totalSpaceSaved, totalFilesCleaned, totalScans, t, memColor],
   )
 
   return (

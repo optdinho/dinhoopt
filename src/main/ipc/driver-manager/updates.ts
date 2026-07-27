@@ -50,10 +50,7 @@ export async function scanDriverUpdates(
     if (wuUpdates.length > 0) {
       allUpdates.push(...wuUpdates)
       usedSources.push('wu-com-api')
-      getLogger().info(
-        'driver-manager',
-        `WU COM API returned ${wuUpdates.length} update(s)`,
-      )
+      getLogger().info('driver-manager', `WU COM API returned ${wuUpdates.length} update(s)`)
     } else {
       getLogger().info('driver-manager', 'WU COM API returned 0 updates — trying catalog fallback')
     }
@@ -94,10 +91,7 @@ export async function scanDriverUpdates(
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      getLogger().warning(
-        'driver-manager',
-        `Catalog HTTP failed: ${msg} — trying DriverStore scan`,
-      )
+      getLogger().warning('driver-manager', `Catalog HTTP failed: ${msg} — trying DriverStore scan`)
     }
   }
 
@@ -116,10 +110,7 @@ export async function scanDriverUpdates(
       if (storeUpdates.length > 0) {
         allUpdates.push(...storeUpdates)
         usedSources.push('driverstore-local')
-        getLogger().info(
-          'driver-manager',
-          `DriverStore scan returned ${storeUpdates.length} local update(s)`,
-        )
+        getLogger().info('driver-manager', `DriverStore scan returned ${storeUpdates.length} local update(s)`)
       } else {
         getLogger().info('driver-manager', 'DriverStore scan returned 0 updates')
       }
@@ -167,9 +158,7 @@ export async function scanDriverUpdates(
  * Scan via the Windows Update COM API (Microsoft.Update.Session).
  * This is the primary source — most reliable when the WU service is running.
  */
-async function scanViaWuComApi(
-  onProgress?: (data: DriverUpdateProgress) => void,
-): Promise<DriverUpdate[]> {
+async function scanViaWuComApi(onProgress?: (data: DriverUpdateProgress) => void): Promise<DriverUpdate[]> {
   const script = `
         $ErrorActionPreference = 'Stop'
         $session = New-Object -ComObject Microsoft.Update.Session
@@ -267,7 +256,7 @@ async function scanViaWuComApi(
     const updateTitle = parts[9] || deviceName
     const downloadSize = parts[10] || ''
 
-    const versionMatch = updateTitle.match(/(\d+\.\d+\.\d+[\.\d]*)/)
+    const versionMatch = updateTitle.match(/(\d+\.\d+\.\d+[.\d]*)/)
     const availableVersion = versionMatch?.[1] || availableDate
 
     idx++

@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockHandle = vi.fn()
-vi.mock('electron', () => ({
-  ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },
-}))
+vi.mock('electron', () => {
+  function MockNotification() { return { show: vi.fn() } }
+  MockNotification.isSupported = vi.fn(() => false)
+  return {
+    ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },
+    Notification: MockNotification,
+  }
+})
 
 const mockScanDirectory = vi.fn()
 const mockScanFile = vi.fn()
@@ -54,6 +59,10 @@ vi.mock('../services/ipc-validation', () => ({
 const mockGetImportedRules = vi.fn()
 vi.mock('./winapp2-rules-store', () => ({
   getImportedRules: (...args: unknown[]) => mockGetImportedRules(...args),
+}))
+
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
 }))
 
 import { registerSystemCleanerIpc } from './system-cleaner.ipc'
@@ -177,8 +186,6 @@ describe('SYSTEM_SCAN handler', () => {
       totalSize: 0,
       itemCount: 0,
     })
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerSystemCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:system:scan')
     await handler()

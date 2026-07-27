@@ -1,4 +1,4 @@
-import { TriangleAlert, CircleCheckBig, CircleX } from 'lucide-react'
+import { CircleCheckBig, CircleX, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface TweakResult {

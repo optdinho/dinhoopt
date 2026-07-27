@@ -52,8 +52,6 @@ vi.mock('../services/exec-utf8', () => ({
 
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
 import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
-
-// biome-ignore lint/suspicious/noExplicitAny: test constant
 const EMPTY_RESULT: ScanResult = { category: 'gaming' as any, subcategory: '', items: [], totalSize: 0, itemCount: 0 }
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
@@ -91,14 +89,12 @@ describe('GAMING_SCAN handler', () => {
       id: '1',
       path: '/cache',
       size: 2048,
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       category: 'gaming' as any,
       subcategory: 'Launcher',
       lastModified: Date.now(),
       selected: true,
     }
     const launcherResult: ScanResult = {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       category: 'gaming' as any,
       subcategory: 'Steam',
       group: 'Launcher Caches',
@@ -107,7 +103,6 @@ describe('GAMING_SCAN handler', () => {
       itemCount: 1,
     }
     const gpuResult: ScanResult = {
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
       category: 'gaming' as any,
       subcategory: 'NVIDIA',
       group: 'GPU Shader Caches',
@@ -138,8 +133,6 @@ describe('GAMING_SCAN handler', () => {
     mockPlatformPaths.steamLibraries.mockReturnValue([])
     mockPlatformPaths.steamRedistPatterns.mockReturnValue([])
     mockScanDirectoriesAsItems.mockResolvedValue(EMPTY_RESULT)
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerGamingCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:gaming:scan')
 
@@ -844,8 +837,6 @@ describe('GAMING_CLEAN handler', () => {
         return cleanResult
       },
     )
-
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     registerGamingCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:gaming:clean')
 

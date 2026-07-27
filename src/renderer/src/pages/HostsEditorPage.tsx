@@ -1,9 +1,5 @@
-import { PageHeader } from '@/components/layout/PageHeader'
-import { Checkbox } from '@/components/shared/Checkbox'
-import { EmptyState } from '@/components/shared/EmptyState'
-import { RECOMMENDATION_PACKS } from '@/lib/hosts-recommendations'
-import { useHostsEditorStore } from '@/stores/hosts-editor-store'
 import type { HostsEntry, HostsFileData, HostsWriteRequest } from '@shared/types'
+import type { LucideIcon } from 'lucide-react'
 import {
   Ban,
   Eye,
@@ -19,10 +15,14 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { Checkbox } from '@/components/shared/Checkbox'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { RECOMMENDATION_PACKS } from '@/lib/hosts-recommendations'
+import { useHostsEditorStore } from '@/stores/hosts-editor-store'
 
 export function HostsEditorPage() {
   const { t } = useTranslation('hostsEditor')

@@ -1,6 +1,6 @@
-import { severityOrder, useUpdaterStore } from '@/stores/updater-store'
 import type { UpdatableApp } from '@shared/types'
 import { useMemo } from 'react'
+import { severityOrder, useUpdaterStore } from '@/stores/updater-store'
 
 export interface FilteredAppsResult {
   filteredApps: UpdatableApp[]

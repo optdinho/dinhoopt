@@ -30,6 +30,7 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
     'schedules',
     'gameMode',
     'registryIgnoredTweaks',
+    'userProfile',
   ])
 
   for (const key of Object.keys(obj)) {
@@ -49,6 +50,7 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if (validateCleanerSettings(obj) === null) return null
   if (validateRegistryIgnoredTweaks(obj) === null) return null
   if (validateGameMode(obj) === null) return null
+  if (validateUserProfile(obj) === null) return null
 
   return obj
 }
@@ -311,6 +313,12 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
           return null
       }
     }
+  }
+}
+
+function validateUserProfile(obj: Record<string, unknown>): null | undefined {
+  if ('userProfile' in obj && obj.userProfile !== undefined) {
+    if (!['gamer', 'professional', 'general'].includes(obj.userProfile as string)) return null
   }
 }
 

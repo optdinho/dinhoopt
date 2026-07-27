@@ -48,10 +48,8 @@ import { ipcMain } from 'electron'
 import { execNativeUtf8 } from '../services/exec-utf8'
 
 import {
-  CLSID_SAFELIST,
-  SCAN_ROOTS,
-  VERB_SAFELIST,
   applyContextMenu,
+  CLSID_SAFELIST,
   disabledNameFor,
   extractClsid,
   inferSource,
@@ -62,7 +60,9 @@ import {
   parentKeyOf,
   parseRegQueryBlocks,
   registerContextMenuCleanerIpc,
+  SCAN_ROOTS,
   scanContextMenu,
+  VERB_SAFELIST,
 } from './context-menu-cleaner.ipc'
 
 // ── isProtectedVerb ──

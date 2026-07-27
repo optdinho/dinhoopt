@@ -27,6 +27,7 @@ vi.mock('../services/elevation', () => ({
 }))
 
 vi.mock('node:fs', () => ({
+  existsSync: (...args: unknown[]) => mocks.existsSync?.(...args) ?? true,
   readFileSync: (...args: unknown[]) => mocks.readFileSync(...args),
   writeFileSync: (...args: unknown[]) => mocks.writeFileSync(...args),
 }))
@@ -37,6 +38,10 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('node:util', () => ({
   promisify: <T>(fn: T): T => fn,
+}))
+
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
 }))
 
 import { IPC } from '@shared/channels'

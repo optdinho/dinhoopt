@@ -1,15 +1,9 @@
-import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import type { DriveInfo } from '@shared/types'
 import { useTranslation } from 'react-i18next'
+import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { DriveBar } from './DriveBar'
 
-export function StorageOverview({
-  drives,
-  platform,
-}: {
-  drives: DriveInfo[]
-  platform: string
-}) {
+export function StorageOverview({ drives, platform }: { drives: DriveInfo[]; platform: string }) {
   const { t } = useTranslation('dashboard')
 
   return (

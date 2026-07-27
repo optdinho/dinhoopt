@@ -522,7 +522,7 @@ export async function applyComplianceSettings(ids: string[]): Promise<Compliance
 
   for (const id of ids) {
     const def = CHECKS.find((c) => c.id === id)
-    if (!def || !def.apply) {
+    if (!def?.apply) {
       failed++
       continue
     }
@@ -546,7 +546,7 @@ export async function revertComplianceSettings(ids: string[]): Promise<Complianc
 
   for (const id of ids) {
     const def = CHECKS.find((c) => c.id === id)
-    if (!def || !def.revert) {
+    if (!def?.revert) {
       failed++
       continue
     }

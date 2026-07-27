@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { SCAN_PROFILES } from './scan-profiles'
 import type { ScanProfile } from './scan-profiles'
+import { SCAN_PROFILES } from './scan-profiles'
 
 describe('ScanProfiles', () => {
   it('all 4 profiles exist with correct structure', () => {

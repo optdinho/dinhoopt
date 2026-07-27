@@ -232,7 +232,7 @@
     *,
     *::before,
     *::after {
-      transition: none !important;
+      transition: none;
     }
   }
 }
