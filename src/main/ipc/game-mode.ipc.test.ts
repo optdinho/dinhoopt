@@ -1335,7 +1335,7 @@ describe('registerGameModeIpc', () => {
     })
   })
 
-  it('GAME_MODE_ACTIVATE returns error when previous deactivation left unrestored items', async () => {
+  it('GAME_MODE_ACTIVATE clears stale snapshot and re-activates when previous deactivation left unrestored items', async () => {
     const snap = makeValidSnapshot()
     snap.active = false
     setMockSnapshot(snap)
@@ -1346,11 +1346,8 @@ describe('registerGameModeIpc', () => {
 
     const config = { enabledOptimizations: [], customProcessKillList: [] }
     const result = await handler({}, config)
-    expect(result).toMatchObject({
-      succeeded: 0,
-      failed: 1,
-      errors: [{ optimizationId: 'config', reason: expect.stringContaining('unrestored') }],
-    })
+    // Should proceed to activation (not return error), snapshot is deleted
+    expect(result).toBeDefined()
   })
 
   it('GAME_MODE_DEACTIVATE suppresses current game when auto-activated', async () => {

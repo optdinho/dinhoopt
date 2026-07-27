@@ -18,7 +18,7 @@ import { startClipCapture } from '../clips-engine-connection'
 import type { WindowGetter } from '../index'
 import { activateGameMode } from './activate'
 import { deactivateGameMode } from './deactivate'
-import { readSnapshot } from './snapshot'
+import { deleteSnapshot, readSnapshot } from './snapshot'
 import { getGameModeStatus } from './status'
 import { validateGameModeConfig } from './validation'
 
@@ -57,18 +57,8 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
       }
     }
     if (existing) {
-      getLogger().warning('game-mode', 'Previous deactivation left unrestored items — re-activation rejected')
-      return {
-        succeeded: 0,
-        failed: 1,
-        errors: [
-          {
-            optimizationId: 'config',
-            reason: 'Previous deactivation left unrestored items — please retry deactivation first',
-          },
-        ],
-        snapshot: null,
-      }
+      getLogger().warning('game-mode', 'Previous deactivation left unrestored items — clearing stale snapshot and re-activating')
+      deleteSnapshot()
     }
     autoActivated = false
     return activateGameMode(config, sendProgress)
