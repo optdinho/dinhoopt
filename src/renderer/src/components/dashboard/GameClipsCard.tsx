@@ -27,15 +27,28 @@ export function GameClipsCard() {
     try {
       if (capturing) {
         await window.dinho?.clipsStopCapture?.()
+        await window.dinho?.clipsStopEngine?.()
       } else {
-        await window.dinho?.clipsStartCapture?.()
+        if (!running) {
+          const engineResult = await window.dinho?.clipsStartEngine?.()
+          if (!engineResult?.success) return
+        }
+        let result = await window.dinho?.clipsStartCapture?.()
+        if (!result?.success) {
+          await new Promise((r) => setTimeout(r, 2000))
+          result = await window.dinho?.clipsStartCapture?.()
+        }
+        if (!result?.success) {
+          await new Promise((r) => setTimeout(r, 2000))
+          await window.dinho?.clipsStartCapture?.()
+        }
       }
     } catch {
       // silent
     } finally {
       setToggling(false)
     }
-  }, [toggling, capturing])
+  }, [toggling, capturing, running])
 
   return (
     <div
@@ -102,14 +115,18 @@ export function GameClipsCard() {
           border: `1px solid ${capturing ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
         }}
       >
-        {toggling ? (
+        {toggling && !capturing ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : capturing ? (
           <Square className="h-3.5 w-3.5" />
         ) : (
           <Play className="h-3.5 w-3.5" />
         )}
-        {capturing ? t('gameClipsCardStop') : t('gameClipsCardStart')}
+        {toggling && !capturing
+          ? t('gameClipsCardStarting')
+          : capturing
+            ? t('gameClipsCardStop')
+            : t('gameClipsCardStart')}
       </button>
     </div>
   )

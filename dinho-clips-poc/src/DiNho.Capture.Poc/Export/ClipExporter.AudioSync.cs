@@ -481,23 +481,16 @@ public sealed partial class ClipExporter
             outPts += (intervals[i].end - intervals[i].start);
         }
 
-        // Re-map video PTS
+        // Re-map video PTS in-place — no allocation
         for (int i = 0; i < videoPackets.Count; i++)
         {
-            var pkt = videoPackets[i];
-            var newPts = RemapPts(pkt.Pts, intervals, outputStarts);
-            videoPackets[i] = new EncodedPacket(pkt.Data, pkt.Type, newPts, pkt.Duration, pkt.IsKeyFrame, pkt.Width, pkt.Height);
+            videoPackets[i].Pts = RemapPts(videoPackets[i].Pts, intervals, outputStarts);
         }
 
-        // Re-map audio PTS
+        // Re-map audio PTS in-place — no allocation
         for (int i = 0; i < audioPackets.Count; i++)
         {
-            var pkt = audioPackets[i];
-            var newPts = RemapPts(pkt.Pts, intervals, outputStarts);
-            if (pkt.PcmSamples != null)
-                audioPackets[i] = new EncodedPacket(pkt.PcmSamples, pkt.Type, newPts, pkt.Duration, pkt.IsPooledPcm);
-            else
-                audioPackets[i] = new EncodedPacket(pkt.Data, pkt.Type, newPts, pkt.Duration, pkt.IsKeyFrame);
+            audioPackets[i].Pts = RemapPts(audioPackets[i].Pts, intervals, outputStarts);
         }
     }
 

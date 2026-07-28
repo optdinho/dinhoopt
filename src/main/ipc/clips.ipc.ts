@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { stat as fsStat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { IPC } from '@shared/channels'
@@ -22,11 +22,13 @@ import {
   getDefaultOutputDir,
   persistClipsConfig,
 } from '../services/clips-config-manager'
+import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
 import {
   getCurrentStatus,
   getDurationsForClips,
+  invalidateDurationCache,
   isEngineRunning,
   isPipeConnected,
   readClipsFromDisk,
@@ -209,6 +211,7 @@ export function registerClipsIpc(): void {
           /* ignore engine thumbnail cleanup failure */
         }
       }
+      invalidateDurationCache(clipPath)
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -282,6 +285,7 @@ export function registerClipsIpc(): void {
           /* ignore favorite rename failure */
         }
       }
+      invalidateDurationCache(oldPath)
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -303,6 +307,8 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(IPC.CLIPS_GET_THUMBNAIL, async (_event, clipName: unknown): Promise<string | null> => {
     if (typeof clipName !== 'string') return null
+    const safe = clipPathInOutputDir(`${clipName}.mp4`)
+    if (!safe) return null
     return getThumbnailDataUrl(getDefaultOutputDir(), clipName)
   })
 
@@ -355,8 +361,8 @@ export function registerClipsIpc(): void {
       if (typeof c.autoStartCapture === 'boolean') C.autoStartCapture = c.autoStartCapture
       if (typeof c.useExcludeMode === 'boolean') C.useExcludeMode = c.useExcludeMode
       if (typeof c.excludeProcessId === 'number') C.excludeProcessId = c.excludeProcessId
-      if (typeof c.gameVolume === 'number') C.gameVolume = Math.max(0, Math.min(2, c.gameVolume))
-      if (typeof c.micVolume === 'number') C.micVolume = Math.max(0, Math.min(2, c.micVolume))
+      if (typeof c.gameVolume === 'number') C.gameVolume = Math.max(0, Math.min(4, c.gameVolume))
+      if (typeof c.micVolume === 'number') C.micVolume = Math.max(0, Math.min(4, c.micVolume))
       if (c.pushToTalk === 'off' || c.pushToTalk === 'hold' || c.pushToTalk === 'toggle') C.pushToTalk = c.pushToTalk
       if (Array.isArray(c.pushToTalkKeys)) {
         C.pushToTalkKeys = (c.pushToTalkKeys as unknown[]).filter((k) => typeof k === 'number') as number[]
@@ -364,8 +370,24 @@ export function registerClipsIpc(): void {
       } else if (typeof c.pushToTalkKey === 'number') {
         C.pushToTalkKeys = [c.pushToTalkKey as number]
       }
-      if (Array.isArray(c.hotkeys)) C.hotkeys = c.hotkeys as HotkeyBinding[]
-      if (typeof c.outputDirectory === 'string') C.outputDirectory = c.outputDirectory
+      if (Array.isArray(c.hotkeys)) {
+        C.hotkeys = c.hotkeys.filter(
+          (h): h is HotkeyBinding =>
+            typeof h === 'object' &&
+            h !== null &&
+            typeof (h as Record<string, unknown>).vk === 'number' &&
+            typeof (h as Record<string, unknown>).action === 'string' &&
+            Array.isArray((h as Record<string, unknown>).modifiers),
+        )
+      }
+      if (typeof c.outputDirectory === 'string' && c.outputDirectory.length > 0 && c.outputDirectory.length < 1024) {
+        try {
+          const stat = statSync(c.outputDirectory, { throwIfNoEntry: false })
+          if (stat?.isDirectory()) {
+            C.outputDirectory = c.outputDirectory
+          }
+        } catch { /* reject invalid path */ }
+      }
       if (typeof c.noiseSuppression === 'boolean') C.noiseSuppression = c.noiseSuppression
       if (typeof c.audioSampleRate === 'number') C.audioSampleRate = c.audioSampleRate
       if (typeof c.autoCleanupEnabled === 'boolean') C.autoCleanupEnabled = c.autoCleanupEnabled
@@ -595,8 +617,9 @@ export function registerClipsIpc(): void {
           'copy',
           outPath,
         ]
-        const proc = execFile('ffmpeg', args, { timeout: 120_000 }, (err) => {
+        const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
           if (err) {
+            try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
             getLogger().warning('clips', `TrimClip ffmpeg failed: ${err.message}`)
             resolve({ success: false, error: err.message })
           } else {
@@ -604,6 +627,7 @@ export function registerClipsIpc(): void {
           }
         })
         proc.on('error', (e) => {
+          try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
           getLogger().warning('clips', `TrimClip process error: ${e.message}`)
           resolve({ success: false, error: e.message })
         })
@@ -641,11 +665,12 @@ export function registerClipsIpc(): void {
       writeFileSync(concatFile, lines.join('\n'), 'utf-8')
       return await new Promise((resolve) => {
         const args = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', outPath]
-        const proc = execFile('ffmpeg', args, { timeout: 120_000 }, (err) => {
+        const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
           try {
             unlinkSync(concatFile)
           } catch {}
           if (err) {
+            try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
             getLogger().warning('clips', `MergeClips ffmpeg failed: ${err.message}`)
             resolve({ success: false, error: err.message })
           } else {
@@ -656,6 +681,7 @@ export function registerClipsIpc(): void {
           try {
             unlinkSync(concatFile)
           } catch {}
+          try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
           getLogger().warning('clips', `MergeClips process error: ${e.message}`)
           resolve({ success: false, error: e.message })
         })

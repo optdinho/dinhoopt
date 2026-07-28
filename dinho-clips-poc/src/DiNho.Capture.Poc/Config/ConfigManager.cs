@@ -240,7 +240,7 @@ public sealed class ConfigManager : IDisposable
             if (string.IsNullOrWhiteSpace(config.EncoderPreset))
                 config.EncoderPreset = _defaults.EncoderPreset;
 
-            if (config.MicVolume < 0f || config.MicVolume > 2f)
+            if (config.MicVolume < 0f || config.MicVolume > 4f)
                 config.MicVolume = _defaults.MicVolume;
 
             config.PttMode = config.PttMode?.ToLowerInvariant() switch

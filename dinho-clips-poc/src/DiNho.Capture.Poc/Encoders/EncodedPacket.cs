@@ -9,7 +9,7 @@ public sealed class EncodedPacket
     public byte[] Data { get; private set; }
     public float[]? PcmSamples { get; private set; }
     public MediaType Type { get; }
-    public TimeSpan Pts { get; }
+    public TimeSpan Pts { get; internal set; }
     public TimeSpan Duration { get; }
     public bool IsKeyFrame { get; }
     public int Width { get; }

@@ -92,7 +92,34 @@ public sealed class FfmpegAacEncoder : IDisposable
         int byteLen = pcmSamples.Length * 4;
         if (_pcmBuf == null || _pcmBuf.Length < byteLen)
             _pcmBuf = new byte[byteLen * 2];
+
+        // Sanitize NaN/Inf + clamp to [-1,1] — FFmpeg AAC encoder crashes on NaN input
+        // and MDCT can overflow on extreme values. This is the single sanitization gate.
+        int badCount = 0;
+        for (int i = 0; i < pcmSamples.Length; i++)
+        {
+            float v = pcmSamples[i];
+            if (float.IsNaN(v) || float.IsInfinity(v))
+            {
+                pcmSamples[i] = 0f;
+                badCount++;
+            }
+            else if (v > 1.0f)
+            {
+                pcmSamples[i] = 1.0f;
+                badCount++;
+            }
+            else if (v < -1.0f)
+            {
+                pcmSamples[i] = -1.0f;
+                badCount++;
+            }
+        }
+        if (badCount > 0 && _pcmWriteErrors <= 3)
+            Log.W("FfmpegAacEncoder", $"Sanitized {badCount} samples (NaN/Inf/clamp) in PCM buffer");
+
         System.Buffer.BlockCopy(pcmSamples, 0, _pcmBuf, 0, byteLen);
+
         try
         {
             _stdin!.Write(_pcmBuf, 0, byteLen);

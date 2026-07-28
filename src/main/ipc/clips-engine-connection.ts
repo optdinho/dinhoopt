@@ -4,6 +4,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ClipInfo, ClipsEngineStatus } from '@shared/types'
 import { buildEngineConfig, config as C, getDefaultOutputDir } from '../services/clips-config-manager'
+import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
 import {
   isEngineCapturing as _isEngineCapturing,
@@ -132,7 +133,7 @@ export async function getVideoDuration(filePath: string): Promise<number> {
   try {
     const stderr = await new Promise<string>((resolve, reject) => {
       execFile(
-        'ffmpeg',
+        getFfmpegPath(),
         ['-i', filePath, '-f', 'null', '-'],
         {
           encoding: 'utf-8',

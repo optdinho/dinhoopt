@@ -54,11 +54,20 @@ export function useClipsActions(deps: ClipsActionDeps) {
         const engineResult = await window.dinho?.clipsStartEngine()
         if (!engineResult?.success) {
           toast.error(engineResult?.error || t('failedToStart'))
-          setStarting(false)
           return
         }
       }
-      const captureResult = await window.dinho?.clipsStartCapture()
+
+      let captureResult = await window.dinho?.clipsStartCapture()
+      if (!captureResult?.success) {
+        await new Promise((r) => setTimeout(r, 2000))
+        captureResult = await window.dinho?.clipsStartCapture()
+      }
+      if (!captureResult?.success) {
+        await new Promise((r) => setTimeout(r, 2000))
+        captureResult = await window.dinho?.clipsStartCapture()
+      }
+
       if (captureResult?.success) {
         toast.success(t('recordingStarted'))
         await refreshStatus()

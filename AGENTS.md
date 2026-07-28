@@ -2495,3 +2495,79 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs`: same + `using DiNho.Capture.Poc.Encoders;`
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: RamManager uses `_config.Config.*` instead of `_activeProfile.*`
 - `resources/clips-engine-staging/ffmpeg.exe`: 231MB, ffmpeg 8.1.2
+
+## Session Summary (2026-07-28 — Volume slider range + NaN crash fix verification)
+
+### Done
+
+- **Volume slider range increased 0–2x → 0–4x** across all layers:
+  - `VolumeSlider` UI: `max={200}` → `max={400}` (0–400%)
+  - `clips.ipc.ts` + `clips-engine.ts`: `Math.min(2, ...)` → `Math.min(4, ...)`
+  - `ConfigManager.cs`: validation `> 2f` → `> 4f`
+  - `AudioMixer.MicGain` already accepted [0, 4] — no change needed
+  - Test updated: `clips-engine-connection.test.ts` expect `toBe(2)` → `toBe(4)`
+  - **97 TS tests passed**, **30 C# ConfigManager tests passed**
+
+- **NaN crash fix confirmed stable**: Full session with PTT (Mouse4 + CapsLock), multiple clip saves, noise gate on/off — zero NaN crashes. Root cause was `ArrayPool<float>.Shared.Rent()` returning oversized arrays without zeroing extra elements, causing garbage bytes past the valid PCM region to reach ffmpeg stdin.
+
+### Relevant Files Changed
+- `src/renderer/src/components/clips/clips-utils.tsx`: VolumeSlider max 200→400
+- `src/main/ipc/clips.ipc.ts`: clamp 2→4
+- `src/main/ipc/clips-engine.ts`: clamp 2→4
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Config/ConfigManager.cs`: validation 2f→4f
+- `src/main/ipc/clips-engine-connection.test.ts`: test expect updated
+
+## Session Summary (2026-07-28 — Clips test suite audit + fix)
+
+### Done
+
+- **Deep audit of clips test suite** identified 33 findings (9 CRITICAL, 10 HIGH, 8 MEDIUM, 6 LOW) across 5 test files covering 2747+ lines of source code
+
+- **12 test fixes applied** (all passing):
+
+  | Audit ID | Category | Fix |
+  |----------|----------|-----|
+  | C5 | Empty stub | 5 `connectPipe` event handler tests implemented: error→disconnected, close→no reconnect (stopped), timeout→destroy+reconnect, error→log+disconnected |
+  | C7 | Broken test | Boolean field type-check test: set known values via valid pipe messages first, then send non-matching types, verify values unchanged |
+  | C6 | Fix verified | Volume clamping test: already had correct assertions (audit was wrong) |
+  | H1 | Empty test | Replay buffer fields test: start engine to get pipe handlers, send status with all 5 fields, verify via `getCurrentStatus()` |
+  | H2 | Coverage gap | CLIPS_OPEN_CLIP path traversal test: `../` path outside output directory rejected |
+  | H3 | Coverage gap | CLIPS_RENAME_CLIP `renameSync` error test: cross-volume EXDEV error returns failure |
+  | M2 | Broken test | Multiple commands in one chunk: assert both resolve via `Promise.all` |
+  | M7 | Coverage gap | CLIPS_RENAME_CLIP `.mp4`-only name test: `.mp4` stripped to empty → rejected |
+  | L1 | Cosmetic | Handler count description: "19" → "24" |
+
+- **Key learnings**:
+  - `getCurrentStatus()` uses `e.audioFallback || undefined` — `false` becomes `undefined` in return value (by design, falsy fields omitted)
+  - Pipe data handlers require `startEngine()` first to register socket event handlers
+  - `statusUpdater` typeof guards (`typeof src.X === 'boolean'`) correctly reject non-matching types — tested by setting truthy initial values then sending non-boolean types
+
+- **Full suite**: **6234 TS tests**, 189 files — **0 failures**
+- **Clips-specific**: 205 tests (97 engine-connection + 108 IPC) — **0 failures**
+
+## Session Summary (2026-07-28b — C8 + C9: sendPipeCommandLongRunning + disconnectPipe tests)
+
+### Done
+
+- **C8 — `sendPipeCommandLongRunning` tests** (4 new tests):
+  - `resolves immediately when engine response status is not accepted` — non-accepted path bypasses long-running flow
+  - `waits for commandResult event after accepted status` — full happy path: accepted → longRunningPending → commandResult resolves
+  - `rejects on timeout` — timeout fires after `timeoutMs` with no commandResult
+  - `rejects when commandResult contains error` — engine error propagated through long-running flow
+  - **Key insight**: `vi.useFakeTimers()` blocks setTimeout but microtasks from `.then()` still need explicit flushing via `await vi.advanceTimersByTimeAsync(0)` before advancing timers
+
+- **C9 — `disconnectPipe` tests** (4 new tests):
+  - `destroys socket and sets pipeConnected false` — basic disconnect
+  - `rejects pending requests with Pipe disconnected` — in-flight `sendPipeCommand` rejected
+  - `rejects long-running pending requests` — accepted long-running command rejected on disconnect
+  - `is safe to call when pipe is not connected` — double-disconnect idempotent
+
+- **Full suite**: **6242 TS tests**, 189 files — **0 failures** (+8 from 6234)
+- **Clips-specific**: 213 tests (105 engine-connection + 108 IPC) — **0 failures**
+
+### Remaining (from audit)
+- C1: `enumerateMicDevicesLocal()` — PowerShell mic discovery untested (complex mocking)
+- C2: `CLIPS_GET_DURATIONS` handler — entirely untested
+- C3: `runWithConcurrency()` — private, tested indirectly via `getDurationsForClips`
+- C4: Duration cache LRU — needs internal state access
+- H4-H10, M1-M8: lower priority items documented in audit

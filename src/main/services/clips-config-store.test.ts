@@ -124,4 +124,75 @@ describe('clips-config-store', () => {
     expect(callArg.gameDetection).toBe(true)
     expect(callArg.gameAudioOnly).toBe(true)
   })
+
+  it('merges partial JSON with defaults via config manager', () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        replayTimeSeconds: 300,
+        fps: 60,
+        width: 2560,
+        height: 1440,
+        micEnabled: false,
+        encoderPreset: 'p5',
+        pushToTalk: 'off',
+        pushToTalkKeys: [0x7a],
+        hotkeys: [],
+        gameDetection: false,
+        gameAudioOnly: false,
+      }),
+    )
+    const cfg = loadClipsConfig()
+    // Store returns exactly what's in the file (no deep merge)
+    expect(cfg.replayTimeSeconds).toBe(300)
+    expect(cfg.fps).toBe(60)
+    expect(cfg.width).toBe(2560)
+    expect(cfg.height).toBe(1440)
+    expect(cfg.micEnabled).toBe(false)
+    expect(cfg.encoderPreset).toBe('p5')
+    expect(cfg.pushToTalk).toBe('off')
+    expect(cfg.pushToTalkKeys).toEqual([0x7a])
+    expect(cfg.hotkeys).toHaveLength(0)
+    expect(cfg.gameDetection).toBe(false)
+  })
+
+  it('resetClipsConfig writes all important default fields', () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    resetClipsConfig()
+    expect(writeFileSync).toHaveBeenCalledTimes(1)
+    const callArg = JSON.parse(vi.mocked(writeFileSync).mock.calls[0][1] as string)
+    expect(callArg.replayTimeSeconds).toBe(120)
+    expect(callArg.micEnabled).toBe(true)
+    expect(callArg.audioLoopback).toBe(false)
+    expect(callArg.fps).toBe(30)
+    expect(callArg.width).toBe(1920)
+    expect(callArg.height).toBe(1080)
+    expect(callArg.bitrateKbps).toBe(40000)
+    expect(callArg.cq).toBe(22)
+    expect(callArg.maxrateKbps).toBe(30000)
+    expect(callArg.bufsizeKbps).toBe(60000)
+    expect(callArg.bframes).toBe(3)
+    expect(callArg.lookahead).toBe(32)
+    expect(callArg.encoderPreset).toBe('p4')
+    expect(callArg.forceSoftware).toBe(false)
+    expect(callArg.pushToTalk).toBe('hold')
+    expect(callArg.pushToTalkKeys).toEqual([5, 20])
+    expect(callArg.hotkeys).toHaveLength(3)
+    expect(callArg.outputDirectory).toBe('')
+    expect(callArg.gameVolume).toBe(1.0)
+    expect(callArg.micVolume).toBe(1.0)
+    expect(callArg.autoCleanupEnabled).toBe(true)
+    expect(callArg.autoCleanupThresholdGB).toBe(20)
+    expect(callArg.adaptiveQuality).toBe(true)
+  })
+
+  it('mutation safety: modifying returned config does not affect subsequent loads', () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    const cfg1 = loadClipsConfig()
+    cfg1.fps = 999
+    cfg1.replayTimeSeconds = 9999
+    const cfg2 = loadClipsConfig()
+    expect(cfg2.fps).toBe(30)
+    expect(cfg2.replayTimeSeconds).toBe(120)
+  })
 })

@@ -54,24 +54,19 @@ public sealed class DiskSpillBuffer : IDisposable
     {
         if (_disposed) return;
 
-        byte[] data;
         int dataLen;
-        if (packet.PcmSamples is { Length: > 0 } pcm)
-        {
-            dataLen = pcm.Length * sizeof(float);
-            data = new byte[dataLen];
-            SysCopyBlock(pcm, 0, data, 0, dataLen);
-        }
-        else
-        {
-            dataLen = packet.DataLength;
-            data = new byte[dataLen];
-            System.Array.Copy(packet.Data, data, dataLen);
-        }
-
         using (var fs = new FileStream(_dataPath, FileMode.Append, FileAccess.Write, FileShare.None, 64 * 1024))
         {
-            fs.Write(data, 0, dataLen);
+            if (packet.PcmSamples is { Length: > 0 } pcm)
+            {
+                dataLen = pcm.Length * sizeof(float);
+                fs.Write(MemoryMarshal.AsBytes(pcm.AsSpan()));
+            }
+            else
+            {
+                dataLen = packet.DataLength;
+                fs.Write(packet.Data, 0, dataLen);
+            }
         }
 
         _index.Add(new SpillEntry(
@@ -250,6 +245,11 @@ public sealed class DiskSpillBuffer : IDisposable
             return;
         }
 
+        // Save original offsets for rollback on failure
+        var originalOffsets = new long[_index.Count];
+        for (int i = 0; i < _index.Count; i++)
+            originalOffsets[i] = _index[i].Offset;
+
         var tmpPath = _dataPath + ".compact";
         try
         {
@@ -285,7 +285,10 @@ public sealed class DiskSpillBuffer : IDisposable
         }
         catch
         {
-            // On failure, keep the original file — index is still valid
+            // Rollback index to original offsets on failure
+            for (int i = 0; i < _index.Count; i++)
+                _index[i] = _index[i] with { Offset = originalOffsets[i] };
+
             try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
         }
     }

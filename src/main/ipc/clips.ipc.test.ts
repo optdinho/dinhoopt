@@ -66,9 +66,16 @@ const mockSendWithFallback = vi.hoisted(() => vi.fn().mockResolvedValue({ succes
 const mockSendPipeCommand = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
 const mockSendPipeCommandLongRunning = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
 const mockSetEngineCapturing = vi.hoisted(() => vi.fn())
+const mockInvalidateDurationCache = vi.hoisted(() => vi.fn())
+
+const realInvalidateDurationCache = vi.hoisted(() => {
+  let fn: (() => void) | null = null
+  return { set: (f: () => void) => { fn = f }, call: () => fn?.() }
+})
 
 vi.mock('./clips-engine-connection', async (importOriginal) => {
-  const mod = await importOriginal()
+  const mod = await importOriginal<typeof import('./clips-engine-connection')>()
+  realInvalidateDurationCache.set(mod.invalidateDurationCache)
   return {
     ...mod,
     isPipeConnected: mockIsPipeConnected,
@@ -77,6 +84,7 @@ vi.mock('./clips-engine-connection', async (importOriginal) => {
     sendPipeCommand: mockSendPipeCommand,
     sendPipeCommandLongRunning: mockSendPipeCommandLongRunning,
     setEngineCapturing: mockSetEngineCapturing,
+    invalidateDurationCache: mockInvalidateDurationCache,
   }
 })
 
@@ -87,17 +95,18 @@ function resetEngineMocks(): void {
   mockSendPipeCommand.mockResolvedValue({ cmd: 'test', payload: {} })
   mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'test', payload: {} })
   mockSetEngineCapturing.mockReset()
+  mockInvalidateDurationCache.mockReset()
 }
 
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { IPC } from '@shared/channels'
 import type { AudioSessionInfo, ClipInfo, ClipMergeResult, ClipTrimResult, MicDeviceInfo } from '@shared/types'
 import { ipcMain, shell } from 'electron'
 import { config as clipsConfig } from '../services/clips-config-manager'
 import { registerClipsIpc } from './clips.ipc'
-import { invalidateDurationCache, stopEngineProcess } from './clips-engine-connection'
+import { stopEngineProcess } from './clips-engine-connection'
 
 function captureHandlers(): Map<string, (...args: unknown[]) => unknown> {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -123,7 +132,7 @@ describe('registerClipsIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 19 clip handlers', () => {
+  it('registers all 24 clip handlers', () => {
     const handlers = captureHandlers()
     const expectedChannels = [
       IPC.CLIPS_GET_STATUS,
@@ -183,8 +192,7 @@ describe('CLIPS_GET_STATUS', () => {
 describe('CLIPS_LIST_CLIPS', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // clear module-level duration cache so tests are isolated
-    invalidateDurationCache()
+    realInvalidateDurationCache.call()
   })
 
   function mockDuration(stderr: string) {
@@ -296,6 +304,7 @@ describe('CLIPS_LIST_CLIPS', () => {
   })
 
   it('returns 0 duration when ffmpeg fails', async () => {
+    realInvalidateDurationCache.call()
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdir).mockResolvedValue(['clip.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
     vi.mocked(stat).mockResolvedValue({ size: 100, birthtime: new Date(), mtime: new Date() } as Awaited<
@@ -398,6 +407,22 @@ describe('CLIPS_OPEN_CLIP', () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_CLIP)
     await handler({}, null)
+    expect(shell.openPath).not.toHaveBeenCalled()
+  })
+
+  it('rejects path traversal outside output directory', async () => {
+    clipsConfig.outputDirectory = 'C:\\clips'
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_CLIP)
+    await handler({}, 'C:\\clips\\..\\..\\Windows\\system.ini')
+    expect(shell.openPath).not.toHaveBeenCalled()
+  })
+
+  it('rejects Unix-style path traversal in CLIPS_OPEN_CLIP', async () => {
+    clipsConfig.outputDirectory = 'C:\\clips'
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_CLIP)
+    await handler({}, '../../../etc/passwd')
     expect(shell.openPath).not.toHaveBeenCalled()
   })
 
@@ -562,6 +587,7 @@ describe('CLIPS_SET_CONFIG', () => {
   })
 
   it('updates outputDirectory when set via config', async () => {
+    vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<typeof statSync>)
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
     await handler({}, { outputDirectory: 'D:\\MeusClipes' })
@@ -1545,6 +1571,15 @@ describe('CLIPS_RENAME_CLIP', () => {
     expect(renameSync).not.toHaveBeenCalled()
   })
 
+  it('rejects newName that is just .mp4 extension', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', '.mp4')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Invalid new name')
+    expect(renameSync).not.toHaveBeenCalled()
+  })
+
   it('rejects old name that escapes output directory', async () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
@@ -1600,6 +1635,20 @@ describe('CLIPS_RENAME_CLIP', () => {
     expect(renameSync).toHaveBeenCalledTimes(1)
   })
 
+  it('returns error when renameSync fails (e.g. cross-volume)', async () => {
+    vi.mocked(existsSync)
+      .mockReturnValueOnce(true) // old clip exists
+      .mockReturnValueOnce(false) // new clip doesn't exist
+    vi.mocked(renameSync).mockImplementationOnce(() => {
+      throw new Error('EXDEV: cross-device link not permitted')
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    const result = (await handler({}, 'oldclip.mp4', 'newclip')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('EXDEV')
+  })
+
   it('renames the cached thumbnail when present', async () => {
     vi.mocked(existsSync).mockImplementation((p) => {
       if (typeof p !== 'string') return false
@@ -1641,5 +1690,99 @@ describe('CLIPS_RENAME_CLIP', () => {
     const result = (await handler({}, 'oldclip.mp4', 'newclip.mp4')) as { success: boolean; error?: string }
     expect(result.success).toBe(true)
     expect(renameSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('invalidates duration cache for old path after successful rename', async () => {
+    vi.mocked(existsSync)
+      .mockReturnValueOnce(true) // old clip exists
+      .mockReturnValueOnce(false) // new clip doesn't exist
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_RENAME_CLIP)
+    await handler({}, 'oldclip.mp4', 'newclip')
+    expect(mockInvalidateDurationCache).toHaveBeenCalled()
+  })
+})
+
+describe('CLIPS_GET_DURATIONS', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+    mockInvalidateDurationCache.mockReset()
+    realInvalidateDurationCache.call()
+  })
+
+  function mockDuration(stderr: string) {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', stderr)
+        return undefined as never
+      },
+    )
+  }
+
+  it('returns duration for valid clip names', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(stat).mockResolvedValue({
+      size: 1000,
+      birthtime: new Date(),
+      mtime: new Date(),
+    } as Awaited<ReturnType<typeof stat>>)
+    mockDuration('Duration: 00:01:30.50, start: 0.000000, bitrate: 1000 kb/s\n')
+
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_DURATIONS)
+    const result = (await handler({}, ['clip.mp4'])) as Record<string, number>
+    const keys = Object.keys(result)
+    expect(keys).toHaveLength(1)
+    expect(result[keys[0]!]).toBeGreaterThan(0)
+  })
+
+  it('returns empty object for empty input', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_DURATIONS)
+    const result = (await handler({}, [])) as Record<string, number>
+    expect(result).toEqual({})
+  })
+
+  it('returns empty object for non-array input', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_DURATIONS)
+    const result = (await handler({}, 'not-an-array')) as Record<string, number>
+    expect(result).toEqual({})
+  })
+
+  it('filters out non-string paths and returns durations for valid ones', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(stat).mockResolvedValue({
+      size: 1000,
+      birthtime: new Date(),
+      mtime: new Date(),
+    } as Awaited<ReturnType<typeof stat>>)
+    mockDuration('Duration: 00:00:30.00, start: 0.000000, bitrate: 1000 kb/s\n')
+
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_DURATIONS)
+    const result = (await handler({}, [123, null, 'clip.mp4'])) as Record<string, number>
+    const keys = Object.keys(result)
+    expect(keys).toHaveLength(1)
+    expect(result[keys[0]!]).toBeGreaterThan(0)
+  })
+
+  it('returns 0 duration for files that fail to stat', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(stat).mockRejectedValue(new Error('no such file'))
+    mockDuration('')
+
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_DURATIONS)
+    const result = (await handler({}, ['missing.mp4'])) as Record<string, number>
+    const keys = Object.keys(result)
+    expect(keys).toHaveLength(1)
+    expect(result[keys[0]!]).toBe(0)
   })
 })

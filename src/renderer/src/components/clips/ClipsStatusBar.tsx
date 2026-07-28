@@ -183,7 +183,14 @@ export function ClipsStatusBar({
                 style={{ background: 'var(--accent)', color: '#fff' }}
               >
                 <Video className="h-4 w-4" />
-                {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : t('startRecording')}
+                {starting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('startingRecording')}
+                  </>
+                ) : (
+                  t('startRecording')
+                )}
               </button>
             )}
           </div>

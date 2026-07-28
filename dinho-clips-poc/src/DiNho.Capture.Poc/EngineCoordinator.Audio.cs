@@ -64,8 +64,14 @@ public sealed partial class EngineCoordinator
 
     private int _audioPacketCount;
     private int _audioSampleRate = 48000;
-    private TimeSpan _lastAudioAnchor = TimeSpan.Zero;
+    private long _lastAudioAnchorTicks; // TimeSpan.Ticks via Interlocked (16-byte struct torn read fix)
     private int _maxAacDrainCount;
+
+    private TimeSpan LastAudioAnchor
+    {
+        get => new TimeSpan(Interlocked.Read(ref _lastAudioAnchorTicks));
+        set => Interlocked.Exchange(ref _lastAudioAnchorTicks, value.Ticks);
+    }
 
     private void OnAudioPacket(EncodedPacket packet)
     {
@@ -79,8 +85,10 @@ public sealed partial class EngineCoordinator
 
         _audioPacketCount++;
 
+        var anchor = LastAudioAnchor; // snapshot once — avoid repeated volatile reads
+
         if (_audioPacketCount <= 5 || _audioPacketCount % 100 == 0)
-            Log.D("AudioDiag", $"packet #{_audioPacketCount} pts={packet.Pts.TotalSeconds:F3}s clock={_clock.Now.TotalSeconds:F3}s anchor={_lastAudioAnchor.TotalSeconds:F3}s");
+            Log.D("AudioDiag", $"packet #{_audioPacketCount} pts={packet.Pts.TotalSeconds:F3}s clock={_clock.Now.TotalSeconds:F3}s anchor={anchor.TotalSeconds:F3}s");
 
         // Envia PCM ao encoder ANTES de drenar AAC — o encoder precisa de dados
         // para produzir frames. A drenagem usa _lastAudioAnchor (PTS do batch PCM
@@ -120,14 +128,14 @@ public sealed partial class EngineCoordinator
         else if (_audioPacketCount <= 5)
             Log.W("AudioDiag", $"packet #{_audioPacketCount}: PcmSamples=null (sem dados PCM)");
 
-        // Drena AAC frames usando _lastAudioAnchor (PTS do PCM que os produziu)
+        // Drena AAC frames usando anchor (PTS do PCM que os produziu)
         // — NÃO packet.Pts (que pode ser de um batch MAIS NOVO se o encoder
         // estiver acumulando backlog). Isso limita o erro de PTS a ~20ms.
         int aacCount = 0;
         while (_aacEncoder?.TryReadPacket() is { } aacPkt)
         {
             aacCount++;
-            var pts = _lastAudioAnchor + TimeSpan.FromSeconds((double)(aacCount - 1) * 1024.0 / _audioSampleRate);
+            var pts = anchor + TimeSpan.FromSeconds((double)(aacCount - 1) * 1024.0 / _audioSampleRate);
             var corrected = new EncodedPacket(aacPkt.Data, aacPkt.Type, pts, aacPkt.Duration, aacPkt.IsKeyFrame);
             _buffer.AddAudio(corrected);
         }
@@ -135,8 +143,8 @@ public sealed partial class EngineCoordinator
         // Avança o anchor SÓ DEPOIS do drain, usando o PTS do batch atual.
         // Antes o anchor era atualizado ANTES do drain, fazendo AAC frames
         // receberem PTS de batches MAIS NOVOS que os produziram.
-        if (packet.Pts > _lastAudioAnchor || _lastAudioAnchor == TimeSpan.Zero)
-            _lastAudioAnchor = packet.Pts;
+        if (packet.Pts > anchor || anchor == TimeSpan.Zero)
+            LastAudioAnchor = packet.Pts;
 
         // Diagnóstico de A/V sync: rastreia pico de aacCount (frames AAC drenados por batch).
         // Se aacCount > 1, o offset dentro do batch usa o mesmo anchor → erro potencial
@@ -144,8 +152,9 @@ public sealed partial class EngineCoordinator
         if (aacCount > _maxAacDrainCount)
             _maxAacDrainCount = aacCount;
 
+        var currentAnchor = LastAudioAnchor;
         if (_audioPacketCount % 1000 == 0 && _audioPacketCount > 0)
-            Log.I("AudioDiag", $"SYNC-DIAG: packets={_audioPacketCount} maxAacDrain={_maxAacDrainCount} anchorGap={(_lastAudioAnchor - TimeSpan.FromSeconds((_audioPacketCount - 1) * 1024.0 / _audioSampleRate)).TotalMilliseconds:F1}ms");
+            Log.I("AudioDiag", $"SYNC-DIAG: packets={_audioPacketCount} maxAacDrain={_maxAacDrainCount} anchorGap={(currentAnchor - TimeSpan.FromSeconds((_audioPacketCount - 1) * 1024.0 / _audioSampleRate)).TotalMilliseconds:F1}ms");
 
         if ((_audioPacketCount <= 5 || _audioPacketCount % 100 == 0) && aacCount > 0)
             Log.D("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced={aacCount}");

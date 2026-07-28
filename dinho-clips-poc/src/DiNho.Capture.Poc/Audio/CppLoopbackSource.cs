@@ -39,7 +39,6 @@ public sealed class CppLoopbackSource : IAudioSource
     private readonly object _lock = new();
     private Thread? _pumpThread;
     private short[]? _shortBuffer;
-    private float[]? _floatBuffer;
 
     public int SampleRate => _sampleRate;
     public int Channels => _channels;
@@ -126,9 +125,11 @@ public sealed class CppLoopbackSource : IAudioSource
 
         Marshal.Copy(data, _shortBuffer, 0, sampleCount);
 
-        var samples = _floatBuffer ?? new float[sampleCount];
-        if (samples.Length < sampleCount) samples = new float[sampleCount];
-        _floatBuffer = samples;
+        // ALWAYS allocate a new float array — never reuse _floatBuffer.
+        // Reusing causes a race condition: the native callback overwrites the array
+        // with new data while the pump thread is still reading the old AudioBuffer,
+        // corrupting samples and producing NaN that crashes the FFmpeg AAC encoder.
+        var samples = new float[sampleCount];
         for (int i = 0; i < sampleCount; i++)
             samples[i] = _shortBuffer[i] / 32768f;
 

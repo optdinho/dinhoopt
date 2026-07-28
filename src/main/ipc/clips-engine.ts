@@ -67,11 +67,11 @@ function statusUpdater(src: Record<string, unknown>): void {
   if (typeof src.audioFallback === 'boolean') {
     _engineAudioFallback = src.audioFallback
   }
-  if (typeof src.gameVolume === 'number') C.gameVolume = Math.max(0, Math.min(2, src.gameVolume))
-  if (typeof src.micVolume === 'number') C.micVolume = Math.max(0, Math.min(2, src.micVolume))
-  if (typeof src.width === 'number') C.width = src.width
-  if (typeof src.height === 'number') C.height = src.height
-  if (typeof src.bitrateKbps === 'number') C.bitrateKbps = src.bitrateKbps
+  if (typeof src.gameVolume === 'number') C.gameVolume = Math.max(0, Math.min(4, src.gameVolume))
+  if (typeof src.micVolume === 'number') C.micVolume = Math.max(0, Math.min(4, src.micVolume))
+  if (typeof src.width === 'number') C.width = Math.max(640, Math.min(7680, src.width))
+  if (typeof src.height === 'number') C.height = Math.max(480, Math.min(4320, src.height))
+  if (typeof src.bitrateKbps === 'number') C.bitrateKbps = Math.max(1000, Math.min(200000, src.bitrateKbps))
   if (typeof src.audioSampleRate === 'number') C.audioSampleRate = src.audioSampleRate
   if (typeof src.replayBufferBytes === 'number') _engineReplayBufferBytes = src.replayBufferBytes
   if (typeof src.replayBufferVideoFrames === 'number') _engineReplayBufferVideoFrames = src.replayBufferVideoFrames
@@ -286,7 +286,8 @@ export async function startEngine(): Promise<{ success: boolean; error?: string 
 }
 
 export function stopEngineProcess(): void {
-  if (!_engineProcess) return
+  const proc = _engineProcess
+  if (!proc) return
   try {
     if (isPipeConnected()) {
       sendPipeCommand('stopEngine').catch(() => {})
@@ -296,10 +297,10 @@ export function stopEngineProcess(): void {
   }
   disconnectPipe()
   try {
-    _engineProcess.kill('SIGTERM')
+    proc.kill('SIGTERM')
     setTimeout(() => {
-      if (_engineProcess && !_engineProcess.killed) {
-        _engineProcess.kill('SIGKILL')
+      if (!proc.killed) {
+        proc.kill('SIGKILL')
       }
     }, ENGINE_GRACE_PERIOD)
   } finally {

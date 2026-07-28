@@ -124,7 +124,7 @@ public sealed partial class EngineCoordinator
                 // Áudio
                 _audioMixer = CreateAudioMixer();
                 _audioSampleRate = _audioMixer.SampleRate;
-                _lastAudioAnchor = TimeSpan.Zero;
+                LastAudioAnchor = TimeSpan.Zero;
                 _audioPacketCount = 0;
                 _maxAacDrainCount = 0;
                 _aacEncoderRecoveryAttempts = 0;
@@ -279,7 +279,7 @@ public sealed partial class EngineCoordinator
                 int flushIdx = 0;
                 foreach (var pkt in remaining)
                 {
-                    var pts = _lastAudioAnchor + TimeSpan.FromSeconds((double)flushIdx * 1024.0 / _audioSampleRate);
+                    var pts = LastAudioAnchor + TimeSpan.FromSeconds((double)flushIdx * 1024.0 / _audioSampleRate);
                     flushIdx++;
                     var corrected = new EncodedPacket(pkt.Data, pkt.Type, pts, pkt.Duration, pkt.IsKeyFrame);
                     _buffer.AddAudio(corrected);

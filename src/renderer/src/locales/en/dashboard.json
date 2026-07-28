@@ -131,6 +131,7 @@
   "gameClipsCardRecordingAria": "Game clips recording",
   "gameClipsCardIdleAria": "View game clips",
   "gameClipsCardStart": "Start",
+  "gameClipsCardStarting": "Starting...",
   "gameClipsCardStartTitle": "Start recording",
   "gameClipsCardStop": "Stop",
   "gameClipsCardStopTitle": "Stop recording",

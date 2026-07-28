@@ -184,17 +184,22 @@ public sealed class AudioMixer : IDisposable
 
         if (!_micEnabled) return;
 
+        // Capture local references to prevent use-after-dispose race:
+        // NoiseSuppressionEnabled setter may dispose filters concurrently
+        var maxine = _maxineFilter;
+        var rnnoise = _noiseFilter;
+
         // Aplica noise suppression se ativo (Maxine AFX ou RNNoise)
         float[] samples;
-        if (_maxineFilter?.Active == true)
-            samples = _maxineFilter.Process(buf.Samples);
-        else if (_noiseFilter?.Active == true)
-            samples = _noiseFilter.Process(buf.Samples);
+        if (maxine?.Active == true)
+            samples = maxine.Process(buf.Samples);
+        else if (rnnoise?.Active == true)
+            samples = rnnoise.Process(buf.Samples);
         else
             samples = buf.Samples;
 
-        // Noise gate — atenua mic quando sinal abaixo do threshold
-        ApplyMicGate(samples);
+        // Noise gate — retorna array NOVO para não corromper buffer original
+        samples = ApplyMicGate(samples);
 
         var pts = _clock.FromTimestamp(buf.CaptureTicks);
 
@@ -291,10 +296,34 @@ public sealed class AudioMixer : IDisposable
         }
         else
         {
-            // Só jogo — aplicar gain sem alocar novo array quando gain == 1.0
+            // Só jogo — sanitize NaN/Inf before sending to encoder
             if (_gameGain == 1.0f)
             {
-                outSamples = loopback.Buffer.Samples;
+                // Check for NaN/Inf — replace with silence to prevent encoder crash
+                bool hasBad = false;
+                for (int i = 0; i < loopback.Buffer.Samples.Length; i++)
+                {
+                    if (float.IsNaN(loopback.Buffer.Samples[i]) || float.IsInfinity(loopback.Buffer.Samples[i]))
+                    {
+                        hasBad = true;
+                        break;
+                    }
+                }
+                if (hasBad)
+                {
+                    // ArrayPool.Rent returns arrays LARGER than requested without zeroing extras.
+                    int len = loopback.Buffer.Samples.Length;
+                    outSamples = new float[len];
+                    Array.Copy(loopback.Buffer.Samples, outSamples, len);
+                    for (int i = 0; i < len; i++)
+                        if (float.IsNaN(outSamples[i]) || float.IsInfinity(outSamples[i]))
+                            outSamples[i] = 0f;
+                    pooled = true;
+                }
+                else
+                {
+                    outSamples = loopback.Buffer.Samples;
+                }
             }
             else
             {
@@ -325,17 +354,13 @@ public sealed class AudioMixer : IDisposable
             int frame = i / loopbackChannels;
             upmixed[i] = frame < micSamples.Length ? micSamples[frame] : 0f;
         }
-        var pooled = MixSamples(loopbackSamples, upmixed, loopbackSamples.Length, gameGain, micGain);
-        var result = new float[loopbackSamples.Length];
-        Array.Copy(pooled, result, loopbackSamples.Length);
-        ArrayPool<float>.Shared.Return(pooled);
-        return result;
+        return MixSamples(loopbackSamples, upmixed, loopbackSamples.Length, gameGain, micGain);
     }
 
     internal static float[] MixSamples(float[] game, float[] mic, int length,
                                         float gameGain, float micGain)
     {
-        var result = ArrayPool<float>.Shared.Rent(length);
+        var result = new float[length];
         for (int i = 0; i < length; i++)
         {
             float g = i < game.Length ? game[i] : 0f;
@@ -348,9 +373,12 @@ public sealed class AudioMixer : IDisposable
 
     private static float[] ApplyGain(float[] samples, float gain)
     {
-        var result = ArrayPool<float>.Shared.Rent(samples.Length);
+        var result = new float[samples.Length];
         for (int i = 0; i < samples.Length; i++)
-            result[i] = SoftClip(samples[i] * gain);
+        {
+            float v = samples[i] * gain;
+            result[i] = float.IsNaN(v) ? 0f : SoftClip(v);
+        }
         return result;
     }
 
@@ -364,16 +392,16 @@ public sealed class AudioMixer : IDisposable
 
     /// <summary>
     /// Noise gate no sinal do mic.
+    /// Retorna array NOVO — nunca modifica o input in-place.
     /// Envelope follower por buffer (20ms) + ganho suave.
-    /// Evita cliques com transição linear entre thresholds.
     /// </summary>
-    private void ApplyMicGate(float[] samples)
+    private float[] ApplyMicGate(float[] input)
     {
         // Peak do buffer
         float peak = 0f;
-        for (int i = 0; i < samples.Length; i++)
+        for (int i = 0; i < input.Length; i++)
         {
-            var abs = MathF.Abs(samples[i]);
+            var abs = MathF.Abs(input[i]);
             if (abs > peak) peak = abs;
         }
 
@@ -388,11 +416,15 @@ public sealed class AudioMixer : IDisposable
             ? MicGateFloor
             : MathF.Min(1f, _micGateEnvelope / (MicGateThreshold * 2f));
 
-        if (gateGain < 1f)
-        {
-            for (int i = 0; i < samples.Length; i++)
-                samples[i] *= gateGain;
-        }
+        // Gate totalmente aberto — retorna referência direta (sem cópia)
+        if (gateGain >= 1f)
+            return input;
+
+        // Gate ativo — copia e aplica ganho (nunca modifica input)
+        var output = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            output[i] = input[i] * gateGain;
+        return output;
     }
 
     private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind, bool isPooled = false)

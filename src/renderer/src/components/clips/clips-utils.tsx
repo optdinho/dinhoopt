@@ -144,8 +144,9 @@ export function formatUptime(seconds: number): string {
 }
 
 export function formatKey(vk: number, modifiers: string[]): string {
+  const order: Record<string, number> = { Ctrl: 0, Shift: 1, Alt: 2 }
   const parts = [
-    ...modifiers.sort((a) => (a === 'Ctrl' ? -1 : a === 'Shift' ? 0 : 1)),
+    ...modifiers.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99)),
     VK_MAP[vk] || `0x${vk.toString(16)}`,
   ]
   return parts.join('+')
@@ -218,7 +219,7 @@ export function VolumeSlider({
       <input
         type="range"
         min={0}
-        max={200}
+        max={400}
         value={pct}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
         className="flex-1 h-1 rounded-full appearance-none cursor-pointer"

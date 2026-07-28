@@ -262,6 +262,11 @@ public sealed class NamedPipeServer : IDisposable
                     {
                         using var iterationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         iterationCts.CancelAfter(500);
+                        // NOTE: ReadLineAsync has no built-in max length limit.
+                        // If a malicious client sends data without \n, this will
+                        // buffer unbounded memory. The 500ms iterationCts timeout
+                        // mitigates slowloris-style attacks but not infinite streams.
+                        // For a trusted local IPC channel this is acceptable.
                         var line = await reader.ReadLineAsync(iterationCts.Token);
                         if (line == null) break;
 

@@ -84,6 +84,7 @@ export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>):
     const existing = pendingRequests.get(cmd)
     if (existing) {
       clearTimeout(existing.timer)
+      existing.reject(new Error(`Command "${cmd}" superseded`))
       pendingRequests.delete(cmd)
     }
 
@@ -162,6 +163,11 @@ export async function sendWithFallback(
 
 export function onPipeData(chunk: Buffer): void {
   _pipeBuffer += chunk.toString('utf-8')
+  if (_pipeBuffer.length > 2 * 1024 * 1024) {
+    getLogger().warning('clips-pipe', 'Pipe buffer exceeded 2MB, discarding')
+    _pipeBuffer = ''
+    return
+  }
   const lines = _pipeBuffer.split('\n')
   _pipeBuffer = lines.pop() || ''
 

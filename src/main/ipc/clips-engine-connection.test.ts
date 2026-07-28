@@ -88,12 +88,14 @@ import {
   isPipeConnected,
   readClipsFromDisk,
   sendPipeCommand,
+  sendPipeCommandLongRunning,
   sendWithFallback,
   setEngineCapturing,
   startClipCapture,
   startEngine,
   stopEngineProcess,
 } from './clips-engine-connection'
+import { disconnectPipe } from './clips-pipe'
 
 const ORIG_ENV = { ...process.env }
 
@@ -473,10 +475,32 @@ describe('getCurrentStatus', () => {
     expect(s.customGameProcess).toBe('game.exe')
   })
 
-  it('includes replay buffer fields when non-zero', () => {
-    // Need to trigger handlePipeMessage to set these. Let's set engine running first
-    // but we can't call handlePipeMessage directly. Instead test that getCurrentStatus
-    // picks up state after pipe messages
+  it('includes replay buffer fields when non-zero', async () => {
+    // Start engine to get pipe handlers set up
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: {
+          type: 'engineStatus',
+          replayBufferBytes: 1048576,
+          replayBufferVideoFrames: 600,
+          replayBufferVideoBytes: 900000,
+          replayBufferAudioPackets: 1200,
+          replayBufferAudioBytes: 148576,
+        },
+      })}\n`,
+    )
+    const s = getCurrentStatus()
+    expect(s.replayBufferBytes).toBe(1048576)
+    expect(s.replayBufferVideoFrames).toBe(600)
+    expect(s.replayBufferVideoBytes).toBe(900000)
+    expect(s.replayBufferAudioPackets).toBe(1200)
+    expect(s.replayBufferAudioBytes).toBe(148576)
   })
 })
 
@@ -636,14 +660,14 @@ describe('handlePipeMessage (via pipe data)', () => {
     expect(C.outputDirectory).toBe('D:\\Clips')
   })
 
-  it('clamps volume values to [0, 2]', () => {
+  it('clamps volume values to [0, 4]', () => {
     triggerPipeData(
       `${JSON.stringify({
         cmd: '_event',
         payload: { type: 'engineStatus', gameVolume: 5, micVolume: -1 },
       })}\n`,
     )
-    expect(C.gameVolume).toBe(2)
+    expect(C.gameVolume).toBe(4)
     expect(C.micVolume).toBe(0)
   })
 
@@ -659,8 +683,28 @@ describe('handlePipeMessage (via pipe data)', () => {
     expect(C.engineFps).toBe(30)
   })
 
-  it('ignores non-matching types for boolean fields', () => {
-    C.engineReplayTimeSeconds = 300
+  it('ignores non-matching types for boolean fields', async () => {
+    // Start engine to get pipe handlers set up
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    // Set known initial values via valid pipe messages (use truthy values to test against || undefined)
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: {
+          type: 'engineStatus',
+          diskSpaceOk: true,
+          audioLoopback: true,
+          audioFallback: true,
+        },
+      })}\n`,
+    )
+    expect(C.audioLoopback).toBe(true)
+
+    // Now send non-matching types — these should be IGNORED by the statusUpdater typeof guards
     triggerPipeData(
       `${JSON.stringify({
         cmd: '_event',
@@ -673,7 +717,15 @@ describe('handlePipeMessage (via pipe data)', () => {
         },
       })}\n`,
     )
-    // Default state checks — these boolean fields should not be truthy
+    // audioLoopback should NOT be changed to a string — it stays boolean true
+    expect(C.audioLoopback).toBe(true)
+    // getCurrentStatus reads from readEngineStatus — verify booleans were not overwritten
+    const s = getCurrentStatus()
+    // diskSpaceOk was set to true above, non-boolean 'yes' should be ignored → stays true
+    expect(s.diskSpaceOk).toBe(true)
+    // audioFallback was set to true above, null should be ignored → stays true
+    // (if the guard was broken, null || undefined would give undefined)
+    expect(s.audioFallback).toBe(true)
   })
 
   it('logs warning on outputDirectory mismatch', () => {
@@ -776,12 +828,13 @@ describe('onPipeData (partial chunks / malformed)', () => {
   })
 
   it('handles multiple complete lines in one chunk', async () => {
-    sendPipeCommand('cmd1').catch(() => {})
-    sendPipeCommand('cmd2').catch(() => {})
+    const p1 = sendPipeCommand('cmd1').catch(() => {})
+    const p2 = sendPipeCommand('cmd2').catch(() => {})
     triggerPipeData(`{"cmd":"cmd1","payload":1}\n{"cmd":"cmd2","payload":2}\n`)
 
-    // Both should resolve — we can check by giving them time
-    // Wait briefly for microtasks to process
+    const [r1, r2] = await Promise.all([p1, p2])
+    expect(r1).toEqual(expect.objectContaining({ payload: 1 }))
+    expect(r2).toEqual(expect.objectContaining({ payload: 2 }))
   })
 
   it('skips empty lines', async () => {
@@ -809,9 +862,17 @@ describe('connectPipe event handlers', () => {
     vi.mocked(connect).mockReturnValue(mockSocket as never)
   })
 
-  it('sets pipeConnected on error event', () => {
-    // ConnectPipe is called internally by startEngine.
-    // Let's directly test by triggering error on the socket after startEngine.
+  it('sets pipeConnected on error event', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    expect(isPipeConnected()).toBe(true)
+
+    // Trigger error on the socket
+    for (const h of errorHandlers) h(new Error('Connection reset'))
+
+    expect(isPipeConnected()).toBe(false)
   })
 
   it('schedules reconnect on close when engine is running', async () => {
@@ -828,14 +889,17 @@ describe('connectPipe event handlers', () => {
   })
 
   it('does NOT schedule reconnect on close when engine is stopped', async () => {
-    // close event should not trigger reconnect if engineRunning is false.
-    // Default state: engineRunning = false
-    // We need a pipeSocket. Let's trigger connectPipe indirectly.
-    // Actually, in default state there's no pipeSocket.
-    // Let's mock connect and trigger close manually
-    vi.mocked(connect).mockReturnValue(mockSocket as never)
-    // We can't call connectPipe directly, but it's called by startEngine.
-    // For this test, let's check that close without engineRunning doesn't schedule.
+    // Engine never started — engineRunning = false
+    // Trigger close event on socket (simulates pipe close after connectPipe was called)
+    // Since engineRunning is false, scheduleReconnect should NOT call connectPipe again
+    const before = vi.mocked(connect).mock.calls.length
+    for (const h of closeHandlers) h()
+
+    // Wait for the reconnect delay (3s) + some buffer
+    await new Promise((r) => setTimeout(r, 3500))
+
+    // No new connect call should have been made since engineRunning is false
+    expect(vi.mocked(connect).mock.calls.length).toBe(before)
   })
 
   it('calls syncConfigOnConnect on connect event', async () => {
@@ -849,12 +913,33 @@ describe('connectPipe event handlers', () => {
     expect(mockLogger.info).toHaveBeenCalledWith('clips-pipe', expect.stringContaining('Connected'))
   })
 
-  it('destroys socket on timeout and reconnects when engine running', () => {
-    // Timeout handler calls sock.destroy() and schedules reconnect.
+  it('destroys socket on timeout and reconnects when engine running', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    expect(isPipeConnected()).toBe(true)
+
+    // Trigger timeout event
+    for (const h of timeoutHandlers) h()
+
+    // Socket should be destroyed
+    expect(mockSocket.destroy).toHaveBeenCalled()
+    expect(isPipeConnected()).toBe(false)
   })
 
-  it('logs on error and sets pipeConnected false', () => {
-    // Need pipeSocket set up first
+  it('logs on error and sets pipeConnected false', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    expect(isPipeConnected()).toBe(true)
+
+    const errMsg = 'ECONNREFUSED'
+    for (const h of errorHandlers) h(new Error(errMsg))
+
+    expect(isPipeConnected()).toBe(false)
+    expect(mockLogger.warning).toHaveBeenCalledWith('clips-pipe', expect.stringContaining(errMsg))
   })
 })
 
@@ -1067,7 +1152,7 @@ describe('stopEngineProcess', () => {
     expect(isPipeConnected()).toBe(false)
   })
 
-  it('schedules SIGKILL timer but nulled before it fires', async () => {
+  it('sends SIGKILL after grace period if process not killed', async () => {
     const child = makeMockChild()
     vi.mocked(spawn).mockReturnValue(child as never)
     vi.mocked(existsSync).mockReturnValue(true)
@@ -1078,11 +1163,9 @@ describe('stopEngineProcess', () => {
       stopEngineProcess()
       expect(child.kill).toHaveBeenCalledWith('SIGTERM')
 
-      // Advance time past grace period — the finally block already nulled
-      // engineProcess, so SIGKILL is never actually sent
       vi.advanceTimersByTime(6000)
-      expect(child.kill).toHaveBeenCalledTimes(1)
-      expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(child.kill).toHaveBeenCalledTimes(2)
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL')
     } finally {
       vi.useRealTimers()
     }
@@ -1322,5 +1405,147 @@ describe('startEngine', () => {
       dateNowSpy?.mockRestore()
       vi.useRealTimers()
     }
+  })
+})
+
+// ─── C8: sendPipeCommandLongRunning ─────────────────────────
+describe('sendPipeCommandLongRunning', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    resetMockSocket()
+    vi.mocked(connect).mockReturnValue(mockSocket as never)
+    await startEngine()
+  })
+
+  it('resolves immediately when engine response status is not accepted', async () => {
+    const p = sendPipeCommandLongRunning('quickCmd')
+    // Simulate engine responding with non-accepted status
+    triggerPipeData(`${JSON.stringify({ cmd: 'quickCmd', payload: { status: 'done', result: 42 } })}\n`)
+    const result = await p
+    expect(result.cmd).toBe('quickCmd')
+    expect(result.payload?.status).toBe('done')
+  })
+
+  it('waits for commandResult event after accepted status', async () => {
+    vi.useFakeTimers()
+    try {
+      const p = sendPipeCommandLongRunning('saveClip', undefined, 5000)
+      // Engine accepts the command
+      triggerPipeData(`${JSON.stringify({ cmd: 'saveClip', payload: { status: 'accepted' } })}\n`)
+      // Flush microtasks so .then() runs and registers longRunningPending
+      await vi.advanceTimersByTimeAsync(0)
+      // Not resolved yet — still waiting for commandResult
+      let resolved = false
+      p.then(() => {
+        resolved = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(resolved).toBe(false)
+      // Engine sends the final result
+      triggerPipeData(
+        `${JSON.stringify({
+          cmd: '_event',
+          payload: { type: 'commandResult', originalCmd: 'saveClip', value: { path: '/clips/test.mp4' } },
+        })}\n`,
+      )
+      const result = await p
+      expect(result.cmd).toBe('saveClip')
+      expect(result.payload?.path).toBe('/clips/test.mp4')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects on timeout', async () => {
+    vi.useFakeTimers()
+    let dateNowSpy: ReturnType<typeof vi.spyOn> | null = null
+    try {
+      const origDateNow = Date.now.bind(Date)
+      let fakeNow = origDateNow()
+      dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow)
+
+      const p = sendPipeCommandLongRunning('slowCmd', undefined, 1000)
+      // Prevent unhandled rejection — advanceTimersByTimeAsync fires the reject()
+      // before the expect() assertion below can catch it
+      p.catch(() => {})
+      // Engine accepts
+      triggerPipeData(`${JSON.stringify({ cmd: 'slowCmd', payload: { status: 'accepted' } })}\n`)
+      // Flush microtasks so .then() runs and registers longRunningPending with 1000ms timer
+      await vi.advanceTimersByTimeAsync(0)
+      // Advance past timeout
+      fakeNow += 1500
+      await vi.advanceTimersByTimeAsync(1500)
+      await expect(p).rejects.toThrow('timed out after 1000ms')
+    } finally {
+      dateNowSpy?.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects when commandResult contains error', async () => {
+    vi.useFakeTimers()
+    try {
+      const p = sendPipeCommandLongRunning('failingCmd', undefined, 5000)
+      triggerPipeData(`${JSON.stringify({ cmd: 'failingCmd', payload: { status: 'accepted' } })}\n`)
+      // Flush microtasks so .then() registers longRunningPending
+      await vi.advanceTimersByTimeAsync(0)
+      triggerPipeData(
+        `${JSON.stringify({
+          cmd: '_event',
+          payload: { type: 'commandResult', originalCmd: 'failingCmd', error: 'disk full' },
+        })}\n`,
+      )
+      await expect(p).rejects.toThrow('disk full')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// ─── C9: disconnectPipe ─────────────────────────────────────
+describe('disconnectPipe', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    resetMockSocket()
+    vi.mocked(connect).mockReturnValue(mockSocket as never)
+    await startEngine()
+  })
+
+  it('destroys socket and sets pipeConnected false', () => {
+    expect(isPipeConnected()).toBe(true)
+    disconnectPipe()
+    expect(isPipeConnected()).toBe(false)
+    expect(mockSocket.destroy).toHaveBeenCalled()
+  })
+
+  it('rejects pending requests with Pipe disconnected', async () => {
+    // Send a command that will create a pending request
+    const p = sendPipeCommand('testCmd')
+    // Disconnect before response arrives
+    disconnectPipe()
+    await expect(p).rejects.toThrow('Pipe disconnected')
+  })
+
+  it('rejects long-running pending requests', async () => {
+    vi.useFakeTimers()
+    try {
+      const p = sendPipeCommandLongRunning('longCmd', undefined, 10000)
+      // Accept the command (creates longRunningPending entry)
+      triggerPipeData(`${JSON.stringify({ cmd: 'longCmd', payload: { status: 'accepted' } })}\n`)
+      // Flush microtasks so .then() registers longRunningPending
+      await vi.advanceTimersByTimeAsync(0)
+      // Disconnect
+      disconnectPipe()
+      await expect(p).rejects.toThrow('Pipe disconnected')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('is safe to call when pipe is not connected', () => {
+    disconnectPipe() // already disconnected from previous test
+    expect(isPipeConnected()).toBe(false)
+    // Should not throw
+    disconnectPipe()
   })
 })
