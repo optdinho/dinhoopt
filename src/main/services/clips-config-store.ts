@@ -42,7 +42,7 @@ interface ClipsPersistedConfig {
 const DEFAULTS: ClipsPersistedConfig = {
   replayTimeSeconds: 120,
   micEnabled: true,
-  noiseSuppression: false,
+  noiseSuppression: true,
   audioLoopback: false,
   fps: 30,
   width: 1920,

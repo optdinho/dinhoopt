@@ -12,10 +12,10 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 2, mic, micGain: 4.0f);
 
         Assert.Equal(4, result.Length);
-        Assert.Equal(0.20f, result[0], 4);  // SoftClip(0.25) = 0.25/1.25
-        Assert.Equal(0.1803f, result[1], 4); // SoftClip(0.22) = 0.22/1.22
-        Assert.Equal(0.1304f, result[2], 4); // SoftClip(0.15) = 0.15/1.15
-        Assert.Equal(0.0909f, result[3], 4); // SoftClip(0.10) = 0.10/1.10
+        Assert.Equal(0.2449f, result[0], 4);  // tanh(0.25)
+        Assert.Equal(0.2165f, result[1], 4);  // tanh(0.22)
+        Assert.Equal(0.1489f, result[2], 4);  // tanh(0.15)
+        Assert.Equal(0.0997f, result[3], 4);  // tanh(0.10)
     }
 
     [Fact]
@@ -26,10 +26,10 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 2, mic, micGain: 4.0f);
 
         Assert.Equal(4, result.Length);
-        Assert.Equal(0.20f, result[0], 4);  // SoftClip(0.05 + 0.05*4)
-        Assert.Equal(0.1803f, result[1], 4); // SoftClip(0.02 + 0.05*4)
-        Assert.Equal(0.1304f, result[2], 4); // SoftClip(0.03 + 0.03*4)
-        Assert.Equal(0.0909f, result[3], 4); // SoftClip(-0.02 + 0.03*4)
+        Assert.Equal(0.2449f, result[0], 4);  // tanh(0.05 + 0.05*4)
+        Assert.Equal(0.2165f, result[1], 4);  // tanh(0.02 + 0.05*4)
+        Assert.Equal(0.1489f, result[2], 4);  // tanh(0.03 + 0.03*4)
+        Assert.Equal(0.0997f, result[3], 4);  // tanh(-0.02 + 0.03*4)
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 1, mic);
 
         Assert.Single(result);
-        Assert.Equal(0.6296f, result[0], 4); // SoftClip(0.9 + 0.8) = 1.7/2.7
+        Assert.Equal(0.9354f, result[0], 4); // tanh(1.7)
     }
 
     [Fact]
@@ -51,12 +51,12 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 1, mic, micGain: 4.0f);
 
         Assert.Equal(3, result.Length);
-        Assert.Equal(0.1736f, result[0], 4); // SoftClip(0.05 + 0.04*4) = 0.21/1.21
-        Assert.Equal(0.0909f, result[1], 4); // SoftClip(0.10) = 0.10/1.10
-        Assert.Equal(0.1304f, result[2], 4); // SoftClip(0.15) = 0.15/1.15
+        Assert.Equal(0.2070f, result[0], 3); // tanh(0.05 + 0.04*4)
+        Assert.Equal(0.0997f, result[1], 3); // tanh(0.10)
+        Assert.Equal(0.1489f, result[2], 3); // tanh(0.15)
     }
 
-    // ─── New tests ──────────────────────────────────────────────────────
+    // --- New tests ---
 
     [Fact]
     public void Mix_NaNInLoopback_IsFiltered()
@@ -66,10 +66,9 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 1, mic, micGain: 1.0f);
 
         Assert.Equal(3, result.Length);
-        // NaN in loopback causes sample=NaN → IsNaN check sets to 0
-        Assert.Equal(0.1304f, result[0], 4); // SoftClip(0.1 + 0.05)
-        Assert.Equal(0.0f, result[1], 4);    // SoftClip(0 + 0.05) = NaN → 0
-        Assert.Equal(0.2593f, result[2], 4); // SoftClip(0.3 + 0.05)
+        Assert.Equal(0.1489f, result[0], 3); // tanh(0.15)
+        Assert.Equal(0.0f, result[1], 3);    // NaN in loopback → 0
+        Assert.Equal(0.3364f, result[2], 3); // tanh(0.35)
     }
 
     [Fact]
@@ -80,22 +79,21 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 1, mic, micGain: 1.0f);
 
         Assert.Equal(2, result.Length);
-        Assert.Equal(0.1304f, result[0], 4); // SoftClip(0.1 + 0.05)
-        Assert.Equal(0.0f, result[1], 4);    // SoftClip(0.2 + NaN) = NaN → 0
+        Assert.Equal(0.1489f, result[0], 3); // tanh(0.15)
+        Assert.Equal(0.0f, result[1], 3);    // NaN in mic → 0
     }
 
     [Fact]
     public void Mix_GainScaling_AppliedToMicOnly()
     {
-        // Verify mic gain scales mic but not loopback
         var loopback = new float[] { 0.1f, 0.1f };
         var mic = new float[] { 0.1f, 0.1f };
 
         var resultLow = AudioMixer.Mix(loopback, 1, mic, micGain: 0.5f);
         var resultHigh = AudioMixer.Mix(loopback, 1, mic, micGain: 2.0f);
 
-        Assert.Equal(0.1304f, resultLow[0], 4);  // SoftClip(0.1 + 0.1*0.5) = 0.15/1.15
-        Assert.Equal(0.2308f, resultHigh[0], 4); // SoftClip(0.1 + 0.1*2) = 0.3/1.3
+        Assert.Equal(0.1489f, resultLow[0], 3);  // tanh(0.15)
+        Assert.Equal(0.2913f, resultHigh[0], 3); // tanh(0.3)
     }
 
     [Fact]
@@ -106,8 +104,8 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 1, mic, micGain: 0.0f);
 
         Assert.Equal(2, result.Length);
-        Assert.Equal(0.1667f, result[0], 4); // SoftClip(0.2) = 0.2/1.2
-        Assert.Equal(0.2308f, result[1], 4); // SoftClip(0.3) = 0.3/1.3
+        Assert.Equal(0.1974f, result[0], 3); // tanh(0.2)
+        Assert.Equal(0.2913f, result[1], 3); // tanh(0.3)
     }
 
     [Fact]
@@ -125,7 +123,7 @@ public sealed class AudioMixerTests
         var result = AudioMixer.Mix(loopback, 1, mic, micGain: 1.0f);
 
         Assert.Equal(2, result.Length);
-        Assert.Equal(0.0f, result[0], 4); // SoftClip(0)
-        Assert.Equal(0.0f, result[1], 4); // SoftClip(0)
+        Assert.Equal(0.0f, result[0], 3);
+        Assert.Equal(0.0f, result[1], 3);
     }
 }

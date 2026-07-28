@@ -48,6 +48,13 @@ public sealed class AudioMixer : IDisposable
     private const int MaxLoopbackQueue = 512;  // ~5s a 48kHz/960frames
     private const int MaxMicQueue = 256;        // ~2.5s
 
+    // Noise gate — atenua mic quando nível cai abaixo do threshold
+    private float _micGateEnvelope;
+    private const float MicGateThreshold = 0.008f; // ~-42 dBFS
+    private const float MicGateAttack = 0.4f;      // abertura rápida (~5ms)
+    private const float MicGateRelease = 0.015f;   // fechamento suave (~130ms)
+    private const float MicGateFloor = 0f;         // mudo quando gated
+
     // Propriedades públicas
     public float GameGain
     {
@@ -186,6 +193,9 @@ public sealed class AudioMixer : IDisposable
         else
             samples = buf.Samples;
 
+        // Noise gate — atenua mic quando sinal abaixo do threshold
+        ApplyMicGate(samples);
+
         var pts = _clock.FromTimestamp(buf.CaptureTicks);
 
         lock (_lock)
@@ -299,9 +309,7 @@ public sealed class AudioMixer : IDisposable
 
     /// <summary>
     /// Mistura loopback + mic com ganhos independentes.
-    /// Usa SoftClip (x / (1 + |x|)) — função C¹ contínua sem aliasing.
-    /// HardClip (Math.Clamp) introduz harmônicos ímpares que o AAC encoder
-    /// não remove e soa agressivo em repetições.
+    /// Usa SoftClip (tanh) — curva C∞ suave sem aliasing.
     /// </summary>
     /// <summary>
     /// Wrapper preservado para compatibilidade com testes existentes.
@@ -348,7 +356,43 @@ public sealed class AudioMixer : IDisposable
 
     internal static float SoftClip(float x)
     {
-        return x / (1f + Math.Abs(x));
+        // Tanh aproximado — curva C∞ suave, saída [-1,1]
+        // Para |x| < 0.5: quase linear (preserva dynamics)
+        // Para |x| > 0.5: satura suavemente (sem harmônicos agressivos)
+        return MathF.Tanh(x);
+    }
+
+    /// <summary>
+    /// Noise gate no sinal do mic.
+    /// Envelope follower por buffer (20ms) + ganho suave.
+    /// Evita cliques com transição linear entre thresholds.
+    /// </summary>
+    private void ApplyMicGate(float[] samples)
+    {
+        // Peak do buffer
+        float peak = 0f;
+        for (int i = 0; i < samples.Length; i++)
+        {
+            var abs = MathF.Abs(samples[i]);
+            if (abs > peak) peak = abs;
+        }
+
+        // Envelope follower — attack rápido, release lento
+        if (peak > _micGateEnvelope)
+            _micGateEnvelope += MicGateAttack * (peak - _micGateEnvelope);
+        else
+            _micGateEnvelope += MicGateRelease * (peak - _micGateEnvelope);
+
+        // Ganho do gate — rampa linear entre floor e 1.0
+        float gateGain = _micGateEnvelope < MicGateThreshold
+            ? MicGateFloor
+            : MathF.Min(1f, _micGateEnvelope / (MicGateThreshold * 2f));
+
+        if (gateGain < 1f)
+        {
+            for (int i = 0; i < samples.Length; i++)
+                samples[i] *= gateGain;
+        }
     }
 
     private void EmitPacket(float[] samples, TimeSpan pts, AudioStreamKind kind, bool isPooled = false)

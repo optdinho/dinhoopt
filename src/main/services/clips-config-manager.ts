@@ -77,7 +77,7 @@ export const config: ConfigState = {
   gameVolume: 1.0,
   micVolume: 1.0,
   selectedAudioSessions: [],
-  noiseSuppression: false,
+  noiseSuppression: true,
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
   autoCleanupThresholdGB: 20,
@@ -199,7 +199,7 @@ export function loadPersistedClipsConfig(): void {
   config.gameVolume = saved.gameVolume ?? 1.0
   config.micVolume = saved.micVolume ?? 1.0
   config.selectedAudioSessions = saved.selectedAudioSessions ?? []
-  config.noiseSuppression = saved.noiseSuppression ?? false
+  config.noiseSuppression = saved.noiseSuppression ?? true
   config.adaptiveQuality = saved.adaptiveQuality ?? true
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
