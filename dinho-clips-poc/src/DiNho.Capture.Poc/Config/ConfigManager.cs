@@ -74,7 +74,8 @@ public sealed class AppConfig
     public bool ForceSoftware { get; set; } = false;
 
     // RNNoise/anlmdn noise suppression on microphone
-    public bool NoiseSuppressionEnabled { get; set; } = true;
+    [JsonPropertyName("noiseSuppression")]
+    public bool NoiseSuppressionEnabled { get; set; } = false;
 
     // Dispositivo de microfone selecionado (vazio = padrão)
     public string MicDeviceId { get; set; } = "";

@@ -442,7 +442,7 @@ public sealed class EngineCoordinatorTests
         Assert.True(cfg.MicEnabled);
         Assert.Equal("Hold", cfg.PttMode);
         Assert.False(cfg.ForceSoftware);
-        Assert.True(cfg.NoiseSuppressionEnabled);
+        Assert.False(cfg.NoiseSuppressionEnabled);
         Assert.Equal("", cfg.MicDeviceId);
         Assert.True(cfg.AutoStartCapture);
         Assert.False(cfg.UseExcludeMode);
