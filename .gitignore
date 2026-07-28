@@ -19,6 +19,8 @@ resources/licenses/*.db-shm
 .backup-security-audit/
 .backup-rapidas/
 .dashboard-backup/
+backup-*/
+.archive/
 
 # Build/test artifacts
 coverage/
@@ -38,3 +40,27 @@ resources/ffmpeg-custom/
 
 # Generated docs
 docs/
+
+# Engine/temp logs
+engine-stderr.txt
+engine-stdout.txt
+
+# Coverage/lint/scan temp reports
+cov-*.txt
+coverage-*.txt
+lint-output.json
+scan-report-*.json
+
+# Test scripts
+test-*.ps1
+test-*.bat
+
+# Temp docs
+.commit-msg.txt
+translation-audit-report.txt
+ADDING_FEATURES.md
+AUDIT-*.md
+PEDIDO_*.md
+PLANO_*.md
+RELATORIO_*.md
+auditoria-*.md
