@@ -1,5 +1,6 @@
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Channels;
 
@@ -19,6 +20,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private int _sampleRate;
     private int _channels;
     private bool _initialized, _disposed;
+    private volatile bool _isHealthy = true;
     private Thread? _readerThread;
     private CancellationTokenSource? _readerCts;
     private long _outputFrameIndex;
@@ -48,11 +50,16 @@ public sealed class FfmpegAacEncoder : IDisposable
         try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
 
         // Read stderr asynchronously to prevent pipe deadlock
+        int stderrCount = 0;
         _process.BeginErrorReadLine();
         _process.ErrorDataReceived += (_, e) =>
         {
-            if (!string.IsNullOrEmpty(e.Data))
-                Log.D("ffmpeg-aac-stderr", e.Data);
+            if (string.IsNullOrEmpty(e.Data)) return;
+            // Log first 20 stderr lines at Error level to capture WHY ffmpeg dies
+            // After that, only log every 500th to avoid flood
+            int count = Interlocked.Increment(ref stderrCount);
+            if (count <= 20 || count % 500 == 0)
+                Log.E("ffmpeg-aac-stderr", $"[{count}] {e.Data}");
         };
 
         _stdin = _process.StandardInput.BaseStream;
@@ -72,7 +79,16 @@ public sealed class FfmpegAacEncoder : IDisposable
 
     public void EncodeAudio(float[] pcmSamples)
     {
-        if (!_initialized || _disposed || _flushing) return;
+        if (!_initialized || _disposed || _flushing || !_isHealthy) return;
+
+        // Detect ffmpeg process death immediately — avoids wasting write attempts
+        if (_process is { HasExited: true })
+        {
+            _isHealthy = false;
+            Log.E("FfmpegAacEncoder", $"ffmpeg process exited (code={_process.ExitCode}) after {_pcmBytesWritten} bytes — encoder UNHEALTHY");
+            return;
+        }
+
         int byteLen = pcmSamples.Length * 4;
         if (_pcmBuf == null || _pcmBuf.Length < byteLen)
             _pcmBuf = new byte[byteLen * 2];
@@ -86,7 +102,18 @@ public sealed class FfmpegAacEncoder : IDisposable
         catch (Exception ex)
         {
             _pcmWriteErrors++;
-            Log.E("FfmpegAacEncoder", $"PCM write #{_pcmWriteErrors} failed ({byteLen} bytes, totalWrote={_pcmBytesWritten}): {ex.GetType().Name}: {ex.Message}");
+            if (_pcmWriteErrors <= 3 || _pcmWriteErrors % 500 == 0)
+                Log.E("FfmpegAacEncoder", $"PCM write #{_pcmWriteErrors} failed ({byteLen} bytes, totalWrote={_pcmBytesWritten}): {ex.GetType().Name}: {ex.Message}");
+            if (ex is IOException)
+            {
+                _isHealthy = false;
+                Log.E("FfmpegAacEncoder", $"Pipe broken (IOException) — encoder UNHEALTHY after {_pcmWriteErrors} errors ({_pcmBytesWritten} bytes)");
+            }
+            else if (_pcmWriteErrors >= 10)
+            {
+                _isHealthy = false;
+                Log.E("FfmpegAacEncoder", $"Too many errors ({_pcmWriteErrors}) — encoder UNHEALTHY ({_pcmBytesWritten} bytes)");
+            }
         }
 
         if (_pcmBuf.Length > byteLen * 4 && _pcmBuf.Length > 65536)
@@ -95,6 +122,7 @@ public sealed class FfmpegAacEncoder : IDisposable
 
     public int TotalAacFrames => _totalAacFrames;
     public int DroppedFrameCount => _droppedFrameCount;
+    public bool IsHealthy => _isHealthy && !_disposed;
 
     public EncodedPacket? TryReadPacket()
     {
@@ -142,13 +170,17 @@ public sealed class FfmpegAacEncoder : IDisposable
             try { read = _stdout!.Read(buf, offset, buf.Length - offset); }
             catch (Exception ex)
             {
-                Log.E("FfmpegAacEncoder", $"ReaderLoop: stdout read failed: {ex.Message}");
+                Log.E("FfmpegAacEncoder", $"ReaderLoop: stdout read failed: {ex.Message} — encoder UNHEALTHY");
+                _isHealthy = false;
                 break;
             }
 
             if (read == 0)
             {
-                Log.I("FfmpegAacEncoder", $"ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames})");
+                int exitCode = -1;
+                try { if (_process is { HasExited: true }) exitCode = _process.ExitCode; } catch { }
+                Log.E("FfmpegAacEncoder", $"ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames} exitCode={exitCode}) — encoder UNHEALTHY");
+                _isHealthy = false;
                 break;
             }
 
@@ -208,6 +240,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _isHealthy = false;
         _readerCts?.Cancel();
         try { _stdin?.Dispose(); } catch { }
         if (_process is { HasExited: false })

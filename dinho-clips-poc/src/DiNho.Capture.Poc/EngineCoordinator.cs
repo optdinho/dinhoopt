@@ -58,6 +58,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private ICaptureSource? _capture;
     private IEncoder? _encoder;
     private FfmpegAacEncoder? _aacEncoder;
+    private int _aacEncoderRecoveryAttempts;
     private AudioMixer? _audioMixer;
     private IAudioSource? _loopbackSource;
     private IAudioSource? _micSource;
@@ -174,7 +175,7 @@ public sealed partial class EngineCoordinator : IDisposable
         // Configura PTT
         foreach (var vk in _config.Config.PushToTalkKeys)
             _ptt.AddPttKey((VirtualKey)vk);
-        _ptt.Mode = NormalizePttMode(_config.Config.PttMode) switch
+        _ptt.Mode = PttModeHelper.Normalize(_config.Config.PttMode) switch
         {
             "Toggle" => PttMode.Toggle,
             "Hold" => PttMode.Hold,

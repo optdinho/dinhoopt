@@ -86,7 +86,37 @@ public sealed partial class EngineCoordinator
         // para produzir frames. A drenagem usa _lastAudioAnchor (PTS do batch PCM
         // que gerou estes AAC frames), que é atualizado SÓ DEPOIS do drain.
         if (packet.PcmSamples != null)
-            _aacEncoder?.EncodeAudio(packet.PcmSamples);
+        {
+            if (_aacEncoder is { IsHealthy: true })
+            {
+                _aacEncoder.EncodeAudio(packet.PcmSamples);
+            }
+            else
+            {
+                // Auto-recovery: se o encoder morreu, tenta recriar (max 3 vezes por sessão)
+                if (_aacEncoderRecoveryAttempts < 3)
+                {
+                    _aacEncoderRecoveryAttempts++;
+                    Log.E("AudioDiag", $"encoder UNHEALTHY — auto-recovery attempt {_aacEncoderRecoveryAttempts}/3");
+                    try
+                    {
+                        _aacEncoder?.Dispose();
+                        _aacEncoder = new FfmpegAacEncoder();
+                        _aacEncoder.Initialize(_audioSampleRate, 2, 192000);
+                        _aacEncoder.EncodeAudio(packet.PcmSamples);
+                        Log.I("AudioDiag", $"AAC encoder recriado com sucesso (PID={_aacEncoder.TotalAacFrames})");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.E("AudioDiag", $"Falha ao recriar encoder: {ex.Message}");
+                    }
+                }
+                else if (_audioPacketCount % 5000 == 0)
+                {
+                    Log.W("AudioDiag", $"packet #{_audioPacketCount}: encoder UNHEALTHY — recovery esgotado ({_aacEncoderRecoveryAttempts} tentativas)");
+                }
+            }
+        }
         else if (_audioPacketCount <= 5)
             Log.W("AudioDiag", $"packet #{_audioPacketCount}: PcmSamples=null (sem dados PCM)");
 
@@ -194,16 +224,6 @@ public sealed partial class EngineCoordinator
         if (mixer != null)
             mixer.MicEnabled = active;
         Log.I("EngineCoordinator", $"[pttEvent] Microfone (PTT): {(active ? "ATIVO" : "MUTO")}");
-    }
-
-    private static string NormalizePttMode(string mode)
-    {
-        return mode?.ToLowerInvariant() switch
-        {
-            "hold" => "Hold",
-            "toggle" => "Toggle",
-            _ => "Off",
-        };
     }
 
     private bool _appliedGameAudioOnly;

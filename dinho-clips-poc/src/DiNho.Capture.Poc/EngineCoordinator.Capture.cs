@@ -127,6 +127,7 @@ public sealed partial class EngineCoordinator
                 _lastAudioAnchor = TimeSpan.Zero;
                 _audioPacketCount = 0;
                 _maxAacDrainCount = 0;
+                _aacEncoderRecoveryAttempts = 0;
                 _audioMixer.OnMixedAudio += OnAudioPacket;
                 _audioMixer.Start();
                 Log.I("EngineCoordinator", "[5/7] Audio mixer started");

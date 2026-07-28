@@ -1482,14 +1482,14 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 **Opção A (trim + merge textual) implemented** in session 2026-06-25.
 
-### Opção B (futuro)
-- AI auto-clipping (event detection) — prioridade futura
-- Voice clip ("clip that")
-- Full session recording + bookmarks
-- Compilação automática de highlights
-- Compartilhamento / links instantâneos
-- Cloud storage
-- Mobile app
+### Opção B (futuro) — ❌ NÃO será implementado
+- ~~AI auto-clipping (event detection)~~ — **REJEITADO pelo usuário (2026-07-28)**
+- ~~Voice clip ("clip that")~~
+- ~~Full session recording + bookmarks~~
+- ~~Compilação automática de highlights~~
+- ~~Compartilhamento / links instantâneos~~
+- ~~Cloud storage~~
+- ~~Mobile app~~
 
 ## Future: Multi-Track Audio (registered 2026-07-23)
 
