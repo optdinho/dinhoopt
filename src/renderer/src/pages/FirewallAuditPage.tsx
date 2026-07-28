@@ -168,7 +168,7 @@ export function FirewallAuditPage() {
       <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
       {/* Action bar */}
-      <div className="mb-5 flex items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={handleScan}

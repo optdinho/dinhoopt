@@ -18,13 +18,13 @@ export function MiniGauge({
   const color = accentColor ?? (percent >= 85 ? '#ef4444' : percent >= 60 ? '#f59e0b' : '#22c55e')
 
   return (
-    <div className="glass-card glass-card-hover group relative flex flex-col items-center gap-2 overflow-hidden rounded-xl px-2 py-3 sm:px-3 sm:py-4 transition-shadow duration-300 hover:shadow-[0_0_24px_rgba(139,92,246,0.06)]">
+    <div className="glass-card glass-card-hover group relative flex flex-col items-center gap-2 overflow-hidden rounded-xl px-2 py-3 sm:px-3 sm:py-4 transition-shadow duration-300 hover:shadow-[0_0_32px_rgba(139,92,246,0.12)]">
       <div
         className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_12px]"
         style={{
           background: `${color}18`,
           border: `1px solid ${color}30`,
-          boxShadow: `0 0 0px ${color}00`,
+          boxShadow: `0 0 8px ${color}30`,
           transition: 'box-shadow 0.3s ease, transform 0.3s ease',
         }}
       >

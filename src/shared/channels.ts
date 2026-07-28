@@ -393,4 +393,5 @@ export const IPC = {
   CLIPS_MERGE_CLIPS: 'clips:merge-clips',
   CLIPS_GET_DURATIONS: 'clips:get-durations',
   CLIPS_RENAME_CLIP: 'clips:rename-clip',
+  CLIPS_CLIP_SAVED: 'clips:clip-saved',
 } as const

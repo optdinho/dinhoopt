@@ -61,7 +61,7 @@ export function ResultsPanel({
       )}
 
       {/* Summary stats */}
-      <div className="mb-5 grid grid-cols-4 gap-3">
+      <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label={t('duplicatesFound')} value={store.result.totalDuplicates.toLocaleString()} />
         <StatCard label={t('reclaimableSpace')} value={formatBytes(store.result.totalReclaimable)} accent />
         <StatCard label={t('filesScanned')} value={store.result.totalFilesScanned.toLocaleString()} />
@@ -71,7 +71,7 @@ export function ResultsPanel({
       {store.result.groups.length > 0 ? (
         <>
           {/* Action bar */}
-          <div className="mb-4 flex items-center gap-3">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => {

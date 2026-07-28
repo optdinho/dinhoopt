@@ -289,7 +289,7 @@ export function EmptyFolderCleanerPage() {
       {store.status === 'complete' && store.result && (
         <>
           {/* Summary stats */}
-          <div className="mb-5 grid grid-cols-3 gap-3">
+          <div className="mb-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <StatCard label={t('emptyFound')} value={store.result.folders.length.toLocaleString()} accent />
             <StatCard label={t('foldersScanned')} value={store.result.totalFoldersScanned.toLocaleString()} />
             <StatCard label={t('duration')} value={formatDuration(store.result.duration)} />

@@ -44,7 +44,7 @@ export function GameModeCard({ gameModeActive }: { gameModeActive: boolean }) {
     >
       {gameModeActive && (
         <div
-          className="pointer-events-none absolute rounded-full opacity-15 blur-3xl"
+          className="pointer-events-none absolute rounded-full opacity-25 blur-3xl"
           style={{
             width: 200,
             height: 200,

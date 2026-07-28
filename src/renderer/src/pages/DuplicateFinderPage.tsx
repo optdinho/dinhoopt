@@ -293,7 +293,7 @@ export function DuplicateFinderPage() {
           )}
 
           {/* Summary stats */}
-          <div className="mb-5 grid grid-cols-4 gap-3">
+          <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label={t('duplicatesFound')} value={store.result.totalDuplicates.toLocaleString()} />
             <StatCard label={t('reclaimableSpace')} value={formatBytes(store.result.totalReclaimable)} accent />
             <StatCard label={t('filesScanned')} value={store.result.totalFilesScanned.toLocaleString()} />

@@ -506,7 +506,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
 
       {/* Stat cards */}
       {hasChecked && packageManagerAvailable && apps.length > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
           <StatCard icon={Package} label={t('softwareUpdater.statOutdatedApps')} value={apps.length} variant="accent" />
           <StatCard
             icon={TriangleAlert}

@@ -1,6 +1,7 @@
 import type { ClipInfo, ClipsConfig, ClipsEngineStatus, MicDeviceInfo } from '@shared/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import type { FilterTab } from './clips-utils'
 import { formatClipsDate, formatClipsSeconds, formatClipsSize, useClipsActions } from './useClipsActions'
 
@@ -75,7 +76,7 @@ export function useClipsState(): ClipsState {
     capturing: false,
     uptime: 0,
     fps: 60,
-    replayTimeSeconds: 60,
+    replayTimeSeconds: 120,
   })
   const [config, setConfig] = useState<ClipsConfig | null>(null)
   const [clips, setClips] = useState<ClipInfo[]>([])
@@ -267,6 +268,15 @@ export function useClipsState(): ClipsState {
     return () => unsub?.()
   }, [])
 
+  // Listen for clip saved events (from hotkey saves in the engine)
+  useEffect(() => {
+    const unsub = window.dinho?.clipsOnClipSaved?.(() => {
+      toast.success(t('clipSaved'))
+      refreshClips()
+    })
+    return () => unsub?.()
+  }, [refreshClips, t])
+
   // ── Actions (delegated to useClipsActions) ───────────────
 
   const actions = useClipsActions({
@@ -314,12 +324,12 @@ export function useClipsState(): ClipsState {
   }, [clips, filterTab, searchQuery, favorites])
 
   const autoReplayTime = useMemo(() => {
-    if (!config) return 60
+    if (!config) return 120
     const maxDuration = Math.max(
       ...config.hotkeys
         .filter((h) => h.enabled && h.action === 'saveClip' && h.replayDurationSeconds)
         .map((h) => h.replayDurationSeconds!),
-      60,
+      120,
     )
     return maxDuration
   }, [config?.hotkeys, config])

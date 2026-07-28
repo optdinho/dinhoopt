@@ -69,9 +69,8 @@ export const NavItem = memo(function NavItem({
   const handleClick = () => {
     if (hasChildren) {
       onToggleSubmenu?.(item.path)
-    } else {
-      navigate(item.path)
     }
+    navigate(item.path)
   }
 
   return (

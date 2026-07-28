@@ -2571,3 +2571,68 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - C3: `runWithConcurrency()` — private, tested indirectly via `getDurationsForClips`
 - C4: Duration cache LRU — needs internal state access
 - H4-H10, M1-M8: lower priority items documented in audit
+
+## Session Summary (2026-07-28 — Layout fixes + Sidebar merge + Hotkey save feedback)
+
+### Done
+
+- **C1–C10: Layout breaks fix — flex-wrap + grid responsive**:
+  - `DuplicateFinderPage.tsx:296` — `grid-cols-4` → `grid-cols-2 sm:grid-cols-4`
+  - `DuplicateFinderResultsPanel.tsx:64` — `grid-cols-4` → `grid-cols-2 sm:grid-cols-4` + `flex-wrap` on action bar
+  - `LargeFileFinderPage.tsx:321` — `grid-cols-4` → `grid-cols-2 sm:grid-cols-4`
+  - `SoftwareUpdaterPage.tsx:509` — `grid-cols-4` → `grid-cols-2 sm:grid-cols-4`
+  - `HostsEditorPage.tsx:130` — `flex-wrap` on action bar
+  - `UninstallerToolbar.tsx:58` — `flex-wrap` on root container
+  - `FirewallAuditPage.tsx:171` — `flex-wrap` on action bar
+  - `EmptyFolderCleanerPage.tsx:292` — `grid-cols-3` → `grid-cols-1 sm:grid-cols-3`
+
+- **H6+M8: KeyboardShortcutsModal removed**:
+  - `AppShell.tsx` — removed import, `showShortcuts` state, `?` key useEffect, JSX rendering
+  - `KeyboardShortcutsModal.tsx` — file deleted (149L)
+  - Zero remaining references to KeyboardShortcutsModal or showShortcuts
+
+- **M2: Replay time default changed to 120s (2min)**:
+  - `useClipsState.ts:78` — `replayTimeSeconds: 60` → `120`
+  - `useClipsState.ts:317` — `autoReplayTime` fallback `60` → `120`
+
+- **L2: Status bar removed from sidebar**:
+  - `Sidebar.tsx` — removed green dot + "Sistema saudável" block between nav and collapse toggle
+  - Removed unused `Upload` import and `i18n` variable from Sidebar
+
+- **Sidebar nav merge**:
+  - **"Limpeza"** absorbs **"Rede"** as child (`/cleaner` → dropdown with `/network`)
+  - **"Inicializador"** absorbs **"Agendador"** as child (`/startup` → dropdown with `/schedules`)
+  - Reduces sidebar top-level items from 10 to 8
+
+- **Hotkey save feedback (instant)**: Fixed missing toast/sound when using keyboard shortcut to save clip:
+  - **Root cause**: `OnHotkeyPressed` called `_ = SaveClipAsync()` fire-and-forget — engine saved clip but never notified Electron → no toast, no sound
+  - **Fix**: `BroadcastClipSaved()` sends `clipSaved` event via `_pipeServer.BroadcastRaw()` **immediately** on hotkey press (before async save starts)
+  - **C# `EngineCoordinator.cs`**: New `BroadcastClipSaved()` method, called in `OnHotkeyPressed` before `SaveClipAsync`
+  - **TS `channels.ts`**: New `CLIPS_CLIP_SAVED: 'clips:clip-saved'` channel
+  - **TS `clips-pipe.ts`**: Handler for `clipSaved` events → forwards to renderer via `CLIPS_CLIP_SAVED`
+  - **TS `preload/clips.ts` + `preload/api/clips.ts`**: New `clipsOnClipSaved` listener
+  - **TS `useClipsState.ts`**: `useEffect` listens for `clipSaved` → `toast.success(t('clipSaved'))` + `refreshClips()`
+  - Feedback is **instant** — toast appears in same frame as hotkey press, save runs in background
+
+### Relevant Files Changed
+- `src/renderer/src/pages/DuplicateFinderPage.tsx` — grid responsive
+- `src/renderer/src/pages/duplicate-finder/DuplicateFinderResultsPanel.tsx` — grid responsive + flex-wrap
+- `src/renderer/src/pages/LargeFileFinderPage.tsx` — grid responsive
+- `src/renderer/src/pages/SoftwareUpdaterPage.tsx` — grid responsive
+- `src/renderer/src/pages/HostsEditorPage.tsx` — flex-wrap
+- `src/renderer/src/components/uninstaller/UninstallerToolbar.tsx` — flex-wrap
+- `src/renderer/src/pages/FirewallAuditPage.tsx` — flex-wrap
+- `src/renderer/src/pages/EmptyFolderCleanerPage.tsx` — grid responsive
+- `src/renderer/src/components/layout/AppShell.tsx` — KeyboardShortcutsModal removed
+- `src/renderer/src/components/shared/KeyboardShortcutsModal.tsx` — DELETED
+- `src/renderer/src/components/clips/useClipsState.ts` — replay default 120 + clipSaved listener
+- `src/renderer/src/components/layout/Sidebar.tsx` — status bar removed + nav groups merged + unused imports cleaned
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs` — `BroadcastClipSaved()` method + call in `OnHotkeyPressed`
+- `src/shared/channels.ts` — `CLIPS_CLIP_SAVED` channel
+- `src/main/ipc/clips-pipe.ts` — `clipSaved` event handler
+- `src/preload/clips.ts` — `clipsOnClipSaved` listener
+- `src/preload/api/clips.ts` — `clipsOnClipSaved` listener
+
+### Build
+- C# engine: 0 errors, 17 pre-existing warnings
+- TS preload tests: 250 passed — 0 failures

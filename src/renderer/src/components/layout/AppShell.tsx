@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { KeyboardShortcutsModal } from '@/components/shared/KeyboardShortcutsModal'
 import { AdminBanner } from './AdminBanner'
 import { Sidebar } from './Sidebar'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation('common')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [showShortcuts, setShowShortcuts] = useState(false)
   const handleSkip = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault()
     const el = document.getElementById('main-content')
@@ -15,20 +13,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       el.focus()
       el.scrollIntoView()
     }
-  }, [])
-
-  // ? key to open shortcuts modal (Shift+/)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
-        e.preventDefault()
-        setShowShortcuts((prev) => !prev)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
   }, [])
 
   return (
@@ -41,12 +25,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Ambient background glow */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
-            className="absolute -top-[100px] left-[80px] h-[500px] w-[500px] rounded-full blur-[180px]"
+            className="absolute -top-[120px] left-[60px] h-[700px] w-[700px] rounded-full blur-[220px]"
             style={{ background: 'var(--glow-amber)' }}
           />
           <div
-            className="absolute bottom-[0] right-[40px] h-[400px] w-[400px] rounded-full blur-[160px]"
+            className="absolute -bottom-[80px] right-[20px] h-[600px] w-[600px] rounded-full blur-[200px]"
             style={{ background: 'var(--glow-blue)' }}
+          />
+          <div
+            className="absolute bottom-[20%] left-[40%] h-[400px] w-[400px] rounded-full blur-[200px]"
+            style={{ background: 'var(--glow-green)' }}
           />
           {/* Noise texture overlay */}
           <div
@@ -71,7 +59,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-      <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
     </div>
   )
 }

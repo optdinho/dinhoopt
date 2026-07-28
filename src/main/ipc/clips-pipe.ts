@@ -219,6 +219,16 @@ function handlePipeMessage(msg: PipeMessage): void {
     return
   }
 
+  if (msg.cmd === '_event' && msg.payload?.type === 'clipSaved') {
+    const p = msg.payload as Record<string, unknown>
+    getLogger().info('clips-pipe', `Clip saved: ${String(p.path ?? 'unknown')}`)
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (win) {
+      win.webContents.send(IPC.CLIPS_CLIP_SAVED, { path: p.path })
+    }
+    return
+  }
+
   const pending = pendingRequests.get(msg.cmd)
   if (pending) {
     pendingRequests.delete(msg.cmd)

@@ -39,15 +39,15 @@ export function HealthCard({
     if (!disk) return '—'
     switch (disk.healthStatus) {
       case 'Healthy':
-        return 'Saudável'
+        return t('diskHealthHealthy')
       case 'Caution':
-        return 'Atenção'
+        return t('diskHealthCaution')
       case 'Bad':
-        return 'Crítico'
+        return t('diskHealthBad')
       default:
         return '—'
     }
-  }, [disk])
+  }, [disk, t])
 
   const diskColor = useMemo(() => {
     if (!disk) return '#6b7280'
@@ -79,7 +79,7 @@ export function HealthCard({
       className="glass-card depth-emphasis flex flex-col items-center justify-center rounded-2xl px-4 py-5 sm:px-6 sm:py-6 animate-fade-in"
       style={{
         borderLeft: '2px solid var(--accent)',
-        boxShadow: '0 0 24px rgba(139,92,246,0.04), 0 2px 8px rgba(0,0,0,0.12), inset 0 1px 0 var(--glass-inset)',
+        boxShadow: '0 0 32px rgba(139,92,246,0.08), 0 4px 16px rgba(0,0,0,0.18), inset 0 1px 0 var(--glass-inset)',
       }}
     >
       <HealthScore score={healthScore} size="md" />

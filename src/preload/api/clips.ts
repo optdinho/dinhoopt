@@ -58,4 +58,11 @@ export const clipsMethods = {
       ipcRenderer.removeListener(IPC.CLIPS_ENGINE_STATUS, handler)
     }
   },
+  clipsOnClipSaved: (callback: (data: { path?: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { path?: string }) => callback(data)
+    ipcRenderer.on(IPC.CLIPS_CLIP_SAVED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_CLIP_SAVED, handler)
+    }
+  },
 }

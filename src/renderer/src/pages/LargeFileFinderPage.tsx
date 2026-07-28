@@ -318,7 +318,7 @@ export function LargeFileFinderPage() {
       {store.status === 'complete' && store.result && (
         <>
           {/* Summary stats */}
-          <div className="mb-5 grid grid-cols-4 gap-3">
+          <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label={t('largeFilesFound')} value={store.result.files.length.toLocaleString()} />
             <StatCard label={t('totalSize')} value={formatBytes(totalLargeSize)} accent />
             <StatCard label={t('filesScanned')} value={store.result.totalFilesScanned.toLocaleString()} />

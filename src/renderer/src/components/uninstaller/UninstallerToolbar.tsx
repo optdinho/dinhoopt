@@ -55,7 +55,7 @@ export function UninstallerToolbar({
   }, [showSortMenu])
 
   return (
-    <div className="mb-5 flex items-center gap-2.5">
+    <div className="mb-5 flex flex-wrap items-center gap-2.5">
       <button
         type="button"
         onClick={handleLoad}

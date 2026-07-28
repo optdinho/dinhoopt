@@ -289,6 +289,8 @@ public sealed partial class EngineCoordinator : IDisposable
         switch (e.Action)
         {
             case HotkeyAction.SaveClip:
+                // Notify Electron immediately for instant feedback (toast + sound)
+                BroadcastClipSaved();
                 _ = SaveClipAsync(e.ReplayDurationSeconds);
                 break;
             case HotkeyAction.ToggleCapture:
@@ -298,6 +300,21 @@ public sealed partial class EngineCoordinator : IDisposable
                 ToggleMic();
                 break;
         }
+    }
+
+    private void BroadcastClipSaved()
+    {
+        try
+        {
+            var envelope = new IpcEnvelope
+            {
+                Version = 1,
+                Command = "_event",
+                Payload = System.Text.Json.JsonSerializer.SerializeToElement(new { type = "clipSaved" })
+            };
+            _pipeServer.BroadcastRaw(System.Text.Json.JsonSerializer.Serialize(envelope));
+        }
+        catch { }
     }
 
     public void Dispose()

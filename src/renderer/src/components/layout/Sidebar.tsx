@@ -37,7 +37,6 @@ import {
   Sliders,
   Sparkles,
   Trash2,
-  Upload,
   Wifi,
   Wrench,
   X,
@@ -91,7 +90,11 @@ const navGroups: NavGroup[] = [
     headingKey: 'sectionClean',
     color: 'blue',
     items: [
-      { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner' },
+      { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner',
+        children: [
+          { icon: Wifi, labelKey: 'network', path: '/network' },
+        ],
+      },
       { icon: Database, labelKey: 'registry', path: '/registry' },
       {
         icon: Package,
@@ -128,11 +131,13 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
       { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
-      { icon: Zap, labelKey: 'startup', path: '/startup' },
+      { icon: Zap, labelKey: 'startup', path: '/startup',
+        children: [
+          { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
+        ],
+      },
       { icon: Activity, labelKey: 'performance', path: '/performance' },
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
-      { icon: Wifi, labelKey: 'network', path: '/network' },
-      { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
       {
         icon: Settings,
         labelKey: 'settings',
@@ -213,7 +218,7 @@ function useBadgeCounts(): Record<string, number> {
 }
 
 export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { t, i18n } = useTranslation('sidebar')
+  const { t } = useTranslation('sidebar')
   const location = useLocation()
   const navigate = useNavigate()
   const badgeCounts = useBadgeCounts()
@@ -224,6 +229,18 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
   const [selectedIndex, setSelectedIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  // Auto-open submenu when current route is a child
+  useEffect(() => {
+    for (const group of navGroups) {
+      for (const item of group.items) {
+        if (item.children?.some((c) => c.path === location.pathname)) {
+          setOpenSubmenu(item.path)
+          return
+        }
+      }
+    }
+  }, [location.pathname])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: navGroups is a module-level const
   const filteredNavGroups = useMemo(
@@ -272,10 +289,11 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
   }, [badgeCounts, filteredNavGroups])
 
   const isPathActive = (item: { children?: { path: string }[]; path: string }) => {
+    if (location.pathname === item.path) return true
     if (item.children) {
       return item.children.some((c) => c.path === location.pathname)
     }
-    return location.pathname === item.path
+    return false
   }
 
   // ── Search: flatten all pages ──
@@ -727,17 +745,6 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
           </div>
         ))}
       </nav>
-
-      {/* ── Status bar ── */}
-      {!collapsed && (
-        <div
-          className="flex items-center gap-1.5 px-3 py-1 text-[10px]"
-          style={{ borderTop: '1px solid var(--border-subtle)', color: 'var(--text-faint)' }}
-        >
-          <div className="h-1 w-1 rounded-full bg-emerald-500" />
-          <span className="flex-1">{t('systemHealthy', 'Sistema saudável')}</span>
-        </div>
-      )}
 
       {/* ── Collapse toggle ── */}
       <button
