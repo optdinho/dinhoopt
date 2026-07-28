@@ -1,7 +1,7 @@
+using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Text;
-using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Export;
 
@@ -55,7 +55,7 @@ public sealed partial class ClipExporter : IDisposable
                 throw new InvalidOperationException(
                     $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
-            var mkvTemp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.mkv");
+            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.h264");
             var adtsTemp = audioPackets.Count > 0
                 ? Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.adts")
                 : null;
@@ -172,6 +172,10 @@ public sealed partial class ClipExporter : IDisposable
                     Log.I("PTS", $"Post-sync — expectedDuration={expectedDuration:F2}s activeDuration={activeDurationSec:F2}s diff={durDiff:F3}s gapsRemoved={gapsRemoved} audioFrames={audioPackets.Count} startTrimmed={startTrimCount}");
 
                     Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved} startTrimmed={startTrimCount}");
+
+                    // Re-timestamp to contiguous timeline: closes alt-tab gaps in the
+                    // Matroska/MP4 so the player doesn't encounter timestamp jumps.
+                    ReTimestampToContiguous(videoPackets, audioPackets, intervals);
                 }
 
                 // Frame-by-frame PTS drift diagnostic
@@ -198,40 +202,9 @@ public sealed partial class ClipExporter : IDisposable
                     Log.I("SYNC", driftLog.ToString());
                 }
 
-                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback,
-                    audioPackets.Count > 0 ? audioPackets : null);
-                var mkvLen = new FileInfo(mkvTemp).Length;
-                var audioCount = audioPackets?.Count(p => p.Type == MediaType.Audio) ?? 0;
-                Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) videoFrames={videoPackets.Count} audioPackets={audioCount}");
-
-#if DEBUG
-                // Copia MKV para o mesmo diretório do MP4 para diagnóstico
-                try
-                {
-                    var mkvDiag = Path.Combine(
-                        Path.GetDirectoryName(Path.GetFullPath(outputPath))!,
-                        Path.GetFileNameWithoutExtension(outputPath) + ".mkv");
-                    File.Copy(mkvTemp, mkvDiag, overwrite: true);
-                    Log.D("Exporter", $"MKV diagnostic: {mkvDiag} ({new FileInfo(mkvDiag).Length / 1024} KB)");
-                }
-                catch (Exception ex)
-                {
-                    Log.W("Exporter", $"Failed to save MKV diagnostic: {ex.Message}");
-                }
-
-                // Hex dump first 200 bytes of MKV for diagnostics
-                try
-                {
-                    var mkvBytes = new byte[Math.Min((int)mkvLen, 200)];
-                    using (var mkvFs = File.OpenRead(mkvTemp))
-                        mkvFs.ReadExactly(mkvBytes, 0, mkvBytes.Length);
-                    var hex = new System.Text.StringBuilder();
-                    for (int i = 0; i < mkvBytes.Length; i++)
-                        hex.Append($"{mkvBytes[i]:X2} ");
-                    Log.D("Exporter", $"MKV hex ({mkvBytes.Length}B)={hex.ToString().Trim()}");
-                }
-                catch { }
-#endif
+                WriteH264AnnexBFile(h264Temp, videoPackets);
+                var h264Len = new FileInfo(h264Temp).Length;
+                Log.I("Exporter", $"H264 AnnexB temp: {h264Temp} ({h264Len / 1024} KB) videoFrames={videoPackets.Count}");
 
                 Log.D("Exporter", $"nominalFps={frameRate} activeFps={activeFps:F1} activeDuration={activeDurationSec:F3}s totalDuration={trueVidDuration:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved} audioDurationSec={audioDurationSec:F3}s");
 
@@ -268,22 +241,12 @@ public sealed partial class ClipExporter : IDisposable
                     Log.I("Exporter", $"ADTS temp: {adtsTemp} ({adtsLen / 1024} KB) audioFrames={audioPackets.Count}");
                 }
 
-                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat, adtsTemp);
+                MuxWithFfmpegStreaming(outputPath, h264Temp, hasAudioTracks, rawFormat, adtsTemp);
 
                 // Post-mux diagnostic: probe output MP4 for audio stream presence
                 try
                 {
-                    using var probe = new Process
-                    {
-                        StartInfo = new ProcessStartInfo("ffmpeg")
-                        {
-                            Arguments = $"-i \"{outputPath}\"",
-                            RedirectStandardError = true,
-                            RedirectStandardOutput = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        }
-                    };
+                    using var probe = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: $"-i \"{outputPath}\"", redirectOutput: true, redirectError: true) };
                     probe.Start();
                     var probeOutput = probe.StandardError.ReadToEnd();
                     probe.WaitForExit(10_000);
@@ -305,7 +268,7 @@ public sealed partial class ClipExporter : IDisposable
             }
             finally
             {
-                try { File.Delete(mkvTemp); } catch { }
+                try { File.Delete(h264Temp); } catch { }
                 if (adtsTemp != null) try { File.Delete(adtsTemp); } catch { }
             }
 
@@ -327,13 +290,10 @@ public sealed partial class ClipExporter : IDisposable
         string args;
         if (hasAudioTracks && adtsPath != null && File.Exists(adtsPath))
         {
-            // Two-input mux: Matroska for video, raw ADTS for audio.
-            // ffmpeg's aac demuxer reads ADTS frames natively, correctly
-            // sets frame_size=1024 and ASC extradata → MP4 muxer gets proper
-            // codec info (no "codec frame size is not set" warning).
+            // Two-input mux: raw H264 AnnexB for video, raw ADTS for audio.
             // -c copy preserves exact quality of both video (NVENC) and audio (AAC).
             args = $"-y -loglevel warning " +
-                   $"-f matroska -i \"{videoPath}\" " +
+                   $"-f h264 -i \"{videoPath}\" " +
                    $"-f aac -i \"{adtsPath}\" " +
                    $"-map 0:v:0 -map 1:a:0 " +
                    $"-c:v copy -c:a copy " +
@@ -342,18 +302,17 @@ public sealed partial class ClipExporter : IDisposable
         }
         else if (hasAudioTracks)
         {
-            // Fallback: audio is in the Matroska (shouldn't happen with new flow)
+            // Fallback: audio is in the raw H264 (shouldn't happen with new flow)
             args = $"-y -loglevel warning " +
-                   $"-f matroska -i \"{videoPath}\" " +
-                   $"-map 0:v:0 -map 0:a:0 " +
-                   $"-c:v copy -bsf:a aac_adtstoasc -c:a copy " +
+                   $"-f h264 -i \"{videoPath}\" " +
+                   $"-map 0:v:0 -c:v copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";
         }
         else
         {
             args = $"-y -loglevel warning " +
-                   $"-f matroska -i \"{videoPath}\" " +
+                   $"-f h264 -i \"{videoPath}\" " +
                    $"-map 0:v:0 -c:v copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";
@@ -361,17 +320,7 @@ public sealed partial class ClipExporter : IDisposable
 
         Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
 
-        using var proc = new Process
-        {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = args,
-                RedirectStandardInput = false,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
+        using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: args, redirectError: true) };
 
         var stderr = new StringBuilder();
         proc.ErrorDataReceived += (s, e) =>
@@ -420,16 +369,7 @@ public sealed partial class ClipExporter : IDisposable
     {
         var thumbPath = Path.ChangeExtension(videoPath, ".thumb.jpg");
 
-        using var proc = new Process
-        {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = $"-y -loglevel warning -i \"{videoPath}\" -vframes 1 -s 320x180 -f image2 \"{thumbPath}\"",
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
+        using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: $"-y -loglevel warning -i \"{videoPath}\" -vframes 1 -s 320x180 -f image2 \"{thumbPath}\"", redirectError: true) };
 
         proc.Start();
         proc.BeginErrorReadLine();

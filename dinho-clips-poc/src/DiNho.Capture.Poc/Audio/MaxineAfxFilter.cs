@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -61,16 +62,12 @@ public sealed class MaxineAfxFilter : IDisposable
 
         _process = new Process
         {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = $"-y -loglevel error -f f32le -ar {sampleRate} -ac {channels} -i pipe:0 " +
-                            $"-af {_activeFilter} -f f32le -flush_packets 1 pipe:1",
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            }
+            StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
+                args: $"-y -loglevel error -f f32le -ar {sampleRate} -ac {channels} -i pipe:0 " +
+                      $"-af {_activeFilter} -f f32le -flush_packets 1 pipe:1",
+                redirectInput: true,
+                redirectOutput: true,
+                redirectError: true)
         };
         _process.Start();
         try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }

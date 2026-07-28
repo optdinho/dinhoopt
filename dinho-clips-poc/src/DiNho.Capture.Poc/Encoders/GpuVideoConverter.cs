@@ -24,38 +24,51 @@ internal sealed class GpuVideoConverter : IDisposable
         _width = width;
         _height = height;
 
-        _videoDevice = device.QueryInterface<ID3D11VideoDevice>();
-        var ctx = device.ImmediateContext;
-        _videoContext = ctx.QueryInterface<ID3D11VideoContext>();
-
-        var contentDesc = new VideoProcessorContentDescription
+        ID3D11VideoDevice? videoDevice = null;
+        ID3D11VideoContext? videoContext = null;
+        try
         {
-            InputFrameFormat = VideoFrameFormat.Progressive,
-            InputFrameRate = new Rational(60, 1),
-            InputWidth = (uint)width,
-            InputHeight = (uint)height,
-            OutputFrameRate = new Rational(60, 1),
-            OutputWidth = (uint)width,
-            OutputHeight = (uint)height,
-            Usage = VideoUsage.PlaybackNormal
-        };
+            videoDevice = device.QueryInterface<ID3D11VideoDevice>();
+            var ctx = device.ImmediateContext;
+            videoContext = ctx.QueryInterface<ID3D11VideoContext>();
+            _videoDevice = videoDevice;
+            _videoContext = videoContext;
 
-        _videoDevice.CreateVideoProcessorEnumerator(ref contentDesc, out _enumerator).CheckError();
-        _videoDevice.CreateVideoProcessor(_enumerator, 0, out _videoProcessor).CheckError();
+            var contentDesc = new VideoProcessorContentDescription
+            {
+                InputFrameFormat = VideoFrameFormat.Progressive,
+                InputFrameRate = new Rational(60, 1),
+                InputWidth = (uint)width,
+                InputHeight = (uint)height,
+                OutputFrameRate = new Rational(60, 1),
+                OutputWidth = (uint)width,
+                OutputHeight = (uint)height,
+                Usage = VideoUsage.PlaybackNormal
+            };
 
-        var nv12Desc = new Texture2DDescription
+            _videoDevice.CreateVideoProcessorEnumerator(ref contentDesc, out _enumerator).CheckError();
+            _videoDevice.CreateVideoProcessor(_enumerator, 0, out _videoProcessor).CheckError();
+
+            var nv12Desc = new Texture2DDescription
+            {
+                Width = (uint)_width,
+                Height = (uint)_height,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Format.NV12,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.RenderTarget,
+                CPUAccessFlags = CpuAccessFlags.None,
+            };
+            _cachedOutput = device.CreateTexture2D(nv12Desc);
+        }
+        catch
         {
-            Width = (uint)_width,
-            Height = (uint)_height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.NV12,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget,
-            CPUAccessFlags = CpuAccessFlags.None,
-        };
-        _cachedOutput = device.CreateTexture2D(nv12Desc);
+            videoDevice?.Dispose();
+            videoContext?.Dispose();
+            throw;
+        }
     }
 
     public ID3D11Texture2D Convert(ID3D11Texture2D inputBgra)

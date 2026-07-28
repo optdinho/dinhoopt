@@ -1045,7 +1045,7 @@ public sealed class NalParsingTests
     }
 
     [Fact]
-    public void ParseAvcc_IncompleteNALU_EmitsEntirePendingAtEnd()
+    public void ParseAvcc_IncompleteNALU_SavesTailForNextRead()
     {
         var enc = CreateH264Encoder();
         InitParseAvccState(enc);
@@ -1058,17 +1058,20 @@ public sealed class NalParsingTests
 
         enc.ParseAvcc(avccData);
 
-        // First NALU (slice) → AppendPending + _hadSlice=true
-        // Second NALU (SPS len=5, incomplete) → appended to pending (5 bytes)
-        // Post-loop: _hadSlice=true → EmitPacket() fires, consuming ALL pending data
-        // Result: pendingLen=0 (entire buffer was emitted as one frame)
+        // Bug 1 fix: Incomplete NALU goes to _incompleteNalBuf, NOT _pendingBuf.
+        // Complete NALU (len=2 slice) is in _pendingBuf with _hadSlice=true.
+        // Post-loop EmitPacket fires for the complete NALU only.
         int pendingLen = (int)GetEncoderField(enc, "_pendingLen");
-        Assert.Equal(0, pendingLen);
+        Assert.Equal(0, pendingLen); // EmitPacket consumed the complete NALU
 
-        // Verify the channel received a packet (the combined frame)
+        // Verify incomplete tail was saved separately
+        int incompleteLen = (int)GetEncoderField(enc, "_incompleteNalLen");
+        Assert.Equal(5, incompleteLen); // 4-byte length prefix + 1 byte payload
+
+        // Verify the emitted packet has only the complete NALU (6 bytes: 4 prefix + 2 payload)
         var channel = (System.Threading.Channels.Channel<EncodedPacket>)GetEncoderField(enc, "_outputChannel");
         Assert.True(channel.Reader.TryRead(out var packet));
-        Assert.Equal(11, packet!.DataLength);
+        Assert.Equal(6, packet!.DataLength);
     }
 
     [Fact]
@@ -1511,18 +1514,17 @@ public sealed class NalParsingTests
     }
 
     [Fact]
-    public void BuildAvcc_WithEmulationPrevention_RemovesIt()
+    public void BuildAvcc_WithEmulationPrevention_Preserved()
     {
-        // SPS with emulation prevention byte 0x03 after 00 00
+        // Bug 3 fix: emulation prevention bytes preserved per ISO 14496-15.
         byte[] sps = [0x67, 0x42, 0x00, 0x00, 0x03, 0x01, 0x80];
         byte[] pps = [0x68, 0xEE];
 
         var avcc = DiNho.Capture.Poc.Export.ClipExporter.BuildAvcc(sps, pps);
 
         Assert.NotNull(avcc);
-        // RemoveEmulationPrevention: 00 00 03 → 00 00 (remove the 03)
-        // sps becomes [0x67, 0x42, 0x00, 0x00, 0x01, 0x80] = 6 bytes (was 7)
-        int expected = 5 + 1 + 2 + 6 + 1 + 2 + pps.Length;
+        // SPS preserved as-is (7 bytes), not cleaned to 6
+        int expected = 5 + 1 + 2 + 7 + 1 + 2 + pps.Length;
         Assert.Equal(expected, avcc!.Length);
     }
 

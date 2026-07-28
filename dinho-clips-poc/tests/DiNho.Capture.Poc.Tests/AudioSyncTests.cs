@@ -461,14 +461,16 @@ public sealed class AudioSyncTests
     }
 
     [Fact]
-    public void BuildAvcc_SpsWithEmulationPrevention_Cleaned()
+    public void BuildAvcc_SpsWithEmulationPrevention_Preserved()
     {
+        // Bug 3 fix: emulation prevention bytes (0x03) are NOT removed — they are part
+        // of the NAL unit syntax and MUST be preserved in the avcC record per ISO 14496-15.
         byte[] sps = [0x67, 0x64, 0x00, 0x00, 0x03, 0x01, 0x1E, 0xAC];
         var pps = MakePps();
         var avcc = ClipExporter.BuildAvcc(sps, pps);
         Assert.NotNull(avcc);
         int spsLen = (avcc[6] << 8) | avcc[7];
-        Assert.Equal(7, spsLen);
+        Assert.Equal(8, spsLen); // SPS preserved as-is (8 bytes, not 7)
     }
 
     // ════════════════════════════════════════════════════════════

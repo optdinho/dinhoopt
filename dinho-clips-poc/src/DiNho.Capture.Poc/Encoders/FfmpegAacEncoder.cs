@@ -36,17 +36,13 @@ public sealed class FfmpegAacEncoder : IDisposable
 
         _process = new Process
         {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = $"-y -loglevel warning " +
-                            $"-f f32le -ar {sampleRate} -ac {channels} -i pipe:0 " +
-                            $"-c:a aac -b:a {bitrate} -f adts pipe:1",
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
+            StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
+                args: $"-y -loglevel warning " +
+                $"-f f32le -ar {sampleRate} -ac {channels} -i pipe:0 " +
+                $"-c:a aac -b:a {bitrate} -f adts pipe:1",
+                redirectInput: true,
+                redirectOutput: true,
+                redirectError: true)
         };
         _process.Start();
         try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }

@@ -1,6 +1,6 @@
 import { CleanerType } from '@shared/enums'
 import type { DriveInfo, PerfQuickStats } from '@shared/types'
-import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Wifi, Zap } from 'lucide-react'
+import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -11,14 +11,13 @@ import { HealthCard } from '@/components/dashboard/HealthCard'
 import { MiniGauge } from '@/components/dashboard/MiniGauge'
 import { ProgressBanner } from '@/components/dashboard/ProgressBanner'
 import { ResultBanner } from '@/components/dashboard/ResultBanner'
-import { StorageOverview } from '@/components/dashboard/StorageOverview'
 import type { OneClickPhase, OneClickResult } from '@/components/dashboard/types'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { usePlatform } from '@/hooks/usePlatform'
-import { formatBytes, formatSpeed } from '@/lib/utils'
+import { formatBytes } from '@/lib/utils'
 import { useGameModeStore } from '@/stores/game-mode-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
@@ -257,6 +256,43 @@ export function DashboardPage() {
     }
   }, [t])
 
+  const runNetworkCleanup = useCallback(async (): Promise<number> => {
+    try {
+      setPhaseLabel(t('phaseLabelCleaningNetwork'))
+      const items = await window.dinho.networkScan()
+      if (items.length === 0) return 0
+      const ids = items.filter((i) => i.selected).map((i) => i.id)
+      if (ids.length === 0) return 0
+      const res = await window.dinho.networkClean(ids)
+      return res.cleaned
+    } catch {
+      toast.error(t('toastNetworkCleanupFailed'))
+      return 0
+    }
+  }, [t])
+
+  const runVulnerabilityScan = useCallback(async (): Promise<number> => {
+    try {
+      setPhaseLabel(t('phaseLabelScanningVulnerabilities'))
+      const result = await window.dinho.vulnerabilityScan()
+      return result.vulnerable
+    } catch {
+      toast.error(t('toastVulnScanFailed'))
+      return 0
+    }
+  }, [t])
+
+  const runMemoryOptimize = useCallback(async (): Promise<number> => {
+    try {
+      setPhaseLabel(t('phaseLabelOptimizingMemory'))
+      const res = await window.dinho.memoryOptimize()
+      return res.success ? res.freedBytes : 0
+    } catch {
+      toast.error(t('toastMemoryOptimizeFailed'))
+      return 0
+    }
+  }, [t])
+
   const runDrivers = useCallback(async (): Promise<{ removed: number; space: number }> => {
     try {
       setPhaseLabel(t('phaseLabelScanningDrivers'))
@@ -331,7 +367,7 @@ export function DashboardPage() {
     cleanStartRef.current = Date.now()
     setPhase('scanning')
     setResult(null)
-    const totalSteps = 5 + (features.registry ? 1 : 0) + (features.drivers ? 1 : 0)
+    const totalSteps = 8 + (features.registry ? 1 : 0) + (features.drivers ? 1 : 0)
     let step = 0
     setStepProgress({ current: step, total: totalSteps })
     // Yield to let React render the scanning phase before cleaning starts
@@ -359,6 +395,12 @@ export function DashboardPage() {
     const startupHighImpact = await runStartupCheck()
     setStepProgress({ current: ++step, total: totalSteps })
     const updatesAvailable = await runSoftwareUpdateCheck()
+    setStepProgress({ current: ++step, total: totalSteps })
+    const networkCleaned = await runNetworkCleanup()
+    setStepProgress({ current: ++step, total: totalSteps })
+    const vulnerabilitiesFound = await runVulnerabilityScan()
+    setStepProgress({ current: ++step, total: totalSteps })
+    const memoryFreed = await runMemoryOptimize()
 
     const oneClickResult: OneClickResult = {
       spaceRecovered: space + drivers.space,
@@ -371,16 +413,19 @@ export function DashboardPage() {
       privacyIssues: privacy.issues,
       startupHighImpact,
       updatesAvailable,
+      networkCleaned,
+      vulnerabilitiesFound,
+      memoryFreed,
     }
 
-    const totalItems = files + regFixed + drivers.removed + malware.quarantined
-    if (totalItems > 0 || malware.found > 0) {
+    const totalItems = files + regFixed + drivers.removed + malware.quarantined + networkCleaned
+    if (totalItems > 0 || malware.found > 0 || vulnerabilitiesFound > 0) {
       await addEntry({
         id: Date.now().toString(),
         type: 'cleaner',
         timestamp: new Date().toISOString(),
         duration: Date.now() - cleanStartRef.current,
-        totalItemsFound: totalItems + malware.found,
+        totalItemsFound: totalItems + malware.found + vulnerabilitiesFound,
         totalItemsCleaned: totalItems,
         totalItemsSkipped: 0,
         totalSpaceSaved: space + drivers.space,
@@ -399,6 +444,9 @@ export function DashboardPage() {
             : []),
           ...(malware.quarantined > 0
             ? [{ name: 'Malware', itemsFound: malware.found, itemsCleaned: malware.quarantined, spaceSaved: 0 }]
+            : []),
+          ...(networkCleaned > 0
+            ? [{ name: 'Network', itemsFound: networkCleaned, itemsCleaned: networkCleaned, spaceSaved: 0 }]
             : []),
         ],
         errorCount: 0,
@@ -419,6 +467,9 @@ export function DashboardPage() {
     runPrivacyCheck,
     runStartupCheck,
     runSoftwareUpdateCheck,
+    runNetworkCleanup,
+    runVulnerabilityScan,
+    runMemoryOptimize,
     addEntry,
     recomputeStats,
     features,
@@ -447,9 +498,9 @@ export function DashboardPage() {
       <StaggerContainer className="flex-1 space-y-4 px-0 pb-8">
         {/* ── Row 1: MiniGauges (PC State) ──────────────────── */}
         <StaggerItem>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
+              Array.from({ length: 4 }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder
                 <MiniGaugeSkeleton key={i} />
               ))
@@ -477,36 +528,27 @@ export function DashboardPage() {
                   icon={Zap}
                   label={t('gaugeGpu')}
                   percent={perf?.gpuPercent ?? 0}
-                  detail={perf?.gpuName ? (perf.gpuName.length > 14 ? `${perf.gpuName.slice(0, 12)}…` : perf.gpuName) : '—'}
+                  detail={perf?.gpuName ?? '—'}
                   accentColor="#22c55e"
-                />
-                <MiniGauge
-                  icon={Wifi}
-                  label={t('gaugeNetwork')}
-                  percent={0}
-                  detail={`↓${formatSpeed(perf?.networkDown ?? 0)} ↑${formatSpeed(perf?.networkUp ?? 0)}`}
-                  accentColor="#3b82f6"
                 />
               </>
             )}
           </div>
         </StaggerItem>
 
-        {/* ── Row 2: PC State + Game Mode + Clips ────────────── */}
+        {/* ── Row 2: Health + Game Mode + Clips ────────────── */}
         <StaggerItem>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="md:col-span-2">
-              <ErrorBoundary>
-                <HealthCard
-                  healthScore={healthScore}
-                  toolCoverage={toolCoverage}
-                  memPercent={Math.round(ramPct)}
-                  totalSpaceSaved={stats.totalSpaceSaved}
-                  totalFilesCleaned={stats.totalFilesCleaned}
-                  totalScans={stats.totalScans}
-                />
-              </ErrorBoundary>
-            </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ErrorBoundary>
+              <HealthCard
+                healthScore={healthScore}
+                toolCoverage={toolCoverage}
+                memPercent={Math.round(ramPct)}
+                totalSpaceSaved={stats.totalSpaceSaved}
+                totalFilesCleaned={stats.totalFilesCleaned}
+                totalScans={stats.totalScans}
+              />
+            </ErrorBoundary>
             {features.gameMode && (
               <ErrorBoundary>
                 <GameModeCard gameModeActive={gameModeActive} />
@@ -533,11 +575,6 @@ export function DashboardPage() {
             <ProgressBanner isRunning={isRunning} phaseLabel={phaseLabel} stepProgress={stepProgress} />
           </div>
           {phase === 'done' && <ResultBanner result={result} />}
-        </StaggerItem>
-
-        {/* ── Row 6: Storage Overview ─────────────────────────── */}
-        <StaggerItem>
-          <StorageOverview drives={drives} platform={platform} />
         </StaggerItem>
       </StaggerContainer>
 

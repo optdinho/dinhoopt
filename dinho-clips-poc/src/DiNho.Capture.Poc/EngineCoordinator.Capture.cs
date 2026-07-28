@@ -144,11 +144,11 @@ public sealed partial class EngineCoordinator
                     _ramManager ??= new RamManager(
                         _captureWidth, _captureHeight,
                         _config.Config.EffectiveReplaySeconds,
-                        _activeProfile.Cq,
-                        _activeProfile.MaxrateKbps,
-                        _activeProfile.BufsizeKbps,
-                        _activeProfile.Bframes,
-                        _activeProfile.Lookahead);
+                        _config.Config.Cq,
+                        _config.Config.MaxrateKbps,
+                        _config.Config.BufsizeKbps,
+                        _config.Config.Bframes,
+                        _config.Config.Lookahead);
                     _ramManager.StartWatchdog();
                     _activeProfile = _ramManager.ResolveProfile();
                 }
@@ -471,7 +471,11 @@ public sealed partial class EngineCoordinator
                         }
                         finally
                         {
-                            if (gcSuppressed) GC.EndNoGCRegion();
+                            if (gcSuppressed)
+                            {
+                                try { GC.EndNoGCRegion(); }
+                                catch (InvalidOperationException) { /* GC forcibly ended the region due to memory pressure */ }
+                            }
                         }
                     }
                     else

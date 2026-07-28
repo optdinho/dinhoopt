@@ -34,6 +34,7 @@ tmp_lint.json
 
 # Build artifacts
 resources/clips-engine-staging/
+resources/ffmpeg-custom/
 
 # Generated docs
 docs/

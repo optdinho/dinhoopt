@@ -16,10 +16,10 @@ if (!app.isPackaged) {
 import { sanitizeEnvVars } from './services/env-sanitize'
 sanitizeEnvVars()
 
-// Disable GPU acceleration — Windows 25H2 (10.0.26200) crashes the GPU
-// process with error_code=18, making every renderer navigation fail
-// with ERR_FAILED (-2). Software rendering is the only reliable fallback.
-app.commandLine.appendSwitch('in-process-gpu')
+// GPU workaround — Chromium 134 (Electron 43) crashes the GPU process with
+// error_code=18 on RTX 5050. --no-sandbox prevents the GPU sandbox from
+// blocking initialization; --disable-gpu forces software rendering as fallback.
+app.commandLine.appendSwitch('no-sandbox')
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 
@@ -46,12 +46,6 @@ import {
   stopScheduler,
 } from './services/scheduler'
 import { getSettings } from './services/settings-store'
-
-// ─── GPU workaround for broken drivers ──────────────────────
-// On some Windows builds the GPU process crashes at launch.
-// disable-gpu forces Skia software rendering (CPU-based),
-// bypassing the broken GPU driver entirely.
-// in-process-gpu is needed to avoid black screen on 25H2.
 
 process.on('uncaughtException', (err) => {
   getLogger().error('app', `Uncaught exception: ${err.message}`)

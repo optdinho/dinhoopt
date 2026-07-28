@@ -218,7 +218,7 @@ public sealed partial class EngineCoordinator
                 Encoder = s.Encoder,
                 DiskSpaceOk = CheckDiskSpace(),
                 LastCrashRecovered = s.LastCrashRecovered,
-                Game = _gameDetector.CurrentGame.IsValid ? _gameDetector.CurrentGame.ToString() : null,
+                Game = _gameDetector.CurrentGame.IsValid && !NonGameProcesses.Contains(_gameDetector.CurrentGame.ProcessName) ? _gameDetector.CurrentGame.ToString() : null,
                 Recording = _recording,
                 UptimeSeconds = (long)_clock.Now.TotalSeconds,
                 AudioFallback = _audioFallback,

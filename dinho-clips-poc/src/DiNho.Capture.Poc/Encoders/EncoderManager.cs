@@ -7,6 +7,87 @@ namespace DiNho.Capture.Poc.Encoders;
 
 public enum EncoderType { Ffmpeg, FfmpegHw, None }
 
+/// <summary>Helper to resolve ffmpeg.exe path from multiple candidates.</summary>
+internal static class FfmpegPathResolver
+{
+    private static string? _cachedPath;
+    private static string? _cachedDir;
+
+    /// <summary>Get the directory containing ffmpeg.exe (for DLL resolution).</summary>
+    public static string GetFfmpegDir() => _cachedDir ?? Path.GetDirectoryName(GetFfmpegPath()) ?? "";
+
+    public static string GetFfmpegPath()
+    {
+        if (_cachedPath != null)
+            return _cachedPath;
+
+        // Candidate paths in priority order:
+        //   1. Same dir as engine exe (packaged app)
+        //   2. Release publish dir (dev: published standalone)
+        //   3. Staging dir (dev: npm run dev, engine in bin/Debug)
+        //   4. Fallback to PATH
+        var baseDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            // Packaged: ffmpeg.exe next to DiNho.Capture.Poc.exe
+            Path.Combine(baseDir, "ffmpeg.exe"),
+            // Dev: Release publish (engine published with -o)
+            Path.Combine(baseDir, "..", "..", "..", "bin", "Release", "net10.0-windows10.0.26100.0", "publish", "ffmpeg.exe"),
+            // Dev: electron staging dir (6 levels up from bin/Debug/net10/.../ to solution root)
+            Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "resources", "clips-engine-staging", "ffmpeg.exe"),
+            // Packaged: resources/clips-engine/ (electron-builder layout)
+            Path.Combine(baseDir, "..", "clips-engine", "ffmpeg.exe"),
+            "ffmpeg", // fallback to PATH
+        };
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var probe = new ProcessStartInfo(candidate)
+                {
+                    Arguments = "-version",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.GetDirectoryName(candidate) ?? ""
+                };
+                using var p = Process.Start(probe);
+                if (p?.WaitForExit(2000) == true && p.ExitCode == 0)
+                {
+                    _cachedPath = candidate;
+                    _cachedDir = Path.GetDirectoryName(candidate) ?? "";
+                    Log.D("FfmpegPathResolver", $"Found ffmpeg at: {candidate}");
+                    return candidate;
+                }
+            }
+            catch { }
+        }
+
+        Log.W("FfmpegPathResolver", "ffmpeg.exe not found in any candidate path");
+        return "ffmpeg"; // final fallback, will likely fail
+    }
+
+    /// <summary>Create a ProcessStartInfo for ffmpeg with correct WorkingDirectory (for DLL resolution).</summary>
+    public static ProcessStartInfo CreateFfmpegStartInfo(
+        string? args = null,
+        bool redirectInput = false,
+        bool redirectOutput = false,
+        bool redirectError = false)
+    {
+        return new ProcessStartInfo(GetFfmpegPath())
+        {
+            Arguments = args ?? "",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = GetFfmpegDir(),
+            RedirectStandardInput = redirectInput,
+            RedirectStandardOutput = redirectOutput,
+            RedirectStandardError = redirectError,
+        };
+    }
+}
+
 public sealed class EncoderManager : IDisposable
 {
     // ── Vendor → codec maps ──────────────────────────────────────────
@@ -202,15 +283,7 @@ public sealed class EncoderManager : IDisposable
         {
             using var process = new Process
             {
-                StartInfo = new ProcessStartInfo("ffmpeg")
-                {
-                    Arguments = args,
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                }
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: args, redirectInput: true, redirectOutput: true, redirectError: true)
             };
 
             process.Start();
@@ -538,13 +611,7 @@ public sealed class EncoderManager : IDisposable
         {
             using var proc = new Process
             {
-                StartInfo = new ProcessStartInfo("ffmpeg")
-                {
-                    Arguments = "-version",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-version", redirectOutput: true)
             };
             proc.Start();
             proc.StandardOutput.ReadToEnd();
@@ -560,13 +627,7 @@ public sealed class EncoderManager : IDisposable
         {
             using var p = new Process
             {
-                StartInfo = new ProcessStartInfo("ffmpeg")
-                {
-                    Arguments = "-encoders",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-encoders", redirectOutput: true)
             };
             p.Start();
             var o = p.StandardOutput.ReadToEnd();

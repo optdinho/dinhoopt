@@ -52,19 +52,32 @@ if (existsSync(stagingDir)) {
 mkdirSync(stagingDir, { recursive: true })
 cpSync(publishDir, stagingDir, { recursive: true })
 
-// Also copy ffmpeg.exe (needed by engine at runtime)
-// Try to find them via PowerShell (resolves WinGet symlinks properly)
+// Also copy ffmpeg.exe + runtime DLLs (needed by engine at runtime)
+// Priority: custom build > PATH ffmpeg
 try {
-  const { execSync } = require('child_process')
-  for (const tool of ['ffmpeg']) {
+  // 1. Check for custom minimal build (from scripts/build-ffmpeg.ps1)
+  const customDir = join(projectRoot, 'resources', 'ffmpeg-custom')
+  const customFfmpeg = join(customDir, 'ffmpeg.exe')
+  if (existsSync(customFfmpeg)) {
+    // Copy all files from ffmpeg-custom/ (ffmpeg.exe + DLLs)
+    for (const entry of readdirSync(customDir)) {
+      const src = join(customDir, entry)
+      if (statSync(src).isFile()) {
+        cpSync(src, join(stagingDir, entry))
+      }
+    }
+    const mb = (statSync(customFfmpeg).size / 1024 / 1024).toFixed(0)
+    const dllCount = readdirSync(customDir).filter(f => f.endsWith('.dll')).length
+    console.log(`  Copied custom ffmpeg.exe (${mb}MB) + ${dllCount} DLLs`)
+  } else {
+    // 2. Fall back to PATH ffmpeg (full build, ~231MB)
+    const { execSync } = require('child_process')
     try {
-      // PowerShell resolves symlinks; (Get-Command).Source gives the resolved path
       const srcExe = execSync(
-        `powershell -NoProfile -Command "(Get-Command ${tool}.exe).Source"`,
+        `powershell -NoProfile -Command "(Get-Command ffmpeg.exe).Source"`,
         { encoding: 'utf-8', timeout: 5000 },
       ).trim()
       if (srcExe && existsSync(srcExe)) {
-        // Resolve symlinks (WinGet uses symlinks)
         let actualExe = srcExe
         try {
           const st = require('fs').lstatSync(srcExe)
@@ -75,14 +88,14 @@ try {
             }
           }
         } catch { /* use srcExe as-is */ }
-        cpSync(actualExe, join(stagingDir, `${tool}.exe`))
+        cpSync(actualExe, join(stagingDir, 'ffmpeg.exe'))
         const mb = (statSync(actualExe).size / 1024 / 1024).toFixed(0)
-        console.log(`  Copied ${tool}.exe (${mb}MB)`)
+        console.log(`  Copied PATH ffmpeg.exe (${mb}MB)`)
       } else {
-        console.log(`  WARN: ${tool}.exe resolved but not accessible: ${srcExe}`)
+        console.log('  WARN: ffmpeg.exe not found on PATH — engine will fail')
       }
-    } catch (err) {
-      console.log(`  WARN: ${tool}.exe not found on PATH — engine will fail if ffmpeg is unavailable`)
+    } catch {
+      console.log('  WARN: ffmpeg.exe not found — engine will fail if ffmpeg is unavailable')
     }
   }
 } catch {

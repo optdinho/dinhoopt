@@ -258,13 +258,11 @@ public sealed class NamedPipeServer : IDisposable
             {
                 while (!ct.IsCancellationRequested && server.IsConnected)
                 {
-                    var readTask = reader.ReadLineAsync(ct).AsTask();
-                    var pollTask = Task.Delay(500, ct);
-                    var completed = await Task.WhenAny(readTask, pollTask);
-
-                    if (completed == readTask)
+                    try
                     {
-                        var line = await readTask;
+                        using var iterationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        iterationCts.CancelAfter(500);
+                        var line = await reader.ReadLineAsync(iterationCts.Token);
                         if (line == null) break;
 
                         try
@@ -274,7 +272,6 @@ public sealed class NamedPipeServer : IDisposable
                             {
                                 if (_longRunningCommands.Contains(envelope.Command) && OnMessage != null)
                                 {
-                                    // Respond immediately with "accepted"
                                     var accepted = new IpcEnvelope
                                     {
                                         Version = 1,
@@ -283,7 +280,6 @@ public sealed class NamedPipeServer : IDisposable
                                     };
                                     await writer.WriteLineAsync(JsonSerializer.Serialize(accepted));
 
-                                    // Process on background — result forwarded via _longRunningResultQueue
                                     var msgCopy = IpcMessage.FromEnvelope(envelope);
                                     if (msgCopy != null)
                                     {
@@ -340,9 +336,9 @@ public sealed class NamedPipeServer : IDisposable
                             await writer.WriteLineAsync(errorJson);
                         }
                     }
-                    else if (readTask.IsFaulted)
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                     {
-                        break;
+                        // Poll timeout — no data, continue to drain queues
                     }
 
                     while (broadcastQueue.TryDequeue(out var broadcastJson))
@@ -362,8 +358,9 @@ public sealed class NamedPipeServer : IDisposable
                 }
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Log.E("NamedPipeServer", $"Pipe IO error: {ex.Message}");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

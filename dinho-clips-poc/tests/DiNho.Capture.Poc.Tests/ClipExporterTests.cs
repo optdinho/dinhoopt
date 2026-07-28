@@ -514,6 +514,180 @@ public sealed class ClipExporterTests
         Assert.Equal(TimeSpan.FromMilliseconds(500), result[0].Pts);
     }
 
+    // ── ReTimestampToContiguous ──
+
+    [Fact]
+    public void ReTimestampToContiguous_NoGap_SingleInterval_PreservesPTS()
+    {
+        var video = new List<EncodedPacket>
+        {
+            MakePacket(0, 10_000_000),
+            MakePacket(10_000_000, 10_000_000),
+            MakePacket(20_000_000, 10_000_000)
+        };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(21), false)
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)>
+        {
+            (TimeSpan.Zero, TimeSpan.FromSeconds(3))
+        };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal(1.0, video[1].Pts.TotalSeconds, 3);
+        Assert.Equal(2.0, video[2].Pts.TotalSeconds, 3);
+        Assert.Equal(0.05, audio[0].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_OneGap_ClosesGap()
+    {
+        // 5s active, 5s gap, 5s active → total 10s
+        var video = new List<EncodedPacket>
+        {
+            MakePacket(0, 1_666_666),                              // 0.000s
+            MakePacket(48_333_334, 1_666_666),                     // 4.833s
+            MakePacket(100_000_000, 1_666_666),                    // 10.000s
+            MakePacket(148_333_334, 1_666_666)                     // 14.833s
+        };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(11), TimeSpan.FromMilliseconds(21), false)
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)>
+        {
+            (TimeSpan.Zero, TimeSpan.FromSeconds(5)),       // dur=5s, output=0s
+            (TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15))  // dur=5s, output=5s
+        };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+
+        // Interval 1 (offset=0): 0→0, 4.833→4.833
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal(4.833, video[1].Pts.TotalSeconds, 3);
+
+        // Interval 2 (offset=-5s): 10→5, 14.833→9.833
+        Assert.Equal(5.0, video[2].Pts.TotalSeconds, 3);
+        Assert.Equal(9.833, video[3].Pts.TotalSeconds, 3);
+
+        // Audio: 1s→1s (interval 1), 11s→6s (interval 2)
+        Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
+        Assert.Equal(6.0, audio[1].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_TwoGaps_ClosesBoth()
+    {
+        var video = new List<EncodedPacket>
+        {
+            MakePacket(0, 1_666_666),
+            MakePacket(48_333_334, 1_666_666),
+            MakePacket(100_000_000, 1_666_666),
+            MakePacket(148_333_334, 1_666_666),
+            MakePacket(200_000_000, 1_666_666)
+        };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(11), TimeSpan.FromMilliseconds(21), false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(21), TimeSpan.FromMilliseconds(21), false)
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)>
+        {
+            (TimeSpan.Zero, TimeSpan.FromSeconds(5)),         // 5s → output 0s
+            (TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)), // 5s → output 5s
+            (TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(25))  // 5s → output 10s
+        };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal(4.833, video[1].Pts.TotalSeconds, 3);
+        Assert.Equal(5.0, video[2].Pts.TotalSeconds, 3);
+        Assert.Equal(9.833, video[3].Pts.TotalSeconds, 3);
+        Assert.Equal(10.0, video[4].Pts.TotalSeconds, 3);
+
+        Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
+        Assert.Equal(6.0, audio[1].Pts.TotalSeconds, 3);
+        Assert.Equal(11.0, audio[2].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_EmptyIntervals_NoChange()
+    {
+        var video = new List<EncodedPacket> { MakePacket(0, 100_000) };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false)
+        };
+        ClipExporter.ReTimestampToContiguous(video, audio, new List<(TimeSpan, TimeSpan)>());
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_EmptyVideo_NoChange()
+    {
+        var video = new List<EncodedPacket>();
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false)
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)> { (TimeSpan.Zero, TimeSpan.FromSeconds(5)) };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+        Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_AudioBeforeFirstInterval_ClampedToZero()
+    {
+        var video = new List<EncodedPacket> { MakePacket(5_000_000, 100_000) };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false)
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)> { (TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10)) };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal(0.0, audio[0].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_AudioAfterLastInterval_Shifted()
+    {
+        var video = new List<EncodedPacket> { MakePacket(0, 100_000) };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(6), TimeSpan.FromMilliseconds(21), false)
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)> { (TimeSpan.Zero, TimeSpan.FromSeconds(5)) };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal(6.0, audio[0].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void ReTimestampToContiguous_DurationPreserved()
+    {
+        var video = new List<EncodedPacket>
+        {
+            MakePacket(0, 1_666_666),
+            MakePacket(48_333_334, 1_666_666),
+            MakePacket(100_000_000, 1_666_666),
+            MakePacket(148_333_334, 1_666_666)
+        };
+        var audio = new List<EncodedPacket>();
+        var intervals = new List<(TimeSpan, TimeSpan)>
+        {
+            (TimeSpan.Zero, TimeSpan.FromSeconds(5)),
+            (TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15))
+        };
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+        // Total active duration = 10s (2 × 5s intervals), last PTS + dur = 10s
+        var lastPts = video[^1].Pts + video[^1].Duration;
+        Assert.Equal(10.0, lastPts.TotalSeconds, 1);
+    }
+
     // ── GenerateThumbnail ──
 
     [Fact]

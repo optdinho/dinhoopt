@@ -284,11 +284,17 @@ public sealed class EngineCoordinatorGameTests : IDisposable
     }
 
     [Fact]
-    public void ResolveProcessByName_FiveMStyle_BuildNumber_ReturnsInvalid()
+    public void ResolveProcessByName_FiveMStyle_BuildNumber_FuzzyMatchesRunningProcess()
     {
         var result = (GameInfo?)InvokeStatic("ResolveProcessByName", "FiveM_b1234_GTAProcess.exe");
         Assert.NotNull(result);
-        Assert.False(result!.IsValid);
+        // Fuzzy match strips _b\d+_ and finds the running FiveM process if present
+        // Result is valid when FiveM is running, invalid when not — both are correct
+        if (System.Diagnostics.Process.GetProcessesByName("FiveM").Length > 0 ||
+            System.Diagnostics.Process.GetProcessesByName("FiveM_b3258_GTA5").Length > 0)
+            Assert.True(result!.IsValid);
+        else
+            Assert.False(result!.IsValid);
     }
 
     [Fact]

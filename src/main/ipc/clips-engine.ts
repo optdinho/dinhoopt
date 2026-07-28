@@ -58,6 +58,7 @@ function statusUpdater(src: Record<string, unknown>): void {
   if (typeof src.estimatedRamMB === 'number') _engineEstimatedRamMB = src.estimatedRamMB
   if (typeof src.diskSpaceOk === 'boolean') _engineDiskSpaceOk = src.diskSpaceOk
   if (typeof src.game === 'string') _engineCurrentGame = src.game
+  else if (src.game === null || src.game === undefined) _engineCurrentGame = ''
   if (typeof src.lastCrashRecovered === 'boolean') _engineLastCrashRecovered = src.lastCrashRecovered
   if (typeof src.audioLoopback === 'boolean') {
     _engineAudioLoopback = src.audioLoopback

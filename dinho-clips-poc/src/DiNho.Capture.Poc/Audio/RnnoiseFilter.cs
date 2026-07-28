@@ -1,3 +1,4 @@
+using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.Logging;
 using System.Diagnostics;
 
@@ -33,16 +34,12 @@ public sealed class RnnoiseFilter : IDisposable
 
         _process = new Process
         {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = $"-y -loglevel error -f f32le -ar {sampleRate} -ac {channels} -i pipe:0 " +
-                            $"-af {filter} -f f32le -flush_packets 1 pipe:1",
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            }
+            StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
+                args: $"-y -loglevel error -f f32le -ar {sampleRate} -ac {channels} -i pipe:0 " +
+                      $"-af {filter} -f f32le -flush_packets 1 pipe:1",
+                redirectInput: true,
+                redirectOutput: true,
+                redirectError: true)
         };
         _process.Start();
         _stdin = _process.StandardInput.BaseStream;

@@ -253,14 +253,46 @@ internal partial class FfmpegEncoder
                 System.Buffer.BlockCopy(buf, 0, _rawBuf, _rawLen, read);
                 _rawLen = need;
 
+                // Bug 1 fix: Prepend incomplete NALU tail from previous ParseAvcc call
+                if (_incompleteNalLen > 0 && _incompleteNalBuf != null)
+                {
+                    int prependLen = _incompleteNalLen;
+                    _incompleteNalLen = 0;
+                    if (_rawLen + prependLen > _rawBuf.Length)
+                    {
+                        byte[] bigger = ArrayPool<byte>.Shared.Rent(Math.Max(_rawBuf.Length * 2, _rawLen + prependLen));
+                        System.Buffer.BlockCopy(_rawBuf, 0, bigger, prependLen, _rawLen);
+                        ArrayPool<byte>.Shared.Return(_rawBuf);
+                        _rawBuf = bigger;
+                    }
+                    else
+                    {
+                        // Shift existing data right by prependLen
+                        System.Buffer.BlockCopy(_rawBuf, 0, _rawBuf, prependLen, _rawLen);
+                    }
+                    System.Buffer.BlockCopy(_incompleteNalBuf, 0, _rawBuf, 0, prependLen);
+                    _rawLen += prependLen;
+                    Log.D("FfmpegEncoder", $"prepended {prependLen}B incomplete NALU tail");
+                }
+
                 if (_pipeFormat == PipeFormat.Unknown && _rawLen >= 4)
                 {
                     if ((_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 1) ||
                         (_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 0 && _rawBuf[3] == 1))
+                    {
                         _pipeFormat = PipeFormat.AnnexB;
+                    }
                     else
-                        _pipeFormat = PipeFormat.Avcc;
-                    Log.I("FfmpegEncoder", $"pipe format latched: {_pipeFormat} (codec={_codec}) rawHex={Convert.ToHexString(_rawBuf.AsSpan(0, Math.Min(_rawLen, 8)))}");
+                    {
+                        // Bug 2 fix: Validate AVCC — first 4 bytes must form a plausible NALU length.
+                        // Prevents false AVCC latch when pipe splits mid-NALU after a format reset.
+                        int probeLen = (_rawBuf[0] << 24) | (_rawBuf[1] << 16) | (_rawBuf[2] << 8) | _rawBuf[3];
+                        if (probeLen > 0 && probeLen < 5 * 1024 * 1024 && 4 + probeLen <= _rawLen)
+                            _pipeFormat = PipeFormat.Avcc;
+                        // else: wait for more data — might be mid-NALU bytes from a format reset
+                    }
+                    if (_pipeFormat != PipeFormat.Unknown)
+                        Log.I("FfmpegEncoder", $"pipe format latched: {_pipeFormat} (codec={_codec}) rawHex={Convert.ToHexString(_rawBuf.AsSpan(0, Math.Min(_rawLen, 8)))}");
                 }
 
                 if (_pipeFormat == PipeFormat.Unknown)
@@ -288,6 +320,7 @@ internal partial class FfmpegEncoder
                         Log.W("FfmpegEncoder", $"AnnexB raw overflow {_rawLen}B hadRawSlice={_hadRawSlice} — forcing format re-detect");
                         _pipeFormat = PipeFormat.Unknown;
                         _rawLen = 0;
+                        _incompleteNalLen = 0;
                         _hadRawSlice = false;
                         int drained = 0;
                         while (_inputPtsQueue.TryDequeue(out _)) drained++;
@@ -304,6 +337,7 @@ internal partial class FfmpegEncoder
                         Log.W("FfmpegEncoder", $"AVCC mismatch: pending={_pendingLen}B hadSlice={_hadSlice} — forcing format re-detect");
                         _pipeFormat = PipeFormat.Unknown;
                         _pendingLen = 0;
+                        _incompleteNalLen = 0;
                         _hadSlice = false;
                         int drained = 0;
                         while (_inputPtsQueue.TryDequeue(out _)) drained++;
@@ -334,6 +368,8 @@ internal partial class FfmpegEncoder
             }
             _pendingLen = 0;
             _rawLen = 0;
+            _incompleteNalBuf = null;
+            _incompleteNalLen = 0;
             _hadSlice = false;
             LogProcessExit();
         }
@@ -357,11 +393,16 @@ internal partial class FfmpegEncoder
 
             if (nalLen <= 0 || pos + totalSize > data.Length)
             {
+                // Bug 1 fix: Save incomplete tail to separate buffer instead of appending to _pendingBuf.
+                // _pendingBuf is for complete NALUs ready for EmitPacket — incomplete data corrupts it.
                 if (pos < data.Length)
                 {
                     int tailLen = data.Length - pos;
-                    Log.W("FfmpegEncoder", $"ParseAvcc: incomplete NALU at pos={pos} nalLen={nalLen} tailLen={tailLen} — appending to pending");
-                    AppendPending(data.Slice(pos));
+                    if (_incompleteNalBuf == null || _incompleteNalBuf.Length < tailLen)
+                        _incompleteNalBuf = new byte[Math.Max(tailLen, 4096)];
+                    data.Slice(pos, tailLen).CopyTo(_incompleteNalBuf);
+                    _incompleteNalLen = tailLen;
+                    Log.D("FfmpegEncoder", $"ParseAvcc: incomplete NALU at pos={pos} nalLen={nalLen} tailLen={tailLen} — saved for next read");
                 }
                 break;
             }

@@ -114,13 +114,7 @@ internal partial class FfmpegEncoder
         {
             using var p = new Process
             {
-                StartInfo = new ProcessStartInfo("ffmpeg")
-                {
-                    Arguments = "-encoders",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-encoders", redirectOutput: true)
             };
             p.Start();
             var o = p.StandardOutput.ReadToEnd();

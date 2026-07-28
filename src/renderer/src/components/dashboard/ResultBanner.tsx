@@ -156,6 +156,41 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
                     </button>
                   </StaggerItem>
                 )}
+                {result.networkCleaned > 0 && (
+                  <StaggerItem key="network">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/network')}
+                      className="text-[12px] hover:underline transition-all hover:translate-x-0.5"
+                      style={{ color: '#3b82f6' }}
+                    >
+                      {t('resultNetworkCleaned', { count: result.networkCleaned })} &rarr;
+                    </button>
+                  </StaggerItem>
+                )}
+                {result.vulnerabilitiesFound > 0 && (
+                  <StaggerItem key="vuln">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/vulnerability')}
+                      className="text-[12px] hover:underline transition-all hover:translate-x-0.5"
+                      style={{ color: result.vulnerabilitiesFound > 5 ? '#ef4444' : '#f59e0b' }}
+                    >
+                      {t(
+                        result.vulnerabilitiesFound !== 1 ? 'resultVulnerabilitiesPlural' : 'resultVulnerabilities',
+                        { count: result.vulnerabilitiesFound },
+                      )}{' '}
+                      &rarr;
+                    </button>
+                  </StaggerItem>
+                )}
+                {result.memoryFreed > 0 && (
+                  <StaggerItem key="memory">
+                    <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                      {t('resultMemoryFreed', { size: formatBytes(result.memoryFreed) })}
+                    </p>
+                  </StaggerItem>
+                )}
                 {result.spaceRecovered === 0 &&
                   result.filesCleaned === 0 &&
                   result.registryFixed === 0 &&
@@ -163,7 +198,10 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
                   result.threatsFound === 0 &&
                   result.privacyIssues === 0 &&
                   result.startupHighImpact === 0 &&
-                  result.updatesAvailable === 0 && (
+                  result.updatesAvailable === 0 &&
+                  result.networkCleaned === 0 &&
+                  result.vulnerabilitiesFound === 0 &&
+                  result.memoryFreed === 0 && (
                     <StaggerItem key="clean">
                       <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
                         {t('resultSystemAlreadyClean')}

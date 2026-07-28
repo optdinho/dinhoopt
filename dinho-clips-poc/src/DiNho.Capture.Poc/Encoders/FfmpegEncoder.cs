@@ -51,6 +51,10 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private long _lastRestartTicks;
     private int _gpuConvertFails;
 
+    // Absolute restart limiter: max 10 restarts in any 30-second window to prevent CLR crash from GC pressure
+    private int _restartsInWindow;
+    private long _restartWindowStartTicks;
+
     // CRF+VBV quality params (NVENC/AV1)
     private int _cq = 24;
     private int _maxrateKbps = 80000;
@@ -78,6 +82,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _rawLen;
     private bool _hadRawSlice; // tracked in AnnexB path before conversion
     private bool _loggedParseAvcc; // first-call guard for ParseAvcc log
+    private byte[]? _incompleteNalBuf;   // Incomplete NALU tail from ParseAvcc (Bug 1 fix)
+    private int _incompleteNalLen;        // Length of incomplete NALU tail
 
     // Format latch — ffmpeg -f h264 with -bsf:v should output AnnexB, but sometimes
     // frames slip through in AVCC format. We detect once and latch.
@@ -120,8 +126,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
 
     public void Initialize(int width, int height, int frameRate, int bitrateKbps = 2000)
     {
-        _width = width;
-        _height = height;
+        // NV12 requires even dimensions — round down to avoid libx264/NVENC "height not divisible by 2"
+        _width = width & ~1;
+        _height = height & ~1;
         _frameRate = frameRate;
         _bitrateKbps = bitrateKbps;
         if (_codec == null)
@@ -207,19 +214,15 @@ internal sealed partial class FfmpegEncoder : IEncoder
 
         _process = new Process
         {
-            StartInfo = new ProcessStartInfo("ffmpeg")
-            {
-                Arguments = $"-y -loglevel info " +
+            StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
+                            args: $"-y -loglevel info " +
                             $"-f rawvideo -pix_fmt nv12 -s {_width}x{_height} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"{cropFilter} -c:v {_codec} {tune} " +
                             $"-f {rawFmt}{bsfArg} pipe:1",
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
+                            redirectInput: true,
+                            redirectOutput: true,
+                            redirectError: true)
         };
         Log.I("FfmpegEncoder", $"ffmpeg args: {_process.StartInfo.Arguments}");
 
@@ -331,6 +334,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _codec = entry.Codec;
         _scaleDivisor = entry.ScaleDivisor;
         _restartAttempts = 0;
+        _restartsInWindow = 0;
 
         Log.W("FfmpegEncoder", $"cascading fallback: {oldCodec} (1/{(_scaleDivisor > 1 ? _scaleDivisor.ToString() : "full")}) → {entry.Label}");
         return true;
@@ -343,6 +347,27 @@ internal sealed partial class FfmpegEncoder : IEncoder
         if (_disposed) return false;
 
         long now = Stopwatch.GetTimestamp();
+
+        // Absolute restart limiter: max 10 restarts in 30-second window
+        const int MaxRestartsInWindow = 10;
+        const int WindowDurationSec = 30;
+        if (_restartsInWindow == 0)
+            _restartWindowStartTicks = now;
+        double windowElapsedSec = (now - _restartWindowStartTicks) / Stopwatch.Frequency;
+        if (windowElapsedSec > WindowDurationSec)
+        {
+            _restartsInWindow = 0;
+            _restartWindowStartTicks = now;
+        }
+        if (_restartsInWindow >= MaxRestartsInWindow)
+        {
+            if (!TryFallbackCodec())
+            {
+                Log.E("FfmpegEncoder", $"max restarts in {WindowDurationSec}s window reached ({MaxRestartsInWindow}), no codec fallback");
+                return false;
+            }
+        }
+
         long elapsedSec = (now - _lastRestartTicks) / Stopwatch.Frequency;
         int delaySec = 1 << Math.Min(_restartAttempts, 4);
 
@@ -362,7 +387,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
         }
 
         _restartAttempts++;
-        Log.W("FfmpegEncoder", $"restarting ffmpeg (attempt {_restartAttempts}, cause={_processFailedCause ?? "unknown"}, gpuFails={_gpuConvertFails})");
+        _restartsInWindow++;
+        Log.W("FfmpegEncoder", $"restarting ffmpeg (attempt {_restartAttempts}, window={_restartsInWindow}/{MaxRestartsInWindow}, cause={_processFailedCause ?? "unknown"}, gpuFails={_gpuConvertFails})");
         StopFfmpeg();
         ResetState();
 
@@ -452,10 +478,15 @@ internal sealed partial class FfmpegEncoder : IEncoder
         // Fresh GPU converter after each restart to avoid stale MFT state
         _gpuConverter?.Dispose();
         _gpuConverter = null;
+        _gpuConverterFailedUntil = DateTime.MinValue;
         _nv12Staging?.Dispose();
         _nv12Staging = null;
         _inputCopy?.Dispose();
         _inputCopy = null;
+        _cpuStaging?.Dispose();
+        _cpuStaging = null;
+        _cpuStagingW = 0;
+        _cpuStagingH = 0;
         _nv12Scratch = null;
     }
 
@@ -527,6 +558,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _gpuConverter?.Dispose();
         _nv12Staging?.Dispose();
         _inputCopy?.Dispose();
+        _cpuStaging?.Dispose();
         _nv12Scratch = null;
 
         // Release pooled buffers and packets to prevent ArrayPool leaks

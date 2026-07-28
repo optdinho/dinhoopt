@@ -64,9 +64,6 @@ export const BACKGROUND_PROCESSES = [
   'Microsoft.SolitaireCollection.exe',
   // Weather
   'Microsoft.Windowsweathermap.exe',
-  // Third-party optional
-  'Spotify.exe',
-  'SpotifyWebHelper.exe',
 ]
 
 const PROTECTED_PROCESSES = new Set([

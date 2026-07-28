@@ -317,7 +317,11 @@ public sealed class AudioMixer : IDisposable
             int frame = i / loopbackChannels;
             upmixed[i] = frame < micSamples.Length ? micSamples[frame] : 0f;
         }
-        return MixSamples(loopbackSamples, upmixed, loopbackSamples.Length, gameGain, micGain);
+        var pooled = MixSamples(loopbackSamples, upmixed, loopbackSamples.Length, gameGain, micGain);
+        var result = new float[loopbackSamples.Length];
+        Array.Copy(pooled, result, loopbackSamples.Length);
+        ArrayPool<float>.Shared.Return(pooled);
+        return result;
     }
 
     internal static float[] MixSamples(float[] game, float[] mic, int length,

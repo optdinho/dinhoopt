@@ -268,25 +268,25 @@ public sealed partial class ClipExporter
     {
         if (sps.Length < 4 || pps.Length == 0) return null;
 
-        byte[] cleanSps = RemoveEmulationPrevention(sps);
-        byte[] cleanPps = RemoveEmulationPrevention(pps);
+        // Bug 3 fix: Use sps directly — emulation prevention bytes (0x03) are part
+        // of the NAL unit syntax and MUST be preserved in the avcC record per ISO 14496-15 Section 5.3.3.1.2.
 
-        int avccLen = 5 + 1 + 2 + cleanSps.Length + 1 + 2 + cleanPps.Length;
+        int avccLen = 5 + 1 + 2 + sps.Length + 1 + 2 + pps.Length;
         var avcc = new byte[avccLen];
         avcc[0] = 1;
-        avcc[1] = cleanSps[1];
-        avcc[2] = cleanSps[2];
-        avcc[3] = cleanSps[3];
+        avcc[1] = sps[1];
+        avcc[2] = sps[2];
+        avcc[3] = sps[3];
         avcc[4] = 0xFC | 3;
         avcc[5] = 0xE0 | 1;
-        avcc[6] = (byte)(cleanSps.Length >> 8);
-        avcc[7] = (byte)(cleanSps.Length & 0xFF);
-        System.Buffer.BlockCopy(cleanSps, 0, avcc, 8, cleanSps.Length);
-        int off = 8 + cleanSps.Length;
+        avcc[6] = (byte)(sps.Length >> 8);
+        avcc[7] = (byte)(sps.Length & 0xFF);
+        System.Buffer.BlockCopy(sps, 0, avcc, 8, sps.Length);
+        int off = 8 + sps.Length;
         avcc[off] = 1;
-        avcc[off + 1] = (byte)(cleanPps.Length >> 8);
-        avcc[off + 2] = (byte)(cleanPps.Length & 0xFF);
-        System.Buffer.BlockCopy(cleanPps, 0, avcc, off + 3, cleanPps.Length);
+        avcc[off + 1] = (byte)(pps.Length >> 8);
+        avcc[off + 2] = (byte)(pps.Length & 0xFF);
+        System.Buffer.BlockCopy(pps, 0, avcc, off + 3, pps.Length);
         return avcc;
     }
 
@@ -353,17 +353,15 @@ public sealed partial class ClipExporter
 
     internal static byte[] BuildHvcc(byte[] vps, byte[] sps, byte[] pps)
     {
-        var cleanVps = RemoveEmulationPrevention(vps);
-        var cleanSps = RemoveEmulationPrevention(sps);
-        var cleanPps = RemoveEmulationPrevention(pps);
+        // Bug 3 fix: Use vps/sps/pps directly — emulation prevention bytes preserved per spec.
 
-        int profileSpace = (cleanSps[0] >> 6) & 0x03;
-        bool tierFlag = (cleanSps[0] & 0x20) != 0;
-        int profileIdc = cleanSps[0] & 0x1F;
-        int generalProfileCompat = (cleanSps[1] << 24) | (cleanSps[2] << 16) | (cleanSps[3] << 8) | cleanSps[4];
-        int generalLevelIdc = cleanSps[12];
+        int profileSpace = (sps[0] >> 6) & 0x03;
+        bool tierFlag = (sps[0] & 0x20) != 0;
+        int profileIdc = sps[0] & 0x1F;
+        int generalProfileCompat = (sps[1] << 24) | (sps[2] << 16) | (sps[3] << 8) | sps[4];
+        int generalLevelIdc = sps[12];
 
-        int len = 23 + 2 + cleanVps.Length + 2 + cleanSps.Length + 2 + cleanPps.Length;
+        int len = 23 + 2 + vps.Length + 2 + sps.Length + 2 + pps.Length;
         var hvcc = new byte[len];
         hvcc[0] = 1;
         hvcc[1] = (byte)((profileSpace << 6) | (tierFlag ? 0x20 : 0) | profileIdc);
@@ -384,23 +382,23 @@ public sealed partial class ClipExporter
         int off = 20;
         hvcc[off++] = 0x20;
         hvcc[off++] = 0; hvcc[off++] = 1;
-        hvcc[off++] = (byte)(cleanVps.Length >> 8);
-        hvcc[off++] = (byte)(cleanVps.Length & 0xFF);
-        System.Buffer.BlockCopy(cleanVps, 0, hvcc, off, cleanVps.Length);
-        off += cleanVps.Length;
+        hvcc[off++] = (byte)(vps.Length >> 8);
+        hvcc[off++] = (byte)(vps.Length & 0xFF);
+        System.Buffer.BlockCopy(vps, 0, hvcc, off, vps.Length);
+        off += vps.Length;
 
         hvcc[off++] = 0x21;
         hvcc[off++] = 0; hvcc[off++] = 1;
-        hvcc[off++] = (byte)(cleanSps.Length >> 8);
-        hvcc[off++] = (byte)(cleanSps.Length & 0xFF);
-        System.Buffer.BlockCopy(cleanSps, 0, hvcc, off, cleanSps.Length);
-        off += cleanSps.Length;
+        hvcc[off++] = (byte)(sps.Length >> 8);
+        hvcc[off++] = (byte)(sps.Length & 0xFF);
+        System.Buffer.BlockCopy(sps, 0, hvcc, off, sps.Length);
+        off += sps.Length;
 
         hvcc[off++] = 0x22;
         hvcc[off++] = 0; hvcc[off++] = 1;
-        hvcc[off++] = (byte)(cleanPps.Length >> 8);
-        hvcc[off++] = (byte)(cleanPps.Length & 0xFF);
-        System.Buffer.BlockCopy(cleanPps, 0, hvcc, off, cleanPps.Length);
+        hvcc[off++] = (byte)(pps.Length >> 8);
+        hvcc[off++] = (byte)(pps.Length & 0xFF);
+        System.Buffer.BlockCopy(pps, 0, hvcc, off, pps.Length);
 
         return hvcc;
     }
@@ -458,6 +456,91 @@ public sealed partial class ClipExporter
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Re-timestamps video and audio packets to produce a contiguous output timeline.
+    /// After FilterAudioByIntervals removes audio during video gaps (alt-tab),
+    /// the Matroska file still has gapped timestamps. This function maps each
+    /// active video interval to a contiguous output range and shifts audio PTS
+    /// accordingly, producing a seamless MP4 without timestamp jumps.
+    /// </summary>
+    internal static void ReTimestampToContiguous(
+        List<EncodedPacket> videoPackets,
+        List<EncodedPacket> audioPackets,
+        List<(TimeSpan start, TimeSpan end)> intervals)
+    {
+        if (intervals.Count == 0 || videoPackets.Count == 0) return;
+
+        // Build contiguous output timeline from video intervals
+        var outputStarts = new TimeSpan[intervals.Count];
+        var outPts = TimeSpan.Zero;
+        for (int i = 0; i < intervals.Count; i++)
+        {
+            outputStarts[i] = outPts;
+            outPts += (intervals[i].end - intervals[i].start);
+        }
+
+        // Re-map video PTS
+        for (int i = 0; i < videoPackets.Count; i++)
+        {
+            var pkt = videoPackets[i];
+            var newPts = RemapPts(pkt.Pts, intervals, outputStarts);
+            videoPackets[i] = new EncodedPacket(pkt.Data, pkt.Type, newPts, pkt.Duration, pkt.IsKeyFrame, pkt.Width, pkt.Height);
+        }
+
+        // Re-map audio PTS
+        for (int i = 0; i < audioPackets.Count; i++)
+        {
+            var pkt = audioPackets[i];
+            var newPts = RemapPts(pkt.Pts, intervals, outputStarts);
+            if (pkt.PcmSamples != null)
+                audioPackets[i] = new EncodedPacket(pkt.PcmSamples, pkt.Type, newPts, pkt.Duration, pkt.IsPooledPcm);
+            else
+                audioPackets[i] = new EncodedPacket(pkt.Data, pkt.Type, newPts, pkt.Duration, pkt.IsKeyFrame);
+        }
+    }
+
+    private static TimeSpan RemapPts(
+        TimeSpan pts,
+        List<(TimeSpan start, TimeSpan end)> intervals,
+        TimeSpan[] outputStarts)
+    {
+        for (int j = 0; j < intervals.Count; j++)
+        {
+            if (pts >= intervals[j].start && pts < intervals[j].end)
+                return outputStarts[j] + (pts - intervals[j].start);
+            if (pts < intervals[j].start)
+                return outputStarts[j];
+        }
+        return outputStarts[^1] + (pts - intervals[^1].start);
+    }
+
+    internal static void WriteH264AnnexBFile(string path, List<EncodedPacket> videoPackets)
+    {
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
+            FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+
+        bool loggedFirst = false;
+        foreach (var pkt in videoPackets)
+        {
+            if (pkt.Type != MediaType.Video) continue;
+
+            // Data is in AVCC format (4-byte length-prefixed NALUs).
+            // Convert to AnnexB (start-code delimited) for raw .h264 mux.
+            var annexB = ConvertAvccToAnnexB(pkt.Data, pkt.DataLength);
+            fs.Write(annexB, 0, annexB.Length);
+
+            if (!loggedFirst)
+            {
+                loggedFirst = true;
+                var hex = new System.Text.StringBuilder();
+                int dumpLen = Math.Min(annexB.Length, 128);
+                for (int i = 0; i < dumpLen; i++)
+                    hex.Append($"{annexB[i]:X2} ");
+                Log.I("Exporter", $"AnnexB first frame: len={annexB.Length}B hex={hex.ToString().Trim()}");
+            }
+        }
     }
 
     internal static byte[]? BuildAudioSpecificConfig(EncodedPacket audioPkt)

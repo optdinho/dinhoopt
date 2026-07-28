@@ -11,6 +11,9 @@ export interface OneClickResult {
   privacyIssues: number
   startupHighImpact: number
   updatesAvailable: number
+  networkCleaned: number
+  vulnerabilitiesFound: number
+  memoryFreed: number
 }
 
 export interface ToolCoverageItem {

@@ -37,7 +37,22 @@ public sealed partial class EngineCoordinator : IDisposable
 
     // RamManager (RAM-aware capture profiles)
     private RamManager? _ramManager;
-    private CaptureProfile _activeProfile = new();
+    private CaptureProfile _activeProfile = CreateDefaultProfile();
+
+    // Create a default Full profile with sensible values (used until RamManager.ResolveProfile is called)
+    private static CaptureProfile CreateDefaultProfile() => new()
+    {
+        Level = RamProfileLevel.Full,
+        Cq = 20,
+        MaxrateKbps = 40000,
+        BufsizeKbps = 80000,
+        Bframes = 0,
+        Lookahead = 4,
+        ReplaySeconds = 300,
+        EncodeWidth = 1920,
+        EncodeHeight = 1080,
+        MaxBufferBytes = 512 * 1024 * 1024
+    };
 
     // Pipeline (criados no Start)
     private ICaptureSource? _capture;

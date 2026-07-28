@@ -2450,3 +2450,48 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - Compatibilidade: electron-vite, vitest, vite — todos usam esbuild, não afetados
 
 ### Remaining: npm install + build + test validation
+
+## Session Summary (2026-07-27 — ffmpeg path fix + RamManager config fix + ffmpeg 8.1.2 install)
+
+### Done
+
+- **Bug 1 — ffmpeg path resolution**: All 9 occurrences of `new ProcessStartInfo("ffmpeg")` hardcoded in source replaced with `FfmpegPathResolver.GetFfmpegPath()`:
+  - `FfmpegEncoder.cs:210`, `FfmpegAacEncoder.cs:39`, `FfmpegEncoder.CodecDetection.cs:117`
+  - `ClipExporter.cs:278,366,425`, `MaxineAfxFilter.cs:64`, `RnnoiseFilter.cs:36`
+  - `MaxineAfxFilter.cs` and `RnnoiseFilter.cs` received `using DiNho.Capture.Poc.Encoders;`
+  - Zero bare `"ffmpeg"` remaining in source files
+
+- **Bug 2 — RamManager Cq source (`EngineCoordinator.Capture.cs:144-151`)**: Changed from `_activeProfile.Cq` (default=20) to `_config.Config.Cq` (user config=22). Same for MaxrateKbps, BufsizeKbps, Bframes, Lookahead — all now read from user config instead of default profile.
+
+- **FfmpegPathResolver candidates fixed**: Previous candidate #2 path was wrong (`bin/Release/publish` instead of `bin/Release/net10.0-windows10.0.26100.0/publish`). Added 3 new candidates:
+  1. BaseDirectory (packaged app) — existing
+  2. Release publish with correct TFM path — fixed
+  3. `resources/clips-engine-staging/` (6 levels up from bin/Debug) — **new, solves dev mode**
+  4. `../clips-engine/` (packaged electron-builder layout) — new
+  5. PATH fallback — existing
+
+- **ffmpeg 8.1.2 installed via WinGet** (`Gyan.FFmpeg`):
+  - WinGet symlink was missing from `WinGet/Links/` — created manually
+  - Version: `ffmpeg 8.1.2-full_build-www.gyan.dev` (gcc 16.1.0, 231MB)
+  - Full build: nvenc, nvdec, ffnvcodec, amf, cuda-llvm, x264, x265, aac, libopus, svta1, dav1d
+  - Copied to `resources/clips-engine-staging/ffmpeg.exe` (231MB)
+
+- **Engine published + staged**: `dotnet build` 0 errors, `dotnet publish -c Release --self-contained true -r win-x64` OK, `copy-engine` staged 292 files (291 engine + 1 ffmpeg)
+
+### Key Decisions
+
+- **FfmpegPathResolver over hardcoded paths**: Centralized path resolution with fallback chain — all 9 call sites now benefit from the same discovery logic
+- **Staging dir as dev-mode candidate**: From `bin/Debug/net10/.../` the staging dir is 6 levels up at `resources/clips-engine-staging/` — reliable for `npm run dev`
+- **WinGet symlink recreation**: `winget install Gyan.FFmpeg` installed the package but didn't create the symlink in `WinGet/Links/` — manual creation fixed PATH availability
+- **ffmpeg 8.1.2 (latest stable)**: Full build includes all hardware encoders (NVENC, AMF, QSV) and software codecs needed by the engine
+
+### Relevant Files Changed
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/EncoderManager.cs`: `FfmpegPathResolver` candidates expanded (5 candidates)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `ProcessStartInfo("ffmpeg")` → `FfmpegPathResolver.GetFfmpegPath()`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegAacEncoder.cs`: same
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.CodecDetection.cs`: same
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: same (×3)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/MaxineAfxFilter.cs`: same + `using DiNho.Capture.Poc.Encoders;`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs`: same + `using DiNho.Capture.Poc.Encoders;`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: RamManager uses `_config.Config.*` instead of `_activeProfile.*`
+- `resources/clips-engine-staging/ffmpeg.exe`: 231MB, ffmpeg 8.1.2
