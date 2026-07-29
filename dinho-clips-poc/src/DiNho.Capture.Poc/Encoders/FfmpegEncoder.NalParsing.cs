@@ -297,6 +297,16 @@ internal partial class FfmpegEncoder
 
                 if (_pipeFormat == PipeFormat.Unknown)
                 {
+                    if (_rawLen > 2 * 1024 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"Unknown format raw overflow {_rawLen}B — forcing format re-detect");
+                        _rawLen = 0;
+                        _incompleteNalLen = 0;
+                        _hadRawSlice = false;
+                        int drained = 0;
+                        while (_inputPtsQueue.TryDequeue(out _)) drained++;
+                        Log.W("FfmpegEncoder", $"drained {drained} stale PTS entries");
+                    }
                     continue;
                 }
 

@@ -202,15 +202,14 @@ internal sealed partial class FfmpegEncoder : IEncoder
             _ => "h264"
         };
 
-        // NVENC/AMF/QSV produce AVCC (4-byte length prefix) natively.
-        // We DO NOT use -bsf:v h264_mp4toannexb because:
-        //   a) It's unreliable — some ffmpeg builds occasionally skip it on random frames,
-        //      causing format confusion in the reader (AVCC data treated as AnnexB)
-        //   b) The AVCC path in ReaderLoop is simpler, more robust, and handles orphaned
-        //      tails via _pendingBuf
-        //   c) WriteMatroskaFile stores AVCC natively with CodecPrivate — no AnnexB needed
-        // The reader latches the format once from position 0 and processes accordingly.
-        string bsfArg = "";
+        // Apply bitstream filter to ensure clean AnnexB output (start-code delimited)
+        // instead of AVCC (4-byte length prefix). The AnnexB path in ReaderLoop is
+        // more robust against pipe splits and arbitrary offsets than the AVCC parser.
+        // AV1 has no mp4toannexb bsf in any ffmpeg version — skip it.
+        string bsfArg = rawFmt == "av1" ? "" : $" -bsf:v {rawFmt}_mp4toannexb";
+        // Note: if the bsf occasionally fails (known ffmpeg quirk with random frames),
+        // the AVCC fallback in ReaderLoop handles misdetected data via the 512KB pending
+        // guard + format re-detect at NalParsing:335-345.
 
         _process = new Process
         {
