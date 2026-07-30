@@ -111,7 +111,12 @@ public sealed partial class EngineCoordinator
             var outputPath = Path.Combine(outputDir, fileName);
             Log.I("EngineCoordinator", $"═══════ SAVE START ═══════  → {outputPath}");
 
-            var cachedAvcc = (_encoder as FfmpegEncoder)?.AvccCache;
+            var ffEncoder = _encoder as FfmpegEncoder;
+            var cachedAvcc = ffEncoder?.AvccCache;
+            var cachedHvcc = ffEncoder?.HvccCache;
+            var cachedVps = ffEncoder?.VpsCache;
+            var cachedSps = ffEncoder?.SpsCache;
+            var cachedPps = ffEncoder?.PpsCache;
             await Task.Run(() =>
             {
                 var result = _exporter.ExportToMp4(
@@ -121,8 +126,12 @@ public sealed partial class EngineCoordinator
                     _captureWidth,
                     _captureHeight,
                     _config.Config.Fps,
-                    rawFormat: (_encoder as FfmpegEncoder)?.RawFormat ?? "h264",
-                    avccFallback: cachedAvcc);
+                    rawFormat: ffEncoder?.RawFormat ?? "h264",
+                    avccFallback: cachedAvcc,
+                    hvccFallback: cachedHvcc,
+                    vps: cachedVps,
+                    sps: cachedSps,
+                    pps: cachedPps);
 
                 var fileInfo = new FileInfo(result);
                 Log.I("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");

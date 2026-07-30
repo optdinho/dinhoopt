@@ -56,6 +56,8 @@
 
   "optMemStandby": "Clear Standby Memory",
   "optMemStandbyDesc": "Purge cached RAM to free memory for your game",
+  "optMemEmptyWorkingSet": "Empty Working Set Memory",
+  "optMemEmptyWorkingSetDesc": "Free up the active memory pages of background processes to increase available RAM for your game",
 
   "optSysFocusAssist": "Enable Focus Assist",
   "optSysFocusAssistDesc": "Suppress Windows notifications and alerts",

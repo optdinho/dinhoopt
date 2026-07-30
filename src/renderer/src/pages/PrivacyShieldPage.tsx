@@ -474,7 +474,13 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
 
       {/* Empty state */}
       {!state && !isScanning && (
-        <EmptyState icon={Eye} title={t('privacy.emptyStateTitle')} description={t('privacy.emptyStateDescription')} showLastScan lastScanType="privacy" />
+        <EmptyState
+          icon={Eye}
+          title={t('privacy.emptyStateTitle')}
+          description={t('privacy.emptyStateDescription')}
+          showLastScan
+          lastScanType="privacy"
+        />
       )}
 
       {/* Category cards */}

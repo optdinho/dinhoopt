@@ -82,22 +82,32 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _rawLen;
     private bool _hadRawSlice; // tracked in AnnexB path before conversion
     private bool _loggedParseAvcc; // first-call guard for ParseAvcc log
+    private string? _userCodec; // original user codec preference, for fallback chain building
     private byte[]? _incompleteNalBuf;   // Incomplete NALU tail from ParseAvcc (Bug 1 fix)
     private int _incompleteNalLen;        // Length of incomplete NALU tail
 
     // Format latch — ffmpeg -f h264 with -bsf:v should output AnnexB, but sometimes
     // frames slip through in AVCC format. We detect once and latch.
-    private enum PipeFormat { Unknown, AnnexB, Avcc }
+    private enum PipeFormat { Unknown, AnnexB, Avcc, Ivf }
     private PipeFormat _pipeFormat;
 
     // Cached avcC (AVCDecoderConfigurationRecord) extracted from the first SPS/PPS encountered.
     // Needed by clip exporter when the rolling replay buffer has evicted the initial packet.
+    private byte[]? _cachedVps;
     private byte[]? _cachedSps;
     private byte[]? _cachedPps;
     private byte[]? _cachedAvcc;
+    private byte[]? _cachedHvcc;
+    private bool _ivfHeaderParsed;
+    private uint _ivfTimebaseDen;
+    private uint _ivfTimebaseNum;
 
     public FfmpegEncoder(bool useHardware = true) => _useHardware = useHardware;
     public byte[]? AvccCache => _cachedAvcc;
+    public byte[]? HvccCache => _cachedHvcc;
+    public byte[]? VpsCache => _cachedVps;
+    public byte[]? SpsCache => _cachedSps;
+    public byte[]? PpsCache => _cachedPps;
     private bool IsHevc => _codec is "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265";
     private bool IsAv1 => _codec is "av1_nvenc" or "libsvtav1";
     public string RawFormat => IsHevc ? "hevc" : IsAv1 ? "av1" : "h264";
@@ -121,7 +131,10 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _lookahead = lookahead;
         _nvencPreset = preset;
         if (!string.IsNullOrEmpty(codec) && codec != "auto")
+        {
+            _userCodec = codec;
             _codec = ResolveCodec(codec);
+        }
     }
 
     public void Initialize(int width, int height, int frameRate, int bitrateKbps = 2000)
@@ -132,7 +145,15 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _frameRate = frameRate;
         _bitrateKbps = bitrateKbps;
         if (_codec == null)
+        {
             _codec = DetectBestCodec();
+        }
+        else
+        {
+            var vendorId = EncoderManager.DetectEncodingVendorId();
+            _fallbackChain = EncoderManager.BuildFallbackChain(_userCodec ?? "auto", vendorId);
+            _currentFallbackIndex = 0;
+        }
         Log.I("FfmpegEncoder", $"codec={_codec} bitrate={_bitrateKbps}Kbps cq={_cq} maxrate={_maxrateKbps}Kbps bufsize={_bufsizeKbps}Kbps res={width}x{height}@{frameRate}fps preset={_nvencPreset} _useHardware={_useHardware}");
         StartFfmpeg();
 
@@ -202,10 +223,15 @@ internal sealed partial class FfmpegEncoder : IEncoder
             _ => "h264"
         };
 
+        // For AV1, use IVF container (explicit frame boundaries with 12-byte headers).
+        // Raw AV1 OBU data is not parseable by our AnnexB/AVCC detector.
+        // H264/HEVC use raw format with bitstream filter for AnnexB output.
+        string outputFmt = rawFmt == "av1" ? "ivf" : rawFmt;
+
         // Apply bitstream filter to ensure clean AnnexB output (start-code delimited)
         // instead of AVCC (4-byte length prefix). The AnnexB path in ReaderLoop is
         // more robust against pipe splits and arbitrary offsets than the AVCC parser.
-        // AV1 has no mp4toannexb bsf in any ffmpeg version — skip it.
+        // AV1 IVF format doesn't need a bsf.
         string bsfArg = rawFmt == "av1" ? "" : $" -bsf:v {rawFmt}_mp4toannexb";
         // Note: if the bsf occasionally fails (known ffmpeg quirk with random frames),
         // the AVCC fallback in ReaderLoop handles misdetected data via the 512KB pending
@@ -218,7 +244,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
                             $"-f rawvideo -pix_fmt nv12 -s {_width}x{_height} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"{cropFilter} -c:v {_codec} {tune} " +
-                            $"-f {rawFmt}{bsfArg} pipe:1",
+                            $"-f {outputFmt}{bsfArg} pipe:1",
                             redirectInput: true,
                             redirectOutput: true,
                             redirectError: true)
@@ -487,6 +513,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _cpuStagingW = 0;
         _cpuStagingH = 0;
         _nv12Scratch = null;
+        _ivfHeaderParsed = false;
+        _ivfTimebaseDen = 0;
+        _ivfTimebaseNum = 0;
     }
 
     // ── GPU NV12 conversion (moved to FfmpegEncoder.GpuConvert.cs) ──

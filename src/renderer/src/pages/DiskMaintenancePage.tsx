@@ -47,13 +47,14 @@ function MediaIcon({ type }: { type: TrimMediaType }) {
 }
 
 function StatusPill({ status, reason }: { status: TrimStatus; reason: string }) {
+  const { t } = useTranslation('disk')
   const styles: Record<TrimStatus, { bg: string; color: string; label: string }> = {
-    'recently-trimmed': { bg: 'rgba(34,197,94,0.12)', color: '#22c55e', label: 'Recently trimmed' },
-    ok: { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'OK' },
-    recommended: { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', label: 'Recommended' },
-    'not-applicable': { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'Not applicable' },
-    disabled: { bg: 'rgba(239,68,68,0.12)', color: '#ef4444', label: 'Disabled' },
-    unknown: { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: 'Unknown' },
+    'recently-trimmed': { bg: 'rgba(34,197,94,0.12)', color: '#22c55e', label: t('statusRecentlyTrimmed') },
+    ok: { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: t('statusOk') },
+    recommended: { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', label: t('statusRecommended') },
+    'not-applicable': { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: t('statusNotApplicable') },
+    disabled: { bg: 'rgba(239,68,68,0.12)', color: '#ef4444', label: t('statusDisabled') },
+    unknown: { bg: 'rgba(63,63,70,0.4)', color: 'var(--text-muted)', label: t('statusUnknown') },
   }
   const s = styles[status]
   return (

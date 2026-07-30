@@ -1,13 +1,14 @@
 import { CleanerType, ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
-import { FileText, Loader2, Search, ShieldAlert, Sparkles, TriangleAlert } from 'lucide-react'
+import { FileText, Loader2, Search, ShieldAlert, Sparkles, TriangleAlert, Wifi } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CleanSummary } from '@/components/cleaner/CleanSummary'
+import { NetworkCleanupModal } from '@/components/cleaner/NetworkCleanupModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { type ReportData, ReportCard, loadReport, saveReport } from '@/components/shared/ReportCard'
+import { loadReport, ReportCard, type ReportData, saveReport } from '@/components/shared/ReportCard'
 import { ScanProgress } from '@/components/shared/ScanProgress'
 import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { usePlatform } from '@/hooks/usePlatform'
@@ -31,6 +32,7 @@ export function CleanerPage() {
   const visibleCategories = protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories
   const [activeCategory, setActiveCategory] = useState<CleanerType>(CleanerType.System)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showNetworkModal, setShowNetworkModal] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const cleanStartRef = useRef<number>(0)
   const [scanningCategory, setScanningCategory] = useState<CleanerType | null>(null)
@@ -289,6 +291,15 @@ export function CleanerPage() {
               <Sparkles className="h-4 w-4" strokeWidth={2} />
               {t('cleanButton')}
             </button>
+            <button
+              type="button"
+              onClick={() => setShowNetworkModal(true)}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-300 transition-all"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-medium)' }}
+            >
+              <Wifi className="h-4 w-4" strokeWidth={1.8} />
+              {t('networkLink')}
+            </button>
           </div>
         }
       />
@@ -421,9 +432,7 @@ export function CleanerPage() {
             <CleanSummary summary={store.cleanSummary} onRelaunchAsAdmin={handleRelaunch} platform={platform} />
           )}
 
-          {report && !hasResults && !isScanning && (
-            <ReportCard report={report} icon={FileText} />
-          )}
+          {report && !hasResults && !isScanning && <ReportCard report={report} icon={FileText} />}
 
           {!hasResults && !isScanning && (
             <EmptyState
@@ -460,6 +469,8 @@ export function CleanerPage() {
         actionLabel={t('cleanButton')}
         actionIcon={Sparkles}
       />
+
+      <NetworkCleanupModal open={showNetworkModal} onClose={() => setShowNetworkModal(false)} />
 
       <ConfirmDialog
         open={showConfirm}

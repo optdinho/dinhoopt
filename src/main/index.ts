@@ -14,6 +14,7 @@ if (!app.isPackaged) {
 
 // ─── Security: move secrets out of process.env ─────────────
 import { sanitizeEnvVars } from './services/env-sanitize'
+
 sanitizeEnvVars()
 
 // GPU workaround — Chromium 134 (Electron 43) crashes the GPU process with
@@ -94,16 +95,24 @@ if (process.argv.includes('--cli')) {
 function initGui(): void {
   // Auto-elevate if not running as admin on Windows
   if (process.platform === 'win32' && !isAdmin()) {
+    getLogger().info('app', 'Not running as admin — spawning UAC elevation via PowerShell')
     const exePath = app.getPath('exe')
-    const psScript = `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -Verb RunAs`
+    const escapedExe = exePath.replace(/'/g, "''")
+    const argList = dataDirFlag ? ` -ArgumentList '${dataDirFlag.replace(/'/g, "''")}'` : ''
+    const psScript = `Start-Process -FilePath '${escapedExe}'${argList} -Verb RunAs`
     execFile('powershell.exe', ['-NoProfile', '-Command', psUtf8(psScript)], { windowsHide: true }, (err) => {
       if (!err) {
+        getLogger().info('app', 'UAC elevation launched — exiting un-elevated instance')
         app.releaseSingleInstanceLock()
         app.exit(0)
+      } else {
+        getLogger().error('app', `UAC elevation failed: ${err.message}`)
       }
     })
     return
   }
+
+  getLogger().info('app', 'Already running as admin — skipping UAC elevation')
 
   // Prevent multiple instances — if another is already running, focus it and quit this one
   const gotLock = app.requestSingleInstanceLock()
@@ -417,6 +426,8 @@ function initGui(): void {
       'app',
       `App starting — v${app.getVersion()}, platform: ${process.platform}, elevated: ${isAdmin()}`,
     )
+    getLogger().info('app', `argv: ${process.argv.slice(1).join(' ')}`)
+    getLogger().info('app', `isPackaged: ${app.isPackaged}, userData: ${app.getPath('userData')}`)
 
     // Ensure an Edit menu exists so clipboard shortcuts (Cmd+C/V/X on macOS,
     // Ctrl+C/V/X elsewhere) work in the frameless window.  On macOS Cmd+V
@@ -441,8 +452,13 @@ function initGui(): void {
     Menu.setApplicationMenu(appMenu)
 
     const settings = getSettings()
+    getLogger().info(
+      'app',
+      `settings.runAtStartup=${settings.runAtStartup}, minimizeToTray=${settings.minimizeToTray}, schedules=${settings.schedules.filter((s) => s.enabled).length} active`,
+    )
 
     // Apply auto-launch setting
+    getLogger().info('app', `Configuring auto-launch (runAtStartup=${settings.runAtStartup}) — may spawn schtasks`)
     applyAutoLaunch(settings.runAtStartup).catch((err) => {
       getLogger().error('app', `Failed to configure auto-launch: ${err.message}`)
     })

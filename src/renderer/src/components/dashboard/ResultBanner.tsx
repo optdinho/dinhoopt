@@ -3,6 +3,7 @@ import { CircleCheckBig } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
+import { DURATION } from '@/lib/animation'
 import { formatBytes, formatNumber } from '@/lib/utils'
 import type { OneClickResult } from './types'
 
@@ -11,13 +12,13 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
   const navigate = useNavigate()
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={() => {}}>
       {result && (
         <motion.div
           initial={{ opacity: 0, y: 16, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -8, scale: 0.97 }}
-          transition={{ type: 'tween', ease: 'easeOut', duration: 0.35 }}
+          transition={{ type: 'tween', ease: 'easeOut', duration: DURATION.slow }}
           className="glass-card depth-emphasis rounded-2xl p-4"
           style={{
             background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(34,197,94,0.02) 100%)',
@@ -29,12 +30,12 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
             className="flex items-center gap-3"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.15, duration: 0.3 }}
+            transition={{ delay: 0.15, duration: DURATION.normal }}
           >
             <motion.div
               initial={{ scale: 0, rotate: -90 }}
               animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
+              transition={{ type: 'tween', duration: DURATION.normal, delay: 0.1 }}
               className="shrink-0"
             >
               <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
@@ -176,10 +177,9 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
                       className="text-[12px] hover:underline transition-all hover:translate-x-0.5"
                       style={{ color: result.vulnerabilitiesFound > 5 ? '#ef4444' : '#f59e0b' }}
                     >
-                      {t(
-                        result.vulnerabilitiesFound !== 1 ? 'resultVulnerabilitiesPlural' : 'resultVulnerabilities',
-                        { count: result.vulnerabilitiesFound },
-                      )}{' '}
+                      {t(result.vulnerabilitiesFound !== 1 ? 'resultVulnerabilitiesPlural' : 'resultVulnerabilities', {
+                        count: result.vulnerabilitiesFound,
+                      })}{' '}
                       &rarr;
                     </button>
                   </StaggerItem>

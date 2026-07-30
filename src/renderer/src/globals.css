@@ -91,6 +91,10 @@
   }
 }
 
+.will-change-transform {
+  will-change: transform, opacity;
+}
+
 @keyframes game-mode-pulse {
   0%,
   100% {
@@ -224,18 +228,8 @@
     outline-offset: 2px;
   }
 
-  *,
-  *::before,
-  *::after {
+  html {
     transition: background-color 0.2s ease, border-color 0.2s ease;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      transition: none;
-    }
   }
 }
 
@@ -290,4 +284,16 @@
 @keyframes logo-glow {
   0% { opacity: 0.6; transform: scale(1); }
   100% { opacity: 1; transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *.animate-pulse,
+  *.animate-fade-in,
+  *.animate-scale-in,
+  *.animate-shimmer,
+  *.animate-glow-pulse,
+  *.animate-stagger-fade,
+  *.animate-spin {
+    animation: none !important;
+  }
 }

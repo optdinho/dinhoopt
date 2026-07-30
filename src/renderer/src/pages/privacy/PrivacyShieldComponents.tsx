@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BrainCircuit,
   CalendarClock,
+  CameraOff,
   Compass,
   Cpu,
   Eye,
@@ -12,7 +13,6 @@ import {
   Radio,
   RefreshCw,
   Search,
-  CameraOff,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 

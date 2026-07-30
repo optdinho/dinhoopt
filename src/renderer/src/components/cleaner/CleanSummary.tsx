@@ -125,7 +125,7 @@ function CategoryBar({
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ delay: delay + 0.15, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute inset-y-0 left-0 rounded-full"
+          className="absolute inset-y-0 left-0 rounded-full will-change-transform"
           style={{ background: 'linear-gradient(90deg, #f59e0b, #d97706)' }}
         />
       </div>

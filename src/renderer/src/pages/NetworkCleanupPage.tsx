@@ -208,7 +208,10 @@ export function NetworkCleanupPage() {
       />
 
       {/* Tab bar */}
-      <div className="mb-5 flex gap-1 rounded-xl p-1" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}>
+      <div
+        className="mb-5 flex gap-1 rounded-xl p-1"
+        style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
+      >
         {(['cleanup', 'monitor'] as const).map((tab) => (
           <button
             key={tab}

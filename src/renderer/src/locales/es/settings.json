@@ -94,5 +94,6 @@
   "logsLevelError": "Error",
   "logsNoEntries": "No se encontraron registros",
   "logsRetentionLabel": "Retención (días)",
-  "logsRetentionDesc": "Cuántos días conservar los archivos de registro antes de la limpieza automática"
+  "logsRetentionDesc": "Cuántos días conservar los archivos de registro antes de la limpieza automática",
+  "brandName": "DiNho Optimizer"
 }

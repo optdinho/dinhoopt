@@ -33,5 +33,10 @@
   "shortcutsShowHelp": "Show this help",
   "shortcutsCloseModal": "Close modal / Go back",
   "itemsSelected": "items selected",
-  "lastScan": "Last scan"
+  "lastScan": "Last scan",
+  "checked": "Checked",
+  "name": "Name",
+  "status": "Status",
+  "driverAgentEvalFailed": "Agent evaluation failed",
+  "driverAgentInstallFailed": "Installation failed"
 }

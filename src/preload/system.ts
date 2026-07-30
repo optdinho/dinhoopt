@@ -269,6 +269,8 @@ export const systemMethods = {
   perfGetSystemInfo: (): Promise<PerfSystemInfo> => ipcRenderer.invoke(IPC.PERF_GET_SYSTEM_INFO),
   perfStartMonitoring: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_START_MONITORING),
   perfStopMonitoring: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_STOP_MONITORING),
+  perfStartProcessPolling: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_START_PROCESS_POLLING),
+  perfStopProcessPolling: (): Promise<void> => ipcRenderer.invoke(IPC.PERF_STOP_PROCESS_POLLING),
   perfKillProcess: (pid: number): Promise<PerfKillResult> => ipcRenderer.invoke(IPC.PERF_KILL_PROCESS, pid),
   perfGetDiskHealth: (): Promise<DiskSmartInfo[]> => ipcRenderer.invoke(IPC.PERF_DISK_HEALTH),
   onPerfSnapshot: (callback: (data: PerfSnapshot) => void) => onEvent(IPC.PERF_SNAPSHOT, callback),
@@ -420,6 +422,8 @@ export const systemMethods = {
   ) => onEvent(IPC.GAME_MODE_AUTO_EVENT, callback),
   gameModeRunAudit: (phase: GameModeAuditReport['phase']): Promise<GameModeAuditReport> =>
     ipcRenderer.invoke(IPC.GAME_MODE_RUN_AUDIT, phase),
+  gameModeDetectorStart: (): Promise<void> => ipcRenderer.invoke(IPC.GAME_MODE_DETECTOR_START),
+  gameModeDetectorStop: (): Promise<void> => ipcRenderer.invoke(IPC.GAME_MODE_DETECTOR_STOP),
 
   powerPlansList: (): Promise<PowerPlanInfo[]> => ipcRenderer.invoke(IPC.POWER_PLANS_LIST),
   powerPlansActivate: (guid: string): Promise<PowerPlanActivateResult> =>

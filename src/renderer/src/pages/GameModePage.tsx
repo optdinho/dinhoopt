@@ -47,6 +47,7 @@ export function GameModePage() {
   }, [])
 
   useEffect(() => {
+    window.dinho?.gameModeDetectorStart?.()
     window.dinho
       ?.clipsGetConfig?.()
       .then((cfg) => {
@@ -55,6 +56,9 @@ export function GameModePage() {
         }
       })
       .catch(() => {})
+    return () => {
+      window.dinho?.gameModeDetectorStop?.()
+    }
   }, [])
 
   const handleToggleAutoStartCapture = useCallback(() => {
@@ -212,7 +216,7 @@ export function GameModePage() {
               initial={{ opacity: 0, y: -10, height: 0 }}
               animate={{ opacity: 1, y: 0, height: 'auto' }}
               exit={{ opacity: 0, y: -10, height: 0 }}
-              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+              className="grid grid-cols-1 gap-3 sm:grid-cols-3 will-change-transform"
             >
               {[
                 { icon: Zap, label: t('statOptimizationsActive'), value: String(enabledCount), color: 'var(--accent)' },
@@ -248,7 +252,7 @@ export function GameModePage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden rounded-xl"
+              className="overflow-hidden rounded-xl will-change-transform"
               style={{ background: 'var(--bg-subtle)', border: '1px solid var(--accent-muted-border)' }}
             >
               <div className="px-5 py-4">
@@ -263,7 +267,7 @@ export function GameModePage() {
                 </div>
                 <div className="relative h-2 overflow-hidden rounded-full" style={{ background: 'var(--bg-subtle-2)' }}>
                   <motion.div
-                    className="h-full rounded-full"
+                    className="h-full rounded-full will-change-transform"
                     style={{
                       backgroundImage: 'linear-gradient(90deg, var(--accent), var(--accent-hover), var(--accent))',
                       backgroundSize: '200% 100%',

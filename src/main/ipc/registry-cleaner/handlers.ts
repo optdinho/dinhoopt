@@ -5,11 +5,11 @@ import type { RegistryEntry } from '@shared/types'
 import { ipcMain } from 'electron'
 import { logAudit } from '../../services/audit-log'
 import { validateStringArray } from '../../services/ipc-validation'
-import { validateSender } from '../sender-validation'
 import { getLogger } from '../../services/logger.service'
 import { collectBackupTargets, fixRegistryEntries, scanRegistry } from '../../services/registry-cleaner.service'
 import { getSettings, updateRegistryIgnoredTweaks } from '../../services/settings-store'
 import type { WindowGetter } from '../index'
+import { validateSender } from '../sender-validation'
 import { cleanupScanSessions, state } from './state'
 
 export { collectBackupTargets, fixRegistryEntries, scanRegistry }
@@ -61,7 +61,8 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       event,
       entryIds: string[],
     ): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
-      if (!validateSender(event, getWindow())) return { fixed: 0, failed: 0, failures: [{ issue: 'Invalid sender', reason: '' }] }
+      if (!validateSender(event, getWindow()))
+        return { fixed: 0, failed: 0, failures: [{ issue: 'Invalid sender', reason: '' }] }
       if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [] }
       const valid = validateStringArray(entryIds)
       if (!valid) {

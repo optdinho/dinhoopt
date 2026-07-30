@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockHandle = vi.fn()
 vi.mock('electron', () => {
-  function MockNotification() { return { show: vi.fn() } }
+  function MockNotification() {
+    return { show: vi.fn() }
+  }
   MockNotification.isSupported = vi.fn(() => false)
   return {
     ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },

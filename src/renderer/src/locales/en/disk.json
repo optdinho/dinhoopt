@@ -107,5 +107,12 @@
   "trimFailedToast_other": "TRIM failed on {{count}} drives",
   "trimBatchFailed": "Failed to run TRIM",
   "trimListFailed": "Failed to list drives",
-  "encryptedAria": "Encrypted"
+  "encryptedAria": "Encrypted",
+  "statusRecentlyTrimmed": "Recently trimmed",
+  "statusOk": "OK",
+  "statusRecommended": "Recommended",
+  "statusNotApplicable": "Not applicable",
+  "statusDisabled": "Disabled",
+  "statusUnknown": "Unknown",
+  "selectDrive": "Select {{drive}}"
 }

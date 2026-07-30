@@ -50,30 +50,34 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
       getLogger().warning('privacy-shield', 'Invalid IDs received for privacy apply')
       return { succeeded: 0, failed: 0, errors: [] }
     }
-      return applyPrivacySettings(valid).then((result) => {
-        if (result.failed > 0) {
-          getLogger().error(
-            'privacy-shield',
-            `Privacy apply completed with ${result.failed} failure(s) — ${result.succeeded} succeeded`,
-          )
-        } else {
-          getLogger().success('privacy-shield', `Privacy apply completed — ${result.succeeded} setting(s) applied`)
-        }
+    return applyPrivacySettings(valid).then((result) => {
+      if (result.failed > 0) {
+        getLogger().error(
+          'privacy-shield',
+          `Privacy apply completed with ${result.failed} failure(s) — ${result.succeeded} succeeded`,
+        )
+      } else {
+        getLogger().success('privacy-shield', `Privacy apply completed — ${result.succeeded} setting(s) applied`)
+      }
 
-        logAudit('PRIVACY_APPLY', 'privacy', {
-          settingIds: valid,
-          succeeded: result.succeeded,
-          failed: result.failed,
-        })
-
-        if (result.succeeded > 0) {
-          notifyScanComplete('Privacy Settings Applied', `${result.succeeded} setting(s) applied to protect your privacy`, {
-            notifications: getSettings().showNotificationOnComplete,
-          })
-        }
-
-        return result
+      logAudit('PRIVACY_APPLY', 'privacy', {
+        settingIds: valid,
+        succeeded: result.succeeded,
+        failed: result.failed,
       })
+
+      if (result.succeeded > 0) {
+        notifyScanComplete(
+          'Privacy Settings Applied',
+          `${result.succeeded} setting(s) applied to protect your privacy`,
+          {
+            notifications: getSettings().showNotificationOnComplete,
+          },
+        )
+      }
+
+      return result
+    })
   })
 
   ipcMain.handle(IPC.PRIVACY_REVERT, async (_event, ids: string[]) => {

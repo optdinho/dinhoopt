@@ -509,12 +509,41 @@ public sealed partial class ClipExporter
         return outputStarts[^1] + (pts - intervals[^1].start);
     }
 
-    internal static void WriteH264AnnexBFile(string path, List<EncodedPacket> videoPackets)
+    internal static void WriteH264AnnexBFile(string path, List<EncodedPacket> videoPackets, string rawFormat = "h264", byte[]? vps = null, byte[]? sps = null, byte[]? pps = null)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
 
         bool loggedFirst = false;
+
+        // Prepend VPS + SPS + PPS cached from encoder (in case ReplayBuffer evicted initial frames).
+        // For HEVC: VPS (type 32) must come first, then SPS (33), then PPS (34).
+        // For H264: SPS (type 7) then PPS (type 8).
+        // Without these at the start of the raw stream, ffmpeg's demuxer cannot decode
+        // any frame — "non-existing PPS 0 referenced".
+        if (rawFormat == "hevc" && vps != null && vps.Length > 0)
+        {
+            fs.Write([0x00, 0x00, 0x00, 0x01], 0, 4);
+            fs.Write(vps, 0, vps.Length);
+            loggedFirst = true;
+            Log.I("Exporter", $"Prepended VPS ({vps.Length}B) from encoder cache");
+        }
+        if (sps != null && sps.Length > 0)
+        {
+            fs.Write([0x00, 0x00, 0x00, 0x01], 0, 4);
+            fs.Write(sps, 0, sps.Length);
+            loggedFirst = true;
+            Log.I("Exporter", $"Prepended SPS ({sps.Length}B) from encoder cache");
+        }
+        if (pps != null && pps.Length > 0)
+        {
+            fs.Write([0x00, 0x00, 0x00, 0x01], 0, 4);
+            fs.Write(pps, 0, pps.Length);
+            loggedFirst = true;
+            Log.I("Exporter", $"Prepended PPS ({pps.Length}B) from encoder cache");
+        }
+
+        bool loggedFirstFrame = false;
         foreach (var pkt in videoPackets)
         {
             if (pkt.Type != MediaType.Video) continue;
@@ -524,9 +553,9 @@ public sealed partial class ClipExporter
             var annexB = ConvertAvccToAnnexB(pkt.Data, pkt.DataLength);
             fs.Write(annexB, 0, annexB.Length);
 
-            if (!loggedFirst)
+            if (!loggedFirstFrame && !loggedFirst)
             {
-                loggedFirst = true;
+                loggedFirstFrame = true;
                 var hex = new System.Text.StringBuilder();
                 int dumpLen = Math.Min(annexB.Length, 128);
                 for (int i = 0; i < dumpLen; i++)

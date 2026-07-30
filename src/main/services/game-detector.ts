@@ -186,7 +186,7 @@ export function startGameDetector(cbs: GameDetectorCallbacks, customGameProcesse
   callbacks = cbs
   detectedGame = null
   suppressedGame = prevSuppressed
-  pollTimer = setInterval(() => poll(customGameProcesses), 10_000)
+  pollTimer = setInterval(() => poll(customGameProcesses), 30_000)
   poll(customGameProcesses)
 }
 

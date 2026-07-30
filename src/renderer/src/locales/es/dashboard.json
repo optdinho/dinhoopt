@@ -142,5 +142,11 @@
   "gameClipsCardSaveTitle": "Guardar clip actual",
   "gameClipsCardGame": "Capturando {{game}}",
   "gameClipsCardClickToOpen": "Haga clic para abrir",
-  "gameClipsCardUnavailable": "No se pudo cargar estado de clips"
+  "gameClipsCardUnavailable": "No se pudo cargar estado de clips",
+  "historyQuickClean": "Limpieza Rápida",
+  "historyFullClean": "Limpieza Completa",
+  "historyRegistry": "Registro",
+  "historyStaleDrivers": "Controladores Obsoletos",
+  "historyMalware": "Malware",
+  "historyNetwork": "Red"
 }

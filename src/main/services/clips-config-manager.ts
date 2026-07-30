@@ -155,9 +155,10 @@ export function clipPathInOutputDir(inputPath: string): string | null {
   const outputDir = getDefaultOutputDir()
   try {
     const resolved = resolve(outputDir, inputPath)
-    const prefix = outputDir.toLowerCase().endsWith('\\') || outputDir.toLowerCase().endsWith('/')
-      ? outputDir.toLowerCase()
-      : outputDir.toLowerCase() + '\\'
+    const prefix =
+      outputDir.toLowerCase().endsWith('\\') || outputDir.toLowerCase().endsWith('/')
+        ? outputDir.toLowerCase()
+        : `${outputDir.toLowerCase()}\\`
     if (!resolved.toLowerCase().startsWith(prefix)) return null
     return resolved
   } catch {

@@ -50,6 +50,8 @@
   "customProcessEmpty": "Nenhum processo personalizado configurado",
   "optMemStandby": "Limpar memória em espera",
   "optMemStandbyDesc": "Limpa a RAM em cache para libertar memória para o seu jogo",
+  "optMemEmptyWorkingSet": "Esvaziar Working Set da Memória",
+  "optMemEmptyWorkingSetDesc": "Liberta as páginas de memória em uso ativo dos processos em segundo plano para aumentar a RAM disponível para o seu jogo",
   "optSysFocusAssist": "Ativar Assistência de concentração",
   "optSysFocusAssistDesc": "Suprime notificações e alertas do Windows",
   "optSysPowerPlan": "Plano de energia de elevado desempenho",

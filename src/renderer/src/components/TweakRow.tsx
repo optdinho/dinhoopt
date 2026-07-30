@@ -1,6 +1,7 @@
 import type { WindowsTweakDef } from '@shared/types'
 import { Check, CircleCheckBig } from 'lucide-react'
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface TweakRowProps {
   tweak: WindowsTweakDef
@@ -21,6 +22,7 @@ export const TweakRow = memo(function TweakRow({
   index,
   onToggle,
 }: TweakRowProps) {
+  const { t } = useTranslation('windowsTweaks')
   return (
     <div
       className="group relative flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 transition-all duration-200 hover:bg-white/[0.03]"
@@ -68,7 +70,9 @@ export const TweakRow = memo(function TweakRow({
             {tweak.name}
           </span>
           {tweak.experimental && (
-            <span className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-[10px] font-medium text-yellow-500">EXP</span>
+            <span className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-[10px] font-medium text-yellow-500">
+              {t('experimental')}
+            </span>
           )}
         </div>
         <div className="mt-0.5 text-[12px] leading-relaxed text-zinc-400 transition-colors group-hover:text-zinc-300">

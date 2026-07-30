@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type { DirectStorageStatus, GameModeAuditReport, GameModeConfig, GameModeProgress } from '@shared/types'
 import { ipcMain } from 'electron'
@@ -10,8 +12,6 @@ import {
   suppressCurrentGame,
 } from '../../services/game-detector'
 import { runGameModeAudit } from '../../services/game-mode-audit'
-import { existsSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { getLogger } from '../../services/logger.service'
 import { getSettings } from '../../services/settings-store'
 import { startClipCapture } from '../clips-engine-connection'
@@ -57,7 +57,10 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
       }
     }
     if (existing) {
-      getLogger().warning('game-mode', 'Previous deactivation left unrestored items — clearing stale snapshot and re-activating')
+      getLogger().warning(
+        'game-mode',
+        'Previous deactivation left unrestored items — clearing stale snapshot and re-activating',
+      )
       deleteSnapshot()
     }
     autoActivated = false
@@ -99,7 +102,13 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
     return checkDirectStorage()
   })
 
-  initGameDetector(getWindow, sendProgress, sendAutoEvent)
+  ipcMain.handle(IPC.GAME_MODE_DETECTOR_START, () => {
+    initGameDetector(getWindow, sendProgress, sendAutoEvent)
+  })
+
+  ipcMain.handle(IPC.GAME_MODE_DETECTOR_STOP, () => {
+    stopGameDetector()
+  })
 }
 
 async function checkDirectStorage(): Promise<DirectStorageStatus> {

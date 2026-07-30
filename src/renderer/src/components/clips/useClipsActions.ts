@@ -9,6 +9,7 @@ interface ClipsActionDeps {
   selectedClips: Set<string>
   favorites: Set<string>
   setStarting: (v: boolean) => void
+  setStopping: (v: boolean) => void
   setLoading: (v: boolean) => void
   setConfig: React.Dispatch<React.SetStateAction<ClipsConfig | null>>
   setFavorites: React.Dispatch<React.SetStateAction<Set<string>>>
@@ -27,6 +28,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
     selectedClips,
     favorites,
     setStarting,
+    setStopping,
     setLoading,
     setConfig,
     setFavorites,
@@ -82,6 +84,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
   }, [status.running, setStarting, refreshStatus, t])
 
   const handleStopRecording = useCallback(async () => {
+    setStopping(true)
     try {
       if (status.capturing) {
         await window.dinho?.clipsStopCapture()
@@ -91,8 +94,10 @@ export function useClipsActions(deps: ClipsActionDeps) {
       await refreshStatus()
     } catch (err) {
       toast.error(String(err))
+    } finally {
+      setStopping(false)
     }
-  }, [status.capturing, refreshStatus, t])
+  }, [status.capturing, setStopping, refreshStatus, t])
 
   const handleSaveClip = useCallback(async () => {
     setLoading(true)

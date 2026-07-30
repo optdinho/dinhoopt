@@ -1,3 +1,4 @@
+import { MotionConfig } from 'framer-motion'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './i18n'
@@ -22,7 +23,9 @@ if (import.meta.env.DEV) {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <MotionConfig reducedMotion="user">
+        <App />
+      </MotionConfig>
     </ErrorBoundary>
   </React.StrictMode>,
 )

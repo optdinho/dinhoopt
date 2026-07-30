@@ -30,15 +30,16 @@ export function registerProgramUninstallerIpc(getWindow: WindowGetter): void {
   })
 
   ipcMain.handle(IPC.UNINSTALLER_UNINSTALL, async (event, programId: string): Promise<UninstallResult> => {
-    if (!validateSender(event, getWindow())) return {
-      success: false,
-      programName: 'Unknown',
-      exitCode: null,
-      error: 'Invalid sender',
-      leftoversFound: 0,
-      leftoversCleaned: 0,
-      leftoversSize: 0,
-    }
+    if (!validateSender(event, getWindow()))
+      return {
+        success: false,
+        programName: 'Unknown',
+        exitCode: null,
+        error: 'Invalid sender',
+        leftoversFound: 0,
+        leftoversCleaned: 0,
+        leftoversSize: 0,
+      }
     const program = cachedPrograms.find((p) => p.id === programId)
     if (!program) {
       getLogger().warning('program-uninstaller', `Program ${programId} not found in cache`)

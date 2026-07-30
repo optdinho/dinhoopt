@@ -36,7 +36,7 @@ export function NetworkMonitor() {
     fetchConnections()
   }, [fetchConnections])
 
-  const uniqueProcesses = useMemo(() => {
+  const _uniqueProcesses = useMemo(() => {
     const names = new Set<string>()
     for (const c of connections) {
       if (c.processName && c.processName !== 'Unknown') names.add(c.processName)
@@ -92,7 +92,10 @@ export function NetworkMonitor() {
   const SortIcon = ({ field }: { field: SortField }) => (
     <ArrowUpDown
       className="h-3 w-3 shrink-0"
-      style={{ color: sortField === field ? 'var(--accent)' : 'var(--text-muted)', opacity: sortField === field ? 1 : 0.4 }}
+      style={{
+        color: sortField === field ? 'var(--accent)' : 'var(--text-muted)',
+        opacity: sortField === field ? 1 : 0.4,
+      }}
     />
   )
 
@@ -134,7 +137,10 @@ export function NetworkMonitor() {
       {/* Filters */}
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+          <Search
+            className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+            style={{ color: 'var(--text-muted)' }}
+          />
           <input
             type="text"
             placeholder={t('monitorFilterProcess')}
@@ -160,14 +166,20 @@ export function NetworkMonitor() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.1)' }}>
+        <div
+          className="flex items-center gap-2 rounded-xl px-4 py-3"
+          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.1)' }}
+        >
           <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
           <span className="text-[13px] text-red-300">{error}</span>
         </div>
       )}
 
       {loading && connections.length === 0 && (
-        <div className="flex items-center gap-3 rounded-2xl px-5 py-8" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}>
+        <div
+          className="flex items-center gap-3 rounded-2xl px-5 py-8"
+          style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
+        >
           <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
           <span className="text-[13px] text-zinc-400">{t('monitorLoading')}</span>
         </div>
@@ -184,12 +196,14 @@ export function NetworkMonitor() {
           <table className="w-full text-left">
             <thead>
               <tr style={{ background: 'var(--bg-hover)' }}>
-                {([
-                  ['remoteAddress', t('monitorColRemote')],
-                  ['remotePort', t('monitorColPort')],
-                  ['processName', t('monitorColProcess')],
-                  ['state', t('monitorColState')],
-                ] as const).map(([field, label]) => (
+                {(
+                  [
+                    ['remoteAddress', t('monitorColRemote')],
+                    ['remotePort', t('monitorColPort')],
+                    ['processName', t('monitorColProcess')],
+                    ['state', t('monitorColState')],
+                  ] as const
+                ).map(([field, label]) => (
                   <th
                     key={field}
                     className="cursor-pointer select-none px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider"
@@ -202,7 +216,10 @@ export function NetworkMonitor() {
                     </div>
                   </th>
                 ))}
-                <th className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                <th
+                  className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider"
+                  style={{ color: 'var(--text-muted)' }}
+                >
                   PID
                 </th>
               </tr>

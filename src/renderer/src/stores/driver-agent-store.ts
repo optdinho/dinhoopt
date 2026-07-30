@@ -1,5 +1,6 @@
 import type { AgentEvaluationResult } from '@shared/driver-agent-types'
 import { create } from 'zustand'
+import i18n from '../i18n'
 
 interface DriverAgentState {
   result: AgentEvaluationResult | null
@@ -32,7 +33,7 @@ export const useDriverAgentStore = create<DriverAgentState>((set, get) => ({
     } catch (err) {
       set({
         evaluating: false,
-        error: err instanceof Error ? err.message : 'Falha na avaliação dos agentes',
+        error: err instanceof Error ? err.message : i18n.t('driverAgentEvalFailed'),
       })
     }
   },
@@ -61,7 +62,7 @@ export const useDriverAgentStore = create<DriverAgentState>((set, get) => ({
     } catch (err) {
       set({
         installing: false,
-        error: err instanceof Error ? err.message : 'Falha na instalação',
+        error: err instanceof Error ? err.message : i18n.t('driverAgentInstallFailed'),
       })
     }
   },

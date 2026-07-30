@@ -290,7 +290,7 @@ export function WindowsTweaksPage() {
             </div>
             <div className="h-1.5 bg-zinc-800">
               <motion.div
-                className="h-full"
+                className="h-full will-change-transform"
                 style={{ background: 'linear-gradient(90deg, #06b6d4, #0891b2)' }}
                 initial={{ width: 0 }}
                 animate={{ width: `${(progress.current / progress.total) * 100}%` }}
@@ -679,7 +679,7 @@ export function WindowsTweaksPage() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
+                    className="overflow-hidden will-change-transform"
                   >
                     <div className="space-y-0.5 border-t px-5 py-2" style={{ borderColor: 'var(--border-subtle)' }}>
                       {catTweaks.map(({ tweak, applied }, idx) => {

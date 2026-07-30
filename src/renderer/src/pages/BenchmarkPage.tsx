@@ -245,7 +245,7 @@ export function BenchmarkPage() {
                   <div className="mt-1 text-[10px] text-zinc-600">{card.detail}</div>
                   <div className="mt-2 h-1 rounded-full bg-zinc-800">
                     <motion.div
-                      className="h-full rounded-full"
+                      className="h-full rounded-full will-change-transform"
                       style={{ background: card.color }}
                       initial={{ width: 0 }}
                       animate={{ width: `${(card.score / card.max) * 100}%` }}
@@ -269,7 +269,7 @@ export function BenchmarkPage() {
               </div>
               <div className="h-2 rounded-full bg-zinc-800">
                 <motion.div
-                  className="h-full rounded-full"
+                  className="h-full rounded-full will-change-transform"
                   style={{
                     background: `linear-gradient(90deg, ${SCORE_COLORS[result.scoreClass]}, ${SCORE_COLORS[result.scoreClass]}88)`,
                     boxShadow: `0 0 12px ${SCORE_GLOWS[result.scoreClass]}`,

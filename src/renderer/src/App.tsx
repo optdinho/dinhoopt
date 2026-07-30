@@ -5,6 +5,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-d
 import { Toaster } from 'sonner'
 import { AppShell } from './components/layout/AppShell'
 import { useScheduledScan } from './hooks/useScheduledScan'
+import { DURATION, EASE } from './lib/animation'
 import { RTL_LANGUAGES } from './lib/languages'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
@@ -211,14 +212,14 @@ export function App() {
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
-  animate: { opacity: 1, y: 0 },
+  animate: { opacity: 1, y: 0, willChange: 'transform, opacity' },
   exit: { opacity: 0, y: -8 },
 }
 
 const pageTransition = {
   type: 'tween' as const,
-  ease: 'easeOut' as const,
-  duration: 0.2,
+  ease: EASE,
+  duration: DURATION.normal,
 }
 
 function PageTransition({ children }: { children: ReactNode }) {
@@ -240,7 +241,7 @@ function AnimatedRoutes() {
   const location = useLocation()
   const wrap = (element: ReactNode) => <PageTransition>{element}</PageTransition>
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence mode="popLayout">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={wrap(<DashboardPage />)} />
         <Route path="/cleaner" element={wrap(<CleanerPage />)} />

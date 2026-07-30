@@ -393,6 +393,8 @@ describe('preload API bridge', () => {
       'perfGetSystemInfo',
       'perfStartMonitoring',
       'perfStopMonitoring',
+      'perfStartProcessPolling',
+      'perfStopProcessPolling',
       'perfKillProcess',
       'perfGetDiskHealth',
     ]) {

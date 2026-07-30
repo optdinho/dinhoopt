@@ -35,5 +35,9 @@
   "packPorn": "Bloquear Conteúdo Adulto",
   "packPornDesc": "Domínios conhecidos de conteúdo adulto (controle parental)",
   "revertButton": "Reverter",
-  "toastRevertSuccess": "Restaurado o conteúdo original do arquivo hosts"
+  "toastRevertSuccess": "Restaurado o conteúdo original do arquivo hosts",
+  "placeholderHeader": "# Digite o comentário do cabeçalho...",
+  "placeholderIp": "127.0.0.1",
+  "placeholderHostname": "exemplo.com",
+  "placeholderComment": "# comentário"
 }

@@ -1,4 +1,5 @@
 import { Loader2, RefreshCw, Shield, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface ServiceBulkActionsProps {
   isBusy: boolean
@@ -27,6 +28,7 @@ export function ServiceBulkActions({
   onDisableSelected,
   onEnableSelected,
 }: ServiceBulkActionsProps) {
+  const { t } = useTranslation('services')
   return (
     <div className="mb-5 flex items-center gap-3">
       <button
@@ -40,7 +42,7 @@ export function ServiceBulkActions({
         }}
       >
         {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" strokeWidth={2} />}
-        {scanning ? 'Scanning...' : 'Scan Services'}
+        {scanning ? t('scanningServices') : t('scanServicesButton')}
       </button>
 
       {hasScanned && (
@@ -58,7 +60,7 @@ export function ServiceBulkActions({
             }}
           >
             <Sparkles className="h-4 w-4" strokeWidth={2} />
-            Select Recommended ({totalSafeToDisable})
+            {t('selectRecommended', { count: totalSafeToDisable })}
           </button>
 
           {selectedActiveCount > 0 && (
@@ -73,7 +75,7 @@ export function ServiceBulkActions({
               }}
             >
               {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" strokeWidth={2} />}
-              {applying ? 'Applying...' : `Disable (${selectedActiveCount})`}
+              {applying ? t('applying') : t('disableSelected', { count: selectedActiveCount })}
             </button>
           )}
           {selectedDisabledCount > 0 && (
@@ -92,7 +94,7 @@ export function ServiceBulkActions({
               ) : (
                 <RefreshCw className="h-4 w-4" strokeWidth={2} />
               )}
-              {applying ? 'Applying...' : `Enable (${selectedDisabledCount})`}
+              {applying ? t('applying') : t('enableSelected', { count: selectedDisabledCount })}
             </button>
           )}
         </>

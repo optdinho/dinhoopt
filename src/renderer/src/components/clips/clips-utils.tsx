@@ -145,10 +145,7 @@ export function formatUptime(seconds: number): string {
 
 export function formatKey(vk: number, modifiers: string[]): string {
   const order: Record<string, number> = { Ctrl: 0, Shift: 1, Alt: 2 }
-  const parts = [
-    ...modifiers.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99)),
-    VK_MAP[vk] || `0x${vk.toString(16)}`,
-  ]
+  const parts = [...modifiers.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99)), VK_MAP[vk] || `0x${vk.toString(16)}`]
   return parts.join('+')
 }
 
@@ -191,7 +188,7 @@ export function ConfigSection({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="overflow-hidden"
+            className="overflow-hidden will-change-transform"
           >
             <div className="px-4 pb-4">{content}</div>
           </motion.div>
@@ -330,7 +327,7 @@ export function CollapsibleMini({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.15, ease: 'easeInOut' }}
-            className="overflow-hidden"
+            className="overflow-hidden will-change-transform"
           >
             <div className="px-2.5 pb-2">{children}</div>
           </motion.div>

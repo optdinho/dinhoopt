@@ -1,10 +1,10 @@
+import { motion } from 'framer-motion'
 import type { LucideIcon } from 'lucide-react'
 import { Clock } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useHistoryStore } from '@/stores/history-store'
 import { cn, formatDate } from '@/lib/utils'
+import { useHistoryStore } from '@/stores/history-store'
 
 export interface EmptyAction {
   label: string
@@ -38,9 +38,7 @@ export function EmptyState({
 
   const lastScanInfo = useMemo(() => {
     if (!showLastScan) return null
-    const matching = lastScanType
-      ? entries.filter((e) => e.type === lastScanType)
-      : entries
+    const matching = lastScanType ? entries.filter((e) => e.type === lastScanType) : entries
     if (matching.length === 0) return null
     const latest = matching[0]
     if (!latest) return null

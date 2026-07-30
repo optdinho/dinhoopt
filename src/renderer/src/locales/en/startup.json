@@ -62,5 +62,8 @@
   "safetyTooltipLocked": "Link to DiNho Optimizer Cloud for safety ratings",
   "safetyScore": "Safety: {{score}}/10",
   "safetyAnalyzed": "Analyzed {{date}}",
-  "sortBySafety": "Sort by Safety"
+  "sortBySafety": "Sort by Safety",
+  "schedulesLink": "Scheduler",
+  "enableItem": "Enable {{name}}",
+  "disableItem": "Disable {{name}}"
 }

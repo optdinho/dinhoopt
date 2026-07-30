@@ -18,11 +18,7 @@ export function initAuditLog(): void {
   auditPath = join(dir, 'audit.jsonl')
 }
 
-export function logAudit(
-  action: string,
-  category: string,
-  details: Record<string, unknown> = {},
-): void {
+export function logAudit(action: string, category: string, details: Record<string, unknown> = {}): void {
   if (!auditPath) return
   const entry: AuditEntry = {
     timestamp: new Date().toISOString(),
@@ -32,7 +28,7 @@ export function logAudit(
     admin: process.env.ELEVATED === '1',
   }
   try {
-    appendFileSync(auditPath, JSON.stringify(entry) + '\n')
+    appendFileSync(auditPath, `${JSON.stringify(entry)}\n`)
   } catch {
     /* best effort — audit logging must never crash the app */
   }

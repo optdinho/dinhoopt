@@ -44,7 +44,7 @@ export function QualitySection({
         {[
           {
             id: 'muito-alta',
-            label: 'Muito Alta',
+            label: t('presetMuitoAlta'),
             sub: 'CQ 18 \u00b7 1440p',
             icon: '\u25cf\u25cf\u25cf',
             config: {
@@ -62,7 +62,7 @@ export function QualitySection({
           },
           {
             id: 'alta',
-            label: 'Alta',
+            label: t('presetAlta'),
             sub: 'CQ 22 \u00b7 1080p',
             icon: '\u25cf\u25cf\u25cb',
             config: {
@@ -80,7 +80,7 @@ export function QualitySection({
           },
           {
             id: 'boa',
-            label: 'Boa',
+            label: t('presetBoa'),
             sub: 'CQ 24 \u00b7 720p',
             icon: '\u25cf\u25cb\u25cb',
             config: {
@@ -148,12 +148,12 @@ export function QualitySection({
         </p>
         <div className="flex flex-wrap gap-1">
           {[
-            { id: 'auto', label: 'Auto' },
-            { id: 'h264', label: 'H.264' },
-            { id: 'hevc', label: 'HEVC' },
-            { id: 'av1', label: 'AV1' },
-            { id: 'libx264', label: 'SW H.264' },
-            { id: 'libx265', label: 'SW HEVC' },
+            { id: 'auto', labelKey: 'codecAuto' },
+            { id: 'h264', labelKey: 'codecH264' },
+            { id: 'hevc', labelKey: 'codecHevc' },
+            { id: 'av1', labelKey: 'codecAv1' },
+            { id: 'libx264', labelKey: 'codecSwH264' },
+            { id: 'libx265', labelKey: 'codecSwHevc' },
           ].map((c) => (
             <button
               key={c.id}
@@ -165,7 +165,7 @@ export function QualitySection({
                 color: (config.codec ?? 'auto') === c.id ? '#fff' : 'var(--text-primary)',
               }}
             >
-              {c.label}
+              {t(c.labelKey)}
             </button>
           ))}
         </div>
@@ -175,7 +175,7 @@ export function QualitySection({
       {gpuList.length > 0 && (
         <div>
           <p className="mb-1 text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-dim)' }}>
-            GPU
+            {t('gpuLabel')}
             <TipBadge id="gpu" activeTip={activeTip} setActiveTip={setActiveTip} />
           </p>
           <select
@@ -188,7 +188,7 @@ export function QualitySection({
               border: '1px solid rgba(113,113,122,0.15)',
             }}
           >
-            <option value={-1}>Auto</option>
+            <option value={-1}>{t('codecAuto')}</option>
             {gpuList.map((gpu) => (
               <option key={gpu.index} value={gpu.index}>
                 {gpu.name}
@@ -313,7 +313,7 @@ export function QualitySection({
       {estimatedRamMB > 0 && (
         <div>
           <div className="mb-1 flex justify-between text-[10px]">
-            <span style={{ color: 'var(--text-dim)' }}>RAM {t('clips')}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('ramLabel')}</span>
             <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
               {_status.replayBufferBytes
                 ? `${Math.round(_status.replayBufferBytes / 1024 / 1024)} MB`

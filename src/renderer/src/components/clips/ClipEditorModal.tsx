@@ -353,7 +353,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     onTimeUpdate={() => {
                       if (videoRef.current) setCurrentTime(videoRef.current.currentTime)
                     }}
-                    onError={() => toast.error('Failed to load video preview')}
+                    onError={() => toast.error(t('videoPreviewFailed'))}
                     preload="auto"
                   />
                 </div>
@@ -492,7 +492,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       {fmt(endSec)}
                     </span>
                     <span className="ml-auto text-[9px]" style={{ color: 'var(--text-muted)' }}>
-                      arraste as alças ou use I/O
+                      {t('trimHint')}
                     </span>
                   </div>
 

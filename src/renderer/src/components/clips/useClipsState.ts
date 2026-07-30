@@ -1,5 +1,5 @@
 import type { ClipInfo, ClipsConfig, ClipsEngineStatus, MicDeviceInfo } from '@shared/types'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import type { FilterTab } from './clips-utils'
@@ -13,6 +13,7 @@ export interface ClipsState {
   clips: ClipInfo[]
   loading: boolean
   starting: boolean
+  stopping: boolean
   rebindingId: string | null
   setRebindingId: (id: string | null) => void
   filterTab: FilterTab
@@ -82,6 +83,7 @@ export function useClipsState(): ClipsState {
   const [clips, setClips] = useState<ClipInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [rebindingId, setRebindingId] = useState<string | null>(null)
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -111,25 +113,20 @@ export function useClipsState(): ClipsState {
 
   const tooltipContent: Record<string, string> = useMemo(
     () => ({
-      quality:
-        'Define a qualidade do vídeo. Maior qualidade = arquivos maiores. CQ controla a compressão (menor = melhor).',
-      codec:
-        'Codec de vídeo. Auto detecta o melhor disponível. H.264/HEVC/AV1 usam aceleração gráfica. Software usa CPU.',
-      gpu: 'Placa de vídeo usada para gravar. Selecione caso tenha mais de uma GPU no sistema.',
-      resolution: 'Tamanho do vídeo gravado. Maior resolução = mais qualidade e mais espaço em disco.',
-      fps: 'Quadros por segundo. 60 FPS é ideal para jogos. 30 FPS economiza espaço. 120+ requer monitor de alta taxa.',
-      replay: 'Quanto tempo de jogo é mantido em memória para salvar o clipe. Mais tempo usa mais RAM.',
+      quality: t('tooltipQuality'),
+      codec: t('tooltipCodec'),
+      gpu: t('tooltipGpu'),
+      resolution: t('tooltipResolution'),
+      fps: t('tooltipFps'),
+      replay: t('tooltipReplay'),
       'force-software': t('forceSoftwareTooltip'),
-      mic: 'Grava o áudio do microfone junto com o vídeo do jogo.',
-      loopback: 'Grava o áudio do sistema (jogo, Discord, navegador) junto com o vídeo.',
+      mic: t('tooltipMic'),
+      loopback: t('tooltipLoopback'),
       ptt: t('pushToTalkTooltip'),
-      'sample-rate': 'Taxa de amostragem do áudio. 48kHz é o padrão para vídeos. 96kHz para áudio de alta qualidade.',
-      'game-audio':
-        'Grava apenas o áudio do jogo e do microfone, silenciando outros aplicativos (Discord, navegador, etc).',
-      'noise-suppression':
-        'Reduz ruído de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Útil para eliminar barulhos de teclado, ventoinha ou ambiente.',
-      'adaptive-quality':
-        'Ajusta automaticamente a qualidade da gravação conforme a RAM disponível. Reduz CQ, resolução e buffer em PCs com pouca memória para evitar travamentos. Desative para qualidade máxima sempre.',
+      'sample-rate': t('tooltipSampleRate'),
+      'game-audio': t('tooltipGameAudio'),
+      'noise-suppression': t('tooltipNoiseSuppression'),
+      'adaptive-quality': t('tooltipAdaptiveQuality'),
     }),
     [t],
   )
@@ -205,6 +202,15 @@ export function useClipsState(): ClipsState {
     if (status.running) loadMicDevices()
   }, [status.running, loadMicDevices])
 
+  // Refresh clips when engine starts running (output directory may have changed)
+  const prevRunning = useRef(status.running)
+  useEffect(() => {
+    if (status.running && !prevRunning.current) {
+      refreshClips()
+    }
+    prevRunning.current = status.running
+  }, [status.running, refreshClips])
+
   // Load GPU list once
   useEffect(() => {
     if (!statusLoaded || gpuList.length > 0) return
@@ -248,12 +254,16 @@ export function useClipsState(): ClipsState {
 
   // Initial data load — all three in one effect so clipsLoaded is set in same microtask batch
   useEffect(() => {
+    window.dinho?.gameModeDetectorStart?.()
     ;(async () => {
       await Promise.all([refreshStatus(), refreshConfig()])
       setStatusLoaded(true)
       await refreshClips()
       setClipsLoaded(true)
     })()
+    return () => {
+      window.dinho?.gameModeDetectorStop?.()
+    }
   }, [refreshStatus, refreshConfig, refreshClips])
 
   // Poll status every 3s
@@ -277,6 +287,14 @@ export function useClipsState(): ClipsState {
     return () => unsub?.()
   }, [refreshClips, t])
 
+  // Listen for durations-ready event (background duration computation finished)
+  useEffect(() => {
+    const unsub = window.dinho?.clipsOnDurationsReady?.(() => {
+      refreshClips()
+    })
+    return () => unsub?.()
+  }, [refreshClips])
+
   // ── Actions (delegated to useClipsActions) ───────────────
 
   const actions = useClipsActions({
@@ -285,6 +303,7 @@ export function useClipsState(): ClipsState {
     selectedClips,
     favorites,
     setStarting,
+    setStopping,
     setLoading,
     setConfig,
     setFavorites,
@@ -366,6 +385,7 @@ export function useClipsState(): ClipsState {
 
   return {
     status,
+    stopping,
     statusLoaded,
     clipsLoaded,
     config,

@@ -72,5 +72,6 @@
     "autoTuningDescription": "Reduz bufferbloat e jitter durante jogos. Recomendado para jogos competitivos. Pode reduzir downloads grandes.",
     "timerApplied": "Configuração do timer aplicada!",
     "timerReverted": "Configurações do timer revertidas para padrão!",
-    "revertTimerDefaults": "Reverter Timer para Padrão"
+    "revertTimerDefaults": "Reverter Timer para Padrão",
+    "experimental": "EXP"
 }

@@ -3,12 +3,14 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "a11y": {
         "useSemanticElements": "off"
       },
       "suspicious": {
-        "noExplicitAny": "error"
+        "noExplicitAny": "error",
+        "noAssignInExpressions": "off",
+        "noTemplateCurlyInString": "off"
       },
       "style": {
         "noNonNullAssertion": "off",
@@ -33,7 +35,7 @@
     }
   },
   "files": {
-    "includes": ["**", "!node_modules", "!out", "!dist", "!coverage", "!**/*.json", "!**/*.md"]
+    "includes": ["**", "!**/src/main/services/coverage/**", "!node_modules", "!out", "!dist", "!coverage", "!**/*.json", "!**/*.md"]
   },
   "overrides": [
     {
@@ -42,6 +44,9 @@
         "rules": {
           "suspicious": {
             "noExplicitAny": "off"
+          },
+          "complexity": {
+            "noBannedTypes": "off"
           }
         }
       }

@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { app, BrowserWindow } from 'electron'
 import type { ClipInfo, ClipsEngineStatus } from '@shared/types'
+import { IPC } from '@shared/channels'
 import { buildEngineConfig, config as C, getDefaultOutputDir } from '../services/clips-config-manager'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
@@ -41,6 +43,22 @@ export {
 } from './clips-engine'
 export { isPipeConnected, sendPipeCommand, sendPipeCommandLongRunning, sendWithFallback } from './clips-pipe'
 
+// ─── Clips list cache ─────────────────────────────────────────
+
+let _clipsCache: ClipInfo[] | null = null
+let _cacheDirty = true
+let _lastReadDir: string | null = null
+
+export function invalidateClipsCache(): void {
+  _cacheDirty = true
+}
+
+export function resetClipsCache(): void {
+  _clipsCache = null
+  _cacheDirty = true
+  _lastReadDir = null
+}
+
 // ─── Duration cache (LRU, 500 entries) ───────────────────────
 
 interface CacheEntry {
@@ -67,6 +85,7 @@ function cacheSet(filePath: string, duration: number, mtimeMs: number): void {
     if (oldest !== undefined) _durationCache.delete(oldest)
   }
   _durationCache.set(filePath, { duration, mtimeMs })
+  schedulePersist()
 }
 
 export function invalidateDurationCache(filePath?: string): void {
@@ -75,7 +94,60 @@ export function invalidateDurationCache(filePath?: string): void {
   } else {
     _durationCache.clear()
   }
+  schedulePersist()
 }
+
+// ─── Persistent duration cache (JSON on disk, debounced) ─────
+
+let _persistTimer: ReturnType<typeof setTimeout> | null = null
+
+function cacheDir(): string {
+  return app.isPackaged ? app.getPath('userData') : join(app.getPath('userData'), 'DiNho-Dev')
+}
+
+function cacheFilePath(): string {
+  return join(cacheDir(), 'clips-duration-cache.json')
+}
+
+function loadPersistedCache(): void {
+  try {
+    const path = cacheFilePath()
+    if (!existsSync(path)) return
+    const raw = readFileSync(path, 'utf-8')
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return
+    for (const entry of parsed) {
+      const e = entry as Record<string, unknown> | null
+      if (!e || typeof e.path !== 'string' || typeof e.duration !== 'number' || typeof e.mtimeMs !== 'number') continue
+      if (_durationCache.size >= MAX_CACHE_ENTRIES) break
+      _durationCache.set(e.path, { duration: e.duration, mtimeMs: e.mtimeMs })
+    }
+  } catch {
+    /* corrupt cache file, ignore */
+  }
+}
+
+function schedulePersist(): void {
+  if (_persistTimer) clearTimeout(_persistTimer)
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null
+    try {
+      const dir = cacheDir()
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      const entries = Array.from(_durationCache.entries()).map(([p, e]) => ({
+        path: p,
+        duration: e.duration,
+        mtimeMs: e.mtimeMs,
+      }))
+      writeFileSync(cacheFilePath(), JSON.stringify(entries), 'utf-8')
+    } catch {
+      /* silent */
+    }
+  }, 5000)
+}
+
+// Load persisted cache on module init
+loadPersistedCache()
 
 const DURATION_CONCURRENCY = 6
 
@@ -94,7 +166,7 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
   return results
 }
 
-// Batch duration lookup — returns cached values, computes missing ones with concurrency limit
+// Batch duration lookup — computes all missing durations synchronously
 export async function getDurationsForClips(
   clips: Array<{ path: string; mtimeMs: number }>,
 ): Promise<Map<string, number>> {
@@ -125,6 +197,49 @@ export async function getDurationsForClips(
   }
 
   return result
+}
+
+// Compute missing durations in background, update cache, and notify renderer
+function computeMissingDurations(
+  missing: Array<{ path: string; mtimeMs: number }>,
+): void {
+  runWithConcurrency(
+    missing.map((clip) => async () => {
+      const duration = await getVideoDuration(clip.path)
+      cacheSet(clip.path, duration, clip.mtimeMs)
+      return { path: clip.path, duration }
+    }),
+    DURATION_CONCURRENCY,
+  )
+    .then((computed) => {
+      // Update clips cache entries in-place so next read hits warm cache
+      if (_clipsCache) {
+        const map = new Map(computed.map((c) => [c.path, c.duration]))
+        _clipsCache = _clipsCache.map((clip) => {
+          const dur = map.get(clip.path)
+          return dur !== undefined ? { ...clip, duration: dur } : clip
+        })
+      }
+      // Notify renderer that durations are ready
+      notifyDurationsReady()
+    })
+    .catch(() => {
+      /* silent */
+    })
+}
+
+// Notify renderer that background durations are ready
+function notifyDurationsReady(): void {
+  try {
+    const wins = BrowserWindow.getAllWindows()
+    for (const win of wins) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.CLIPS_DURATIONS_READY)
+      }
+    }
+  } catch {
+    /* silent */
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────
@@ -164,12 +279,17 @@ export async function getVideoDuration(filePath: string): Promise<number> {
 
 export async function readClipsFromDisk(): Promise<ClipInfo[]> {
   const dir = getDefaultOutputDir()
-  try {
-    await new Promise<void>((resolve, reject) => {
-      existsSync(dir) ? resolve() : reject(new Error('not found'))
-    })
-  } catch {
-    return []
+  if (!_cacheDirty && _clipsCache && _lastReadDir === dir) return _clipsCache
+  _lastReadDir = dir
+
+  if (!existsSync(dir)) {
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch {
+      _clipsCache = []
+      _cacheDirty = false
+      return []
+    }
   }
   try {
     const allFiles = await readdir(dir)
@@ -196,17 +316,39 @@ export async function readClipsFromDisk(): Promise<ClipInfo[]> {
 
     valid.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
-    const durationMap = await getDurationsForClips(valid)
+    // Compute missing durations in background to avoid blocking the renderer
+    const durations: Array<{ path: string; duration: number }> = []
+    const missing: Array<{ path: string; mtimeMs: number }> = []
+    for (const e of valid) {
+      const cached = cacheGet(e.path, e.mtimeMs)
+      if (cached !== null) {
+        durations.push({ path: e.path, duration: cached })
+      } else {
+        durations.push({ path: e.path, duration: 0 })
+        missing.push({ path: e.path, mtimeMs: e.mtimeMs })
+      }
+    }
 
-    return valid.map((e) => ({
-      name: e.name,
-      path: e.path,
-      size: e.size,
-      createdAt: e.createdAt,
-      duration: durationMap.get(e.path) ?? 0,
-    }))
+    if (missing.length > 0) {
+      computeMissingDurations(missing)
+    }
+
+    _clipsCache = valid.map((e) => {
+      const dur = durations.find((d) => d.path === e.path)
+      return {
+        name: e.name,
+        path: e.path,
+        size: e.size,
+        createdAt: e.createdAt,
+        duration: dur?.duration ?? 0,
+      }
+    })
+    _cacheDirty = false
+    return _clipsCache
   } catch (err) {
     getLogger().error('clips', `Failed to list clips: ${err}`)
+    _clipsCache = []
+    _cacheDirty = false
     return []
   }
 }

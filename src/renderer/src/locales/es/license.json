@@ -22,5 +22,9 @@
   "hwidDescription": "Este HWID identifica su equipo. Envíelo al soporte para vincular su licencia.",
   "licensedBy": "Con licencia de DiNho © 2026",
   "invalidKeyDefault": "Clave inválida o expirada.",
-  "keyPlaceholder": "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+  "keyPlaceholder": "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX",
+  "activationError": "Error en la activación",
+  "activationFailedShort": "Error al activar",
+  "noConnection": "Sin conexión",
+  "checkFailed": "Error al verificar licencia"
 }

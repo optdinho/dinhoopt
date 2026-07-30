@@ -23,6 +23,10 @@ export const VALID_OPTIMIZATION_IDS = new Set<string>([
   'cpu-game-priority',
   'net-flush-dns',
   'net-disable-nagle',
+  'pcie-aspm-off',
+  'usb-selective-suspend-off',
+  'processor-min-max',
+  'vbs-enable',
 ])
 
 const PROCESS_NAME_RE = /^[A-Za-z0-9._\- ]+$/

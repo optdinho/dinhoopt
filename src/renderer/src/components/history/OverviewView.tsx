@@ -1,22 +1,11 @@
 import type { HistoryEntryType, ScanHistoryEntry } from '@shared/types'
 import { BarChart3, Clock, HardDrive, TrendingUp } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { formatBytes } from '@/lib/utils'
-import { PIE_COLORS, typeConfigBase } from './constants'
+import { PIE_COLORS } from './constants'
 import { formatDuration } from './formatDuration'
 import { MiniStat } from './MiniStat'
 import { RecentScanRow } from './RecentScanRow'
@@ -163,10 +152,7 @@ export function OverviewView({
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                 {activeTypes.map((tp) => (
                   <div key={tp} className="flex items-center gap-1.5">
-                    <div
-                      className="h-2 w-2 rounded-sm"
-                      style={{ background: TYPE_COLORS[tp] ?? '#888' }}
-                    />
+                    <div className="h-2 w-2 rounded-sm" style={{ background: TYPE_COLORS[tp] ?? '#888' }} />
                     <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                       {t(`typeLabels.${tp}`, { defaultValue: tp })}
                     </span>

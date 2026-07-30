@@ -1,15 +1,12 @@
-import type { DiskSmartInfo } from '@shared/types'
 import { BarChart3, Check, FileStack, HardDrive, MemoryStick } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { HealthScore } from '@/components/shared/HealthScore'
-import { usePolling } from '@/hooks/usePolling'
 import { formatBytes } from '@/lib/utils'
+import { usePerfStore } from '@/stores/perf-store'
 import { toolRoutes } from './constants'
 import type { ToolCoverageItem } from './types'
-
-const STATS_POLL_INTERVAL = 60_000
 
 export function HealthCard({
   healthScore,
@@ -28,10 +25,7 @@ export function HealthCard({
 }) {
   const { t } = useTranslation('dashboard')
   const navigate = useNavigate()
-  const { data: disks } = usePolling<DiskSmartInfo[]>(
-    () => window.dinho?.perfGetDiskHealth?.() ?? Promise.resolve([]),
-    STATS_POLL_INTERVAL,
-  )
+  const disks = usePerfStore((s) => s.diskHealth)
   const disk = disks?.[0] ?? null
   const memColor = memPercent >= 85 ? '#ef4444' : memPercent >= 60 ? '#f59e0b' : '#06b6d4'
 

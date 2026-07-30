@@ -107,5 +107,12 @@
   "trimFailedToast_other": "Falha do TRIM em {{count}} unidades",
   "trimBatchFailed": "Falha ao executar o TRIM",
   "trimListFailed": "Falha ao listar as unidades",
-  "encryptedAria": "Criptografado"
+  "encryptedAria": "Criptografado",
+  "statusRecentlyTrimmed": "TRIM recente",
+  "statusOk": "OK",
+  "statusRecommended": "Recomendado",
+  "statusNotApplicable": "Não aplicável",
+  "statusDisabled": "Desativado",
+  "statusUnknown": "Desconhecido",
+  "selectDrive": "Selecionar {{drive}}"
 }

@@ -62,5 +62,8 @@
   "safetyTooltipLocked": "Ligue ao DiNho Optimizer para ver classificações de segurança",
   "safetyScore": "Segurança: {{score}}/10",
   "safetyAnalyzed": "Analisado em {{date}}",
-  "sortBySafety": "Ordenar por segurança"
+  "sortBySafety": "Ordenar por segurança",
+  "schedulesLink": "Agendador",
+  "enableItem": "Ativar {{name}}",
+  "disableItem": "Desativar {{name}}"
 }

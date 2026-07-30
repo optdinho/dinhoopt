@@ -1,5 +1,7 @@
+import { motion } from 'framer-motion'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { DURATION } from '@/lib/animation'
 import { AdminBanner } from './AdminBanner'
 import { Sidebar } from './Sidebar'
 
@@ -20,8 +22,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <button type="button" className="skip-nav" onClick={handleSkip}>
         {t('skipToContent')}
       </button>
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((v) => !v)} />
-      <div className="relative flex flex-1 flex-col overflow-hidden">
+      <motion.div
+        className="relative z-10 shrink-0 overflow-hidden"
+        animate={{ width: sidebarCollapsed ? 60 : 260 }}
+        layout
+        transition={{ duration: DURATION.slow, ease: 'easeInOut' }}
+      >
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((v) => !v)} />
+      </motion.div>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Ambient background glow */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div

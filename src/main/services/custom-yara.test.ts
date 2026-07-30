@@ -170,7 +170,7 @@ describe('CustomYaraService', () => {
 
   it('addRule rejects content exceeding 1 MB file size limit', async () => {
     const { customYaraService: service } = await getCustomYaraService()
-    const largeContent = 'rule Large { condition: true } // ' + 'x'.repeat(1_048_576)
+    const largeContent = `rule Large { condition: true } // ${'x'.repeat(1_048_576)}`
     const result = service.addRule('large.yar', largeContent)
     expect(result).toBe(false)
     expect(service.getRuleCount()).toBe(0)

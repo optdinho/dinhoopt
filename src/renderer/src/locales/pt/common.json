@@ -33,5 +33,10 @@
   "shortcutsShowHelp": "Mostrar esta ajuda",
   "shortcutsCloseModal": "Fechar modal / Voltar",
   "itemsSelected": "itens selecionados",
-  "lastScan": "Última verificação"
+  "lastScan": "Última verificação",
+  "checked": "Selecionado",
+  "name": "Nome",
+  "status": "Estado",
+  "driverAgentEvalFailed": "Falha na avaliação dos agentes",
+  "driverAgentInstallFailed": "Falha na instalação"
 }

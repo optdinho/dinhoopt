@@ -62,7 +62,7 @@ export function TweakCategoryCard({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
+            className="overflow-hidden will-change-transform"
           >
             <div className="space-y-0.5 border-t px-5 py-2" style={{ borderColor: 'var(--border-subtle)' }}>
               {tweaks.map(({ tweak, applied: isApplied }, idx) => {

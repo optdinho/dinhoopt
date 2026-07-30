@@ -13,9 +13,9 @@ export function AboutPage() {
     <div className="animate-fade-in">
       <div className="glass-card rounded-2xl p-6">
         <div className="flex items-center gap-4">
-          <img src={logoSrc} alt="DiNho Optimizer" className="h-14 w-14 rounded-xl" />
+          <img src={logoSrc} alt={t('brandName')} className="h-14 w-14 rounded-xl" />
           <div>
-            <p className="text-[16px] font-semibold text-white">DiNho Optimizer</p>
+            <p className="text-[16px] font-semibold text-white">{t('brandName')}</p>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
               {t('appVersion', { version: __APP_VERSION__ })}
             </p>

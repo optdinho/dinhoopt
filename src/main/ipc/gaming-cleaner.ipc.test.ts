@@ -52,6 +52,7 @@ vi.mock('../services/exec-utf8', () => ({
 
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
 import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
+
 const EMPTY_RESULT: ScanResult = { category: 'gaming' as any, subcategory: '', items: [], totalSize: 0, itemCount: 0 }
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {

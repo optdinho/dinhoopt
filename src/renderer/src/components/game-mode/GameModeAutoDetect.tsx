@@ -74,7 +74,7 @@ export function GameModeAutoDetect({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="overflow-hidden"
+            className="overflow-hidden will-change-transform"
             style={{ borderTop: '1px solid var(--border-subtle)' }}
           >
             <div className="flex items-center gap-4 px-5 py-3.5" style={{ borderBottom: '1px solid var(--bg-subtle)' }}>

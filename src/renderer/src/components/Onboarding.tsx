@@ -1,22 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import {
-  Briefcase,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Gamepad2,
-  Loader2,
-  Monitor,
-  Rocket,
-  Shield,
-  Sparkles,
-} from 'lucide-react'
+import { Briefcase, Check, ChevronLeft, ChevronRight, Gamepad2, Monitor, Rocket, Shield, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import logoSrc from '@/assets/logo.png'
-import { usePlatform } from '@/hooks/usePlatform'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
+import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
 
 interface OnboardingProps {
@@ -265,9 +254,7 @@ function UserTypeStep({
                       {t(`userType${ut.id.charAt(0).toUpperCase() + ut.id.slice(1)}Desc`)}
                     </p>
                   </div>
-                  {isActive && (
-                    <Check className="h-4 w-4 shrink-0" style={{ color: ut.color }} strokeWidth={2} />
-                  )}
+                  {isActive && <Check className="h-4 w-4 shrink-0" style={{ color: ut.color }} strokeWidth={2} />}
                 </button>
               </StaggerItem>
             )
@@ -394,9 +381,7 @@ function HealthCheckStep({
 
       const scanResult = await window.dinho?.systemScan?.()
       const itemsFound = Array.isArray(scanResult) ? scanResult.reduce((s, r) => s + r.itemCount, 0) : 0
-      const spaceRecovered = Array.isArray(scanResult)
-        ? scanResult.reduce((s, r) => s + r.totalSize, 0)
-        : 0
+      const spaceRecovered = Array.isArray(scanResult) ? scanResult.reduce((s, r) => s + r.totalSize, 0) : 0
       const duration = Date.now() - startTime
       const score = Math.max(10, 100 - Math.min(itemsFound / 10, 50))
 
@@ -424,7 +409,7 @@ function HealthCheckStep({
           <div className="mb-5 w-full">
             <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--bg-active)' }}>
               <motion.div
-                className="h-full rounded-full"
+                className="h-full rounded-full will-change-transform"
                 style={{ background: 'var(--accent)' }}
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
@@ -467,9 +452,7 @@ function HealthCheckStep({
                 <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                   {t('healthCheckDuration')}
                 </p>
-                <p className="text-[20px] font-bold text-zinc-200">
-                  {(result.duration / 1000).toFixed(1)}s
-                </p>
+                <p className="text-[20px] font-bold text-zinc-200">{(result.duration / 1000).toFixed(1)}s</p>
               </div>
             </div>
           </motion.div>

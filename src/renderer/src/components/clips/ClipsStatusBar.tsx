@@ -6,6 +6,7 @@ export function ClipsStatusBar({
   status,
   statusLoaded,
   starting,
+  stopping,
   loading,
   estimatedRamMB,
   handleStartRecording,
@@ -152,7 +153,17 @@ export function ClipsStatusBar({
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {status.running && status.capturing ? (
+            {stopping ? (
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium opacity-60 transition-all"
+                style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t('stoppingRecording')}
+              </button>
+            ) : status.running && status.capturing ? (
               <>
                 <button
                   type="button"

@@ -70,7 +70,12 @@ const mockInvalidateDurationCache = vi.hoisted(() => vi.fn())
 
 const realInvalidateDurationCache = vi.hoisted(() => {
   let fn: (() => void) | null = null
-  return { set: (f: () => void) => { fn = f }, call: () => fn?.() }
+  return {
+    set: (f: () => void) => {
+      fn = f
+    },
+    call: () => fn?.(),
+  }
 })
 
 vi.mock('./clips-engine-connection', async (importOriginal) => {
@@ -106,7 +111,7 @@ import type { AudioSessionInfo, ClipInfo, ClipMergeResult, ClipTrimResult, MicDe
 import { ipcMain, shell } from 'electron'
 import { config as clipsConfig } from '../services/clips-config-manager'
 import { registerClipsIpc } from './clips.ipc'
-import { stopEngineProcess } from './clips-engine-connection'
+import { stopEngineProcess, resetClipsCache } from './clips-engine-connection'
 
 function captureHandlers(): Map<string, (...args: unknown[]) => unknown> {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -193,6 +198,7 @@ describe('CLIPS_LIST_CLIPS', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     realInvalidateDurationCache.call()
+    resetClipsCache()
   })
 
   function mockDuration(stderr: string) {
@@ -288,7 +294,7 @@ describe('CLIPS_LIST_CLIPS', () => {
     expect(list[0]!.name).toBe('good.mp4')
   })
 
-  it('populates duration from ffmpeg', async () => {
+  it('populates duration from ffmpeg via background computation', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readdir).mockResolvedValue(['clip.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
     vi.mocked(stat).mockResolvedValue({ size: 100, birthtime: new Date(), mtime: new Date() } as Awaited<
@@ -299,8 +305,17 @@ describe('CLIPS_LIST_CLIPS', () => {
     const handlers = captureHandlers()
     const list = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
     expect(list).toHaveLength(1)
-    // readClipsFromDisk now computes durations inline (90.5s rounds to 91)
-    expect(list[0]!.duration).toBe(91)
+    // First call returns 0 (background computation in progress)
+    expect(list[0]!.duration).toBe(0)
+
+    // Wait for microtasks to flush (mock execFile is synchronous)
+    await new Promise((r) => setTimeout(r, 0))
+
+    // Second call should have cached duration
+    const list2 = (await getAsyncHandler(handlers, IPC.CLIPS_LIST_CLIPS)()) as ClipInfo[]
+    expect(list2).toHaveLength(1)
+    // 90.5s rounds to 91
+    expect(list2[0]!.duration).toBe(91)
   })
 
   it('returns 0 duration when ffmpeg fails', async () => {

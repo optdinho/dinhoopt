@@ -28,6 +28,7 @@ import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbna
 import {
   getCurrentStatus,
   getDurationsForClips,
+  invalidateClipsCache,
   invalidateDurationCache,
   isEngineRunning,
   isPipeConnected,
@@ -145,6 +146,7 @@ export function registerClipsIpc(): void {
         getLogger().warning('clips', `SaveClip failed: ${resp.payload?.error || 'Save failed'}`)
         return { success: false, error: String(resp.payload?.error || 'Save failed') }
       }
+      invalidateClipsCache()
       return { success: true }
     } catch (err) {
       getLogger().warning('clips', `SaveClip exception: ${err instanceof Error ? err.message : String(err)}`)
@@ -212,6 +214,7 @@ export function registerClipsIpc(): void {
         }
       }
       invalidateDurationCache(clipPath)
+      invalidateClipsCache()
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -286,6 +289,7 @@ export function registerClipsIpc(): void {
         }
       }
       invalidateDurationCache(oldPath)
+      invalidateClipsCache()
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -386,7 +390,9 @@ export function registerClipsIpc(): void {
           if (stat?.isDirectory()) {
             C.outputDirectory = c.outputDirectory
           }
-        } catch { /* reject invalid path */ }
+        } catch {
+          /* reject invalid path */
+        }
       }
       if (typeof c.noiseSuppression === 'boolean') C.noiseSuppression = c.noiseSuppression
       if (typeof c.audioSampleRate === 'number') C.audioSampleRate = c.audioSampleRate
@@ -619,15 +625,24 @@ export function registerClipsIpc(): void {
         ]
         const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
           if (err) {
-            try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
+            try {
+              unlinkSync(outPath)
+            } catch {
+              /* ignore cleanup error */
+            }
             getLogger().warning('clips', `TrimClip ffmpeg failed: ${err.message}`)
             resolve({ success: false, error: err.message })
           } else {
+            invalidateClipsCache()
             resolve({ success: true, path: outPath })
           }
         })
         proc.on('error', (e) => {
-          try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
+          try {
+            unlinkSync(outPath)
+          } catch {
+            /* ignore cleanup error */
+          }
           getLogger().warning('clips', `TrimClip process error: ${e.message}`)
           resolve({ success: false, error: e.message })
         })
@@ -670,10 +685,15 @@ export function registerClipsIpc(): void {
             unlinkSync(concatFile)
           } catch {}
           if (err) {
-            try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
+            try {
+              unlinkSync(outPath)
+            } catch {
+              /* ignore cleanup error */
+            }
             getLogger().warning('clips', `MergeClips ffmpeg failed: ${err.message}`)
             resolve({ success: false, error: err.message })
           } else {
+            invalidateClipsCache()
             resolve({ success: true, path: outPath })
           }
         })
@@ -681,7 +701,11 @@ export function registerClipsIpc(): void {
           try {
             unlinkSync(concatFile)
           } catch {}
-          try { unlinkSync(outPath) } catch { /* ignore cleanup error */ }
+          try {
+            unlinkSync(outPath)
+          } catch {
+            /* ignore cleanup error */
+          }
           getLogger().warning('clips', `MergeClips process error: ${e.message}`)
           resolve({ success: false, error: e.message })
         })

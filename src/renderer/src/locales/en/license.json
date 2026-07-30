@@ -22,5 +22,9 @@
   "hwidDescription": "This HWID identifies your machine. Send it to support to bind your license.",
   "licensedBy": "Licensed by DiNho © 2026",
   "invalidKeyDefault": "Invalid or expired key.",
-  "keyPlaceholder": "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+  "keyPlaceholder": "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX",
+  "activationError": "Activation error",
+  "activationFailedShort": "Failed to activate",
+  "noConnection": "No connection",
+  "checkFailed": "Failed to check license"
 }

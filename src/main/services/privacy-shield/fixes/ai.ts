@@ -16,10 +16,7 @@ export function revertWindowsRecall(): Promise<void> {
 
 export async function applyRecallBlocker(): Promise<void> {
   const key = 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI'
-  await Promise.all([
-    regSetDword(key, 'AllowRecallEnable', 0),
-    regSetDword(key, 'AllowRecallSaveState', 0),
-  ])
+  await Promise.all([regSetDword(key, 'AllowRecallEnable', 0), regSetDword(key, 'AllowRecallSaveState', 0)])
 }
 export async function revertRecallBlocker(): Promise<void> {
   const key = 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI'

@@ -273,7 +273,7 @@ export function DuplicateFinderPage() {
               <StatMini label={t('duplicatesFound')} value={store.progress.duplicatesFound.toLocaleString()} />
             )}
             {store.progress.filesHashed != null && store.progress.filesToHash != null && (
-              <StatMini label="Hashed" value={`${store.progress.filesHashed} / ${store.progress.filesToHash}`} />
+              <StatMini label={t('hashed')} value={`${store.progress.filesHashed} / ${store.progress.filesToHash}`} />
             )}
           </div>
         </div>

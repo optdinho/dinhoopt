@@ -12,8 +12,23 @@
 
 import { type ChildProcess, type ExecFileOptions, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { getLogger } from './logger.service'
 
-const execFileAsync = promisify(execFile)
+const _execFileAsync = promisify(execFile)
+
+function execFileAsync(
+  file: string,
+  args: readonly string[],
+  options?: import('node:child_process').ExecFileOptions,
+): ReturnType<typeof _execFileAsync> & { child?: import('node:child_process').ChildProcess } {
+  getLogger().info(
+    'exec-utf8',
+    `execFileAsync: ${file} ${args.slice(0, 4).join(' ')}${args.length > 4 ? ' ...' : ''}`,
+  )
+  return _execFileAsync(file, args, options) as ReturnType<typeof _execFileAsync> & {
+    child?: import('node:child_process').ChildProcess
+  }
+}
 
 export { execFileAsync }
 
@@ -87,6 +102,7 @@ export async function execTracked(
   args: string[],
   opts?: Pick<ExecFileOptions, 'windowsHide' | 'maxBuffer'> & { timeout?: number; signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string }> {
+  getLogger().info('exec-utf8', `execTracked: ${file} ${args.slice(0, 4).join(' ')}${args.length > 4 ? ' ...' : ''}`)
   if (opts?.signal?.aborted) throw new Error('Operation cancelled')
   const timeoutMs = opts?.timeout ?? 15_000
   const promise = execFileAsync(file, args, {
@@ -191,6 +207,8 @@ export async function execNativeUtf8(
   args: string[],
   opts?: Pick<ExecFileOptions, 'timeout' | 'windowsHide' | 'maxBuffer'> & { signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string }> {
+  getLogger().info('exec-utf8', `execNativeUtf8: ${tool} ${args.slice(0, 4).join(' ')}${args.length > 4 ? ' ...' : ''}`)
+
   if (!ALLOWED_TOOL_RE.test(tool)) {
     throw new Error(`execNativeUtf8: disallowed tool "${tool}"`)
   }

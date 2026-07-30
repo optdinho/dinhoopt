@@ -262,7 +262,7 @@ describe('game exited callback', () => {
     mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
 
     // Advance by 10 seconds to trigger interval poll
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     expect(onExited).toHaveBeenCalled()
   })
@@ -279,7 +279,7 @@ describe('game exited callback', () => {
 
     mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
 
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     expect(onExited).toHaveBeenCalled()
   })
@@ -303,7 +303,7 @@ describe('poll concurrency guard', () => {
     startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
 
     // Advance interval to trigger a second poll that should bail early due to pollRunning
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     expect(mocks.execFileAsync).toHaveBeenCalledTimes(1)
     expect(onDetected).not.toHaveBeenCalled()
@@ -332,7 +332,7 @@ describe('suppressed game re-detection guard', () => {
     onDetected.mockClear()
 
     // Next poll: cs2.exe still running → game === suppressedGame → early return
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     expect(onDetected).not.toHaveBeenCalled()
     expect(getDetectedGame()).toBeNull()
@@ -394,12 +394,12 @@ describe('suppressed game exit', () => {
 
     // Advance interval — poll runs, sees no game and suppressedGame is set
     // The !game && !detectedGame && suppressedGame branch clears suppressedGame
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     // Now bring cs2 back — should be detected again since suppressedGame was cleared
     mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
 
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     expect(onDetected).toHaveBeenCalledWith('cs2.exe')
   })

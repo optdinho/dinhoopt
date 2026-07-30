@@ -156,20 +156,43 @@ internal partial class FfmpegEncoder
             }
             else
             {
-                if (_cachedAvcc == null && !IsAv1)
+                if (((IsHevc && _cachedHvcc == null) || (!IsHevc && _cachedAvcc == null)) && !IsAv1)
                 {
-                    if (nalType == 7 && _cachedSps == null)
+                    if (IsHevc)
                     {
-                        _cachedSps = new byte[nalLen];
-                        System.Buffer.BlockCopy(buf, nalStart, _cachedSps, 0, nalLen);
+                        if (nalType == 32 && _cachedVps == null)
+                        {
+                            _cachedVps = new byte[nalLen];
+                            System.Buffer.BlockCopy(buf, nalStart, _cachedVps, 0, nalLen);
+                        }
+                        else if (nalType == 33 && _cachedSps == null)
+                        {
+                            _cachedSps = new byte[nalLen];
+                            System.Buffer.BlockCopy(buf, nalStart, _cachedSps, 0, nalLen);
+                        }
+                        else if (nalType == 34 && _cachedPps == null)
+                        {
+                            _cachedPps = new byte[nalLen];
+                            System.Buffer.BlockCopy(buf, nalStart, _cachedPps, 0, nalLen);
+                        }
+                        if (_cachedVps != null && _cachedSps != null && _cachedPps != null)
+                            _cachedHvcc = ClipExporter.BuildHvcc(_cachedVps, _cachedSps, _cachedPps);
                     }
-                    else if (nalType == 8 && _cachedPps == null)
+                    else
                     {
-                        _cachedPps = new byte[nalLen];
-                        System.Buffer.BlockCopy(buf, nalStart, _cachedPps, 0, nalLen);
+                        if (nalType == 7 && _cachedSps == null)
+                        {
+                            _cachedSps = new byte[nalLen];
+                            System.Buffer.BlockCopy(buf, nalStart, _cachedSps, 0, nalLen);
+                        }
+                        else if (nalType == 8 && _cachedPps == null)
+                        {
+                            _cachedPps = new byte[nalLen];
+                            System.Buffer.BlockCopy(buf, nalStart, _cachedPps, 0, nalLen);
+                        }
+                        if (_cachedSps != null && _cachedPps != null)
+                            _cachedAvcc = ClipExporter.BuildAvcc(_cachedSps, _cachedPps);
                     }
-                    if (_cachedSps != null && _cachedPps != null)
-                        _cachedAvcc = ClipExporter.BuildAvcc(_cachedSps, _cachedPps);
                 }
 
                 if (isSlice && _hadSlice)
@@ -207,6 +230,57 @@ internal partial class FfmpegEncoder
 
         if (_hadSlice && !_pendingTooLarge)
             EmitPacket();
+    }
+
+    private void ProcessIvfFrames()
+    {
+        if (!_ivfHeaderParsed)
+        {
+            if (_rawLen < 32) return;
+
+            _ivfTimebaseDen = BitConverter.ToUInt32(_rawBuf, 16);
+            _ivfTimebaseNum = BitConverter.ToUInt32(_rawBuf, 20);
+            if (_ivfTimebaseDen == 0) _ivfTimebaseDen = (uint)_frameRate;
+            if (_ivfTimebaseNum == 0) _ivfTimebaseNum = 1;
+
+            _ivfHeaderParsed = true;
+            int tail = _rawLen - 32;
+            if (tail > 0)
+                System.Buffer.BlockCopy(_rawBuf, 32, _rawBuf, 0, tail);
+            _rawLen = tail;
+
+            Log.I("FfmpegEncoder", $"IVF header parsed: tb={_ivfTimebaseNum}/{_ivfTimebaseDen} rawFmt={_codec}");
+        }
+
+        while (_rawLen >= 12)
+        {
+            int frameSize = BitConverter.ToInt32(_rawBuf, 0);
+            long ptsIvf = BitConverter.ToInt64(_rawBuf, 4);
+            int totalFrame = 12 + frameSize;
+
+            if (_rawLen < totalFrame) break;
+
+            long ptsTicks = ptsIvf * _ivfTimebaseNum * 10_000_000L / _ivfTimebaseDen;
+            long durTicks = _ivfTimebaseNum * 10_000_000L / _ivfTimebaseDen;
+
+            byte[] data = ArrayPool<byte>.Shared.Rent(frameSize);
+            System.Buffer.BlockCopy(_rawBuf, 12, data, 0, frameSize);
+
+            _outputChannel.Writer.TryWrite(new EncodedPacket(
+                data, MediaType.Video,
+                TimeSpan.FromTicks(ptsTicks), TimeSpan.FromTicks(durTicks),
+                isKeyFrame: false, isPooled: true, dataLength: frameSize, width: _width, height: _height));
+
+            if (_outputFrameIndex < 10 || _outputFrameIndex % 300 == 1)
+                Log.I("FfmpegEncoder", $"ProcessIvfFrames #{_outputFrameIndex} pts={ptsTicks/10000}ms len={frameSize}B");
+
+            _outputFrameIndex++;
+
+            int remaining = _rawLen - totalFrame;
+            if (remaining > 0)
+                System.Buffer.BlockCopy(_rawBuf, totalFrame, _rawBuf, 0, remaining);
+            _rawLen = remaining;
+        }
     }
 
     private void ReaderLoop(CancellationToken ct)
@@ -277,8 +351,13 @@ internal partial class FfmpegEncoder
 
                 if (_pipeFormat == PipeFormat.Unknown && _rawLen >= 4)
                 {
-                    if ((_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 1) ||
-                        (_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 0 && _rawBuf[3] == 1))
+                    // IVF magic signature: "DKIF" at offset 0
+                    if (_rawBuf[0] == 'D' && _rawBuf[1] == 'K' && _rawBuf[2] == 'I' && _rawBuf[3] == 'F')
+                    {
+                        _pipeFormat = PipeFormat.Ivf;
+                    }
+                    else if ((_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 1) ||
+                             (_rawBuf[0] == 0 && _rawBuf[1] == 0 && _rawBuf[2] == 0 && _rawBuf[3] == 1))
                     {
                         _pipeFormat = PipeFormat.AnnexB;
                     }
@@ -306,6 +385,24 @@ internal partial class FfmpegEncoder
                         int drained = 0;
                         while (_inputPtsQueue.TryDequeue(out _)) drained++;
                         Log.W("FfmpegEncoder", $"drained {drained} stale PTS entries");
+                    }
+                    continue;
+                }
+
+                if (_pipeFormat == PipeFormat.Ivf)
+                {
+                    ProcessIvfFrames();
+
+                    // 2MB overflow guard for IVF
+                    if (_rawLen > 2 * 1024 * 1024)
+                    {
+                        Log.W("FfmpegEncoder", $"IVF raw overflow {_rawLen}B — resetting buffer");
+                        _rawLen = 0;
+                        _ivfHeaderParsed = false;
+                        int drained = 0;
+                        while (_inputPtsQueue.TryDequeue(out _)) drained++;
+                        Log.W("FfmpegEncoder", $"drained {drained} stale PTS entries");
+                        _pipeFormat = PipeFormat.Unknown;
                     }
                     continue;
                 }
@@ -431,22 +528,45 @@ internal partial class FfmpegEncoder
             }
             else
             {
-                if (_cachedAvcc == null && !IsAv1)
+                if (((IsHevc && _cachedHvcc == null) || (!IsHevc && _cachedAvcc == null)) && !IsAv1)
                 {
-                    int spsType = IsHevc ? 33 : 7;
-                    int ppsType = IsHevc ? 34 : 8;
-                    if (nalType == spsType && _cachedSps == null)
+                    if (IsHevc)
                     {
-                        _cachedSps = new byte[nalLen];
-                        data.Slice(pos + 4, nalLen).CopyTo(_cachedSps);
+                        if (nalType == 32 && _cachedVps == null)
+                        {
+                            _cachedVps = new byte[nalLen];
+                            data.Slice(pos + 4, nalLen).CopyTo(_cachedVps);
+                        }
+                        else if (nalType == 33 && _cachedSps == null)
+                        {
+                            _cachedSps = new byte[nalLen];
+                            data.Slice(pos + 4, nalLen).CopyTo(_cachedSps);
+                        }
+                        else if (nalType == 34 && _cachedPps == null)
+                        {
+                            _cachedPps = new byte[nalLen];
+                            data.Slice(pos + 4, nalLen).CopyTo(_cachedPps);
+                        }
+                        if (_cachedVps != null && _cachedSps != null && _cachedPps != null)
+                            _cachedHvcc = ClipExporter.BuildHvcc(_cachedVps, _cachedSps, _cachedPps);
                     }
-                    else if (nalType == ppsType && _cachedPps == null)
+                    else
                     {
-                        _cachedPps = new byte[nalLen];
-                        data.Slice(pos + 4, nalLen).CopyTo(_cachedPps);
+                        int spsType = 7;
+                        int ppsType = 8;
+                        if (nalType == spsType && _cachedSps == null)
+                        {
+                            _cachedSps = new byte[nalLen];
+                            data.Slice(pos + 4, nalLen).CopyTo(_cachedSps);
+                        }
+                        else if (nalType == ppsType && _cachedPps == null)
+                        {
+                            _cachedPps = new byte[nalLen];
+                            data.Slice(pos + 4, nalLen).CopyTo(_cachedPps);
+                        }
+                        if (_cachedSps != null && _cachedPps != null)
+                            _cachedAvcc = ClipExporter.BuildAvcc(_cachedSps, _cachedPps);
                     }
-                    if (_cachedSps != null && _cachedPps != null)
-                        _cachedAvcc = ClipExporter.BuildAvcc(_cachedSps, _cachedPps);
                 }
 
                 if (isSlice && _hadSlice)

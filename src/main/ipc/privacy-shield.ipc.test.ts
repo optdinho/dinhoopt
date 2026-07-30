@@ -39,7 +39,9 @@ vi.mock('path', async () => {
 
 vi.mock('electron', () => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
-  function MockNotification() { return { show: vi.fn() } }
+  function MockNotification() {
+    return { show: vi.fn() }
+  }
   MockNotification.isSupported = vi.fn(() => false)
   return {
     app: {

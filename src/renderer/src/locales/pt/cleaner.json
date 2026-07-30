@@ -68,5 +68,6 @@
   "summaryDurationLabel": "Duração",
   "summaryBreakdown": "Detalhes por categoria",
   "summarySkipped": "{{count}} itens ignorados (em utilização ou protegidos)",
-  "itemsSelected": "itens selecionados"
+  "itemsSelected": "itens selecionados",
+  "networkLink": "Limpeza de Rede"
 }

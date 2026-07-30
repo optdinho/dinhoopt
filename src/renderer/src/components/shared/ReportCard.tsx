@@ -147,10 +147,7 @@ export function ReportCard({
         </div>
 
         {report.categories.length > 0 && (
-          <div
-            className="pt-3"
-            style={{ borderTop: '1px solid var(--border-subtle)' }}
-          >
+          <div className="pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
             <p className="mb-2 text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
               {t('reportBreakdown')}
             </p>
@@ -164,9 +161,7 @@ export function ReportCard({
                       <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
                         {formatNumber(cat.cleaned)} {t('reportItems')}
                       </span>
-                      <span className="text-[11px] font-mono text-green-500">
-                        {formatBytes(cat.space)}
-                      </span>
+                      <span className="text-[11px] font-mono text-green-500">{formatBytes(cat.space)}</span>
                     </div>
                   </div>
                 ))}

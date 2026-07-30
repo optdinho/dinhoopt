@@ -1,22 +1,23 @@
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import type { ReactNode } from 'react'
+import { DURATION } from '@/lib/animation'
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.04,
+      staggerChildren: 0.02,
       delayChildren: 0.05,
     },
   },
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 12 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { type: 'tween', ease: 'easeOut', duration: 0.25 },
+    transition: { type: 'tween', ease: 'easeOut', duration: DURATION.normal },
   },
 }
 

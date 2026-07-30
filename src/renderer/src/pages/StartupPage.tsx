@@ -1,7 +1,8 @@
 import type { StartupItem } from '@shared/types'
-import { RefreshCw, Shield, Trash2, Zap } from 'lucide-react'
+import { CalendarClock, RefreshCw, Shield, Trash2, Zap } from 'lucide-react'
 import { Fragment, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -22,6 +23,7 @@ import {
 
 export function StartupPage() {
   const { t } = useTranslation('startup')
+  const navigate = useNavigate()
   const items = useStartupStore((s) => s.items)
   const loading = useStartupStore((s) => s.loading)
   const sortBy = useStartupStore((s) => s.sortBy)
@@ -218,6 +220,15 @@ export function StartupPage() {
               style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
             >
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/schedules')}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-300 transition-all"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-medium)' }}
+            >
+              <CalendarClock className="h-4 w-4" strokeWidth={1.8} />
+              {t('schedulesLink')}
             </button>
           </div>
         }

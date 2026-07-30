@@ -410,11 +410,15 @@ public sealed class EncoderManager : IDisposable
             _ => "h264"
         };
 
+        // Use -f ivf for AV1 (same as actual encoding path) — raw AV1
+        // OBU data is not frame-delimited without IVF headers.
+        string outputFmt = rawFmt == "av1" ? "ivf" : rawFmt;
+
         return $"-y -loglevel error " +
                $"-f rawvideo -pix_fmt nv12 -s {width}x{height} " +
                $"-r {fps} -i pipe:0 " +
                $"-c:v {codec} {tune} -frames:v 5 " +
-               $"-f {rawFmt} pipe:1";
+               $"-f {outputFmt} pipe:1";
     }
 
     // ── NVENC session limit detection ────────────────────────────────

@@ -47,16 +47,23 @@ export function PerformanceMonitorPage() {
         })
 
         await window.dinho.perfStartMonitoring()
+        window.dinho.perfStartProcessPolling()
         setMonitoring(true)
 
         // 2. Load system info + disk health in background (non-blocking, ~2-5s)
-        window.dinho.perfGetSystemInfo().then((info) => {
-          if (!cancelled) setSystemInfo(info)
-        }).catch(() => {})
+        window.dinho
+          .perfGetSystemInfo()
+          .then((info) => {
+            if (!cancelled) setSystemInfo(info)
+          })
+          .catch(() => {})
 
-        window.dinho.perfGetDiskHealth().then((disks) => {
-          if (!cancelled) setDiskHealth(disks)
-        }).catch(() => {})
+        window.dinho
+          .perfGetDiskHealth()
+          .then((disks) => {
+            if (!cancelled) setDiskHealth(disks)
+          })
+          .catch(() => {})
       } catch {
         if (!cancelled) toast.error(t('failedToStartToast'))
       }
@@ -76,6 +83,7 @@ export function PerformanceMonitorPage() {
   const togglePause = useCallback(async () => {
     if (paused) {
       await window.dinho.perfStartMonitoring()
+      window.dinho.perfStartProcessPolling()
       setPaused(false)
     } else {
       await window.dinho.perfStopMonitoring()

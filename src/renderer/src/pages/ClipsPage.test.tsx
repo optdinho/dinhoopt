@@ -327,23 +327,23 @@ describe('ClipsPage', () => {
     showSettings()
     await screen.findByText('recordingQuality')
     screen.getByText('hotkeys').click()
-    expect(await screen.findByText('PTT')).toBeTruthy()
+    expect(await screen.findByText('actionPushToTalkLabel')).toBeTruthy()
   })
 
   it('renders quality presets', async () => {
     render(<ClipsPage />)
     showSettings()
     expect(await screen.findByText('recordingQuality')).toBeTruthy()
-    expect(screen.getByText('Muito Alta')).toBeTruthy()
-    expect(screen.getByText('Alta')).toBeTruthy()
-    expect(screen.getByText('Boa')).toBeTruthy()
+    expect(screen.getByText('presetMuitoAlta')).toBeTruthy()
+    expect(screen.getByText('presetAlta')).toBeTruthy()
+    expect(screen.getByText('presetBoa')).toBeTruthy()
   })
 
   it('calls setConfig when quality preset is clicked', async () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('Alta').click()
+    screen.getByText('presetAlta').click()
     expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ cq: 22, maxrateKbps: 30000 }))
   })
 

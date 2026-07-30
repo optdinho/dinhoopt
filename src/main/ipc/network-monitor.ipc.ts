@@ -18,16 +18,46 @@ export interface NetworkConnection {
 }
 
 const SUSPICIOUS_PORTS = new Set([
-  4444, 5555, 6666, 31337, 1234, 9999, 8888, 7777, 27374, 12345, 54321,
-  1080, 3128, 8080, 9050, 9051, // common proxy ports
+  4444,
+  5555,
+  6666,
+  31337,
+  1234,
+  9999,
+  8888,
+  7777,
+  27374,
+  12345,
+  54321,
+  1080,
+  3128,
+  8080,
+  9050,
+  9051, // common proxy ports
 ])
 
-const KNOWN_SYSTEM_PROCESSES = new Set([
-  'system', 'svchost.exe', 'lsass.exe', 'csrss.exe', 'wininit.exe',
-  'services.exe', 'smss.exe', 'winlogon.exe', 'dwm.exe', 'fontdrvhost.exe',
-  'searchhost.exe', 'startmenuexperiencehost.exe', 'shellexperiencehost.exe',
-  'taskhostw.exe', 'conhost.exe', 'dllhost.exe', 'runtimebroker.exe',
-  'spoolsv.exe', 'sihost.exe', 'ctfmon.exe', 'explorer.exe',
+const _KNOWN_SYSTEM_PROCESSES = new Set([
+  'system',
+  'svchost.exe',
+  'lsass.exe',
+  'csrss.exe',
+  'wininit.exe',
+  'services.exe',
+  'smss.exe',
+  'winlogon.exe',
+  'dwm.exe',
+  'fontdrvhost.exe',
+  'searchhost.exe',
+  'startmenuexperiencehost.exe',
+  'shellexperiencehost.exe',
+  'taskhostw.exe',
+  'conhost.exe',
+  'dllhost.exe',
+  'runtimebroker.exe',
+  'spoolsv.exe',
+  'sihost.exe',
+  'ctfmon.exe',
+  'explorer.exe',
 ])
 
 export function isSuspicious(conn: NetworkConnection): boolean {
@@ -54,7 +84,11 @@ async function getProcessName(pid: number): Promise<string> {
   try {
     const { stdout } = await execFileAsync(
       'powershell.exe',
-      ['-NoProfile', '-Command', `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName`],
+      [
+        '-NoProfile',
+        '-Command',
+        `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName`,
+      ],
       { timeout: 3000, windowsHide: true, encoding: 'utf-8' },
     )
     return stdout.trim() || 'Unknown'
@@ -67,7 +101,11 @@ export async function getActiveConnections(): Promise<NetworkConnection[]> {
   try {
     const { stdout } = await execFileAsync(
       'powershell.exe',
-      ['-NoProfile', '-Command', 'Get-NetTCPConnection | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,OwningProcess,State | ConvertTo-Json -Compress'],
+      [
+        '-NoProfile',
+        '-Command',
+        'Get-NetTCPConnection | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,OwningProcess,State | ConvertTo-Json -Compress',
+      ],
       { timeout: 10000, windowsHide: true, encoding: 'utf-8' },
     )
 
@@ -114,14 +152,17 @@ export async function getActiveConnections(): Promise<NetworkConnection[]> {
 }
 
 export function registerNetworkMonitorIpc(_getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.NETWORK_GET_CONNECTIONS, async (): Promise<{
-    connections: NetworkConnection[]
-    suspicious: NetworkConnection[]
-  }> => {
-    getLogger().info('network-monitor', 'Fetching active network connections')
-    const connections = await getActiveConnections()
-    const suspicious = connections.filter(isSuspicious)
-    getLogger().info('network-monitor', `Found ${connections.length} connections, ${suspicious.length} suspicious`)
-    return { connections, suspicious }
-  })
+  ipcMain.handle(
+    IPC.NETWORK_GET_CONNECTIONS,
+    async (): Promise<{
+      connections: NetworkConnection[]
+      suspicious: NetworkConnection[]
+    }> => {
+      getLogger().info('network-monitor', 'Fetching active network connections')
+      const connections = await getActiveConnections()
+      const suspicious = connections.filter(isSuspicious)
+      getLogger().info('network-monitor', `Found ${connections.length} connections, ${suspicious.length} suspicious`)
+      return { connections, suspicious }
+    },
+  )
 }

@@ -5,7 +5,7 @@ import { getLogger } from './logger.service'
 
 const MAX_RULE_FILE_SIZE = 1_048_576 // 1 MB
 const MAX_RULE_COUNT = 100
-const COMPILE_TIMEOUT_MS = 10_000 // 10 seconds
+const _COMPILE_TIMEOUT_MS = 10_000 // 10 seconds
 
 export class CustomYaraService {
   private customRulesDir: string

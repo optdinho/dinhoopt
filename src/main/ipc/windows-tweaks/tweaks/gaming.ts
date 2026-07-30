@@ -148,12 +148,7 @@ async function getVbsStatus(): Promise<{ enabled: boolean; requirePlatformSecuri
 
     const { stdout: pfsOut } = await execFileAsync(
       'reg.exe',
-      [
-        'query',
-        'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard',
-        '/v',
-        'RequirePlatformSecurityFeatures',
-      ],
+      ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard', '/v', 'RequirePlatformSecurityFeatures'],
       { timeout: 10000, windowsHide: true },
     )
     const pfsMatch = pfsOut.match(/RequirePlatformSecurityFeatures\s+REG_DWORD\s+0x([0-9a-fA-F]+)/i)

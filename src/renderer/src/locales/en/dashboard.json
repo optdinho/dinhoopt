@@ -142,5 +142,11 @@
   "gameClipsCardSaveTitle": "Save current clip",
   "gameClipsCardGame": "Capturing {{game}}",
   "gameClipsCardClickToOpen": "Click to open",
-  "gameClipsCardUnavailable": "Unable to load clips status"
+  "gameClipsCardUnavailable": "Unable to load clips status",
+  "historyQuickClean": "Quick Clean",
+  "historyFullClean": "Full Clean",
+  "historyRegistry": "Registry",
+  "historyStaleDrivers": "Stale Drivers",
+  "historyMalware": "Malware",
+  "historyNetwork": "Network"
 }

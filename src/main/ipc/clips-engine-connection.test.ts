@@ -42,7 +42,7 @@ const mockSocket = {
 
 vi.mock('node:child_process', () => ({ execFile: vi.fn(), execFileSync: vi.fn(), spawn: vi.fn() }))
 vi.mock('node:net', () => ({ connect: vi.fn(() => mockSocket) }))
-vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
+vi.mock('node:fs', () => ({ existsSync: vi.fn(), mkdirSync: vi.fn() }))
 vi.mock('node:fs/promises', () => ({ readdir: vi.fn(), stat: vi.fn() }))
 vi.mock('electron', () => ({
   app: { isPackaged: false },
@@ -94,6 +94,7 @@ import {
   startClipCapture,
   startEngine,
   stopEngineProcess,
+  resetClipsCache,
 } from './clips-engine-connection'
 import { disconnectPipe } from './clips-pipe'
 
@@ -133,6 +134,7 @@ function triggerPipeData(chunk: string): void {
 // ─── Tests ─────────────────────────────────────────────────
 beforeEach(() => {
   vi.clearAllMocks()
+  resetClipsCache()
   resetMockSocket()
   vi.mocked(connect).mockReturnValue(mockSocket as never)
   C.customGameProcess = ''

@@ -1,6 +1,7 @@
 import type { RegistryEntry } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
 import { CalendarClock, Check, ChevronDown, Gauge, Server, ShieldAlert, Trash2, Wifi } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@/components/shared/Checkbox'
 
 type CardType = RegistryEntry['type']
@@ -103,6 +104,7 @@ export const cards: CardDef[] = [
 ]
 
 export function HealthRing({ percent, color, size = 36 }: { percent: number; color: string; size?: number }) {
+  const { t } = useTranslation('registry')
   const r = (size - 4) / 2
   const circumference = 2 * Math.PI * r
   const offset = circumference - (percent / 100) * circumference
@@ -111,7 +113,7 @@ export function HealthRing({ percent, color, size = 36 }: { percent: number; col
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <title>Progress gauge</title>
+        <title>{t('progressGauge')}</title>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--gauge-track)" strokeWidth={3} />
         <circle
           cx={size / 2}

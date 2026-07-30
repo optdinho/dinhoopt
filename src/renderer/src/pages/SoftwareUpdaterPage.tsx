@@ -14,7 +14,7 @@ import {
   Sparkles,
   TriangleAlert,
 } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
@@ -82,59 +82,6 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
 
   const { filteredApps, upToDate, selectedCount, allSelected, isBusy, majorCount, minorCount, patchCount } =
     useFilteredAndSortedApps()
-
-  // ─── Check for updates ──────────────────────────────────────
-  const handleCheck = useCallback(() => {
-    const store = useUpdaterStore.getState()
-    store.setLoading(true)
-    store.setError(null)
-    store.setUpdateResult(null)
-
-    window.dinho
-      .softwareUpdateCheck()
-      .then((result) => {
-        const s = useUpdaterStore.getState()
-        s.setApps(result.apps)
-        s.setPackageManagerAvailable(result.packageManagerAvailable)
-        s.setPackageManagerName(result.packageManagerName)
-        s.setHasChecked(true)
-
-        const visibleCount = useUpdaterStore.getState().apps.length
-        if (
-          result.packageManagerAvailable &&
-          visibleCount === 0 &&
-          useUpdaterStore.getState().ignoredApps.length === 0
-        ) {
-          toast.success(t('softwareUpdater.toastAllUpToDate'))
-        } else if (visibleCount > 0) {
-          toast.info(
-            visibleCount !== 1
-              ? t('softwareUpdater.toastUpdatesFoundPlural', { count: visibleCount })
-              : t('softwareUpdater.toastUpdatesFound', { count: visibleCount }),
-          )
-        }
-
-        // Auto-install: if enabled and updates found, install all visible apps
-        const settings = useSettingsStore.getState().settings
-        if (settings.autoInstallUpdates && visibleCount > 0 && result.packageManagerAvailable) {
-          const allIds = useUpdaterStore.getState().apps.map((a) => a.id)
-          if (allIds.length > 0) {
-            toast.info(t('softwareUpdater.autoInstalling', { count: allIds.length }))
-            handleUpdate(allIds)
-          }
-        }
-      })
-      .catch((err) => {
-        logger.error('SoftwareUpdaterPage', 'Update check failed', err)
-        useUpdaterStore.getState().setError(t('softwareUpdater.errorCheckFailed'))
-      })
-      .finally(() => {
-        useUpdaterStore.getState().setLoading(false)
-      })
-  }, [])
-
-  useUpdaterProgress()
-  useInitialLoader(handleCheck)
 
   // ─── Run updates ────────────────────────────────────────────
   const handleUpdate = useCallback(
@@ -215,6 +162,59 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       .map((a) => a.id)
     handleUpdate(selectedIds)
   }, [handleUpdate])
+
+  // ─── Check for updates ──────────────────────────────────────
+  const handleCheck = useCallback(() => {
+    const store = useUpdaterStore.getState()
+    store.setLoading(true)
+    store.setError(null)
+    store.setUpdateResult(null)
+
+    window.dinho
+      .softwareUpdateCheck()
+      .then((result) => {
+        const s = useUpdaterStore.getState()
+        s.setApps(result.apps)
+        s.setPackageManagerAvailable(result.packageManagerAvailable)
+        s.setPackageManagerName(result.packageManagerName)
+        s.setHasChecked(true)
+
+        const visibleCount = useUpdaterStore.getState().apps.length
+        if (
+          result.packageManagerAvailable &&
+          visibleCount === 0 &&
+          useUpdaterStore.getState().ignoredApps.length === 0
+        ) {
+          toast.success(t('softwareUpdater.toastAllUpToDate'))
+        } else if (visibleCount > 0) {
+          toast.info(
+            visibleCount !== 1
+              ? t('softwareUpdater.toastUpdatesFoundPlural', { count: visibleCount })
+              : t('softwareUpdater.toastUpdatesFound', { count: visibleCount }),
+          )
+        }
+
+        // Auto-install: if enabled and updates found, install all visible apps
+        const settings = useSettingsStore.getState().settings
+        if (settings.autoInstallUpdates && visibleCount > 0 && result.packageManagerAvailable) {
+          const allIds = useUpdaterStore.getState().apps.map((a) => a.id)
+          if (allIds.length > 0) {
+            toast.info(t('softwareUpdater.autoInstalling', { count: allIds.length }))
+            handleUpdate(allIds)
+          }
+        }
+      })
+      .catch((err) => {
+        logger.error('SoftwareUpdaterPage', 'Update check failed', err)
+        useUpdaterStore.getState().setError(t('softwareUpdater.errorCheckFailed'))
+      })
+      .finally(() => {
+        useUpdaterStore.getState().setLoading(false)
+      })
+  }, [t, handleUpdate])
+
+  useUpdaterProgress()
+  useInitialLoader(handleCheck)
 
   return (
     <div className={embedded ? '' : 'animate-fade-in'}>

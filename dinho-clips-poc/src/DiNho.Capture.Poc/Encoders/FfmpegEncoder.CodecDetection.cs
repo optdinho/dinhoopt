@@ -84,8 +84,16 @@ internal partial class FfmpegEncoder
             return EncoderManager.GetPreferredCodec(vendorId);
         }
 
-        if (result != null && CheckFfmpegEncoderCached(result))
-            return result;
+        if (result != null)
+        {
+            // Probe with real encoding instead of just checking encoder name —
+            // some encoders exist in ffmpeg's list but fail at runtime (NVENC
+            // session limit, driver mismatch, GPU unsupported features).
+            var probe = EncoderManager.ProbeEncoder(result);
+            if (probe.Success)
+                return result;
+            Logging.Log.W("FfmpegEncoder", $"probe FAILED for {result} ({probe.Error}) — falling back to DetectBestCodec");
+        }
 
         return DetectBestCodec();
     }

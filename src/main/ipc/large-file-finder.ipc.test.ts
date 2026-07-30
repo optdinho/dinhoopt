@@ -32,6 +32,7 @@ vi.mock('../services/logger.service', () => ({
 }))
 
 import { registerLargeFileFinderIpc } from './large-file-finder.ipc'
+
 function getHandler(channel: string): (...args: unknown[]) => any {
   const call = mocks.ipcHandle.mock.calls.find((c) => c[0] === channel)
   if (!call) throw new Error(`No handler for ${channel}`)

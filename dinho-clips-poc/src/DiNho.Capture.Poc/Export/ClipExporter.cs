@@ -27,7 +27,11 @@ public sealed partial class ClipExporter : IDisposable
         int height,
         int frameRate,
         string rawFormat = "h264",
-        byte[]? avccFallback = null)
+        byte[]? avccFallback = null,
+        byte[]? hvccFallback = null,
+        byte[]? vps = null,
+        byte[]? sps = null,
+        byte[]? pps = null)
     {
         if (videoPackets.Count == 0)
             throw new InvalidOperationException("No video packets to export");
@@ -55,7 +59,8 @@ public sealed partial class ClipExporter : IDisposable
                 throw new InvalidOperationException(
                     $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
-            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.h264");
+            string videoExt = rawFormat == "hevc" ? ".hevc" : ".h264";
+            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}{videoExt}");
             var adtsTemp = audioPackets.Count > 0
                 ? Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.adts")
                 : null;
@@ -202,7 +207,7 @@ public sealed partial class ClipExporter : IDisposable
                     Log.I("SYNC", driftLog.ToString());
                 }
 
-                WriteH264AnnexBFile(h264Temp, videoPackets);
+                WriteH264AnnexBFile(h264Temp, videoPackets, rawFormat, vps, sps, pps);
                 var h264Len = new FileInfo(h264Temp).Length;
                 Log.I("Exporter", $"H264 AnnexB temp: {h264Temp} ({h264Len / 1024} KB) videoFrames={videoPackets.Count}");
 
@@ -290,10 +295,11 @@ public sealed partial class ClipExporter : IDisposable
         string args;
         if (hasAudioTracks && adtsPath != null && File.Exists(adtsPath))
         {
-            // Two-input mux: raw H264 AnnexB for video, raw ADTS for audio.
+            // Two-input mux: raw video AnnexB for video, raw ADTS for audio.
             // -c copy preserves exact quality of both video (NVENC) and audio (AAC).
+            string videoDemuxer = rawFormat == "hevc" ? "hevc" : "h264";
             args = $"-y -loglevel warning " +
-                   $"-f h264 -i \"{videoPath}\" " +
+                   $"-f {videoDemuxer} -i \"{videoPath}\" " +
                    $"-f aac -i \"{adtsPath}\" " +
                    $"-map 0:v:0 -map 1:a:0 " +
                    $"-c:v copy -c:a copy " +

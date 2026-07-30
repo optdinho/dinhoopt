@@ -191,6 +191,8 @@ export const IPC = {
   PERF_GET_SYSTEM_INFO: 'perf:system-info',
   PERF_START_MONITORING: 'perf:start',
   PERF_STOP_MONITORING: 'perf:stop',
+  PERF_START_PROCESS_POLLING: 'perf:start-process',
+  PERF_STOP_PROCESS_POLLING: 'perf:stop-process',
   PERF_SNAPSHOT: 'perf:snapshot',
   PERF_PROCESS_LIST: 'perf:process-list',
   PERF_KILL_PROCESS: 'perf:kill',
@@ -290,6 +292,8 @@ export const IPC = {
 
   // DirectStorage check
   GAME_MODE_DIRECTSTORAGE_CHECK: 'game-mode:directstorage-check',
+  GAME_MODE_DETECTOR_START: 'game-mode:detector-start',
+  GAME_MODE_DETECTOR_STOP: 'game-mode:detector-stop',
 
   // Benchmark
   BENCHMARK_RUN: 'benchmark:run',
@@ -394,4 +398,5 @@ export const IPC = {
   CLIPS_GET_DURATIONS: 'clips:get-durations',
   CLIPS_RENAME_CLIP: 'clips:rename-clip',
   CLIPS_CLIP_SAVED: 'clips:clip-saved',
+  CLIPS_DURATIONS_READY: 'clips:durations-ready',
 } as const

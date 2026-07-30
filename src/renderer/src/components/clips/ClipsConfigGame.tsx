@@ -124,10 +124,10 @@ export function GameSection({
                     colorScheme: 'dark',
                   }}
                 >
-                  <option value="saveClip">Replay</option>
-                  <option value="toggleCapture">Captura</option>
-                  <option value="toggleMic">Microfone</option>
-                  <option value="pushToTalk">PTT</option>
+                  <option value="saveClip">{tClips('actionSaveClipLabel')}</option>
+                  <option value="toggleCapture">{tClips('actionToggleCaptureLabel')}</option>
+                  <option value="toggleMic">{tClips('actionToggleMicLabel')}</option>
+                  <option value="pushToTalk">{tClips('actionPushToTalkLabel')}</option>
                 </select>
                 {hk.action === 'saveClip' && (
                   <select

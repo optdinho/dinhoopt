@@ -90,10 +90,11 @@ const navGroups: NavGroup[] = [
     headingKey: 'sectionClean',
     color: 'blue',
     items: [
-      { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner',
-        children: [
-          { icon: Wifi, labelKey: 'network', path: '/network' },
-        ],
+      {
+        icon: Sparkles,
+        labelKey: 'cleaner',
+        path: '/cleaner',
+        children: [{ icon: Wifi, labelKey: 'network', path: '/network' }],
       },
       { icon: Database, labelKey: 'registry', path: '/registry' },
       {
@@ -131,10 +132,11 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
       { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
-      { icon: Zap, labelKey: 'startup', path: '/startup',
-        children: [
-          { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
-        ],
+      {
+        icon: Zap,
+        labelKey: 'startup',
+        path: '/startup',
+        children: [{ icon: CalendarClock, labelKey: 'schedules', path: '/schedules' }],
       },
       { icon: Activity, labelKey: 'performance', path: '/performance' },
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
@@ -509,7 +511,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
 
   return (
     <div
-      className={cn('flex h-full shrink-0 flex-col transition-all duration-300', collapsed ? 'w-[60px]' : 'w-[260px]')}
+      className={cn('flex h-full w-full shrink-0 flex-col')}
       style={{
         background: 'var(--sidebar-bg)',
         borderRight: '1px solid var(--border-medium)',
@@ -533,7 +535,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
               : { left: '8px', top: '12px' }),
           }}
         />
-        <img src={logoSrc} alt="DiNho Optimizer" className="relative h-8 w-8 shrink-0 rounded-xl" />
+        <img src={logoSrc} alt={t('appName')} className="relative h-8 w-8 shrink-0 rounded-xl" />
         {!collapsed && (
           <div>
             <div className="text-[14px] font-bold tracking-tight text-white">{t('appName')}</div>
@@ -545,124 +547,126 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
       </div>
 
       {/* ── Search ── */}
-      {!collapsed && (
-        <div ref={searchContainerRef} className="relative mx-2 mb-2">
-          {searchOpen ? (
-            <div
-              className="flex items-center gap-2 rounded-lg px-3 py-2"
-              style={{
-                background: 'var(--surface-2, rgba(255,255,255,0.06))',
-                border: '1px solid var(--accent, #3b82f6)',
+      <div
+        ref={searchContainerRef}
+        className="relative mx-2 mb-2 overflow-hidden transition-all duration-300 will-change-transform"
+        style={{ maxHeight: collapsed ? 0 : 400, opacity: collapsed ? 0 : 1 }}
+      >
+        {searchOpen ? (
+          <div
+            className="flex items-center gap-2 rounded-lg px-3 py-2"
+            style={{
+              background: 'var(--surface-2, rgba(255,255,255,0.06))',
+              border: '1px solid var(--accent, #3b82f6)',
+            }}
+          >
+            <Search className="h-3.5 w-3.5 shrink-0 text-zinc-400" strokeWidth={1.7} />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setSelectedIndex(0)
               }}
-            >
-              <Search className="h-3.5 w-3.5 shrink-0 text-zinc-400" strokeWidth={1.7} />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setSelectedIndex(0)
-                }}
-                onKeyDown={handleSearchKeyDown}
-                placeholder={t('searchPlaceholder', 'Search pages & actions...')}
-                className="flex-1 bg-transparent text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600"
-              />
-              <button type="button" onClick={closeSearch} className="shrink-0 text-zinc-500 hover:text-zinc-300">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={openSearch}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-white/5"
-              style={{
-                background: 'var(--surface-2, rgba(255,255,255,0.03))',
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
-              <Scan className="h-3.5 w-3.5 text-zinc-600" strokeWidth={1.7} />
-              <span className="flex-1 text-left text-[12px] text-zinc-600">{t('searchHint', 'Pesquisar...')}</span>
-              <kbd
-                className="rounded border px-1.5 py-0.5 text-[9px] text-zinc-600"
-                style={{ borderColor: 'var(--border-subtle)' }}
-              >
-                ⌘K
-              </kbd>
+              onKeyDown={handleSearchKeyDown}
+              placeholder={t('searchPlaceholder', 'Search pages & actions...')}
+              className="flex-1 bg-transparent text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600"
+            />
+            <button type="button" onClick={closeSearch} className="shrink-0 text-zinc-500 hover:text-zinc-300">
+              <X className="h-3.5 w-3.5" />
             </button>
-          )}
-
-          {/* ── Search results ── */}
-          {searchOpen && searchResults.length > 0 && (
-            <div
-              className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[360px] overflow-y-auto rounded-lg py-1"
-              style={{
-                background: 'var(--sidebar-bg)',
-                border: '1px solid var(--border-medium)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              }}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={openSearch}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-white/5"
+            style={{
+              background: 'var(--surface-2, rgba(255,255,255,0.03))',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <Scan className="h-3.5 w-3.5 text-zinc-600" strokeWidth={1.7} />
+            <span className="flex-1 text-left text-[12px] text-zinc-600">{t('searchHint', 'Pesquisar...')}</span>
+            <kbd
+              className="rounded border px-1.5 py-0.5 text-[9px] text-zinc-600"
+              style={{ borderColor: 'var(--border-subtle)' }}
             >
-              {(() => {
-                let runningIndex = 0
-                let lastSection = ''
-                const elements: React.ReactNode[] = []
-                for (const result of searchResults) {
-                  if (result.section !== lastSection) {
-                    lastSection = result.section
-                    elements.push(
-                      <div
-                        key={`section-${result.section}`}
-                        className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
-                        style={{ color: 'var(--text-faint)' }}
-                      >
-                        {result.section}
-                      </div>,
-                    )
-                  }
-                  const Icon = result.icon
-                  const idx = runningIndex
+              ⌘K
+            </kbd>
+          </button>
+        )}
+
+        {/* ── Search results ── */}
+        {searchOpen && searchResults.length > 0 && (
+          <div
+            className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[360px] overflow-y-auto rounded-lg py-1"
+            style={{
+              background: 'var(--sidebar-bg)',
+              border: '1px solid var(--border-medium)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+          >
+            {(() => {
+              let runningIndex = 0
+              let lastSection = ''
+              const elements: React.ReactNode[] = []
+              for (const result of searchResults) {
+                if (result.section !== lastSection) {
+                  lastSection = result.section
                   elements.push(
-                    <button
-                      key={result.key}
-                      type="button"
-                      onClick={() => navigateToResult(result)}
-                      onMouseEnter={() => setSelectedIndex(idx)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors',
-                        idx === selectedIndex
-                          ? 'bg-white/10 text-white'
-                          : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200',
-                      )}
+                    <div
+                      key={`section-${result.section}`}
+                      className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                      style={{ color: 'var(--text-faint)' }}
                     >
-                      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
-                      <span className="flex-1 truncate">{result.label}</span>
-                      {result.kind === 'action' && (
-                        <Rocket className="h-3 w-3 shrink-0 text-amber-500/70" strokeWidth={1.7} />
-                      )}
-                    </button>,
+                      {result.section}
+                    </div>,
                   )
-                  runningIndex++
                 }
-                return elements
-              })()}
-            </div>
-          )}
+                const Icon = result.icon
+                const idx = runningIndex
+                elements.push(
+                  <button
+                    key={result.key}
+                    type="button"
+                    onClick={() => navigateToResult(result)}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors',
+                      idx === selectedIndex
+                        ? 'bg-white/10 text-white'
+                        : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
+                    <span className="flex-1 truncate">{result.label}</span>
+                    {result.kind === 'action' && (
+                      <Rocket className="h-3 w-3 shrink-0 text-amber-500/70" strokeWidth={1.7} />
+                    )}
+                  </button>,
+                )
+                runningIndex++
+              }
+              return elements
+            })()}
+          </div>
+        )}
 
-          {searchOpen && searchQuery && searchResults.length === 0 && (
-            <div
-              className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg px-3 py-4 text-center text-[12px] text-zinc-600"
-              style={{
-                background: 'var(--sidebar-bg)',
-                border: '1px solid var(--border-medium)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              }}
-            >
-              {t('searchEmpty', 'Nenhum resultado')}
-            </div>
-          )}
-        </div>
-      )}
+        {searchOpen && searchQuery && searchResults.length === 0 && (
+          <div
+            className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg px-3 py-4 text-center text-[12px] text-zinc-600"
+            style={{
+              background: 'var(--sidebar-bg)',
+              border: '1px solid var(--border-medium)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+          >
+            {t('searchEmpty', 'Nenhum resultado')}
+          </div>
+        )}
+      </div>
 
       {/* ── Scrollable nav ── */}
       <nav className="min-h-0 flex-1 overflow-y-auto px-2" aria-label={t('mainNavigation', 'Main navigation')}>

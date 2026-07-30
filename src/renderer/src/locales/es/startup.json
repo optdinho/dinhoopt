@@ -62,5 +62,8 @@
   "safetyTooltipLocked": "Vincule con DiNho Optimizer Cloud para ver las calificaciones de seguridad",
   "safetyScore": "Seguridad: {{score}}/10",
   "safetyAnalyzed": "Analizado el {{date}}",
-  "sortBySafety": "Ordenar por seguridad"
+  "sortBySafety": "Ordenar por seguridad",
+  "schedulesLink": "Programador",
+  "enableItem": "Habilitar {{name}}",
+  "disableItem": "Deshabilitar {{name}}"
 }

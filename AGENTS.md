@@ -2636,3 +2636,34 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 ### Build
 - C# engine: 0 errors, 17 pre-existing warnings
 - TS preload tests: 250 passed — 0 failures
+
+## Session Summary (2026-07-29 — FfmpegEncoder infinite restart loop fix)
+
+### Done
+
+- **Root cause**: `-bsf:v h264_mp4toannexb` was removed in an earlier refactoring — NVENC outputs AVCC (4-byte length prefix) but without the bitstream filter the format detector couldn't latch reliably, causing unbounded `_rawBuf` accumulation → pipe fill → ffmpeg exit → restart loop exhausting all 5 fallback codecs → `video=0frames 0,0MB` forever while audio kept accumulating.
+
+- **Fix 1 — `-bsf:v {rawFmt}_mp4toannexb` restored** (`FfmpegEncoder.cs:205-213`): Re-added bitstream filter to convert NVENC's AVCC output to AnnexB (start-code delimited) before writing to the pipe. AV1 excluded — no such bsf exists in any ffmpeg version.
+
+- **Fix 2 — 2MB overflow guard for `PipeFormat.Unknown`** (`FfmpegEncoder.NalParsing.cs:298-310`): When `_rawLen > 2MB` and format is still unknown, the raw buffer is reset and stale PTS entries drained, preventing unbounded accumulation.
+
+- **937/937 C# tests** — 0 quebras
+- **6252 TS tests**, 197 files — **0 quebras** (1 skipped)
+- **Engine**: `dotnet publish -c Release --self-contained true -r win-x64` — 0 erros
+- **Stage**: `npm run copy-engine` — 292 engine files + ffmpeg.exe staged
+- **Commit**: `f4ee1ff`
+
+## Session Summary (2026-07-29b — Game Mode validation fix)
+
+### Done
+
+- **Bug**: `proc-kill-background` and `mem-empty-working-set` (kill background processes + empty working set) were defined in types, listed in UI, and handled in activation logic — but **missing from both validation sets** in `validation.ts` and `ipc-validation.ts`. This caused config validation to reject the entire game mode config, showing "Invalid config" → "0 otimização aplicada • 1 falhou".
+
+- **Fix**: Added both IDs to:
+  - `src/main/ipc/game-mode/validation.ts` — `VALID_OPTIMIZATION_IDS` set
+  - `src/main/services/ipc-validation.ts` — both `validOptIds` sets (main config + game profiles)
+
+- **214/214 game-mode.ipc tests** — 0 quebras
+- **140/140 ipc-validation tests** — 0 quebras
+- **31/31 game-mode-store tests** — 0 quebras
+- **Commit**: `c487cfa`

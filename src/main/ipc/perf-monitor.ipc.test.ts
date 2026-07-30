@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
     getSystemInfo: vi.fn(),
     startMonitoring: vi.fn(),
     stopMonitoring: vi.fn(),
+    startProcessPolling: vi.fn(),
+    stopProcessPolling: vi.fn(),
     getProcessName: vi.fn(),
     killProcess: vi.fn(),
     getDiskHealth: vi.fn(),
@@ -30,18 +32,9 @@ vi.mock('../services/perf-monitor', () => ({
   PerfMonitorService: mocks.perfMonitorService,
 }))
 
-vi.mock('systeminformation', () => ({
-  default: {
-    currentLoad: vi.fn().mockResolvedValue({ cpus: [{ load: 42 }] }),
-    networkStats: vi.fn().mockResolvedValue([{ rx_sec: 1000, tx_sec: 500 }]),
-    graphics: vi.fn().mockResolvedValue({ controllers: [{ model: 'Test GPU' }] }),
-  },
-  currentLoad: vi.fn().mockResolvedValue({ cpus: [{ load: 42 }] }),
-  networkStats: vi.fn().mockResolvedValue([{ rx_sec: 1000, tx_sec: 500 }]),
-  graphics: vi.fn().mockResolvedValue({ controllers: [{ model: 'Test GPU' }] }),
-}))
 
-import { registerPerfMonitorIpc } from './perf-monitor.ipc'
+
+import { _resetPerfCache, registerPerfMonitorIpc } from './perf-monitor.ipc'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
   const call = mocks.ipcHandle.mock.calls.find((c) => c[0] === channel)
@@ -51,18 +44,24 @@ function getHandler(channel: string): (...args: unknown[]) => unknown {
 
 describe('registerPerfMonitorIpc', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    // Reset CPU sampling between tests
+    vi.resetAllMocks()
     vi.resetModules()
+    _resetPerfCache()
+    // Restore default mockService implementation (cleared by resetAllMocks)
+    mocks.perfMonitorService.mockImplementation(function () {
+      return mocks.mockService
+    })
   })
 
-  it('registers 6 IPC handlers + extra registered handlers', () => {
+  it('registers 8 IPC handlers + extra registered handlers', () => {
     registerPerfMonitorIpc(() => null)
     const channels = mocks.ipcHandle.mock.calls.map((c) => c[0]!)
     expect(channels).toContain('perf:quick-stats')
     expect(channels).toContain('perf:system-info')
     expect(channels).toContain('perf:start')
     expect(channels).toContain('perf:stop')
+    expect(channels).toContain('perf:start-process')
+    expect(channels).toContain('perf:stop-process')
     expect(channels).toContain('perf:kill')
     expect(channels).toContain('perf:disk-health')
   })
@@ -83,6 +82,8 @@ describe('registerPerfMonitorIpc', () => {
       expect(result).toHaveProperty('memPercent')
       expect(typeof result.cpuPercent).toBe('number')
       expect(typeof result.memPercent).toBe('number')
+      expect(result.cpuPercent).toBeGreaterThanOrEqual(0)
+      expect(result.memPercent).toBeGreaterThanOrEqual(0)
     })
 
     it('computes CPU percent correctly on second call', async () => {
@@ -374,6 +375,24 @@ describe('registerPerfMonitorIpc', () => {
       const handler = getHandler('perf:kill')
       const result = await (handler(null, 789) as { success: boolean })
       expect(result.success).toBe(false)
+    })
+  })
+
+  describe('PERF_START_PROCESS_POLLING handler', () => {
+    it('calls service.startProcessPolling', () => {
+      registerPerfMonitorIpc(() => null)
+      const handler = getHandler('perf:start-process')
+      handler()
+      expect(mocks.mockService.startProcessPolling).toHaveBeenCalledOnce()
+    })
+  })
+
+  describe('PERF_STOP_PROCESS_POLLING handler', () => {
+    it('calls service.stopProcessPolling', () => {
+      registerPerfMonitorIpc(() => null)
+      const handler = getHandler('perf:stop-process')
+      handler()
+      expect(mocks.mockService.stopProcessPolling).toHaveBeenCalledOnce()
     })
   })
 

@@ -251,6 +251,10 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
         'cpu-game-priority',
         'net-flush-dns',
         'net-disable-nagle',
+        'pcie-aspm-off',
+        'usb-selective-suspend-off',
+        'processor-min-max',
+        'vbs-enable',
       ])
       if (!g.enabledOptimizations.every((v: unknown) => typeof v === 'string' && validOptIds.has(v as string)))
         return null
@@ -304,6 +308,10 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
         'cpu-game-priority',
         'net-flush-dns',
         'net-disable-nagle',
+        'pcie-aspm-off',
+        'usb-selective-suspend-off',
+        'processor-min-max',
+        'vbs-enable',
       ])
       const PROCESS_NAME_RE = /^[A-Za-z0-9._\- ]+$/
       for (const key of profileKeys) {

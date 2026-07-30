@@ -68,5 +68,6 @@
   "summaryDurationLabel": "Duration",
   "summaryBreakdown": "Breakdown by Category",
   "summarySkipped": "{{count}} items skipped (in use or protected)",
-  "itemsSelected": "items selected"
+  "itemsSelected": "items selected",
+  "networkLink": "Network Cleanup"
 }

@@ -127,7 +127,7 @@ export function CategoryResultsPanel({
                       >
                         {allSelected && (
                           <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                            <title>Checkmark</title>
+                            <title>{t('checkmark')}</title>
                             <path
                               d="M2.5 6l2.5 2.5 4.5-5"
                               stroke="var(--text-on-accent)"

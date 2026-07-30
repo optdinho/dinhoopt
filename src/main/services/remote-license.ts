@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, net } from 'electron'
+import { getSecret } from './env-sanitize'
 import { generateHwid } from './hwid'
 import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'
-import { getSecret } from './env-sanitize'
 import { getLogger } from './logger.service'
 
 const NETWORK_TIMEOUT = 20_000

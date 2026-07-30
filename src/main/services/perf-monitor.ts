@@ -18,13 +18,13 @@ export class PerfMonitorService {
   private sender: Electron.WebContents | null = null
   private cachedSystemInfo: PerfSystemInfo | null = null
   private startupExeMap: Map<string, string> = new Map()
-  // Guards to prevent overlapping async calls from piling up if si hangs
   private snapshotRunning = false
   private processesRunning = false
-  // Cache expensive si.networkStats() — poll every 5s, reuse in between
-  private cachedNetworkStats = { rxBytesPerSec: 0, txBytesPerSec: 0 }
-  private lastNetworkPoll = 0
-  private readonly NETWORK_POLL_INTERVAL_MS = 5000
+  private prevCpuTimes: Array<{ idle: number; total: number }> | null = null
+  private cachedDiskIO: { rIO_sec: number; wIO_sec: number } | null = null
+  private lastDiskIOPoll = 0
+  private diskIOPolling = false
+  private cachedDiskLayout: DiskSmartInfo[] | null = null
 
   async getSystemInfo(): Promise<PerfSystemInfo> {
     if (this.cachedSystemInfo) return this.cachedSystemInfo
@@ -68,14 +68,23 @@ export class PerfMonitorService {
       }
     }
 
-    // Fast interval: system metrics every 1s
-    this.fastTimer = setInterval(() => this.collectSnapshot(), 1000)
+    // Fast interval: system metrics every 3s (was 1s — unnecessary IPC pressure)
+    this.fastTimer = setInterval(() => this.collectSnapshot(), 3000)
     // Collect immediately
     this.collectSnapshot()
+  }
 
-    // Slow interval: process list every 10s (si.processes() is expensive)
+  startProcessPolling(): void {
+    if (this.slowTimer) return
     this.slowTimer = setInterval(() => this.collectProcesses(), 10000)
     this.collectProcesses()
+  }
+
+  stopProcessPolling(): void {
+    if (this.slowTimer) {
+      clearInterval(this.slowTimer)
+      this.slowTimer = null
+    }
   }
 
   stopMonitoring(): void {
@@ -83,10 +92,7 @@ export class PerfMonitorService {
       clearInterval(this.fastTimer)
       this.fastTimer = null
     }
-    if (this.slowTimer) {
-      clearInterval(this.slowTimer)
-      this.slowTimer = null
-    }
+    this.stopProcessPolling()
     this.sender = null
   }
 
@@ -129,11 +135,11 @@ export class PerfMonitorService {
   }
 
   async getDiskHealth(): Promise<DiskSmartInfo[]> {
+    if (this.cachedDiskLayout) return this.cachedDiskLayout
     try {
       const disks = await si.diskLayout()
       const reliabilityMap = await this.getStorageReliability()
-
-      return disks.map((d) => {
+      this.cachedDiskLayout = disks.map((d) => {
         const smartStatus =
           d.smartStatus === 'Ok'
             ? 'Healthy'
@@ -167,6 +173,7 @@ export class PerfMonitorService {
           smartAttributes: [],
         }
       })
+      return this.cachedDiskLayout
     } catch {
       return []
     }
@@ -223,6 +230,58 @@ export class PerfMonitorService {
     return map
   }
 
+  private getCpuLoad(): { overall: number; perCore: number[] } {
+    const cpus = os.cpus()
+    const now = cpus.map((cpu) => {
+      const t = cpu.times
+      const idle = t.idle
+      const total = t.user + t.nice + t.sys + t.idle + t.irq
+      return { idle, total }
+    })
+
+    if (!this.prevCpuTimes) {
+      this.prevCpuTimes = now
+      return { overall: 0, perCore: cpus.map(() => 0) }
+    }
+
+    const perCore: number[] = []
+    let totalIdleDelta = 0
+    let totalDelta = 0
+
+    for (let i = 0; i < now.length; i++) {
+      const idleDelta = now[i].idle - this.prevCpuTimes[i].idle
+      const totalDeltaCore = now[i].total - this.prevCpuTimes[i].total
+      totalIdleDelta += idleDelta
+      totalDelta += totalDeltaCore
+      perCore.push(totalDeltaCore > 0 ? Math.min(100, Math.max(0, (1 - idleDelta / totalDeltaCore) * 100)) : 0)
+    }
+
+    this.prevCpuTimes = now
+    const overall = totalDelta > 0 ? Math.min(100, Math.max(0, (1 - totalIdleDelta / totalDelta) * 100)) : 0
+    return { overall, perCore }
+  }
+
+  private async getDiskIO(): Promise<{ rIO_sec: number; wIO_sec: number }> {
+    const now = Date.now()
+    if (this.cachedDiskIO && now - this.lastDiskIOPoll < 30000) {
+      return this.cachedDiskIO
+    }
+    if (this.diskIOPolling) {
+      return this.cachedDiskIO ?? { rIO_sec: 0, wIO_sec: 0 }
+    }
+    this.diskIOPolling = true
+    try {
+      const disk = await si.disksIO()
+      this.cachedDiskIO = { rIO_sec: disk?.rIO_sec ?? 0, wIO_sec: disk?.wIO_sec ?? 0 }
+      this.lastDiskIOPoll = now
+      return this.cachedDiskIO
+    } catch {
+      return this.cachedDiskIO ?? { rIO_sec: 0, wIO_sec: 0 }
+    } finally {
+      this.diskIOPolling = false
+    }
+  }
+
   private async collectSnapshot(): Promise<void> {
     if (!this.sender || this.sender.isDestroyed()) {
       this.stopMonitoring()
@@ -232,46 +291,27 @@ export class PerfMonitorService {
     this.snapshotRunning = true
 
     try {
-      // Only poll si.networkStats() every 5s — it costs ~320ms per call.
-      const now = Date.now()
-      const needsNetworkPoll = now - this.lastNetworkPoll >= this.NETWORK_POLL_INTERVAL_MS
-
-      const [load, disk, net] = await Promise.all([
-        si.currentLoad(),
-        si.disksIO(),
-        needsNetworkPoll ? si.networkStats() : Promise.resolve(null),
-      ])
-
-      if (net) {
-        this.cachedNetworkStats = {
-          rxBytesPerSec: net.reduce((sum, n) => sum + n.rx_sec, 0),
-          txBytesPerSec: net.reduce((sum, n) => sum + n.tx_sec, 0),
-        }
-        this.lastNetworkPoll = now
-      }
+      const cpu = this.getCpuLoad()
+      const disk = await this.getDiskIO()
 
       const totalMem = os.totalmem()
       const usedMem = totalMem - os.freemem()
-      const cachedMem = 0
 
       const snapshot: PerfSnapshot = {
         timestamp: Date.now(),
-        cpu: {
-          overall: load.currentLoad,
-          perCore: load.cpus.map((c) => c.load),
-        },
+        cpu,
         memory: {
           usedBytes: usedMem,
           totalBytes: totalMem,
-          cachedBytes: cachedMem,
-          percent: (usedMem / totalMem) * 100,
+          cachedBytes: 0,
+          percent: totalMem > 0 ? (usedMem / totalMem) * 100 : 0,
         },
         disk: {
-          readBytesPerSec: disk?.rIO_sec ?? 0,
-          writeBytesPerSec: disk?.wIO_sec ?? 0,
+          readBytesPerSec: disk.rIO_sec,
+          writeBytesPerSec: disk.wIO_sec,
         },
-        network: this.cachedNetworkStats,
-        uptime: si.time().uptime,
+        network: { rxBytesPerSec: 0, txBytesPerSec: 0 },
+        uptime: os.uptime(),
       }
 
       if (!this.sender.isDestroyed()) {
@@ -293,8 +333,8 @@ export class PerfMonitorService {
     this.processesRunning = true
 
     try {
-      const [data, mem] = await Promise.all([si.processes(), si.mem()])
-      const totalMem = mem.total
+      const data = await si.processes()
+      const totalMem = os.totalmem()
 
       // Sort by CPU + memory and take top 100
       const sorted = data.list.sort((a, b) => b.cpu + b.memRss - (a.cpu + a.memRss)).slice(0, 100)

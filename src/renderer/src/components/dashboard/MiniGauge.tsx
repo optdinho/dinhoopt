@@ -1,5 +1,10 @@
 import type { LucideIcon } from 'lucide-react'
+import { memo } from 'react'
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
+
+const DetailText = memo(function DetailText({ text }: { text: string }) {
+  return <>&middot; {text}</>
+})
 
 export function MiniGauge({
   icon: Icon,
@@ -32,11 +37,11 @@ export function MiniGauge({
       </div>
       <p className="text-sm font-semibold text-zinc-200">{label}</p>
       <p className="truncate text-xs font-medium" style={{ color: 'var(--text-dim)' }}>
-        {animatedPct}% &middot; {detail}
+        {animatedPct}% {detail && <DetailText text={detail} />}
       </p>
       <div className="mt-1 h-[2px] w-full overflow-hidden rounded-full" style={{ background: 'var(--bg-subtle-2)' }}>
         <div
-          className="h-full rounded-full transition-all duration-700 animate-shimmer"
+          className="h-full rounded-full transition-all duration-700"
           style={{
             width: `${animatedPct}%`,
             backgroundImage: `linear-gradient(90deg, ${color}, ${color}cc, ${color})`,

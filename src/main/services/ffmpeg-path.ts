@@ -4,12 +4,31 @@ import { join } from 'node:path'
 
 let _cachedPath: string | null = null
 
+const _candidates = ['ffmpeg.exe', 'ffmpeg']
+
+function findInDirs(dirs: string[]): string | null {
+  for (const dir of dirs) {
+    for (const name of _candidates) {
+      const p = join(dir, name)
+      if (existsSync(p)) return p
+    }
+  }
+  return null
+}
+
 export function getFfmpegPath(): string {
   if (_cachedPath && existsSync(_cachedPath)) return _cachedPath
 
-  const candidates = ['ffmpeg.exe', 'ffmpeg']
-  const dirs: string[] = []
+  // Try PATH first (most common: WinGet, scoop, choco, manual)
+  const pathDirs = (process.env.PATH || '').split(';')
+  const found = findInDirs(pathDirs.map((d) => d.trim()).filter(Boolean))
+  if (found) {
+    _cachedPath = found
+    return found
+  }
 
+  // Fall back to common install directories
+  const dirs: string[] = []
   const pf = process.env.ProgramFiles
   const pf86 = process.env['ProgramFiles(x86)']
   const localAppData = process.env.LOCALAPPDATA
@@ -22,14 +41,10 @@ export function getFfmpegPath(): string {
   }
   dirs.push('C:\\ffmpeg\\bin', 'C:\\FFmpeg\\bin', 'C:\\tools\\ffmpeg\\bin')
 
-  for (const dir of dirs) {
-    for (const name of candidates) {
-      const p = join(dir, name)
-      if (existsSync(p)) {
-        _cachedPath = p
-        return p
-      }
-    }
+  const fromDirs = findInDirs(dirs)
+  if (fromDirs) {
+    _cachedPath = fromDirs
+    return fromDirs
   }
 
   try {

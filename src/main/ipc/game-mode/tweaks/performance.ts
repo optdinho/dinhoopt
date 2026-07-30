@@ -4,44 +4,40 @@ import { ps } from '../utils'
 
 export async function clearStandbyMemory(): Promise<void> {
   await ps(
-    `
-    Add-Type -TypeDefinition @'
+    `Add-Type -TypeDefinition @'
       using System;
       using System.Runtime.InteropServices;
       public class MemoryUtils {
         [DllImport("kernel32.dll")]
         public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, int dwMinimumWorkingSetSize, int dwMaximumWorkingSetSize);
       }
-    '@
-    Get-Process | ForEach-Object {
-      try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
-    }
-  `,
+'@
+Get-Process | ForEach-Object {
+  try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
+}`,
     30000,
   )
 }
 
 export async function emptyWorkingSetForBackground(): Promise<void> {
   await ps(
-    `
-    Add-Type -TypeDefinition @'
+    `Add-Type -TypeDefinition @'
       using System;
       using System.Runtime.InteropServices;
       public class MemoryUtils {
         [DllImport("kernel32.dll")]
         public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, int dwMinimumWorkingSetSize, int dwMaximumWorkingSetSize);
       }
-    '@
-    $bgProcs = @('OneDrive','OneDriveStandaloneUpdater','Teams','ms-teams','msedgewebview2',
-      'EdgeUpdate','SkypeBackgroundHost','YourPhone','PhoneExperienceHost',
-      'SecurityHealthSystray','SearchUI','SearchApp','StartMenuExperienceHost',
-      'ShellExperienceHost','GameBarPresenceWriter','XboxAppServices','XboxGameOverlay')
-    foreach ($name in $bgProcs) {
-      Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
-        try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
-      }
-    }
-  `,
+'@
+$bgProcs = @('OneDrive','OneDriveStandaloneUpdater','Teams','ms-teams','msedgewebview2',
+  'EdgeUpdate','SkypeBackgroundHost','YourPhone','PhoneExperienceHost',
+  'SecurityHealthSystray','SearchUI','SearchApp','StartMenuExperienceHost',
+  'ShellExperienceHost','GameBarPresenceWriter','XboxAppServices','XboxGameOverlay')
+foreach ($name in $bgProcs) {
+  Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+    try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
+  }
+}`,
     30000,
   )
 }

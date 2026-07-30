@@ -48,17 +48,13 @@ export const NavItem = memo(function NavItem({
   const hasChildren = item.children && item.children.length > 0
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const styles = sectionStyles[sectionColor]
 
   useEffect(() => {
     if (!submenuOpen) return
     const handler = (e: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         onCloseSubmenu?.()
       }
     }
@@ -74,7 +70,7 @@ export const NavItem = memo(function NavItem({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         ref={buttonRef}

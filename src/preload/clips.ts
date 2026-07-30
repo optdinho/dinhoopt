@@ -65,4 +65,11 @@ export const clipsMethods = {
       ipcRenderer.removeListener(IPC.CLIPS_CLIP_SAVED, handler)
     }
   },
+  clipsOnDurationsReady: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC.CLIPS_DURATIONS_READY, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_DURATIONS_READY, handler)
+    }
+  },
 }

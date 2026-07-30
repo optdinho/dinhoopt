@@ -1,6 +1,6 @@
 import { CleanerType } from '@shared/enums'
-import type { DriveInfo, PerfQuickStats } from '@shared/types'
-import { Cpu, Database, Download, HardDrive, MemoryStick, Search, Server, Zap } from 'lucide-react'
+import type { PerfQuickStats } from '@shared/types'
+import { Cpu, Database, Download, MemoryStick, Search, Server, Zap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -19,6 +19,7 @@ import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContai
 import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
 import { useGameModeStore } from '@/stores/game-mode-store'
+import { usePerfStore } from '@/stores/perf-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
 import { useServiceStore } from '@/stores/service-store'
@@ -44,13 +45,14 @@ export function DashboardPage() {
   const gameModeActive = useGameModeStore((s) => s.active)
 
   const cleanStartRef = useRef<number>(0)
-  const [drives, setDrives] = useState<DriveInfo[]>([])
   const [phase, setPhase] = useState<OneClickPhase>('idle')
   const [phaseLabel, setPhaseLabel] = useState('')
   const [result, setResult] = useState<OneClickResult | null>(null)
   const [showQuickConfirm, setShowQuickConfirm] = useState(false)
   const [showFullConfirm, setShowFullConfirm] = useState(false)
   const [stepProgress, setStepProgress] = useState({ current: 0, total: 0 })
+
+  const setDiskHealth = usePerfStore((s) => s.setDiskHealth)
 
   // ── Lightweight system metrics (no heavy process polling) ──
   const [perf, setPerf] = useState<PerfQuickStats | null>(null)
@@ -67,8 +69,8 @@ export function DashboardPage() {
         // silently ignore polling errors
       }
     }
-    const iv = setInterval(poll, 3000)
-    const initial = setTimeout(poll, 1000)
+    const iv = setInterval(poll, 5000)
+    const initial = setTimeout(poll, 500)
     return () => {
       cancelled = true
       clearInterval(iv)
@@ -76,20 +78,10 @@ export function DashboardPage() {
     }
   }, [])
 
-  const refreshDrives = useCallback(() => {
-    window.dinho
-      ?.diskDrives?.()
-      .then(setDrives)
-      .catch(() => {})
-  }, [])
-
+  // Fetch disk health once on mount (stored in perf-store for HealthCard to read)
   useEffect(() => {
-    refreshDrives()
-    const iv = setInterval(() => {
-      if (document.visibilityState === 'visible') refreshDrives()
-    }, 60_000)
-    return () => clearInterval(iv)
-  }, [refreshDrives])
+    window.dinho?.perfGetDiskHealth?.().then(setDiskHealth).catch(() => {})
+  }, [setDiskHealth])
 
   // ── Health score (memoized) ────────────────────────────────
 
@@ -138,13 +130,6 @@ export function DashboardPage() {
     const doneTools = toolCoverage.filter((x) => x.usedRecently).length
     let score = Math.round((doneTools / totalTools) * 60)
 
-    if (drives.length > 0) {
-      const worstUsage = Math.max(...drives.map((d) => d.usedSpace / d.totalSize))
-      if (worstUsage > 0.7) {
-        score -= Math.min(20, Math.round(((worstUsage - 0.7) / 0.3) * 20))
-      }
-    }
-
     if (stats.lastScanDate) {
       const daysSinceScan = (Date.now() - new Date(stats.lastScanDate).getTime()) / (1000 * 60 * 60 * 24)
       score -= Math.min(20, Math.round(daysSinceScan * (20 / 7)))
@@ -154,7 +139,7 @@ export function DashboardPage() {
 
     if (stats.lastScanDate) score += 40
     return Math.max(0, Math.min(100, score))
-  }, [toolCoverage, drives, stats.lastScanDate])
+  }, [toolCoverage, stats.lastScanDate])
 
   // ── One-click clean callbacks (unchanged logic) ────────────
 
@@ -348,8 +333,12 @@ export function DashboardPage() {
         totalItemsSkipped: 0,
         totalSpaceSaved: space,
         categories: [
-          ...(files > 0 ? [{ name: 'Quick Clean', itemsFound: files, itemsCleaned: files, spaceSaved: space }] : []),
-          ...(regFixed > 0 ? [{ name: 'Registry', itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }] : []),
+          ...(files > 0
+            ? [{ name: t('historyQuickClean'), itemsFound: files, itemsCleaned: files, spaceSaved: space }]
+            : []),
+          ...(regFixed > 0
+            ? [{ name: t('historyRegistry'), itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }]
+            : []),
         ],
         errorCount: 0,
       })
@@ -359,8 +348,7 @@ export function DashboardPage() {
     setResult(oneClickResult)
     setPhase('done')
     setPhaseLabel('')
-    refreshDrives()
-  }, [phase, runCleaners, runRegistry, addEntry, recomputeStats, features, refreshDrives])
+  }, [phase, runCleaners, runRegistry, addEntry, recomputeStats, features])
 
   const handleFullClean = useCallback(async () => {
     if (phase !== 'idle' && phase !== 'done') return
@@ -430,12 +418,16 @@ export function DashboardPage() {
         totalItemsSkipped: 0,
         totalSpaceSaved: space + drivers.space,
         categories: [
-          ...(files > 0 ? [{ name: 'Full Clean', itemsFound: files, itemsCleaned: files, spaceSaved: space }] : []),
-          ...(regFixed > 0 ? [{ name: 'Registry', itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }] : []),
+          ...(files > 0
+            ? [{ name: t('historyFullClean'), itemsFound: files, itemsCleaned: files, spaceSaved: space }]
+            : []),
+          ...(regFixed > 0
+            ? [{ name: t('historyRegistry'), itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }]
+            : []),
           ...(drivers.removed > 0
             ? [
                 {
-                  name: 'Stale Drivers',
+                  name: t('historyStaleDrivers'),
                   itemsFound: drivers.removed,
                   itemsCleaned: drivers.removed,
                   spaceSaved: drivers.space,
@@ -443,10 +435,17 @@ export function DashboardPage() {
               ]
             : []),
           ...(malware.quarantined > 0
-            ? [{ name: 'Malware', itemsFound: malware.found, itemsCleaned: malware.quarantined, spaceSaved: 0 }]
+            ? [
+                {
+                  name: t('historyMalware'),
+                  itemsFound: malware.found,
+                  itemsCleaned: malware.quarantined,
+                  spaceSaved: 0,
+                },
+              ]
             : []),
           ...(networkCleaned > 0
-            ? [{ name: 'Network', itemsFound: networkCleaned, itemsCleaned: networkCleaned, spaceSaved: 0 }]
+            ? [{ name: t('historyNetwork'), itemsFound: networkCleaned, itemsCleaned: networkCleaned, spaceSaved: 0 }]
             : []),
         ],
         errorCount: 0,
@@ -457,7 +456,6 @@ export function DashboardPage() {
     setResult(oneClickResult)
     setPhase('done')
     setPhaseLabel('')
-    refreshDrives()
   }, [
     phase,
     runCleaners,
@@ -473,21 +471,16 @@ export function DashboardPage() {
     addEntry,
     recomputeStats,
     features,
-    refreshDrives,
   ])
 
   const isRunning = phase === 'scanning' || phase === 'cleaning'
 
   // ── Helpers ────────────────────────────────────────────────
 
-  const cpuPct = perf?.cpuPercent ?? 0
-  const ramPct = perf?.memPercent ?? 0
-  const diskPct =
-    drives.length > 0
-      ? Math.round((drives.reduce((s, d) => s + d.usedSpace, 0) / drives.reduce((s, d) => s + d.totalSize, 0)) * 100)
-      : 0
+const cpuPct = perf?.cpuPercent ?? 0
+const ramPct = perf?.memPercent ?? 0
 
-  const loading = !statsLoaded && drives.length === 0
+  const loading = !statsLoaded
 
   // ── Render ─────────────────────────────────────────────────
 
@@ -498,9 +491,9 @@ export function DashboardPage() {
       <StaggerContainer className="flex-1 space-y-4 px-0 pb-8">
         {/* ── Row 1: MiniGauges (PC State) ──────────────────── */}
         <StaggerItem>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
             {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
+              Array.from({ length: 2 }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder
                 <MiniGaugeSkeleton key={i} />
               ))
@@ -517,19 +510,6 @@ export function DashboardPage() {
                   label={t('gaugeRam')}
                   percent={Math.round(ramPct)}
                   detail={perf ? `${formatBytes(perf.memUsedBytes)} / ${formatBytes(perf.memTotalBytes)}` : '—'}
-                />
-                <MiniGauge
-                  icon={HardDrive}
-                  label={t('gaugeDisk')}
-                  percent={diskPct}
-                  detail={`${diskPct}% ${t('gaugeDiskUsed')}`}
-                />
-                <MiniGauge
-                  icon={Zap}
-                  label={t('gaugeGpu')}
-                  percent={perf?.gpuPercent ?? 0}
-                  detail={perf?.gpuName ?? '—'}
-                  accentColor="#22c55e"
                 />
               </>
             )}
