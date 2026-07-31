@@ -526,7 +526,7 @@ public sealed class EncoderManager : IDisposable
 
     /// <summary>
     /// Build a cascading fallback chain for the given user codec preference.
-    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → CPU ultrafast.
+    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → CPU veryfast.
     /// Each entry includes the codec and optional resolution scale divisor.
     /// The scale divisor only takes effect when the user did NOT choose an explicit
     /// output resolution (native); a user-chosen target is the floor and is preserved.
