@@ -38,6 +38,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _currentFallbackIndex;
     private int _scaleDivisor = 1; // 1 = full res, 2 = half, 4 = quarter
 
+    // Resolução de saída configurável pelo usuário (0 = mantém resolução de entrada).
+    // O input rawvideo fica sempre na resolução da captura (_width/_height); o scale
+    // acontece dentro do ffmpeg via -vf "scale=..." antes do encoder.
+    private int _outputWidth;
+    private int _outputHeight;
+
     private GpuVideoConverter? _gpuConverter;
     private ID3D11Texture2D? _nv12Staging;
     private ID3D11Texture2D? _inputCopy;
@@ -116,6 +122,67 @@ internal sealed partial class FfmpegEncoder : IEncoder
     public void SetCropRect(int x, int y, int w, int h)
     {
         _cropX = x; _cropY = y; _cropW = w; _cropH = h;
+    }
+
+    /// <summary>
+    /// Define a resolução de saída desejada (ex.: 854×480, 1280×720, 1920×1080).
+    /// O frame é redimensionado inteiro via filtro scale do ffmpeg — sem recorte.
+    /// Valores ≤ 0 mantêm a resolução de entrada. Dimensões ímpares são arredondadas
+    /// para baixo (par), exigência do NV12.
+    /// </summary>
+    public void SetOutputResolution(int width, int height)
+    {
+        _outputWidth = width > 0 ? width & ~1 : 0;
+        _outputHeight = height > 0 ? height & ~1 : 0;
+    }
+
+    /// <summary>Resolução efetiva dos pacotes emitidos, determinada no StartFfmpeg a partir do
+    /// scale aplicado (usuário + divisor) e do crop. Cobre tanto o scale do usuário quanto o
+    /// cascading fallback — evita que o header do MKV (EncodedPacket.Width/Height) divirja do
+    /// bitstream real.</summary>
+    private int _encodedW;
+    private int _encodedH;
+    private int EncodedWidth => _encodedW > 0 ? _encodedW : _width;
+    private int EncodedHeight => _encodedH > 0 ? _encodedH : _height;
+
+    /// <summary>
+    /// Calcula a resolução alvo do filtro scale combinando a resolução de saída do
+    /// usuário com o scale do cascading fallback (1/N da entrada). Preserva o aspect
+    /// ratio da entrada quando a resolução do usuário tem proporção diferente (ex.:
+    /// captura 16:10/21:9 + preset 16:9) — ajusta dentro do box alvo sem esticar.
+    /// Retorna null quando nenhum scale é necessário (saída == entrada).
+    /// </summary>
+    internal static (int Width, int Height)? ComputeScaleTarget(
+        int inputW, int inputH, int outputW, int outputH, int scaleDivisor)
+    {
+        int outW = outputW > 0 ? outputW : inputW;
+        int outH = outputH > 0 ? outputH : inputH;
+        if (scaleDivisor > 1)
+        {
+            outW = Math.Min(outW, inputW / scaleDivisor);
+            outH = Math.Min(outH, inputH / scaleDivisor);
+        }
+        // Nunca faz upscale — limita à resolução de entrada (mesma regra do EngineCoordinator)
+        outW = Math.Min(outW, inputW);
+        outH = Math.Min(outH, inputH);
+        // Preserva o aspect ratio da captura quando o alvo do usuário tem proporção distinta.
+        if (outW > 0 && outH > 0)
+        {
+            double inAr = (double)inputW / inputH;
+            double outAr = (double)outW / outH;
+            if (Math.Abs(inAr - outAr) > 0.01)
+            {
+                if (inAr > outAr) // entrada mais larga: limita por largura
+                    outH = (int)Math.Round(outW / inAr);
+                else // entrada mais estreita: limita por altura
+                    outW = (int)Math.Round(outH * inAr);
+            }
+        }
+        outW &= ~1;
+        outH &= ~1;
+        if (outW == inputW && outH == inputH)
+            return null;
+        return (outW, outH);
     }
 
     /// <summary>
@@ -205,19 +272,23 @@ internal sealed partial class FfmpegEncoder : IEncoder
             Log.I("FfmpegEncoder", $"crop={cw}:{ch}:{_cropX}:{_cropY} src={_width}x{_height}");
         }
 
-        // Build -vf filter chain: optional crop + optional scale (for cascading fallback)
+        // Build -vf filter chain: optional crop + optional scale (user output resolution + cascading fallback)
+        // O scale é relativo à resolução PÓS-crop — se um crop estiver ativo, o "nunca upscale"
+        // e o divisor do fallback aplicam-se ao frame cortado, não ao frame cheio.
         var vfParts = new List<string>();
         if (cw > 0 && ch > 0)
             vfParts.Add($"crop={cw}:{ch}:{_cropX}:{_cropY}");
-        if (_scaleDivisor > 1)
+        int baseW = cw > 0 && ch > 0 ? cw : _width;
+        int baseH = cw > 0 && ch > 0 ? ch : _height;
+        var scaleTarget = ComputeScaleTarget(baseW, baseH, _outputWidth, _outputHeight, _scaleDivisor);
+        _encodedW = scaleTarget?.Width ?? baseW;
+        _encodedH = scaleTarget?.Height ?? baseH;
+        if (scaleTarget.HasValue)
         {
-            var sw = _width / _scaleDivisor;
-            var sh = _height / _scaleDivisor;
-            // Ensure even dimensions (required by most encoders)
-            sw = sw & ~1;
-            sh = sh & ~1;
+            var sw = scaleTarget.Value.Width;
+            var sh = scaleTarget.Value.Height;
             vfParts.Add($"scale={sw}:{sh}");
-            Log.I("FfmpegEncoder", $"cascading fallback scale: {_width}x{_height} → {sw}x{sh} (1/{_scaleDivisor})");
+            Log.I("FfmpegEncoder", $"output scale: {baseW}x{baseH} → {sw}x{sh} (user={( _outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : "native" )}, fallback=1/{_scaleDivisor})");
         }
         var cropFilter = vfParts.Count > 0
             ? $" -vf \"{string.Join(",", vfParts)}\""

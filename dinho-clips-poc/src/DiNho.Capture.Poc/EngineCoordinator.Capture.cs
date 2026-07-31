@@ -126,6 +126,14 @@ public sealed partial class EngineCoordinator
                     Log.I("EngineCoordinator", "AdaptiveQuality DISABLED — usando config do usuário sem ajuste RAM");
                 }
 
+                // Resolução de saída do usuário: nunca faz upscale (limita à captura nativa) e
+                // respeita o cap de resolução do perfil RAM (LowMemory ≤1280×720, Balanced height ≤1080).
+                int profileCapW = _activeProfile.EncodeWidth > 0 ? _activeProfile.EncodeWidth : _captureWidth;
+                int profileCapH = _activeProfile.EncodeHeight > 0 ? _activeProfile.EncodeHeight : _captureHeight;
+                _outputWidth = Math.Max(0, Math.Min(_config.Config.Width, Math.Min(_captureWidth, profileCapW))) & ~1;
+                _outputHeight = Math.Max(0, Math.Min(_config.Config.Height, Math.Min(_captureHeight, profileCapH))) & ~1;
+                Log.I("EngineCoordinator", $"Output resolution: user={_config.Config.Width}x{_config.Config.Height} capture={_captureWidth}x{_captureHeight} profileCap={profileCapW}x{profileCapH} → encoded={(_outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : "native")}");
+
                 // Encoder (NVENC/AMF/QSV/software) — usa o perfil já resolvido
                 Log.I("EngineCoordinator", $"EncoderPreset config: '{_config.Config.EncoderPreset}' Cq={_activeProfile.Cq} Maxrate={_activeProfile.MaxrateKbps}kbps Bframes={_activeProfile.Bframes} Lookahead={_activeProfile.Lookahead}");
                 _encoder?.Dispose();
@@ -142,6 +150,7 @@ public sealed partial class EngineCoordinator
                         preset: _config.Config.EncoderPreset,
                         codec: _config.Config.Codec);
                     Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead}");
+                    fe.SetOutputResolution(_outputWidth, _outputHeight);
                 }
                 _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
                 _status.Update(s =>
@@ -151,7 +160,8 @@ public sealed partial class EngineCoordinator
                     s.ActivePipelines = 1;
                 });
 
-                Log.I("EngineCoordinator", $"[3/7] Encoder: {_encoder.GetType().Name} ({_captureWidth}x{_captureHeight} @ {_config.Config.Fps}fps)");
+                string encodedDesc = _outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : $"{_captureWidth}x{_captureHeight}";
+                Log.I("EngineCoordinator", $"[3/7] Encoder: {_encoder.GetType().Name} ({encodedDesc} @ {_config.Config.Fps}fps)");
 
                 // Áudio
                 _audioMixer = CreateAudioMixer();
@@ -725,6 +735,7 @@ public sealed partial class EngineCoordinator
             _encoder?.Dispose();
             _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
             if (_encoder is FfmpegEncoder fe)
+            {
                 fe.SetQualityParams(
                     cq: _activeProfile.Cq,
                     maxrateKbps: _activeProfile.MaxrateKbps,
@@ -733,7 +744,9 @@ public sealed partial class EngineCoordinator
                     lookahead: _activeProfile.Lookahead,
                     preset: _config.Config.EncoderPreset,
                     codec: _config.Config.Codec);
-            _encoder.Initialize(_activeProfile.EncodeWidth, _activeProfile.EncodeHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
+                fe.SetOutputResolution(_outputWidth, _outputHeight);
+            }
+            _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
             _status.Update(s => s.Encoder = _encoder.GetType().Name.Replace("Encoder", ""));
 
             if (_capture != null)

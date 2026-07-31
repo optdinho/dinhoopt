@@ -70,10 +70,10 @@ export function QualitySection({
           {
             id: 'alta',
             label: t('presetAlta'),
-            sub: 'CQ 22 \u00b7 1080p',
+            sub: 'CQ 20 \u00b7 1080p',
             icon: '\u25cf\u25cf\u25cb',
             config: {
-              cq: 22,
+              cq: 20,
               maxrateKbps: 50000,
               bufsizeKbps: 100000,
               encoderPreset: 'p5',
@@ -88,10 +88,10 @@ export function QualitySection({
           {
             id: 'boa',
             label: t('presetBoa'),
-            sub: 'CQ 24 \u00b7 720p',
+            sub: 'CQ 22 \u00b7 720p',
             icon: '\u25cf\u25cb\u25cb',
             config: {
-              cq: 24,
+              cq: 22,
               maxrateKbps: 40000,
               bufsizeKbps: 80000,
               encoderPreset: 'p5',
@@ -100,7 +100,7 @@ export function QualitySection({
               bitrateKbps: 18000,
               width: 1280,
               height: 720,
-              fps: 30,
+              fps: 60,
             },
           },
         ].map((p) => {
@@ -246,7 +246,7 @@ export function QualitySection({
           </p>
           <div className="flex gap-1">
             {[
-              { w: 640, h: 360, l: '360p' },
+              { w: 854, h: 480, l: '480p' },
               { w: 1280, h: 720, l: '720p' },
               { w: 1920, h: 1080, l: '1080p' },
             ].map((r) => (

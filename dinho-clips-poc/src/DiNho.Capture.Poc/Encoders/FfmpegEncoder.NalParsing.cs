@@ -269,7 +269,7 @@ internal partial class FfmpegEncoder
             _outputChannel.Writer.TryWrite(new EncodedPacket(
                 data, MediaType.Video,
                 TimeSpan.FromTicks(ptsTicks), TimeSpan.FromTicks(durTicks),
-                isKeyFrame: false, isPooled: true, dataLength: frameSize, width: _width, height: _height));
+                isKeyFrame: false, isPooled: true, dataLength: frameSize, width: EncodedWidth, height: EncodedHeight));
 
             if (_outputFrameIndex < 10 || _outputFrameIndex % 300 == 1)
                 Log.I("FfmpegEncoder", $"ProcessIvfFrames #{_outputFrameIndex} pts={ptsTicks/10000}ms len={frameSize}B");
@@ -720,7 +720,7 @@ internal partial class FfmpegEncoder
         _outputChannel.Writer.TryWrite(new EncodedPacket(
             data, MediaType.Video,
             TimeSpan.FromTicks(pts), TimeSpan.FromTicks(dur),
-            key, isPooled: true, dataLength: _pendingLen, width: _width, height: _height));
+            key, isPooled: true, dataLength: _pendingLen, width: EncodedWidth, height: EncodedHeight));
 
         long ptsMs = pts / 10_000;
         if (_outputFrameIndex < 10 || _outputFrameIndex % 300 == 1)

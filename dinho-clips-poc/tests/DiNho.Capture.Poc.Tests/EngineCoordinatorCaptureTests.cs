@@ -644,6 +644,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
 
     [Theory]
     [InlineData(640, 480)]
+    [InlineData(854, 480)]
     [InlineData(1280, 720)]
     [InlineData(1920, 1080)]
     public void AppConfig_WidthHeight_StandardResolutions(int w, int h)

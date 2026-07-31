@@ -153,6 +153,10 @@ public sealed partial class EngineCoordinator : IDisposable
     private int _captureWidth;
     private int _captureHeight;
 
+    // Resolução de saída configurada pelo usuário (0 = mantém resolução nativa da captura)
+    private int _outputWidth;
+    private int _outputHeight;
+
     // Eventos
     public event Action<EngineStatusValue>? OnStatusChanged;
 

@@ -291,4 +291,98 @@ public sealed class FfmpegEncoderTests
         Assert.Equal(6, result);
         Assert.Equal(5, consumed);
     }
+
+    // ─── ComputeScaleTarget ─────────────────────────────────────────────
+
+    [Fact]
+    public void ComputeScaleTarget_NoUserOutput_NoFallback_ReturnsNull()
+    {
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 0, 0, 1);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_UserOutputDownscalesCapture()
+    {
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 1);
+        Assert.NotNull(result);
+        Assert.Equal((1280, 720), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_UserOutputEqualInput_ReturnsNull()
+    {
+        var result = FfmpegEncoder.ComputeScaleTarget(1280, 720, 1280, 720, 1);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_OddOutputRoundedDownToEven()
+    {
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 855, 481, 1);
+        Assert.NotNull(result);
+        Assert.Equal((854, 480), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_UserOutputLargerThanInput_NoUpscale()
+    {
+        // Jogo rodando em 720p com preset 1080p — nunca faz upscale.
+        var result = FfmpegEncoder.ComputeScaleTarget(1280, 720, 1920, 1080, 1);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_FallbackDivisorLimitsUserOutput()
+    {
+        // Cascading fallback 1/2 + user 720p num capture 1920×1080 → 960×540 (limite do divisor).
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 2);
+        Assert.NotNull(result);
+        Assert.Equal((960, 540), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_FallbackOnly_Downscales()
+    {
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 0, 0, 4);
+        Assert.NotNull(result);
+        Assert.Equal((480, 270), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_FallbackDivisorMakesInputOdd_EvenResult()
+    {
+        // Input 1280×721 (impar) sem output do usuário → arredonda altura para par (1280×720).
+        var result = FfmpegEncoder.ComputeScaleTarget(1280, 721, 0, 0, 1);
+        Assert.NotNull(result);
+        Assert.Equal((1280, 720), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_PreservesAspect_16by10Source()
+    {
+        // Captura 2560×1600 (16:10) + preset 1920×1080 (16:9) → 1728×1080 (16:10), sem esticar.
+        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 1920, 1080, 1);
+        Assert.NotNull(result);
+        Assert.Equal((1728, 1080), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_PreservesAspect_21by9Source()
+    {
+        // Captura 3440×1440 (21:9) + preset 1920×1080 (16:9) → 1920×804 (21:9), sem esticar.
+        var result = FfmpegEncoder.ComputeScaleTarget(3440, 1440, 1920, 1080, 1);
+        Assert.NotNull(result);
+        Assert.Equal((1920, 804), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_PreservesAspect_WithFallbackDivisor()
+    {
+        // Captura 2560×1600 + preset 1280×720 + fallback 1/2 → ajustado para 1152×720 (16:10),
+        // encaixado no box 1280×720 sem esticar.
+        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 1280, 720, 2);
+        Assert.NotNull(result);
+        Assert.Equal((1152, 720), result!.Value);
+    }
 }
