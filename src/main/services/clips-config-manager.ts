@@ -57,7 +57,7 @@ export const config: ConfigState = {
   bufsizeKbps: 60000,
   bframes: 3,
   lookahead: 32,
-  encoderPreset: 'p4',
+  encoderPreset: 'p5',
   codec: 'auto',
   adapterIndex: -1,
   micEnabled: true,
@@ -185,7 +185,7 @@ export function loadPersistedClipsConfig(): void {
   config.bufsizeKbps = saved.bufsizeKbps ?? 60000
   config.bframes = saved.bframes ?? 3
   config.lookahead = saved.lookahead ?? 32
-  config.encoderPreset = saved.encoderPreset ?? 'p4'
+  config.encoderPreset = saved.encoderPreset ?? 'p5'
   config.codec = saved.codec ?? 'auto'
   config.adapterIndex = saved.adapterIndex ?? -1
   config.micEnabled = saved.micEnabled

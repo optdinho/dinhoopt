@@ -70,28 +70,9 @@ public sealed partial class EngineCoordinator
                 }
                 Log.I("EngineCoordinator", "[1/7] D3D11 device OK");
 
-                // Encoder (NVENC/AMF/QSV/software)
-                Log.I("EngineCoordinator", $"EncoderPreset config: '{_config.Config.EncoderPreset}' Cq={_activeProfile.Cq} Maxrate={_activeProfile.MaxrateKbps}kbps Bframes={_activeProfile.Bframes} Lookahead={_activeProfile.Lookahead}");
-                _encoder?.Dispose();
-                _encoder = null;
-                _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
-                if (_encoder is FfmpegEncoder fe)
-                {
-                    fe.SetQualityParams(
-                        cq: _activeProfile.Cq,
-                        maxrateKbps: _activeProfile.MaxrateKbps,
-                        bufsizeKbps: _activeProfile.BufsizeKbps,
-                        bframes: _activeProfile.Bframes,
-                        lookahead: _activeProfile.Lookahead,
-                        preset: _config.Config.EncoderPreset,
-                        codec: _config.Config.Codec);
-                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead}");
-                }
-                Log.I("EngineCoordinator", "[2/7] Encoder criado");
-
                 // Seleciona fonte de captura (WGC/DXGI/Hybrid/PrintWindow) — async selector with Task.Delay retries
                 SelectCaptureSourceAsync().GetAwaiter().GetResult();
-                Log.I("EngineCoordinator", "[3/7] SelectCaptureSource OK (async)");
+                Log.I("EngineCoordinator", "[2/7] SelectCaptureSource OK (async)");
 
                 // WDA_EXCLUDEFROMCAPTURE — esconde a janela DnHo do recording.
                 // Evita que o usuário veja a UI do DiNho ao alt-tab durante gameplay.
@@ -108,41 +89,22 @@ public sealed partial class EngineCoordinator
                     return;
                 }
 
-                // Inicializa encoder com dimensões reais da captura
+                // Inicializa dimensões reais da captura
                 _captureWidth = Math.Max(_capture.Width, 320);
                 _captureHeight = Math.Max(_capture.Height, 240);
-                _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
-                _status.Update(s =>
-                {
-                    s.Recording = true;
-                    s.Encoder = _encoder.GetType().Name.Replace("Encoder", "");
-                    s.ActivePipelines = 1;
-                });
 
-                Log.I("EngineCoordinator", $"[4/7] Encoder: {_encoder.GetType().Name} ({_captureWidth}x{_captureHeight} @ {_config.Config.Fps}fps)");
-
-                // Áudio
-                _audioMixer = CreateAudioMixer();
-                _audioSampleRate = _audioMixer.SampleRate;
-                LastAudioAnchor = TimeSpan.Zero;
-                _audioPacketCount = 0;
-                _maxAacDrainCount = 0;
-                _aacEncoderRecoveryAttempts = 0;
-                _audioMixer.OnMixedAudio += OnAudioPacket;
-                _audioMixer.Start();
-                Log.I("EngineCoordinator", "[5/7] Audio mixer started");
-
-                // AAC encoder
-                _aacEncoder?.Dispose();
-                _aacEncoder = null;
-                _aacEncoder = new FfmpegAacEncoder();
-                _aacEncoder.Initialize(_audioSampleRate, 2, 192000);
-                Log.I("EngineCoordinator", "[6/7] AAC encoder initialized");
-
-                // RamManager — detecta perfil e configura limites
+                // RamManager — resolve o perfil ANTES de criar o encoder, para que a
+                // qualidade configurada pelo usuário (Cq/Maxrate/Bufsize/Bframes/Lookahead)
+                // chegue ao encoder já no primeiro start. Antes, o encoder era criado
+                // com o perfil default (Cq=20/Lookahead=4) e só o reinit do watchdog
+                // usava os valores reais — a qualidade "Muito Alta" nunca era aplicada.
                 if (_config.Config.AdaptiveQualityEnabled)
                 {
-                    _ramManager ??= new RamManager(
+                    // Recria o RamManager a cada sessão: ele armazena as dimensões e valores de
+                    // config no construtor — reutilizar (??=) manteria valores obsoletos se o
+                    // usuário mudasse a qualidade ou a resolução do jogo entre capturas.
+                    _ramManager?.Dispose();
+                    _ramManager = new RamManager(
                         _captureWidth, _captureHeight,
                         _config.Config.EffectiveReplaySeconds,
                         _config.Config.Cq,
@@ -156,10 +118,63 @@ public sealed partial class EngineCoordinator
                 else
                 {
                     _ramManager?.StopWatchdog();
+                    _activeProfile = RamManager.BuildSettings(
+                        RamProfileLevel.Full, _captureWidth, _captureHeight,
+                        _config.Config.Cq, _config.Config.EffectiveReplaySeconds,
+                        _config.Config.MaxrateKbps, _config.Config.BufsizeKbps,
+                        _config.Config.Bframes, _config.Config.Lookahead);
                     Log.I("EngineCoordinator", "AdaptiveQuality DISABLED — usando config do usuário sem ajuste RAM");
                 }
+
+                // Encoder (NVENC/AMF/QSV/software) — usa o perfil já resolvido
+                Log.I("EngineCoordinator", $"EncoderPreset config: '{_config.Config.EncoderPreset}' Cq={_activeProfile.Cq} Maxrate={_activeProfile.MaxrateKbps}kbps Bframes={_activeProfile.Bframes} Lookahead={_activeProfile.Lookahead}");
+                _encoder?.Dispose();
+                _encoder = null;
+                _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
+                if (_encoder is FfmpegEncoder fe)
+                {
+                    fe.SetQualityParams(
+                        cq: _activeProfile.Cq,
+                        maxrateKbps: _activeProfile.MaxrateKbps,
+                        bufsizeKbps: _activeProfile.BufsizeKbps,
+                        bframes: _activeProfile.Bframes,
+                        lookahead: _activeProfile.Lookahead,
+                        preset: _config.Config.EncoderPreset,
+                        codec: _config.Config.Codec);
+                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead}");
+                }
+                _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
+                _status.Update(s =>
+                {
+                    s.Recording = true;
+                    s.Encoder = _encoder.GetType().Name.Replace("Encoder", "");
+                    s.ActivePipelines = 1;
+                });
+
+                Log.I("EngineCoordinator", $"[3/7] Encoder: {_encoder.GetType().Name} ({_captureWidth}x{_captureHeight} @ {_config.Config.Fps}fps)");
+
+                // Áudio
+                _audioMixer = CreateAudioMixer();
+                _audioSampleRate = _audioMixer.SampleRate;
+                LastAudioAnchor = TimeSpan.Zero;
+                _audioPacketCount = 0;
+                _maxAacDrainCount = 0;
+                _aacEncoderRecoveryAttempts = 0;
+                _audioMixer.OnMixedAudio += OnAudioPacket;
+                _audioMixer.Start();
+                Log.I("EngineCoordinator", "[4/7] Audio mixer started");
+
+                // AAC encoder
+                _aacEncoder?.Dispose();
+                _aacEncoder = null;
+                _aacEncoder = new FfmpegAacEncoder();
+                _aacEncoder.Initialize(_audioSampleRate, 2, 192000);
+                Log.I("EngineCoordinator", "[5/7] AAC encoder initialized");
+
+                // Limites do buffer (perfil já resolvido antes do encoder)
                 _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
                 _buffer.MaxBytes = _activeProfile.MaxBufferBytes;
+                Log.I("EngineCoordinator", "[6/7] Buffer limits aplicados");
 
                 // Enable disk spill when the requested replay duration exceeds what RAM can hold.
                 // Evicted frames are written to a temp file and merged back in GetSegments().

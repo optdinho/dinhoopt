@@ -41,9 +41,9 @@ public sealed class ConfigManagerTests
     public void OverrideResolution_Persists()
     {
         var cfg = CreateClean();
-        cfg.Config.Width = 2560;
-        cfg.Config.Height = 1440;
-        Assert.Equal(2560, cfg.Config.Width);
-        Assert.Equal(1440, cfg.Config.Height);
+        cfg.Config.Width = 1920;
+        cfg.Config.Height = 1080;
+        Assert.Equal(1920, cfg.Config.Width);
+        Assert.Equal(1080, cfg.Config.Height);
     }
 }

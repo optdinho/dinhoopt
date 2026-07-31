@@ -58,7 +58,7 @@ public sealed class AppConfig
     public int BufsizeKbps { get; set; } = 60000;
     public int Bframes { get; set; } = 3;
     public int Lookahead { get; set; } = 32;
-    public string EncoderPreset { get; set; } = "p4";
+    public string EncoderPreset { get; set; } = "p5";
     public string Codec { get; set; } = "auto";
     /// <summary>GPU adapter index for multi-GPU systems (-1 = auto).</summary>
     public int AdapterIndex { get; set; } = -1;
@@ -211,13 +211,13 @@ public sealed class ConfigManager : IDisposable
             if (config.ReplayTimeSeconds < 30 || config.ReplayTimeSeconds > 600)
                 config.ReplayTimeSeconds = _defaults.ReplayTimeSeconds;
 
-            if (config.Fps is not (30 or 60 or 75 or 120 or 144))
+            if (config.Fps is not (30 or 60 or 75 or 120))
                 config.Fps = _defaults.Fps;
 
             if (config.AudioSampleRate is not (44100 or 48000 or 96000))
                 config.AudioSampleRate = _defaults.AudioSampleRate;
 
-            if (config.Width < 640 || config.Width > 7680 || config.Height < 480 || config.Height > 4320)
+            if (config.Width < 640 || config.Width > 1920 || config.Height < 480 || config.Height > 1080)
             {
                 config.Width = _defaults.Width;
                 config.Height = _defaults.Height;

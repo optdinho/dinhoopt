@@ -434,7 +434,7 @@ public sealed class EngineCoordinatorTests
         Assert.Equal(60000, cfg.BufsizeKbps);
         Assert.Equal(3, cfg.Bframes);
         Assert.Equal(32, cfg.Lookahead);
-        Assert.Equal("p4", cfg.EncoderPreset);
+        Assert.Equal("p5", cfg.EncoderPreset);
         Assert.Equal("auto", cfg.Codec);
         Assert.Equal(48000, cfg.AudioSampleRate);
         Assert.Equal(1.0f, cfg.MicVolume);
@@ -1194,7 +1194,6 @@ public sealed class EngineCoordinatorTests
     [InlineData(60)]
     [InlineData(75)]
     [InlineData(120)]
-    [InlineData(144)]
     public void ConfigManager_Load_ValidFps_Kept(int fps)
     {
         var tempFile = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"), "config.json");
@@ -1211,10 +1210,33 @@ public sealed class EngineCoordinatorTests
         var tempFile = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"), "config.json");
         var dir = Path.GetDirectoryName(tempFile)!;
         Directory.CreateDirectory(dir);
+        File.WriteAllText(tempFile, """{"Width": 1920, "Height": 1080}""");
+        var cfg = new ConfigManager(tempFile);
+        Assert.Equal(1920, cfg.Config.Width);
+        Assert.Equal(1080, cfg.Config.Height);
+    }
+
+    [Fact]
+    public void ConfigManager_Load_WidthAbove1080p_Reverts()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"), "config.json");
+        var dir = Path.GetDirectoryName(tempFile)!;
+        Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Width": 2560, "Height": 1440}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(2560, cfg.Config.Width);
-        Assert.Equal(1440, cfg.Config.Height);
+        Assert.Equal(1920, cfg.Config.Width);
+        Assert.Equal(1080, cfg.Config.Height);
+    }
+
+    [Fact]
+    public void ConfigManager_Load_Fps144_Reverts()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"), "config.json");
+        var dir = Path.GetDirectoryName(tempFile)!;
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(tempFile, """{"Fps": 144}""");
+        var cfg = new ConfigManager(tempFile);
+        Assert.Equal(30, cfg.Config.Fps);
     }
 
     [Fact]
@@ -1235,7 +1257,7 @@ public sealed class EngineCoordinatorTests
         var tempFile = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"), "config.json");
         var dir = Path.GetDirectoryName(tempFile)!;
         Directory.CreateDirectory(dir);
-        File.WriteAllText(tempFile, """{"Width": 7681, "Height": 4321}""");
+        File.WriteAllText(tempFile, """{"Width": 1921, "Height": 1081}""");
         var cfg = new ConfigManager(tempFile);
         Assert.Equal(1920, cfg.Config.Width);
         Assert.Equal(1080, cfg.Config.Height);
@@ -1271,7 +1293,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"EncoderPreset": ""}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal("p4", cfg.Config.EncoderPreset);
+        Assert.Equal("p5", cfg.Config.EncoderPreset);
     }
 
     [Fact]

@@ -323,7 +323,8 @@ export function registerClipsIpc(): void {
     getLogger().info('clips', `Config update requested: ${JSON.stringify(config)}`)
     const c = config as Record<string, unknown> | undefined
     if (c) {
-      if (typeof c.replayTimeSeconds === 'number') C.engineReplayTimeSeconds = c.replayTimeSeconds
+      if (typeof c.replayTimeSeconds === 'number')
+        C.engineReplayTimeSeconds = Math.max(30, Math.min(600, c.replayTimeSeconds))
       if (typeof c.fps === 'number') C.engineFps = c.fps
       if (typeof c.width === 'number') C.width = c.width
       if (typeof c.height === 'number') C.height = c.height
@@ -546,7 +547,14 @@ export function registerClipsIpc(): void {
     try {
       const resp = await sendPipeCommand('getGpus')
       if (Array.isArray(resp.payload)) {
-        return resp.payload as GpuInfo[]
+        // 0x1414 = Microsoft Basic Render Driver (software fallback, no hw encoder)
+        return (resp.payload as GpuInfo[]).filter(
+          (gpu) =>
+            gpu &&
+            typeof gpu === 'object' &&
+            typeof gpu.vendorId === 'number' &&
+            gpu.vendorId !== 0x1414,
+        )
       }
       return []
     } catch {

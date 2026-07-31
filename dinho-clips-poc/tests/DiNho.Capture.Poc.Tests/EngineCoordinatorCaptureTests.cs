@@ -646,8 +646,6 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     [InlineData(640, 480)]
     [InlineData(1280, 720)]
     [InlineData(1920, 1080)]
-    [InlineData(2560, 1440)]
-    [InlineData(3840, 2160)]
     public void AppConfig_WidthHeight_StandardResolutions(int w, int h)
     {
         var tempFile = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"), "config.json");

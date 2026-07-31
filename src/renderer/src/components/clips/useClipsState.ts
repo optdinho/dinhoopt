@@ -43,7 +43,6 @@ export interface ClipsState {
   mergeModePaths: string[] | null
   setMergeModePaths: (paths: string[] | null) => void
   filteredClips: ClipInfo[]
-  autoReplayTime: number
   estimatedRamMB: number
   tooltipContent: Record<string, string>
   filterTabs: { key: FilterTab; label: string }[]
@@ -342,26 +341,6 @@ export function useClipsState(): ClipsState {
     })
   }, [clips, filterTab, searchQuery, favorites])
 
-  const autoReplayTime = useMemo(() => {
-    if (!config) return 120
-    const maxDuration = Math.max(
-      ...config.hotkeys
-        .filter((h) => h.enabled && h.action === 'saveClip' && h.replayDurationSeconds)
-        .map((h) => h.replayDurationSeconds!),
-      120,
-    )
-    return maxDuration
-  }, [config?.hotkeys, config])
-
-  // Auto-increase buffer when a hotkey needs more than current
-  useEffect(() => {
-    if (!config || config.replayTimeSeconds >= autoReplayTime) return
-    const timer = setTimeout(() => {
-      actions.handleConfigUpdate({ replayTimeSeconds: autoReplayTime })
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [autoReplayTime, config, actions.handleConfigUpdate])
-
   // Expose save trigger for E2E tests
   useEffect(() => {
     ;(window as unknown as Record<string, unknown>).__clipsSaveClip = actions.handleSaveClip
@@ -421,7 +400,6 @@ export function useClipsState(): ClipsState {
     mergeModePaths,
     setMergeModePaths,
     filteredClips,
-    autoReplayTime,
     estimatedRamMB,
     tooltipContent,
     filterTabs,

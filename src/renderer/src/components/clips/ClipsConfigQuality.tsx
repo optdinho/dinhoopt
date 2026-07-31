@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { TogglePill } from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
@@ -36,7 +38,12 @@ export function QualitySection({
   ClipsState,
   'config' | 'status' | 'activeTip' | 'setActiveTip' | 'gpuList' | 'estimatedRamMB' | 'handleConfigUpdate' | 't'
 >) {
+  const [gpuOpen, setGpuOpen] = useState(false)
   if (!config) return null
+  const replayPresets = [30, 120, 300]
+  const isCustomReplay = !replayPresets.includes(config.replayTimeSeconds)
+  const formatReplay = (s: number) =>
+    s < 60 ? `${s}s` : s % 60 === 0 ? `${s / 60}min` : `${Math.floor(s / 60)}min ${s % 60}s`
   return (
     <div className="space-y-3">
       {/* Quick Preset */}
@@ -45,18 +52,18 @@ export function QualitySection({
           {
             id: 'muito-alta',
             label: t('presetMuitoAlta'),
-            sub: 'CQ 18 \u00b7 1440p',
+            sub: 'CQ 18 \u00b7 1080p',
             icon: '\u25cf\u25cf\u25cf',
             config: {
               cq: 18,
-              maxrateKbps: 50000,
-              bufsizeKbps: 100000,
-              encoderPreset: 'p5',
+              maxrateKbps: 80000,
+              bufsizeKbps: 160000,
+              encoderPreset: 'p6',
               bframes: 3,
               lookahead: 32,
               bitrateKbps: 40000,
-              width: 2560,
-              height: 1440,
+              width: 1920,
+              height: 1080,
               fps: 60,
             },
           },
@@ -67,9 +74,9 @@ export function QualitySection({
             icon: '\u25cf\u25cf\u25cb',
             config: {
               cq: 22,
-              maxrateKbps: 30000,
-              bufsizeKbps: 60000,
-              encoderPreset: 'p4',
+              maxrateKbps: 50000,
+              bufsizeKbps: 100000,
+              encoderPreset: 'p5',
               bframes: 2,
               lookahead: 16,
               bitrateKbps: 25000,
@@ -85,9 +92,9 @@ export function QualitySection({
             icon: '\u25cf\u25cb\u25cb',
             config: {
               cq: 24,
-              maxrateKbps: 25000,
-              bufsizeKbps: 50000,
-              encoderPreset: 'p3',
+              maxrateKbps: 40000,
+              bufsizeKbps: 80000,
+              encoderPreset: 'p5',
               bframes: 2,
               lookahead: 16,
               bitrateKbps: 18000,
@@ -178,23 +185,55 @@ export function QualitySection({
             {t('gpuLabel')}
             <TipBadge id="gpu" activeTip={activeTip} setActiveTip={setActiveTip} />
           </p>
-          <select
-            value={config.adapterIndex ?? -1}
-            onChange={(e) => handleConfigUpdate({ adapterIndex: Number(e.target.value) })}
-            className="w-full rounded-lg px-2 py-1.5 text-[11px] transition-all"
-            style={{
-              background: 'rgba(113,113,122,0.08)',
-              color: 'var(--text-primary)',
-              border: '1px solid rgba(113,113,122,0.15)',
-            }}
-          >
-            <option value={-1}>{t('codecAuto')}</option>
-            {gpuList.map((gpu) => (
-              <option key={gpu.index} value={gpu.index}>
-                {gpu.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setGpuOpen((o) => !o)}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-all"
+              style={{
+                background: 'rgba(113,113,122,0.08)',
+                color: 'var(--text-primary)',
+                border: '1px solid rgba(113,113,122,0.15)',
+              }}
+            >
+              <span className="truncate">
+                {config.adapterIndex === undefined || config.adapterIndex === -1
+                  ? t('codecAuto')
+                  : (gpuList.find((g) => g.index === config.adapterIndex)?.name ?? t('codecAuto'))}
+              </span>
+              <ChevronDown className="h-3 w-3 shrink-0" style={{ color: 'var(--text-dim)' }} />
+            </button>
+            {gpuOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setGpuOpen(false)} />
+                <div
+                  className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-lg py-1"
+                  style={{
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-medium)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+                  }}
+                >
+                  {[{ index: -1, name: t('codecAuto') }, ...gpuList].map((gpu) => (
+                    <button
+                      key={gpu.index}
+                      type="button"
+                      onClick={() => {
+                        handleConfigUpdate({ adapterIndex: gpu.index })
+                        setGpuOpen(false)
+                      }}
+                      className="block w-full truncate px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.05]"
+                      style={{
+                        color: (config.adapterIndex ?? -1) === gpu.index ? 'var(--accent)' : 'var(--text-primary)',
+                      }}
+                    >
+                      {gpu.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -210,7 +249,6 @@ export function QualitySection({
               { w: 640, h: 360, l: '360p' },
               { w: 1280, h: 720, l: '720p' },
               { w: 1920, h: 1080, l: '1080p' },
-              { w: 2560, h: 1440, l: '1440p' },
             ].map((r) => (
               <button
                 key={r.l}
@@ -233,7 +271,7 @@ export function QualitySection({
             <TipBadge id="fps" activeTip={activeTip} setActiveTip={setActiveTip} />
           </p>
           <div className="flex gap-1">
-            {[30, 60, 75, 120, 144].map((f) => (
+            {[30, 60, 75, 120].map((f) => (
               <button
                 key={f}
                 type="button"
@@ -258,7 +296,11 @@ export function QualitySection({
           <TipBadge id="replay" activeTip={activeTip} setActiveTip={setActiveTip} />
         </p>
         <div className="flex gap-1">
-          {[60, 180, 300, 600].map((s) => (
+          {[
+            { s: 30, label: '30s' },
+            { s: 120, label: '2min' },
+            { s: 300, label: '5min' },
+          ].map(({ s, label }) => (
             <button
               key={s}
               type="button"
@@ -269,10 +311,49 @@ export function QualitySection({
                 color: s === config.replayTimeSeconds ? '#fff' : 'var(--text-primary)',
               }}
             >
-              {Math.floor(s / 60)}min
+              {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => handleConfigUpdate({ replayTimeSeconds: isCustomReplay ? config.replayTimeSeconds : 150 })}
+            className="flex-1 rounded-lg py-1 text-[11px] font-medium transition-all"
+            style={{
+              background: isCustomReplay ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
+              color: isCustomReplay ? '#fff' : 'var(--text-primary)',
+            }}
+          >
+            {t('replayCustom')}
+          </button>
         </div>
+        {isCustomReplay && (
+          <div className="mt-2 rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
+            <input
+              type="range"
+              min={30}
+              max={600}
+              step={5}
+              value={Math.max(30, Math.min(600, config.replayTimeSeconds))}
+              onChange={(e) => handleConfigUpdate({ replayTimeSeconds: Number(e.target.value) })}
+              className="w-full"
+            />
+            <div className="mt-1 flex justify-between text-[10px]">
+              <span style={{ color: 'var(--text-dim)' }}>30s</span>
+              <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                {formatReplay(config.replayTimeSeconds)}
+              </span>
+              <span style={{ color: 'var(--text-dim)' }}>10min</span>
+            </div>
+          </div>
+        )}
+        {config.replayTimeSeconds > 300 && (
+          <div
+            className="mt-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] leading-snug"
+            style={{ color: '#f87171' }}
+          >
+            {t('replayRamWarning')}
+          </div>
+        )}
       </div>
 
       {/* Force Software Encoding */}

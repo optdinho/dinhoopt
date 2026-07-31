@@ -16,7 +16,7 @@ vi.mock('./clips-config-store', () => ({
     bufsizeKbps: 60000,
     bframes: 3,
     lookahead: 32,
-    encoderPreset: 'p4',
+    encoderPreset: 'p5',
     codec: 'auto',
     adapterIndex: -1,
     outputDirectory: '',
@@ -102,7 +102,7 @@ describe('clips-config-manager', () => {
       expect(result.bufsizeKbps).toBe(60000)
       expect(result.bframes).toBe(3)
       expect(result.lookahead).toBe(32)
-      expect(result.encoderPreset).toBe('p4')
+      expect(result.encoderPreset).toBe('p5')
       expect(result.codec).toBe('auto')
       expect(result.adapterIndex).toBe(-1)
       expect(result.forceSoftware).toBe(false)
@@ -319,7 +319,7 @@ describe('clips-config-manager', () => {
       expect(config.bufsizeKbps).toBe(60000)
       expect(config.bframes).toBe(3)
       expect(config.lookahead).toBe(32)
-      expect(config.encoderPreset).toBe('p4')
+      expect(config.encoderPreset).toBe('p5')
       expect(config.codec).toBe('auto')
       expect(config.adapterIndex).toBe(-1)
       expect(config.micDeviceId).toBe('')

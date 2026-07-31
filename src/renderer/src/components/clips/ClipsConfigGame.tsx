@@ -8,7 +8,6 @@ export function GameSection({
   status,
   rebindingId,
   setRebindingId,
-  autoReplayTime,
   handleConfigUpdate,
   addHotkey,
   removeHotkey,
@@ -22,7 +21,6 @@ export function GameSection({
   | 'status'
   | 'rebindingId'
   | 'setRebindingId'
-  | 'autoReplayTime'
   | 'handleConfigUpdate'
   | 'addHotkey'
   | 'removeHotkey'
@@ -170,7 +168,7 @@ export function GameSection({
               </p>
             </div>
           ))}
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center pt-1">
             <button
               type="button"
               onClick={addHotkey}
@@ -180,9 +178,6 @@ export function GameSection({
               <Plus className="h-3 w-3" />
               {t('addHotkey')}
             </button>
-            <span className="text-[9px]" style={{ color: 'var(--text-dim)' }}>
-              Buffer: {autoReplayTime < 60 ? `${autoReplayTime}s` : `${autoReplayTime / 60}min`} ({t('autoBuffer')})
-            </span>
           </div>
         </div>
       </CollapsibleMini>

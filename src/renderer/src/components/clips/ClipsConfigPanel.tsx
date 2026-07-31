@@ -18,7 +18,6 @@ export function ClipsConfigPanel({
   micDevices,
   loadingMicDevices,
   estimatedRamMB,
-  autoReplayTime,
   processes,
   procSearch,
   setProcSearch,
@@ -132,7 +131,6 @@ export function ClipsConfigPanel({
                   status={status}
                   rebindingId={rebindingId}
                   setRebindingId={setRebindingId}
-                  autoReplayTime={autoReplayTime}
                   handleConfigUpdate={handleConfigUpdate}
                   addHotkey={addHotkey}
                   removeHotkey={removeHotkey}

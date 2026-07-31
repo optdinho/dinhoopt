@@ -9,6 +9,7 @@ internal sealed class GpuVideoConverter : IDisposable
     private readonly ID3D11VideoContext _videoContext;
     private readonly ID3D11VideoProcessor _videoProcessor;
     private readonly ID3D11VideoProcessorEnumerator _enumerator;
+    private ID3D11VideoContext1? _videoContext1;
     private readonly int _width;
     private readonly int _height;
     private ID3D11Texture2D? _cachedOutput;
@@ -49,6 +50,24 @@ internal sealed class GpuVideoConverter : IDisposable
             _videoDevice.CreateVideoProcessorEnumerator(ref contentDesc, out _enumerator).CheckError();
             _videoDevice.CreateVideoProcessor(_enumerator, 0, out _videoProcessor).CheckError();
 
+            // Define o espaço de cores correto: entrada BGRA full-range BT.709 → saída NV12
+            // limited-range BT.709. Sem isso o D3D11 VideoProcessor mantém o default BT.601 e o
+            // MP4 exportado fica sem o atom `colr` — players assumem BT.601 e as cores saem lavadas.
+            _videoContext1 = ctx.QueryInterfaceOrNull<ID3D11VideoContext1>();
+            if (_videoContext1 is not null)
+            {
+                try
+                {
+                    _videoContext1.VideoProcessorSetStreamColorSpace1(_videoProcessor, 0, ColorSpaceType.RgbFullG22NoneP709);
+                    _videoContext1.VideoProcessorSetOutputColorSpace1(_videoProcessor, ColorSpaceType.YcbcrStudioG22LeftP709);
+                }
+                catch (Exception)
+                {
+                    _videoContext1.Dispose();
+                    _videoContext1 = null;
+                }
+            }
+
             var nv12Desc = new Texture2DDescription
             {
                 Width = (uint)_width,
@@ -67,6 +86,7 @@ internal sealed class GpuVideoConverter : IDisposable
         {
             videoDevice?.Dispose();
             videoContext?.Dispose();
+            _videoContext1?.Dispose();
             throw;
         }
     }

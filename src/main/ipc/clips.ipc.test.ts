@@ -494,7 +494,7 @@ describe('CLIPS_GET_CONFIG', () => {
     expect(cfg.bufsizeKbps).toBe(60000)
     expect(cfg.bframes).toBe(3)
     expect(cfg.lookahead).toBe(32)
-    expect(cfg.encoderPreset).toBe('p4')
+    expect(cfg.encoderPreset).toBe('p5')
     expect(cfg.outputDirectory).toContain('DiNhoClips')
     expect(cfg.forceSoftware).toBe(false)
     expect(cfg.pushToTalk).toBe('hold')
@@ -1208,6 +1208,22 @@ describe('CLIPS_GET_GPUS', () => {
     const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)
     const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
     expect(result).toEqual([])
+  })
+
+  it('filters out Microsoft Basic Render Driver (vendorId 0x1414)', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [
+        { index: 0, name: 'NVIDIA RTX 5050', vendorId: 4318 },
+        { index: 1, name: 'Microsoft Basic Render Driver', vendorId: 5140 },
+      ],
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)
+    const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ index: 0, vendorId: 4318 })
   })
 
   it('returns empty array when sendPipeCommand throws', async () => {

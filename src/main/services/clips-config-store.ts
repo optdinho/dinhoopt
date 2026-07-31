@@ -53,7 +53,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   bufsizeKbps: 60000,
   bframes: 3,
   lookahead: 32,
-  encoderPreset: 'p4',
+  encoderPreset: 'p5',
   codec: 'auto',
   adapterIndex: -1,
   outputDirectory: '',
