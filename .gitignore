@@ -27,6 +27,8 @@ coverage/
 tmp/
 logs/
 test-results/
+TestResults/
+*.trx
 *.zip
 fix_buttons.js
 parse_failures.py

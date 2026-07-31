@@ -1,48 +1,49 @@
 /**
- * Copy the .NET engine publish output to a version-independent staging location.
- * electron-builder.yml references resources/clips-engine-staging/ so the
- * framework version in the path doesn't need manual updates.
+ * Build + publish the .NET engine FRESH and copy the output to a version-independent
+ * staging location. electron-builder.yml references resources/clips-engine-staging/
+ * so the framework version in the path doesn't need manual updates.
+ *
+ * Always publishes from source (into a clean temp dir) instead of reusing stale
+ * bin/Release publish folders left by manual `dotnet publish` commands —
+ * those can be older than the latest build and would bake old fixes into the
+ * installer.
  */
 const { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } = require('node:fs')
+const { execFileSync } = require('node:child_process')
 const { join } = require('node:path')
+const { tmpdir } = require('node:os')
 
 const projectRoot = join(__dirname, '..')
+const engineProj = join(projectRoot, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'DiNho.Capture.Poc.csproj')
 
-function findPublishDir() {
-  const base = join(projectRoot, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'bin', 'Release')
-  if (!existsSync(base)) return null
-  // Scan TFM dirs (e.g. net10.0-windows10.0.26100.0) for publish subdirs
-  const candidates = []
-  for (const tfm of readdirSync(base)) {
-    const tfmDir = join(base, tfm)
-    if (!statSync(tfmDir).isDirectory()) continue
-    // Check both publish/ (explicit -o) and win-x64/publish/ (implicit -r)
-    for (const sub of ['publish', join('win-x64', 'publish')]) {
-      const dir = join(tfmDir, sub)
-      const exe = join(dir, 'DiNho.Capture.Poc.exe')
-      if (existsSync(exe)) {
-        candidates.push({ dir, mtime: statSync(exe).mtimeMs })
-      }
+function publishFresh() {
+  const outDir = join(tmpdir(), 'dinhocopy')
+  // Clean temp dir so publish is always full & fresh (no incremental cache)
+  rmSync(outDir, { recursive: true, force: true })
+  mkdirSync(outDir, { recursive: true })
+  try {
+    console.log('Publishing engine (fresh)...')
+    execFileSync('dotnet', [
+      'publish', '-c', 'Release',
+      '--self-contained', 'true',
+      '-r', 'win-x64',
+      '-o', outDir,
+      engineProj,
+    ], { stdio: 'inherit' })
+    const exe = join(outDir, 'DiNho.Capture.Poc.exe')
+    if (!existsSync(exe)) {
+      console.error('ERROR: publish finished but DiNho.Capture.Poc.exe not found')
+      process.exit(1)
     }
+    return outDir
+  } catch (err) {
+    console.error('ERROR: dotnet publish failed:', err.message)
+    console.error('  cd dinho-clips-poc/src/DiNho.Capture.Poc && dotnet publish -c Release --self-contained true -r win-x64')
+    process.exit(1)
   }
-  if (candidates.length === 0) return null
-  // Pick the most recently built candidate
-  candidates.sort((a, b) => b.mtime - a.mtime)
-  return candidates[0].dir
 }
 
-let publishDir = findPublishDir()
-
-if (!publishDir) {
-  const exact = join(projectRoot, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'bin', 'Release', 'net10.0-windows10.0.26100.0', 'publish')
-  if (existsSync(exact)) publishDir = exact
-}
-
-if (!publishDir) {
-  console.error('ERROR: Engine publish directory not found. Build the .NET project first:')
-  console.error('  cd dinho-clips-poc/src/DiNho.Capture.Poc && dotnet publish -c Release --self-contained true -r win-x64')
-  process.exit(1)
-}
+const publishDir = publishFresh()
 
 const stagingDir = join(projectRoot, 'resources', 'clips-engine-staging')
 
@@ -112,3 +113,5 @@ function countFiles(dir) {
 }
 countFiles(stagingDir)
 console.log(`Copied ${fileCount} engine files to ${stagingDir}`)
+
+rmSync(publishDir, { recursive: true, force: true })

@@ -333,10 +333,20 @@ public sealed class FfmpegEncoderTests
     }
 
     [Fact]
-    public void ComputeScaleTarget_FallbackDivisorLimitsUserOutput()
+    public void ComputeScaleTarget_FallbackDivisor_DoesNotReduceBelowUserOutput()
     {
-        // Cascading fallback 1/2 + user 720p num capture 1920×1080 → 960×540 (limite do divisor).
+        // Cascading fallback 1/2 + user 720p num capture 1920×1080 → mantém 1280×720.
+        // O alvo explícito do usuário é o piso — fallback troca encoder, nunca a resolução.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 2);
+        Assert.NotNull(result);
+        Assert.Equal((1280, 720), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_FallbackDivisor_AppliesWhenNative()
+    {
+        // Sem resolução explícita do usuário (nativo) + fallback 1/2 → reduz para 960×540.
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 0, 0, 2);
         Assert.NotNull(result);
         Assert.Equal((960, 540), result!.Value);
     }

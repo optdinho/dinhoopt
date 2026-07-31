@@ -151,13 +151,17 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// ratio da entrada quando a resolução do usuário tem proporção diferente (ex.:
     /// captura 16:10/21:9 + preset 16:9) — ajusta dentro do box alvo sem esticar.
     /// Retorna null quando nenhum scale é necessário (saída == entrada).
+    /// O divisor do fallback SÓ se aplica quando o usuário não definiu resolução
+    /// explícita (nativo, outputW &lt;= 0). Se o usuário escolheu um alvo (ex.: 720p),
+    /// esse alvo é o piso — o fallback troca o encoder, nunca degrada a resolução
+    /// escolhida (filosofia OBS: output resolution é decisão do usuário).
     /// </summary>
     internal static (int Width, int Height)? ComputeScaleTarget(
         int inputW, int inputH, int outputW, int outputH, int scaleDivisor)
     {
         int outW = outputW > 0 ? outputW : inputW;
         int outH = outputH > 0 ? outputH : inputH;
-        if (scaleDivisor > 1)
+        if (scaleDivisor > 1 && outputW <= 0)
         {
             outW = Math.Min(outW, inputW / scaleDivisor);
             outH = Math.Min(outH, inputH / scaleDivisor);
@@ -251,17 +255,21 @@ internal sealed partial class FfmpegEncoder : IEncoder
            GOP 120 (~2s a 60fps): OBS recomenda, ~10% menos bits que GOP 60. */
         var bframesArg = _bframes > 0 ? $"-bf {_bframes}" : "-bf 0";
         var lookaheadArg = $"-rc-lookahead {_lookahead}";
+        // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
+        // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
+        // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
+        var cpuCq = Math.Clamp(_cq, 1, 51);
         var tune = _codec switch
         {
-            "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
-            "libx265" => "-preset ultrafast -tune zerolatency -x265-params no-open-gop=1:bframes=0:keyint=60:min-keyint=60",
+            "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high",
+            "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
             "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
             "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
             "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "h264_qsv" => $"-preset veryslow -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
-            _ => "-preset ultrafast -tune zerolatency -threads 1"
+            _ => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high"
         };
 
         int cw = _cropW, ch = _cropH;

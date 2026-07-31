@@ -426,6 +426,7 @@ public sealed partial class EngineCoordinator
             var diagFrames = 0;
             var loggedFirstNullFrame = false;
             var loggedFirstFailFrame = false;
+            var lastRamLogUtc = DateTime.UtcNow.AddSeconds(-2);
 
         while (!ct.IsCancellationRequested && _capture != null && _encoder != null)
         {
@@ -436,6 +437,24 @@ public sealed partial class EngineCoordinator
             // Captura o PTS da câmera ANTES de TryCaptureFrame — reflete o momento
             // real da captura, não o momento após latência de encoding (NVENC/AMF)
             var capturePts = TimeSpan.FromSeconds((double)(beforeCapture - _clock.StartTimestamp) / Stopwatch.Frequency);
+
+            // Log de RAM em tempo real (~1s). Usa clock, não diagFrames, para que
+            // continue rodando mesmo durante stall de vídeo (frames null/success=false)
+            // — o cenário exato em que se quer vigiar crescimento de memória.
+            var nowUtc = DateTime.UtcNow;
+            if ((nowUtc - lastRamLogUtc).TotalSeconds >= 1)
+            {
+                lastRamLogUtc = nowUtc;
+                var d = _buffer.StatsDetailed();
+                double videoMb = d.videoBytes / (1024.0 * 1024.0);
+                double audioMb = d.audioBytes / (1024.0 * 1024.0);
+                double totalMb = videoMb + audioMb;
+                long workingSetMb = 0;
+                try { workingSetMb = Process.GetCurrentProcess().WorkingSet64 / (1024L * 1024L); }
+                catch (Exception ex) { Log.D("RAM", $"working set sample failed: {ex.Message}"); }
+                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB");
+            }
+
             try
             {
                 int captureTimeout = Math.Max(1, Math.Min(100, 1000 / _config.Config.Fps));
@@ -530,14 +549,19 @@ public sealed partial class EngineCoordinator
 
                 if (!_needsReinit)
                 {
-                    // Se o processo alvo ainda está vivo e usamos WGC per-window,
-                    // NÃO reinicia JAMAIS — o usuário só alt-tabou e vai voltar.
-                    // WGC per-window retoma frames naturalmente quando o jogo
-                    // voltar ao foreground. O watchdog é resetado para evitar
-                    // que o acúmulo de frames dropped dispare ShouldReinit()
-                    // quando o jogo retornar.
+                    // Se o processo alvo ainda está vivo, usamos WGC per-window E o
+                    // jogo NÃO está em foreground, não reinicia — o usuário só
+                    // alt-tabou e vai voltar. WGC per-window retoma frames
+                    // naturalmente quando o jogo voltar ao foreground. O watchdog
+                    // é resetado para evitar que o acúmulo de frames dropped
+                    // dispare ShouldReinit() quando o jogo retornar.
+                    //
+                    // Se o jogo ESTÁ em foreground mas os frames não chegam, não é
+                    // alt-tab — é stall do WGC (ex: DWM parou de entregar frames).
+                    // Nesse caso cai no else-if e o watchdog/starvation podem reiniciar.
                     if (_capture is WgcCaptureSource && _captureTargetGame.IsValid &&
-                        IsProcessAlive(_captureTargetGame.ProcessName))
+                        IsProcessAlive(_captureTargetGame.ProcessName) &&
+                        !IsTargetGameForeground())
                     {
                         _bgDropCount++;
                         if (_bgDropCount >= BG_DEBOUNCE_DROPS)
@@ -564,6 +588,12 @@ public sealed partial class EngineCoordinator
                             _captureActive = false;
                             _captureTargetGame = new GameInfo();
                             _captureTargetHwnd = IntPtr.Zero;
+                            // Não chama StopCapture() aqui: PipelineLoop É a _pipelineTask,
+                            // e StopCapture() faz _pipelineTask.Wait(2000) → deadlock.
+                            // Agenda o teardown completo para rodar DEPOIS que o loop
+                            // sair e a task completar (evita zumbi: ffmpeg/encoder/áudio
+                            // continuam rodando com recording=false).
+                            _ = Task.Run(() => StopCapture());
                             break;
                         }
                         else
@@ -606,15 +636,8 @@ public sealed partial class EngineCoordinator
                     s.ReplayBufferAudioBytes = d.audioBytes;
                 });
 
-                // Log de RAM a cada ~60 frames (~1s a 60fps)
-                if (diagFrames % 60 == 0)
-                {
-                    var d = _buffer.StatsDetailed();
-                    double videoMb = d.videoBytes / (1024.0 * 1024.0);
-                    double audioMb = d.audioBytes / (1024.0 * 1024.0);
-                    double totalMb = videoMb + audioMb;
-                    Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s");
-                }
+                // Log de RAM a cada ~60 frames (~1s a 60fps) — movido para o topo do
+                // loop (clock-based) para continuar rodando durante stall de vídeo.
 
                 // DriftMonitor: a cada ~300 frames (~5s a 60fps), verifica se o PTS de
                 // vídeo e áudio estão divergindo. Loga warning se drift > 150ms (ITU-R perceptível).
@@ -667,6 +690,26 @@ public sealed partial class EngineCoordinator
                      _encoder == null ? "encoder nulo" : "desconhecido";
         Log.E("Pipeline", $"Loop encerrado: {reason} diagFrames={diagFrames} loggedFirstNull={loggedFirstNullFrame} loggedFirstFail={loggedFirstFailFrame}");
         RevertMmThreadPriority();
+    }
+
+    /// <summary>
+    /// True se a janela alvo da captura ainda é a janela em foreground.
+    /// Distingue alt-tab real (jogo NÃO em foreground → suppression de reinit)
+    /// de stall do WGC (jogo EM foreground mas frames não chegam → watchdog pode reiniciar).
+    /// </summary>
+    private bool IsTargetGameForeground()
+    {
+        if (_captureTargetHwnd == IntPtr.Zero)
+            return false;
+        try
+        {
+            return PInvoke.GetForegroundWindow() == (HWND)_captureTargetHwnd;
+        }
+        catch (Exception ex)
+        {
+            Log.D("EngineCoordinator", $"IsTargetGameForeground failed: {ex.Message}");
+            return false;
+        }
     }
 
     private async Task ReinitializePipelineAsync()

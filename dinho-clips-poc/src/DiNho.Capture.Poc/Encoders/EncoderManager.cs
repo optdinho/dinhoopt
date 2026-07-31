@@ -528,6 +528,8 @@ public sealed class EncoderManager : IDisposable
     /// Build a cascading fallback chain for the given user codec preference.
     /// Chain order: hardware native → reduced resolution (1/2, 1/4) → CPU ultrafast.
     /// Each entry includes the codec and optional resolution scale divisor.
+    /// The scale divisor only takes effect when the user did NOT choose an explicit
+    /// output resolution (native); a user-chosen target is the floor and is preserved.
     /// </summary>
     public static List<FallbackEntry> BuildFallbackChain(string userCodec, int vendorId)
     {
@@ -550,22 +552,22 @@ public sealed class EncoderManager : IDisposable
         if (!string.IsNullOrEmpty(hwCodec))
             chain.Add(new FallbackEntry { Codec = hwCodec, Label = $"HW native ({hwCodec})" });
 
-        // HW at 720p
+        // HW at half resolution (divisor 2)
         if (!string.IsNullOrEmpty(hwCodec))
             chain.Add(new FallbackEntry
             {
                 Codec = hwCodec,
                 ScaleDivisor = 2,
-                Label = $"HW 720p ({hwCodec})",
+                Label = $"HW 1/2 ({hwCodec})",
             });
 
-        // HW at 480p
+        // HW at quarter resolution (divisor 4)
         if (!string.IsNullOrEmpty(hwCodec))
             chain.Add(new FallbackEntry
             {
                 Codec = hwCodec,
                 ScaleDivisor = 4,
-                Label = $"HW 480p ({hwCodec})",
+                Label = $"HW 1/4 ({hwCodec})",
             });
 
         // CPU fallback
@@ -576,12 +578,12 @@ public sealed class EncoderManager : IDisposable
         };
         chain.Add(new FallbackEntry { Codec = cpuCodec, Label = $"CPU ({cpuCodec})" });
 
-        // CPU at 720p (last resort)
+        // CPU at half resolution (last resort)
         chain.Add(new FallbackEntry
         {
             Codec = cpuCodec,
             ScaleDivisor = 2,
-            Label = $"CPU 720p ({cpuCodec})",
+            Label = $"CPU 1/2 ({cpuCodec})",
         });
 
         return chain;

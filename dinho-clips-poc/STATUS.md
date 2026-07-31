@@ -57,8 +57,8 @@ Uma vez em `libx264`, não há fallback adicional — o encoder tenta 5x e falha
 ### Otimizações PC fraco (seção 10 da spec: CPU < 2%)
 - GPU→GPU NV12 via D3D11 Video Processor (zero CPU no hot path de conversão)
 - ffmpeg em prioridade **BelowNormal** — não compete com o jogo
-- `-threads 1` no libx264 — não estoura CPU
-- `-preset ultrafast -tune zerolatency` — latência mínima
+- `-threads` livre no libx264 — usa todos os cores (fallback de CPU mantém qualidade)
+- `-preset veryfast -crf N -maxrate X -bufsize Y -bf 0 -profile:v high` — fallback de CPU com qualidade decente (2026-07-31: era `ultrafast`/baseline/threads 1, que gerava clips borrados)
 - `EncodeFrame` bloqueia apenas no `stdin.Write` (sub-milissegundo com HW)
 - `ArrayPool` sem leaks no hot path
 - `-movflags +faststart` nos exports — streaming-ready

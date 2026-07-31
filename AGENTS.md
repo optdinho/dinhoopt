@@ -2667,3 +2667,96 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - **140/140 ipc-validation tests** — 0 quebras
 - **31/31 game-mode-store tests** — 0 quebras
 - **Commit**: `c487cfa`
+
+## Session Summary (2026-07-31 — WGC video stall fix: jogo "fechado" falso + teardown zumbi)
+
+### Root cause (confirmada via logs do app instalado `dinho-optimizer`)
+
+- Incidente real: ffmpeg congelado em `frame=133904` (vídeo parado), áudio/PTT saudáveis, pump WGC vivo (`msgs=0`), status `game="null" recording=false`. 4 etapas:
+  1. **WGC per-window parou de entregar frames no meio da sessão** (pump vivo mas DWM não entrega).
+  2. **Guard de alt-tab impede self-heal**: `EngineCoordinator.Capture.cs:539-553` — enquanto `IsProcessAlive()` for true, cada frame incrementa `_bgDropCount`, seta `_gameBackgrounded=true`, zera `_starvationStart` e reseta `_watchdog`; o `else if` de reinit (linha 554) nunca é avaliado. Frames ausentes com jogo "vivo" eram interpretados como alt-tab indefinidamente.
+  3. **`IsProcessAlive("FiveM_b3258_GTAProcess")` retornou falso às 09:51:37 com o jogo ainda rodando** (áudio continuou às 09:53) → caiu no ramo de "jogo fechou".
+  4. **Ramo de "jogo fechou" fazia `break` sem desligar nada** (ffmpeg, AudioMixer, AAC encoder, captura, WGC pump continuavam rodando; nada reiniciava) → estado zumbi `game="null" recording=false` + ffmpeg congelado + áudio fluindo para sempre até stop/start manual.
+
+### Fixes aplicados
+
+- **Fix 1 — teardown no ramo "jogo fechou"** (`EngineCoordinator.Capture.cs:~558`): o `break` agora agenda `_ = Task.Run(() => StopCapture());` para rodar DEPOIS que o loop sair e a task completar — evita o deadlock do `_pipelineTask.Wait(2000)` (o PipelineLoop É a `_pipelineTask`) e elimina o zumbi com teardown completo (ffmpeg/encoder/áudio). Primeira versão tinha cancel manual do `_pipelineCts`, removido por redundância/risco de `ObjectDisposedException`.
+- **Fix 2 — guard anti-restart distingue stall de alt-tab** (`EngineCoordinator.Capture.cs:~531`): a condição do `if` agora exige `!IsTargetGameForeground()`. Jogo EM foreground com frames ausentes = stall do WGC (não alt-tab) → cai no `else if` → watchdog/starvation podem reiniciar em ~3s (o watchdog reseta `_starvationStart`/`_lastIssueTime`; após voltar ao foreground, 3s sem frames bons → `ShouldReinit()` = true).
+- **Helper novo `IsTargetGameForeground()`** (`EngineCoordinator.Capture.cs`, após `PipelineLoop`): compara `PInvoke.GetForegroundWindow() == (HWND)_captureTargetHwnd` (mesmo padrão já usado em `GameDetector.cs` / `PrintWindowCaptureSource.cs`). Retorna false quando `_captureTargetHwnd == IntPtr.Zero` ou exceção de P/Invoke (log Debug).
+
+### Validado
+
+- **Build**: `dotnet build` — 0 erros (19 warnings pré-existentes)
+- **C# tests**: **954/954 pass** — 0 falhas
+- **Publish + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; copiado `DiNho.Capture.Poc.{dll,exe,pdb,deps.json,runtimeconfig.json}` para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\`
+
+### Next Steps
+
+- Reiniciar o app instalado e testar sessão longa com FiveM: verificar que stall de vídeo se recupera sozinho (watchdog reinit) e que não há mais estado zumbi `game="null" recording=false` com ffmpeg congelado
+- Candidato a investigação futura: `FfmpegEncoder.cs:382` — `_stdin!.Write(nv12)` bloqueante sem timeout (se o pipe do ffmpeg encher, o loop de captura trava sem detecção)
+
+## Session Summary (2026-07-31b — Fallback não sobrepõe resolução do usuário + labels honestas)
+
+### Root cause (clip 960x540 com front setado em 720p)
+
+- Usuário setou 720p (1280x720) no front, captura 1080p. Quando o cascading fallback disparou (loop de restarts ffmpeg), o `ComputeScaleTarget` reduziu a saída para **960x540** em vez de manter 720p.
+- Causa: `ComputeScaleTarget` (`FfmpegEncoder.cs`) aplicava o divisor do fallback contra a **captura**, não contra o alvo do usuário: `outW = Math.Min(outW, inputW / scaleDivisor)` → com user=1280x720, capture=1920x1080, divisor 1/2 → `min(1280, 960) = 960`. O divisor **sobrepunha a resolução escolhida no front** (qualidade/bitrate ficavam intactos — só resolução era sobreposta).
+- Labels da cadeia de fallback enganosas: `BuildFallbackChain` (`EncoderManager.cs`) chamava os degraus de "HW 720p"/"HW 480p"/"CPU 720p", mas divisor 1/2 sobre captura 1080p = 540p (não 720p) e 1/4 = 270p. Rótulos prometiam 720p e entregavam 540p.
+
+### Decisão (com referências OBS/NVIDIA)
+
+- **Filosofia OBS**: Output (Scaled) Resolution é decisão explícita do usuário — OBS nunca muda a resolução de saída automaticamente em fallback; downscale é escolha deliberada do usuário. NVENC guide idem. Ladders de resolução são para streaming adaptativo de entrega, não para encoder local instável.
+- **Regra adotada**: o alvo explícito do usuário é o **piso**. Fallback troca o encoder (HW→CPU), nunca degrada a resolução escolhida. O divisor só se aplica quando o usuário deixou **nativo** (outputW <= 0).
+
+### Implementado
+
+- `FfmpegEncoder.cs` `ComputeScaleTarget`: divisor agora condicionado a `scaleDivisor > 1 && outputW <= 0` — se o usuário setou alvo explícito, o divisor é ignorado e a resolução escolhida é preservada em qualquer degrau da cadeia. Nativo + divisor 1/2 continua reduzindo (sobrevida, ex.: 1080p→540p).
+- `EncoderManager.cs` `BuildFallbackChain`: labels corrigidas para **"HW 1/2" / "HW 1/4" / "CPU 1/2"** (honestas — divisor relativo à captura, não resolução fixa). Doc comment da cadeia atualizado com a regra do divisor.
+- `FfmpegEncoderTests.cs`: teste antigo `ComputeScaleTarget_FallbackDivisorLimitsUserOutput` (esperava 960x540) substituído por `ComputeScaleTarget_FallbackDivisor_DoesNotReduceBelowUserOutput` (espera 1280x720) + novo `ComputeScaleTarget_FallbackDivisor_AppliesWhenNative` (espera 960x540).
+
+### Validado
+
+- **C# tests**: **955/955 pass** — 0 falhas (era 954; +1 novo teste)
+- **Build**: `dotnet build` 0 erros
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (291 files); copiado `DiNho.Capture.Poc.{dll,exe,pdb,deps.json,runtimeconfig.json}` para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — hash SHA256 confere com o publish
+
+### Next Steps
+
+- Reiniciar o app instalado: confirmar que clip com front em 720p + fallback mantém 1280x720 (não 960x540)
+- Validar em campo com FiveM: sessão longa + save de clip novo → `MP4 probe: streams=2 video=True audio=True` e resolução respeitando o front
+
+## Session Summary (2026-07-31c — CPU fallback quality fix: ultrafast → veryfast CRF+VBV)
+
+### Root cause (qualidade ruim do clip 09-34-58)
+
+- Clip de evidência `DiNho Optimizer 2026-07-31_09-34-58.mp4`: `h264 (Constrained Baseline) • 960x540 • 60fps • 7322 kb/s` — perfil **Constrained Baseline** é a assinatura do `-preset ultrafast` (CAVLC, sem CABAC, sem B-frames).
+- Args reais do fallback de CPU no log JSONL (01:25:46): `-vf "scale=960:540" -c:v libx264 -preset ultrafast -tune zerolatency -threads 1` — **3 fatores de degradação somados**:
+  1. `-preset ultrafast` — pior preset do libx264 (estimativa de movimento primitiva → blocos/ruído em movimento)
+  2. `-tune zerolatency` → perfil Baseline/CAVLC (~15% menos eficiente que High/CABAC)
+  3. `-threads 1` — single-thread, e **nenhum controle de bitrate** (sem `-crf`/`-maxrate` → CRF 23 padrão, sem VBV)
+
+### Fix aplicado (`FfmpegEncoder.cs` `StartFfmpeg` tune switch, linhas ~258-273)
+
+- **libx264** / **default** (`_ =>`): `-preset ultrafast -tune zerolatency -threads 1` → `-preset veryfast -crf {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high`
+- **libx265**: idem + `-x265-params no-open-gop=1:keyint=60:min-keyint=60` mantido, `bframes=0` preservado
+- `cpuCq = Math.Clamp(_cq, 1, 51)` — CRF segue o CQ do usuário (default 22)
+- Decisões:
+  - **Sem `-tune zerolatency`**: zerolatency forçava baseline/bframes=0 via sliced-threads; removido para permitir CABAC/High profile. `-bf 0` explícito **garante ordem de saída = ordem de entrada** — requisito do PTS pipeline (EmitPacket → Matroska). Latência de lookahead do veryfast é irrelevante para replay buffer.
+  - **Sem `-threads 1`**: x264 auto-usa todos os cores — velocidade ↑ e qualidade ↑ simultâneos.
+  - **CRF+VBV**: mesmo padrão do NVENC (`-crf` primário + `-maxrate`/`-bufsize` cap) — mantém controle de tamanho/qualidade.
+- `BuildProbeArgs` (EncoderManager.cs:390) NÃO mudado — é o probe de teste (5 frames dummy, 320x240), não afeta a gravação.
+- `STATUS.md` atualizado (seção "Otimizações PC fraco": doc antiga de `-threads 1`/ultrafast substituída).
+
+### Validado
+
+- **Build**: `dotnet build -c Release` 0 erros (warnings pré-existentes)
+- **C# tests**: **955/955 pass** — 0 falhas
+- **Publish**: `dotnet publish -c Release --self-contained true -r win-x64` EXIT=0
+- **Stage**: `npm run copy-engine` — 291 files staged
+- **Deploy**: copiado para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — DLL SHA256 `E62C592D...` (novo, vs antigo `96027A72...`), LastWriteTime 11:15:18
+
+### Next Steps
+
+- Reiniciar o app instalado e rodar sessão de campo com FiveM (front 720p):
+  - Conferir que o fallback **não dispara mais** (engine novo resolve codec) — `initialized (codec=av1_nvenc)` no log
+  - Se disparar: qualidade do clip com `-preset veryfast -crf 22 -maxrate ... -bf 0 -profile:v high` (High/CABAC, sem Baseline) e resolução **1280x720**
