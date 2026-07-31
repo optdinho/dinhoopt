@@ -93,8 +93,8 @@ export interface DiNhoSettings {
     hour: number
   }
   schedules: ScheduleEntry[]
-  /** Preferred Windows package manager for Software Updater */
-  windowsPackageManager: 'winget' | 'choco' | 'scoop'
+  /** @deprecated No longer used — only Winget is supported */
+  windowsPackageManager?: 'winget'
   gameMode: GameModeConfig
   /**
    * Registry-cleaner tweaks the user has chosen to ignore. Recurring advisory

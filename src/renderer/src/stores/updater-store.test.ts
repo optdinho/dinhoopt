@@ -37,7 +37,7 @@ afterEach(() => {
     packageManagerAvailable: true,
     packageManagerName: null,
     searchQuery: '',
-    sortField: 'name',
+    sortField: 'severity',
     sortDirection: 'asc',
     severityFilter: 'all',
   })
@@ -51,7 +51,7 @@ describe('updater-store', () => {
     expect(s.ignoredIds.size).toBe(0)
     expect(s.loading).toBe(false)
     expect(s.hasChecked).toBe(false)
-    expect(s.sortField).toBe('name')
+    expect(s.sortField).toBe('severity')
     expect(s.severityFilter).toBe('all')
   })
 

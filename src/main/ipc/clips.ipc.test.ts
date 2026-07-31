@@ -342,6 +342,26 @@ describe('CLIPS_LIST_CLIPS', () => {
     expect(list).toHaveLength(1)
     expect(list[0]!.duration).toBe(0)
   })
+
+  it('re-reads the disk on every call so manual refresh picks up new clips', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockDuration('Duration: 00:01:00.00\n')
+    const readdirMock = vi.mocked(readdir)
+    readdirMock.mockResolvedValueOnce(['clip1.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
+    vi.mocked(stat).mockResolvedValue({
+      size: 100,
+      birthtime: new Date(),
+      mtime: new Date(),
+    } as Awaited<ReturnType<typeof stat>>)
+
+    const handler = getAsyncHandler(captureHandlers(), IPC.CLIPS_LIST_CLIPS)
+    const first = (await handler()) as ClipInfo[]
+    expect(first).toHaveLength(1)
+
+    readdirMock.mockResolvedValueOnce(['clip1.mp4', 'clip2.mp4'] as unknown as Awaited<ReturnType<typeof readdir>>)
+    const second = (await handler()) as ClipInfo[]
+    expect(second).toHaveLength(2)
+  })
 })
 
 describe('CLIPS_DELETE_CLIP', () => {

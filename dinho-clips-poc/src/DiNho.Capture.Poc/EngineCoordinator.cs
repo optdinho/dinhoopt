@@ -211,6 +211,11 @@ public sealed partial class EngineCoordinator : IDisposable
     {
         Log.I("EngineCoordinator", "Iniciando...");
 
+        // Remove spill temp files órfãos de sessões anteriores (crash não executa Dispose)
+        var orphans = Buffer.DiskSpillBuffer.CleanupOrphans();
+        if (orphans > 0)
+            Log.I("EngineCoordinator", $"Spill cleanup: {orphans} orphan temp file(s) removed");
+
         // timeBeginPeriod(1) garante resolução de 1ms no scheduler,
         // reduzindo glitches de áudio e melhorando precisão de timestamps QPC
         var result = PInvoke.timeBeginPeriod(1);

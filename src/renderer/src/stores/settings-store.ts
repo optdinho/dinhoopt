@@ -35,7 +35,6 @@ const defaultSettings: DiNhoSettings = {
     hour: 9,
   },
   schedules: [],
-  windowsPackageManager: 'winget',
   gameMode: {
     enabledOptimizations: [
       'svc-wsearch',

@@ -502,4 +502,154 @@ public sealed class ReplayBufferTests
         // Without spill, only RAM frames survive (budget ~3 frames)
         Assert.True(video.Count < 10, $"Without spill, should have fewer than 10, got {video.Count}");
     }
+
+    // ─── Disk Spill — Sliding Time Window (Opção 1) ─────────────────────
+
+    [Fact]
+    public void DiskSpill_TrimToWindow_BoundsDiskFootprint()
+    {
+        var dir = TempDir();
+        try
+        {
+            // Window of 10s with a tiny RAM budget forces heavy spilling.
+            // The spill must be bounded by the time window (like ShadowPlay),
+            // never growing without limit.
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(10), 200);
+            buf.EnableDiskSpill(dir);
+
+            // 40 frames at 1s intervals (PTS 0..39s) — way beyond the 10s window
+            for (int i = 0; i < 40; i++)
+                buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), false, 100));
+
+            var stats = buf.SpillStats();
+            // RAM keeps ~1 frame (the newest); disk keeps ~the last 10s window
+            Assert.True(stats.ramVideo + stats.diskVideo <= 13,
+                $"Total frames should be bounded by the 10s window, got {stats.ramVideo + stats.diskVideo}");
+            Assert.True(stats.diskVideo >= 8,
+                $"Disk should still hold most of the window, got {stats.diskVideo}");
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_TrimAlignsToKeyframe()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(10), 200);
+            buf.EnableDiskSpill(dir);
+
+            // Every 5th frame is a keyframe
+            for (int i = 0; i < 40; i++)
+                buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), isKey: i % 5 == 0, 100));
+
+            var stats = buf.SpillStats();
+            Assert.True(stats.ramVideo + stats.diskVideo <= 12,
+                $"Total frames should stay bounded, got {stats.ramVideo + stats.diskVideo}");
+
+            // The oldest retained frame must be a keyframe so the surviving
+            // stream starts at a decodable frame.
+            var (video, _) = buf.GetSegments();
+            Assert.NotEmpty(video);
+            Assert.True(video[0].IsKeyFrame,
+                $"Retained window should start at a keyframe, oldest PTS={video[0].Pts.TotalSeconds}s");
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_TrimKeepsAllWithinWindow()
+    {
+        var dir = TempDir();
+        try
+        {
+            // 60s window, only 10s of data → nothing should be trimmed
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60), 300);
+            buf.EnableDiskSpill(dir);
+
+            for (int i = 0; i < 10; i++)
+                buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), false, 100));
+
+            var stats = buf.SpillStats();
+            Assert.Equal(10, stats.ramVideo + stats.diskVideo);
+
+            var (video, _) = buf.GetSegments();
+            Assert.Equal(10, video.Count);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_TrimOldest_CompactsWhenGarbageDominates()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var spill = new DiskSpillBuffer(dir);
+            for (int i = 0; i < 100; i++)
+                spill.Write(MakeVideo(TimeSpan.FromSeconds(i), false, 100));
+
+            // Trim to last 10s → cutoff 89s → keep frames 89..99 (11 frames)
+            int removed = spill.TrimOldest(TimeSpan.FromSeconds(10));
+            Assert.Equal(89, removed);
+            Assert.Equal(11, spill.Count);
+            Assert.Equal(1100, spill.TotalBytes);
+
+            // Compaction must run once garbage dominates (>50% of the file)
+            var dataFile = Directory.GetFiles(dir, "dinho-spill-*.bin").Single();
+            Assert.True(new FileInfo(dataFile).Length <= 2200,
+                $"Physical file should be compacted, was {new FileInfo(dataFile).Length}");
+
+            // Reads must still be correct after compaction (physical offsets)
+            var all = spill.ReadAll();
+            Assert.Equal(11, all.Count);
+            for (int i = 0; i < all.Count; i++)
+                Assert.Equal(TimeSpan.FromSeconds(i + 89), all[i].Pts);
+
+            // Writes after trim/compact must land at correct offsets
+            spill.Write(MakeVideo(TimeSpan.FromSeconds(120), false, 100));
+            var all2 = spill.ReadAll();
+            Assert.Equal(12, all2.Count);
+            Assert.Equal(TimeSpan.FromSeconds(120), all2[^1].Pts);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_CleanupOrphans_RemovesOnlySpillFiles()
+    {
+        var dir = TempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "dinho-spill-aaaa1111.bin"), "stale-data");
+            File.WriteAllText(Path.Combine(dir, "dinho-spill-aaaa1111.idx"), "stale-index");
+            var keepFile = Path.Combine(dir, "important.txt");
+            File.WriteAllText(keepFile, "keep");
+            Directory.CreateDirectory(Path.Combine(dir, "dinho-spill-subdir"));
+
+            int removed = DiskSpillBuffer.CleanupOrphans(dir);
+
+            Assert.True(removed >= 2, $"Should remove stale spill files, removed={removed}");
+            Assert.False(File.Exists(Path.Combine(dir, "dinho-spill-aaaa1111.bin")));
+            Assert.False(File.Exists(Path.Combine(dir, "dinho-spill-aaaa1111.idx")));
+            Assert.True(File.Exists(keepFile), "Non-spill file must be kept");
+            Assert.True(Directory.Exists(Path.Combine(dir, "dinho-spill-subdir")),
+                "Directories with spill-like prefix must be kept");
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_CleanupOrphans_NoSpillFiles_ReturnsZero()
+    {
+        var dir = TempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "unrelated.bin"), "data");
+            Assert.Equal(0, DiskSpillBuffer.CleanupOrphans(dir));
+            Assert.True(File.Exists(Path.Combine(dir, "unrelated.bin")));
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
 }

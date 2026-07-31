@@ -39,6 +39,7 @@ function padListCols(name: string, id: string, version: string, source: string):
 
 beforeEach(() => {
   vi.clearAllMocks()
+  execFileAsyncMock.mockReset()
 })
 
 // ─── parseWingetUpgradeOutput ────────────────────────────────
@@ -340,12 +341,10 @@ describe('checkForUpdatesWinget', () => {
       upgradeSeparator,
       padUpgradeCols('App', 'Some.App', '1.0.0', '2.0.0', 'winget'),
     ].join('\n')
-    const listOutput = [listHeader, listSeparator, padListCols('Other', 'Other.App', '1.5.0', 'winget')].join('\n')
 
     execFileAsyncMock
       .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
       .mockResolvedValueOnce({ stdout: upgradeOutput, stderr: '' })
-      .mockResolvedValueOnce({ stdout: listOutput, stderr: '' })
 
     const result = await checkForUpdatesWinget()
     expect(result.packageManagerAvailable).toBe(true)
@@ -379,22 +378,6 @@ describe('checkForUpdatesWinget', () => {
     expect(result.apps).toEqual([])
   })
 
-  it('handles winget list failure gracefully', async () => {
-    const upgradeOutput = [
-      upgradeHeader,
-      upgradeSeparator,
-      padUpgradeCols('App', 'Some.App', '1.0.0', '2.0.0', 'winget'),
-    ].join('\n')
-
-    execFileAsyncMock
-      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      .mockResolvedValueOnce({ stdout: upgradeOutput, stderr: '' })
-      .mockRejectedValueOnce(new Error('list failed'))
-
-    const result = await checkForUpdatesWinget()
-    expect(result.packageManagerAvailable).toBe(true)
-    expect(result.totalCount).toBe(1)
-  })
 })
 
 // ─── runUpdatesWinget ────────────────────────────────────────
@@ -627,50 +610,5 @@ describe('attemptElevatedUpgrade (edge cases)', () => {
 
     const result = await runUpdatesWinget([''], noop)
     expect(result.failed).toBe(1)
-  })
-})
-
-// ─── checkForUpdatesWinget (edge cases) ─────────────────────
-
-describe('checkForUpdatesWinget (edge cases)', () => {
-  it('handles list stdout being empty after error', async () => {
-    const upgradeOutput = [
-      upgradeHeader,
-      upgradeSeparator,
-      padUpgradeCols('App', 'Some.App', '1.0.0', '2.0.0', 'winget'),
-    ].join('\n')
-
-    execFileAsyncMock
-      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      .mockResolvedValueOnce({ stdout: upgradeOutput, stderr: '' })
-      .mockRejectedValueOnce({ message: 'list failed', code: '1' })
-
-    const result = await checkForUpdatesWinget()
-    expect(result.packageManagerAvailable).toBe(true)
-    expect(result.totalCount).toBe(1)
-    // list failed without stdout → listStdout = '' → if(listStdout) is false → no upToDateApps
-    expect(result.apps).toHaveLength(1)
-  })
-
-  it('handles list stdout being set from error', async () => {
-    const upgradeOutput = [
-      upgradeHeader,
-      upgradeSeparator,
-      padUpgradeCols('App', 'Some.App', '1.0.0', '2.0.0', 'winget'),
-    ].join('\n')
-
-    const listOutput = [listHeader, listSeparator, padListCols('VS Code', 'Microsoft.VSCode', '1.85.0', 'winget')].join(
-      '\n',
-    )
-
-    execFileAsyncMock
-      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
-      .mockResolvedValueOnce({ stdout: upgradeOutput, stderr: '' })
-      .mockRejectedValueOnce({ stdout: listOutput, code: '1' })
-
-    const result = await checkForUpdatesWinget()
-    expect(result.packageManagerAvailable).toBe(true)
-    // up-to-date apps parsed from list stdout despite error exit code
-    expect(result.totalCount).toBe(1)
   })
 })

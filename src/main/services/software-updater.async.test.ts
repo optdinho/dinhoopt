@@ -9,10 +9,6 @@ vi.mock('./elevation', () => ({
   isAdmin: () => false,
 }))
 
-vi.mock('./settings-store', () => ({
-  getSettings: () => ({ windowsPackageManager: 'winget' }),
-}))
-
 function setPlatform(p: string) {
   Object.defineProperty(process, 'platform', { value: p, configurable: true })
 }
@@ -39,18 +35,11 @@ describe('checkForUpdates (win32)', () => {
       'Google Chrome            Google.Chrome                   120.0.1     121.0.0     winget',
       '2 upgrades available.',
     ].join('\n')
-    const listOutput = [
-      'Name              Id                    Version    Available  Source',
-      '---------------------------------------------------------------------',
-      'Google Chrome     Google.Chrome         121.0.0               winget',
-      'Node.js           OpenJS.NodeJS         20.10.0               winget',
-    ].join('\n')
 
     vi.mocked(execFileAsync).mockImplementation(async (cmd, args) => {
       if (cmd === 'winget') {
         if (args?.[0] === '--version') return { stdout: 'v1.4', stderr: '' }
         if (args?.[0] === 'upgrade') return { stdout: upgradeOutput, stderr: '' }
-        if (args?.[0] === 'list') return { stdout: listOutput, stderr: '' }
       }
       throw new Error('not found')
     })
@@ -58,9 +47,9 @@ describe('checkForUpdates (win32)', () => {
     const result = await mod.checkForUpdates()
     expect(result.packageManagerName).toBe('winget')
     expect(result.packageManagerAvailable).toBe(true)
-    expect(result.apps).toHaveLength(2)
+    expect(result.apps).toHaveLength(1)
     expect(result.apps[0]!.id).toBe('Google.Chrome')
-    expect(result.totalCount).toBe(2)
+    expect(result.totalCount).toBe(1)
     expect(result.majorCount).toBe(1)
   })
 
@@ -158,18 +147,12 @@ describe('runUpdates (win32)', () => {
     expect(result.errors[0]!.reason!.length).toBeLessThanOrEqual(203)
   })
 
-  it('routes to choco when source is specified', async () => {
-    const mod = await freshMod()
-    const { execFileAsync } = await import('./exec-utf8')
-    vi.mocked(execFileAsync).mockResolvedValue({ stdout: 'googlechrome was successful', stderr: '' })
-    const result = await mod.runUpdates(['googlechrome'], vi.fn(), 'choco')
-    expect(result.succeeded).toBe(1)
-  })
-
   it('routes to winget when source is specified', async () => {
     const mod = await freshMod()
     const { execFileAsync } = await import('./exec-utf8')
-    vi.mocked(execFileAsync).mockResolvedValue({ stdout: 'successfully upgraded', stderr: '' })
+    vi.mocked(execFileAsync)
+      .mockResolvedValueOnce({ stdout: 'v1.4', stderr: '' })
+      .mockResolvedValueOnce({ stdout: 'successfully upgraded', stderr: '' })
     const result = await mod.runUpdates(['Google.Chrome'], vi.fn(), 'winget')
     expect(result.succeeded).toBe(1)
   })

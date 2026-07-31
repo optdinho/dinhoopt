@@ -1,12 +1,9 @@
 export {
   checkForUpdates,
   cleanOutput,
+  clearUpdateCache,
   computeSeverity,
   isValidAppId,
-  parseChocoListOutput,
-  parseChocoOutdatedOutput,
-  parseScoopListOutput,
-  parseScoopStatusOutput,
   parseWingetListOutput,
   parseWingetUpgradeOutput,
   runUpdates,

@@ -41,7 +41,6 @@ const defaults: StoreData = {
       hour: 9,
     },
     schedules: [],
-    windowsPackageManager: 'winget' as const,
     gameMode: {
       enabledOptimizations: [
         'svc-wsearch',

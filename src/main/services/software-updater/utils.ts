@@ -52,3 +52,15 @@ export function emptyResult(
 export function stripTrailingVersion(name: string): string {
   return name.replace(/\s+v?\d+[\d.]*\s*$/, '').trim()
 }
+
+export function formatAppName(raw: string): string {
+  const cleaned = raw.replace(/[_-]/g, ' ').trim()
+  if (!cleaned) return raw
+  return cleaned
+    .split(/\s+/)
+    .map((word) => {
+      if (word.length <= 2) return word.toLowerCase()
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    })
+    .join(' ')
+}

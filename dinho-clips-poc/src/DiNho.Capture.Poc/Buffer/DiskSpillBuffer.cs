@@ -55,8 +55,12 @@ public sealed class DiskSpillBuffer : IDisposable
         if (_disposed) return;
 
         int dataLen;
+        long offset;
         using (var fs = new FileStream(_dataPath, FileMode.Append, FileAccess.Write, FileShare.None, 64 * 1024))
         {
+            // Physical position in the file — stays valid even after lazy
+            // compaction leaves holes, because trims never rewrite mid-file.
+            offset = fs.Length;
             if (packet.PcmSamples is { Length: > 0 } pcm)
             {
                 dataLen = pcm.Length * sizeof(float);
@@ -70,10 +74,10 @@ public sealed class DiskSpillBuffer : IDisposable
         }
 
         _index.Add(new SpillEntry(
-            _currentOffset, dataLen, packet.Type, packet.Pts,
+            offset, dataLen, packet.Type, packet.Pts,
             packet.Duration, packet.IsKeyFrame, packet.Width, packet.Height, dataLen));
 
-        _currentOffset += dataLen;
+        _currentOffset = offset + dataLen;
         _totalBytes += dataLen;
         if (packet.Type == MediaType.Video)
         {
@@ -189,10 +193,120 @@ public sealed class DiskSpillBuffer : IDisposable
             removedBytes += _index[i].Length;
 
         _index.RemoveRange(0, splitIdx);
-        _currentOffset -= removedBytes;
         _totalBytes -= removedBytes;
+        RecomputeCounts();
 
-        // Recalculate counts
+        // Compact: rewrite file with remaining data
+        CompactFile();
+
+        return result;
+    }
+
+    /// <summary>
+    /// Drop spilled packets older than <paramref name="maxAge"/> relative to the
+    /// newest spilled packet (sliding time window, like ShadowPlay/Medal). The
+    /// retained window is aligned to the oldest keyframe within it so the
+    /// surviving stream starts at a decodable frame. The physical file is
+    /// compacted lazily only once holes (removed prefix) dominate the file.
+    /// Must be called under ReplayBuffer's write lock.
+    /// </summary>
+    /// <returns>The number of entries removed.</returns>
+    public int TrimOldest(TimeSpan maxAge)
+    {
+        if (_disposed || _index.Count == 0) return 0;
+
+        var lastPts = _index[^1].Pts;
+        var cutoff = lastPts - maxAge;
+        if (cutoff < TimeSpan.Zero) cutoff = TimeSpan.Zero;
+
+        // Fast path: nothing is older than the window.
+        if (_index[0].Pts >= cutoff) return 0;
+
+        // Align the retained window to the oldest keyframe >= cutoff.
+        int splitIdx = -1;
+        for (int i = 0; i < _index.Count; i++)
+        {
+            if (_index[i].Pts < cutoff) continue;
+            if (_index[i].Type == MediaType.Video && _index[i].IsKeyFrame)
+            {
+                splitIdx = i;
+                break;
+            }
+        }
+
+        if (splitIdx < 0)
+        {
+            // No keyframe inside the retained region — fall back to the PTS
+            // cutoff (same window semantics as GetSegments).
+            for (int i = 0; i < _index.Count; i++)
+            {
+                if (_index[i].Pts >= cutoff)
+                {
+                    splitIdx = i;
+                    break;
+                }
+            }
+            if (splitIdx < 0) splitIdx = _index.Count; // entire spill older than window
+        }
+
+        if (splitIdx == 0) return 0;
+
+        long removedBytes = 0;
+        for (int i = 0; i < splitIdx; i++)
+            removedBytes += _index[i].Length;
+
+        _index.RemoveRange(0, splitIdx);
+        _totalBytes -= removedBytes;
+        RecomputeCounts();
+
+        if (_index.Count == 0)
+        {
+            // Everything removed — drop the physical file (no holes remain).
+            try { if (File.Exists(_dataPath)) File.Delete(_dataPath); } catch { }
+            _currentOffset = 0;
+            return splitIdx;
+        }
+
+        // Lazy compaction: rewrite only when holes dominate (physical file
+        // >= 2x retained). Bounds the file to ~2x the window size without
+        // competing with the game for disk I/O on every eviction.
+        if (_currentOffset >= _totalBytes * 2)
+            CompactFile();
+
+        return splitIdx;
+    }
+
+    /// <summary>
+    /// Remove orphaned spill files (dinho-spill-*.bin / dinho-spill-*.idx)
+    /// left behind by crashed sessions. Called once at engine startup.
+    /// Only our own temp files are deleted — unrelated files and directories
+    /// are never touched.
+    /// </summary>
+    /// <returns>The number of files removed.</returns>
+    public static int CleanupOrphans(string? tempDir = null)
+    {
+        var dir = tempDir ?? Path.GetTempPath();
+        int removed = 0;
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(dir, "dinho-spill-*"))
+            {
+                var ext = Path.GetExtension(file);
+                if (ext is not (".bin" or ".idx")) continue;
+                try
+                {
+                    File.Delete(file);
+                    removed++;
+                }
+                catch { /* best effort — a live spill may be in use (Windows locks) */ }
+            }
+        }
+        catch { /* temp directory may not exist */ }
+        return removed;
+    }
+
+    private void RecomputeCounts()
+    {
         _videoCount = 0;
         _audioCount = 0;
         _totalVideoBytes = 0;
@@ -202,11 +316,6 @@ public sealed class DiskSpillBuffer : IDisposable
             if (e.Type == MediaType.Video) { _videoCount++; _totalVideoBytes += e.Length; }
             else { _audioCount++; _totalAudioBytes += e.Length; }
         }
-
-        // Compact: rewrite file with remaining data
-        CompactFile();
-
-        return result;
     }
 
     /// <summary>

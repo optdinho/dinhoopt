@@ -195,6 +195,7 @@ public sealed class ReplayBuffer : IDisposable
                 _spill.Write(oldest);
             oldest.Release();
         }
+        TrimSpillToWindow();
     }
 
     private void TrimExcessAudio()
@@ -211,6 +212,19 @@ public sealed class ReplayBuffer : IDisposable
                 _spill.Write(oldest);
             oldest.Release();
         }
+        TrimSpillToWindow();
+    }
+
+    /// <summary>
+    /// Keep the disk spill bounded by the replay time window: data older than
+    /// MaxDuration is dropped instead of accumulating without limit. No-op
+    /// (O(1) fast path) when the spill is already within the window.
+    /// Must be called under the write lock.
+    /// </summary>
+    private void TrimSpillToWindow()
+    {
+        if (_diskSpillEnabled && _spill is { Count: > 0 })
+            _spill.TrimOldest(_maxDuration);
     }
 
     private static void GrowIfNeeded(ref EncodedPacket?[] buffer, ref int head, ref int tail, ref int count)

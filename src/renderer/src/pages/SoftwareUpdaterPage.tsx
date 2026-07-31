@@ -23,7 +23,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
 import { StatCard } from '@/components/shared/StatCard'
-import { usePlatform } from '@/hooks/usePlatform'
+
 import logger from '@/lib/renderer-logger'
 import { useHistoryStore } from '@/stores/history-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -70,14 +70,11 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
     })),
   )
 
-  const { platform } = usePlatform()
-  const windowsPackageManager = useSettingsStore((s) => s.settings.windowsPackageManager)
   const autoInstallUpdates = useSettingsStore((s) => s.settings.autoInstallUpdates)
   const autoInstallSchedule = useSettingsStore((s) => s.settings.autoInstallSchedule)
 
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [showFilterMenu, setShowFilterMenu] = useState(false)
-  const [showUpToDate, setShowUpToDate] = useState(false)
   const [showIgnored, setShowIgnored] = useState(false)
 
   const { filteredApps, upToDate, selectedCount, allSelected, isBusy, majorCount, minorCount, patchCount } =
@@ -245,29 +242,6 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
               ? t('softwareUpdater.recheckButton')
               : t('softwareUpdater.checkForUpdatesButton')}
         </button>
-
-        {/* Package manager selector (Windows only) */}
-        {platform === 'win32' && (
-          <select
-            value={windowsPackageManager ?? 'winget'}
-            onChange={async (e) => {
-              const value = e.target.value as 'winget' | 'choco'
-              useSettingsStore.getState().updateSettings({ windowsPackageManager: value })
-              await window.dinho.settingsSet({ windowsPackageManager: value })
-              handleCheck()
-            }}
-            disabled={isBusy}
-            aria-label={t('softwareUpdater.packageManagerLabel')}
-            className="rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 outline-none transition-all disabled:opacity-40"
-            style={{
-              background: 'var(--bg-subtle)',
-              border: '1px solid var(--border-medium)',
-            }}
-          >
-            <option value="winget">winget</option>
-            <option value="choco">Chocolatey</option>
-          </select>
-        )}
 
         {/* Auto-install updates toggle */}
         <div className="flex items-center gap-2">
@@ -444,57 +418,12 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         >
           <TriangleAlert className="h-5 w-5 shrink-0 text-red-400" strokeWidth={1.8} />
           <p className="text-[12px] text-zinc-400">
-            {packageManagerName === 'brew' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.brewNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.brewRequired')}{' '}
-                <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.brewSite')}</span>.
-              </>
-            ) : packageManagerName === 'winget' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.wingetNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.wingetRequired')}{' '}
-                <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.wingetStore')}</span>{' '}
-                {t('softwareUpdater.packageManagerNotFound.wingetSearchTerm')}
-              </>
-            ) : packageManagerName === 'choco' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.chocoNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.chocoRequired')}{' '}
-                <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.chocoSite')}</span>.
-              </>
-            ) : packageManagerName === 'apt' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.aptNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.aptRequired')}
-              </>
-            ) : packageManagerName === 'dnf' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.dnfNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.dnfRequired')}
-              </>
-            ) : packageManagerName === 'pacman' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.pacmanNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.pacmanRequired')}
-              </>
-            ) : (
-              <span className="font-semibold text-red-400">
-                {t('softwareUpdater.packageManagerNotFound.noPackageManager')}
-              </span>
-            )}
+            <span className="font-semibold text-red-400">
+              {t('softwareUpdater.packageManagerNotFound.wingetNotFound')}
+            </span>{' '}
+            — {t('softwareUpdater.packageManagerNotFound.wingetRequired')}{' '}
+            <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.wingetStore')}</span>{' '}
+            {t('softwareUpdater.packageManagerNotFound.wingetSearchTerm')}
           </p>
         </div>
       )}
@@ -777,27 +706,16 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       {/* Up to date apps */}
       {hasChecked && !loading && packageManagerAvailable && upToDate.length > 0 && (
         <div className="mb-6">
-          <button
-            type="button"
-            onClick={() => setShowUpToDate(!showUpToDate)}
-            className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            {showUpToDate ? (
-              <ChevronDown className="h-4 w-4" strokeWidth={2} />
-            ) : (
-              <ChevronRight className="h-4 w-4" strokeWidth={2} />
-            )}
+          <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-zinc-500">
             <CircleCheckBig className="h-4 w-4 text-green-500" strokeWidth={1.8} />
             {t('softwareUpdater.upToDateSection', { count: upToDate.length })}
-          </button>
+          </div>
 
-          {showUpToDate && (
-            <div className="grid grid-cols-1 gap-1.5">
-              {upToDate.map((app) => (
-                <UpToDateRow key={app.id} app={app} />
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-1 gap-1.5">
+            {upToDate.map((app) => (
+              <UpToDateRow key={app.id} app={app} />
+            ))}
+          </div>
         </div>
       )}
     </div>

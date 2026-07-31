@@ -184,7 +184,7 @@ export async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
       const result = await execFileAsync(
         'winget',
         ['upgrade', '--accept-source-agreements', '--disable-interactivity'],
-        { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+        { timeout: 15_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
       )
       stdout = result.stdout
     } catch (err: unknown) {
@@ -196,33 +196,12 @@ export async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
       }
     }
 
-    const apps = parseWingetUpgradeOutput(stdout)
-
-    let upToDateApps: UpdatableApp[] = []
-    try {
-      let listStdout = ''
-      try {
-        const listResult = await execFileAsync(
-          'winget',
-          ['list', '--accept-source-agreements', '--disable-interactivity'],
-          { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
-        )
-        listStdout = listResult.stdout
-      } catch (err: unknown) {
-        const e = err as { stdout?: string; message?: string; stderr?: string; code?: string }
-        if (e?.stdout) listStdout = e.stdout
-      }
-      if (listStdout) {
-        const allApps = parseWingetListOutput(listStdout)
-        const outdatedIds = new Set(apps.map((a) => a.id))
-        upToDateApps = allApps.filter((a) => !outdatedIds.has(a.id))
-      }
-    } catch {
-      // Non-critical — just skip the up-to-date list
-    }
+    const apps = parseWingetUpgradeOutput(stdout).filter(
+      (a) => a.currentVersion !== a.availableVersion,
+    )
 
     return {
-      apps: [...apps, ...upToDateApps],
+      apps: apps,
       totalCount: apps.length,
       majorCount: apps.filter((a) => a.severity === 'major').length,
       minorCount: apps.filter((a) => a.severity === 'minor').length,

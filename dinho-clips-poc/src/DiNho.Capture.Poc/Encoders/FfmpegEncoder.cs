@@ -174,19 +174,23 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private void StartFfmpeg()
     {
         /* NVENC/AV1: CRF+VBV — sem -b:v, CQ guia qualidade, maxrate/bufsize como segurança VBV.
-           AMF/QSV/libx264: fallback com bitrateKbps alvo (esses codecs não têm CRF+VBV bom). */
+           AMF/QSV/libx264: fallback com bitrateKbps alvo (esses codecs não têm CRF+VBV bom).
+           Melhorias de qualidade sem alterar CQ/res:
+             NVENC: spatial-aq 1 + temporal-aq 1 + multipass fullres + weighted_pred + nonref_p
+             AMF:   preanalysis + pa_taq_mode 2 + vbaq + scene change detection + me_quarter_pel
+             QSV:   veryslow + extbrc + rdo 1 + adaptive_i/b + b_strategy + mbbrc */
         var bframesArg = _bframes > 0 ? $"-bf {_bframes}" : "-bf 0";
         var lookaheadArg = $"-rc-lookahead {_lookahead}";
         var tune = _codec switch
         {
             "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
             "libx265" => "-preset ultrafast -tune zerolatency -x265-params no-open-gop=1:bframes=0:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
-            "hevc_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
-            "av1_nvenc" => $"-preset {_nvencPreset} -tune ll -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 0 -temporal-aq 0 -zerolatency 1 -g 60 -keyint_min 60",
-            "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0",
-            "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0",
-            "h264_qsv" => $"-preset medium -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K",
+            "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 60 -keyint_min 60",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 60 -keyint_min 60",
+            "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 60 -keyint_min 60",
+            "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
+            "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
+            "h264_qsv" => $"-preset veryslow -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
             _ => "-preset ultrafast -tune zerolatency -threads 1"
         };
 

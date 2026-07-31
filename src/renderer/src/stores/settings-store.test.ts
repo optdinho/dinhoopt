@@ -35,7 +35,6 @@ describe('settings-store', () => {
           hour: 9,
         },
         schedules: [],
-        windowsPackageManager: 'winget',
         gameMode: {
           enabledOptimizations: [],
           customProcessKillList: [],

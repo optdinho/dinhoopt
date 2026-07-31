@@ -49,57 +49,12 @@ export function UpdateDetail({
         >
           <TriangleAlert className="h-5 w-5 shrink-0 text-red-400" strokeWidth={1.8} />
           <p className="text-[12px] text-zinc-400">
-            {packageManagerName === 'brew' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.brewNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.brewRequired')}{' '}
-                <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.brewSite')}</span>.
-              </>
-            ) : packageManagerName === 'winget' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.wingetNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.wingetRequired')}{' '}
-                <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.wingetStore')}</span>{' '}
-                {t('softwareUpdater.packageManagerNotFound.wingetSearchTerm')}
-              </>
-            ) : packageManagerName === 'choco' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.chocoNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.chocoRequired')}{' '}
-                <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.chocoSite')}</span>.
-              </>
-            ) : packageManagerName === 'apt' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.aptNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.aptRequired')}
-              </>
-            ) : packageManagerName === 'dnf' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.dnfNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.dnfRequired')}
-              </>
-            ) : packageManagerName === 'pacman' ? (
-              <>
-                <span className="font-semibold text-red-400">
-                  {t('softwareUpdater.packageManagerNotFound.pacmanNotFound')}
-                </span>{' '}
-                — {t('softwareUpdater.packageManagerNotFound.pacmanRequired')}
-              </>
-            ) : (
-              <span className="font-semibold text-red-400">
-                {t('softwareUpdater.packageManagerNotFound.noPackageManager')}
-              </span>
-            )}
+            <span className="font-semibold text-red-400">
+              {t('softwareUpdater.packageManagerNotFound.wingetNotFound')}
+            </span>{' '}
+            — {t('softwareUpdater.packageManagerNotFound.wingetRequired')}{' '}
+            <span className="text-zinc-300">{t('softwareUpdater.packageManagerNotFound.wingetStore')}</span>{' '}
+            {t('softwareUpdater.packageManagerNotFound.wingetSearchTerm')}
           </p>
         </div>
       )}

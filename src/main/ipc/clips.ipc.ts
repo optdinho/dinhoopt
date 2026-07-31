@@ -155,6 +155,7 @@ export function registerClipsIpc(): void {
   })
 
   ipcMain.handle(IPC.CLIPS_LIST_CLIPS, async (): Promise<ClipInfo[]> => {
+    invalidateClipsCache()
     return await readClipsFromDisk()
   })
 

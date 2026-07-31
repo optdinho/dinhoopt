@@ -2,9 +2,7 @@ import { ArrowUpDown, ChevronDown, CircleCheckBig, Filter, Loader2, RefreshCw, S
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
-import { usePlatform } from '@/hooks/usePlatform'
 import { FILTER_LABEL_KEYS, SORT_LABEL_KEYS } from '@/pages/software-updater/updater-constants'
-import { useSettingsStore } from '@/stores/settings-store'
 import { type SeverityFilter, type SortField, useUpdaterStore } from '@/stores/updater-store'
 
 export interface UpdateHeaderProps {
@@ -31,8 +29,6 @@ export function UpdateHeader({
   onCheck,
 }: UpdateHeaderProps) {
   const { t } = useTranslation('updates')
-  const { platform } = usePlatform()
-  const windowsPackageManager = useSettingsStore((s) => s.settings.windowsPackageManager)
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [showFilterMenu, setShowFilterMenu] = useState(false)
 
@@ -59,28 +55,6 @@ export function UpdateHeader({
             ? t('softwareUpdater.recheckButton')
             : t('softwareUpdater.checkForUpdatesButton')}
       </button>
-
-      {platform === 'win32' && (
-        <select
-          value={windowsPackageManager ?? 'winget'}
-          onChange={async (e) => {
-            const value = e.target.value as 'winget' | 'choco'
-            useSettingsStore.getState().updateSettings({ windowsPackageManager: value })
-            await window.dinho.settingsSet({ windowsPackageManager: value })
-            onCheck()
-          }}
-          disabled={isBusy}
-          aria-label={t('softwareUpdater.packageManagerLabel')}
-          className="rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-400 outline-none transition-all disabled:opacity-40"
-          style={{
-            background: 'var(--bg-subtle)',
-            border: '1px solid var(--border-medium)',
-          }}
-        >
-          <option value="winget">winget</option>
-          <option value="choco">Chocolatey</option>
-        </select>
-      )}
 
       {hasChecked && appsCount > 0 && (
         <div

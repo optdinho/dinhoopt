@@ -68,7 +68,6 @@ const defaults: Record<string, unknown> = {
     backupMode: 'targeted',
     schedule: { enabled: false, frequency: 'weekly', day: 1, hour: 9 },
     schedules: [],
-    windowsPackageManager: 'winget',
     gameMode: {
       enabledOptimizations: [],
       customProcessKillList: [],

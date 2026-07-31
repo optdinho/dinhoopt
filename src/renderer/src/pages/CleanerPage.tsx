@@ -41,23 +41,26 @@ export function CleanerPage() {
   const scanIndexRef = useRef(0)
   const cleanIndexRef = useRef(0)
   const cleanTotalRef = useRef(1)
+  const totalCategoriesRef = useRef(visibleCategories.length)
+  totalCategoriesRef.current = visibleCategories.length
+  const setProgress = useScanStore((s) => s.setProgress)
 
   useEffect(() => {
     if (!window.dinho?.onScanProgress) return
     return window.dinho.onScanProgress((data) => {
       if (data.phase === 'cleaning') {
-        const total = cleanTotalRef.current
+        const total = Math.max(cleanTotalRef.current, 1)
         const base = (cleanIndexRef.current / total) * 100
-        const slice = data.progress / total
-        store.setProgress({ ...data, progress: base + slice })
+        const slice = Math.min(data.progress, 100) / total
+        setProgress({ ...data, progress: Math.min(100, base + slice) })
       } else {
-        const total = visibleCategories.length
+        const total = Math.max(totalCategoriesRef.current, 1)
         const base = (scanIndexRef.current / total) * 100
-        const slice = data.progress / total
-        store.setProgress({ ...data, progress: base + slice })
+        const slice = Math.min(data.progress, 100) / total
+        setProgress({ ...data, progress: Math.min(100, base + slice) })
       }
     })
-  }, [store, visibleCategories])
+  }, [setProgress])
 
   const [failedCategories, setFailedCategories] = useState<string[]>([])
   const [elevationSkipped, setElevationSkipped] = useState<string[]>([])

@@ -22,7 +22,7 @@ export function useBackgroundScans(): void {
     const runSoftwareCheck = async () => {
       logger.info(
         'useBackgroundScans',
-        'Starting background software update check (winget/choco/scoop via PowerShell)...',
+        'Starting background software update check (winget)...',
       )
       try {
         const settings = await window.dinho.settingsGet()

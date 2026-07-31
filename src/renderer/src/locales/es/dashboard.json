@@ -12,6 +12,8 @@
   "gameModeActive": "ACTIVO",
   "gameModeReady": "MODO JUEGO",
   "gameModeClickToOpen": "Haga clic para configurar",
+  "gameModeStarting": "Iniciando...",
+  "gameModeStopping": "Deteniendo...",
   "statSpaceRecovered": "Espacio recuperado",
   "statFilesCleaned": "Archivos limpiados",
   "statTotalScans": "Análisis totales",

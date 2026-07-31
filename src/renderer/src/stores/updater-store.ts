@@ -66,7 +66,7 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
   packageManagerAvailable: true,
   packageManagerName: null,
   searchQuery: '',
-  sortField: 'name',
+  sortField: 'severity',
   sortDirection: 'asc',
   severityFilter: 'all',
 
@@ -158,7 +158,7 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
       packageManagerAvailable: true,
       packageManagerName: null,
       searchQuery: '',
-      sortField: 'name',
+      sortField: 'severity',
       sortDirection: 'asc',
       severityFilter: 'all',
     }),

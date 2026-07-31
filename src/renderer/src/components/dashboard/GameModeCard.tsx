@@ -1,33 +1,35 @@
 import { Gamepad2, Loader2, Play, Square } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGameModeStore } from '@/stores/game-mode-store'
 
 export function GameModeCard({ gameModeActive }: { gameModeActive: boolean }) {
   const { t } = useTranslation('dashboard')
   const storeConfig = useGameModeStore((s) => s.config)
-  const [toggling, setToggling] = useState(false)
+  const status = useGameModeStore((s) => s.status)
+  const setStatus = useGameModeStore((s) => s.setStatus)
+  const isTransitioning = status !== 'idle'
 
   const handleToggle = useCallback(async () => {
-    if (toggling) return
-    setToggling(true)
+    if (isTransitioning) return
+    setStatus(gameModeActive ? 'deactivating' : 'activating')
     try {
       if (gameModeActive) {
         await window.dinho?.gameModeDeactivate?.()
         useGameModeStore.getState().setActive(false, null)
       } else {
         await window.dinho?.gameModeActivate?.(storeConfig)
-        const status = await window.dinho?.gameModeStatus?.()
-        if (status) {
-          useGameModeStore.getState().setActive(status.active, status.activatedAt)
+        const current = await window.dinho?.gameModeStatus?.()
+        if (current) {
+          useGameModeStore.getState().setActive(current.active, current.activatedAt)
         }
       }
     } catch {
       // silent
     } finally {
-      setToggling(false)
+      setStatus('idle')
     }
-  }, [toggling, gameModeActive, storeConfig])
+  }, [isTransitioning, gameModeActive, storeConfig, setStatus])
 
   const glowColor = gameModeActive ? '#06b6d4' : 'transparent'
 
@@ -80,7 +82,7 @@ export function GameModeCard({ gameModeActive }: { gameModeActive: boolean }) {
       <button
         type="button"
         onClick={handleToggle}
-        disabled={toggling}
+        disabled={isTransitioning}
         className="mt-2 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50"
         style={{
           background: gameModeActive ? 'rgba(239,68,68,0.15)' : 'rgba(6,182,212,0.15)',
@@ -88,14 +90,20 @@ export function GameModeCard({ gameModeActive }: { gameModeActive: boolean }) {
           border: `1px solid ${gameModeActive ? 'rgba(239,68,68,0.3)' : 'rgba(6,182,212,0.3)'}`,
         }}
       >
-        {toggling ? (
+        {isTransitioning ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : gameModeActive ? (
           <Square className="h-3.5 w-3.5" />
         ) : (
           <Play className="h-3.5 w-3.5" />
         )}
-        {gameModeActive ? t('gameModeStop', 'Parar') : t('gameModeStart', 'Iniciar')}
+        {status === 'activating'
+          ? t('gameModeStarting', 'Iniciando...')
+          : status === 'deactivating'
+            ? t('gameModeStopping', 'Encerrando...')
+            : gameModeActive
+              ? t('gameModeStop', 'Parar')
+              : t('gameModeStart', 'Iniciar')}
       </button>
     </div>
   )

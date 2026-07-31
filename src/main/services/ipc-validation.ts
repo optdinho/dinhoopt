@@ -25,7 +25,6 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
     'exclusions',
     'ignoredSoftwareUpdates',
     'backupPath',
-    'windowsPackageManager',
     'schedule',
     'schedules',
     'gameMode',
@@ -41,7 +40,6 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if (validateLanguage(obj) === null) return null
   if (validateBoolFields(obj) === null) return null
   if (validateUpdateInterval(obj) === null) return null
-  if (validatePackageManager(obj) === null) return null
   if (validateExclusions(obj) === null) return null
   if (validateIgnoredUpdates(obj) === null) return null
   if (validateBackupPath(obj) === null) return null
@@ -94,12 +92,6 @@ function validateUpdateInterval(obj: Record<string, unknown>): null | undefined 
       obj.updateCheckIntervalHours > 168
     )
       return null
-  }
-}
-
-function validatePackageManager(obj: Record<string, unknown>): null | undefined {
-  if ('windowsPackageManager' in obj && obj.windowsPackageManager !== undefined) {
-    if (!['winget', 'choco', 'scoop'].includes(obj.windowsPackageManager as string)) return null
   }
 }
 
