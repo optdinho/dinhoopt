@@ -613,7 +613,7 @@ export function registerClipsIpc(): void {
         getLogger().warning('clips', `TrimClip failed: Invalid trim range (${startSeconds}-${endSeconds})`)
         return { success: false, error: 'Invalid trim range' }
       }
-      const outDir = join(getDefaultOutputDir(), 'trimmed')
+      const outDir = getDefaultOutputDir()
       if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
       const baseName = basename(safePath, '.mp4')
       const outPath = join(outDir, `${baseName}_trimmed_${Date.now()}.mp4`)
@@ -680,7 +680,7 @@ export function registerClipsIpc(): void {
       }
       safePaths.push(safe)
     }
-    const outDir = join(getDefaultOutputDir(), 'merged')
+    const outDir = getDefaultOutputDir()
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
     const concatFile = join(outDir, `concat_${Date.now()}.txt`)
     const outPath = join(outDir, `merged_${Date.now()}.mp4`)

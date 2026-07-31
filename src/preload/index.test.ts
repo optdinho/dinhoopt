@@ -748,20 +748,16 @@ describe('preload API bridge', () => {
       expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_ENGINE_STATUS, expect.any(Function))
     })
 
-    it('clipsGetVideoUrl returns clip-video:// URL for Windows path', () => {
-      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe(
-        'clip-video://file?path=C%3A%5CUsers%5Ctest%5Cclip.mp4',
-      )
+    it('clipsGetVideoUrl returns file:/// URL for Windows path', () => {
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe('file:///C:/Users/test/clip.mp4')
     })
 
     it('clipsGetVideoUrl handles already normalized path', () => {
-      expect(api.clipsGetVideoUrl('D:/games/clip.mp4')).toBe('clip-video://file?path=D%3A%2Fgames%2Fclip.mp4')
+      expect(api.clipsGetVideoUrl('D:/games/clip.mp4')).toBe('file:///D:/games/clip.mp4')
     })
 
     it('clipsGetVideoUrl handles spaces in path', () => {
-      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe(
-        'clip-video://file?path=C%3A%5CUsers%5Ctest%5Cmy%20clip.mp4',
-      )
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe('file:///C:/Users/test/my%20clip.mp4')
     })
   })
 })

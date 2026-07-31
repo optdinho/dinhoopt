@@ -83,7 +83,14 @@ window.dinho = {
   clipsDelete: mockDeleteClip,
   clipsOpen: mockOpenClip,
   clipsOnEngineStatus: mockOnEngineStatus,
-  clipsGetVideoUrl: (path: string) => `clip-video://file?path=${encodeURIComponent(path)}`,
+  clipsGetVideoUrl: (path: string) => {
+    const normalized = path.replace(/\\/g, '/')
+    const encoded = normalized
+      .split('/')
+      .map((seg, i) => (i === 0 && /^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
+      .join('/')
+    return `file:///${encoded}`
+  },
 } as Record<string, unknown> as typeof window.dinho
 
 import { ClipsPage } from './ClipsPage'

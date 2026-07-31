@@ -48,8 +48,12 @@ export const clipsMethods = {
   clipsMergeClips: (clipPaths: string[]): Promise<ClipMergeResult> =>
     ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths),
   clipsGetVideoUrl: (clipPath: string): string => {
-    const encoded = encodeURIComponent(clipPath)
-    return `clip-video://file?path=${encoded}`
+    const normalized = clipPath.replace(/\\/g, '/')
+    const encoded = normalized
+      .split('/')
+      .map((seg, i) => (i === 0 && /^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
+      .join('/')
+    return `file:///${encoded}`
   },
   clipsOnEngineStatus: (callback: (status: ClipsEngineStatus) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: ClipsEngineStatus) => callback(status)

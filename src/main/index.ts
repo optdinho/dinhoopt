@@ -336,6 +336,7 @@ function initGui(): void {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
         nodeIntegration: false,
+        allowFileAccessFromFiles: true,
       },
     })
     // abre em tela cheia
