@@ -204,7 +204,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
         if (!string.IsNullOrEmpty(codec) && codec != "auto")
         {
             _userCodec = codec;
-            _codec = ResolveCodec(codec);
+            var resolved = ResolveCodec(codec);
+            // A failed resolve must never leave an empty codec — null lets Initialize pick DetectBestCodec.
+            _codec = string.IsNullOrWhiteSpace(resolved) ? null : resolved;
         }
     }
 
@@ -215,7 +217,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _height = height & ~1;
         _frameRate = frameRate;
         _bitrateKbps = bitrateKbps;
-        if (_codec == null)
+        if (string.IsNullOrWhiteSpace(_codec))
         {
             _codec = DetectBestCodec();
         }

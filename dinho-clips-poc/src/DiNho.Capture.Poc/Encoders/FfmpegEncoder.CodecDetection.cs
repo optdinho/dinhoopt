@@ -81,7 +81,10 @@ internal partial class FfmpegEncoder
         if (result != null && result.Contains("av1") && !EncoderManager.SupportsAv1Hardware(vendorId))
         {
             Logging.Log.W("FfmpegEncoder", $"AV1 requested but GPU vendor 0x{vendorId:X4} doesn't support HW AV1 — falling back to H264");
-            return EncoderManager.GetPreferredCodec(vendorId);
+            var fallback = EncoderManager.GetPreferredCodec(vendorId);
+            if (!string.IsNullOrEmpty(fallback)) return fallback;
+            Logging.Log.W("FfmpegEncoder", $"GPU vendor 0x{vendorId:X4} unknown — falling back to DetectBestCodec");
+            return DetectBestCodec();
         }
 
         if (result != null)

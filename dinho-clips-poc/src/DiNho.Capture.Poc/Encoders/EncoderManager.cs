@@ -213,12 +213,15 @@ public sealed class EncoderManager : IDisposable
                         Index = (int)i,
                         Name = desc.Description.TrimEnd('\0'),
                         VendorId = (int)desc.VendorId,
-                        VideoMemoryBytes = desc.DedicatedVideoMemory,
+                        VideoMemoryBytes = (long)(ulong)desc.DedicatedVideoMemory,
                     });
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logging.Log.W("EncoderManager", $"GPU adapter enumeration failed: {ex.Message}");
+        }
         return adapters;
     }
 

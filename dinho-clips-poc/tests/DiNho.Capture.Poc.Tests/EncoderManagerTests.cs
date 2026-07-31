@@ -1,3 +1,4 @@
+using System.Reflection;
 using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Tests;
@@ -269,5 +270,94 @@ public sealed class EncoderManagerTests
         var result = EncoderManager.ProbeEncoder("hevc_nvenc");
         Assert.True(result.Success, $"HEVC NVENC probe failed: {result.Error}");
         Assert.True(result.OutputBytes > 0);
+    }
+
+    // ── DetectAllGpuAdapters — Bug A regression (PointerUSize → long OverflowException) ──
+
+    [Fact]
+    public void DetectAllGpuAdapters_ReturnsAdapters_WhenGpuListHasAdapters()
+    {
+        // Regression: DetectAllGpuAdapters threw OverflowException converting
+        // DedicatedVideoMemory (SharpGen PointerUSize) to long on 8.3GB VRAM, and the
+        // silent catch returned an empty list even though GetGpuList found adapters.
+        var gpuList = EncoderManager.GetGpuList();
+        if (gpuList.Count == 0) return; // headless CI without GPU
+
+        var adapters = EncoderManager.DetectAllGpuAdapters();
+        Assert.NotEmpty(adapters);
+        Assert.All(adapters, a => Assert.True(a.VideoMemoryBytes >= 0,
+            $"VRAM {a.VideoMemoryBytes} must convert without overflow for {a.Name}"));
+    }
+
+    [Fact]
+    public void DetectEncodingVendorId_NonZero_WhenGpuListHasSupportedVendor()
+    {
+        var gpuList = EncoderManager.GetGpuList();
+        if (!gpuList.Any(g => g.VendorId is 0x10DE or 0x1002 or 0x8086)) return;
+
+        // Before the fix this returned 0 because adapter enumeration threw internally.
+        Assert.NotEqual(0, EncoderManager.DetectEncodingVendorId());
+    }
+
+    // ── MapUserCodec / SupportsAv1Hardware — AV1 with zero/unknown vendor ──
+
+    [Fact]
+    public void MapUserCodec_av1_ZeroVendor_ReturnsLibsvtav1()
+    {
+        Assert.Equal("libsvtav1", EncoderManager.MapUserCodec("av1", 0));
+    }
+
+    [Fact]
+    public void MapUserCodec_av1_Nvidia_ReturnsAv1Nvenc()
+    {
+        Assert.Equal("av1_nvenc", EncoderManager.MapUserCodec("av1", 0x10DE));
+    }
+
+    [Fact]
+    public void SupportsAv1Hardware_VendorZero_ReturnsFalse()
+    {
+        Assert.False(EncoderManager.SupportsAv1Hardware(0));
+    }
+
+    // ── ResolveCodec — Bug B regression (must never return empty codec) ──
+
+    [Theory]
+    [InlineData("av1")]
+    [InlineData("h264")]
+    [InlineData("hevc")]
+    public void ResolveCodec_NeverReturnsEmpty(string userCodec)
+    {
+        var enc = CreateUninitializedEncoder(hardware: true);
+        string codec = InvokeResolveCodec(enc, userCodec);
+        Assert.False(string.IsNullOrWhiteSpace(codec),
+            $"ResolveCodec('{userCodec}') must never return empty — got '{codec}'");
+    }
+
+    [Fact]
+    public void ResolveCodec_av1_WhenAv1Unsupported_FallsBackToNonEmpty()
+    {
+        // Simulate the exact failure: vendor unknown (0) → MapUserCodec gives libsvtav1
+        // → no HW AV1 support → fallback must still be a real codec, never "".
+        var enc = CreateUninitializedEncoder(hardware: true);
+        var resolved = InvokeResolveCodec(enc, "av1");
+        Assert.False(string.IsNullOrWhiteSpace(resolved),
+            $"AV1 fallback must be non-empty — got '{resolved}'");
+    }
+
+    private static FfmpegEncoder CreateUninitializedEncoder(bool hardware)
+    {
+        var enc = (FfmpegEncoder)System.Runtime.Serialization.FormatterServices
+            .GetUninitializedObject(typeof(FfmpegEncoder));
+        typeof(FfmpegEncoder).GetField("_useHardware",
+            BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(enc, hardware);
+        return enc;
+    }
+
+    private static string InvokeResolveCodec(FfmpegEncoder encoder, string codec)
+    {
+        var method = typeof(FfmpegEncoder).GetMethod("ResolveCodec",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        return (string)method!.Invoke(encoder, [codec])!;
     }
 }

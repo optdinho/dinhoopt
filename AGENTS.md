@@ -2760,3 +2760,51 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - Reiniciar o app instalado e rodar sessão de campo com FiveM (front 720p):
   - Conferir que o fallback **não dispara mais** (engine novo resolve codec) — `initialized (codec=av1_nvenc)` no log
   - Se disparar: qualidade do clip com `-preset veryfast -crf 22 -maxrate ... -bf 0 -profile:v high` (High/CABAC, sem Baseline) e resolução **1280x720**
+
+## Session Summary (2026-07-31d — Codec vazio fix: OverflowException do PointerUSize + fallback não-vazio)
+
+### Root cause (ffmpeg `-c:v ` vazio → exit -22 com `codec:"av1"`)
+
+- **Bug A (raiz, confirmado empiricamente nesta máquina RTX 5050)** — `EncoderManager.DetectAllGpuAdapters()`:
+  - `VideoMemoryBytes = desc.DedicatedVideoMemory` — `SharpGen.Runtime.PointerUSize` (valor 8295284736) tem operador `explicit long` bugado/`checked` que **sempre lança `OverflowException`** em VRAM real (testado também `unchecked((long)ded)`). `(ulong)` e `(nuint)` funcionam.
+  - O `catch { }` vazio engolia a exceção → lista vazia → `DetectEncodingVendorId() = 0` → `GetPreferredCodec(0) = ""`.
+  - Provas: `GetGpuList()` (mesma enumeração DXGI sem ler VRAM) retornava RTX 5050 + Basic Render Driver; teste RAW DXGI enumerava os 2 adapters sem erro; `--encoders` standalone também perdia a GPU.
+- **Bug B (codec vazio)** — `FfmpegEncoder.ResolveCodec("av1")` com vendor 0:
+  - `MapUserCodec("av1", 0)` → `"libsvtav1"` → ramo `!SupportsAv1Hardware(0)` = true → `return GetPreferredCodec(0)` = **`""`** → short-circuit antes do probe/`DetectBestCodec`.
+  - `Initialize` só checava `_codec == null` (linha 218) — string vazia passava → `-c:v {_codec}` em `StartFfmpeg` → ffmpeg exit -22, restart loop, `video=0frames`.
+
+### Fixes aplicados
+
+1. **Bug A — `EncoderManager.DetectAllGpuAdapters()`**: `VideoMemoryBytes = (long)(ulong)desc.DedicatedVideoMemory`; `catch { }` → `catch (Exception ex)` com `Logging.Log.W`.
+2. **Bug B — `FfmpegEncoder.ResolveCodec`** (CodecDetection.cs:81-88): no ramo "AV1 sem suporte HW", se `GetPreferredCodec(vendorId)` retornar vazio → log warning + `return DetectBestCodec()` (nunca devolve `""`).
+3. **Defesa — `FfmpegEncoder.Initialize`**: `if (_codec == null)` → `if (string.IsNullOrWhiteSpace(_codec))` (código vazio cai no `DetectBestCodec`).
+4. **Defesa — `FfmpegEncoder.SetQualityParams`**: se `ResolveCodec` devolver null/vazio, `_codec = null` para o `Initialize` escolher.
+
+### Testes (9 novos em EncoderManagerTests.cs)
+
+- `DetectAllGpuAdapters_ReturnsAdapters_WhenGpuListHasAdapters` — regressão do Bug A (antes: lista vazia com GPU presente)
+- `DetectEncodingVendorId_NonZero_WhenGpuListHasSupportedVendor` — antes retornava 0
+- `MapUserCodec_av1_ZeroVendor_ReturnsLibsvtav1`, `MapUserCodec_av1_Nvidia_ReturnsAv1Nvenc`, `SupportsAv1Hardware_VendorZero_ReturnsFalse`
+- `ResolveCodec_NeverReturnsEmpty` (Theory av1/h264/hevc) + `ResolveCodec_av1_WhenAv1Unsupported_FallsBackToNonEmpty` — regressão do Bug B via reflection (`_useHardware=true`)
+
+### Validado
+
+- **Build**: `dotnet build -c Release` — 0 erros (19 warnings pré-existentes)
+- **C# tests**: **964/964 pass** (era 955; +9) — `dotnet test` isolado do EncoderManagerTests = 42/42, EXIT 0
+- **Nota**: a suite completa termina com "Execução de Teste Anulada" (exit 1) mesmo com 0 falhas — **flakiness pré-existente** confirmada com `git stash` (955/955 pass + abort idêntico sem minhas mudanças); vstest interpreta o output do `Log.cs` (ConsoleLogger) durante os testes de integração que spawnam ffmpeg como falha do host
+- **Publish + stage**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` — 291 files staged
+- **Deploy**: copiado `DiNho.Capture.Poc.{dll,exe,pdb,deps.json,runtimeconfig.json}` para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 DLL confere com o publish (`E70925FC...`)
+- **Smoke test**: `DiNho.Capture.Poc.exe --encoders` do diretório instalado → `probed OK: HW native (h264_nvenc) (60034B output)` e `initialized (codec=h264_nvenc)` — GPU detectada de novo (antes codec vazio)
+
+### Next Steps
+
+- Reiniciar o app instalado e gravar com `codec:"av1"`: esperar `initialized (codec=av1_nvenc)` e clip com `video>0` (sem exit -22 / restart loop)
+- Opcional (flakiness): investigar por que o vstest aborta a suite completa quando o ConsoleLogger escreve durante testes de integração ffmpeg (pré-existente, fora do escopo)
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/EncoderManager.cs`: conversão VRAM `(long)(ulong)`, catch com log
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.CodecDetection.cs`: fallback não-vazio no ramo AV1
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `IsNullOrWhiteSpace` no Initialize + guard no SetQualityParams
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EncoderManagerTests.cs`: 9 testes novos
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/GpuDiagnosticTests.cs`: DELETADO (temporário de diagnóstico)
