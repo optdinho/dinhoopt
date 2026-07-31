@@ -394,8 +394,8 @@ public sealed class EncoderManager : IDisposable
     {
         var tune = codec switch
         {
-            "libx264" => "-preset ultrafast -tune zerolatency -threads 1",
-            "libx265" => "-preset ultrafast -tune zerolatency -threads 1",
+            "libx264" => "-preset veryfast -tune zerolatency -threads 1",
+            "libx265" => "-preset veryfast -tune zerolatency -threads 1",
             "h264_nvenc" => "-preset p1 -tune ll",
             "hevc_nvenc" => "-preset p1 -tune ll",
             "av1_nvenc" => "-preset p1 -tune ll",
@@ -403,7 +403,7 @@ public sealed class EncoderManager : IDisposable
             "hevc_amf" => "-quality speed",
             "h264_qsv" => "-preset fastest",
             "av1_amf" => "-quality speed",
-            _ => "-preset ultrafast",
+            _ => "-preset veryfast",
         };
 
         var rawFmt = codec switch

@@ -638,7 +638,7 @@ internal static class ProgramBenchmark
             var psi = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-y -f lavfi -i color=c=black:s=640x480:d=0.5 -c:v libx264 -preset ultrafast -frames:v 15 -f h264 \"{tempRaw}\"",
+                Arguments = $"-y -f lavfi -i color=c=black:s=640x480:d=0.5 -c:v libx264 -preset veryfast -frames:v 15 -f h264 \"{tempRaw}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,

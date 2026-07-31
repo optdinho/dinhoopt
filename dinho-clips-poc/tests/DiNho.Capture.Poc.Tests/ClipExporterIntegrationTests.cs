@@ -89,7 +89,7 @@ public sealed class ClipExporterIntegrationTests
                 StartInfo = new ProcessStartInfo("ffmpeg")
                 {
                     Arguments = $"-y -f lavfi -i color=c=black:s={width}x{height}:d={durationSec:F4} " +
-                                $"-c:v libx264 -preset ultrafast -crf 51 -profile baseline -level 30 " +
+                                $"-c:v libx264 -preset veryfast -crf 51 -profile baseline -level 30 " +
                                 $"-bsf:v h264_mp4toannexb -f h264 \"{tempRaw}\"",
                     RedirectStandardError = true,
                     UseShellExecute = false,
