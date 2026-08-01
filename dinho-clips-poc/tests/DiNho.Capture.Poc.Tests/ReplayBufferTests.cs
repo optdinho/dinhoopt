@@ -641,6 +641,69 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
+    public void DiskSpill_ReadAll_VideoPackets_ArePooled()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var spill = new DiskSpillBuffer(dir);
+            for (int i = 0; i < 10; i++)
+                spill.Write(MakeVideo(TimeSpan.FromSeconds(i), false, 1000));
+
+            var all = spill.ReadAll();
+            Assert.Equal(10, all.Count);
+            Assert.All(all, p => Assert.True(p.IsPooled,
+                $"Video packet at {p.Pts.TotalSeconds}s should be pooled"));
+            Assert.All(all, p => Assert.Equal(1000, p.DataLength));
+            Assert.All(all, p => Assert.NotNull(p.Data));
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_ReadAll_VideoPackets_ReleaseReturnsToPool()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var spill = new DiskSpillBuffer(dir);
+            for (int i = 0; i < 5; i++)
+                spill.Write(MakeVideo(TimeSpan.FromSeconds(i), false, 1000));
+
+            var all = spill.ReadAll();
+            foreach (var pkt in all)
+            {
+                Assert.True(pkt.IsPooled);
+                Assert.Equal(1000, pkt.DataLength);
+                pkt.Release();
+                Assert.Equal(0, pkt.DataLength);
+            }
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_GetSegments_VideoSpilled_IsPooledAndReleasable()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60), 200);
+            buf.EnableDiskSpill(dir);
+            for (int i = 0; i < 40; i++)
+                buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), i % 5 == 0, 5000));
+
+            var (video, _) = buf.GetSegments();
+            Assert.Equal(40, video.Count);
+            Assert.True(video[0].IsPooled,
+                "Oldest video frame should come from spill and be pooled");
+            Assert.Contains(video, p => p.IsPooled);
+            foreach (var pkt in video) pkt.Release();
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
     public void DiskSpill_CleanupOrphans_NoSpillFiles_ReturnsZero()
     {
         var dir = TempDir();

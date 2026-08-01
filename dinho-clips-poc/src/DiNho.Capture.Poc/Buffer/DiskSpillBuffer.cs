@@ -105,7 +105,11 @@ public sealed class DiskSpillBuffer : IDisposable
         foreach (var entry in _index)
         {
             fs.Seek(entry.Offset, SeekOrigin.Begin);
-            var buf = new byte[entry.Length];
+            // Vídeo lido do spill aloca do pool (GREEN — evita new byte[] por
+            // pacote spillado no GetSegments → pico de LOH no save, +2,1GB).
+            var buf = entry.Type == MediaType.Video
+                ? VideoPacketPool.Rent(entry.Length)
+                : new byte[entry.Length];
             int read = 0;
             while (read < entry.Length)
             {
@@ -124,7 +128,7 @@ public sealed class DiskSpillBuffer : IDisposable
             else
             {
                 result.Add(new EncodedPacket(buf, entry.Type, entry.Pts, entry.Duration,
-                    entry.IsKeyFrame, entry.Width, entry.Height));
+                    entry.IsKeyFrame, isPooled: true, entry.Width, entry.Height, entry.Length));
             }
         }
 
@@ -164,7 +168,9 @@ public sealed class DiskSpillBuffer : IDisposable
         {
             var entry = _index[i];
             fs.Seek(entry.Offset, SeekOrigin.Begin);
-            var buf = new byte[entry.Length];
+            var buf = entry.Type == MediaType.Video
+                ? VideoPacketPool.Rent(entry.Length)
+                : new byte[entry.Length];
             int read = 0;
             while (read < entry.Length)
             {
@@ -183,7 +189,7 @@ public sealed class DiskSpillBuffer : IDisposable
             else
             {
                 result.Add(new EncodedPacket(buf, entry.Type, entry.Pts, entry.Duration,
-                    entry.IsKeyFrame, entry.Width, entry.Height));
+                    entry.IsKeyFrame, isPooled: true, entry.Width, entry.Height, entry.Length));
             }
         }
 
