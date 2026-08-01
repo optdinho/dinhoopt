@@ -106,9 +106,11 @@ public sealed class ReplayBuffer : IDisposable
         }
         set
         {
+            List<EncodedPacket>? evicted;
             _lock.EnterWriteLock();
-            try { _maxDuration = value; TrimExcess(); }
+            try { _maxDuration = value; evicted = TrimExcess(); }
             finally { _lock.ExitWriteLock(); }
+            FlushEvicted(evicted);
         }
     }
 
@@ -122,14 +124,16 @@ public sealed class ReplayBuffer : IDisposable
         }
         set
         {
+            List<EncodedPacket>? evicted;
             _lock.EnterWriteLock();
             try
             {
                 _maxBytes = value;
                 RecalculateProportionalBudgets();
-                TrimExcess();
+                evicted = TrimExcess();
             }
             finally { _lock.ExitWriteLock(); }
+            FlushEvicted(evicted);
         }
     }
 
@@ -145,6 +149,7 @@ public sealed class ReplayBuffer : IDisposable
 
     public void AddVideo(EncodedPacket packet)
     {
+        List<EncodedPacket>? evicted;
         _lock.EnterWriteLock();
         try
         {
@@ -154,13 +159,15 @@ public sealed class ReplayBuffer : IDisposable
             _videoCount++;
             _totalVideoDuration += packet.Duration;
             _totalVideoBytes += packet.DataLength;
-            TrimExcessVideo();
+            evicted = TrimExcessVideo();
         }
         finally { _lock.ExitWriteLock(); }
+        FlushEvicted(evicted);
     }
 
     public void AddAudio(EncodedPacket packet)
     {
+        List<EncodedPacket>? evicted;
         _lock.EnterWriteLock();
         try
         {
@@ -172,19 +179,30 @@ public sealed class ReplayBuffer : IDisposable
             // Áudio no buffer é sempre AAC (PcmSamples == null) — contabilização
             // consistente via DataLength (B2: ramo PcmSamples era inalcançável).
             _totalAudioBytes += packet.DataLength;
-            TrimExcessAudio();
+            evicted = TrimExcessAudio();
         }
         finally { _lock.ExitWriteLock(); }
+        FlushEvicted(evicted);
     }
 
-    private void TrimExcess()
+    /// <summary>
+    /// Trim both streams, returning the evicted packets. Eviction only removes
+    /// packets from the ring under the lock — the actual spill write + release
+    /// happens later in <see cref="FlushEvicted"/>, outside the write lock.
+    /// </summary>
+    private List<EncodedPacket>? TrimExcess()
     {
-        TrimExcessVideo();
-        TrimExcessAudio();
+        var v = TrimExcessVideo();
+        var a = TrimExcessAudio();
+        if (v == null) return a;
+        if (a == null) return v;
+        v.AddRange(a);
+        return v;
     }
 
-    private void TrimExcessVideo()
+    private List<EncodedPacket>? TrimExcessVideo()
     {
+        List<EncodedPacket>? evicted = null;
         while (_videoCount > 0 && (_totalVideoDuration > _maxDuration || (_maxVideoBytes > 0 && _totalVideoBytes > _maxVideoBytes)))
         {
             var oldest = _videoPackets[_videoHead]!;
@@ -193,15 +211,14 @@ public sealed class ReplayBuffer : IDisposable
             _videoCount--;
             _totalVideoDuration -= oldest.Duration;
             _totalVideoBytes -= oldest.DataLength;
-            if (_diskSpillEnabled && _spill != null)
-                _spill.Write(oldest);
-            oldest.Release();
+            (evicted ??= new List<EncodedPacket>(4)).Add(oldest);
         }
-        TrimSpillToWindow();
+        return evicted;
     }
 
-    private void TrimExcessAudio()
+    private List<EncodedPacket>? TrimExcessAudio()
     {
+        List<EncodedPacket>? evicted = null;
         while (_audioCount > 0 && (_totalAudioDuration > _maxDuration || (_maxAudioBytes > 0 && _totalAudioBytes > _maxAudioBytes)))
         {
             var oldest = _audioPackets[_audioHead]!;
@@ -210,23 +227,33 @@ public sealed class ReplayBuffer : IDisposable
             _audioCount--;
             _totalAudioDuration -= oldest.Duration;
             _totalAudioBytes -= oldest.DataLength;
-            if (_diskSpillEnabled && _spill != null)
-                _spill.Write(oldest);
-            oldest.Release();
+            (evicted ??= new List<EncodedPacket>(4)).Add(oldest);
         }
-        TrimSpillToWindow();
+        return evicted;
     }
 
     /// <summary>
-    /// Keep the disk spill bounded by the replay time window: data older than
-    /// MaxDuration is dropped instead of accumulating without limit. No-op
-    /// (O(1) fast path) when the spill is already within the window.
-    /// Must be called under the write lock.
+    /// Write evicted packets to the disk spill and release them, OUTSIDE the
+    /// ReplayBuffer write lock. Both the spill write and the sliding-window
+    /// trim (which only deletes fully-consumed segment files — no compaction)
+    /// are long I/O; running them under the write lock froze the whole capture
+    /// pipeline for 76s (2026-08-01 incident).
     /// </summary>
-    private void TrimSpillToWindow()
+    private void FlushEvicted(List<EncodedPacket>? evicted)
     {
-        if (_diskSpillEnabled && _spill is { Count: > 0 })
-            _spill.TrimOldest(_maxDuration);
+        if (evicted == null || evicted.Count == 0) return;
+
+        var spill = _spill;
+        var spillEnabled = _diskSpillEnabled;
+        if (spillEnabled && spill != null)
+        {
+            foreach (var oldest in evicted)
+                spill.Write(oldest);
+            spill.TrimOldest(_maxDuration);
+        }
+
+        foreach (var oldest in evicted)
+            oldest.Release();
     }
 
     private static void GrowIfNeeded(ref EncodedPacket?[] buffer, ref int head, ref int tail, ref int count)

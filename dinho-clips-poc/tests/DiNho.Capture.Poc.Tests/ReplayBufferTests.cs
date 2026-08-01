@@ -581,7 +581,7 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
-    public void DiskSpill_TrimOldest_CompactsWhenGarbageDominates()
+    public void DiskSpill_TrimOldest_NoCompaction_ReadsStayCorrect()
     {
         var dir = TempDir();
         try
@@ -596,22 +596,116 @@ public sealed class ReplayBufferTests
             Assert.Equal(11, spill.Count);
             Assert.Equal(1100, spill.TotalBytes);
 
-            // Compaction must run once garbage dominates (>50% of the file)
-            var dataFile = Directory.GetFiles(dir, "dinho-spill-*.bin").Single();
-            Assert.True(new FileInfo(dataFile).Length <= 2200,
-                $"Physical file should be compacted, was {new FileInfo(dataFile).Length}");
+            // The physical file is NOT rewritten (no lazy compaction) — a single
+            // segment still holds all 100 frames. This is the whole point of the
+            // stall fix: trims never read+rewrite the entire spill file.
+            var files = Directory.GetFiles(dir, "dinho-spill-*.bin");
+            Assert.Single(files);
+            Assert.Equal(10_000, new FileInfo(files[0]).Length);
 
-            // Reads must still be correct after compaction (physical offsets)
+            // Reads must still be correct after the trim.
             var all = spill.ReadAll();
             Assert.Equal(11, all.Count);
             for (int i = 0; i < all.Count; i++)
                 Assert.Equal(TimeSpan.FromSeconds(i + 89), all[i].Pts);
 
-            // Writes after trim/compact must land at correct offsets
+            // Writes after trim must land at correct offsets.
             spill.Write(MakeVideo(TimeSpan.FromSeconds(120), false, 100));
             var all2 = spill.ReadAll();
             Assert.Equal(12, all2.Count);
             Assert.Equal(TimeSpan.FromSeconds(120), all2[^1].Pts);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_SegmentRollover_SpansMultipleSegments()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var spill = new DiskSpillBuffer(dir, segmentBytes: 1024);
+            for (int i = 0; i < 10; i++)
+                spill.Write(MakeVideo(TimeSpan.FromSeconds(i), false, 300));
+
+            // 10 × 300B = 3000B → 3 segment files (1024 / 1024 / 952 bytes)
+            var files = Directory.GetFiles(dir, "dinho-spill-*.bin");
+            Assert.Equal(3, files.Length);
+            Assert.Equal(3000, spill.TotalBytes);
+
+            // Reads must span segments correctly and stay in PTS order.
+            var all = spill.ReadAll();
+            Assert.Equal(10, all.Count);
+            for (int i = 0; i < all.Count; i++)
+                Assert.Equal(TimeSpan.FromSeconds(i), all[i].Pts);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_TrimOldest_DeletesFullyConsumedSegment()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var spill = new DiskSpillBuffer(dir, segmentBytes: 1024);
+            // 5 × 300B: seg0 holds packets 0-3 (900+300=1200 > 1024 → roll after
+            // packet 3), seg1 holds packet 4.
+            for (int i = 0; i < 5; i++)
+                spill.Write(MakeVideo(TimeSpan.FromSeconds(i), false, 300));
+
+            Assert.Equal(2, Directory.GetFiles(dir, "dinho-spill-*.bin").Length);
+
+            // Trim to a 0.5s window → cutoff = 4s - 0.5s = 3.5s → keep only
+            // packet 4. Packets 0-3 (the entire segment 0) are dropped, so the
+            // segment 0 file is deleted — without rewriting anything.
+            int removed = spill.TrimOldest(TimeSpan.FromMilliseconds(500));
+            Assert.Equal(4, removed);
+            Assert.Equal(1, spill.Count);
+
+            var files = Directory.GetFiles(dir, "dinho-spill-*.bin");
+            Assert.Single(files);
+
+            var all = spill.ReadAll();
+            Assert.Single(all);
+            Assert.Equal(TimeSpan.FromSeconds(4), all[0].Pts);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void DiskSpill_ConcurrentAddAndGet_NoDeadlock()
+    {
+        var dir = TempDir();
+        try
+        {
+            // 5s window + tiny budget forces constant spill writes and
+            // sliding-window trims while a reader drains the buffer — the
+            // scenario that froze the pipeline for 76s when spill I/O ran
+            // under the ReplayBuffer write lock.
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(5), 300);
+            buf.EnableDiskSpill(dir);
+
+            var done = false;
+            var t = Task.Run(() =>
+            {
+                for (int i = 0; i < 1000; i++)
+                {
+                    buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i * 0.01), i % 10 == 0, 300));
+                    buf.AddAudio(MakeAudio(TimeSpan.FromSeconds(i * 0.01), 100));
+                }
+                done = true;
+            });
+
+            var reads = 0;
+            while (!done)
+            {
+                buf.GetSegments();
+                reads++;
+            }
+
+            t.Wait();
+            Assert.True(reads > 0, "Reader loop should have completed while writer ran");
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
     }
