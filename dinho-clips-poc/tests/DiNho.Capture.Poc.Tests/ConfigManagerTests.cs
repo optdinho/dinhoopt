@@ -14,10 +14,10 @@ public sealed class ConfigManagerTests
     public void Default_Config_HasExpectedValues()
     {
         var cfg = CreateClean();
-        Assert.Equal(40000, cfg.Config.BitrateKbps);
-        Assert.Equal(30, cfg.Config.Fps);
-        Assert.Equal(1920, cfg.Config.Width);
-        Assert.Equal(1080, cfg.Config.Height);
+        Assert.Equal(30000, cfg.Config.BitrateKbps);
+        Assert.Equal(60, cfg.Config.Fps);
+        Assert.Equal(1280, cfg.Config.Width);
+        Assert.Equal(720, cfg.Config.Height);
         Assert.Equal(120, cfg.Config.ReplayTimeSeconds);
     }
 

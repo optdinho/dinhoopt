@@ -425,13 +425,13 @@ public sealed class EngineCoordinatorTests
     {
         var cfg = new AppConfig();
         Assert.Equal(120, cfg.ReplayTimeSeconds);
-        Assert.Equal(30, cfg.Fps);
+        Assert.Equal(60, cfg.Fps);
         Assert.Equal(1280, cfg.Width);
         Assert.Equal(720, cfg.Height);
-        Assert.Equal(40000, cfg.BitrateKbps);
+        Assert.Equal(30000, cfg.BitrateKbps);
         Assert.Equal(20, cfg.Cq);
-        Assert.Equal(35000, cfg.MaxrateKbps);
-        Assert.Equal(70000, cfg.BufsizeKbps);
+        Assert.Equal(30000, cfg.MaxrateKbps);
+        Assert.Equal(60000, cfg.BufsizeKbps);
         Assert.Equal(3, cfg.Bframes);
         Assert.Equal(32, cfg.Lookahead);
         Assert.Equal("p5", cfg.EncoderPreset);
@@ -727,7 +727,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Fps": 999}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(30, cfg.Config.Fps);
+        Assert.Equal(60, cfg.Config.Fps);
     }
 
     [Fact]
@@ -738,7 +738,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"BitrateKbps": 10}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(40000, cfg.Config.BitrateKbps);
+        Assert.Equal(30000, cfg.Config.BitrateKbps);
     }
 
     [Fact]
@@ -760,8 +760,8 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Width": 100, "Height": 100}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(1920, cfg.Config.Width);
-        Assert.Equal(1080, cfg.Config.Height);
+        Assert.Equal(1280, cfg.Config.Width);
+        Assert.Equal(720, cfg.Config.Height);
     }
 
     [Fact]
@@ -794,7 +794,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"MaxrateKbps": 500}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(35000, cfg.Config.MaxrateKbps);
+        Assert.Equal(30000, cfg.Config.MaxrateKbps);
     }
 
     [Fact]
@@ -805,7 +805,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"BufsizeKbps": 1000}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(70000, cfg.Config.BufsizeKbps);
+        Assert.Equal(60000, cfg.Config.BufsizeKbps);
     }
 
     [Fact]
@@ -1224,8 +1224,8 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Width": 2560, "Height": 1440}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(1920, cfg.Config.Width);
-        Assert.Equal(1080, cfg.Config.Height);
+        Assert.Equal(1280, cfg.Config.Width);
+        Assert.Equal(720, cfg.Config.Height);
     }
 
     [Fact]
@@ -1236,7 +1236,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Fps": 144}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(30, cfg.Config.Fps);
+        Assert.Equal(60, cfg.Config.Fps);
     }
 
     [Fact]
@@ -1247,8 +1247,8 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Width": 639, "Height": 479}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(1920, cfg.Config.Width);
-        Assert.Equal(1080, cfg.Config.Height);
+        Assert.Equal(1280, cfg.Config.Width);
+        Assert.Equal(720, cfg.Config.Height);
     }
 
     [Fact]
@@ -1259,8 +1259,8 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Width": 1921, "Height": 1081}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(1920, cfg.Config.Width);
-        Assert.Equal(1080, cfg.Config.Height);
+        Assert.Equal(1280, cfg.Config.Width);
+        Assert.Equal(720, cfg.Config.Height);
     }
 
     [Fact]
@@ -1282,7 +1282,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"BitrateKbps": 200001}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(40000, cfg.Config.BitrateKbps);
+        Assert.Equal(30000, cfg.Config.BitrateKbps);
     }
 
     [Fact]

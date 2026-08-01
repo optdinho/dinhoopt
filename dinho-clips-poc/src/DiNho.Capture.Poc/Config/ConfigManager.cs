@@ -47,15 +47,15 @@ public sealed class AppConfig
     public float GameVolume { get; set; } = 1.0f;
 
     // Video
-    public int Fps { get; set; } = 30;
-    public int Width { get; set; } = 1920;
-    public int Height { get; set; } = 1080;
-    public int BitrateKbps { get; set; } = 40000;
+    public int Fps { get; set; } = 60;
+    public int Width { get; set; } = 1280;
+    public int Height { get; set; } = 720;
+    public int BitrateKbps { get; set; } = 30000;
 
     // CRF+VBV quality params (usados por NVENC/AV1)
     public int Cq { get; set; } = 20;
-    public int MaxrateKbps { get; set; } = 35000;
-    public int BufsizeKbps { get; set; } = 70000;
+    public int MaxrateKbps { get; set; } = 30000;
+    public int BufsizeKbps { get; set; } = 60000;
     public int Bframes { get; set; } = 3;
     public int Lookahead { get; set; } = 32;
     public string EncoderPreset { get; set; } = "p5";
