@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { join, resolve } from 'node:path'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import {
   buildClipVideoUrl,
   CLIP_VIDEO_SCHEME,
@@ -10,6 +10,13 @@ import {
 } from './clip-video-protocol'
 
 const tempDir = mkdtempSync(join(tmpdir(), 'clip-video-protocol-'))
+
+vi.mock('../services/clips-config-manager', () => ({
+  clipPathInOutputDir: (inputPath: string) => {
+    const resolved = resolve(inputPath)
+    return resolved.toLowerCase().startsWith(tempDir.toLowerCase()) ? resolved : null
+  },
+}))
 
 afterAll(() => {
   rmSync(tempDir, { recursive: true, force: true })
@@ -81,5 +88,11 @@ describe('clip-video-protocol', () => {
     const missing = join(tempDir, 'missing.mp4')
     const res = await handleClipVideoRequest(makeRequest(buildClipVideoUrl(missing)))
     expect(res.status).toBe(404)
+  })
+
+  it('returns 403 for a path outside the clips output directory', async () => {
+    const outside = join(tmpdir(), 'outside-clips', 'secret.mp4')
+    const res = await handleClipVideoRequest(makeRequest(buildClipVideoUrl(outside)))
+    expect(res.status).toBe(403)
   })
 })

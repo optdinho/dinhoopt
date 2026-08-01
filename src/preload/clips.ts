@@ -1,4 +1,5 @@
 import { IPC } from '@shared/channels'
+import { buildClipVideoUrl } from '@shared/clip-video-url'
 import type {
   AudioSessionInfo,
   ClipInfo,
@@ -9,7 +10,6 @@ import type {
   MicDeviceInfo,
 } from '@shared/types'
 import { ipcRenderer } from 'electron'
-import { buildClipVideoUrl } from '@shared/clip-video-url'
 
 export const clipsMethods = {
   clipsGetStatus: (): Promise<ClipsEngineStatus> => ipcRenderer.invoke(IPC.CLIPS_GET_STATUS),

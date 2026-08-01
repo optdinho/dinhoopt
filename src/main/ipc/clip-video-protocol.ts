@@ -2,12 +2,18 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { buildClipVideoUrl, CLIP_VIDEO_SCHEME, decodeClipVideoPath } from '@shared/clip-video-url'
+import { clipPathInOutputDir } from '../services/clips-config-manager'
 
 export { buildClipVideoUrl, CLIP_VIDEO_SCHEME, decodeClipVideoPath }
 
 export async function handleClipVideoRequest(request: Request): Promise<Response> {
-  const filePath = decodeClipVideoPath(request.url)
-  if (!filePath) return new Response('bad request', { status: 400 })
+  const rawPath = decodeClipVideoPath(request.url)
+  if (!rawPath) return new Response('bad request', { status: 400 })
+
+  // Confine reads to the clips output directory — never stream arbitrary
+  // files requested via ?path=.
+  const filePath = clipPathInOutputDir(rawPath)
+  if (!filePath) return new Response('forbidden', { status: 403 })
 
   let fileSize: number
   try {

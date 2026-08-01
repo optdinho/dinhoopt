@@ -203,6 +203,7 @@ export function useClipsState(): ClipsState {
 
   // Refresh clips when engine starts running (output directory may have changed)
   const prevRunning = useRef(status.running)
+  const lastRamLevelRef = useRef<string | undefined>('normal')
   useEffect(() => {
     if (status.running && !prevRunning.current) {
       refreshClips()
@@ -288,12 +289,17 @@ export function useClipsState(): ClipsState {
 
   // Listen for RAM pressure broadcasts (RamManager watchdog)
   useEffect(() => {
+    // Watchdog broadcasts every ~5s while pressure persists — toast only on
+    // level transitions (critical↔normal) to avoid spam.
     const unsub = window.dinho?.clipsOnRamPressure?.((data) => {
-      if (data.level === 'critical') {
+      const level = data.level ?? 'normal'
+      if (level === lastRamLevelRef.current) return
+      lastRamLevelRef.current = level
+      if (level === 'critical') {
         toast.warning(t('ramPressureCritical'), {
           description: t('ramPressureCriticalDesc', { pct: Math.round((data.usedPercent ?? 0) * 100) }),
         })
-      } else if (data.level === 'normal') {
+      } else if (level === 'normal') {
         toast.success(t('ramPressureNormal'))
       }
     })

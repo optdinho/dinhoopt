@@ -19,6 +19,9 @@ export interface PipeEnvelope {
 export interface PipeMessage {
   cmd: string
   payload?: Record<string, unknown>
+  // Raw JSON broadcasts from the engine (e.g. RamManager watchdog) carry no
+  // v/cmd envelope — they arrive as { event: "ramPressure", ... }.
+  event?: string
 }
 
 export type PendingRequest = {
