@@ -3010,3 +3010,42 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegAacEncoder.cs`: `_writeLock`, `_pcmBatchesWritten`, `_writeTimeoutMs`, consts de timeout, seam interno + ctor público, `EncodeAudio` com `TryWriteStdin`
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: overload `TryWriteStdin` com offset/count (4-arg delega) + mudanças R2 M1 pré-existentes commitadas juntas
 - `AGENTS.md`: resumo de sessão + "Next Steps" marcado como feito
+
+## Session Summary (2026-08-01 — Stall 76s do pipeline: spill fora do write lock)
+
+### Done
+
+- **Root cause do stall de 76s (04:47:27–04:48:43) fechada**: `AddVideo`/`AddAudio` do `ReplayBuffer.cs` faziam **todo o I/O de spill dentro do write lock** — `_spill.Write(oldest)` (FileStream sync por frame evictado) + `_spill.TrimOldest` → `CompactFile()` (lê+reescreve o arquivo spill inteiro, gatilho `_currentOffset >= _totalBytes * 2`). Com vídeo em 90% do budget (1381,7MB/1535MB), o trim disparava a cada frame → pipeline congelado.
+- **`DiskSpillBuffer.cs` reescrito (segmentos, sem CompactFile)**:
+  - Arquivos de segmento (`dinho-spill-{id}-{segment:000000}.bin`, ~64MB) em vez de arquivo único
+  - `Write` = append buffered em `FileStream` persistente (`FileShare.ReadWrite`, aberto no `EnableDiskSpill`) — sem abrir/fechar por frame
+  - `TrimOldest(int)` remove entradas do índice e **deleta segmentos totalmente consumidos** (sem reescrita de arquivo inteiro)
+  - Lock interno `_sync`; `ReadRange` usa `VideoPacketPool.Rent` para vídeo (isPooled) e buffer byte→float PCM para áudio; `CleanupOrphans` (static novo)
+  - Construtor `internal` com `segmentBytes` para testes (default = `DefaultSegmentBytes` = 64MB)
+- **`ReplayBuffer.cs` — spill movido para fora do write lock**: `TrimExcessVideo/Audio/TrimExcess` agora retornam `List<EncodedPacket>?` de evictados (só removem do anel sob lock); novo `FlushEvicted` faz spill+release **fora do lock**. Aplicado em `AddVideo`, `AddAudio` e setters de `MaxDuration`/`MaxBytes`.
+- **Testes (4 novos/reescritos em ReplayBufferTests.cs)**:
+  - `DiskSpill_TrimOldest_NoCompaction_ReadsStayCorrect` — substitui o antigo `..._CompactsWhenGarbageDominates`: arquivo NÃO é reescrito após trim (10KB físicos com 11 pacotes vivos), reads corretos, writes pós-trim corretos
+  - `DiskSpill_SegmentRollover_SpansMultipleSegments` — 3 segmentos via construtor internal (1024B), reads em ordem PTS
+  - `DiskSpill_TrimOldest_DeletesFullyConsumedSegment` — segmento 0 inteiro consumido → arquivo deletado, 1 segmento restante
+  - `DiskSpill_ConcurrentAddAndGet_NoDeadlock` — stress writer (1000 add video+audio, budget 300B, janela 5s) + reader loop, sem deadlock
+- **Deploy completo**: commit `8bbad31` → `dotnet publish` OK → `npm run copy-engine` (291 arquivos) → DLL copiada para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 `C53741BC...` confere staging/instalado.
+- **Suítes**: C# **1003/1003** aprovados, 0 falhas ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger); build `-c Release` 0 erros.
+- Inclui commit prévio `113c479` (spill read pooled — elimina pico de LOH no save).
+
+### Key Decisions
+
+- **Segmentos sobre arquivo único**: trim destrutivo de arquivo inteiro é O(n) com write lock segurando o pipeline — deletar arquivos de segmento totalmente consumidos é O(1) por segmento e nunca reescreve dados.
+- **Evictados coletados sob lock, flush fora do lock**: a coleção de pacotes a evictar é barata (só manipulação de ponteiros do anel); o I/O (spill write + trim + release) roda na thread do caller após soltar o write lock.
+- **FlushEvicted sem Retain() extra**: pacotes evictados já saíram do anel — vão para o spill e são release'd como antes, preservando a semântica de ownership.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (cenário do incidente: `ramOptimization=aggressive`, replay longo, vídeo ~90% do budget): confirmar ausência de stall no pipeline e `proc` estável
+- Monitorar logs por `diskSpill=True` ativo e trim sem pausas >500ms
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/DiskSpillBuffer.cs`: reescrito (segmentos, FileStream persistente, `_sync`, `TrimOldest(int)`, `CleanupOrphans`, sem `CompactFile`)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `TrimExcess*` retornam evictados, `FlushEvicted` novo (spill+release fora do lock), setters `MaxDuration`/`MaxBytes`
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs`: teste de compactação reescrito + 3 testes novos de segmento/concorrência
+- `AGENTS.md`: resumo de sessão
