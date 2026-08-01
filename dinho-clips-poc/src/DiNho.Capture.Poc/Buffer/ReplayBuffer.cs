@@ -245,15 +245,27 @@ public sealed class ReplayBuffer : IDisposable
 
         var spill = _spill;
         var spillEnabled = _diskSpillEnabled;
-        if (spillEnabled && spill != null)
+        try
+        {
+            if (spillEnabled && spill != null)
+            {
+                foreach (var oldest in evicted)
+                    spill.Write(oldest);
+                spill.TrimOldest(_maxDuration);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Spill é best-effort: falha de I/O (disco cheio/erro) não pode
+            // matar a captura nem vazar arrays pooled. Pacotes evictados são
+            // descartados (sem spill) mas sempre liberados abaixo.
+            Log.W("ReplayBuffer", $"FlushEvicted: spill write/trim falhou: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
         {
             foreach (var oldest in evicted)
-                spill.Write(oldest);
-            spill.TrimOldest(_maxDuration);
+                oldest.Release();
         }
-
-        foreach (var oldest in evicted)
-            oldest.Release();
     }
 
     private static void GrowIfNeeded(ref EncodedPacket?[] buffer, ref int head, ref int tail, ref int count)
@@ -288,6 +300,11 @@ public sealed class ReplayBuffer : IDisposable
             var video = CopyRing(_videoPackets, _videoHead, _videoCount);
             var audio = CopyRing(_audioPackets, _audioHead, _audioCount);
 
+            // Pacotes lidos do spill nesta chamada que precisam de Release() se
+            // ficarem de fora da janela de duração (RAM ring mantém ownership).
+            HashSet<EncodedPacket>? diskVideoSet = null;
+            HashSet<EncodedPacket>? diskAudioSet = null;
+
             // Merge disk-spilled packets (oldest first, already sorted by PTS)
             if (_diskSpillEnabled && _spill is { Count: > 0 })
             {
@@ -299,6 +316,11 @@ public sealed class ReplayBuffer : IDisposable
                     if (pkt.Type == MediaType.Video) diskVideo.Add(pkt);
                     else diskAudio.Add(pkt);
                 }
+                // Os pacotes lidos do spill pertencem a ESTA chamada (o spill já
+                // os removeu do disco) — se algum ficar de fora da janela abaixo,
+                // precisa ser Release()d. Track por referência.
+                diskVideoSet = new HashSet<EncodedPacket>(diskVideo);
+                diskAudioSet = new HashSet<EncodedPacket>(diskAudio);
                 // Disk packets are older than RAM packets — prepend then sort
                 diskVideo.AddRange(video);
                 diskVideo.Sort((a, b) => a.Pts.CompareTo(b.Pts));
@@ -339,12 +361,16 @@ public sealed class ReplayBuffer : IDisposable
             for (int i = 0; i < video.Count; i++)
                 if (video[i].Pts >= videoStart)
                     trimmedVideo.Add(video[i]);
+                else if (diskVideoSet?.Remove(video[i]) == true)
+                    video[i].Release();
             video = trimmedVideo;
 
             var trimmedAudio = new List<EncodedPacket>(audio.Count);
             for (int i = 0; i < audio.Count; i++)
                 if (audio[i].Pts >= audioStart)
                     trimmedAudio.Add(audio[i]);
+                else if (diskAudioSet?.Remove(audio[i]) == true)
+                    audio[i].Release();
             audio = trimmedAudio;
 
             return (video, audio);

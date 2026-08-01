@@ -119,7 +119,9 @@ public sealed partial class EngineCoordinator
                     _ramManager.OnBroadcast = msg => _pipeServer.BroadcastRaw(msg);
                     _ramManager.OnReduceReplay = reducedReplay =>
                     {
-                        if (_buffer.MaxDuration > TimeSpan.FromSeconds(reducedReplay))
+                        // Callbacks são async (thread do watchdog) — _buffer/_activeProfile
+                        // podem estar nulos se o stop for simultâneo. Guard defensivo.
+                        if (_buffer != null && _buffer.MaxDuration > TimeSpan.FromSeconds(reducedReplay))
                         {
                             _buffer.MaxDuration = TimeSpan.FromSeconds(reducedReplay);
                             Log.W("EngineCoordinator", $"RAM crítica — replay buffer reduzido para {reducedReplay}s");
@@ -127,8 +129,11 @@ public sealed partial class EngineCoordinator
                     };
                     _ramManager.OnNormal = () =>
                     {
-                        _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
-                        Log.I("EngineCoordinator", $"RAM normal — replay buffer restaurado para {_activeProfile.ReplaySeconds}s");
+                        if (_buffer != null && _activeProfile != null)
+                        {
+                            _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                            Log.I("EngineCoordinator", $"RAM normal — replay buffer restaurado para {_activeProfile.ReplaySeconds}s");
+                        }
                     };
                     _ramManager.StartWatchdog();
                     _activeProfile = _ramManager.ResolveProfile();
@@ -629,8 +634,13 @@ public sealed partial class EngineCoordinator
                     modeCheckDue = DateTime.UtcNow.AddSeconds(2);
                     // Mode switching (DXGI↔PrintWindow) é gerenciado internamente
                     // pelo HybridCaptureSource via PickDesiredMode().
-                    // Crop é atualizado uma vez no startup — não periodicamente,
-                    // pois Flush() reinicia o ffmpeg e causa flickering.
+                    // NOTA (A1, 2026-08-01): UpdateDxgiCropRect foi removido —
+                    // crop de janela não é mais aplicado. Capturas per-window
+                    // (WGC) já isolam a janela do jogo na origem; aplicar crop
+                    // em fallback de desktop exigia Flush() (restart do ffmpeg),
+                    // que causava flickering no caminho quente. Se crop fixo for
+                    // desejado no futuro, deve ser aplicado UMA vez em StartCapture
+                    // (não periodicamente no loop).
                 }
 
                 _status.Update(s =>

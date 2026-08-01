@@ -403,7 +403,10 @@ public sealed class FfmpegEncoderTests
     public void IsAv1Keyframe_FrameHeaderObu_KeyFrame_ReturnsTrue()
     {
         // OBU FRAME_HEADER (type 3) com frame_type == 0 (KEY_FRAME).
-        var payload = new byte[] { 0x00 }; // frame_type bits [0..1] == 0
+        // Primeiro byte do payload (AV1 §5.9.1, MSB→LSB):
+        //   frame_marker(2)=01 | version(1)=0 | show_existing_frame(1)=0 |
+        //   frame_type(2)=00 | show_frame(1) | error_resilient_mode(1) → 0x40
+        var payload = new byte[] { 0x40 };
         var data = BuildAv1Obu(3, payload);
         Assert.True(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
     }
@@ -411,8 +414,8 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void IsAv1Keyframe_FrameObu_KeyFrame_ReturnsTrue()
     {
-        // OBU FRAME (type 6) com frame_type == 0 (KEY_FRAME).
-        var payload = new byte[] { 0x00 };
+        // OBU FRAME (type 6) com frame_type == 0 (KEY_FRAME) → 0x40.
+        var payload = new byte[] { 0x40 };
         var data = BuildAv1Obu(6, payload);
         Assert.True(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
     }
@@ -420,8 +423,8 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void IsAv1Keyframe_FrameHeaderObu_InterFrame_ReturnsFalse()
     {
-        // frame_type == 1 (INTER_FRAME) — bits [4..3] do primeiro byte = 01.
-        var payload = new byte[] { 0x08 };
+        // frame_type == 1 (INTER_FRAME) → bits [3..2] = 01 → 0x44.
+        var payload = new byte[] { 0x44 };
         var data = BuildAv1Obu(3, payload);
         Assert.False(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
     }
@@ -429,7 +432,7 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void IsAv1Keyframe_FrameObu_InterFrame_ReturnsFalse()
     {
-        var payload = new byte[] { 0x08 };
+        var payload = new byte[] { 0x44 };
         var data = BuildAv1Obu(6, payload);
         Assert.False(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
     }
@@ -440,7 +443,7 @@ public sealed class FfmpegEncoderTests
         // Payload realista: TEMPORAL_DELIMITER (2) → SEQUENCE_HEADER (1) → FRAME (6).
         var delimiter = BuildAv1Obu(2, Array.Empty<byte>());
         var seqHeader = BuildAv1Obu(1, new byte[] { 0x80, 0x00 });
-        var frame = BuildAv1Obu(6, new byte[] { 0x00 });
+        var frame = BuildAv1Obu(6, new byte[] { 0x40 });
         var data = Concat(delimiter, seqHeader, frame);
         Assert.True(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
     }

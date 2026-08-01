@@ -133,8 +133,12 @@ public sealed class ConfigManager : IDisposable
 {
     private static readonly HashSet<string> ValidEncoderPresets = new()
     {
+        // Alinhado com o allowlist TS (clips.ipc.ts): apenas presets NVENC/HEVC/AV1
+        // numéricos. Presets de CPU (veryfast/veryslow) são hardcoded nos args de
+        // fallback libx264/libx265 — não são configuráveis pelo usuário. Aceitar
+        // "veryfast" aqui o injetaria como "-preset veryfast" no NVENC (inválido) →
+        // erro ffmpeg → restart loop.
         "p1", "p2", "p3", "p4", "p5", "p6", "p7",
-        "veryfast", "veryslow",
     };
 
     public static bool IsValidEncoderPreset(string? preset)

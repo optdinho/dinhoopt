@@ -599,6 +599,9 @@ public sealed class ReplayBufferTests
             // The physical file is NOT rewritten (no lazy compaction) — a single
             // segment still holds all 100 frames. This is the whole point of the
             // stall fix: trims never read+rewrite the entire spill file.
+            // Flush forces the 64KB FileStream buffer to disk so the physical
+            // size (10KB = 100 frames) is observable.
+            spill.Flush();
             var files = Directory.GetFiles(dir, "dinho-spill-*.bin");
             Assert.Single(files);
             Assert.Equal(10_000, new FileInfo(files[0]).Length);

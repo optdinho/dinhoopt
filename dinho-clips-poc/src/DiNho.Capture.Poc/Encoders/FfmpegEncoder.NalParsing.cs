@@ -806,12 +806,13 @@ internal partial class FfmpegEncoder
 
             // Frame header / frame OBU — read frame_type from the payload.
             // AV1 uncompressed header first byte layout (MSB→LSB):
-            //   frame_marker(1) | version(1) | show_existing_frame(1) | frame_type(2) | ...
-            // → frame_type == 0 means KEY_FRAME.
+            //   frame_marker(2)=01 | version(1) | show_existing_frame(1) |
+            //   frame_type(2) | show_frame(1) | error_resilient_mode(1)
+            // → frame_type == 0 means KEY_FRAME. Bits [3..2] → shift by 2.
             if (obuType == 3 || obuType == 6)
             {
                 if (pos >= length) return false;
-                int frameType = (data[pos] >> 3) & 0x03;
+                int frameType = (data[pos] >> 2) & 0x03;
                 return frameType == 0;
             }
 

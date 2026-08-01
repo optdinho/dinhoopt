@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using DiNho.Capture.Poc.Encoders;
+using DiNho.Capture.Poc.Logging;
 
 namespace DiNho.Capture.Poc.Buffer;
 
@@ -145,48 +146,6 @@ public sealed class DiskSpillBuffer : IDisposable
     }
 
     /// <summary>
-    /// Read only the oldest N seconds of spilled packets (for merging with RAM).
-    /// Returns the read packets and removes them from the index (FIFO eviction).
-    /// </summary>
-    public List<EncodedPacket> ReadOldest(TimeSpan maxAge)
-    {
-        lock (_sync)
-        {
-            if (_disposed || _index.Count == 0) return new List<EncodedPacket>();
-
-            var lastPts = _index[^1].Pts;
-            var cutoff = lastPts - maxAge;
-            if (cutoff < TimeSpan.Zero) cutoff = TimeSpan.Zero;
-
-            int splitIdx = 0;
-            for (int i = 0; i < _index.Count; i++)
-            {
-                if (_index[i].Pts >= cutoff)
-                {
-                    splitIdx = i;
-                    break;
-                }
-                if (i == _index.Count - 1) splitIdx = _index.Count; // all below cutoff
-            }
-
-            if (splitIdx == 0) return new List<EncodedPacket>();
-
-            var result = ReadRange(0, splitIdx);
-
-            long removedBytes = 0;
-            for (int i = 0; i < splitIdx; i++)
-                removedBytes += _index[i].Length;
-
-            _index.RemoveRange(0, splitIdx);
-            _totalBytes -= removedBytes;
-            RecomputeCounts();
-            DeleteFullyConsumedSegments();
-
-            return result;
-        }
-    }
-
-    /// <summary>
     /// Drop spilled packets older than <paramref name="maxAge"/> relative to the
     /// newest spilled packet (sliding time window, like ShadowPlay/Medal). The
     /// retained window is aligned to the oldest keyframe within it so the
@@ -295,20 +254,6 @@ public sealed class DiskSpillBuffer : IDisposable
     }
 
     /// <summary>
-    /// Read all spilled packets and remove them from disk (full drain).
-    /// Used when GetSegments needs the complete history.
-    /// </summary>
-    public List<EncodedPacket> DrainAll()
-    {
-        lock (_sync)
-        {
-            var result = ReadAll();
-            Clear();
-            return result;
-        }
-    }
-
-    /// <summary>
     /// Remove all spilled data and delete temp files.
     /// </summary>
     public void Clear()
@@ -358,7 +303,21 @@ public sealed class DiskSpillBuffer : IDisposable
 
     private void FlushActive()
     {
-        try { _activeStream?.Flush(false); } catch { }
+        try { _activeStream?.Flush(false); }
+        catch (Exception ex) { Log.W("DiskSpillBuffer", $"FlushActive failed: {ex.GetType().Name}: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Force buffered writes to disk. Used by tests to make physical file size
+    /// observable (the FileStream buffers 64KB, so Length is 0 until flushed)
+    /// and by any consumer that needs the spill durable without disposing.
+    /// </summary>
+    public void Flush()
+    {
+        lock (_sync)
+        {
+            FlushActive();
+        }
     }
 
     /// <summary>

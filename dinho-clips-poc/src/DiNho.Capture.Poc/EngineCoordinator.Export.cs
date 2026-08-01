@@ -114,9 +114,6 @@ public sealed partial class EngineCoordinator
             var ffEncoder = _encoder as FfmpegEncoder;
             var cachedAvcc = ffEncoder?.AvccCache;
             var cachedHvcc = ffEncoder?.HvccCache;
-            var cachedVps = ffEncoder?.VpsCache;
-            var cachedSps = ffEncoder?.SpsCache;
-            var cachedPps = ffEncoder?.PpsCache;
             await Task.Run(() =>
             {
                 var result = _exporter.ExportToMp4(
@@ -128,10 +125,7 @@ public sealed partial class EngineCoordinator
                     _config.Config.Fps,
                     rawFormat: ffEncoder?.RawFormat ?? "h264",
                     avccFallback: cachedAvcc,
-                    hvccFallback: cachedHvcc,
-                    vps: cachedVps,
-                    sps: cachedSps,
-                    pps: cachedPps);
+                    hvccFallback: cachedHvcc);
 
                 var fileInfo = new FileInfo(result);
                 Log.I("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");

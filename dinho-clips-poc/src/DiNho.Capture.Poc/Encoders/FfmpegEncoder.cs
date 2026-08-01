@@ -136,9 +136,6 @@ internal sealed partial class FfmpegEncoder : IEncoder
     }
     public byte[]? AvccCache => _cachedAvcc;
     public byte[]? HvccCache => _cachedHvcc;
-    public byte[]? VpsCache => _cachedVps;
-    public byte[]? SpsCache => _cachedSps;
-    public byte[]? PpsCache => _cachedPps;
     private bool IsHevc => _codec is "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265";
     private bool IsAv1 => _codec is "av1_nvenc" or "libsvtav1";
     public string RawFormat => IsHevc ? "hevc" : IsAv1 ? "av1" : "h264";

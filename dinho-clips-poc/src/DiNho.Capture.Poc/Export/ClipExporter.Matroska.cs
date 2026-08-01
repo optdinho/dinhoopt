@@ -112,7 +112,7 @@ public sealed partial class ClipExporter
         bw.Write(data, dataOffset, dataLength);
     }
 
-    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null)
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null, byte[]? hvccFallback = null)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
@@ -189,10 +189,10 @@ public sealed partial class ClipExporter
             }
             else if (rawFormat == "hevc")
             {
-                var hvcc = ExtractHvccExtradata(packets);
+                var hvcc = hvccFallback ?? ExtractHvccExtradata(packets);
                 if (hvcc != null)
                 {
-                    Log.I("Exporter", $"hvcC len={hvcc.Length}");
+                    Log.I("Exporter", $"hvcC len={hvcc.Length} source={(hvcc == hvccFallback ? "encoder" : "packets")}");
                     WriteEbmlBinary(tw, 0x63A2, hvcc);
                 }
                 else

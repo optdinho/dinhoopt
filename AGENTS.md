@@ -3049,3 +3049,45 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `TrimExcess*` retornam evictados, `FlushEvicted` novo (spill+release fora do lock), setters `MaxDuration`/`MaxBytes`
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs`: teste de compactação reescrito + 3 testes novos de segmento/concorrência
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-01 — Code review `d737658^..HEAD`: export pipeline + IPC/config)
+
+### Done
+
+- **Code review completo** de `d737658^..HEAD` (HEAD `27229b5`, 30 arquivos) — export pipeline C# + Electron main/preload/shared. **Sem CRITICAL/HIGH**; 2 MEDIUM + 4 LOW (tabela abaixo). Todas as correções da faixa (H1/H2/A1/B1/B2/B3/B4/R2 M1) verificadas corretas.
+
+- **Pool-leak CLOSED (sem leak)**: `FilterAudioByIntervals`/`TrimAudioStart`/`TrimAudioEnd`/`PadAudioWithSilence` (AudioSync.cs:50–210) só criam listas subset/wrapper sobre os mesmos pacotes retidos; o loop de `Release()` no `finally` do caller (EngineCoordinator.Export.cs:148–161) percorre as listas ORIGINAIS completas; `Export/` não tem nenhum `.Release()` (grep: 0). AAC silent frames não-pooled (`new byte[]`) — Release é no-op no pool.
+
+- **Verificado via per-file diff**: H1 (listas `List<EncodedPacket>?` nullables pré-try + release no `finally` com null guards, cobre exceção/vazio/`_exportInProgress`); B4 (probe pós-mux separado removido → `GenerateThumbnail` único com `expectedAudio`, erro engolido em try/catch warning-only); M4 (`WriteMatroskaFile` sem áudio → ADTS temp separado + `-f aac` no mux, `finally` deleta mkvTemp+adtsTemp :263–267); B3 (`_exportLock`/`Monitor.TryEnter` removidos, serialização só via `_exportLock`/`_exportInProgress` do EngineCoordinator).
+
+- **Allowlist encoderPreset LOCALIZADA + verificada**: `clips.ipc.ts:48` `VALID_ENCODER_PRESETS = new Set(['p1'..'p7'])`, aplicada :339–340; teste de rejeição `clips.ipc.test.ts:719–725` (`p5; shutdown /s` → mantém cfg anterior). Trim com reEncode: `-c:v libx264 -crf {C.cq} -maxrate {maxrateKbps}K` (clips.ipc.ts:629–643).
+
+- **Default config NÃO bate com preset "Boa"**: defaults CQ20/maxrate30000/bufsize60000 vs Boa 40000/80000 (LOW de rotulagem).
+
+- **Named pipe `PipeOptions.CurrentUserOnly`** (NamedPipeServer.cs:201) — mitiga injeção cross-user (pré-existente, fora de escopo).
+
+### Findings (veredito final)
+
+| Sev | Local | Achado |
+|-----|-------|--------|
+| MED | `ClipExporter.cs:214` + `EngineCoordinator.Export.cs:114–134` | **HEVC sem fallback de CodecPrivate**: `cachedHvcc/cachedVps/cachedSps/cachedPps` são coletados do encoder (NalParsing.cs:163–179, 541–557 populam; `BuildHvcc` :179) e passados a `ExportToMp4`, mas só `avccFallback` chega a `WriteMatroskaFile`; HEVC re-extrai hvcC dos packets (Matroska.cs:192). Se a extração por packets falhar (mesma classe do bug avcC do H264 de 2026-06-27), export HEVC corrompe. AV1 sem cache por design (`!IsAv1`, :159). Fix trivial: forward `hvccFallback` no `WriteMatroskaFile` (e dropar params mortos `vps/sps/pps`). |
+| MED | `IpcMessageHandler.Config.cs:97–138` + `ConfigManager.cs:330` | **Handler `config` do pipe ignora validação**: copia `Cq/MaxrateKbps/BufsizeKbps/Bframes/Lookahead/OutputDirectory/Codec` cru via `ConfigManager.Update` (que não clampa — validação só no `Load()` :223–256). Processo same-user ou renderer comprometido pode setar OutputDirectory fora do profile ou params inválidos pro ffmpeg. Mitigado por `CurrentUserOnly`. Pré-existente; B1 adicionou allowlist de preset nos dois lados mas não os guards numéricos/OutputDirectory aqui. |
+| LOW | `ClipExporter.cs:366–400` | Regressão B4: diagnóstico de probe/áudio só loga após o decode de thumbnail sair com exit 0; vídeo corrompido engole a exceção (:260–261) e perde exatamente o aviso "MP4 probe FAILED". Fix: parsear o input dump antes do throw ou rodar probe header-only na falha. |
+| LOW | `ClipExporter.cs:221,297–309` | Export silenciosamente video-only se `audioPackets[0]` não for ADTS (`IsAdts` false → `hasAudioTracks=false`); o warning M3 nunca dispara. Deveria logar "áudio presente mas não-ADTS". |
+| LOW | `clips-config-manager.ts`/`store` vs `ClipsConfigQuality.tsx` | Default maxrate/bufsize 30000/60000 não corresponde a nenhum preset da UI (Boa=40000/80000); default fica "abaixo do Boa". |
+| LOW | `DiskSpillBuffer.cs:102` | Ramo `PcmSamples` inalcançável no fluxo atual (áudio é AAC). Cosmético. |
+
+### Key Decisions
+
+- **Fallback de CodecPrivate só para H264 hoje**: o avcC fallback do encoder foi adicionado na saga de 2026-06-27 porque a extração por packets falhava; HEVC tem o mesmo perfil de risco e o cache (`BuildHvcc`) JÁ é populado — é só religar os params já plumbed. Candidato claro a fix de baixo risco na próxima sessão.
+- **`CurrentUserOnly` no pipe** é a fronteira de confiança atual: cross-user bloqueado, same-user (ou renderer comprometido) não — aceitável enquanto o renderer roda com contexto isolado, mas o `HandleConfig` sem validação é o ponto mais fraco.
+
+### Next Steps
+
+- (Opcional) Fix do MED #1: forward `hvccFallback` no `WriteMatroskaFile` + remover params mortos `hvccFallback/vps/sps/pps` de `ExportToMp4`; teste de integração HEVC.
+- (Opcional) Fix do MED #2: fatorar `ValidateAndFix(AppConfig)` compartilhado entre `Load()` e `Update()` + validação de path-traversal em `OutputDirectory` no `HandleConfig`.
+- Testar em campo (app instalado): sessão com `codec:"hevc"` para exercitar hvcC path; validar que `clips.ipc.ts` aceita apenas presets p1–p7 via UI.
+
+### Relevant Files Changed
+
+- `AGENTS.md`: resumo de sessão (review apenas; nenhum código alterado nesta sessão)

@@ -27,10 +27,7 @@ public sealed partial class ClipExporter : IDisposable
         int frameRate,
         string rawFormat = "h264",
         byte[]? avccFallback = null,
-        byte[]? hvccFallback = null,
-        byte[]? vps = null,
-        byte[]? sps = null,
-        byte[]? pps = null)
+        byte[]? hvccFallback = null)
     {
         if (videoPackets.Count == 0)
             throw new InvalidOperationException("No video packets to export");
@@ -211,7 +208,7 @@ public sealed partial class ClipExporter : IDisposable
                 // Áudio NÃO entra no MKV (M4): é escrito no arquivo ADTS separado e
                 // mapeado no mux via -f aac — o matroskadec não seta frame_size para
                 // A_AAC, então a trilha MKV era só parsing desnecessário.
-                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback);
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback, hvccFallback);
                 var mkvLen = new FileInfo(mkvTemp).Length;
                 var audioCount = audioPackets.Count(p => p.Type == MediaType.Audio);
                 Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) videoFrames={videoPackets.Count} audioPackets={audioCount}");
