@@ -26,10 +26,41 @@ public sealed class FfmpegAacEncoder : IDisposable
     private long _outputFrameIndex;
     private byte[]? _pcmBuf;
     private long _pcmBytesWritten;
+    private long _pcmBatchesWritten;
     private int _pcmWriteErrors;
     private int _totalAacFrames;
     private volatile int _droppedFrameCount;
     private volatile bool _flushing;
+
+    // Timeout de escrita no stdin: warm-up (encoder ainda não produziu batches)
+    // usa timeout generoso para o ffmpeg abrir; estado estável usa timeout estrito
+    // de proteção contra travas — espelha o padrão do FfmpegEncoder (vídeo).
+    internal const int StdinWriteWarmupTimeoutMs = 5000;
+    internal const int StdinWriteTimeoutMs = 250;
+
+    /// <summary>0 = auto (warmup/steady); &gt;0 = fixo (usado pelos testes).</summary>
+    private int _writeTimeoutMs;
+
+    internal static int ComputeAacWriteTimeout(long batchesWritten) =>
+        batchesWritten == 0 ? StdinWriteWarmupTimeoutMs : StdinWriteTimeoutMs;
+
+    /// <summary>
+    /// Seam de teste — injeta o stdin (e um timeout de escrita fixo) sem spawnar
+    /// um processo ffmpeg real. Não inicia o ReaderLoop nem cria o processo;
+    /// apenas exercita EncodeAudio/Dispose contra o Stream injetado.
+    /// </summary>
+    internal FfmpegAacEncoder(Stream stdin, int writeTimeoutMs = 100)
+    {
+        _stdin = stdin;
+        _sampleRate = 48000;
+        _channels = 2;
+        _writeTimeoutMs = writeTimeoutMs;
+        _initialized = true;
+    }
+
+    public FfmpegAacEncoder()
+    {
+    }
 
     public void Initialize(int sampleRate, int channels, int bitrate = 128000)
     {
