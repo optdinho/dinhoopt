@@ -14,11 +14,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private Process? _process;
     private Stream? _stdin;
     private Stream? _stdout;
-    private readonly Channel<EncodedPacket> _outputChannel =
-        Channel.CreateBounded<EncodedPacket>(new BoundedChannelOptions(256)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest
-        });
+    private readonly Channel<EncodedPacket> _outputChannel;
 
     private int _width, _height, _frameRate;
     private int _cropX, _cropY, _cropW, _cropH;
@@ -56,6 +52,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _restartAttempts;
     private long _lastRestartTicks;
     private int _gpuConvertFails;
+    private int _droppedPackets;
 
     // Absolute restart limiter: max 10 restarts in any 30-second window to prevent CLR crash from GC pressure
     private int _restartsInWindow;
@@ -83,6 +80,15 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private bool _pendingTooLarge; // Set by ParseAvcc when pending exceeds 200KB — prevents false EmitPacket
     private long _outputFrameIndex;
 
+    // Stdin write timeout: strict 200ms only in steady state (encoder proven working).
+    // During warm-up (no packet emitted yet) use a generous timeout — ffmpeg opening the
+    // HW encoder does not read stdin yet, and a strict timeout kills it before cold-start,
+    // causing a kill-restart loop that cascades to CPU libx264 (observed on RTX 5050:
+    // av1_nvenc cold-start can exceed 200ms, especially when the previous NVENC session
+    // is still being released).
+    internal const int StdinWriteTimeoutMs = 200;
+    internal const int StdinWriteWarmupTimeoutMs = 10_000;
+
     // Raw AnnexB/AVCC accumulation buffer — handles pipe splits that land mid-NALU
     private byte[]? _rawBuf;
     private int _rawLen;
@@ -108,7 +114,26 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private uint _ivfTimebaseDen;
     private uint _ivfTimebaseNum;
 
-    public FfmpegEncoder(bool useHardware = true) => _useHardware = useHardware;
+    public FfmpegEncoder(bool useHardware = true)
+    {
+        _useHardware = useHardware;
+
+        // DropOldest mantém a dinâmica de gravação: quando o canal enche, o
+        // pacote mais antigo é descartado e os frames mais recentes (o "agora",
+        // que é o ponto de save do replay buffer) são preservados.
+        //
+        // O callback itemDropped é obrigatório: o descarte via DropOldest NÃO
+        // chama Release() sozinho — sem este callback o byte[] do VideoPacketPool
+        // vazaria (M1).
+        _outputChannel = Channel.CreateBounded<EncodedPacket>(new BoundedChannelOptions(256)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest
+        }, itemDropped: pkt =>
+        {
+            pkt.Release();
+            Interlocked.Increment(ref _droppedPackets);
+        });
+    }
     public byte[]? AvccCache => _cachedAvcc;
     public byte[]? HvccCache => _cachedHvcc;
     public byte[]? VpsCache => _cachedVps;
@@ -379,9 +404,60 @@ internal sealed partial class FfmpegEncoder : IEncoder
 
     // ── Encode frame ─────────────────────────────────────────────────
 
+    internal enum StdinWriteResult { Ok, Timeout, Faulted }
+
+    internal static StdinWriteResult TryWriteStdin(Stream stdin, byte[] data, int timeoutMs, out Exception? fault) =>
+        TryWriteStdin(stdin, data, 0, data.Length, timeoutMs, out fault);
+
+    /// <summary>
+    /// Escreve dados no stdin do ffmpeg com timeout. Se o pipe encher (processo
+    /// travado / CPU zero), retorna Timeout em vez de bloquear a thread de captura.
+    /// A task em voo após o timeout é observada (só-faulted) para evitar unobserved
+    /// task exception — o processo antigo será morto pelo restart.
+    /// </summary>
+    internal static StdinWriteResult TryWriteStdin(Stream stdin, byte[] data, int offset, int count, int timeoutMs, out Exception? fault)
+    {
+        fault = null;
+        var writeTask = stdin.WriteAsync(data, offset, count);
+        try
+        {
+            if (writeTask.Wait(TimeSpan.FromMilliseconds(timeoutMs)))
+                return StdinWriteResult.Ok;
+        }
+        catch (AggregateException)
+        {
+            // Task.Wait(timeout) LANÇA AggregateException quando a task completa
+            // com falha em vez de retornar true — trata como Faulted (teste
+            // TryWriteStdin_FaultingStream_ReturnsFaultedWithException). Sem este
+            // catch, a AggregateException escapava da EncodeFrame (o catch externo
+            // só filtra IOException/ObjectDisposedException).
+            if (writeTask.IsFaulted)
+            {
+                fault = writeTask.Exception?.GetBaseException();
+                return StdinWriteResult.Faulted;
+            }
+            throw;
+        }
+        // A write pode falhar depois do timeout (ex.: restart dispõe o pipe).
+        // Observa a task para evitar unobserved task exception; a falha é
+        // irrelevante aqui porque o processo antigo será morto.
+        _ = writeTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+        return StdinWriteResult.Timeout;
+    }
+
+    /// <summary>
+    /// Escolhe o timeout de escrita no stdin: warm-up (nenhum pacote emitido ainda)
+    /// usa timeout generoso para o ffmpeg abrir o encoder HW; estado estável usa o
+    /// timeout estrito de proteção contra travas. Um encoder que nunca emitiu pacote
+    /// não pode ser considerado "travado" — só um que já provou funcionar.
+    /// </summary>
+    internal static int ComputeStdinWriteTimeout(long outputFrameIndex) =>
+        outputFrameIndex == 0 ? StdinWriteWarmupTimeoutMs : StdinWriteTimeoutMs;
+
     public EncodedPacket? EncodeFrame(ID3D11Texture2D texture, TimeSpan pts)
     {
         if (!_initialized) throw new InvalidOperationException("not initialized");
+        if (_disposed) return null;
 
         if (_processFailed && !TryRestart())
             return null;
@@ -391,7 +467,33 @@ internal sealed partial class FfmpegEncoder : IEncoder
 
         try
         {
-            _stdin!.Write(nv12);
+            // WriteAsync com timeout: se o pipe do ffmpeg encher (processo travado /
+            // CPU zero) e o pipeline for reiniciado, o Write síncrono bloquearia o
+            // loop de captura indefinidamente — e o pipeline ANTIGO continuaria
+            // rodando contra um encoder sendo Dispose()d (A2). Com timeout, o frame
+            // é dropado e o restart ocorre de forma ordenada, sem dupla gravação.
+            // O timeout é estrito (200ms) só depois que o encoder provou funcionar
+            // (primeiro pacote emitido); durante o warm-up usa folga generosa para o
+            // ffmpeg abrir o encoder HW sem ser morto antes do cold-start.
+            var timeoutMs = ComputeStdinWriteTimeout(_outputFrameIndex);
+            var result = TryWriteStdin(_stdin!, nv12, timeoutMs, out var fault);
+            if (result == StdinWriteResult.Timeout)
+            {
+                _processFailed = true;
+                _processFailedCause = "encoder:stdin_timeout";
+                Log.W("FfmpegEncoder", $"stdin write timeout after {timeoutMs}ms (warmup={timeoutMs == StdinWriteWarmupTimeoutMs}, emitted={_outputFrameIndex}) — dropping frame (pts={pts.TotalMilliseconds:F0}ms)");
+                LogProcessExit();
+                return null;
+            }
+            if (result == StdinWriteResult.Faulted)
+            {
+                _processFailed = true;
+                _processFailedCause = "encoder:stdin_io_error";
+                Log.E("FfmpegEncoder", $"stdin: {fault?.Message}");
+                LogProcessExit();
+                return null;
+            }
+
             // Só enfileira o PTS depois que o Write for bem-sucedido —
             // se falhar, o EmitPacket() nunca vai desenfileirar e o PTS
             // ficaria órfão na fila, corrompendo o sync dos frames seguintes
@@ -399,7 +501,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             _frameCount++;
             _restartAttempts = 0;
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
             _processFailed = true;
             _processFailedCause = "encoder:stdin_io_error";
@@ -489,7 +591,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
 
         if (_restartAttempts > 0 && elapsedSec < delaySec)
         {
-            _outputChannel.Reader.TryRead(out _);
+            // M1: descarte o pacote mais antigo SEM vazar o byte[] do pool
+            if (_outputChannel.Reader.TryRead(out var backoffPkt))
+                backoffPkt.Release();
             return false;
         }
 

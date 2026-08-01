@@ -31,6 +31,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private int _totalAacFrames;
     private volatile int _droppedFrameCount;
     private volatile bool _flushing;
+    private readonly object _writeLock = new();
 
     // Timeout de escrita no stdin: warm-up (encoder ainda não produziu batches)
     // usa timeout generoso para o ffmpeg abrir; estado estável usa timeout estrito
@@ -120,10 +121,6 @@ public sealed class FfmpegAacEncoder : IDisposable
             return;
         }
 
-        int byteLen = pcmSamples.Length * 4;
-        if (_pcmBuf == null || _pcmBuf.Length < byteLen)
-            _pcmBuf = new byte[byteLen * 2];
-
         // Sanitize NaN/Inf + clamp to [-1,1] — FFmpeg AAC encoder crashes on NaN input
         // and MDCT can overflow on extreme values. This is the single sanitization gate.
         int badCount = 0;
@@ -149,33 +146,57 @@ public sealed class FfmpegAacEncoder : IDisposable
         if (badCount > 0 && _pcmWriteErrors <= 3)
             Log.W("FfmpegAacEncoder", $"Sanitized {badCount} samples (NaN/Inf/clamp) in PCM buffer");
 
-        System.Buffer.BlockCopy(pcmSamples, 0, _pcmBuf, 0, byteLen);
+        int byteLen = pcmSamples.Length * 4;
 
-        try
+        // EncodeAudio pode ser chamado por 2 threads WASAPI (loopback + mic) quando o
+        // mic está ativo. O lock serializa o buffer compartilhado (_pcmBuf) E a escrita
+        // no stdin — sem isso, batches corrompidos chegavam ao ffmpeg (race).
+        lock (_writeLock)
         {
-            _stdin!.Write(_pcmBuf, 0, byteLen);
-            _stdin.Flush();
-            _pcmBytesWritten += byteLen;
-        }
-        catch (Exception ex)
-        {
-            _pcmWriteErrors++;
-            if (_pcmWriteErrors <= 3 || _pcmWriteErrors % 500 == 0)
-                Log.E("FfmpegAacEncoder", $"PCM write #{_pcmWriteErrors} failed ({byteLen} bytes, totalWrote={_pcmBytesWritten}): {ex.GetType().Name}: {ex.Message}");
-            if (ex is IOException)
-            {
-                _isHealthy = false;
-                Log.E("FfmpegAacEncoder", $"Pipe broken (IOException) — encoder UNHEALTHY after {_pcmWriteErrors} errors ({_pcmBytesWritten} bytes)");
-            }
-            else if (_pcmWriteErrors >= 10)
-            {
-                _isHealthy = false;
-                Log.E("FfmpegAacEncoder", $"Too many errors ({_pcmWriteErrors}) — encoder UNHEALTHY ({_pcmBytesWritten} bytes)");
-            }
-        }
+            if (_pcmBuf == null || _pcmBuf.Length < byteLen)
+                _pcmBuf = new byte[byteLen * 2];
 
-        if (_pcmBuf.Length > byteLen * 4 && _pcmBuf.Length > 65536)
-            Array.Resize(ref _pcmBuf, Math.Max(byteLen, 65536));
+            System.Buffer.BlockCopy(pcmSamples, 0, _pcmBuf, 0, byteLen);
+
+            // Timeout de escrita: warm-up (primeiro batch) usa timeout generoso para o
+            // ffmpeg abrir; estado estável usa timeout estrito — um pipe preso marca
+            // UNHEALTHY e não trava mais a thread WASAPI (auto-recovery do engine).
+            long batch = _pcmBatchesWritten++;
+            int timeoutMs = _writeTimeoutMs > 0 ? _writeTimeoutMs : ComputeAacWriteTimeout(batch);
+            var result = FfmpegEncoder.TryWriteStdin(_stdin!, _pcmBuf, 0, byteLen, timeoutMs, out var fault);
+
+            switch (result)
+            {
+                case FfmpegEncoder.StdinWriteResult.Ok:
+                    _stdin.Flush();
+                    _pcmBytesWritten += byteLen;
+                    break;
+                case FfmpegEncoder.StdinWriteResult.Timeout:
+                    _pcmWriteErrors++;
+                    _isHealthy = false;
+                    Log.E("FfmpegAacEncoder",
+                        $"PCM write TIMEOUT after {timeoutMs}ms (batch #{batch}, {byteLen} bytes, totalWrote={_pcmBytesWritten}) — encoder UNHEALTHY (ffmpeg pipe preso)");
+                    break;
+                default:
+                    _pcmWriteErrors++;
+                    if (_pcmWriteErrors <= 3 || _pcmWriteErrors % 500 == 0)
+                        Log.E("FfmpegAacEncoder", $"PCM write #{_pcmWriteErrors} failed ({byteLen} bytes, totalWrote={_pcmBytesWritten}): {fault?.GetType().Name}: {fault?.Message}");
+                    if (fault is IOException)
+                    {
+                        _isHealthy = false;
+                        Log.E("FfmpegAacEncoder", $"Pipe broken (IOException) — encoder UNHEALTHY after {_pcmWriteErrors} errors ({_pcmBytesWritten} bytes)");
+                    }
+                    else if (_pcmWriteErrors >= 10)
+                    {
+                        _isHealthy = false;
+                        Log.E("FfmpegAacEncoder", $"Too many errors ({_pcmWriteErrors}) — encoder UNHEALTHY ({_pcmBytesWritten} bytes)");
+                    }
+                    break;
+            }
+
+            if (_pcmBuf.Length > byteLen * 4 && _pcmBuf.Length > 65536)
+                Array.Resize(ref _pcmBuf, Math.Max(byteLen, 65536));
+        }
     }
 
     public int TotalAacFrames => _totalAacFrames;
