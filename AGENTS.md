@@ -2927,3 +2927,86 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 
 - Testar no app instalado: preview de clip via `clip-video://` (agora confinado ao output dir), trim com re-encode, e toast de RAM pressure aparecendo UMA vez por transição
 - Opcional: deletar `src/preload/api/clips.ts` morto (importa `clip-video-protocol` do main)
+
+## Session Summary (2026-07-31 — Review 5 agents: todos CRITICAL/HIGH fixados, veredito APROVADO)
+
+### Done
+
+- **B1 HIGH** — allowlist `encoderPreset` (TS + C# + testes): `clips.ipc.ts` valida via `VALID_ENCODER_PRESETS` set (`p1`-`p7`); `IpcMessageHandler.Config.cs` + `ConfigManager.cs` idem; testes TS e C# para valores inválidos. Teste de rejeição do `clips.ipc.test.ts` corrigido para resetar `clipsConfig.encoderPreset = 'p5'` antes (estado de módulo vazava `p4` do teste anterior — falha `expected 'p4' to be 'p5'`).
+- **H1 HIGH** — `pkt.Release()` no export: pacotes video/audio retornados ao pool via `try/finally` em `ExportToMp4`/`SaveClipAsync` (`EngineCoordinator.Export.cs`); testes validam Release chamado mesmo em erro.
+- **H2 HIGH** — race reinit/stop: re-check `_captureActive` dentro do `_pipelineLock` antes de lançar `ReinitializePipelineAsync` (`EngineCoordinator.CaptureSource.cs`); testes com stop durante reinit.
+- **A1 HIGH** — `UpdateDxgiCropRect` removido do caminho quente de captura DXGI (crop fixo mantido); testes de `CaptureDxgi` atualizados.
+- **R4 M1** — `ClipsStatusBar.tsx`: `t('diskSpaceLow')` → `t('lowDisk')` (chave real no locale); teste virou positivo (`findByText('lowDisk')`).
+- **R2 M1** — pool leak no canal `DropWrite` do `FfmpegEncoder`: helper `TryWriteOutput` faz `pkt.Release()` + `Interlocked.Increment(ref _droppedPackets)` quando `TryWrite` falha; `EmitPacket` (NalParsing.cs:725), `ProcessIvfFrames` (NalParsing.cs:275) e backoff de restart (`FfmpegEncoder.cs:~492`, agora `TryRead(out var backoffPkt)` + `Release()` em vez de `TryRead(out _)`) usam o helper. **AAC**: arrays não-pooled (`new byte[frameLen]`) + `DropWrite` + drop contabilizado (`FfmpegAacEncoder.cs:239-246`) — sem leak, nada a fazer.
+- **R2 M2** — keyframe no caminho IVF (AV1): `internal static bool IsAv1Keyframe(byte[] data, int length)` em `FfmpegEncoder.NalParsing.cs` — caminha OBUs (header 1 byte, extension flag, campo de tamanho leb128) até OBU FRAME_HEADER (type 3) ou FRAME (type 6) e lê `frame_type` em `(data[pos] >> 3) & 0x03` (`0` = KEY_FRAME). `ProcessIvfFrames` marca keyframe real (antes: tudo `false`). **8 testes** em `FfmpegEncoderTests.cs` (keyframe/interframe via OBU 3 e 6, delimiter+sequence_header+frame realista, empty, truncado, só delimiter) — com helpers `BuildAv1Obu`/`Leb128`/`Concat`. Rota IVF só é alcançada para AV1 (`rawFmt == "av1" ? "ivf" : rawFmt`, FfmpegEncoder.cs:324). Consumo downstream: `ClipExporter.cs:133` (`FindLastIndex(trimIdx, p => p.IsKeyFrame)` no `TrimVideoStart`).
+- **R5 A1** — `src/preload/api/clips.ts` deletado (dead code main-only, zero importers; `preload/api/index.ts` não o referenciava).
+
+## Session Summary (2026-07-31 — R2 M1 refinamento: DropOldest + itemDropped no canal do encoder)
+
+### Done
+
+- **Refinamento do R2 M1** — a correção original (`DropWrite` + helper `TryWriteOutput`) resolvia o leak do pool, mas **mudava a dinâmica de descarte**: em overflow sustentado, `DropWrite` descarta o pacote NOVO mantendo os antigos — criando gap nos frames mais recentes, exatamente onde o replay buffer termina (o "agora", ponto de save do clip). A solução escolhida restaura o comportamento original (`DropOldest`) sem reintroduzir o leak:
+  - **Canal** (`FfmpegEncoder.cs:17`): `Channel.CreateBounded(256)` com `FullMode = DropOldest` + callback `itemDropped: pkt => { pkt.Release(); Interlocked.Increment(ref _droppedPackets); }` — o descarte nativo do canal libera o `byte[]` do `VideoPacketPool` (sem leak M1) e preserva os frames mais recentes (dinâmica DropOldest).
+  - **Overload descoberta**: o parâmetro nomeado do callback é **`itemDropped`**, não `onDropped` (CS1739) — confirmado via reflexão no runtime 10.0.10 (`CreateBounded(BoundedChannelOptions, Action<T>)` com param `itemDropped`).
+  - **CS0236 resolvido**: o callback referencia `_droppedPackets` (campo de instância) — não pode ficar em inicializador de campo. Movido para o construtor (corpo de bloco, `_outputChannel` mantém `readonly`).
+  - **`TryWriteOutput` removido** (NalParsing.cs): as 2 chamadas (`ProcessIvfFrames:275`, `EmitPacket:725`) agora usam `_outputChannel.Writer.TryWrite(...)` direto — o descarte é tratado nativamente pelo `itemDropped`. O helper virou dead code e foi deletado.
+  - **Backoff de restart** (`FfmpegEncoder.cs:~492`): mantido com `TryRead(out var backoffPkt)` + `Release()` — já correto.
+  - **AAC inalterado** (`FfmpegAacEncoder.cs:14`): continua `DropWrite` com arrays não-pooled (`new byte[frameLen]`) — sem leak, dinâmica irrelevante para frames pequenos.
+
+### Validado
+
+- **C#**: build main `-c Release` — **0 erros**; `dotnet test` — **988/988 pass** (2 execuções, a 1ª flakiness do ConsoleLogger como documentado); FfmpegEncoderTests 51/51.
+- **Smoke**: probe `net10.0-windows10.0.26100.0` confirmou overload `CreateBounded(BoundedChannelOptions, Action<T>)` com param `itemDropped`; comportamento DropOldest verificado (10 itens escritos em canal cap. 4 → 4 lidos, 6 dropped via callback).
+
+### Key Decisions
+
+- **`DropOldest` + `itemDropped` sobre `DropWrite`**: o canal com callback nativo é a forma mais limpa de restaurar a semântica original (descartar o mais antigo) sem vazar arrays pooled. O `onDropped`/`itemDropped` é chamado pela implementação do channel ao evictar, então não há caminho de código que esqueça o `Release()`.
+- **Construtor com corpo em vez de inicializador de campo**: necessário porque o callback captura o campo `_droppedPackets` (CS0236). `_outputChannel` continua `readonly` — atribuído uma única vez no construtor.
+
+### Next Steps
+
+- ~~Publicar engine + `npm run copy-engine` + deploy no app instalado~~ ✅ (ver sessão 2026-08-01)
+- Testar no app instalado: gravação com `codec: "av1"` → keyframe correto no trim (`TrimVideoStart`), clip sem macroblocos no fast copy
+- Opcional: `preload/api/` restante (`index.ts`, `scanner.ts`, `system.ts`) também é código morto (nada fora do folder importa) — avaliar remoção completa
+
+## Session Summary (2026-08-01 — TDD fix Bugs B/C do áudio AAC: race + stdin sem timeout)
+
+### Done
+
+- **TDD completo (RED → GREEN → suítes → deploy)** para 2 bugs reais do áudio AAC:
+  - **Bug B (race)**: `OnLoopbackData` + `OnMicData` → `EncodeAudio` na mesma instância do `FfmpegAacEncoder` — `_pcmBuf` compartilhado + escrita no stdin sem lock corrompiam batches AAC quando o mic estava ligado.
+  - **Bug C**: `_stdin.Write` síncrono (sem timeout) travava a thread WASAPI se o ffmpeg AAC (BelowNormal) travasse — assimétrico com o `TryWriteStdin` do vídeo.
+
+- **RED — seam + 6 testes** (`FfmpegAacEncoderTests.cs`, novo):
+  - Construtor `internal FfmpegAacEncoder(Stream stdin, int writeTimeoutMs = 100)` (sem spawnar processo/ReaderLoop) + construtor `public FfmpegAacEncoder()` (produção).
+  - Constantes internas `StdinWriteWarmupTimeoutMs = 5000` / `StdinWriteTimeoutMs = 250` + `ComputeAacWriteTimeout(long batch)` (warmup na 1ª batch, steady nas demais).
+  - Testes: `EncodeAudio_Healthy_WritesExactBytes`, `EncodeAudio_ConcurrentWriters_SerializeWrites` (spy detecta overlap via contador de escrita ativa + amplificação SpinWait), `EncodeAudio_StuckPipe_ReturnsWithinTimeout_AndMarksUnhealthy` (stream que bloqueia 5s em write sync e nunca completa async — assert via `WaitAsync(3s)`), `EncodeAudio_FaultingStream_MarksUnhealthy`, `ComputeAacWriteTimeout_Warmup/Steady`.
+  - RED confirmado: 4 guardas passaram, 2 falharam (race detectada; stuck pipe estourou timeout).
+- **Commit RED `d737658`** — só o seam + o teste (changes pré-existentes de `FfmpegEncoder.cs` ficaram de fora).
+
+- **GREEN — fix**:
+  - Overload novo `FfmpegEncoder.TryWriteStdin(Stream stdin, byte[] data, int offset, int count, int timeoutMs, out Exception? fault)` (o 4-arg delega). `.AsTask()` removido — `WriteAsync(data, offset, count)` já retorna `Task` (CS1929).
+  - `EncodeAudio`: `lock (_writeLock)` serializa `_pcmBuf` + escrita → `_pcmBatchesWritten++` → timeout fixo `_writeTimeoutMs` (testes) ou `ComputeAacWriteTimeout(batch)` → `TryWriteStdin`; Ok faz Flush; **Timeout marca `_isHealthy = false` imediatamente**; IOException marca unhealthy imediato, senão após ≥10 erros.
+- **Commit GREEN `a821c55`** — incluiu junto as mudanças R2 M1 pré-existentes não commitadas de `FfmpegEncoder.cs` (channel 256 `DropOldest` → configurável + `itemDropped`/`_droppedPackets` + comentário warmup timeout) — indissociáveis sem staging parcial; documentado na mensagem.
+
+- **Suítes**: C# completa **1000 aprovados / 0 falhas** (mensagem final "Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest); TS **200 arquivos, 6274 aprovados, 1 skipped, 0 falhas** — `npm test` (pool default) crasha com `EXIT=-1073741819` (access violation), corrigido com `npx vitest run --pool=forks`.
+- **Publish**: `dotnet publish -c Release --self-contained true -r win-x64 -o bin/Release/net10.0-windows10.0.26100.0/publish` → EXIT=0.
+- **Stage + deploy**: `npm run copy-engine` → 291 arquivos em `resources\clips-engine-staging`; `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 conferido com o publish: `2FF20AFEB8B908FD365A014F75C5E914E90927457FCAA7B6B80CEF361E8AF43F`.
+
+### Key Decisions
+
+- **Lock em vez de canal para serializar o AAC**: `_pcmBuf` é compartilhado entre as 2 threads WASAPI e a ordem de escrita importa (batches contíguos de 1024 samples). Um lock curto dentro do `EncodeAudio` preserva a ordem de chegada sem reestruturar o fluxo.
+- **Espelhar o padrão de timeout do vídeo** (warmup 5000ms / steady 250ms): primeira batch ocorre com o ffmpeg ainda abrindo — timeout generoso evita falso-unhealthy no arranque; steady strict impede travas longas.
+- **`_isHealthy = false` em Timeout**: escolhido porque um ffmpeg AAC travado raramente se recupera; o watchdog do pipeline trata a recuperação via restart.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar: gravação com `codec: "av1"` → keyframe correto no trim (`TrimVideoStart`) e clip sem macroblocos no fast copy
+- Validar mic em campo: ligar PTT com mic habilitado (2 threads WASAPI concorrentes) e conferir ausência de freeze/desync — fix do Bug B/C
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegAacEncoderTests.cs` (novo): 6 testes + streams `ConcurrentSpyStream`, `StuckPipeStream`, `FaultingStream`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegAacEncoder.cs`: `_writeLock`, `_pcmBatchesWritten`, `_writeTimeoutMs`, consts de timeout, seam interno + ctor público, `EncodeAudio` com `TryWriteStdin`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: overload `TryWriteStdin` com offset/count (4-arg delega) + mudanças R2 M1 pré-existentes commitadas juntas
+- `AGENTS.md`: resumo de sessão + "Next Steps" marcado como feito
