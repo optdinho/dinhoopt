@@ -1,4 +1,5 @@
 using DiNho.Capture.Poc.Encoders;
+using System.Diagnostics;
 
 namespace DiNho.Capture.Poc.Tests;
 
@@ -394,5 +395,205 @@ public sealed class FfmpegEncoderTests
         var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 1280, 720, 2);
         Assert.NotNull(result);
         Assert.Equal((1152, 720), result!.Value);
+    }
+
+    // ─── IsAv1Keyframe ──────────────────────────────────────────────────
+
+    [Fact]
+    public void IsAv1Keyframe_FrameHeaderObu_KeyFrame_ReturnsTrue()
+    {
+        // OBU FRAME_HEADER (type 3) com frame_type == 0 (KEY_FRAME).
+        var payload = new byte[] { 0x00 }; // frame_type bits [0..1] == 0
+        var data = BuildAv1Obu(3, payload);
+        Assert.True(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_FrameObu_KeyFrame_ReturnsTrue()
+    {
+        // OBU FRAME (type 6) com frame_type == 0 (KEY_FRAME).
+        var payload = new byte[] { 0x00 };
+        var data = BuildAv1Obu(6, payload);
+        Assert.True(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_FrameHeaderObu_InterFrame_ReturnsFalse()
+    {
+        // frame_type == 1 (INTER_FRAME) — bits [4..3] do primeiro byte = 01.
+        var payload = new byte[] { 0x08 };
+        var data = BuildAv1Obu(3, payload);
+        Assert.False(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_FrameObu_InterFrame_ReturnsFalse()
+    {
+        var payload = new byte[] { 0x08 };
+        var data = BuildAv1Obu(6, payload);
+        Assert.False(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_WithTemporalDelimiterAndSequenceHeader_DetectsKeyFrame()
+    {
+        // Payload realista: TEMPORAL_DELIMITER (2) → SEQUENCE_HEADER (1) → FRAME (6).
+        var delimiter = BuildAv1Obu(2, Array.Empty<byte>());
+        var seqHeader = BuildAv1Obu(1, new byte[] { 0x80, 0x00 });
+        var frame = BuildAv1Obu(6, new byte[] { 0x00 });
+        var data = Concat(delimiter, seqHeader, frame);
+        Assert.True(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_OnlyDelimiter_ReturnsFalse()
+    {
+        var data = BuildAv1Obu(2, Array.Empty<byte>());
+        Assert.False(FfmpegEncoder.IsAv1Keyframe(data, data.Length));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_Empty_ReturnsFalse()
+    {
+        Assert.False(FfmpegEncoder.IsAv1Keyframe(Array.Empty<byte>(), 0));
+    }
+
+    [Fact]
+    public void IsAv1Keyframe_TruncatedObu_ReturnsFalse()
+    {
+        var payload = new byte[] { 0x00 };
+        var data = BuildAv1Obu(6, payload);
+        var truncated = new byte[data.Length - 1];
+        Array.Copy(data, truncated, truncated.Length);
+        Assert.False(FfmpegEncoder.IsAv1Keyframe(truncated, truncated.Length));
+    }
+
+    private static byte[] BuildAv1Obu(int obuType, byte[] payload)
+    {
+        // AV1 OBU header byte: forbidden(1) | obu_type(4) | extension(1) | has_size(1) | reserved(1).
+        byte header = (byte)((obuType << 3) | 0x02); // has_size_field = 1
+        var size = Leb128(payload.Length);
+        var result = new byte[1 + size.Length + payload.Length];
+        result[0] = header;
+        Array.Copy(size, 0, result, 1, size.Length);
+        Array.Copy(payload, 0, result, 1 + size.Length, payload.Length);
+        return result;
+    }
+
+    private static byte[] Leb128(int value)
+    {
+        var bytes = new System.Collections.Generic.List<byte>();
+        do
+        {
+            byte b = (byte)(value & 0x7F);
+            value >>= 7;
+            if (value > 0) b |= 0x80;
+            bytes.Add(b);
+        } while (value > 0);
+        return bytes.ToArray();
+    }
+
+    private static byte[] Concat(params byte[][] arrays)
+    {
+        int total = 0;
+        foreach (var a in arrays) total += a.Length;
+        var result = new byte[total];
+        int offset = 0;
+        foreach (var a in arrays)
+        {
+            Array.Copy(a, 0, result, offset, a.Length);
+            offset += a.Length;
+        }
+        return result;
+    }
+
+    // ─── TryWriteStdin / ComputeStdinWriteTimeout ──────────────────────
+
+    [Fact]
+    public void TryWriteStdin_ResponsiveStream_ReturnsOk()
+    {
+        using var ms = new MemoryStream();
+        var result = FfmpegEncoder.TryWriteStdin(ms, new byte[] { 1, 2, 3 }, 200, out var fault);
+        Assert.Equal(FfmpegEncoder.StdinWriteResult.Ok, result);
+        Assert.Null(fault);
+        Assert.Equal(new byte[] { 1, 2, 3 }, ms.ToArray());
+    }
+
+    [Fact]
+    public void TryWriteStdin_SlowStream_TimesOutWithoutHanging()
+    {
+        var stream = new NeverCompletingStream();
+        var sw = Stopwatch.StartNew();
+        var result = FfmpegEncoder.TryWriteStdin(stream, new byte[] { 1 }, 100, out var fault);
+        sw.Stop();
+        Assert.Equal(FfmpegEncoder.StdinWriteResult.Timeout, result);
+        Assert.Null(fault);
+        Assert.True(sw.ElapsedMilliseconds < 2000, $"Wait deve respeitar o timeout; levou {sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public void TryWriteStdin_FaultingStream_ReturnsFaultedWithException()
+    {
+        var stream = new FaultingStream();
+        var result = FfmpegEncoder.TryWriteStdin(stream, new byte[] { 1 }, 2000, out var fault);
+        Assert.Equal(FfmpegEncoder.StdinWriteResult.Faulted, result);
+        Assert.IsType<IOException>(fault);
+    }
+
+    [Fact]
+    public void TryWriteStdin_EmptyData_StillWritesOk()
+    {
+        using var ms = new MemoryStream();
+        var result = FfmpegEncoder.TryWriteStdin(ms, Array.Empty<byte>(), 200, out var fault);
+        Assert.Equal(FfmpegEncoder.StdinWriteResult.Ok, result);
+        Assert.Null(fault);
+    }
+
+    [Fact]
+    public void ComputeStdinWriteTimeout_WarmupNoOutput_ReturnsGenerousTimeout()
+    {
+        Assert.Equal(FfmpegEncoder.StdinWriteWarmupTimeoutMs, FfmpegEncoder.ComputeStdinWriteTimeout(0));
+        Assert.True(FfmpegEncoder.StdinWriteWarmupTimeoutMs > FfmpegEncoder.StdinWriteTimeoutMs);
+    }
+
+    [Fact]
+    public void ComputeStdinWriteTimeout_ProducingOutput_ReturnsStrictTimeout()
+    {
+        Assert.Equal(FfmpegEncoder.StdinWriteTimeoutMs, FfmpegEncoder.ComputeStdinWriteTimeout(1));
+        Assert.Equal(FfmpegEncoder.StdinWriteTimeoutMs, FfmpegEncoder.ComputeStdinWriteTimeout(9001));
+    }
+
+    // Streams de teste para TryWriteStdin — sem depender de um processo ffmpeg real.
+
+    private sealed class NeverCompletingStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) { }
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously).Task;
+    }
+
+    private sealed class FaultingStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => Task.FromException<byte[]>(new IOException("pipe closed"));
     }
 }

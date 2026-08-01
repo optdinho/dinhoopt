@@ -266,10 +266,16 @@ internal partial class FfmpegEncoder
             byte[] data = VideoPacketPool.Rent(frameSize);
             System.Buffer.BlockCopy(_rawBuf, 12, data, 0, frameSize);
 
+            // M2: detecta keyframe no payload AV1 (IVF). O payload é uma sequência
+            // de OBUs; keyframes são precedidos por um OBU SEQUENCE_HEADER (type 1).
+            // O caminho AnnexB retorna false para AV1 (CheckKeyFrame), então este
+            // parser dá à rota IVF a mesma capacidade (TrimVideoStart/seek no Matroska).
+            bool key = IsAv1Keyframe(data, frameSize);
+
             _outputChannel.Writer.TryWrite(new EncodedPacket(
                 data, MediaType.Video,
                 TimeSpan.FromTicks(ptsTicks), TimeSpan.FromTicks(durTicks),
-                isKeyFrame: false, isPooled: true, dataLength: frameSize, width: EncodedWidth, height: EncodedHeight));
+                isKeyFrame: key, isPooled: true, dataLength: frameSize, width: EncodedWidth, height: EncodedHeight));
 
             if (_outputFrameIndex < 10 || _outputFrameIndex % 300 == 1)
                 Log.I("FfmpegEncoder", $"ProcessIvfFrames #{_outputFrameIndex} pts={ptsTicks/10000}ms len={frameSize}B");
@@ -714,7 +720,6 @@ internal partial class FfmpegEncoder
 
         if (usedExtrapolated)
             Log.D("FfmpegEncoder", $"EmitPacket: used extrapolated pts {pts/10000}ms (frameIndex={_outputFrameIndex})");
-
         bool key = CheckKeyFrame(data);
 
         _outputChannel.Writer.TryWrite(new EncodedPacket(
@@ -753,6 +758,73 @@ internal partial class FfmpegEncoder
                 if (t >= 1 && t <= 5) return false;
             }
             pos = nalStart + nalLen;
+        }
+        return false;
+    }
+
+    internal static bool IsAv1Keyframe(byte[] data, int length)
+    {
+        // AV1 uncompressed header (within the frame OBU) begins with a
+        // frame_type (2 bits). frame_type == 0 => KEY_FRAME.
+        // IVF payload is a sequence of OBUs: TEMPORAL_DELIMITER (2) →
+        // SEQUENCE_HEADER (1) for keyframes → FRAME_HEADER (3) / FRAME (6).
+        // Walk OBU headers (with leb128 size fields) to the frame OBU and
+        // read frame_type from the first payload bit.
+        int pos = 0;
+        while (pos < length)
+        {
+            if (pos + 1 > length) break;
+            byte obuHeader = data[pos];
+            int obuType = (obuHeader >> 3) & 0x0F;
+            bool hasExtension = (obuHeader & 0x04) != 0;
+            bool hasSizeField = (obuHeader & 0x02) != 0;
+            pos += 1;
+
+            if (hasExtension)
+            {
+                if (pos >= length) break;
+                pos += 1;
+            }
+
+            long payloadSize = -1;
+            if (hasSizeField)
+            {
+                long sz = 0;
+                int shift = 0;
+                bool done = false;
+                while (pos < length && shift < 56)
+                {
+                    byte b = data[pos];
+                    pos += 1;
+                    sz |= (long)(b & 0x7F) << shift;
+                    shift += 7;
+                    if ((b & 0x80) == 0) { done = true; break; }
+                }
+                if (!done) break;
+                payloadSize = sz;
+            }
+
+            // Frame header / frame OBU — read frame_type from the payload.
+            // AV1 uncompressed header first byte layout (MSB→LSB):
+            //   frame_marker(1) | version(1) | show_existing_frame(1) | frame_type(2) | ...
+            // → frame_type == 0 means KEY_FRAME.
+            if (obuType == 3 || obuType == 6)
+            {
+                if (pos >= length) return false;
+                int frameType = (data[pos] >> 3) & 0x03;
+                return frameType == 0;
+            }
+
+            if (payloadSize >= 0)
+            {
+                pos += (int)payloadSize;
+            }
+            else if (obuType != 2)
+            {
+                // No size field on a non-delimiter OBU — cannot locate the
+                // frame header safely; fall back to "not keyframe".
+                break;
+            }
         }
         return false;
     }
