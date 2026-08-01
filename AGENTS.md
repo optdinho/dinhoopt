@@ -2904,3 +2904,26 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `src/renderer/src/locales/{en,pt,es}/clips.json`: reEncode/reEncodeTooltip/ramPressure*
 - `dinho-clips-poc/.../EngineCoordinator.Capture.cs`: callbacks watchdog RamManager (linhas ~115-133)
 - `dinho-clips-poc/.../Memory/RamManager.cs`: (sem mudança — callbacks já existiam, só estavam sem assinante)
+
+## Session Summary (2026-07-31 — Review fixes: clip-video containment + toast dedup + tipo PipeMessage)
+
+### Done
+
+- **3 achados dos 2 revisores corrigidos** (commit `48f0998`):
+  1. **Contenção de path no `clip-video://`** (`clip-video-protocol.ts`): `handleClipVideoRequest` agora valida o path via `clipPathInOutputDir()` antes de `stat()`/`createReadStream()` — fora do output dir → `403 Forbidden` (antes: leitura de arquivo arbitrário via `?path=`). Reuso da função existente do `clips-config-manager` (sem ciclo de import). Teste novo: `returns 403 for a path outside the clips output directory`. Testes existentes migrados para `vi.mock('../services/clips-config-manager')` (temp dir como output dir virtual).
+  2. **Toast de RAM pressure dedupado** (`useClipsState.ts`): watchdog do `RamManager` emite a cada ~5s enquanto a pressão persiste — adicionado `lastRamLevelRef` (useRef), toast só em transição `critical`↔`normal`. `ramPressureCritical`/`ramPressureCriticalDesc`/`ramPressureNormal` mantidos.
+  3. **`PipeMessage.event?` tipado** (`clips-pipe.ts`): interface ganhou `event?: string` (broadcasts raw JSON do engine não têm envelope v/cmd) — remove o erro de TS `Property 'event' does not exist`. Nota: linha 200 (`payload: ... | undefined`) continua com erro **pré-existente** de `exactOptionalPropertyTypes` (parte dos ~1011 do tsc, não gating).
+- **Import order biome**: `preload/clips.ts` + `preload/api/clips.ts` corrigidos via `npx biome check --write` (2 files).
+- **`src/preload/api/clips.ts`** continua código morto (zero importers, importa módulo do main) — LOW, deixado como está.
+
+### Validado
+
+- **TS tests**: 4 files afetados (clip-video-protocol, ClipsPage, clips.ipc, preload/index) — **405/405 pass**; +1 teste de contenção (34→35 no protocol file).
+- **Build**: `npm run build` OK (~10s).
+- **Biome**: `check` nos 4 arquivos de código — sem issues.
+- **tsc**: filtrado — `msg.event` (236) resolvido; só resta erro pré-existente na linha 200.
+
+### Next Steps
+
+- Testar no app instalado: preview de clip via `clip-video://` (agora confinado ao output dir), trim com re-encode, e toast de RAM pressure aparecendo UMA vez por transição
+- Opcional: deletar `src/preload/api/clips.ts` morto (importa `clip-video-protocol` do main)
