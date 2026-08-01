@@ -112,6 +112,24 @@ public sealed partial class EngineCoordinator
                         _config.Config.BufsizeKbps,
                         _config.Config.Bframes,
                         _config.Config.Lookahead);
+                    // Watchdog wiring: repassa a pressão de RAM ao pipe (broadcast) e reduz
+                    // o replay buffer em RAM crítica, restaurando quando volta ao normal.
+                    // Estes callbacks foram perdidos na refatoração para partial classes
+                    // (08e8761) — sem eles o watchdog media mas nunca agia.
+                    _ramManager.OnBroadcast = msg => _pipeServer.BroadcastRaw(msg);
+                    _ramManager.OnReduceReplay = reducedReplay =>
+                    {
+                        if (_buffer.MaxDuration > TimeSpan.FromSeconds(reducedReplay))
+                        {
+                            _buffer.MaxDuration = TimeSpan.FromSeconds(reducedReplay);
+                            Log.W("EngineCoordinator", $"RAM crítica — replay buffer reduzido para {reducedReplay}s");
+                        }
+                    };
+                    _ramManager.OnNormal = () =>
+                    {
+                        _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                        Log.I("EngineCoordinator", $"RAM normal — replay buffer restaurado para {_activeProfile.ReplaySeconds}s");
+                    };
                     _ramManager.StartWatchdog();
                     _activeProfile = _ramManager.ResolveProfile();
                 }
@@ -497,30 +515,22 @@ public sealed partial class EngineCoordinator
                         }
                         _bgDropCount = 0;
                         _starvationStart = default;
-                        // Suprimir GC durante encode + buffer write (~3MB NV12) para evitar frame drops
-                        var gcSuppressed = GC.TryStartNoGCRegion(4 * 1024 * 1024);
-                        try
+                        // NOTA: NoGCRegion removido aqui. O orçamento fixo de 4MB era
+                        // estourado por keyframes grandes, forçando um full GC bloqueante
+                        // no EndNoGCRegion (padrão de serra no working set). Com o
+                        // VideoPacketPool reutilizando os arrays evictados, o churn de
+                        // LOH sumiu e GCs gen0/gen1 rápidos não causam frame drops.
+                        var encoded = enc.EncodeFrame(frame.Texture, capturePts);
+                        if (encoded != null)
                         {
-                            var encoded = enc.EncodeFrame(frame.Texture, capturePts);
-                            if (encoded != null)
-                            {
-                                _buffer.AddVideo(encoded);
-                                var elapsedMs = (Stopwatch.GetTimestamp() - beforeCapture) * 1000.0 / Stopwatch.Frequency;
-                                _watchdog.ReportGoodFrame(elapsedMs);
-                                _hasEverBeenHealthy = true;
-                            }
-                            else
-                            {
-                                _watchdog.ReportDroppedFrame(PipelineIssue.EncodeError);
-                            }
+                            _buffer.AddVideo(encoded);
+                            var elapsedMs = (Stopwatch.GetTimestamp() - beforeCapture) * 1000.0 / Stopwatch.Frequency;
+                            _watchdog.ReportGoodFrame(elapsedMs);
+                            _hasEverBeenHealthy = true;
                         }
-                        finally
+                        else
                         {
-                            if (gcSuppressed)
-                            {
-                                try { GC.EndNoGCRegion(); }
-                                catch (InvalidOperationException) { /* GC forcibly ended the region due to memory pressure */ }
-                            }
+                            _watchdog.ReportDroppedFrame(PipelineIssue.EncodeError);
                         }
                     }
                     else

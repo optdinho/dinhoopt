@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import dotenv from 'dotenv'
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, screen, shell, Tray } from 'electron'
 
 // Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
 if (!app.isPackaged) {
@@ -24,12 +24,25 @@ app.commandLine.appendSwitch('no-sandbox')
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 
+// Custom protocol to serve clip video files. Registered as privileged (standard +
+// stream) so `<video src="clip-video://...">` works both in dev (renderer served
+// over http://localhost) and packaged (file://). The `file://` scheme itself is
+// blocked by Chromium when the page is loaded from an http origin, which is why
+// a dedicated handler that streams the file is required.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: CLIP_VIDEO_SCHEME,
+    privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+  },
+])
+
 import { IPC } from '../shared/channels'
 import type { ScheduleRunStatus } from '../shared/types'
 import { runCli } from './cli'
 import { runDaemon } from './daemon'
 import { t } from './i18n'
 import { registerCleanerIpc } from './ipc'
+import { CLIP_VIDEO_SCHEME, handleClipVideoRequest } from './ipc/clip-video-protocol'
 import { stopEngineProcess } from './ipc/clips-engine-connection'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
 import { initAuditLog } from './services/audit-log'
@@ -429,6 +442,10 @@ function initGui(): void {
     )
     getLogger().info('app', `argv: ${process.argv.slice(1).join(' ')}`)
     getLogger().info('app', `isPackaged: ${app.isPackaged}, userData: ${app.getPath('userData')}`)
+
+    // Serve clip video files through the privileged clip-video:// scheme.
+    // Range requests are honored so `<video>` seeking works in the clip editor.
+    protocol.handle(CLIP_VIDEO_SCHEME, (request) => handleClipVideoRequest(request))
 
     // Ensure an Edit menu exists so clipboard shortcuts (Cmd+C/V/X on macOS,
     // Ctrl+C/V/X elsewhere) work in the frameless window.  On macOS Cmd+V

@@ -263,7 +263,7 @@ internal partial class FfmpegEncoder
             long ptsTicks = ptsIvf * _ivfTimebaseNum * 10_000_000L / _ivfTimebaseDen;
             long durTicks = _ivfTimebaseNum * 10_000_000L / _ivfTimebaseDen;
 
-            byte[] data = ArrayPool<byte>.Shared.Rent(frameSize);
+            byte[] data = VideoPacketPool.Rent(frameSize);
             System.Buffer.BlockCopy(_rawBuf, 12, data, 0, frameSize);
 
             _outputChannel.Writer.TryWrite(new EncodedPacket(
@@ -684,7 +684,7 @@ internal partial class FfmpegEncoder
         if (_pendingLen == 0 || !_hadSlice || _pendingBuf == null) return;
         if (!CheckPendingHasSlice()) return;
 
-        byte[] data = ArrayPool<byte>.Shared.Rent(_pendingLen);
+        byte[] data = VideoPacketPool.Rent(_pendingLen);
         System.Buffer.BlockCopy(_pendingBuf, 0, data, 0, _pendingLen);
 
         long dur = 10_000_000L / _frameRate;

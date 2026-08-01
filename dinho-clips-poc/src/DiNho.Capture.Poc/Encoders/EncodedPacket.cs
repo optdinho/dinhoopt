@@ -92,7 +92,7 @@ public sealed class EncodedPacket
 
         if (IsPooled && DataLength > 0)
         {
-            ArrayPool<byte>.Shared.Return(Data);
+            VideoPacketPool.Return(Data);
             Data = [];
             DataLength = 0;
         }

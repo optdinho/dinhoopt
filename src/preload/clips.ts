@@ -9,6 +9,7 @@ import type {
   MicDeviceInfo,
 } from '@shared/types'
 import { ipcRenderer } from 'electron'
+import { buildClipVideoUrl } from '@shared/clip-video-url'
 
 export const clipsMethods = {
   clipsGetStatus: (): Promise<ClipsEngineStatus> => ipcRenderer.invoke(IPC.CLIPS_GET_STATUS),
@@ -43,18 +44,15 @@ export const clipsMethods = {
     ipcRenderer.invoke(IPC.CLIPS_GET_RUNNING_PROCESSES),
   clipsSetFavorite: (clipName: string, favorite: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.CLIPS_SET_FAVORITE, clipName, favorite),
-  clipsTrimClip: (clipPath: string, startSeconds: number, endSeconds: number): Promise<ClipTrimResult> =>
-    ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds),
+  clipsTrimClip: (
+    clipPath: string,
+    startSeconds: number,
+    endSeconds: number,
+    reEncode?: boolean,
+  ): Promise<ClipTrimResult> => ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode),
   clipsMergeClips: (clipPaths: string[]): Promise<ClipMergeResult> =>
     ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths),
-  clipsGetVideoUrl: (clipPath: string): string => {
-    const normalized = clipPath.replace(/\\/g, '/')
-    const encoded = normalized
-      .split('/')
-      .map((seg, i) => (i === 0 && /^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
-      .join('/')
-    return `file:///${encoded}`
-  },
+  clipsGetVideoUrl: (clipPath: string): string => buildClipVideoUrl(clipPath),
   clipsOnEngineStatus: (callback: (status: ClipsEngineStatus) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: ClipsEngineStatus) => callback(status)
     ipcRenderer.on(IPC.CLIPS_ENGINE_STATUS, handler)
@@ -67,6 +65,18 @@ export const clipsMethods = {
     ipcRenderer.on(IPC.CLIPS_CLIP_SAVED, handler)
     return () => {
       ipcRenderer.removeListener(IPC.CLIPS_CLIP_SAVED, handler)
+    }
+  },
+  clipsOnRamPressure: (
+    callback: (data: { level?: string; usedPercent?: number; reducedReplay?: number | null }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      data: { level?: string; usedPercent?: number; reducedReplay?: number | null },
+    ) => callback(data)
+    ipcRenderer.on(IPC.CLIPS_RAM_PRESSURE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_RAM_PRESSURE, handler)
     }
   },
   clipsOnDurationsReady: (callback: () => void): (() => void) => {

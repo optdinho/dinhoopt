@@ -1415,6 +1415,55 @@ describe('CLIPS_TRIM_CLIP', () => {
     expect(mkdirSync).toHaveBeenCalled()
   })
 
+  it('uses -c copy args when reEncode is not set', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const args = vi.mocked(execFile).mock.calls[0][1]
+    expect(args).toContain('-c')
+    expect(args).toContain('copy')
+    expect(args).not.toContain('libx264')
+  })
+
+  it('uses libx264 re-encode args when reEncode is true', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const args = vi.mocked(execFile).mock.calls[0][1]
+    expect(args).toContain('libx264')
+    expect(args).toContain('-c:v')
+    expect(args).toContain('-crf')
+    expect(args).not.toContain('-c')
+  })
+
   it('returns error when ffmpeg trim fails', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(execFile).mockImplementation(

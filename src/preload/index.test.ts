@@ -748,16 +748,19 @@ describe('preload API bridge', () => {
       expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_ENGINE_STATUS, expect.any(Function))
     })
 
-    it('clipsGetVideoUrl returns file:/// URL for Windows path', () => {
-      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe('file:///C:/Users/test/clip.mp4')
+    it('clipsGetVideoUrl returns clip-video:// URL for Windows path', () => {
+      const expected = `clip-video://file?path=${encodeURIComponent('C:\\Users\\test\\clip.mp4')}`
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\clip.mp4')).toBe(expected)
     })
 
     it('clipsGetVideoUrl handles already normalized path', () => {
-      expect(api.clipsGetVideoUrl('D:/games/clip.mp4')).toBe('file:///D:/games/clip.mp4')
+      const expected = `clip-video://file?path=${encodeURIComponent('D:/games/clip.mp4')}`
+      expect(api.clipsGetVideoUrl('D:/games/clip.mp4')).toBe(expected)
     })
 
     it('clipsGetVideoUrl handles spaces in path', () => {
-      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe('file:///C:/Users/test/my%20clip.mp4')
+      const expected = `clip-video://file?path=${encodeURIComponent('C:\\Users\\test\\my clip.mp4')}`
+      expect(api.clipsGetVideoUrl('C:\\Users\\test\\my clip.mp4')).toBe(expected)
     })
   })
 })

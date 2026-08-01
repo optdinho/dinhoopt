@@ -251,6 +251,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
            AMF/QSV/libx264: fallback com bitrateKbps alvo (esses codecs não têm CRF+VBV bom).
            Melhorias de qualidade sem alterar CQ/res:
              NVENC: spatial-aq 1 + temporal-aq 1 + multipass fullres + weighted_pred + nonref_p
+                    (weighted_pred apenas em H264/HEVC — av1_nvenc rejeita e falha com
+                     "No capable devices found"; remoção confirmada em ffmpeg 8.1.2)
              AMF:   preanalysis + pa_taq_mode 2 + vbaq + scene change detection + me_quarter_pel
              QSV:   veryslow + extbrc + rdo 1 + adaptive_i/b + b_strategy + mbbrc
            Cor BT.709: tagging no output → NVENC escreve VUI → atom `colr` no MP4 (players corretos).
@@ -267,7 +269,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
             "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
             "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
-            "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
+            "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -nonref_p 1 -g 120 -keyint_min 120",
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "h264_qsv" => $"-preset veryslow -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",

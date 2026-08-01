@@ -44,7 +44,14 @@ internal sealed class GpuVideoConverter : IDisposable
                 OutputFrameRate = new Rational(60, 1),
                 OutputWidth = (uint)width,
                 OutputHeight = (uint)height,
-                Usage = VideoUsage.PlaybackNormal
+                // OptimalQuality (não PlaybackNormal): este VideoProcessor é usado para conversão
+                // de captura BGRA→NV12 frame-accurate, NÃO para playback. O modo PlaybackNormal
+                // permite o driver aplicar noise reduction + edge enhancement (filtros de "TV
+                // smooth"), que suavizam microdetalhes (asfalto, paredes, vegetação) mesmo em
+                // alta resolução/bitrate. Vortice.OptimalQuality = 2 = native D3D11
+                // VIDEO_PROCESSOR_USAGE_QUALITY (o Vortice fundiu QUALITY/OPTIMAL_QUALITY),
+                // que força conversão de alta qualidade sem filtros de playback.
+                Usage = VideoUsage.OptimalQuality
             };
 
             _videoDevice.CreateVideoProcessorEnumerator(ref contentDesc, out _enumerator).CheckError();

@@ -229,6 +229,26 @@ function handlePipeMessage(msg: PipeMessage): void {
     return
   }
 
+  // ramPressure broadcasts from RamManager watchdog (raw JSON, no envelope)
+  if (msg.event === 'ramPressure') {
+    const p = msg as unknown as Record<string, unknown>
+    const level = String(p.level ?? 'unknown')
+    const usedPct = Number(p.usedPercent ?? 0)
+    const reducedReplay = p.reducedReplay
+    const baseMsg = `RAM pressure: level=${level} used=${(usedPct * 100).toFixed(1)}%`
+    const detail = typeof reducedReplay === 'number' ? ` replayReducedTo=${reducedReplay}s` : ''
+    if (level === 'critical') {
+      getLogger().warning('clips-pipe', `${baseMsg}${detail}`)
+    } else {
+      getLogger().info('clips-pipe', `${baseMsg}${detail}`)
+    }
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (win) {
+      win.webContents.send(IPC.CLIPS_RAM_PRESSURE, p)
+    }
+    return
+  }
+
   const pending = pendingRequests.get(msg.cmd)
   if (pending) {
     pendingRequests.delete(msg.cmd)

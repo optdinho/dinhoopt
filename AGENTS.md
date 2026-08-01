@@ -2808,3 +2808,99 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `IsNullOrWhiteSpace` no Initialize + guard no SetQualityParams
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EncoderManagerTests.cs`: 9 testes novos
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/GpuDiagnosticTests.cs`: DELETADO (temporário de diagnóstico)
+
+## Session Summary (2026-07-31e — av1_nvenc restart loop fix: weighted_pred removido)
+
+### Root cause (instalado, sessão FiveM 15:46, clip 24.9MB)
+
+- Sessão instalada (codec=av1_nvenc) entrou em restart loop logo no arranque: `stdout EOF after 2 frames written, 0 packets emitted`, `ffmpeg exited code=-542398533`, `Nothing was written into output file`, `restarting ffmpeg (attempt 1, window=3/10 → 9/10, cause=reader:stdout_eof, gpuFails=0)`. Vídeo=0frames por ~19s (15:46:57→15:47:16) — primeiros segundos da sessão perdidos. O restart loop repetia para sempre o MESMO av1_nvenc (sem fallback) porque o ffmpeg morria com `-22` e o reader via EOF.
+- Dev (codec=h264_nvenc) funcionou limpo desde o início — isolou o problema como específico do av1_nvenc.
+- **Causa raiz**: `-weighted_pred 1` no perfil av1_nvenc (FfmpegEncoder.cs:270). ffmpeg 8.1.2 (gyan) rejeita weighted_pred no AV1: `[av1_nvenc] No capable devices found` → `Error while opening encoder` → `-542398533 (Generic error in an external library)` → `-22`.
+- Confirmado empiricamente com o ffmpeg instalado (232 bins de args testados 1-a-1): TODOS os demais args (preset p5, tune hq, rc vbr, b:v 0, cq, maxrate/bufsize, bf 0, rc-lookahead 16, spatial-aq, aq-strength 8, temporal-aq 1, multipass fullres, nonref_p 1, g 120) passam isolados; `-weighted_pred 1` sozinho reproduz `No capable devices found` (exit -542398533). `-weighted_pred 0` ou omitido → encode OK (5s/1280x720/8.7MB válido).
+
+### Fix aplicado (FfmpegEncoder.cs:270)
+
+- `"av1_nvenc" => ... -multipass fullres -weighted_pred 1 -nonref_p 1 ...` → removido `-weighted_pred 1` (mantido `-nonref_p 1`).
+- Comentário do bloco StartFfmpeg atualizado: weighted_pred apenas em H264/HEVC — av1_nvenc rejeita e falha com "No capable devices found".
+
+### Validado
+
+- **Build**: `dotnet build -c Release` 0 erros (19 warnings pré-existentes)
+- **C# tests**: **964/964 pass** — 0 falhas (abort final = flakiness pré-existente do ConsoleLogger, documentada)
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64 -o bin/Release/.../publish` OK; `npm run copy-engine` (291 files); copiado `DiNho.Capture.Poc.{dll,exe,pdb,deps.json,runtimeconfig.json}` para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 DLL confere com publish (`AEC3D1DA...`)
+
+### Next Steps
+
+- Reiniciar o app instalado e gravar com av1: esperar `initialized (codec=av1_nvenc)` SEM restart loop no arranque e vídeo frames desde o início (`video>` frames imediatos)
+- Sessão dev pendente: WGC per-window falhou (InvalidCastException → DXGI desktop fallback), frame drops, `anchorGap=-31519,6ms` (drift A/V) — avaliar se repete após restart limpo
+- Preview de clipes no renderer ainda quebrado (`file://` bloqueado, `clip-video://` viola CSP)
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: removido `-weighted_pred 1` do perfil av1_nvenc (linha 270) + comentário
+
+## Session Summary (2026-07-31f — RAM fix: VideoPacketPool dedicado + NoGCRegion removido)
+
+### Root cause (investigação concluída — NÃO é exceção/leak, é LOH churn)
+
+- **Nenhum `OutOfMemoryException`** nos logs — o padrão de serra do `proc` (subia ~0,8MB/s e despencava, ex: 4,3GB→1,3GB) é **garbage steady no LOH**.
+- **Fator 1 — `ArrayPool<byte>.Shared` com buckets pequenos**: o pool default retém apenas ~16-20 arrays por bucket. O ReplayBuffer segura ~18.000 arrays de vídeo (300s), então ao evictar frames (60/s), os arrays retornados excediam a capacidade do bucket e **caíam no LOH** (arrays ≥85KB). LOH só é coletado em GC gen2 **bloqueante** → serra.
+- **Fator 2 — `GC.TryStartNoGCRegion(4MB)`** (`EngineCoordinator.Capture.cs:501`): orçamento fixo de 4MB era estourado por keyframes grandes → `EndNoGCRegion()` lançava e o runtime **forçava full GC bloqueante**, agravando o padrão.
+
+### Fix aplicado
+
+- **`VideoPacketPool.cs` (novo)**: `ArrayPool<byte>.Create(256MB maxArrayLength, 65536 arrays/bucket)` — buckets grandes o suficiente para reutilizar os arrays evictados em vez de descartá-los ao LOH. O pool é retido por buckets amplos, mas como os arrays são reutilizados em vez de descartados, o churn de LOH some.
+- **`FfmpegEncoder.NalParsing.cs:266,687`**: `ArrayPool<byte>.Shared.Rent` → `VideoPacketPool.Rent` (buffers de dados de vídeo).
+- **`EncodedPacket.cs:95`**: `ArrayPool<byte>.Shared.Return` → `VideoPacketPool.Return` (retorno no Release, sincronizado com o mesmo pool).
+- **`EngineCoordinator.Capture.cs:~500-524`**: NoGCRegion removido — GCs gen0/gen1 rápidos não causam frame drops com o churn de LOH eliminado; comentário explica o porquê.
+- **Áudio AAC NÃO foi tocado**: usa `new byte[]` não-pooled (frames pequenos, gen0), sem impacto no LOH.
+
+### Testes (3 novos em VideoPacketPoolTests.cs)
+
+- `Rent_ReturnsArray_AtLeastRequestedSize`, `ReturnThenRent_ReusesArray`, `ReturnMany_ThenRent_ReusesArrays_BeyondSharedBucketLimit` (512 arrays de 128KB reutilizados — além do limite do Shared)
+
+### Validado
+
+- **Build**: `dotnet build -c Release` — 0 erros
+- **C# tests**: **967/967 pass** (era 964; +3) — 0 falhas
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (291 files); copiado para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 DLL confere (`422C3B01...`)
+
+### Next Steps
+
+- Reiniciar o app instalado e capturar sessão longa: verificar que o `proc` não oscila mais em serra (deve ficar estável no patamar do buffer, ~1,3-1,5GB) e que não há frame drops
+- Se o `proc` ainda subir, monitorar `GC.GetTotalMemory` vs `WorkingSet64` para distinguir managed heap de native/GPU memory
+
+## Session Summary (2026-07-31 — Preview de clips + re-encode no trim + watchdog RAM wiring)
+
+### Done
+
+- **Preview de clips no renderer (app instalado)**: módulo node-free `src/shared/clip-video-url.ts` com `CLIP_VIDEO_SCHEME`, `buildClipVideoUrl` e `decodeClipVideoPath` (path cru via `encodeURIComponent` — **sem base64**; quebra compat com URLs base64 antigas, aceitável pois código era untracked). `src/main/ipc/clip-video-protocol.ts` re-exporta do shared (mantém Range 200/206/416). `preload/clips.ts` importa de `@shared/clip-video-url` (remove dependência de node-deps no preload). Root cause do preview quebrado no app instalado: o build instalado era da era `file://` (CSP/media-src) — pré-rebuild.
+- **Trim com re-encode opcional**: `CLIPS_TRIM_CLIP` aceita 4º param `reEncode?: boolean`. `false`/omitido = `-c copy` (instantâneo); `true` = `-c:v libx264 -preset veryfast -crf {C.cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -c:a copy` (corrige macroblocos do fast copy). Pré-validations mantidas. Preload (`clipsTrimClip`) + UI (`ClipEditorModal.tsx` checkbox com tooltip `reEncodeTooltip`).
+- **Watchdog RamManager re-wiring**: callbacks `OnBroadcast`/`OnReduceReplay`/`OnNormal` do `RamManager` **perdidos na refatoração partial classes (`08e8761`)** — watchdog media mas nunca agia. Agora: `OnBroadcast` → `_pipeServer.BroadcastRaw(msg)`; `OnReduceReplay` → reduz `_buffer.MaxDuration` (triggers `TrimExcess`); `OnNormal` → restaura `_activeProfile.ReplaySeconds`. Callbacks atribuídos ANTES de `StartWatchdog()`.
+- **Canal `CLIPS_RAM_PRESSURE`**: `handlePipeMessage` em `clips-pipe.ts` trata broadcasts `{"event":"ramPressure","level":"warning|critical|normal","usedPercent":N,"reducedReplay":N}` (raw JSON, sem envelope — antes logava "No pending request for cmd=undefined"). Log warning em critical, forward ao renderer. Preload `clipsOnRamPressure` + `useClipsState.ts` (toast warning critical / success normal). Locales en/pt/es com `ramPressureCritical`/`ramPressureCriticalDesc`/`ramPressureNormal`.
+
+### Validado
+
+- **Build**: `dotnet build -c Release` 0 erros (19 warnings pré-existentes); `npm run build` OK (main + preload + renderer)
+- **TS tests**: **6272 passed**, 1 skipped, 200 files — 0 falhas
+- **C# tests**: **967/967 pass** — 0 falhas (abort final = flakiness pré-existente do ConsoleLogger, documentada)
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (291 files); copiado para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 DLL `9FB7CCD8...`
+
+### Next Steps
+
+- Reiniciar o app instalado: validar preview de clips (URL `clip-video://` do módulo shared) e toast de RAM pressure sob carga
+- Testar trim com re-encode em clip com macroblocos (checkbox) vs fast copy
+
+### Relevant Files Changed
+
+- `src/shared/clip-video-url.ts` (novo) + `clip-video-url.test.ts`
+- `src/main/ipc/clip-video-protocol.ts` + `clip-video-protocol.test.ts` (re-export do shared)
+- `src/preload/clips.ts` + `src/preload/api/clips.ts`: `clipsTrimClip(..., reEncode?)`, `clipsOnRamPressure`
+- `src/main/ipc/clips.ipc.ts`: `CLIPS_TRIM_CLIP` com reEncode; `clips.ipc.test.ts` +2 testes (copy vs libx264 args)
+- `src/main/ipc/clips-pipe.ts`: handler `ramPressure` + canal `CLIPS_RAM_PRESSURE`
+- `src/shared/channels.ts`: `CLIPS_RAM_PRESSURE`
+- `src/renderer/src/components/clips/ClipEditorModal.tsx`: checkbox re-encode
+- `src/renderer/src/components/clips/useClipsState.ts`: listener RAM pressure + toasts
+- `src/renderer/src/locales/{en,pt,es}/clips.json`: reEncode/reEncodeTooltip/ramPressure*
+- `dinho-clips-poc/.../EngineCoordinator.Capture.cs`: callbacks watchdog RamManager (linhas ~115-133)
+- `dinho-clips-poc/.../Memory/RamManager.cs`: (sem mudança — callbacks já existiam, só estavam sem assinante)

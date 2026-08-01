@@ -139,6 +139,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const [startSec, setStartSec] = useState(0)
   const [endSec, setEndSec] = useState(clip?.duration || 60)
   const [trimming, setTrimming] = useState(false)
+  const [reEncode, setReEncode] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [realDuration, setRealDuration] = useState(clip?.duration || 0)
@@ -241,7 +242,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
     }
     setTrimming(true)
     try {
-      const result: ClipTrimResult = await window.dinho.clipsTrimClip(clip!.path, startSec, endSec)
+      const result: ClipTrimResult = await window.dinho.clipsTrimClip(clip!.path, startSec, endSec, reEncode)
       if (result.success) {
         toast.success(t('trimSuccess'))
         onSave()
@@ -495,6 +496,20 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       {t('trimHint')}
                     </span>
                   </div>
+
+                  <label
+                    className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[10px]"
+                    style={{ background: 'rgba(0,0,0,0.2)' }}
+                    title={t('reEncodeTooltip')}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={reEncode}
+                      onChange={(e) => setReEncode(e.target.checked)}
+                      className="accent-[var(--accent)]"
+                    />
+                    <span style={{ color: 'var(--text-secondary)' }}>{t('reEncode')}</span>
+                  </label>
 
                   <button
                     type="button"

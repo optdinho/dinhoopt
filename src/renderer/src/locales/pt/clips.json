@@ -155,5 +155,10 @@
   "tooltipGameAudio": "Grava apenas o áudio do jogo e do microfone, silenciando outros aplicativos (Discord, navegador, etc).",
   "tooltipNoiseSuppression": "Reduz ruído de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Útil para eliminar barulhos de teclado, ventoinha ou ambiente.",
   "tooltipAdaptiveQuality": "Ajusta automaticamente a qualidade da gravação conforme a RAM disponível. Reduz CQ, resolução e buffer em PCs com pouca memória para evitar travamentos. Desative para qualidade máxima sempre.",
-  "trimHint": "arraste as alças ou use I/O"
+  "trimHint": "arraste as alças ou use I/O",
+  "reEncode": "Re-encode (corrigir macroblocos)",
+  "reEncodeTooltip": "Recodifica o trecho cortado para remover macroblocos/artefatos deixados pelo copia rápida. Mais lento, porém saída mais limpa.",
+  "ramPressureCritical": "Memória baixa detectada",
+  "ramPressureCriticalDesc": "Uso de RAM está em {{pct}}%. O buffer de replay foi reduzido para manter a gravação estável.",
+  "ramPressureNormal": "Memória restaurada ao normal"
 }

@@ -59,8 +59,7 @@ public sealed partial class ClipExporter : IDisposable
                 throw new InvalidOperationException(
                     $"Espaco insuficiente: {drive.AvailableFreeSpace / 1024 / 1024}MB");
 
-            string videoExt = rawFormat == "hevc" ? ".hevc" : ".h264";
-            var h264Temp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}{videoExt}");
+            var mkvTemp = Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.mkv");
             var adtsTemp = audioPackets.Count > 0
                 ? Path.Combine(Path.GetTempPath(), $"dhn_{Guid.NewGuid():N}.adts")
                 : null;
@@ -207,9 +206,14 @@ public sealed partial class ClipExporter : IDisposable
                     Log.I("SYNC", driftLog.ToString());
                 }
 
-                WriteH264AnnexBFile(h264Temp, videoPackets, rawFormat, vps, sps, pps);
-                var h264Len = new FileInfo(h264Temp).Length;
-                Log.I("Exporter", $"H264 AnnexB temp: {h264Temp} ({h264Len / 1024} KB) videoFrames={videoPackets.Count}");
+                // Write video to a Matroska temp file (preserves per-frame PTS via
+                // SimpleBlocks). ffmpeg's -f matroska demuxer reads these timestamps,
+                // so alt-tab gap closing (ReTimestampToContiguous) survives the mux.
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback,
+                    audioPackets.Count > 0 ? audioPackets : null);
+                var mkvLen = new FileInfo(mkvTemp).Length;
+                var audioCount = audioPackets.Count(p => p.Type == MediaType.Audio);
+                Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) videoFrames={videoPackets.Count} audioPackets={audioCount}");
 
                 Log.D("Exporter", $"nominalFps={frameRate} activeFps={activeFps:F1} activeDuration={activeDurationSec:F3}s totalDuration={trueVidDuration:F3}s videoFrames={videoPackets.Count} audioPackets={audioPackets.Count} gapsRemoved={gapsRemoved} audioDurationSec={audioDurationSec:F3}s");
 
@@ -246,7 +250,7 @@ public sealed partial class ClipExporter : IDisposable
                     Log.I("Exporter", $"ADTS temp: {adtsTemp} ({adtsLen / 1024} KB) audioFrames={audioPackets.Count}");
                 }
 
-                MuxWithFfmpegStreaming(outputPath, h264Temp, hasAudioTracks, rawFormat, adtsTemp);
+                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat, adtsTemp);
 
                 // Post-mux diagnostic: probe output MP4 for audio stream presence
                 try
@@ -273,7 +277,7 @@ public sealed partial class ClipExporter : IDisposable
             }
             finally
             {
-                try { File.Delete(h264Temp); } catch { }
+                try { File.Delete(mkvTemp); } catch { }
                 if (adtsTemp != null) try { File.Delete(adtsTemp); } catch { }
             }
 
@@ -295,11 +299,10 @@ public sealed partial class ClipExporter : IDisposable
         string args;
         if (hasAudioTracks && adtsPath != null && File.Exists(adtsPath))
         {
-            // Two-input mux: raw video AnnexB for video, raw ADTS for audio.
+            // Two-input mux: Matroska for video (preserves per-frame PTS), raw ADTS for audio.
             // -c copy preserves exact quality of both video (NVENC) and audio (AAC).
-            string videoDemuxer = rawFormat == "hevc" ? "hevc" : "h264";
             args = $"-y -loglevel warning " +
-                   $"-f {videoDemuxer} -i \"{videoPath}\" " +
+                   $"-f matroska -i \"{videoPath}\" " +
                    $"-f aac -i \"{adtsPath}\" " +
                    $"-map 0:v:0 -map 1:a:0 " +
                    $"-c:v copy -c:a copy " +
@@ -308,9 +311,9 @@ public sealed partial class ClipExporter : IDisposable
         }
         else if (hasAudioTracks)
         {
-            // Fallback: audio is in the raw H264 (shouldn't happen with new flow)
+            // Fallback: audio is in the Matroska (shouldn't happen with new flow)
             args = $"-y -loglevel warning " +
-                   $"-f h264 -i \"{videoPath}\" " +
+                   $"-f matroska -i \"{videoPath}\" " +
                    $"-map 0:v:0 -c:v copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";
@@ -318,7 +321,7 @@ public sealed partial class ClipExporter : IDisposable
         else
         {
             args = $"-y -loglevel warning " +
-                   $"-f h264 -i \"{videoPath}\" " +
+                   $"-f matroska -i \"{videoPath}\" " +
                    $"-map 0:v:0 -c:v copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";

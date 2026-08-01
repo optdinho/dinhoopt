@@ -286,6 +286,20 @@ export function useClipsState(): ClipsState {
     return () => unsub?.()
   }, [refreshClips, t])
 
+  // Listen for RAM pressure broadcasts (RamManager watchdog)
+  useEffect(() => {
+    const unsub = window.dinho?.clipsOnRamPressure?.((data) => {
+      if (data.level === 'critical') {
+        toast.warning(t('ramPressureCritical'), {
+          description: t('ramPressureCriticalDesc', { pct: Math.round((data.usedPercent ?? 0) * 100) }),
+        })
+      } else if (data.level === 'normal') {
+        toast.success(t('ramPressureNormal'))
+      }
+    })
+    return () => unsub?.()
+  }, [t])
+
   // Listen for durations-ready event (background duration computation finished)
   useEffect(() => {
     const unsub = window.dinho?.clipsOnDurationsReady?.(() => {

@@ -594,7 +594,13 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(
     IPC.CLIPS_TRIM_CLIP,
-    async (_event, clipPath: string, startSeconds: number, endSeconds: number): Promise<ClipTrimResult> => {
+    async (
+      _event,
+      clipPath: string,
+      startSeconds: number,
+      endSeconds: number,
+      reEncode?: boolean,
+    ): Promise<ClipTrimResult> => {
       if (!clipPath || typeof clipPath !== 'string') {
         getLogger().warning('clips', 'TrimClip failed: Invalid clip path')
         return { success: false, error: 'Invalid clip path' }
@@ -617,6 +623,21 @@ export function registerClipsIpc(): void {
       if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
       const baseName = basename(safePath, '.mp4')
       const outPath = join(outDir, `${baseName}_trimmed_${Date.now()}.mp4`)
+      const copyArgs = ['-c', 'copy']
+      const reEncodeArgs = [
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        String(C.cq),
+        '-maxrate',
+        `${C.maxrateKbps}K`,
+        '-bufsize',
+        `${C.bufsizeKbps}K`,
+        '-c:a',
+        'copy',
+      ]
       return new Promise((resolve) => {
         const args = [
           '-y',
@@ -628,8 +649,7 @@ export function registerClipsIpc(): void {
           String(endSeconds),
           '-i',
           safePath,
-          '-c',
-          'copy',
+          ...(reEncode ? reEncodeArgs : copyArgs),
           outPath,
         ]
         const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
