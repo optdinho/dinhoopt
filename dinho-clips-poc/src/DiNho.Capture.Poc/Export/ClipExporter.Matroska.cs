@@ -112,21 +112,21 @@ public sealed partial class ClipExporter
         bw.Write(data, dataOffset, dataLength);
     }
 
-    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null, List<EncodedPacket>? audioPackets = null)
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
         using var bw = new BinaryWriter(fs);
 
-        // Re-baseline PTS so the first frame starts at 0
+        // Re-baseline PTS so the first frame starts at 0.
+        // Áudio NÃO é gravado no MKV (M4): o áudio é exportado num arquivo ADTS
+        // separado e mapeado no mux via -f aac. Gravar trilha A_AAC aqui só
+        // adicionava parsing do matroskadec (que não seta frame_size para A_AAC)
+        // e bytes gastos no temp, além de risco residual de falha de demux.
         var minPts = packets.Count > 0 ? packets[0].Pts : TimeSpan.Zero;
         for (int i = 1; i < packets.Count; i++)
             if (packets[i].Pts < minPts)
                 minPts = packets[i].Pts;
-        if (audioPackets != null)
-            foreach (var pkt in audioPackets)
-                if (pkt.Pts < minPts)
-                    minPts = pkt.Pts;
 
         // EBML Header (known-size — ffmpeg must be able to skip it cleanly)
         WriteEbmlMaster(bw, 0x1A45DFA3, (w) =>
@@ -150,11 +150,6 @@ public sealed partial class ClipExporter
             double totalSec = 0;
             if (packets.Count >= 2)
                 totalSec = (packets[^1].Pts - minPts).TotalSeconds + packets[^1].Duration.TotalSeconds;
-            if (audioPackets?.Count >= 2)
-            {
-                double audioEnd = (audioPackets[^1].Pts - minPts).TotalSeconds + audioPackets[^1].Duration.TotalSeconds;
-                if (audioEnd > totalSec) totalSec = audioEnd;
-            }
             if (totalSec > 0)
                 WriteEbmlFloat(w, 0x4489, totalSec * 1_000_000.0);
             WriteEbmlString(w, 0x4D80, "DiNho Capture"); // MuxingApp
@@ -225,39 +220,7 @@ public sealed partial class ClipExporter
                 WriteEbmlUnsignedInt(vw, 0xBA, vh_);  // DisplayHeight
             });
         });
-
-            // Track 2: Audio (AAC) — only if audio packets are provided
-            if (audioPackets?.Count > 0)
-            {
-                var asc = BuildAudioSpecificConfig(audioPackets[0]);
-                var adtsProfile = (audioPackets[0].Data[2] >> 6) & 0x03;
-                var adtsSampleRateIdx = (audioPackets[0].Data[2] >> 2) & 0x0F;
-                var adtsChanConfig = ((audioPackets[0].Data[2] & 0x01) << 2) | ((audioPackets[0].Data[3] >> 6) & 0x03);
-                int[] sampleRates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000];
-                int sampleRate = adtsSampleRateIdx < sampleRates.Length ? sampleRates[adtsSampleRateIdx] : 48000;
-
-            WriteEbmlMaster(w, 0xAE, (tw) =>
-            {
-                WriteEbmlUnsignedInt(tw, 0xD7, 2);   // TrackNumber
-                WriteEbmlUnsignedInt(tw, 0x73C5, 2); // TrackUID
-                WriteEbmlUnsignedInt(tw, 0x83, 2);   // TrackType (2=audio)
-                WriteEbmlUnsignedInt(tw, 0x9A, 1);   // FlagDefault
-                WriteEbmlUnsignedInt(tw, 0x9C, 1);   // FlagLacing
-                WriteEbmlString(tw, 0x86, "A_AAC");  // CodecID
-                WriteEbmlString(tw, 0x437E, "und"); // Language (undetermined)
-                if (asc != null)
-                    WriteEbmlBinary(tw, 0x63A2, asc); // CodecPrivate (AudioSpecificConfig)
-                // AAC-LC encoder delay: 1024 samples — CodecDelay in nanoseconds
-                WriteEbmlUnsignedInt(tw, 0x56AA, (ulong)(1024L * 1_000_000_000 / sampleRate)); // CodecDelay
-                WriteEbmlMaster(tw, 0xE1, (aw) => // Audio
-                {
-                    WriteEbmlFloat(aw, 0xB5, sampleRate); // SamplingFrequency (float per Matroska spec)
-                    WriteEbmlUnsignedInt(aw, 0x9F, (uint)adtsChanConfig); // Channels
-                });
-            });
-            }
-
-        });
+        }); // fecha WriteEbmlMaster Tracks (Track 2 de áudio removido no M4)
 
         // ── Diagnostics: log first frame hex ──
         bool loggedFirstFrame = false;
@@ -304,41 +267,5 @@ public sealed partial class ClipExporter
             int relTc = (int)(ptsMs - clusterBaseTimecode);
             WriteSimpleBlock(bw, 1, relTc, pkt.IsKeyFrame, pkt.Data, pkt.DataLength);
         }
-
-        // ── Audio Clusters ──
-        if (audioPackets?.Count > 0)
-        {
-            int audioClusterSize = 0;
-            long audioClusterBaseTimecode = 0;
-
-            foreach (var pkt in audioPackets)
-            {
-                if (pkt.Type != MediaType.Audio) continue;
-
-                long ptsMs = (pkt.Pts - minPts).Ticks / 10_000;
-
-                bool startNew = audioClusterSize == 0 ||
-                                audioClusterSize >= maxClusterFrames ||
-                                ptsMs - audioClusterBaseTimecode > 30000 ||
-                                ptsMs - audioClusterBaseTimecode > short.MaxValue;
-
-                if (startNew)
-                {
-                    audioClusterSize = 0;
-                    audioClusterBaseTimecode = ptsMs;
-                    WriteEbmlMasterBegin(bw, 0x1F43B675); // Cluster
-                    WriteEbmlUnsignedInt(bw, 0xE7, (ulong)ptsMs); // Timecode
-                    audioClusterSize = 1;
-                }
-                else
-                {
-                    audioClusterSize++;
-                }
-
-                int relTc = (int)(ptsMs - audioClusterBaseTimecode);
-                WriteSimpleBlock(bw, 2, relTc, false, pkt.Data, pkt.DataLength);
-            }
-        }
-
     }
 }

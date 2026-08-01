@@ -7,7 +7,6 @@ namespace DiNho.Capture.Poc.Export;
 
 public sealed partial class ClipExporter : IDisposable
 {
-    private readonly object _exportLock = new();
     private bool _disposed;
 
     public static string GenerateOutputPath(string? directory = null)
@@ -48,9 +47,9 @@ public sealed partial class ClipExporter : IDisposable
             if (audioChannels < 1 || audioChannels > 7) audioChannels = 2;
         }
 
-        if (!Monitor.TryEnter(_exportLock))
-            throw new InvalidOperationException("Export ja em andamento");
-
+        // B3: serialização única no EngineCoordinator (anti-double-press via
+        // _exportLock/_exportInProgress). Este lock próprio era redundante e
+        // criava dupla camada de proteção com semânticas diferentes.
         try
         {
             var outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
@@ -209,8 +208,10 @@ public sealed partial class ClipExporter : IDisposable
                 // Write video to a Matroska temp file (preserves per-frame PTS via
                 // SimpleBlocks). ffmpeg's -f matroska demuxer reads these timestamps,
                 // so alt-tab gap closing (ReTimestampToContiguous) survives the mux.
-                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback,
-                    audioPackets.Count > 0 ? audioPackets : null);
+                // Áudio NÃO entra no MKV (M4): é escrito no arquivo ADTS separado e
+                // mapeado no mux via -f aac — o matroskadec não seta frame_size para
+                // A_AAC, então a trilha MKV era só parsing desnecessário.
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback);
                 var mkvLen = new FileInfo(mkvTemp).Length;
                 var audioCount = audioPackets.Count(p => p.Type == MediaType.Audio);
                 Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) videoFrames={videoPackets.Count} audioPackets={audioCount}");
@@ -252,27 +253,11 @@ public sealed partial class ClipExporter : IDisposable
 
                 MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat, adtsTemp);
 
-                // Post-mux diagnostic: probe output MP4 for audio stream presence
-                try
-                {
-                    using var probe = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: $"-i \"{outputPath}\"", redirectOutput: true, redirectError: true) };
-                    probe.Start();
-                    var probeOutput = probe.StandardError.ReadToEnd();
-                    probe.WaitForExit(10_000);
-                    // Count audio/video streams
-                    var hasVideoStream = probeOutput.Contains("Video:");
-                    var hasAudioStream = probeOutput.Contains("Audio:");
-                    var streamCount = System.Text.RegularExpressions.Regex.Matches(probeOutput, "Stream #").Count;
-                    Log.I("Exporter", $"MP4 probe: streams={streamCount} video={hasVideoStream} audio={hasAudioStream}");
-                    if (!hasAudioStream && hasAudioTracks)
-                        Log.W("Exporter", $"MP4 probe FAILED: expected audio but none found! Full probe:\n{probeOutput}");
-                    else if (hasAudioStream)
-                        Log.I("Exporter", $"MP4 probe OK: audio stream present");
-                }
-                catch (Exception ex) { Log.W("Exporter", $"MP4 probe failed: {ex.Message}"); }
-
-                // Gera thumbnail (320x180 JPEG) a partir do MP4 final
-                try { GenerateThumbnail(outputPath); }
+                // Pós-mux: verifica presença de áudio no MP4 E gera thumbnail em
+                // UMA chamada ffmpeg (B4 — antes eram 2 processos de 217MB por save).
+                // A dump de input do ffmpeg (stderr) já lista "Stream #0:..." com
+                // "Audio:"/"Video:", então o probe dedicado é desnecessário.
+                try { GenerateThumbnail(outputPath, expectedAudio: hasAudioTracks); }
                 catch (Exception ex) { Log.W("Exporter", $"Thumbnail generation failed: {ex.Message}"); }
             }
             finally
@@ -285,7 +270,7 @@ public sealed partial class ClipExporter : IDisposable
         }
         finally
         {
-            Monitor.Exit(_exportLock);
+            // (B3) sem Monitor.Exit — serialização delegada ao EngineCoordinator
         }
     }
 
@@ -311,7 +296,11 @@ public sealed partial class ClipExporter : IDisposable
         }
         else if (hasAudioTracks)
         {
-            // Fallback: audio is in the Matroska (shouldn't happen with new flow)
+            // M3: hasAudioTracks mas adtsPath é null/inexistente — o áudio foi
+            // perdido antes do mux (falha ao escrever ADTS). O MKV agora NÃO
+            // contém trilha de áudio (M4), então não há como recuperar. Em vez de
+            // um dead-end silencioso, loga warning explícito para o operador.
+            Log.W("Exporter", $"Áudio disponível ({adtsPath ?? "null"}) mas arquivo ADTS não existe — exportando vídeo sem áudio!");
             args = $"-y -loglevel warning " +
                    $"-f matroska -i \"{videoPath}\" " +
                    $"-map 0:v:0 -c:v copy " +
@@ -374,11 +363,13 @@ public sealed partial class ClipExporter : IDisposable
         }
     }
 
-    internal static void GenerateThumbnail(string videoPath)
+    internal static void GenerateThumbnail(string videoPath, bool expectedAudio = false)
     {
         var thumbPath = Path.ChangeExtension(videoPath, ".thumb.jpg");
 
-        using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: $"-y -loglevel warning -i \"{videoPath}\" -vframes 1 -s 320x180 -f image2 \"{thumbPath}\"", redirectError: true) };
+        var sb = new StringBuilder();
+        using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: $"-y -loglevel info -i \"{videoPath}\" -vframes 1 -s 320x180 -f image2 \"{thumbPath}\"", redirectError: true) };
+        proc.ErrorDataReceived += (s, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
 
         proc.Start();
         proc.BeginErrorReadLine();
@@ -391,6 +382,19 @@ public sealed partial class ClipExporter : IDisposable
 
         if (proc.ExitCode != 0)
             throw new InvalidOperationException($"ffmpeg thumbnail exit code {proc.ExitCode}");
+
+        string stderr;
+        lock (sb) { stderr = sb.ToString(); }
+
+        // A dump de input do ffmpeg lista as streams — reaproveita como probe (B4).
+        var hasVideoStream = stderr.Contains("Video:");
+        var hasAudioStream = stderr.Contains("Audio:");
+        var streamCount = System.Text.RegularExpressions.Regex.Matches(stderr, "Stream #").Count;
+        Log.I("Exporter", $"MP4 probe: streams={streamCount} video={hasVideoStream} audio={hasAudioStream}");
+        if (expectedAudio && !hasAudioStream)
+            Log.W("Exporter", $"MP4 probe FAILED: expected audio but none found!\n{stderr}");
+        else if (hasAudioStream)
+            Log.I("Exporter", "MP4 probe OK: audio stream present");
 
         if (File.Exists(thumbPath))
             Log.I("Exporter", $"Thumbnail: {thumbPath} ({new FileInfo(thumbPath).Length / 1024} KB)");
