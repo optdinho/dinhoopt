@@ -49,12 +49,12 @@ export interface ConfigState {
 export const config: ConfigState = {
   engineFps: 30,
   engineReplayTimeSeconds: 120,
-  width: 1920,
-  height: 1080,
+  width: 1280,
+  height: 720,
   bitrateKbps: 40000,
-  cq: 22,
-  maxrateKbps: 30000,
-  bufsizeKbps: 60000,
+  cq: 20,
+  maxrateKbps: 35000,
+  bufsizeKbps: 70000,
   bframes: 3,
   lookahead: 32,
   encoderPreset: 'p5',
@@ -180,9 +180,9 @@ export function loadPersistedClipsConfig(): void {
   config.width = saved.width
   config.height = saved.height
   config.bitrateKbps = saved.bitrateKbps
-  config.cq = saved.cq ?? 22
-  config.maxrateKbps = saved.maxrateKbps ?? 30000
-  config.bufsizeKbps = saved.bufsizeKbps ?? 60000
+  config.cq = saved.cq ?? 20
+  config.maxrateKbps = saved.maxrateKbps ?? 35000
+  config.bufsizeKbps = saved.bufsizeKbps ?? 70000
   config.bframes = saved.bframes ?? 3
   config.lookahead = saved.lookahead ?? 32
   config.encoderPreset = saved.encoderPreset ?? 'p5'

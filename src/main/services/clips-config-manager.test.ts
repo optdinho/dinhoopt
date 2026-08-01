@@ -8,12 +8,12 @@ vi.mock('./clips-config-store', () => ({
     noiseSuppression: undefined as unknown as boolean,
     audioLoopback: false,
     fps: 30,
-    width: 1920,
-    height: 1080,
+    width: 1280,
+    height: 720,
     bitrateKbps: 40000,
-    cq: 22,
-    maxrateKbps: 30000,
-    bufsizeKbps: 60000,
+    cq: 20,
+    maxrateKbps: 35000,
+    bufsizeKbps: 70000,
     bframes: 3,
     lookahead: 32,
     encoderPreset: 'p5',
@@ -79,8 +79,8 @@ describe('clips-config-manager', () => {
 
   describe('module initialization', () => {
     it('populates config from persisted defaults', () => {
-      expect(config.width).toBe(1920)
-      expect(config.height).toBe(1080)
+      expect(config.width).toBe(1280)
+      expect(config.height).toBe(720)
       expect(config.bitrateKbps).toBe(40000)
       expect(config.pushToTalk).toBe('hold')
       expect(config.hotkeys).toHaveLength(3)
@@ -94,12 +94,12 @@ describe('clips-config-manager', () => {
       expect(result.micEnabled).toBe(true)
       expect(result.audioLoopback).toBe(false)
       expect(result.fps).toBe(30)
-      expect(result.width).toBe(1920)
-      expect(result.height).toBe(1080)
+      expect(result.width).toBe(1280)
+      expect(result.height).toBe(720)
       expect(result.bitrateKbps).toBe(40000)
-      expect(result.cq).toBe(22)
-      expect(result.maxrateKbps).toBe(30000)
-      expect(result.bufsizeKbps).toBe(60000)
+      expect(result.cq).toBe(20)
+      expect(result.maxrateKbps).toBe(35000)
+      expect(result.bufsizeKbps).toBe(70000)
       expect(result.bframes).toBe(3)
       expect(result.lookahead).toBe(32)
       expect(result.encoderPreset).toBe('p5')
@@ -257,7 +257,7 @@ describe('clips-config-manager', () => {
     it('preserves all engine config fields', () => {
       const result = getCurrentConfigPayload()
       expect(result.replayTimeSeconds).toBe(120)
-      expect(result.width).toBe(1920)
+      expect(result.width).toBe(1280)
       expect(result.bitrateKbps).toBe(40000)
     })
 
@@ -272,7 +272,7 @@ describe('clips-config-manager', () => {
     it('loads from store and updates config object', () => {
       config.width = 0
       loadPersistedClipsConfig()
-      expect(config.width).toBe(1920)
+      expect(config.width).toBe(1280)
     })
 
     it('applies defaults for missing optional fields', () => {
@@ -314,9 +314,9 @@ describe('clips-config-manager', () => {
         adaptiveQuality: undefined as unknown as boolean,
       })
       loadPersistedClipsConfig()
-      expect(config.cq).toBe(22)
-      expect(config.maxrateKbps).toBe(30000)
-      expect(config.bufsizeKbps).toBe(60000)
+      expect(config.cq).toBe(20)
+      expect(config.maxrateKbps).toBe(35000)
+      expect(config.bufsizeKbps).toBe(70000)
       expect(config.bframes).toBe(3)
       expect(config.lookahead).toBe(32)
       expect(config.encoderPreset).toBe('p5')

@@ -610,17 +610,17 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     }
 
     [Fact]
-    public void AppConfig_Cq_DefaultIs22()
+    public void AppConfig_Cq_DefaultIs20()
     {
         var cfg = CreateConfig();
-        Assert.Equal(22, cfg.Config.Cq);
+        Assert.Equal(20, cfg.Config.Cq);
     }
 
     [Fact]
-    public void AppConfig_MaxrateKbps_DefaultIs30000()
+    public void AppConfig_MaxrateKbps_DefaultIs35000()
     {
         var cfg = CreateConfig();
-        Assert.Equal(30000, cfg.Config.MaxrateKbps);
+        Assert.Equal(35000, cfg.Config.MaxrateKbps);
     }
 
     #endregion
