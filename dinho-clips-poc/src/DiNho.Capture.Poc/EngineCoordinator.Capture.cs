@@ -750,6 +750,18 @@ public sealed partial class EngineCoordinator
 
         lock (_pipelineLock)
         {
+            // H2: StopCapture() pode ter rodado entre o check inicial e a aquisição do lock.
+            // Se isso aconteceu, _captureActive é false e tudo já foi desligado — não re-crie
+            // um pipeline zumbi. Só prossegue se a captura ainda está ativa.
+            if (!_captureActive)
+            {
+                _needsReinit = false;
+                _pipelineCts?.Dispose();
+                _pipelineCts = null;
+                _pipelineTask = null;
+                return;
+            }
+
             // Null the fields under lock — StopCapture() also nulls them under lock,
             // so only one thread will actually null them.
             _pipelineCts?.Dispose();

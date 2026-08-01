@@ -268,64 +268,6 @@ public sealed partial class EngineCoordinator
         // If all fail, leave _capture null and caller handles cleanup.
     }
 
-    private int _lastCropX, _lastCropY, _lastCropW, _lastCropH;
-
-    private unsafe void UpdateDxgiCropRect()
-    {
-        var game = ResolveTargetGame();
-        int cropX = 0, cropY = 0, cropW = 0, cropH = 0;
-
-        var rect = new RECT();
-        if (game.IsValid && game.Hwnd != IntPtr.Zero && PInvoke.DwmGetWindowAttribute((HWND)game.Hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &rect, (uint)sizeof(RECT)).Succeeded)
-        {
-            var hMon = MonitorHelper.GetMonitorFromWindowHandle(game.Hwnd);
-            var (mLeft, mTop, mRight, mBottom) = MonitorHelper.GetMonitorRect(hMon);
-
-            cropW = rect.right - rect.left;
-            cropH = rect.bottom - rect.top;
-            if (cropW > 0 && cropH > 0)
-            {
-                var clampedLeft = Math.Max(rect.left, mLeft);
-                var clampedTop = Math.Max(rect.top, mTop);
-                var clampedRight = Math.Min(rect.right, mRight);
-                var clampedBottom = Math.Min(rect.bottom, mBottom);
-                cropW = (clampedRight - clampedLeft) & ~1;
-                cropH = (clampedBottom - clampedTop) & ~1;
-                cropX = clampedLeft - mLeft;
-                cropY = clampedTop - mTop;
-                Log.I("UpdateDxgiCropRect", $"window={rect.left}:{rect.top}:{rect.right}:{rect.bottom} monitor={mLeft}:{mTop}:{mRight}:{mBottom} clamped={clampedLeft}:{clampedTop}:{clampedRight}:{clampedBottom} crop={cropX}:{cropY}:{cropW}:{cropH}");
-
-                // Crop muito pequeno: GpuVideoConverter falha com E_INVALIDARG e ffmpeg produz output vazio.
-                // Ignora crop e usa quadro completo quando abaixo de 320x240.
-                if (cropW > 0 && (cropW < 320 || cropH < 240))
-                {
-                    Log.I("UpdateDxgiCropRect", $"Crop muito pequeno ({cropW}x{cropH}) — usando quadro completo");
-                    cropW = 0;
-                    cropH = 0;
-                }
-            }
-        }
-
-        if (_encoder != null && (cropX != _lastCropX || cropY != _lastCropY || cropW != _lastCropW || cropH != _lastCropH))
-        {
-            _encoder.SetCropRect(cropX, cropY, cropW, cropH);
-
-            // Se crop cobre a tela inteira (crop=source=no-op), não precisa restartar ffmpeg
-            bool isNoop = cropW == _captureWidth && cropH == _captureHeight && cropX == 0 && cropY == 0;
-            if (!isNoop)
-            {
-                Log.E("UpdateDxgiCropRect", $"Crop real: {_lastCropX},{_lastCropY},{_lastCropW},{_lastCropH} → {cropX},{cropY},{cropW},{cropH}. Chamando Flush()...");
-                _encoder.Flush();
-            }
-            else
-            {
-                Log.I("UpdateDxgiCropRect", $"Crop no-op (tela inteira) — Flush ignorado");
-            }
-
-            _lastCropX = cropX; _lastCropY = cropY; _lastCropW = cropW; _lastCropH = cropH;
-        }
-    }
-
     private AvRevertMmThreadCharacteristicsSafeHandle? _mmThreadHandle;
 
     private void SetMmThreadPriority()
