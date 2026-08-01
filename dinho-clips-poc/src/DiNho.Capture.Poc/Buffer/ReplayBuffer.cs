@@ -169,7 +169,9 @@ public sealed class ReplayBuffer : IDisposable
             _audioTail = (_audioTail + 1) % _audioPackets.Length;
             _audioCount++;
             _totalAudioDuration += packet.Duration;
-            _totalAudioBytes += packet.PcmSamples is { } pcm ? pcm.Length * 4L : packet.DataLength;
+            // Áudio no buffer é sempre AAC (PcmSamples == null) — contabilização
+            // consistente via DataLength (B2: ramo PcmSamples era inalcançável).
+            _totalAudioBytes += packet.DataLength;
             TrimExcessAudio();
         }
         finally { _lock.ExitWriteLock(); }
@@ -207,7 +209,7 @@ public sealed class ReplayBuffer : IDisposable
             _audioHead = (_audioHead + 1) % _audioPackets.Length;
             _audioCount--;
             _totalAudioDuration -= oldest.Duration;
-            _totalAudioBytes -= oldest.PcmSamples is { } pcm ? pcm.Length * 4L : oldest.DataLength;
+            _totalAudioBytes -= oldest.DataLength;
             if (_diskSpillEnabled && _spill != null)
                 _spill.Write(oldest);
             oldest.Release();
