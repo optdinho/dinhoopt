@@ -1,4 +1,5 @@
 using System.Buffers;
+using DiNho.Capture.Poc.Logging;
 
 namespace DiNho.Capture.Poc.Encoders;
 
@@ -87,9 +88,22 @@ public sealed class EncodedPacket
 
     public void Release()
     {
-        if (Interlocked.Decrement(ref _retainCount) >= 0)
-            return;
+        var next = Interlocked.Decrement(ref _retainCount);
 
+        if (next >= 0)
+            return; // ainda retido (Retain() pendente) — release parcial normal
+
+        if (next < -1)
+        {
+            // Duplo Release em pacote já devolvido ao pool: o byte[] já foi
+            // retornado na 1ª chamada (next == -1), então esta é uma violação
+            // de contrato. Não é recuperável (o array pode estar em uso por outro
+            // consumer), mas loga para detecção em vez de corromper silenciosamente.
+            Log.E("EncodedPacket", $"Duplo Release! retainCount={next} type={Type} pts={Pts.TotalMilliseconds:F0}ms pooled={IsPooled}");
+            return;
+        }
+
+        // next == -1: última referência liberada — devolve ao pool (uma única vez)
         if (IsPooled && DataLength > 0)
         {
             VideoPacketPool.Return(Data);

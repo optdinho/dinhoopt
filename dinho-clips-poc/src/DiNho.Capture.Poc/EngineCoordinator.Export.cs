@@ -20,6 +20,8 @@ public sealed partial class EngineCoordinator
             _exportInProgress = true;
         }
 
+        List<EncodedPacket>? video = null, audio = null;
+
         try
         {
             // Post-clip buffer: espera N segundos para incluir o momento após o trigger
@@ -65,8 +67,6 @@ public sealed partial class EngineCoordinator
             }
 
             // Post-clip buffer: espera N segundos para incluir o momento após o trigger
-            List<EncodedPacket> video, audio;
-
             if (postClipSec > 0)
             {
                 var originalMax = _buffer.MaxDuration;
@@ -138,11 +138,6 @@ public sealed partial class EngineCoordinator
                 Log.I("EngineCoordinator", $"═══════ SAVE OK ═══════");
                 _status.Update(s => s.LastClipSize = fileInfo.Length);
             });
-
-            // Libera retain dos pacotes — TrimExcess pode já ter Release()'d alguns,
-            // então este Release() extra é o que efetivamente retorna ao pool.
-            foreach (var pkt in video) pkt.Release();
-            foreach (var pkt in audio) pkt.Release();
         }
         catch (Exception ex)
         {
@@ -152,6 +147,13 @@ public sealed partial class EngineCoordinator
         }
         finally
         {
+            // Libera retain dos pacotes — TrimExcess pode já ter Release()'d alguns,
+            // então este Release() extra é o que efetivamente retorna ao pool.
+            // Em finally para cobrir exceções do export (H1) e o early-return de buffer vazio.
+            if (video != null)
+                foreach (var pkt in video) pkt.Release();
+            if (audio != null)
+                foreach (var pkt in audio) pkt.Release();
             lock (_exportLock)
             {
                 _exportInProgress = false;
