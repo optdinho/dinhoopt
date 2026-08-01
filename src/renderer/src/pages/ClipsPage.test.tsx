@@ -236,7 +236,7 @@ describe('ClipsPage', () => {
     expect(screen.getByText('crashRecovered')).toBeTruthy()
   })
 
-  it('does not show low disk warning in status badges', async () => {
+  it('shows low disk warning in status badges when diskSpaceOk is false', async () => {
     mockGetStatus.mockResolvedValue({
       running: true,
       capturing: false,
@@ -246,7 +246,7 @@ describe('ClipsPage', () => {
       diskSpaceOk: false,
     })
     render(<ClipsPage />)
-    expect(screen.queryByText('lowDisk')).toBeNull()
+    expect(await screen.findByText('lowDisk')).toBeTruthy()
   })
 
   it('renders push-to-talk mode selector', async () => {

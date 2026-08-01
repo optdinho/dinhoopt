@@ -147,7 +147,7 @@ export function ClipsStatusBar({
                 style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}
               >
                 <HardDrive className="h-3 w-3" />
-                <span>{t('diskSpaceLow')}</span>
+                <span>{t('lowDisk')}</span>
               </div>
             )}
           </div>
