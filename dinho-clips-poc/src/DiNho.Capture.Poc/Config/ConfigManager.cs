@@ -131,6 +131,19 @@ public sealed class AppConfig
 
 public sealed class ConfigManager : IDisposable
 {
+    private static readonly HashSet<string> ValidEncoderPresets = new()
+    {
+        "p1", "p2", "p3", "p4", "p5", "p6", "p7",
+        "veryfast", "veryslow",
+    };
+
+    public static bool IsValidEncoderPreset(string? preset)
+    {
+        if (string.IsNullOrWhiteSpace(preset))
+            return false;
+        return ValidEncoderPresets.Contains(preset.ToLowerInvariant());
+    }
+
     private readonly string _configDir;
     private readonly string _configPath;
     private readonly AppConfig _defaults = new();
@@ -238,6 +251,8 @@ public sealed class ConfigManager : IDisposable
             if (config.Lookahead < 0 || config.Lookahead > 256)
                 config.Lookahead = _defaults.Lookahead;
             if (string.IsNullOrWhiteSpace(config.EncoderPreset))
+                config.EncoderPreset = _defaults.EncoderPreset;
+            else if (!IsValidEncoderPreset(config.EncoderPreset))
                 config.EncoderPreset = _defaults.EncoderPreset;
 
             if (config.MicVolume < 0f || config.MicVolume > 4f)

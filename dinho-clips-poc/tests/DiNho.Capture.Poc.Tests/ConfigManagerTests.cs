@@ -46,4 +46,40 @@ public sealed class ConfigManagerTests
         Assert.Equal(1920, cfg.Config.Width);
         Assert.Equal(1080, cfg.Config.Height);
     }
+
+    [Theory]
+    [InlineData("p1", true)]
+    [InlineData("p5", true)]
+    [InlineData("p7", true)]
+    [InlineData("veryfast", true)]
+    [InlineData("veryslow", true)]
+    [InlineData("P5", true)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData(null, false)]
+    [InlineData("p8", false)]
+    [InlineData("p5; shutdown /s", false)]
+    [InlineData("--preset evil", false)]
+    public void IsValidEncoderPreset_Validates(string? preset, bool expected)
+    {
+        Assert.Equal(expected, ConfigManager.IsValidEncoderPreset(preset));
+    }
+
+    [Fact]
+    public void Load_InvalidEncoderPreset_FallsBackToDefault()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempFile = Path.Combine(tempDir, "config.json");
+        File.WriteAllText(tempFile, "{\"EncoderPreset\":\"p5; shutdown /s\"}");
+        try
+        {
+            var cfg = new ConfigManager(tempFile);
+            Assert.Equal("p5", cfg.Config.EncoderPreset);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
 }

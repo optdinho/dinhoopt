@@ -716,6 +716,15 @@ describe('CLIPS_SET_CONFIG', () => {
     expect(cfg.autoCleanupThresholdGB).toBe(20)
   })
 
+  it('rejects unknown encoderPreset values', async () => {
+    clipsConfig.encoderPreset = 'p5'
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { encoderPreset: 'p5; shutdown /s' })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.encoderPreset).toBe('p5')
+  })
+
   it('syncs customGameProcess and micDeviceId when pipe is connected', async () => {
     mockIsPipeConnected.mockReturnValue(true)
     mockSendWithFallback.mockResolvedValue({ success: true })

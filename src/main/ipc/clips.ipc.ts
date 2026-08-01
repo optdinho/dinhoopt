@@ -45,6 +45,8 @@ import {
 let _micDevicesCache: MicDeviceInfo[] | null = null
 let _micDevicesCacheTs = 0
 
+const VALID_ENCODER_PRESETS = new Set(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
+
 function enumerateMicDevicesLocal(): Promise<MicDeviceInfo[]> {
   if (_micDevicesCache && Date.now() - _micDevicesCacheTs < 10_000) {
     return Promise.resolve(_micDevicesCache)
@@ -334,7 +336,8 @@ export function registerClipsIpc(): void {
       if (typeof c.bufsizeKbps === 'number') C.bufsizeKbps = Math.max(2000, c.bufsizeKbps)
       if (typeof c.bframes === 'number') C.bframes = Math.max(0, Math.min(16, c.bframes))
       if (typeof c.lookahead === 'number') C.lookahead = Math.max(0, Math.min(256, c.lookahead))
-      if (typeof c.encoderPreset === 'string') C.encoderPreset = c.encoderPreset
+      if (typeof c.encoderPreset === 'string' && VALID_ENCODER_PRESETS.has(c.encoderPreset))
+        C.encoderPreset = c.encoderPreset
       if (typeof c.codec === 'string') C.codec = c.codec
       if (typeof c.adapterIndex === 'number') C.adapterIndex = c.adapterIndex
       if (typeof c.micEnabled === 'boolean') C.micEnabled = c.micEnabled

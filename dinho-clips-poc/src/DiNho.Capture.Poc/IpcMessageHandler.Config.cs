@@ -110,7 +110,8 @@ public sealed partial class EngineCoordinator
                     c.BufsizeKbps = incoming.BufsizeKbps;
                     c.Bframes = incoming.Bframes;
                     c.Lookahead = incoming.Lookahead;
-                    c.EncoderPreset = incoming.EncoderPreset;
+                    if (ConfigManager.IsValidEncoderPreset(incoming.EncoderPreset))
+                        c.EncoderPreset = incoming.EncoderPreset;
                     c.AdapterIndex = incoming.AdapterIndex;
                     c.OutputDirectory = incoming.OutputDirectory;
                     c.ForceSoftware = incoming.ForceSoftware;
