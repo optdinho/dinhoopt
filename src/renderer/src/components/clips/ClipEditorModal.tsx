@@ -17,6 +17,8 @@ function TrimTimeline({
   endSec,
   duration,
   ariaLabel,
+  startLabel,
+  endLabel,
   onSeek,
   onStartChange,
   onEndChange,
@@ -26,12 +28,28 @@ function TrimTimeline({
   endSec: number
   duration: number
   ariaLabel: string
+  startLabel: string
+  endLabel: string
   onSeek: (s: number) => void
   onStartChange: (s: number) => void
   onEndChange: (s: number) => void
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState<'seek' | 'start' | 'end' | null>(null)
+
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, '0')}`
+  }
+
+  const adjustStart = (delta: number) => {
+    onStartChange(Math.max(0, Math.min(endSec - 0.1, startSec + delta)))
+  }
+
+  const adjustEnd = (delta: number) => {
+    onEndChange(Math.max(startSec + 0.1, Math.min(duration, endSec + delta)))
+  }
 
   const posFromClient = useCallback(
     (clientX: number) => {
@@ -112,6 +130,7 @@ function TrimTimeline({
       aria-valuemin={0}
       aria-valuemax={duration}
       aria-valuenow={Math.round(currentTime)}
+      aria-valuetext={fmt(currentTime)}
       className="relative h-8 cursor-pointer select-none"
       style={{ touchAction: 'none' }}
       tabIndex={0}
@@ -137,6 +156,24 @@ function TrimTimeline({
 
       {/* Start handle */}
       <div
+        role="slider"
+        aria-label={startLabel}
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={Math.round(startSec)}
+        aria-valuetext={fmt(startSec)}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') {
+            e.preventDefault()
+            e.stopPropagation()
+            adjustStart(1)
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault()
+            e.stopPropagation()
+            adjustStart(-1)
+          }
+        }}
         className="absolute top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2"
         style={{
           left: `${pct(startSec)}%`,
@@ -147,6 +184,24 @@ function TrimTimeline({
 
       {/* End handle */}
       <div
+        role="slider"
+        aria-label={endLabel}
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={Math.round(endSec)}
+        aria-valuetext={fmt(endSec)}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') {
+            e.preventDefault()
+            e.stopPropagation()
+            adjustEnd(1)
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault()
+            e.stopPropagation()
+            adjustEnd(-1)
+          }
+        }}
         className="absolute top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2"
         style={{
           left: `${pct(endSec)}%`,
@@ -186,6 +241,10 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const [mergeClips] = mergeClipsState
   const setMergeClips = mergeClipsState[1]
   const videoRef = useRef<HTMLVideoElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   const videoUrl = clip ? window.dinho.clipsGetVideoUrl(clip.path) : ''
 
@@ -310,26 +369,55 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
 
   const trimDuration = endSec - startSec
 
+  // Focus trap: autofocus first control, wrap Tab, restore focus on close.
+  // Escape handled here via onCloseRef (stable) — no re-registration on re-render.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    const dialog = dialogRef.current
+    if (!dialog) return
+    previousFocusRef.current = document.activeElement as HTMLElement | null
+
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    first?.focus()
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last?.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first?.focus()
+      }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
-      <button
-        type="button"
-        aria-label={t('close')}
-        className="absolute inset-0 cursor-default"
-        onClick={onClose}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        onMouseDown={onClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={showTrim && clip ? `${t('editClip')}: ${clip.name}` : t('merge')}
+        onMouseMove={showOverlayTemporarily}
         className="relative w-full rounded-xl border shadow-2xl"
         style={{
           maxWidth: fullscreen ? '100%' : '36rem',
@@ -354,10 +442,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
 
         <div
           ref={containerRef}
-          role="group"
-          aria-label={showTrim && clip ? `${t('editClip')}: ${clip.name}` : t('merge')}
           className={fullscreen ? 'flex flex-1 flex-col' : ''}
-          onMouseMove={showOverlayTemporarily}
           style={fullscreen ? { background: '#000', minHeight: 0 } : undefined}
         >
           {showTrim && clip && (
@@ -369,6 +454,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     fullscreen ? 'flex-1 flex items-center justify-center bg-black' : 'mb-4 overflow-hidden rounded-lg'
                   }
                 >
+                  {/* biome-ignore lint/a11y/useMediaCaption: preview of the user's own recordings — no dialogue captions exist */}
                   <video
                     ref={videoRef}
                     src={videoUrl}
@@ -399,9 +485,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     }}
                     onError={() => toast.error(t('videoPreviewFailed'))}
                     preload="auto"
-                  >
-                    <track kind="captions" />
-                  </video>
+                  ></video>
                 </div>
 
                 {/* Overlay controls (fullscreen) — fixed at bottom */}
@@ -419,6 +503,8 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       endSec={endSec}
                       duration={effectiveDuration}
                       ariaLabel={t('trim')}
+                      startLabel={t('start')}
+                      endLabel={t('end')}
                       onSeek={(s) => {
                         setCurrentTime(s)
                         seekTo(s)
@@ -463,6 +549,8 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       endSec={endSec}
                       duration={effectiveDuration}
                       ariaLabel={t('trim')}
+                      startLabel={t('start')}
+                      endLabel={t('end')}
                       onSeek={(s) => {
                         setCurrentTime(s)
                         seekTo(s)
