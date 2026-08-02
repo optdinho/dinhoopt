@@ -201,13 +201,27 @@ public sealed class DiskSpillBuffer : IDisposable
 
             if (splitIdx == 0) return 0;
 
+            // Incremental accounting: subtract only the removed entries instead of
+            // recomputing the whole index on every trim (RecomputeCounts was O(n)
+            // per evicted frame — with video near the budget cap that meant an
+            // O(n) scan per frame on the capture thread).
             long removedBytes = 0;
+            int removedVideo = 0, removedAudio = 0;
+            long removedVideoBytes = 0, removedAudioBytes = 0;
             for (int i = 0; i < splitIdx; i++)
-                removedBytes += _index[i].Length;
+            {
+                var removedEntry = _index[i];
+                removedBytes += removedEntry.Length;
+                if (removedEntry.Type == MediaType.Video) { removedVideo++; removedVideoBytes += removedEntry.Length; }
+                else { removedAudio++; removedAudioBytes += removedEntry.Length; }
+            }
 
             _index.RemoveRange(0, splitIdx);
             _totalBytes -= removedBytes;
-            RecomputeCounts();
+            _totalVideoBytes -= removedVideoBytes;
+            _totalAudioBytes -= removedAudioBytes;
+            _videoCount -= removedVideo;
+            _audioCount -= removedAudio;
             DeleteFullyConsumedSegments();
 
             return splitIdx;
@@ -241,19 +255,6 @@ public sealed class DiskSpillBuffer : IDisposable
         }
         catch { /* temp directory may not exist */ }
         return removed;
-    }
-
-    private void RecomputeCounts()
-    {
-        _videoCount = 0;
-        _audioCount = 0;
-        _totalVideoBytes = 0;
-        _totalAudioBytes = 0;
-        foreach (var e in _index)
-        {
-            if (e.Type == MediaType.Video) { _videoCount++; _totalVideoBytes += e.Length; }
-            else { _audioCount++; _totalAudioBytes += e.Length; }
-        }
     }
 
     /// <summary>

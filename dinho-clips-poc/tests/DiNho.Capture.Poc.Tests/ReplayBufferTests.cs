@@ -615,6 +615,43 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
+    public void DiskSpill_TrimOldest_KeepsCountersConsistent_MixedMedia()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var spill = new DiskSpillBuffer(dir);
+
+            // 20 video frames (100B each, keyframe every 5th) + 10 audio packets (256B each).
+            for (int i = 0; i < 20; i++)
+                spill.Write(MakeVideo(TimeSpan.FromSeconds(i), isKey: i % 5 == 0, 100));
+            for (int i = 0; i < 10; i++)
+                spill.Write(MakeAudio(TimeSpan.FromSeconds(i), 256));
+
+            Assert.Equal(30, spill.Count);
+            Assert.Equal(20, spill.VideoCount);
+            Assert.Equal(10, spill.AudioCount);
+            Assert.Equal(20 * 100 + 10 * 256, spill.TotalBytes);
+
+            // Newest entry is audio PTS 9s; window 5s -> cutoff 4s, but trim aligns
+            // to the first video keyframe >= cutoff (PTS 5s), dropping video PTS 0..4.
+            int removed = spill.TrimOldest(TimeSpan.FromSeconds(5));
+            Assert.Equal(5, removed);
+
+            Assert.Equal(25, spill.Count);
+            Assert.Equal(15, spill.VideoCount);
+            Assert.Equal(10, spill.AudioCount);
+            Assert.Equal(15 * 100 + 10 * 256, spill.TotalBytes);
+
+            // ReadAll must still return the surviving window in PTS order.
+            var all = spill.ReadAll();
+            Assert.Equal(25, all.Count);
+            Assert.Equal(TimeSpan.FromSeconds(5), all[0].Pts);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
     public void DiskSpill_TrimOldest_NoCompaction_ReadsStayCorrect()
     {
         var dir = TempDir();
