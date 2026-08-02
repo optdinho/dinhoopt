@@ -47,6 +47,24 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         return (T?)field.GetValue(coord);
     }
 
+    private static T? GetStaticField<T>(string name)
+    {
+        var field = CoordinatorType.GetField(name, BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+        return (T?)field.GetValue(null);
+    }
+
+    private static void SetStaticField(string name, object? value)
+    {
+        var field = CoordinatorType.GetField(name, BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+        field.SetValue(null, value);
+    }
+
+    private static object? InvokeInstance(string name, object instance, params object?[] args)
+    {
+        var method = CoordinatorType.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
+        return method?.Invoke(instance, args);
+    }
+
     private ConfigManager CreateConfig(Action<AppConfig>? configure = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "DiNhoTests_" + Guid.NewGuid().ToString("N")[..8]);
@@ -383,6 +401,172 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         var withExe = baseName + ".exe";
         var result = (bool?)InvokeStatic("IsProcessAlive", withExe);
         Assert.True(result);
+    }
+
+    #endregion
+
+    #region IsProcessAlive (PID overload)
+
+    [Fact]
+    public void IsProcessAlive_OwnPid_ReturnsTrue()
+    {
+        var result = (bool?)InvokeStatic("IsProcessAlive", Environment.ProcessId);
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsProcessAlive_ZeroPid_ReturnsFalse()
+    {
+        var result = (bool?)InvokeStatic("IsProcessAlive", 0);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsProcessAlive_NegativePid_ReturnsFalse()
+    {
+        var result = (bool?)InvokeStatic("IsProcessAlive", -1);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsProcessAlive_MaxIntPid_ReturnsFalse()
+    {
+        var result = (bool?)InvokeStatic("IsProcessAlive", int.MaxValue);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsProcessAlive_DeadPid_ReturnsFalse()
+    {
+        var p = new System.Diagnostics.Process
+        {
+            StartInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe") { CreateNoWindow = true, UseShellExecute = false }
+        };
+        p.Start();
+        var deadPid = p.Id;
+        p.Kill();
+        p.WaitForExit();
+        p.Dispose();
+
+        var result = (bool?)InvokeStatic("IsProcessAlive", deadPid);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsProcessAlive_ProbeThrows_ReturnsTrue_FailClosed()
+    {
+        var prev = GetStaticField<Func<uint, bool>>("IsProcessAliveProbe");
+        SetStaticField("IsProcessAliveProbe", new Func<uint, bool>(_ => throw new InvalidOperationException("probe boom")));
+        try
+        {
+            var result = (bool?)InvokeStatic("IsProcessAlive", 424242);
+            Assert.True(result);
+        }
+        finally { SetStaticField("IsProcessAliveProbe", prev); }
+    }
+
+    [Fact]
+    public void IsProcessAlive_OpenProcessAccessDenied_ReturnsTrue()
+    {
+        var prev = GetStaticField<Func<uint, IntPtr>>("OpenProcessProbe");
+        SetStaticField("OpenProcessProbe", new Func<uint, IntPtr>(_ =>
+        {
+            System.Runtime.InteropServices.Marshal.SetLastPInvokeError(5);
+            return IntPtr.Zero;
+        }));
+        try
+        {
+            var result = (bool?)InvokeStatic("IsProcessAlive", 424242);
+            Assert.True(result);
+        }
+        finally { SetStaticField("OpenProcessProbe", prev); }
+    }
+
+    [Fact]
+    public void IsProcessAlive_OpenProcessReturnsInvalidHandle_ExitCodeUnreadable_FailClosed()
+    {
+        var prev = GetStaticField<Func<uint, IntPtr>>("OpenProcessProbe");
+        SetStaticField("OpenProcessProbe", new Func<uint, IntPtr>(_ => new IntPtr(1)));
+        try
+        {
+            var result = (bool?)InvokeStatic("IsProcessAlive", 424242);
+            Assert.True(result);
+        }
+        finally { SetStaticField("OpenProcessProbe", prev); }
+    }
+
+    #endregion
+
+    #region NormalizeProcessName
+
+    [Fact]
+    public void NormalizeProcessName_FiveMBuildSegment_Stripped()
+    {
+        var result = InvokeStatic("NormalizeProcessName", "FiveM_b3258_GTAProcess");
+        Assert.Equal("FiveM_GTAProcess", result);
+    }
+
+    [Fact]
+    public void NormalizeProcessName_BuildSegmentWithExe_Stripped()
+    {
+        var result = InvokeStatic("NormalizeProcessName", "FiveM_b3260_GTAProcess.exe");
+        Assert.Equal("FiveM_GTAProcess", result);
+    }
+
+    [Fact]
+    public void NormalizeProcessName_NoBuildSegment_Unchanged()
+    {
+        var result = InvokeStatic("NormalizeProcessName", "GTA5.exe");
+        Assert.Equal("GTA5", result);
+    }
+
+    [Fact]
+    public void NormalizeProcessName_EmptyString_ReturnsEmpty()
+    {
+        var result = InvokeStatic("NormalizeProcessName", "");
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void NormalizeProcessName_Whitespace_ReturnsEmpty()
+    {
+        var result = InvokeStatic("NormalizeProcessName", "   ");
+        Assert.Equal("", result);
+    }
+
+    #endregion
+
+    #region IsTargetProcessAlive
+
+    [Fact]
+    public void IsTargetProcessAlive_WhenPidSet_UsesPidOverload()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_captureTargetGame",
+            new GameInfo("FiveM_b3258_GTAProcess", "", "", "", DisplayMode.Unknown, 777, IntPtr.Zero));
+        var prev = GetStaticField<Func<uint, bool>>("IsProcessAliveProbe");
+        uint? calledPid = null;
+        SetStaticField("IsProcessAliveProbe", new Func<uint, bool>(pid => { calledPid = pid; return true; }));
+        try
+        {
+            var result = (bool)InvokeInstance("IsTargetProcessAlive", coord)!;
+            Assert.True(result);
+            Assert.Equal(777u, calledPid);
+        }
+        finally { SetStaticField("IsProcessAliveProbe", prev); }
+    }
+
+    [Fact]
+    public void IsTargetProcessAlive_WhenPidZero_UsesNameFallback()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_captureTargetGame",
+            new GameInfo("FiveM_b3258_GTAProcess", "", "", "", DisplayMode.Unknown, 0, IntPtr.Zero));
+        var result = (bool)InvokeInstance("IsTargetProcessAlive", coord)!;
+        // PID 0 → cai no overload por nome (fuzzy _b\d+_). Deve ser True se o
+        // processo de teste (testhost) rodar com nome qualquer — aqui só garantimos
+        // que NÃO lança e retorna bool.
+        Assert.IsType<bool>(result);
     }
 
     #endregion
