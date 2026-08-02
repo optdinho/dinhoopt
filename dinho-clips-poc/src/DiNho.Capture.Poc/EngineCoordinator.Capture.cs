@@ -575,7 +575,7 @@ public sealed partial class EngineCoordinator
                     // alt-tab — é stall do WGC (ex: DWM parou de entregar frames).
                     // Nesse caso cai no else-if e o watchdog/starvation podem reiniciar.
                     if (_capture is WgcCaptureSource && _captureTargetGame.IsValid &&
-                        IsProcessAlive(_captureTargetGame.ProcessName) &&
+                        IsTargetProcessAlive() &&
                         !IsTargetGameForeground())
                     {
                         _bgDropCount++;
@@ -596,7 +596,7 @@ public sealed partial class EngineCoordinator
                         // Se o processo alvo MORREU enquanto backgrounded, sai do loop
                         // (não chama StopCapture() aqui para evitar deadlock com _pipelineTask.Wait)
                         if (_gameBackgrounded && _captureTargetGame.IsValid &&
-                                 !IsProcessAlive(_captureTargetGame.ProcessName))
+                                 !IsTargetProcessAlive())
                         {
                             Log.I("Pipeline", $"Jogo '{_captureTargetGame.ProcessName}' fechou enquanto backgrounded — encerrando pipeline");
                             _recording = false;

@@ -337,10 +337,10 @@ public sealed class EngineCoordinatorGameTests : IDisposable
     #region IsProcessAlive
 
     [Fact]
-    public void IsProcessAlive_EmptyString_ReturnsTrueOnWindows()
+    public void IsProcessAlive_EmptyString_ReturnsFalse()
     {
         var result = (bool?)InvokeStatic("IsProcessAlive", "");
-        Assert.True(result);
+        Assert.False(result);
     }
 
     [Fact]

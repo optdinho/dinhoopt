@@ -28,7 +28,7 @@ public sealed partial class EngineCoordinator
 
             // Processo vivo mas sem MainWindowHandle (ex: minimizado)
             // Usa o HWND salvo original como fallback
-            if (_captureTargetHwnd != IntPtr.Zero && IsProcessAlive(_captureTargetGame.ProcessName))
+            if (_captureTargetHwnd != IntPtr.Zero && IsTargetProcessAlive())
             {
                 Log.I("EngineCoordinator", $"Target game '{_captureTargetGame.ProcessName}' vivo mas sem HWND — usando HWND salvo 0x{_captureTargetHwnd:X8}");
                 return new GameInfo(
@@ -90,19 +90,115 @@ public sealed partial class EngineCoordinator
         return current;
     }
 
+    // ---------------------------------------------------------------------------
+    // Alive-check por PID via OpenProcess (Opção A — fix do falso-negativo FiveM).
+    // O nome do processo do FiveM inclui o build number (FiveM_b3258_GTAProcess),
+    // que muda a cada atualização — Process.GetProcessesByName faz match exato e
+    // o jogo parecia "morto" estando vivo. OpenProcess por PID é robusto a isso.
+    // Seam estático para testes determinísticos (default = P/Invoke real).
+    // ---------------------------------------------------------------------------
+
+    internal const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    internal const uint ERROR_ACCESS_DENIED = 5;
+    internal const uint STILL_ACTIVE = 259;
+
+    // Campos (não auto-properties) para reflexão por nome nos testes.
+    internal static Func<uint, bool> IsProcessAliveProbe = IsProcessAliveCore;
+    internal static Func<uint, IntPtr> OpenProcessProbe = pid =>
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, EntryPoint = "OpenProcess")]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, uint dwProcessId);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, EntryPoint = "GetExitCodeProcess")]
+    private static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, EntryPoint = "CloseHandle")]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    // Retorna true se o processo ainda está vivo. Fail-closed: em caso de dúvida
+    // (exceção, sem acesso de leitura), assume vivo — nunca derruba captura por engano.
+    private static bool IsProcessAlive(int pid)
+    {
+        if (pid <= 0)
+            return false;
+        try
+        {
+            return IsProcessAliveProbe((uint)pid);
+        }
+        catch (Exception ex)
+        {
+            Log.W("EngineCoordinator", $"IsProcessAlive(pid={pid}) falhou — assumindo vivo: {ex.Message}");
+            return true;
+        }
+    }
+
+    private static bool IsProcessAliveCore(uint pid)
+    {
+        IntPtr handle = OpenProcessProbe(pid);
+        if (handle == IntPtr.Zero)
+        {
+            // Sem acesso de query (ex: processo de outro usuário) ainda é "vivo".
+            var err = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            if (err == ERROR_ACCESS_DENIED)
+                return true;
+            return false;
+        }
+
+        try
+        {
+            // Handle aberto: o processo existe no momento. GetExitCodeProcess com
+            // STILL_ACTIVE (259) confirma que ainda está rodando; qualquer outra
+            // leitura não-confiável assume vivo (fail-closed).
+            if (GetExitCodeProcess(handle, out uint code))
+                return code == STILL_ACTIVE;
+            return true;
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
+
+    // Normaliza nome de processo: remove sufixo .exe e o build number do FiveM
+    // ("FiveM_b3258_GTAProcess" → "FiveM_GTAProcess"). Vazio/whitespace → "".
+    internal static string NormalizeProcessName(string? processName)
+    {
+        var name = processName?.Trim();
+        if (string.IsNullOrEmpty(name))
+            return "";
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            name = name[..^4];
+        return System.Text.RegularExpressions.Regex.Replace(name, @"_b\d+_", "_", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
     private static bool IsProcessAlive(string processName)
     {
         try
         {
-            var name = processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                ? processName[..^4]
-                : processName;
+            var name = NormalizeProcessName(processName);
+            if (name.Length == 0)
+                return false;
             var procs = Process.GetProcessesByName(name);
             bool alive = procs.Length > 0;
             foreach (var p in procs) p.Dispose();
             return alive;
         }
-        catch (Exception ex) { Log.D("EngineCoordinator", $"IsProcessAlive failed for '{processName}': {ex.Message}"); return false; }
+        catch (Exception ex)
+        {
+            // Fail-closed: exceção na checagem nunca derruba captura por engano.
+            Log.W("EngineCoordinator", $"IsProcessAlive('{processName}') falhou — assumindo vivo: {ex.Message}");
+            return true;
+        }
+    }
+
+    // Check de vida do jogo alvo da captura: usa PID quando disponível
+    // (robusto ao build number do FiveM), senão cai no fallback por nome (fuzzy).
+    private bool IsTargetProcessAlive()
+    {
+        if (_captureTargetGame.ProcessId > 0)
+            return IsProcessAlive(_captureTargetGame.ProcessId);
+        return IsProcessAlive(_captureTargetGame.ProcessName);
     }
 
     private static GameInfo ResolveProcessByName(string processName)
@@ -340,14 +436,16 @@ public sealed partial class EngineCoordinator
         {
             try
             {
-                // Verifica se o processo do jogo ainda existe
-                var procs = Process.GetProcessesByName(_capturedGameProcess);
-                bool alive = procs.Length > 0;
-                foreach (var p in procs) p.Dispose();
+                // Verifica se o processo do jogo ainda existe.
+                // Usa PID primeiro (robusto ao build number do FiveM), senão o nome.
+                bool alive = _capturedGameProcessId > 0
+                    ? IsProcessAlive(_capturedGameProcessId)
+                    : IsProcessAlive(_capturedGameProcess);
                 if (!alive)
                 {
                     Log.I("EngineCoordinator", $"Jogo '{_capturedGameProcess}' fechou — parando captura");
                     _capturedGameProcess = null;
+                    _capturedGameProcessId = 0;
                     StopCapture();
                 }
             }
@@ -383,6 +481,7 @@ public sealed partial class EngineCoordinator
 
             Log.I("EngineCoordinator", $"Auto-start capture for game '{game}' (autoStartCapture=true)");
             _capturedGameProcess = game.ProcessName;
+            _capturedGameProcessId = game.ProcessId;
             StartCapture();
         }
     }

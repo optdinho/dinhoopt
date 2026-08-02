@@ -66,6 +66,7 @@ public sealed partial class EngineCoordinator : IDisposable
     // Estado
     private volatile bool _recording;
     private string? _capturedGameProcess;
+    private int _capturedGameProcessId;
     private volatile bool _captureActive;
     private volatile bool _exportInProgress;
     private readonly object _exportLock = new();
