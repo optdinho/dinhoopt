@@ -32,6 +32,11 @@ public sealed partial class ClipExporter : IDisposable
         if (videoPackets.Count == 0)
             throw new InvalidOperationException("No video packets to export");
 
+        // Opção B: descarta prefixo não-ADTS (frames corrompidos do spill pré-fix A)
+        // ANTES do parse de sample rate e do hasAudioTracks, para que audioPackets[0]
+        // seja sempre ADTS válido quando houver áudio.
+        audioPackets = TrimNonAdtsPrefix(audioPackets);
+
         // Parse audio sample rate from first ADTS packet (used for padding & CodecDelay)
         int audioSampleRate = 48000;
         int audioChannels = 2;
@@ -62,6 +67,12 @@ public sealed partial class ClipExporter : IDisposable
 
             try
             {
+                // Clona os pacotes para o export poder ajustar Pts sem corromper o
+                // anel vivo do ReplayBuffer (GetSegments retorna referências Retain'd).
+                // Clones compartilham o byte[]; o caller libera os originais no finally.
+                videoPackets = ClonePackets(videoPackets);
+                audioPackets = ClonePackets(audioPackets);
+
                 // SYNC-PROBE: PTS offset between audio and video BEFORE any processing
                 if (videoPackets.Count > 0 && audioPackets.Count > 0)
                 {
@@ -88,6 +99,16 @@ public sealed partial class ClipExporter : IDisposable
                     var aFirst = audioPackets[0].Pts;
                     var aLast = audioPackets[^1].Pts;
                     Log.D("PTS", $"Pre-sync — Video: {vFirst.TotalSeconds:F3}s → {vLast.TotalSeconds:F3}s ({videoPackets.Count} frames)  Audio: {aFirst.TotalSeconds:F3}s → {aLast.TotalSeconds:F3}s ({audioPackets.Count} packets)");
+
+                    // Re-âncora do áudio na timeline do vídeo — sem isso, um offset
+                    // grande (encoder < 1.0x, observado ~480s) faz FilterAudioByIntervals
+                    // descartar TODO o áudio (nenhum PTS de áudio cai nos intervalos do
+                    // vídeo) → clip mudo. Alinha o "now" de cada stream (mesma janela
+                    // de wall-clock) e deixa o sync fino (TrimVideoStart/NoSync) tratar
+                    // o resíduo sub-2s.
+                    var alignShift = AlignAudioToVideoPts(audioPackets, videoPackets);
+                    if (alignShift != TimeSpan.Zero)
+                        Log.I("PTS", $"AlignAudio: re-anchoring audio by {alignShift.TotalMilliseconds:F0}ms to video timeline");
 
                     int origAudioCount = audioPackets.Count;
                     var intervals = GetVideoIntervals(videoPackets, TimeSpan.FromMilliseconds(50));
@@ -348,6 +369,23 @@ public sealed partial class ClipExporter : IDisposable
 
     internal static bool IsAdts(EncodedPacket pkt) =>
         pkt.Data.Length >= 2 && pkt.Data[0] == 0xFF && (pkt.Data[1] & 0xF0) == 0xF0;
+
+    /// <summary>
+    /// Descarta um prefixo inicial de pacotes de áudio não-ADTS. Defesa (Opção B)
+    /// contra frames corrompidos vindos do disk spill pré-fix A (Data=[]/DataLength=0):
+    /// isola o primeiro pacote ADTS válido e mantém o suffixo a partir dele. Não
+    /// dessincroniza A/V porque a âncora do sync é o FIM dos streams e o prefixo
+    /// removido está no início. Retorna a lista original se já começa em ADTS.
+    /// </summary>
+    internal static List<EncodedPacket> TrimNonAdtsPrefix(List<EncodedPacket> audioPackets)
+    {
+        if (audioPackets.Count == 0) return audioPackets;
+        int first = audioPackets.FindIndex(p => p.Type == MediaType.Audio && IsAdts(p));
+        if (first == -1) return new List<EncodedPacket>();
+        if (first == 0) return audioPackets;
+        Log.W("Exporter", $"TrimNonAdtsPrefix: descartando {first} pacote(s) não-ADTS no início do áudio");
+        return audioPackets.GetRange(first, audioPackets.Count - first);
+    }
 
     internal static void WriteAdtsFile(string path, List<EncodedPacket> audioPackets)
     {

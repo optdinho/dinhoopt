@@ -238,8 +238,112 @@ public sealed class AudioSyncTests
     }
 
     // ════════════════════════════════════════════════════════════
-    //  PadAudioWithSilence
+    //  AlignAudioToVideoPts — re-âncora do PTS do áudio (bug clip mudo)
     // ════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void AlignAudioToVideoPts_AudioFarAhead_ShiftsToVideoTimeline()
+    {
+        // Vídeo: 30s a 60fps começando em 2220s (encoder atrasado ~481s)
+        var video = new List<EncodedPacket>();
+        for (int i = 0; i < 1800; i++)
+            video.Add(Pkt(MediaType.Video, 2_220_000 + i * 16, 16));
+
+        // Áudio: ~30s em 2700s (wall-clock real — per-stream reference)
+        var audio = new List<EncodedPacket>();
+        for (int i = 0; i < 1430; i++)
+            audio.Add(Pkt(MediaType.Audio, 2_700_000 + i * 21, 21));
+
+        // Antes da re-âncora, nenhum PTS de áudio cai nos intervalos do vídeo
+        var intervals = ClipExporter.GetVideoIntervals(video, TimeSpan.FromMilliseconds(50));
+        var before = ClipExporter.FilterAudioByIntervals(audio, intervals);
+        Assert.Empty(before);
+
+        var shift = ClipExporter.AlignAudioToVideoPts(audio, video);
+
+        Assert.True(shift > TimeSpan.Zero);
+        Assert.Equal(2_730_030 - 2_248_800, shift.TotalMilliseconds, 0);
+
+        // Agora o áudio alinhado sobrevive ao filtro → clip com áudio
+        var after = ClipExporter.FilterAudioByIntervals(audio, intervals);
+        Assert.NotEmpty(after);
+    }
+
+    [Fact]
+    public void AlignAudioToVideoPts_VideoRestarted_AudioStillAligned()
+    {
+        // Vídeo reiniciou (PTS fresca ~125s) enquanto o áudio seguiu em ~2716s
+        var video = new List<EncodedPacket>();
+        for (int i = 0; i < 200; i++)
+            video.Add(Pkt(MediaType.Video, 95_000 + i * 16, 16));
+        var audio = new List<EncodedPacket>();
+        for (int i = 0; i < 1430; i++)
+            audio.Add(Pkt(MediaType.Audio, 2_686_000 + i * 21, 21));
+
+        var shift = ClipExporter.AlignAudioToVideoPts(audio, video);
+
+        Assert.True(shift > TimeSpan.Zero);
+        // Fim do áudio alinhado ao fim do vídeo
+        var aNow = audio[^1].Pts + audio[^1].Duration;
+        var vNow = video[^1].Pts + video[^1].Duration;
+        Assert.Equal(0, (aNow - vNow).TotalMilliseconds, 1);
+    }
+
+    [Fact]
+    public void AlignAudioToVideoPts_SmallOffset_NoChange()
+    {
+        var video = new List<EncodedPacket> { Pkt(MediaType.Video, 0, 16), Pkt(MediaType.Video, 16, 16) };
+        var audio = new List<EncodedPacket> { Pkt(MediaType.Audio, 300, 21), Pkt(MediaType.Audio, 321, 21) };
+
+        var before = audio[0].Pts;
+        var shift = ClipExporter.AlignAudioToVideoPts(audio, video);
+
+        Assert.Equal(TimeSpan.Zero, shift);
+        Assert.Equal(before, audio[0].Pts);
+    }
+
+    [Fact]
+    public void AlignAudioToVideoPts_EmptyStreams_ReturnsZero()
+    {
+        Assert.Equal(TimeSpan.Zero, ClipExporter.AlignAudioToVideoPts([], new List<EncodedPacket>()));
+        var audio = new List<EncodedPacket> { Pkt(MediaType.Audio, 0, 21) };
+        Assert.Equal(TimeSpan.Zero, ClipExporter.AlignAudioToVideoPts(audio, []));
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  ClonePackets — export não corrompe o anel vivo do buffer
+    // ════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ClonePackets_ReturnsIndependentPts_SharedData()
+    {
+        var original = new List<EncodedPacket>
+        {
+            Pkt(MediaType.Video, 1000, 16, [1, 2, 3]),
+            Pkt(MediaType.Audio, 2000, 21),
+        };
+
+        var clones = ClipExporter.ClonePackets(original);
+
+        Assert.Equal(2, clones.Count);
+        Assert.Same(original[0].Data, clones[0].Data);
+        Assert.Equal(original[0].Pts, clones[0].Pts);
+        Assert.Equal(original[0].Duration, clones[0].Duration);
+        Assert.Equal(original[0].IsKeyFrame, clones[0].IsKeyFrame);
+        Assert.Equal(original[0].DataLength, clones[0].DataLength);
+        Assert.False(clones[0].IsPooled);
+
+        // Mutar o clone NÃO afeta o original (anel vivo)
+        clones[0].Pts = TimeSpan.FromMilliseconds(9999);
+        Assert.Equal(TimeSpan.FromMilliseconds(1000), original[0].Pts);
+    }
+
+    [Fact]
+    public void ClonePackets_Empty_ReturnsSame()
+    {
+        var empty = new List<EncodedPacket>();
+        Assert.Same(empty, ClipExporter.ClonePackets(empty));
+    }
 
     [Fact]
     public void PadAudioWithSilence_LargeGap_InsertsSilence()

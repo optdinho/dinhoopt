@@ -490,6 +490,40 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
+    public void DiskSpill_ADTSAudioBytes_SurviveRoundTrip()
+    {
+        var dir = TempDir();
+        try
+        {
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60), 200);
+            buf.EnableDiskSpill(dir);
+
+            // Production audio is always AAC ADTS raw bytes (PcmSamples == null).
+            // 64 bytes > audio budget (20) so it must spill; header-ish syncword
+            // 0xFF 0xF1 keeps it a valid ADTS packet (IsAdts true).
+            var adts = new byte[64];
+            adts[0] = 0xFF; adts[1] = 0xF1; adts[2] = 0x50;
+            var pkt = new EncodedPacket(adts, MediaType.Audio, TimeSpan.FromSeconds(1),
+                TimeSpan.FromTicks(21_333), false);
+            buf.AddAudio(pkt);
+
+            // Force spill by adding a large video frame
+            buf.AddVideo(MakeVideo(TimeSpan.Zero, false, 500));
+
+            var (_, audio) = buf.GetSegments();
+            Assert.Single(audio);
+            // Raw ADTS bytes must survive the round-trip — NOT be converted to
+            // float PCM (pre-fix ReadRange bug: Data=[] + DataLength=0).
+            Assert.Null(audio[0].PcmSamples);
+            Assert.Equal(64, audio[0].DataLength);
+            Assert.Equal(64, audio[0].Data.Length);
+            Assert.Equal(0xFF, audio[0].Data[0]);
+            Assert.Equal(0xF1, audio[0].Data[1]);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
     public void DiskSpill_NoSpillWhenDisabled()
     {
         using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60), 300);

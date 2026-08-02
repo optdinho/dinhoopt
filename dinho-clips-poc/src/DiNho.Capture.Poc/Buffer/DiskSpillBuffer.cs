@@ -49,7 +49,8 @@ public sealed class DiskSpillBuffer : IDisposable
         TimeSpan Duration,
         bool IsKeyFrame,
         int Width,
-        int Height);
+        int Height,
+        bool IsPcm);
 
     public DiskSpillBuffer(string? tempDir = null)
         : this(tempDir, DefaultSegmentBytes)
@@ -100,9 +101,11 @@ public sealed class DiskSpillBuffer : IDisposable
             long offset = stream.Position;
 
             int dataLen;
-            if (packet.PcmSamples is { Length: > 0 } pcm)
+            var pcm = packet.PcmSamples;
+            bool isPcm = pcm is { Length: > 0 };
+            if (isPcm)
             {
-                dataLen = pcm.Length * sizeof(float);
+                dataLen = pcm!.Length * sizeof(float);
                 stream.Write(MemoryMarshal.AsBytes(pcm.AsSpan()));
             }
             else
@@ -113,7 +116,7 @@ public sealed class DiskSpillBuffer : IDisposable
 
             _index.Add(new SpillEntry(
                 _activeSegment, offset, dataLen, packet.Type, packet.Pts,
-                packet.Duration, packet.IsKeyFrame, packet.Width, packet.Height));
+                packet.Duration, packet.IsKeyFrame, packet.Width, packet.Height, isPcm));
 
             _totalBytes += dataLen;
             if (packet.Type == MediaType.Video)
@@ -359,10 +362,21 @@ public sealed class DiskSpillBuffer : IDisposable
 
                 if (entry.Type == MediaType.Audio)
                 {
-                    int sampleCount = entry.Length / sizeof(float);
-                    var pcm = new float[sampleCount];
-                    SysCopyBlock(buf, 0, pcm, 0, entry.Length);
-                    result.Add(new EncodedPacket(pcm, entry.Type, entry.Pts, entry.Duration));
+                    // Production audio is always AAC ADTS bytes (PcmSamples == null).
+                    // Preserve the raw bytes verbatim — converting them to float PCM
+                    // corrupted audio (Data=[]/DataLength=0) and killed the AAC track
+                    // in saved clips (missing audio, save 14:31).
+                    if (entry.IsPcm)
+                    {
+                        var pcm = new float[entry.Length / sizeof(float)];
+                        SysCopyBlock(buf, 0, pcm, 0, entry.Length);
+                        result.Add(new EncodedPacket(pcm, entry.Type, entry.Pts, entry.Duration));
+                    }
+                    else
+                    {
+                        result.Add(new EncodedPacket(buf, entry.Type, entry.Pts, entry.Duration,
+                            isKeyFrame: false, isPooled: false, width: 0, height: 0, entry.Length));
+                    }
                 }
                 else
                 {

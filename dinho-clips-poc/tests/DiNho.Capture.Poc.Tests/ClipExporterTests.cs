@@ -688,6 +688,70 @@ public sealed class ClipExporterTests
         Assert.Equal(10.0, lastPts.TotalSeconds, 1);
     }
 
+    // ── TrimNonAdtsPrefix (Opção B: descarta prefixo não-ADTS) ──
+
+    private static EncodedPacket MakeAdtsAudio(int i)
+    {
+        // ADTS syncword 0xFFF + valid header (IsAdts true)
+        var data = new byte[7] { 0xFF, 0xF1, 0x50, 0x80, 0x00, 0x1F, 0xFC };
+        return new EncodedPacket(data, MediaType.Audio,
+            TimeSpan.FromSeconds(i), TimeSpan.FromMilliseconds(21), false);
+    }
+
+    [Fact]
+    public void TrimNonAdtsPrefix_Empty_ReturnsEmpty()
+    {
+        var result = ClipExporter.TrimNonAdtsPrefix(new List<EncodedPacket>());
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void TrimNonAdtsPrefix_AllAdts_ReturnsSameCount()
+    {
+        var audio = new List<EncodedPacket>
+        {
+            MakeAdtsAudio(1),
+            MakeAdtsAudio(2),
+            MakeAdtsAudio(3)
+        };
+        var result = ClipExporter.TrimNonAdtsPrefix(audio);
+        Assert.Equal(3, result.Count);
+        Assert.Equal(1.0, result[0].Pts.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void TrimNonAdtsPrefix_DropsLeadingNonAdts()
+    {
+        // Data=[] (corrupt packet, e.g. spilled) → IsAdts false
+        var corrupt = new EncodedPacket(Array.Empty<byte>(), MediaType.Audio,
+            TimeSpan.FromSeconds(0), TimeSpan.FromMilliseconds(21), false);
+        var audio = new List<EncodedPacket>
+        {
+            corrupt,
+            MakeAdtsAudio(1),
+            MakeAdtsAudio(2)
+        };
+        var result = ClipExporter.TrimNonAdtsPrefix(audio);
+        Assert.Equal(2, result.Count);
+        Assert.Equal(1.0, result[0].Pts.TotalSeconds, 3);
+        Assert.Equal(2.0, result[1].Pts.TotalSeconds, 3);
+        // Original untouched
+        Assert.Equal(3, audio.Count);
+    }
+
+    [Fact]
+    public void TrimNonAdtsPrefix_AllNonAdts_ReturnsEmpty()
+    {
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, TimeSpan.FromMilliseconds(21), false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false)
+        };
+        var result = ClipExporter.TrimNonAdtsPrefix(audio);
+        Assert.Empty(result);
+    }
+
     // ── GenerateThumbnail ──
 
     [Fact]

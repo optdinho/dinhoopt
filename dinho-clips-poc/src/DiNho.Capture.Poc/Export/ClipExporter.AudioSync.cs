@@ -84,6 +84,69 @@ public sealed partial class ClipExporter
         return result;
     }
 
+    /// <summary>
+    /// Re-anchora o PTS do áudio na timeline do vídeo.
+    /// <para>
+    /// <c>GetSegments</c> corta cada stream na sua própria referência ("now") —
+    /// janela de vídeo em <c>video[^1].Pts</c>, janela de áudio em <c>audio[^1].Pts</c>.
+    /// Quando o encoder roda abaixo de tempo real (NVENC speed &lt; 1.0x), o PTS do
+    /// vídeo fica atrás do áudio por um offset acumulativo (observado até ~480s em
+    /// sessão de 45min). Sem re-âncora, <see cref="FilterAudioByIntervals"/> descarta
+    /// TODO o áudio — nenhum PTS de áudio cai dentro dos intervalos do vídeo → clip mudo
+    /// (MP4 probe <c>audio=False</c>).
+    /// </para>
+    /// <para>
+    /// Ambos os segmentos representam a mesma janela de wall-clock (per-stream
+    /// reference), então alinhar os fins ("now") é a correspondência correta.
+    /// Só aplica quando o offset é material (&gt; 2s — mesmo limiar do TrimVideoStart);
+    /// offsets pequenos preservam o tratamento 30ms–2s existente.
+    /// </para>
+    /// </summary>
+    /// <param name="audioPackets">Áudio (Pts é mutado).</param>
+    /// <param name="videoPackets">Vídeo (não mutado — é a referência).</param>
+    /// <returns>O shift aplicado (TimeSpan.Zero se não houve re-âncora).</returns>
+    internal static TimeSpan AlignAudioToVideoPts(List<EncodedPacket> audioPackets, List<EncodedPacket> videoPackets)
+    {
+        if (audioPackets.Count == 0 || videoPackets.Count == 0)
+            return TimeSpan.Zero;
+
+        var aNow = audioPackets[^1].Pts + audioPackets[^1].Duration;
+        var vNow = videoPackets[^1].Pts + videoPackets[^1].Duration;
+        var shift = aNow - vNow;
+
+        if (Math.Abs(shift.TotalSeconds) <= 2.0)
+            return TimeSpan.Zero;
+
+        for (int i = 0; i < audioPackets.Count; i++)
+            audioPackets[i].Pts -= shift;
+        return shift;
+    }
+
+    /// <summary>
+    /// Cria wrappers leves (mesmo byte[] compartilhado, Pts independente) dos pacotes
+    /// para o export. <see cref="ReplayBuffer.GetSegments"/> retorna referências Retain'd
+    /// aos objetos vivos do anel; o export (ReTimestampToContiguous, AlignAudioToVideoPts)
+    /// muta Pts — fazê-lo in-place corromperia o anel vivo (janelas de segmento seguintes
+    /// calcularam PTS já re-mapeados). Clones têm <c>IsPooled = false</c> e NUNCA são
+    /// Release()'d aqui: o caller libera os originais no finally após o export retornar.
+    /// Seguro porque os originais permanecem retidos durante todo o export (arrays pooled
+    /// não voltam ao pool até o último Release do caller).
+    /// </summary>
+    internal static List<EncodedPacket> ClonePackets(List<EncodedPacket> packets)
+    {
+        if (packets.Count == 0) return packets;
+        var clones = new List<EncodedPacket>(packets.Count);
+        foreach (var pkt in packets)
+        {
+            if (pkt.PcmSamples != null)
+                clones.Add(new EncodedPacket(pkt.PcmSamples, pkt.Type, pkt.Pts, pkt.Duration));
+            else
+                clones.Add(new EncodedPacket(pkt.Data, pkt.Type, pkt.Pts, pkt.Duration,
+                    pkt.IsKeyFrame, isPooled: false, pkt.Width, pkt.Height, pkt.DataLength));
+        }
+        return clones;
+    }
+
     internal static double ComputeIntervalsDuration(List<(TimeSpan start, TimeSpan end)> intervals)
     {
         double total = 0;
