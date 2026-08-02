@@ -71,6 +71,18 @@ public sealed class MaxineAfxFilter : IDisposable
         };
         _process.Start();
         try { _process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+
+        // C8: drain stderr asynchronously — the pipe is redirected but never read,
+        // so a flood of ffmpeg error output would fill the buffer and block the
+        // process (hanging the filter). -loglevel error means these lines are
+        // genuine errors — log them for diagnosis.
+        _process.BeginErrorReadLine();
+        _process.ErrorDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrEmpty(e.Data)) return;
+            Log.W("MaxineAfxFilter", $"ffmpeg stderr: {e.Data}");
+        };
+
         _stdin = _process.StandardInput.BaseStream;
         _stdout = _process.StandardOutput.BaseStream;
 
