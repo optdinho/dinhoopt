@@ -213,39 +213,46 @@ public sealed class WgcCaptureSource : ICaptureSource
         try
         {
             var nativePtr = winrtObj.NativeObject.GetRef();
-            var iid = typeof(IDirect3D11CaptureFrame2).GUID;
-            var hr = Marshal.QueryInterface(nativePtr, ref iid, out var ptr);
-            if (hr != 0 || ptr == IntPtr.Zero) return -1;
             try
             {
-                // IDirect3D11CaptureFrame2 vtable:
-                //   IInspectable(3) + IPropertyAccessor methods(4) = 7 slots before DirtyRegions
-                //   DirtyRegions is slot 7 (index 7 from IUnknown)
-                var vtable = Marshal.ReadIntPtr(ptr);
-                var getDirtyRegionsPtr = Marshal.ReadIntPtr(vtable, 7 * IntPtr.Size);
-                var getDirtyRegions = Marshal.GetDelegateForFunctionPointer<GetDirtyRegionsDelegate>(getDirtyRegionsPtr);
-
-                hr = getDirtyRegions(ptr, out var vectorPtr);
-                if (hr != 0 || vectorPtr == IntPtr.Zero) return -1;
+                var iid = typeof(IDirect3D11CaptureFrame2).GUID;
+                var hr = Marshal.QueryInterface(nativePtr, ref iid, out var ptr);
+                if (hr != 0 || ptr == IntPtr.Zero) return -1;
                 try
                 {
-                    // IVectorView<DirtyRegion> — IInspectable(3) + IIterable(1) + IVectorView(3) = 7
-                    // Size is slot 7
-                    var vectorVtable = Marshal.ReadIntPtr(vectorPtr);
-                    var getSizePtr = Marshal.ReadIntPtr(vectorVtable, 7 * IntPtr.Size);
-                    var getSize = Marshal.GetDelegateForFunctionPointer<GetSizeDelegate>(getSizePtr);
-                    hr = getSize(vectorPtr, out var size);
-                    if (hr == 0) return (int)size;
-                    return -1;
+                    // IDirect3D11CaptureFrame2 vtable:
+                    //   IInspectable(3) + IPropertyAccessor methods(4) = 7 slots before DirtyRegions
+                    //   DirtyRegions is slot 7 (index 7 from IUnknown)
+                    var vtable = Marshal.ReadIntPtr(ptr);
+                    var getDirtyRegionsPtr = Marshal.ReadIntPtr(vtable, 7 * IntPtr.Size);
+                    var getDirtyRegions = Marshal.GetDelegateForFunctionPointer<GetDirtyRegionsDelegate>(getDirtyRegionsPtr);
+
+                    hr = getDirtyRegions(ptr, out var vectorPtr);
+                    if (hr != 0 || vectorPtr == IntPtr.Zero) return -1;
+                    try
+                    {
+                        // IVectorView<DirtyRegion> — IInspectable(3) + IIterable(1) + IVectorView(3) = 7
+                        // Size is slot 7
+                        var vectorVtable = Marshal.ReadIntPtr(vectorPtr);
+                        var getSizePtr = Marshal.ReadIntPtr(vectorVtable, 7 * IntPtr.Size);
+                        var getSize = Marshal.GetDelegateForFunctionPointer<GetSizeDelegate>(getSizePtr);
+                        hr = getSize(vectorPtr, out var size);
+                        if (hr == 0) return (int)size;
+                        return -1;
+                    }
+                    finally
+                    {
+                        Marshal.Release(vectorPtr);
+                    }
                 }
                 finally
                 {
-                    Marshal.Release(vectorPtr);
+                    Marshal.Release(ptr);
                 }
             }
             finally
             {
-                Marshal.Release(ptr);
+                Marshal.Release(nativePtr);
             }
         }
         catch
@@ -259,6 +266,84 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private delegate int GetSizeDelegate(IntPtr thisPtr, out uint size);
+
+    /// <summary>
+    /// Extrai a textura D3D11 de uma superfície WGC, gerenciando o ciclo de vida
+    /// do ponteiro nativo retornado por GetRef() (que faz AddRef). O Release é
+    /// garantido em finally — antes, o ponteiro nunca era liberado a 60fps,
+    /// retendo o IDirect3DSurface nativo e a textura D3D11 subjacente.
+    /// </summary>
+    internal static ID3D11Texture2D? TryExtractTexture(IWinRTObject surface, Action<string, string> log)
+    {
+        var nativePtr = surface.NativeObject.GetRef();
+        try
+        {
+            return TryExtractTextureFromNativePtr(nativePtr, log);
+        }
+        finally
+        {
+            Marshal.Release(nativePtr);
+        }
+    }
+
+    /// <summary>
+    /// Estratégias de extração sobre o ponteiro nativo de um IDirect3DSurface WGC.
+    /// NÃO é dono do ponteiro — o caller gerencia GetRef()/Release.
+    /// </summary>
+    internal static ID3D11Texture2D? TryExtractTextureFromNativePtr(IntPtr nativePtr, Action<string, string> log)
+    {
+        if (nativePtr == IntPtr.Zero)
+            return null;
+
+        int hr1 = -1, hr2 = -1;
+        ID3D11Texture2D? sourceTexture = null;
+
+        // Estratégia 1: IDirect3DDxgiInterfaceAccess (abordagem oficial)
+        var dxgiAccessGuid = typeof(IDirect3DDxgiInterfaceAccess).GUID;
+        hr1 = Marshal.QueryInterface(nativePtr, ref dxgiAccessGuid, out var dxgiAccessPtr);
+        if (hr1 == 0 && dxgiAccessPtr != IntPtr.Zero)
+        {
+            try
+            {
+                var dxgiAccess = (IDirect3DDxgiInterfaceAccess)Marshal.GetTypedObjectForIUnknown(dxgiAccessPtr, typeof(IDirect3DDxgiInterfaceAccess));
+                var d3d11Guid = typeof(ID3D11Texture2D).GUID;
+                var hrGet = dxgiAccess.GetInterface(ref d3d11Guid, out var d3dPtr);
+                if (hrGet == 0 && d3dPtr != IntPtr.Zero)
+                    sourceTexture = new ID3D11Texture2D(d3dPtr);
+                else
+                    log("WGC", $"GetInterface falhou: hr={hrGet}");
+            }
+            finally
+            {
+                Marshal.Release(dxgiAccessPtr);
+            }
+        }
+
+        // Estratégia 2: QI direto para IDXGISurface → depois OpenResource
+        if (sourceTexture is null)
+        {
+            var dxgiSurfaceGuid = typeof(IDXGISurface).GUID;
+            hr2 = Marshal.QueryInterface(nativePtr, ref dxgiSurfaceGuid, out var dxgiSurfacePtr);
+            if (hr2 == 0 && dxgiSurfacePtr != IntPtr.Zero)
+            {
+                try
+                {
+                    var dxgiSurface = new IDXGISurface(dxgiSurfacePtr);
+                    using var resource = dxgiSurface.QueryInterface<ID3D11Resource>();
+                    sourceTexture = resource.QueryInterface<ID3D11Texture2D>();
+                }
+                finally
+                {
+                    Marshal.Release(dxgiSurfacePtr);
+                }
+            }
+        }
+
+        if (sourceTexture is null)
+            log("WGC", $"Ambas estratégias falharam — IDirect3DDxgiInterfaceAccess={hr1}, IDXGISurface={hr2}");
+
+        return sourceTexture;
+    }
 
     public CapturedFrame TryCaptureFrame(int timeoutMs)
     {
@@ -300,9 +385,10 @@ public sealed class WgcCaptureSource : ICaptureSource
             var endTicks = frameTicks;
 
             ID3D11Texture2D? sourceTexture = null;
+            IDirect3DSurface? surface = null;
             try
             {
-                var surface = frame.Surface;
+                surface = frame.Surface;
                 if (surface == null)
                     return new CapturedFrame(startTicks, endTicks, 0, 0, success: false, waitEndTicks: waitEndTicks);
 
@@ -310,55 +396,7 @@ public sealed class WgcCaptureSource : ICaptureSource
                 {
                     if (surface is IWinRTObject winrtObj)
                     {
-                        var nativePtr = winrtObj.NativeObject.GetRef();
-                        int hr1 = -1, hr2 = -1;
-
-                        // Estratégia 1: IDirect3DDxgiInterfaceAccess (abordagem oficial)
-                        var dxgiAccessGuid = typeof(IDirect3DDxgiInterfaceAccess).GUID;
-                        hr1 = Marshal.QueryInterface(nativePtr, ref dxgiAccessGuid, out var dxgiAccessPtr);
-                        if (hr1 == 0 && dxgiAccessPtr != IntPtr.Zero)
-                        {
-                            try
-                            {
-                                var dxgiAccess = (IDirect3DDxgiInterfaceAccess)Marshal.GetTypedObjectForIUnknown(dxgiAccessPtr, typeof(IDirect3DDxgiInterfaceAccess));
-                                var d3d11Guid = typeof(ID3D11Texture2D).GUID;
-                                var hrGet = dxgiAccess.GetInterface(ref d3d11Guid, out var d3dPtr);
-                                if (hrGet == 0 && d3dPtr != IntPtr.Zero)
-                                    sourceTexture = new ID3D11Texture2D(d3dPtr);
-                                else
-                                    Log.E("WGC", $"GetInterface falhou: hr={hrGet}");
-                            }
-                            finally
-                            {
-                                Marshal.Release(dxgiAccessPtr);
-                            }
-                        }
-
-                        // Estratégia 2: QI direto para IDXGISurface → depois OpenResource
-                        if (sourceTexture is null)
-                        {
-                            var dxgiSurfaceGuid = typeof(IDXGISurface).GUID;
-                            hr2 = Marshal.QueryInterface(nativePtr, ref dxgiSurfaceGuid, out var dxgiSurfacePtr);
-                            if (hr2 == 0 && dxgiSurfacePtr != IntPtr.Zero)
-                            {
-                                try
-                                {
-                                    var dxgiSurface = new IDXGISurface(dxgiSurfacePtr);
-                                    using var resource = dxgiSurface.QueryInterface<ID3D11Resource>();
-                                    var d3d11Tex = resource.QueryInterface<ID3D11Texture2D>();
-                                    sourceTexture = d3d11Tex;
-                                }
-                                finally
-                                {
-                                    Marshal.Release(dxgiSurfacePtr);
-                                }
-                            }
-                        }
-
-                        if (sourceTexture is null)
-                        {
-                            Log.E("WGC", $"Ambas estratégias falharam — IDirect3DDxgiInterfaceAccess={hr1}, IDXGISurface={hr2}");
-                        }
+                        sourceTexture = TryExtractTexture(winrtObj, (source, message) => Log.E(source, message));
                     }
                 }
                 catch (Exception ex)
@@ -396,6 +434,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             finally
             {
                 sourceTexture?.Dispose();
+                surface?.Dispose();
                 frame.Dispose();
             }
         }
