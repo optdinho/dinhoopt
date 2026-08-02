@@ -647,9 +647,12 @@ public sealed partial class EngineCoordinator
                 {
                     s.LastFrameMs = _watchdog.GetHealth().AvgFrameTimeMs;
                     s.WatchdogOk = _watchdog.GetHealth().Level != HealthLevel.Red;
-                    var (vFramesTotal, _, _, bytesTotal) = _buffer.Stats();
-                    s.ReplayBufferBytes = bytesTotal;
+                    // M11: snapshot único (StatsDetailed) em vez de Stats()+StatsDetailed()
+                    // — cada chamada adquire o read lock do ReplayBuffer separadamente.
+                    // Uma chamada = uma aquisição = snapshot consistente + menos lock
+                    // contention no hot path do status update (a cada frame).
                     var d = _buffer.StatsDetailed();
+                    s.ReplayBufferBytes = d.videoBytes + d.audioBytes;
                     s.ReplayBufferVideoFrames = d.videoCount;
                     s.ReplayBufferVideoBytes = d.videoBytes;
                     s.ReplayBufferAudioPackets = d.audioCount;

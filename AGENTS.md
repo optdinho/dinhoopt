@@ -3288,3 +3288,47 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 ### Relevant Files Changed
 
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs`: loop de leitura do stdout reescrito (espaço livre + consume `min(off, expected)` + leftover real via BlockCopy)
+
+## Session Summary (2026-08-02 — FASE 6 M2+L2 e FASE 7 M14)
+
+### Done
+
+- **FASE 6 — M2 (overflow do canal de saída com log + pool-safe)**:
+  - `FfmpegEncoder.cs`: canal `_outputChannel` (cap. 256) agora criado com `CreateBounded` + `itemDropped` callback que chama `pkt.Release()` (devolve o `byte[]` ao `VideoPacketPool` — sem leak M1) e `Interlocked.Increment(ref _droppedPackets)`.
+  - O callback loga `Log.W("FfmpegEncoder", "output channel overflow — {drops} packets dropped total")` no **1º drop e a cada 100** — ffmpeg lento descarta centenas/s, logar todo drop inundaria o log JSONL.
+  - 6 novos testes em `FfmpegEncoderTests.cs` (helpers reflection `GetField<T>`/`SetField` adicionados no topo): overflow 300→cap 256 = 44 drops, no-overflow 0, DropOldest preserva pacote 299, Flush após dispose não respawna, Flush process null não respawna, Flush disposto drena pendingOutputs.
+
+- **FASE 6 — L2 (guard anti-respawn no `Flush()`)**:
+  - `Flush()` começa com guard `bool canRestart = !_disposed && _process != null;` — drena o channel + emite packet pendente **sempre**, mas só executa StopFfmpeg+ResetState+StartFfmpeg+ReaderLoop se `canRestart`. Comentário explica: respawn após dispose criaria processo órfão.
+  - `_isRunning` não existe no FfmpegEncoder — guard usa `_disposed || _process == null`.
+  - `Flush()` tem 1 chamador real em produção: `EngineCoordinator.Capture.cs:326` via `_aacEncoder.FlushAndDrain` (áudio, não FfmpegEncoder); `ProgramBenchmark.cs:41` chama `enc.Flush()`.
+
+- **FASE 7 — M14 (probe de streams antes do throw no `GenerateThumbnail`)**:
+  - `ClipExporter.cs:401`: `GenerateThumbnail` agora perfaz o "probe de streams" (stderr do ffmpeg: `Video:`/`Audio:`/`Stream #` + logs "MP4 probe", "MP4 probe FAILED: expected audio but none found!") **antes** dos throws; exceções de timeout/exit≠0 carregam stderr. Antes o throw vinha primeiro e o aviso de export corrompido era engolido pelo catch `Log.W` em `ClipExporter.cs:278-279`.
+  - 2 novos testes de integração em `ClipExporterIntegrationTests.cs`: `GenerateThumbnail_OnValidMp4_CreatesThumbFile` (MP4 lavfi 320x180/30fps/1s gera `.thumb.jpg` com >0 bytes) e `GenerateThumbnail_OnCorruptFile_Throws_WithStderrProbe` (conteúdo `Array.Empty<byte>()` → exceção com "exit code" + "Invalid data found").
+  - Gotcha corrigido no teste: `RedirectStandardError=true` sem `BeginErrorReadLine()` faz o processo bloquear no pipe (reproduzido 2x; 9KB stderr ou 4.7KB já bloqueiam).
+
+### Validado
+
+- **C# tests**: suite completa **1048/1048 aprovados, 0 falhas** (1 suíte completa, 5s; "Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Build**: `dotnet build -c Release` — 0 erros (warnings pré-existentes: `FfmpegEncoder.NalParsing.cs:241/257` CS8604, `EngineCoordinator.CaptureSource.cs:198` CS8602, `EngineCoordinator.cs:130` CS0169).
+- **Commits**: `56ca4db` (M2+L2) e `c325561` (M14).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` — 291 files staged; app instalado parado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — hashes do destino == staging (FASE 6 DLL `A6FA989B...`; FASE 7/M14 DLL `7469EA78...`).
+
+### Key Decisions
+
+- **`itemDropped` do canal sobre `TryWriteOutput`**: o descarte nativo do channel chama o callback — é o único caminho que garante `Release()` mesmo se o frame for evictado internamente. `DropOldest` preserva os frames mais recentes (ponto de save do replay buffer) enquanto libera o pool.
+- **Probe no thumbnail antes do throw**: o export corrompido produzia thumbnail que falhava com exit≠0 e a exceção carregava stderr truncada; o probe de streams dá o diagnóstico "MP4 probe FAILED: expected audio but none found!" que antes era engolido pelo catch `Log.W`.
+
+### Next Steps
+
+- Continuar FASE 7: H6/H7/M10-M13/L9 (M1/M14/L10 ⚪ opcionais).
+- Depois FASE 8: L13 ⚪ (opcional), L15 ⚪ (cosmético) — decidir se aplicá-los.
+- Se houver mudanças: repetir ciclo commit → publish → copy-engine → deploy.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: M2 (`itemDropped` callback no `_outputChannel`, `_droppedPackets`) e L2 (`Flush()` guard `canRestart`)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 6 testes M2+L2 + helpers `GetField<T>`/`SetField`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `GenerateThumbnail` reescrito (M14) — probe de streams antes dos throws, exceções com stderr
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ClipExporterIntegrationTests.cs`: 2 testes de integração (thumb válida + corrupta)
