@@ -1,4 +1,5 @@
 using DiNho.Capture.Poc.Capture;
+using System.Runtime.InteropServices;
 
 namespace DiNho.Capture.Poc.Tests;
 
@@ -164,5 +165,65 @@ public sealed class WgcCaptureSourceTests
         Assert.Equal(0, frame.CaptureEndTicks);
         Assert.Equal(0, frame.WaitEndTicks);
         Assert.Equal(0, frame.CopyEndTicks);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  TryExtractTextureFromNativePtr — extração de textura D3D11
+    //  (seam testável do caminho WGC; o leak do GetRef()/Release é
+    //  gerenciado pelo caller via try/finally — ver TryCaptureFrame)
+    // ═══════════════════════════════════════════════════════════════
+
+    private static string[] RunExtraction(IntPtr ptr)
+    {
+        var logs = new List<string>();
+        var result = WgcCaptureSource.TryExtractTextureFromNativePtr(
+            ptr,
+            (source, message) => logs.Add($"{source}: {message}"));
+        Assert.Null(result); // ponteiro de teste nunca produz textura válida
+        return logs.ToArray();
+    }
+
+    [Fact]
+    public void TryExtractTexture_NullPointer_ReturnsNull_WithoutLogging()
+    {
+        var logs = RunExtraction(IntPtr.Zero);
+        Assert.Empty(logs);
+    }
+
+    [Fact]
+    public void TryExtractTexture_UnsupportedPointer_ReturnsNull_AndLogsBothStrategiesFailed()
+    {
+        var logs = RunExtraction(Marshal.GetIUnknownForObject(new object()));
+        Assert.NotEmpty(logs);
+        Assert.Contains(logs, l => l.Contains("Ambas estratégias falharam"));
+    }
+
+    [Fact]
+    public void TryExtractTexture_UnsupportedPointer_DoesNotOverReleaseCallersPointer()
+    {
+        var managed = new object();
+        var ptr = Marshal.GetIUnknownForObject(managed);
+        try
+        {
+            RunExtraction(ptr);
+
+            // Se o helper desse Release indevido no ponteiro do caller,
+            // o RCW seria desconectado e o QI a seguir falharia com
+            // RPC_E_DISCONNECTED (0x80010108) ou retornaria erro.
+            var iidIUnknown = Guid.Parse("00000000-0000-0000-C000-000000000046");
+            var hr = Marshal.QueryInterface(ptr, ref iidIUnknown, out var ppv);
+            try
+            {
+                Assert.Equal(0, hr);
+            }
+            finally
+            {
+                if (hr == 0) Marshal.Release(ppv);
+            }
+        }
+        finally
+        {
+            Marshal.Release(ptr);
+        }
     }
 }
