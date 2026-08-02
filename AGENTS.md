@@ -3186,3 +3186,40 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 
 - Reiniciar o app (build de produção novo) e validar em campo: preview de clip reproduzindo + scrub, handles de trim arrastando corretamente em clips longos (120s+), trim com re-encode (checkbox) vs fast copy.
 - (Opcional) Corrigir o erro pré-existente de tsc em `ClipEditorModal.tsx:160` (`useRef<ReturnType<typeof setTimeout>>()` → `useRef<ReturnType<typeof setTimeout> | undefined>(undefined)`) e os 5 a11y warnings.
+
+## Session Summary (2026-08-02 — G1-3: GetSegments sem lock durante spill I/O + drop-release de RAM)
+
+### Done
+
+- **Root cause (RED crash decifrado com probe)**: `.NET 10` `ArrayPool<T>` valida procedência — `VideoPacketPool.Return(new byte[100])` lança `ArgumentException: The buffer is not associated with this pool`. Testes do G1-3 simulavam pacotes pooled com `new byte[100]` (nunca rentados do pool) — qualquer `Release()` que chegasse a zero crashava. Produção SEMPRE usa `VideoPacketPool.Rent`, então só o harness dos testes estava errado. Probe confirmou: rent→return OK, rent→return→return OK (sem detecção de duplo return), `new byte[]` cru → THROW.
+
+- **Fix do harness (GREEN)**: nos 4 testes G1-3, `new byte[100]` → `VideoPacketPool.Rent(100)` (espelha produção). Agora o zero-release devolve o array ao pool (DataLength=0), o que os asserts verificam.
+
+- **Fix de implementação — `ReplayBuffer.GetSegments` (G1-3)**:
+  - Snapshot do anel sob lock CURTO; `ReadAll()` do spill (I/O de disco — potencialmente centenas de MB) movido para FORA do lock. Antes o read lock era segurado durante todo o ReadAll+merge+trim — como AddVideo/AddAudio usam write lock exclusivo, o pipeline de captura congelava durante o save (mesma classe do incidente stall 76s).
+  - `spill` é atribuído uma única vez em `EnableDiskSpill` e nunca nullado — snapshot da referência sob o lock é seguro.
+  - Race de teardown (Dispose→`_spill.Dispose` entre snapshot e ReadAll) mitigado com `catch (ObjectDisposedException)` → usa só o snapshot RAM (o save já está inviável). Simétrico ao best-effort do `FlushEvicted`.
+
+- **Fix de leak — trim da janela**: o código antigo só liberava pacotes do spill fora da janela (`diskVideoSet?.Remove(...) == true`), VAZANDO o Retain() do snapshot GetSegments nos pacotes RAM descartados (count preso em 2/1 — array pooled nunca voltava ao pool). Agora TODO pacote fora da janela é liberado (RAM: solta o retain do snapshot 1→0, o anel mantém ownership e o Clear() final faz -1; disk: ownership integral desta chamada 0→-1→pooled).
+
+- **`MergeSpilledPackets` (seam `internal static`)**: merge de snapshot RAM (retido) + spill (ownership da chamada) ordenado por PTS. Em PTS igual o RAM vence (authoritative, retido) e TODOS os duplicados do disk são liberados — a frame não aparece duas vezes no clipe. `disk.Count==0` → retorna `ram` (mesma referência); `ram.Count==0` → retorna `disk`.
+
+### Validado
+
+- **C# tests**: ReplayBufferTests **46/46** (era 42; +4 G1-3); suite completa **1040/1040 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Build**: `dotnet build` implícito no test — 0 erros.
+
+### Key Decisions
+
+- **`VideoPacketPool.Rent` no harness em vez de relaxar o assert**: o leak observável é "array pooled retornado exatamente uma vez" — o pool de produção valida procedência, então a simulação precisa de arrays REAIS do pool. `new byte[100]` com `isPooled: true` é um estado impossível em produção.
+- **ReadAll fora do lock é a prioridade**: segurar o read lock durante I/O de disco inteiro bloquearia AddVideo/AddAudio (write lock exclusivo) — o pior modo de falha (pipeline congelado). A race de teardown é estreita e tratada como best-effort.
+
+### Next Steps
+
+- Commit GREEN (impl + harness fix) → `dotnet publish -c Release --self-contained true -r win-x64` → `npm run copy-engine` → deploy no app instalado (`%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\`).
+- Validar em campo (app instalado, sessão longa com spill ativo): save de clip sem stall do pipeline e sem leak de arrays pooled (proc estável no patamar do buffer).
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `GetSegments` (ReadAll fora do lock, trim libera RAM+disk, `MergeSpilledPackets` seam)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs`: 4 testes G1-3 com `VideoPacketPool.Rent(100)` (harness fix)

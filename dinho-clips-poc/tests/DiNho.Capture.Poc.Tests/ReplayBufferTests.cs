@@ -319,7 +319,7 @@ public sealed class ReplayBufferTests
         for (int i = 1; i <= 10; i++)
         {
             var pkt = new EncodedPacket(
-                new byte[100], MediaType.Video, TimeSpan.FromSeconds(i),
+                VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(i),
                 TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
             added.Add(pkt);
             buf.AddVideo(pkt);
@@ -350,16 +350,16 @@ public sealed class ReplayBufferTests
         // read (PTS=5s — evicted between snapshot and read). The disk copy must
         // be dropped and released so the clip contains the frame exactly once.
         var ramPkt = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(5),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(5),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         ramPkt.Retain(); // simulate CopyRing ownership in GetSegments
         var ram = new List<EncodedPacket> { ramPkt };
 
         var diskDup = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(5),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(5),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var diskOther = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(1),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(1),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var disk = new List<EncodedPacket> { diskDup, diskOther };
 
@@ -389,18 +389,18 @@ public sealed class ReplayBufferTests
     public void MergeSpilledPackets_NoOverlap_MergesSorted_AndKeepsBothOwnerships()
     {
         var ram1 = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(7),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(7),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var ram2 = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(9),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(9),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var ram = new List<EncodedPacket> { ram1, ram2 };
 
         var disk1 = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(2),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(2),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var disk2 = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(4),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(4),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var disk = new List<EncodedPacket> { disk2, disk1 };
 
@@ -420,7 +420,7 @@ public sealed class ReplayBufferTests
     public void MergeSpilledPackets_EmptyDisk_ReturnsRamUnchanged()
     {
         var ramPkt = new EncodedPacket(
-            new byte[100], MediaType.Video, TimeSpan.FromSeconds(3),
+            VideoPacketPool.Rent(100), MediaType.Video, TimeSpan.FromSeconds(3),
             TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
         var ram = new List<EncodedPacket> { ramPkt };
 

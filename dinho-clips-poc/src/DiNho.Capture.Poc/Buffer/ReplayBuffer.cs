@@ -294,88 +294,178 @@ public sealed class ReplayBuffer : IDisposable
 
     public (List<EncodedPacket> video, List<EncodedPacket> audio) GetSegments(TimeSpan? duration = null, TimeSpan? endOffset = null)
     {
+        // G1-3: snapshot do anel sob um lock CURTO; o I/O do spill (ReadAll) e o
+        // merge/trim rodam FORA do lock. Segurar o lock durante I/O de disco
+        // congelava o pipeline de captura inteiro (incidente stall 76s de
+        // 2026-08-01 — a mesma classe de bug que o TrimExcess/FlushEvicted fix).
+        List<EncodedPacket> video;
+        List<EncodedPacket> audio;
+        DiskSpillBuffer? spill;
         _lock.EnterReadLock();
         try
         {
-            var video = CopyRing(_videoPackets, _videoHead, _videoCount);
-            var audio = CopyRing(_audioPackets, _audioHead, _audioCount);
+            video = CopyRing(_videoPackets, _videoHead, _videoCount);
+            audio = CopyRing(_audioPackets, _audioHead, _audioCount);
+            // Snapshota a referência do spill sob o lock (atribuída uma única vez
+            // em EnableDiskSpill, nunca nulleada). O I/O do ReadAll acontece FORA
+            // do lock — ler o spill inteiro (potencialmente centenas de MB) sob o
+            // read lock bloquearia AddVideo/AddAudio (write lock exclusivo) e
+            // congelaria o pipeline de captura (classe do incidente stall 76s).
+            spill = (_diskSpillEnabled && _spill is { Count: > 0 }) ? _spill : null;
+        }
+        finally { _lock.ExitReadLock(); }
 
-            // Pacotes lidos do spill nesta chamada que precisam de Release() se
-            // ficarem de fora da janela de duração (RAM ring mantém ownership).
-            HashSet<EncodedPacket>? diskVideoSet = null;
-            HashSet<EncodedPacket>? diskAudioSet = null;
-
-            // Merge disk-spilled packets (oldest first, already sorted by PTS)
-            if (_diskSpillEnabled && _spill is { Count: > 0 })
+        List<EncodedPacket>? diskVideo = null;
+        List<EncodedPacket>? diskAudio = null;
+        if (spill != null)
+        {
+            // Pacotes lidos do spill pertencem a ESTA chamada (o spill já os
+            // removeu do disco). A decisão de ownership acontece no merge.
+            List<EncodedPacket>? diskPkts;
+            try
             {
-                var diskPkts = _spill.ReadAll();
-                var diskVideo = new List<EncodedPacket>();
-                var diskAudio = new List<EncodedPacket>();
+                diskPkts = spill.ReadAll();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Teardown race: o buffer foi disposto (Dispose → _spill.Dispose)
+                // entre o snapshot e o ReadAll. O save já está inviável — usa só o
+                // snapshot RAM; nada a liberar (o spill Clear()/Dispose() cuidou).
+                diskPkts = null;
+            }
+            if (diskPkts != null)
+            {
+                diskVideo = new List<EncodedPacket>();
+                diskAudio = new List<EncodedPacket>();
                 foreach (var pkt in diskPkts)
                 {
                     if (pkt.Type == MediaType.Video) diskVideo.Add(pkt);
                     else diskAudio.Add(pkt);
                 }
-                // Os pacotes lidos do spill pertencem a ESTA chamada (o spill já
-                // os removeu do disco) — se algum ficar de fora da janela abaixo,
-                // precisa ser Release()d. Track por referência.
-                diskVideoSet = new HashSet<EncodedPacket>(diskVideo);
-                diskAudioSet = new HashSet<EncodedPacket>(diskAudio);
-                // Disk packets are older than RAM packets — prepend then sort
-                diskVideo.AddRange(video);
-                diskVideo.Sort((a, b) => a.Pts.CompareTo(b.Pts));
-                diskAudio.AddRange(audio);
-                diskAudio.Sort((a, b) => a.Pts.CompareTo(b.Pts));
-                video = diskVideo;
-                audio = diskAudio;
             }
+        }
 
-            // Diagnostic: mede offset entre último PTS de video/audio (throttled 5s)
-            if (video.Count > 0 && audio.Count > 0)
+        // Merge + dedup fora do lock. Em PTS igual o copy RAM (retido) vence — a
+        // mesma frame pode ter sido evictada para o spill entre o snapshot do anel
+        // e a leitura do disco; o duplicado do spill é liberado (ownership desta
+        // chamada). Pacotes do spill que ficarem fora da janela abaixo também são
+        // liberados — RAM e disk compartilham o mesmo caminho de release.
+        if (diskVideo != null) video = MergeSpilledPackets(video, diskVideo);
+        if (diskAudio != null) audio = MergeSpilledPackets(audio, diskAudio);
+
+        // Diagnostic: mede offset entre último PTS de video/audio (throttled 5s)
+        if (video.Count > 0 && audio.Count > 0)
+        {
+            var offsetMs = (audio[^1].Pts - video[^1].Pts).TotalMilliseconds;
+            if (Math.Abs(offsetMs) > SegmentOffsetWarnMs)
             {
-                var offsetMs = (audio[^1].Pts - video[^1].Pts).TotalMilliseconds;
-                if (Math.Abs(offsetMs) > SegmentOffsetWarnMs)
+                var now = Stopwatch.GetTimestamp();
+                if (now - _lastSegmentOffsetLogTick >= SegmentOffsetLogThrottleTicks)
                 {
-                    var now = Stopwatch.GetTimestamp();
-                    if (now - _lastSegmentOffsetLogTick >= SegmentOffsetLogThrottleTicks)
-                    {
-                        _lastSegmentOffsetLogTick = now;
-                        Log.D("ReplayBuffer", $"GetSegments: offset entre último PTS de video/audio = {offsetMs:F0}ms " +
-                            $"(video={video[^1].Pts.TotalSeconds:F2}s audio={audio[^1].Pts.TotalSeconds:F2}s)");
-                    }
+                    _lastSegmentOffsetLogTick = now;
+                    Log.D("ReplayBuffer", $"GetSegments: offset entre último PTS de video/audio = {offsetMs:F0}ms " +
+                        $"(video={video[^1].Pts.TotalSeconds:F2}s audio={audio[^1].Pts.TotalSeconds:F2}s)");
                 }
             }
-
-            if (duration == null && endOffset == null)
-                return (video, audio);
-
-            var cutoff = endOffset ?? TimeSpan.Zero;
-            var maxAge = duration ?? _maxDuration;
-
-            var videoStart = video.Count > 0 ? video[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
-            if (videoStart < TimeSpan.Zero) videoStart = TimeSpan.Zero;
-            var audioStart = audio.Count > 0 ? audio[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
-            if (audioStart < TimeSpan.Zero) audioStart = TimeSpan.Zero;
-
-            var trimmedVideo = new List<EncodedPacket>(video.Count);
-            for (int i = 0; i < video.Count; i++)
-                if (video[i].Pts >= videoStart)
-                    trimmedVideo.Add(video[i]);
-                else if (diskVideoSet?.Remove(video[i]) == true)
-                    video[i].Release();
-            video = trimmedVideo;
-
-            var trimmedAudio = new List<EncodedPacket>(audio.Count);
-            for (int i = 0; i < audio.Count; i++)
-                if (audio[i].Pts >= audioStart)
-                    trimmedAudio.Add(audio[i]);
-                else if (diskAudioSet?.Remove(audio[i]) == true)
-                    audio[i].Release();
-            audio = trimmedAudio;
-
-            return (video, audio);
         }
-        finally { _lock.ExitReadLock(); }
+
+        if (duration == null && endOffset == null)
+            return (video, audio);
+
+        var cutoff = endOffset ?? TimeSpan.Zero;
+        var maxAge = duration ?? _maxDuration;
+
+        var videoStart = video.Count > 0 ? video[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
+        if (videoStart < TimeSpan.Zero) videoStart = TimeSpan.Zero;
+        var audioStart = audio.Count > 0 ? audio[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
+        if (audioStart < TimeSpan.Zero) audioStart = TimeSpan.Zero;
+
+        // Trim da janela: pacotes fora da janela são liberados.
+        //   - RAM: solta o Retain() do snapshot desta chamada (1 → 0) — o anel
+        //     mantém ownership e o Clear() posterior faz o release final (-1).
+        //   - Disk: libera a ownership integral desta chamada (0 → -1 → pooled).
+        // Ambos os caminhos são consistentes sob a contagem de referência: nem
+        // leak (G1-3) nem duplo release.
+        var trimmedVideo = new List<EncodedPacket>(video.Count);
+        for (int i = 0; i < video.Count; i++)
+            if (video[i].Pts >= videoStart)
+                trimmedVideo.Add(video[i]);
+            else
+                video[i].Release();
+        video = trimmedVideo;
+
+        var trimmedAudio = new List<EncodedPacket>(audio.Count);
+        for (int i = 0; i < audio.Count; i++)
+            if (audio[i].Pts >= audioStart)
+                trimmedAudio.Add(audio[i]);
+            else
+                audio[i].Release();
+        audio = trimmedAudio;
+
+        return (video, audio);
+    }
+
+    /// <summary>
+    /// Merge um snapshot RAM (pacotes retidos para esta chamada — o anel ainda os
+    /// possui) com pacotes do spill (ownership desta chamada) numa única lista
+    /// ordenada por PTS.
+    ///
+    /// Em PTS igual o copy RAM vence: a mesma frame pode ter sido evictada para o
+    /// spill entre o snapshot do anel e a leitura do disco (as duas aquisições de
+    /// lock são separadas). O copy RAM é o authoritative e retido; o duplicado do
+    /// disco é liberado aqui (é ownership desta chamada). Todos os pacotes do
+    /// disk com o mesmo PTS do RAM são consumidos/liberados para a frame não
+    /// aparecer duas vezes no clipe.
+    ///
+    /// Ownership da lista retornada: pacotes RAM continuam retidos (snapshot do
+    /// GetSegments), pacotes disk são entregues. O chamador deve fazer Release()
+    /// de cada pacote retornado exatamente uma vez.
+    /// </summary>
+    internal static List<EncodedPacket> MergeSpilledPackets(List<EncodedPacket> ram, List<EncodedPacket> disk)
+    {
+        if (disk.Count == 0) return ram;
+        if (ram.Count == 0) return disk;
+
+        // Defensivo — o spill devolve ordenado e o CopyRing também, mas este
+        // merge roda no save (não no hot path de captura); ordenar é barato e
+        // garante o contrato independente da origem.
+        if (ram.Count > 1)
+            ram.Sort((a, b) => a.Pts.CompareTo(b.Pts));
+        if (disk.Count > 1)
+            disk.Sort((a, b) => a.Pts.CompareTo(b.Pts));
+
+        var merged = new List<EncodedPacket>(ram.Count + disk.Count);
+        int i = 0, j = 0;
+        while (i < ram.Count && j < disk.Count)
+        {
+            var cmp = ram[i].Pts.CompareTo(disk[j].Pts);
+            if (cmp < 0)
+            {
+                merged.Add(ram[i]);
+                i++;
+            }
+            else if (cmp > 0)
+            {
+                merged.Add(disk[j]);
+                j++;
+            }
+            else
+            {
+                // PTS igual: RAM vence; TODOS os duplicados do disk com este PTS
+                // são liberados (evita a mesma frame duas vezes no clipe).
+                merged.Add(ram[i]);
+                var dupPts = ram[i].Pts;
+                i++;
+                while (j < disk.Count && disk[j].Pts == dupPts)
+                {
+                    disk[j].Release();
+                    j++;
+                }
+            }
+        }
+        while (i < ram.Count) merged.Add(ram[i++]);
+        while (j < disk.Count) merged.Add(disk[j++]);
+        return merged;
     }
 
     private static List<EncodedPacket> CopyRing(EncodedPacket?[] buffer, int head, int count)
