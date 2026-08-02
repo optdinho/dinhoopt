@@ -409,19 +409,17 @@ public sealed partial class ClipExporter : IDisposable
         proc.Start();
         proc.BeginErrorReadLine();
 
-        if (!proc.WaitForExit(30_000))
-        {
+        bool timedOut = !proc.WaitForExit(30_000);
+        if (timedOut)
             proc.Kill();
-            throw new InvalidOperationException("ffmpeg thumbnail timed out");
-        }
 
-        if (proc.ExitCode != 0)
-            throw new InvalidOperationException($"ffmpeg thumbnail exit code {proc.ExitCode}");
-
+        // M14: o dump de input do ffmpeg (stderr) lista as streams ANTES do encode —
+        // reaproveita como probe (B4) MESMO quando o thumbnail falha (exit != 0,
+        // timeout). Antes o throw vinha primeiro e o aviso "MP4 probe FAILED" — que
+        // diagnostica export corrompido sem áudio — era engolido pelo catch do caller.
         string stderr;
         lock (sb) { stderr = sb.ToString(); }
 
-        // A dump de input do ffmpeg lista as streams — reaproveita como probe (B4).
         var hasVideoStream = stderr.Contains("Video:");
         var hasAudioStream = stderr.Contains("Audio:");
         var streamCount = System.Text.RegularExpressions.Regex.Matches(stderr, "Stream #").Count;
@@ -430,6 +428,11 @@ public sealed partial class ClipExporter : IDisposable
             Log.W("Exporter", $"MP4 probe FAILED: expected audio but none found!\n{stderr}");
         else if (hasAudioStream)
             Log.I("Exporter", "MP4 probe OK: audio stream present");
+
+        if (timedOut)
+            throw new InvalidOperationException($"ffmpeg thumbnail timed out:\n{stderr}");
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"ffmpeg thumbnail exit code {proc.ExitCode}:\n{stderr}");
 
         if (File.Exists(thumbPath))
             Log.I("Exporter", $"Thumbnail: {thumbPath} ({new FileInfo(thumbPath).Length / 1024} KB)");

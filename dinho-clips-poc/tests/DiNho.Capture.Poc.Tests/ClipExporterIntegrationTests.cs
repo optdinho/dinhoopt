@@ -522,6 +522,74 @@ public sealed class ClipExporterIntegrationTests
         }
     }
 
+    [Fact]
+    public void GenerateThumbnail_OnValidMp4_CreatesThumbFile()
+    {
+        if (!ToolAvailable("ffmpeg"))
+            return;
+
+        var tempMp4 = Path.Combine(Path.GetTempPath(), $"thumb_{Guid.NewGuid():N}.mp4");
+        var thumbPath = Path.ChangeExtension(tempMp4, ".thumb.jpg");
+        try
+        {
+            // MP4 válido mínimo (lavfi color, 1s, H264 baseline).
+            // RedirectStandardError exige drenagem assíncrona (BeginErrorReadLine) —
+            // sem leitor o processo bloqueia no pipe (gotcha do .NET Process).
+            using var gen = new Process
+            {
+                StartInfo = new ProcessStartInfo("ffmpeg")
+                {
+                    Arguments = $"-y -f lavfi -i color=c=black:s=320x180:r=30 -t 1 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -profile baseline \"{tempMp4}\"",
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            gen.ErrorDataReceived += (s, e) => { };
+            gen.Start();
+            gen.BeginErrorReadLine();
+            gen.WaitForExit(15000);
+            Assert.Equal(0, gen.ExitCode);
+            Assert.True(File.Exists(tempMp4));
+
+            ClipExporter.GenerateThumbnail(tempMp4);
+
+            Assert.True(File.Exists(thumbPath), "Thumbnail file was not created");
+            Assert.True(new FileInfo(thumbPath).Length > 0);
+        }
+        finally
+        {
+            try { File.Delete(tempMp4); } catch { }
+            try { File.Delete(thumbPath); } catch { }
+        }
+    }
+
+    [Fact]
+    public void GenerateThumbnail_OnCorruptFile_Throws_WithStderrProbe()
+    {
+        if (!ToolAvailable("ffmpeg"))
+            return;
+
+        var tempMp4 = Path.Combine(Path.GetTempPath(), $"corrupt_{Guid.NewGuid():N}.mp4");
+        try
+        {
+            File.WriteAllBytes(tempMp4, Array.Empty<byte>());
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                ClipExporter.GenerateThumbnail(tempMp4, expectedAudio: true));
+
+            // M14: a exceção agora carrega o stderr do ffmpeg (probe de streams) — antes
+            // o throw vinha antes do probe e o aviso "MP4 probe FAILED" era engolido pelo
+            // catch do caller, mascarando export corrompido sem áudio.
+            Assert.Contains("exit code", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Invalid data found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { File.Delete(tempMp4); } catch { }
+        }
+    }
+
     private static string? RunFfprobe(string filePath, string entries)
     {
         try
