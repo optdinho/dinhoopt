@@ -303,6 +303,134 @@ public sealed class ReplayBufferTests
         Assert.True(video[0].Pts >= TimeSpan.FromSeconds(24), $"First frame PTS {video[0].Pts} should be ≥24s");
     }
 
+    // ─── G1-3 GetSegments sem lock/cópia ───────────────────────────────
+
+    [Fact]
+    public void GetSegments_ShortWindow_ReleasesDroppedRamPacketsToPool()
+    {
+        // No spill and no byte budget → nothing trims the ring, so the only
+        // release for a dropped packet is the one inside GetSegments itself.
+        // Pre-G1-3 the drop path only released disk packets (diskVideoSet),
+        // leaking the GetSegments Retain() on RAM packets → their pooled arrays
+        // were never returned to the pool (count stuck at 1 after Clear).
+        using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60), 0);
+
+        var added = new List<EncodedPacket>();
+        for (int i = 1; i <= 10; i++)
+        {
+            var pkt = new EncodedPacket(
+                new byte[100], MediaType.Video, TimeSpan.FromSeconds(i),
+                TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+            added.Add(pkt);
+            buf.AddVideo(pkt);
+        }
+
+        // Window of 2s → newest PTS=10s, start=8s → frames 8,9,10 kept, 1..7 dropped.
+        var (video, _) = buf.GetSegments(TimeSpan.FromSeconds(2));
+        Assert.Equal(3, video.Count);
+
+        // Caller contract: release every returned packet.
+        foreach (var p in video) p.Release();
+
+        // Clear releases ring ownership. Dropped packets had their GetSegments
+        // retain released during the drop, so this final Release() → -1 returns
+        // them to the pool (DataLength reset to 0). A leaked retain would leave
+        // them at count 0 → NOT pooled → DataLength still 100.
+        buf.Clear();
+
+        Assert.All(added.Take(7), p => Assert.Equal(0, p.DataLength));
+        Assert.All(added.Skip(7), p => Assert.Equal(0, p.DataLength));
+    }
+
+    [Fact]
+    public void MergeSpilledPackets_OverlappingPts_SkipsDiskCopy_AndReleasesIt()
+    {
+        // Simulates the G1-3 race: the spill read runs outside the ReplayBuffer
+        // lock, so a frame can be in BOTH the RAM snapshot (PTS=5s) and the disk
+        // read (PTS=5s — evicted between snapshot and read). The disk copy must
+        // be dropped and released so the clip contains the frame exactly once.
+        var ramPkt = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(5),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        ramPkt.Retain(); // simulate CopyRing ownership in GetSegments
+        var ram = new List<EncodedPacket> { ramPkt };
+
+        var diskDup = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(5),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var diskOther = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(1),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var disk = new List<EncodedPacket> { diskDup, diskOther };
+
+        var merged = ReplayBuffer.MergeSpilledPackets(ram, disk);
+
+        // Only the RAM copy of PTS=5s + the non-overlapping disk packet survive.
+        Assert.Equal(2, merged.Count);
+        Assert.Contains(merged, p => ReferenceEquals(p, ramPkt));
+        Assert.Contains(merged, p => ReferenceEquals(p, diskOther));
+        Assert.DoesNotContain(merged, p => ReferenceEquals(p, diskDup));
+        // Sorted by PTS.
+        Assert.Equal(TimeSpan.FromSeconds(1), merged[0].Pts);
+        Assert.Equal(TimeSpan.FromSeconds(5), merged[1].Pts);
+
+        // The skipped disk copy is owned by this call → released → pooled → cleared.
+        Assert.Equal(0, diskDup.DataLength);
+
+        // Caller releases returned packets: diskOther → pooled, ramPkt → count 0
+        // (ring still owns it until Clear, simulated below).
+        foreach (var p in merged) p.Release();
+        ramPkt.Release(); // ring Clear → count 0 → -1 → pooled
+        Assert.Equal(0, ramPkt.DataLength);
+        Assert.Equal(0, diskOther.DataLength);
+    }
+
+    [Fact]
+    public void MergeSpilledPackets_NoOverlap_MergesSorted_AndKeepsBothOwnerships()
+    {
+        var ram1 = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(7),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var ram2 = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(9),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var ram = new List<EncodedPacket> { ram1, ram2 };
+
+        var disk1 = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(2),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var disk2 = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(4),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var disk = new List<EncodedPacket> { disk2, disk1 };
+
+        var merged = ReplayBuffer.MergeSpilledPackets(ram, disk);
+
+        Assert.Equal(4, merged.Count);
+        for (int i = 1; i < merged.Count; i++)
+            Assert.True(merged[i].Pts >= merged[i - 1].Pts, "Merged list must be sorted by PTS");
+        Assert.Equal(TimeSpan.FromSeconds(2), merged[0].Pts);
+        Assert.Equal(TimeSpan.FromSeconds(9), merged[^1].Pts);
+
+        // Cleanup — no double-release: every returned packet released once.
+        foreach (var p in merged) p.Release();
+    }
+
+    [Fact]
+    public void MergeSpilledPackets_EmptyDisk_ReturnsRamUnchanged()
+    {
+        var ramPkt = new EncodedPacket(
+            new byte[100], MediaType.Video, TimeSpan.FromSeconds(3),
+            TimeSpan.FromTicks(333_333), isKeyFrame: false, isPooled: true);
+        var ram = new List<EncodedPacket> { ramPkt };
+
+        var merged = ReplayBuffer.MergeSpilledPackets(ram, new List<EncodedPacket>());
+
+        Assert.Same(ram, merged);
+        Assert.Single(merged);
+        ramPkt.Release();
+    }
+
     // ─── Disk Spill Tests ──────────────────────────────────────────────
 
     [Fact]
