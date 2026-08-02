@@ -3091,3 +3091,47 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 ### Relevant Files Changed
 
 - `AGENTS.md`: resumo de sessão (review apenas; nenhum código alterado nesta sessão)
+
+## Session Summary (2026-08-01 — IsProcessAlive por PID: fix do falso-negativo FiveM)
+
+### Root cause (falso-negativo no alive-check)
+
+- Incidente 2026-07-31: jogo FiveM vivo reportado como morto pelo engine -> teardown zumbi (`game="null" recording=false`) com ffmpeg congelado e áudio fluindo.
+- `IsProcessAlive(string)` (EngineCoordinator.Game.cs) usava `Process.GetProcessesByName(name)` — match **exato**. O nome do processo do FiveM inclui build number volátil (`FiveM_b3258_GTAProcess`); a cada atualização o nome muda e o jogo vivo parecia morto.
+- Comportamento perigoso adicional: `catch { return false }` era **fail-open** — qualquer exceção na checagem derrubava a captura.
+- `ResolveProcessByName` já fazia fuzzy match (`_b\d+_`) mas `IsProcessAlive` não.
+
+### Fix aplicado (Opção A — TDD completo RED→GREEN→suítes→deploy)
+
+- **`IsProcessAlive(int pid)`** novo: `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` por PID — robusto ao build number. `NULL` + `ERROR_ACCESS_DENIED` => vivo; `GetExitCodeProcess`/`STILL_ACTIVE` (259) para desambiguar; `CloseHandle` no `finally`.
+- **`IsProcessAlive(string)`** virou fallback por nome: `NormalizeProcessName` (strip `.exe` + regex `_b\d+_`) e **fail-closed** (exceção => vivo, loga). String vazia/whitespace => `false`.
+- **`IsTargetProcessAlive()`** (instance): usa PID quando `_captureTargetGame.ProcessId > 0`, senão fallback fuzzy por nome.
+- **Seams para testes determinísticos**: `internal static Func<uint,bool> IsProcessAliveProbe` e `Func<uint,IntPtr> OpenProcessProbe` (campos, não auto-properties — reflexão por nome).
+- **Call sites migrados para `IsTargetProcessAlive()`/PID-primeiro**:
+  - `EngineCoordinator.Capture.cs` guard WGC background (alt-tab) + teardown "fechou enquanto backgrounded".
+  - `ResolveTargetGame` fallback HWND salvo (Game.cs).
+  - Auto-stop: `_capturedGameProcessId` novo (set no auto-start, reset no stop) — PID primeiro, nome fallback.
+
+### Testes
+
+- **RED (commit `de462d6`)**: 15 testes novos falhando — PID atual=>true, 0/-1/int.MaxValue=>false, PID morto (spawn cmd+kill)=>false, probe lança=>true (fail-closed), `ERROR_ACCESS_DENIED`=>true, handle inválido=>true, `NormalizeProcessName` (5), `IsTargetProcessAlive` PID-vs-nome (2).
+- **GREEN (commit `808f0b3`)**: implementação + ajuste de `IsProcessAlive_EmptyString_ReturnsTrueOnWindows`→`ReturnsFalse` (semântica nova: empty => false; antigo retornava True por match vazio do `GetProcessesByName("")`).
+- **Suítes**: C# completa **1032/1032 aprovados — 0 falhas**; classes tocadas: 443/443.
+- **Build**: `dotnet build -c Debug` 0 erros.
+
+### Deploy (app instalado)
+
+- `dotnet publish -c Release --self-contained true -r win-x64 -o bin/Release/net10.0-windows10.0.26100.0/publish` — OK.
+- `npm run copy-engine` — 291 files staged; hash staging = publish = instalado `F5102537F5CE66D7A7D93E9EC993E375D8233894BB510CAD86900EAF6BC1D15D`.
+- App instalado fechado pelo usuário para o deploy; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\`.
+
+### Key Decisions
+
+- **PID sobre nome**: o build number do FiveM muda a cada update — qualquer heurística de nome é frágil; `OpenProcess` por PID é determinístico e barato (abre/fecha handle em µs).
+- **Fail-closed como política**: em dúvida (exceção, sem acesso de leitura), assume vivo — nunca derruba captura por engano. Custo de falso-positivo (loop espera watchdog) é aceitável vs. derrubar uma sessão de gravação.
+- **Campos estáticos para seams**: reflexão `GetField` não acha backing field de auto-property; usando campos com inicializador default = P/Invoke real.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo com FiveM (sessão longa): guard de alt-tab sem teardown falso e auto-stop disparando apenas quando o jogo REAL fechar.
+- Se ainda houver falso-negativo (ex.: processo em outro user/session), avaliar Opção B (re-resolução do alvo ao falhar) documentada no plano.
