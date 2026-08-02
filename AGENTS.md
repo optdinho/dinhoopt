@@ -3414,3 +3414,23 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/src/DiNho.Capture.Poc/IpcMessageHandler.Config.cs`: `HandleSetReplayTime` clamp [30,600]
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ConfigManagerTests.cs`: 7 testes novos
 - `AGENTS.md`: resumo de sessão
+## Session Summary (2026-08-02 — ClipEditorModal: 8 findings da revisao corrigidos)
+
+### Done
+
+- **8 achados do revisor (2 MEDIUM + 6 LOW) corrigidos** em `ClipEditorModal.tsx` (revisao de `8adec6c^..b28b280`; commits `8adec6c` + `938b94c`):
+  1. **Handles de trim acessiveis**: `role="slider"` + `aria-label` (startLabel/endLabel), `aria-valuemin/max/now/valuetext`, `tabIndex={0}`, `onKeyDown` Arrow Left/Right (±1s, clamp 0.1s, preventDefault+stopPropagation).
+  2. **Slider de seek**: `aria-valuetext={fmt(currentTime)}` com novo helper `fmt` (`m:ss`).
+  3. **Focus trap completo** (padrao ConfirmDialog): `dialogRef`/`previousFocusRef`/`onCloseRef`; autofoca 1o controle; Tab wrap (shift inclusive) sobre `[tabindex]:not([tabindex="-1"])`; restaura foco no cleanup; Escape via `onCloseRef.current()` (estavel — sem re-registro a cada re-render).
+  4. **Backdrop**: `<button>` → `<div aria-hidden="true" onMouseDown={onClose}>` — sai do tab order, fecha ao arrastar para fora.
+  5. **`role="group"` duplicado removido** (dialog ja tem `role="dialog"`/`aria-label`).
+  6. **`<track kind="captions" />` inerte removido** — preview de clips proprios sem legenda; `useMediaCaption` suprimido com `biome-ignore` (precedente DashboardPage/Sidebar) + `onMouseMove` movido para o dialog (`role="dialog"` permite handler) — sem erros NOVOS de biome.
+  7. `startLabel={t('start')}`/`endLabel={t('end')}` passados nas 2 instancias (chaves ja existiam nos 3 locales).
+- **Validacao**: biome baseline-only (so resta o diff CRLF pre-existente, confirmado via `git stash`); tsc sem erros; suite completa **6280 passed | 1 skipped** (200 files) — 0 falhas; build OK; ClipsPage 23/23, clip suites 494/494.
+
+### Full Suite
+- **6280 TS tests**, 200 files — **0 quebras**
+- **Commit**: `938b94c` — `fix: a11y final no ClipEditorModal (focus trap + backdrop + handles de trim)`
+
+### Next Steps
+- Validar em campo no app instalado: handles de trim arrastando/teclado em clips longos (120s+), tab order com foco no 1o controle e Escape fechando, sem regressao no preview.
