@@ -135,6 +135,28 @@ public sealed class NonGameProcessesTests
     }
 
     [Fact]
+    public void NonGameProcesses_ContainsAudioUtilities()
+    {
+        // FxSound and other system audio EQ/mixer utilities must never be
+        // treated as games (false-positive triggered a GameAudioOnly restart
+        // mid-recording, switching DXGI desktop -> WGC per-window of a tiny
+        // utility window that then stalled).
+        var field = typeof(EngineCoordinator).GetField("NonGameProcesses",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        var set = field.GetValue(null) as HashSet<string>;
+        Assert.NotNull(set);
+
+        Assert.Contains("FxSound", set);
+        Assert.Contains("voicemeeter", set);
+        Assert.Contains("voicemeeter8x64", set);
+        Assert.Contains("voicemeeterpro", set);
+        Assert.Contains("equalizerapo", set);
+        Assert.Contains("peace", set);
+    }
+
+    [Fact]
     public void IsSystemWindowClass_ReturnsTrueForKnownClasses()
     {
         var method = typeof(EngineCoordinator).GetMethod("IsSystemWindowClass",

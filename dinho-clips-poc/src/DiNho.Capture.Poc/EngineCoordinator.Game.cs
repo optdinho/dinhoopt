@@ -560,6 +560,9 @@ public sealed partial class EngineCoordinator
         "mpv", "mpv.net", "foobar2000", "winamp",
         "audacity", "obs64", "obs",
         "streamlabs", "xsplit",
+        // === Áudio (EQ / Mixer de sistema — NUNCA são jogos) ===
+        "fxsound", "voicemeeter", "voicemeeter8x64", "voicemeeterpro",
+        "equalizerapo", "peace",
         "davinci-resolve", "resolve",
         "premiere", "afterfx", "photoshop", "illustrator", "lightroom",
         "gimp", "inkscape", "blender",
