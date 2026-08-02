@@ -1560,13 +1560,15 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `src/main/ipc/clips-engine-connection.ts`: ffprobe → ffmpeg -i
 - `src/main/ipc/clips.ipc.test.ts`: mock updated for ffmpeg -i
 
-### Opções para redução futura do bundle ffmpeg (~217MB → 20-30MB)
+### Opções para redução do bundle ffmpeg (~217MB → 20-30MB) — ❌ REJEITADO
 
-**Esforço:** ~3-5h
+**Decisão (2026-08-02):** NÃO será implementado — tentado antes, gerou muitos problemas (falsos negativos de codec/encoder, regressões no pipeline de encoding). **Descartado por tempo indeterminado.**
 
-- **Opção A (recomendada) — Custom ffmpeg minimal**: Build próprio com `--enable-encoder=h264_nvenc,libx264,aac --enable-muxer=mp4,matroska --enable-protocol=pipe --enable-demuxer=matroska,image2 --enable-decoder=png --enable-filter=anlmdn`. Remove ~190MB de codecs não usados. Sem runtime dependency, sem falso positivo.
-- **Opção B — UPX compress**: ~30-50% reduction no ffmpeg.exe. Risco de falso positivo em antivírus.
-- **Opção C — winget + engine não self-contained**: Reverter `--self-contained true` → `false`, winget instala .NET Desktop Runtime 9. Remove ~248 DLLs (~150MB). Requer .NET runtime instalado.
+~~**Esforço:** ~3-5h~~ (planejamento mantido como referência apenas)
+
+- ~~**Opção A (recomendada) — Custom ffmpeg minimal**~~: Build próprio com `--enable-encoder=h264_nvenc,libx264,aac --enable-muxer=mp4,matroska --enable-protocol=pipe --enable-demuxer=matroska,image2 --enable-decoder=png --enable-filter=anlmdn`. Remove ~190MB de codecs não usados. Sem runtime dependency, sem falso positivo.
+- ~~**Opção B — UPX compress**~~: ~30-50% reduction no ffmpeg.exe. Risco de falso positivo em antivírus.
+- ~~**Opção C — winget + engine não self-contained**~~: Reverter `--self-contained true` → `false`, winget instala .NET Desktop Runtime 9. Remove ~248 DLLs (~150MB). Requer .NET runtime instalado.
 
 ## Session Summary (2026-06-26 — Testes unitários para clips-engine-connection.ts)
 
