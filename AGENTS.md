@@ -3332,3 +3332,44 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 6 testes M2+L2 + helpers `GetField<T>`/`SetField`
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Export/ClipExporter.cs`: `GenerateThumbnail` reescrito (M14) — probe de streams antes dos throws, exceções com stderr
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ClipExporterIntegrationTests.cs`: 2 testes de integração (thumb válida + corrupta)
+
+## Session Summary (2026-08-02 — FASE 7 M11 + triagem status FASE 7/8)
+
+### Done
+
+- **FASE 7 — M11 (lock único no status update)**: `EngineCoordinator.Capture.cs:650-656` fazia **duas aquisições separadas** do read lock do ReplayBuffer por frame (`Stats()` + `StatsDetailed()`). Substituído por **uma única chamada `StatsDetailed()`** — que já retorna `videoCount/audioCount/videoBytes/audioBytes`; `ReplayBufferBytes` agora é derivado de `videoBytes + audioBytes`. Menos lock contention no hot path (a cada frame) e snapshot consistente. `Stats()` permanece usado em `IpcMessageHandler.Capture.cs:75`, `EngineCoordinator.Export.cs:31` e `ProgramBenchmark`.
+
+- **Triagem de status — FASE 7 itens restantes verificados como DONE no código atual** (planos referenciam versão antiga do arquivo):
+  - **H6** (drenar stderr no `ClipExporter`): done — ambos os Process (`MuxWithFfmpegStreaming` `:342-349` e `GenerateThumbnail` `:407-410`) têm `ErrorDataReceived` não-vazio + `BeginErrorReadLine()`.
+  - **H7** (stdin dispose no mux): done — mux usa `-f matroska -i` / `-f aac -i` (arquivos, sem stdin); nada a dispor.
+  - **M10** (`_maxAudioBytes` + trim por bytes): done — `ReplayBuffer.cs:95-96` `_maxVideoBytes = 0.9*_maxBytes`, `_maxAudioBytes = resto`; trims `:206` (vídeo) e `:222` (áudio) por duração **ou** bytes.
+  - **M12** (flags bit 0 reserved): done — `ClipExporter.Matroska.cs:108-110` `byte flags = 0; if (keyframe) flags |= 0x80;` (nunca seta bit 0x01).
+  - **L9** (dead code): done — zero matches de `EncodeRawNv12ToMp4`/`DetectFastestCodec` no src.
+  - **C5** (rawFormat propagation) e **C6** (re-baseline PTS): done (sessões anteriores).
+
+- **FASE 7 — M13 (Opcional, NÃO aplicado)**: `GenerateSilentAacFrames` (`ClipExporter.AudioSync.cs:8-46`) produz ADTS header-only de 9 bytes (7 header + 2 zeros), sem raw_data_block AAC real. Pipeline validado em produção (áudio funciona nos clips) — decisão de NÃO alterar para evitar risco de regressão num caminho já funcional.
+
+- **FASE 8 — L12/L13/L15 (LOW, NÃO aplicados)**: L12 referencia `Log.cs:22-24` (setter) — o setter atual já é null-safe (double-checked locking, `_instance ??=`); sem `catch {}` vazio nem defeito real. L13 (Debug.WriteLine em falha de I/O) e L15 (`hMonitor` via IntPtr) são cosméticos — mantidos.
+
+### Validado
+
+- **C# tests**: ReplayBufferTests **46/46**, EngineCoordinatorCaptureTests **99/99**, suite completa **1048/1048 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Build**: `dotnet build -c Release` — 0 erros (21 warnings pré-existentes: NalParsing.cs:241/257 CS8604, CaptureSource.cs CS8602, EngineCoordinator.cs:130 CS0169, etc.).
+- **Commit**: `085f345` — `fix: FASE 7 M11 — snapshot unico StatsDetailed (lock unico) no status update` (inclui session summary anterior FASE 6+7 não commitado).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` — 291 files staged; app instalado parado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == `BA2640B3...`**.
+
+### Key Decisions
+
+- **`StatsDetailed()` único em vez de `Stats()`+`StatsDetailed()`**: cada chamada adquire o read lock do ReplayBuffer; unificar a leitura a uma aquisição reduz contention no status update (roda a cada frame) e garante valores coerentes entre si.
+- **M13/L10/FASE 8 não aplicados**: itens opcionais ou LOW em caminho validado em produção — mudar por mudar arrisca regressão sem ganho mensurável.
+- **Planos desatualizados**: `PLANO_EXECUCAO_FASES.md` referencia linhas de versões antigas (ex.: `ReplayBuffer.cs:1125-1131`, `ClipExporter.cs:841-842`) — itens conferidos no código real, não pela linha do plano.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessão longa): status do replay buffer coerente (`ReplayBufferBytes = video+audio`), sem alteração funcional no pipeline.
+- FASE 7 completa; FASE 8 (L12/L13/L15) avaliada e dispensada — remediação G-series concluída.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: status update com `StatsDetailed()` único (M11)
+- `AGENTS.md`: resumo de sessão
