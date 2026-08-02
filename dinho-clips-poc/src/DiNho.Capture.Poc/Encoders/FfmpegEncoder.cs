@@ -131,7 +131,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
         }, itemDropped: pkt =>
         {
             pkt.Release();
-            Interlocked.Increment(ref _droppedPackets);
+            // M2: contabiliza drops para o operador. Loga no 1º drop e depois a cada
+            // 100 — um ffmpeg lento (encoder < 1.0x) pode descartar centenas por
+            // segundo, e logar todo drop inundaria o log. 100 = ~1.6s a 60fps.
+            int drops = Interlocked.Increment(ref _droppedPackets);
+            if (drops == 1 || drops % 100 == 0)
+                Log.W("FfmpegEncoder", $"output channel overflow — {drops} packets dropped total (encoder output slower than capture)");
         });
     }
     public byte[]? AvccCache => _cachedAvcc;
@@ -727,6 +732,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
 
     public void Flush()
     {
+        // L2: não reiniciar ffmpeg se o encoder já foi encerrado (stop/dispose) ou
+        // se o processo nunca chegou a iniciar. Respawning após dispose criaria um
+        // processo órfão sem dono. Os pacotes ainda pendentes no channel são drenados
+        // para _pendingOutputs (consumido pelo save), independente do estado do processo.
+        bool canRestart = !_disposed && _process != null;
+
         // Close stdin to signal EOF to ffmpeg (like the working PowerShell test)
         try { _stdin?.Dispose(); } catch { }
 
@@ -741,6 +752,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
         // Collect remaining packets from the channel
         while (_outputChannel.Reader.TryRead(out var pkt))
             _pendingOutputs.Enqueue(pkt);
+
+        if (!canRestart)
+            return;
 
         // Restart ffmpeg for next capture session
         StopFfmpeg();

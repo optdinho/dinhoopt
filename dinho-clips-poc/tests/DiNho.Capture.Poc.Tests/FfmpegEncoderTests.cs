@@ -1,10 +1,135 @@
 using DiNho.Capture.Poc.Encoders;
 using System.Diagnostics;
+using System.Reflection;
+using System.Threading.Channels;
 
 namespace DiNho.Capture.Poc.Tests;
 
 public sealed class FfmpegEncoderTests
 {
+    // ─── Reflection helpers (campos privados de FfmpegEncoder) ─────────
+
+    private static T GetField<T>(FfmpegEncoder encoder, string name)
+    {
+        var field = typeof(FfmpegEncoder).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(field);
+        return (T)field!.GetValue(encoder)!;
+    }
+
+    private static void SetField(FfmpegEncoder encoder, string name, object value)
+    {
+        var field = typeof(FfmpegEncoder).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(field);
+        field!.SetValue(encoder, value);
+    }
+
+    // ─── M2: drops do _outputChannel ──────────────────────────────────
+
+    [Fact]
+    public void OutputChannel_WhenOverflowed_IncrementsDroppedPackets()
+    {
+        using var enc = new FfmpegEncoder();
+        var channel = GetField<Channel<EncodedPacket>>(enc, "_outputChannel");
+        Assert.NotNull(channel);
+
+        // Capacidade 256 (DropOldest). Escrever 300 → 44 drops chamando itemDropped.
+        for (int i = 0; i < 300; i++)
+        {
+            var pkt = new EncodedPacket(new byte[] { (byte)i }, MediaType.Video,
+                TimeSpan.FromMilliseconds(i), TimeSpan.FromMilliseconds(16), isKeyFrame: false);
+            Assert.True(channel.Writer.TryWrite(pkt));
+        }
+
+        Assert.Equal(44, GetField<int>(enc, "_droppedPackets"));
+    }
+
+    [Fact]
+    public void OutputChannel_NoOverflow_ZeroDropped()
+    {
+        using var enc = new FfmpegEncoder();
+        var channel = GetField<Channel<EncodedPacket>>(enc, "_outputChannel");
+        for (int i = 0; i < 100; i++)
+        {
+            var pkt = new EncodedPacket(new byte[] { (byte)i }, MediaType.Video,
+                TimeSpan.FromMilliseconds(i), TimeSpan.FromMilliseconds(16), isKeyFrame: false);
+            Assert.True(channel.Writer.TryWrite(pkt));
+        }
+        Assert.Equal(0, GetField<int>(enc, "_droppedPackets"));
+    }
+
+    [Fact]
+    public void OutputChannel_DroppedPacket_RetainsNewest()
+    {
+        // DropOldest: ao encher, o MAIS ANTIGO é descartado — os frames recentes
+        // (ponto de save do replay buffer) sobrevivem.
+        using var enc = new FfmpegEncoder();
+        var channel = GetField<Channel<EncodedPacket>>(enc, "_outputChannel");
+
+        for (int i = 0; i < 300; i++)
+        {
+            var pkt = new EncodedPacket(new byte[] { (byte)(i & 0xFF) }, MediaType.Video,
+                TimeSpan.FromMilliseconds(i), TimeSpan.FromMilliseconds(16), isKeyFrame: false);
+            Assert.True(channel.Writer.TryWrite(pkt));
+        }
+
+        var remaining = new List<EncodedPacket>();
+        while (channel.Reader.TryRead(out var pkt))
+        {
+            remaining.Add(pkt);
+            pkt.Release();
+        }
+
+        Assert.Equal(256, remaining.Count);
+        // O pacote 0 (mais antigo) foi dropado; o 299 (mais novo) sobreviveu.
+        Assert.True(remaining.All(p => p.Pts > TimeSpan.Zero));
+        Assert.Contains(remaining, p => p.Pts == TimeSpan.FromMilliseconds(299));
+    }
+
+    // ─── L2: guard no Flush() ─────────────────────────────────────────
+
+    [Fact]
+    public void Flush_WhenDisposed_DoesNotRestartFfmpeg()
+    {
+        using var enc = new FfmpegEncoder();
+        SetField(enc, "_disposed", true);
+        SetField(enc, "_process", null);
+
+        enc.Flush();
+
+        // Sem respawn: _process continua nulo (StartFfmpeg não é chamado).
+        Assert.Null(GetField<object?>(enc, "_process"));
+    }
+
+    [Fact]
+    public void Flush_WhenProcessNull_DoesNotRestartFfmpeg()
+    {
+        using var enc = new FfmpegEncoder();
+        SetField(enc, "_process", null);
+
+        enc.Flush();
+
+        Assert.Null(GetField<object?>(enc, "_process"));
+    }
+
+    [Fact]
+    public void Flush_WhenDisposed_StillDrainsPendingOutputs()
+    {
+        // Mesmo sem reiniciar ffmpeg, os pacotes do channel são drenados para
+        // _pendingOutputs (consumido pelo save) — o guard só impede o respawn.
+        using var enc = new FfmpegEncoder();
+        SetField(enc, "_disposed", true);
+        var channel = GetField<Channel<EncodedPacket>>(enc, "_outputChannel");
+        var pkt = new EncodedPacket(new byte[] { 0x01 }, MediaType.Video,
+            TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(16), isKeyFrame: true);
+        channel.Writer.TryWrite(pkt);
+
+        enc.Flush();
+
+        var pending = GetField<Queue<EncodedPacket>>(enc, "_pendingOutputs");
+        Assert.Single(pending);
+        while (pending.Count > 0) pending.Dequeue().Release();
+    }
+
     [Theory]
     [InlineData("h264_nvenc")]
     [InlineData("h264_amf")]
