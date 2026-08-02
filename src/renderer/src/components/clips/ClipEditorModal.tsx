@@ -40,6 +40,28 @@ function TrimTimeline({
     [duration],
   )
 
+  // Handle grab threshold in pixels — the previous seconds-based threshold
+  // (< 1s) was sub-pixel at clip lengths >= 120s, making the visible handles
+  // ungrabbable (clicks registered as seek instead of drag).
+  const HANDLE_GRAB_PX = 12
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (!rect || rect.width === 0) return
+    const s = posFromClient(e.clientX)
+    const x = e.clientX - rect.left
+    const toPx = (sec: number) => (sec / duration) * rect.width
+    const distStart = Math.abs(x - toPx(startSec))
+    const distEnd = Math.abs(x - toPx(endSec))
+    const distCur = Math.abs(x - toPx(currentTime))
+    if (distStart <= HANDLE_GRAB_PX && distStart <= distEnd && distStart <= distCur) setDragging('start')
+    else if (distEnd <= HANDLE_GRAB_PX && distEnd <= distCur) setDragging('end')
+    else {
+      setDragging('seek')
+      onSeek(s)
+    }
+  }
+
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!dragging) return
@@ -71,18 +93,7 @@ function TrimTimeline({
       ref={trackRef}
       className="relative h-8 cursor-pointer select-none"
       style={{ touchAction: 'none' }}
-      onMouseDown={(e) => {
-        const s = posFromClient(e.clientX)
-        const distStart = Math.abs(s - startSec)
-        const distEnd = Math.abs(s - endSec)
-        const distCur = Math.abs(s - currentTime)
-        if (distStart < 1 && distStart <= distEnd && distStart <= distCur) setDragging('start')
-        else if (distEnd < 1 && distEnd <= distCur) setDragging('end')
-        else {
-          setDragging('seek')
-          onSeek(s)
-        }
-      }}
+      onMouseDown={handleMouseDown}
     >
       {/* Track background */}
       <div

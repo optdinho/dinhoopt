@@ -32,7 +32,7 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 protocol.registerSchemesAsPrivileged([
   {
     scheme: CLIP_VIDEO_SCHEME,
-    privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+    privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, bypassCSP: true },
   },
 ])
 

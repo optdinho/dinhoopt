@@ -1,11 +1,46 @@
-import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { createReadStream, statSync } from 'node:fs'
+import { extname } from 'node:path'
 import { Readable } from 'node:stream'
 import { buildClipVideoUrl, CLIP_VIDEO_SCHEME, decodeClipVideoPath } from '@shared/clip-video-url'
 import { clipPathInOutputDir } from '../services/clips-config-manager'
 
 export { buildClipVideoUrl, CLIP_VIDEO_SCHEME, decodeClipVideoPath }
 
+const MIME_TYPES: Readonly<Record<string, string>> = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.mkv': 'video/x-matroska',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+}
+
+function toWebStream(stream: import('node:stream').Readable): ReadableStream<Uint8Array> {
+  return Readable.toWeb(stream)
+}
+
+function baseHeaders(contentType: string): Record<string, string> {
+  return {
+    'Content-Type': contentType,
+    'Accept-Ranges': 'bytes',
+  }
+}
+
+/**
+ * Serve clip video files with manual HTTP Range support.
+ *
+ * net.fetch(file://...) cannot be used here: Chromium's file loader ignores
+ * the Range header, so media elements report seekable.end() === 0 and every
+ * seek jumps back to the start (see electron/electron#38749 and #51442). The
+ * confirmed working pattern is to parse the Range header ourselves and return
+ * 206 Partial Content with Content-Range/Accept-Ranges using a bounded
+ * fs.createReadStream. The clip-video:// scheme is registered as `standard`,
+ * which is required for media elements to issue follow-up range requests.
+ */
 export async function handleClipVideoRequest(request: Request): Promise<Response> {
   const rawPath = decodeClipVideoPath(request.url)
   if (!rawPath) return new Response('bad request', { status: 400 })
@@ -15,38 +50,42 @@ export async function handleClipVideoRequest(request: Request): Promise<Response
   const filePath = clipPathInOutputDir(rawPath)
   if (!filePath) return new Response('forbidden', { status: 403 })
 
-  let fileSize: number
+  let size: number
   try {
-    fileSize = (await stat(filePath)).size
+    size = statSync(filePath).size
   } catch {
     return new Response('not found', { status: 404 })
   }
 
-  let start = 0
-  let end = fileSize - 1
-  let status = 200
+  const contentType = MIME_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
+  const isHead = request.method === 'HEAD'
+
   const range = request.headers.get('range')
-  if (range) {
-    const match = /^bytes=(\d*)-(\d*)$/.exec(range)
-    if (match) {
-      if (match[1]) start = Number(match[1])
-      if (match[2]) end = Math.min(Number(match[2]), fileSize - 1)
-      if (start >= fileSize) return new Response('range not satisfiable', { status: 416 })
-      if (end < start) end = start
-      status = 206
+  const m = range && /^bytes=(\d*)-(\d*)$/.exec(range.trim())
+  if (m) {
+    const start = m[1] !== '' ? Number(m[1]) : 0
+    const end = m[2] !== '' ? Number(m[2]) : size - 1
+    if (start >= size || start > end) {
+      return new Response(null, {
+        status: 416,
+        headers: { ...baseHeaders(contentType), 'Content-Range': `bytes */${size}` },
+      })
     }
+    const clampedEnd = Math.min(end, size - 1)
+    const chunk = clampedEnd - start + 1
+    const headers = {
+      ...baseHeaders(contentType),
+      'Content-Range': `bytes ${start}-${clampedEnd}/${size}`,
+      'Content-Length': String(chunk),
+    }
+    if (isHead) return new Response(null, { status: 206, headers })
+    return new Response(toWebStream(createReadStream(filePath, { start, end: clampedEnd })), {
+      status: 206,
+      headers,
+    })
   }
 
-  const length = end - start + 1
-  const nodeStream = createReadStream(filePath, { start, end })
-  const body = Readable.toWeb(nodeStream) as unknown as BodyInit
-  return new Response(body, {
-    status,
-    headers: {
-      'content-type': 'video/mp4',
-      'accept-ranges': 'bytes',
-      'content-length': String(length),
-      ...(status === 206 ? { 'content-range': `bytes ${start}-${end}/${fileSize}` } : {}),
-    },
-  })
+  const headers = { ...baseHeaders(contentType), 'Content-Length': String(size) }
+  if (isHead) return new Response(null, { status: 200, headers })
+  return new Response(toWebStream(createReadStream(filePath)), { status: 200, headers })
 }

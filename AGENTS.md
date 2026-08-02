@@ -3135,3 +3135,54 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 
 - Reiniciar o app instalado e validar em campo com FiveM (sessão longa): guard de alt-tab sem teardown falso e auto-stop disparando apenas quando o jogo REAL fechar.
 - Se ainda houver falso-negativo (ex.: processo em outro user/session), avaliar Opção B (re-resolução do alvo ao falhar) documentada no plano.
+
+## Session Summary (2026-08-02 — Clip player fix definitivo: net.fetch + trim handles em px)
+
+### Done (part 1 — net.fetch, REVERTED em campo)
+
+- **Tentativa `net.fetch`**: o handler `clip-video://` construía `Response` manual (Range parseado à mão + `createReadStream` + `Readable.toWeb`) e foi trocado para delegar a `net.fetch(pathToFileURL(filePath).toString())` com forwarding do header `Range`. **FALHOU em campo** (janela dev, build com o fix): clicar num tempo à frente (ex.: minuto 1 de um vídeo de 2) voltava ao início.
+- **Nova causa-raiz (pesquisa)**: `net.fetch(file://...)` **não suporta seek** — o file loader do Chromium ignora o header `Range`, `video.seekable.end()` fica `0` e todo seek salta para o início (electron/electron#38749; #51442). O padrão confirmado por múltiplos usuários em Windows é **servir Range manualmente** (`206` + `Content-Range` + `Accept-Ranges` + `createReadStream` com `start/end`), combinado com `standard: true` no registro do esquema.
+
+### Done (part 2 — Range manual, implementado e validado)
+
+- **`src/main/ipc/clip-video-protocol.ts` reescrito** para implementar HTTP Range manual:
+  - Validações preservadas: 400 sem path, 403 fora do output dir (`clipPathInOutputDir`), 404 quando `statSync` falha.
+  - Sem `Range`: `200` com `Content-Type` (por extensão), `Accept-Ranges: bytes`, `Content-Length: size`, corpo = `createReadStream(filePath)` completo.
+  - Com `Range: bytes=start-end`: parseia `^bytes=(\d*)-(\d*)$`; `206` com `Content-Range: bytes start-end/size`, `Accept-Ranges`, `Content-Length: chunk`, corpo = `createReadStream(filePath, { start, end: clampedEnd })`. End além do tamanho é clampado; range não-satisfazível ou reverso → `416` com `Content-Range: bytes */size`.
+  - `HEAD` → headers com corpo vazio (200 ou 206 conforme o Range).
+  - Corpo via `Readable.toWeb(createReadStream(...))` (web ReadableStream aceito pelo `Response` do main).
+- **`src/main/index.ts`**: `bypassCSP: true` já adicionado na part 1; `standard: true` já presente — prerequisito para mídia emitir requests de range subsequentes.
+- **Testes reescritos** (`clip-video-protocol.test.ts`): 17 testes — round-trip URL, null cases, 400/403/404, full-file 200 (Content-Length/Accept-Ranges + bytes corretos), range explícito 206 (`Content-Range` + bytes do segmento via arquivo two-tone), range aberto `bytes=500-`, clamp do end, 416 unsatisfiable e reverso, malformed → 200, HEAD 200 e HEAD 206, extensão desconhecida → `application/octet-stream`. Mock de `electron`/`net.fetch` removido (agora usa `node:fs` real). **17/17 pass**.
+- **Bug de teste encontrado**: `makeRequest(url, 'bytes=...')` passava string no lugar do objeto `{ range }` — header nunca era enviado e os testes de range retornavam 200. Corrigido para `{ range: 'bytes=...' }`.
+
+### Validado
+
+- **Tests**: `clip-video-protocol.test.ts` 17/17; clip suites `clips.ipc.test.ts` + `clips-engine-connection.test.ts` + `preload/index.test.ts` + protocol = **494 passed** (4 files) — 0 falhas.
+- **Build**: `npm run build` OK (main + preload + renderer, `✓ built in 10.13s`).
+- **Biome**: `clip-video-protocol.ts` + test sem issues (1 fix de formatação aplicado via `--write`).
+- **Lint/biome**: nenhum erro NOVO — 5 issues a11y (`noStaticElementInteractions`/`useMediaCaption`) são pré-existentes (verificados via `git stash` no baseline, mesmas 5 com linhas originais).
+- **tsc**: `useRef<ReturnType<typeof setTimeout>>()` (ClipEditorModal:160) é erro **pré-existente** (existe na versão original em :149) — fora do escopo desta sessão.
+
+- **Trim handles — hit-test em pixels**: `TrimTimeline` (`ClipEditorModal.tsx`) usava threshold de **segundos** (`distStart < 1`) no `onMouseDown`. A 120s+ de clipe, 1s = <2px — o handle de 16px ficava quase todo "fora da zona de gravação" e o clique caía no `seek`. Novo `handleMouseDown`:
+  - `HANDLE_GRAB_PX = 12` (raio de gravação em pixels, independente da duração/escala do clipe)
+  - `toPx(sec) = (sec / duration) * rect.width` converte posição dos handles para px; `distStart`/`distEnd`/`distCur` comparados em px contra o clique
+  - Ordem de precedência preservada (start > end > seek) e clamp de ordem no drag mantido
+  - Guard `rect.width === 0` evita divisão por zero
+  - Tipado `React.MouseEvent` (era inline anônimo no JSX)
+
+### Validado
+
+- **Tests**: `clip-video-protocol.test.ts` 9/9; clip suites `clips.ipc.test.ts` + `preload/index.test.ts` + protocol = **381 passed** (3 files) — 0 falhas.
+- **Build**: `npm run build` OK (main + preload + renderer, `✓ built in 9.74s`).
+- **Lint/biome**: nenhum erro NOVO — 5 issues a11y (`noStaticElementInteractions`/`useMediaCaption`) são pré-existentes (verificados via `git stash` no baseline, mesmas 5 com linhas originais).
+- **tsc**: `useRef<ReturnType<typeof setTimeout>>()` (ClipEditorModal:160) é erro **pré-existente** (existe na versão original em :149) — fora do escopo desta sessão.
+
+### Key Decisions
+
+- **Range manual sobre `net.fetch(file://)`**: o file loader do Chromium ignora `Range` — seek fica impossível (`seekable.end() === 0`). Implementar `206`/`Content-Range`/`Accept-Ranges` com `createReadStream(filePath, { start, end })` é o padrão validado por usuários reais do Electron no Windows e funciona porque o esquema é registrado com `standard: true` (prerequisito para o loader de mídia emitir requests de range). O confinamento (`clipPathInOutputDir` → 403) impede leitura arbitrária de arquivos fora do output dir.
+- **Hit-test em px para os handles**: a escala do clipe (60s vs 300s) torna thresholds em segundos inúteis — o usuário deve poder agarrar o handle VISÍVEL independentemente da duração.
+
+### Next Steps
+
+- Reiniciar o app (build de produção novo) e validar em campo: preview de clip reproduzindo + scrub, handles de trim arrastando corretamente em clips longos (120s+), trim com re-encode (checkbox) vs fast copy.
+- (Opcional) Corrigir o erro pré-existente de tsc em `ClipEditorModal.tsx:160` (`useRef<ReturnType<typeof setTimeout>>()` → `useRef<ReturnType<typeof setTimeout> | undefined>(undefined)`) e os 5 a11y warnings.
