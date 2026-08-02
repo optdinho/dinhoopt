@@ -42,7 +42,7 @@ public sealed partial class EngineCoordinator
     {
         if (msg.Value.HasValue)
         {
-            var secs = Math.Clamp(msg.Value.Value.GetInt32(), 15, 600);
+            var secs = Math.Clamp(msg.Value.Value.GetInt32(), 30, 600);
             _config.Update(c => c.ReplayTimeSeconds = secs);
         }
         return new IpcMessage { Action = "ok" };

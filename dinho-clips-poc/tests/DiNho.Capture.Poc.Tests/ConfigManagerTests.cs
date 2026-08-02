@@ -82,4 +82,125 @@ public sealed class ConfigManagerTests
             Directory.Delete(tempDir, true);
         }
     }
+
+    [Fact]
+    public void ValidateAndFix_ClampsInvalidNumericValues()
+    {
+        var cfg = CreateClean();
+        var raw = new AppConfig
+        {
+            ReplayTimeSeconds = 5,
+            Fps = 144,
+            AudioSampleRate = 12345,
+            Width = 100,
+            Height = 100,
+            BitrateKbps = 1,
+            Cq = 99,
+            MaxrateKbps = 0,
+            BufsizeKbps = 0,
+            Bframes = 99,
+            Lookahead = -5,
+            MicVolume = 9f,
+        };
+
+        cfg.ValidateAndFix(raw);
+
+        Assert.Equal(120, raw.ReplayTimeSeconds);
+        Assert.Equal(60, raw.Fps);
+        Assert.Equal(48000, raw.AudioSampleRate);
+        Assert.Equal(1280, raw.Width);
+        Assert.Equal(720, raw.Height);
+        Assert.Equal(30000, raw.BitrateKbps);
+        Assert.Equal(20, raw.Cq);
+        Assert.Equal(30000, raw.MaxrateKbps);
+        Assert.Equal(60000, raw.BufsizeKbps);
+        Assert.Equal(3, raw.Bframes);
+        Assert.Equal(32, raw.Lookahead);
+        Assert.Equal(1.0f, raw.MicVolume);
+    }
+
+    [Fact]
+    public void ValidateAndFix_ValidValues_Unchanged()
+    {
+        var cfg = CreateClean();
+        var raw = new AppConfig
+        {
+            ReplayTimeSeconds = 300,
+            Fps = 60,
+            AudioSampleRate = 48000,
+            Width = 1280,
+            Height = 720,
+            BitrateKbps = 30000,
+            Cq = 22,
+            MaxrateKbps = 40000,
+            BufsizeKbps = 80000,
+            Bframes = 2,
+            Lookahead = 16,
+            MicVolume = 2.5f,
+        };
+
+        cfg.ValidateAndFix(raw);
+
+        Assert.Equal(300, raw.ReplayTimeSeconds);
+        Assert.Equal(22, raw.Cq);
+        Assert.Equal(40000, raw.MaxrateKbps);
+        Assert.Equal(80000, raw.BufsizeKbps);
+        Assert.Equal(2, raw.Bframes);
+        Assert.Equal(16, raw.Lookahead);
+        Assert.Equal(2.5f, raw.MicVolume);
+    }
+
+    [Fact]
+    public void ValidateAndFix_RejectsOutputDirectoryOutsideProfile()
+    {
+        var cfg = CreateClean();
+        var raw = new AppConfig { OutputDirectory = "C:\\Windows\\System32" };
+
+        cfg.ValidateAndFix(raw);
+
+        Assert.Equal("", raw.OutputDirectory);
+    }
+
+    [Fact]
+    public void ValidateAndFix_ClampsHotkeyReplayDurations()
+    {
+        var cfg = CreateClean();
+        var raw = new AppConfig();
+        raw.HotkeyBindings.Clear();
+        raw.HotkeyBindings.Add(new HotkeyBinding { Vk = 0x77, Action = "SaveClip", ReplayDurationSeconds = 100000, Enabled = true });
+        raw.HotkeyBindings.Add(new HotkeyBinding { Vk = 0x78, Action = "ToggleCapture", ReplayDurationSeconds = 60, Enabled = true });
+
+        cfg.ValidateAndFix(raw);
+
+        Assert.Null(raw.HotkeyBindings[0].ReplayDurationSeconds);
+        Assert.Equal(60, raw.HotkeyBindings[1].ReplayDurationSeconds);
+        Assert.Equal(120, raw.EffectiveReplaySeconds);
+    }
+
+    [Fact]
+    public void Update_PipeStyleUnclampedValues_AreClamped()
+    {
+        var cfg = CreateClean();
+
+        cfg.Update(c =>
+        {
+            c.Cq = 99;
+            c.OutputDirectory = "C:\\Windows\\System32";
+        });
+
+        Assert.Equal(20, cfg.Config.Cq);
+        Assert.Equal("", cfg.Config.OutputDirectory);
+    }
+
+    [Fact]
+    public void Update_HotkeyBindingsNull_RestoresEmptyList()
+    {
+        var cfg = CreateClean();
+
+        cfg.Update(c => c.HotkeyBindings = null);
+
+        Assert.NotNull(cfg.Config.HotkeyBindings);
+        Assert.Empty(cfg.Config.HotkeyBindings);
+        Assert.Equal(120, cfg.Config.EffectiveReplaySeconds);
+    }
 }

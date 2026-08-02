@@ -224,76 +224,7 @@ public sealed class ConfigManager : IDisposable
                 return CloneConfig(_defaults);
             }
 
-            // Valida campos críticos
-            if (config.ReplayTimeSeconds < 30 || config.ReplayTimeSeconds > 600)
-                config.ReplayTimeSeconds = _defaults.ReplayTimeSeconds;
-
-            if (config.Fps is not (30 or 60 or 75 or 120))
-                config.Fps = _defaults.Fps;
-
-            if (config.AudioSampleRate is not (44100 or 48000 or 96000))
-                config.AudioSampleRate = _defaults.AudioSampleRate;
-
-            if (config.Width < 640 || config.Width > 1920 || config.Height < 480 || config.Height > 1080)
-            {
-                config.Width = _defaults.Width;
-                config.Height = _defaults.Height;
-            }
-
-            if (config.BitrateKbps < 500 || config.BitrateKbps > 200_000)
-                config.BitrateKbps = _defaults.BitrateKbps;
-
-            // Valida parâmetros CRF+VBV
-            if (config.Cq < 0 || config.Cq > 51)
-                config.Cq = _defaults.Cq;
-            if (config.MaxrateKbps < 1000 || config.MaxrateKbps > 500_000)
-                config.MaxrateKbps = _defaults.MaxrateKbps;
-            if (config.BufsizeKbps < 2000 || config.BufsizeKbps > 1_000_000)
-                config.BufsizeKbps = _defaults.BufsizeKbps;
-            if (config.Bframes < 0 || config.Bframes > 16)
-                config.Bframes = _defaults.Bframes;
-            if (config.Lookahead < 0 || config.Lookahead > 256)
-                config.Lookahead = _defaults.Lookahead;
-            if (string.IsNullOrWhiteSpace(config.EncoderPreset))
-                config.EncoderPreset = _defaults.EncoderPreset;
-            else if (!IsValidEncoderPreset(config.EncoderPreset))
-                config.EncoderPreset = _defaults.EncoderPreset;
-
-            if (config.MicVolume < 0f || config.MicVolume > 4f)
-                config.MicVolume = _defaults.MicVolume;
-
-            config.PttMode = config.PttMode?.ToLowerInvariant() switch
-            {
-                "hold" => "Hold",
-                "toggle" => "Toggle",
-                "off" => "Off",
-                _ => _defaults.PttMode,
-            };
-
-            // Valida diretório de saída (anti-path-traversal)
-            if (!string.IsNullOrEmpty(config.OutputDirectory))
-            {
-                try
-                {
-                    var resolved = Path.GetFullPath(config.OutputDirectory);
-                    var profileDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    if (!resolved.StartsWith(profileDir, StringComparison.OrdinalIgnoreCase))
-                    {
-                        Log.W("Config", $"OutputDirectory '{resolved}' fora do perfil do usuário — rejeitado");
-                        config.OutputDirectory = "";
-                    }
-                    else
-                    {
-                        config.OutputDirectory = resolved;
-                        if (!Directory.Exists(config.OutputDirectory))
-                            Directory.CreateDirectory(config.OutputDirectory);
-                    }
-                }
-                catch
-                {
-                    config.OutputDirectory = "";
-                }
-            }
+            ValidateAndFix(config);
 
             return config;
         }
@@ -301,6 +232,93 @@ public sealed class ConfigManager : IDisposable
         {
             Log.E("Config", $"Erro ao carregar: {ex.Message}, revertendo para defaults");
             return CloneConfig(_defaults);
+        }
+    }
+
+    /// <summary>
+    /// Valida e corrige (clamp + anti-path-traversal) um AppConfig em place,
+    /// usando os defaults como fallback. Compartilhado entre <see cref="Load"/>
+    /// (arquivo) e <see cref="Update"/> (pipe do Electron) — o handler `config`
+    /// do pipe não deve confiar cegamente no payload do frontend.
+    /// </summary>
+    public void ValidateAndFix(AppConfig config)
+    {
+        if (config.ReplayTimeSeconds < 30 || config.ReplayTimeSeconds > 600)
+            config.ReplayTimeSeconds = _defaults.ReplayTimeSeconds;
+
+        if (config.Fps is not (30 or 60 or 75 or 120))
+            config.Fps = _defaults.Fps;
+
+        if (config.AudioSampleRate is not (44100 or 48000 or 96000))
+            config.AudioSampleRate = _defaults.AudioSampleRate;
+
+        if (config.Width < 640 || config.Width > 1920 || config.Height < 480 || config.Height > 1080)
+        {
+            config.Width = _defaults.Width;
+            config.Height = _defaults.Height;
+        }
+
+        if (config.BitrateKbps < 500 || config.BitrateKbps > 200_000)
+            config.BitrateKbps = _defaults.BitrateKbps;
+
+        // Valida parâmetros CRF+VBV
+        if (config.Cq < 0 || config.Cq > 51)
+            config.Cq = _defaults.Cq;
+        if (config.MaxrateKbps < 1000 || config.MaxrateKbps > 500_000)
+            config.MaxrateKbps = _defaults.MaxrateKbps;
+        if (config.BufsizeKbps < 2000 || config.BufsizeKbps > 1_000_000)
+            config.BufsizeKbps = _defaults.BufsizeKbps;
+        if (config.Bframes < 0 || config.Bframes > 16)
+            config.Bframes = _defaults.Bframes;
+        if (config.Lookahead < 0 || config.Lookahead > 256)
+            config.Lookahead = _defaults.Lookahead;
+        if (string.IsNullOrWhiteSpace(config.EncoderPreset))
+            config.EncoderPreset = _defaults.EncoderPreset;
+        else if (!IsValidEncoderPreset(config.EncoderPreset))
+            config.EncoderPreset = _defaults.EncoderPreset;
+
+        if (config.MicVolume < 0f || config.MicVolume > 4f)
+            config.MicVolume = _defaults.MicVolume;
+
+        config.PttMode = config.PttMode?.ToLowerInvariant() switch
+        {
+            "hold" => "Hold",
+            "toggle" => "Toggle",
+            "off" => "Off",
+            _ => _defaults.PttMode,
+        };
+
+        // Clampa durações de replay por hotkey: protege EffectiveReplaySeconds,
+        // que dimensiona o ReplayBuffer (memória/disk spill). Frontend envia
+        // apenas 30..600 (presets 60/120/300 + slider custom [30,600]).
+        config.HotkeyBindings ??= new();
+        foreach (var b in config.HotkeyBindings)
+            if (b.ReplayDurationSeconds.HasValue && b.ReplayDurationSeconds.Value is < 30 or > 600)
+                b.ReplayDurationSeconds = null;
+
+        // Valida diretório de saída (anti-path-traversal)
+        if (!string.IsNullOrEmpty(config.OutputDirectory))
+        {
+            try
+            {
+                var resolved = Path.GetFullPath(config.OutputDirectory);
+                var profileDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (!resolved.StartsWith(profileDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.W("Config", $"OutputDirectory '{resolved}' fora do perfil do usuário — rejeitado");
+                    config.OutputDirectory = "";
+                }
+                else
+                {
+                    config.OutputDirectory = resolved;
+                    if (!Directory.Exists(config.OutputDirectory))
+                        Directory.CreateDirectory(config.OutputDirectory);
+                }
+            }
+            catch
+            {
+                config.OutputDirectory = "";
+            }
         }
     }
 
@@ -336,6 +354,10 @@ public sealed class ConfigManager : IDisposable
         lock (_lock)
         {
             updater(Config);
+            // Valida/corrige mesmo em updates via pipe — o handler `config` copia
+            // valores crus do frontend; ValidateAndFix clampa números e rejeita
+            // OutputDirectory fora do perfil antes de persistir.
+            ValidateAndFix(Config);
             SaveToDisk(Config);
         }
         OnConfigChanged?.Invoke(Config);
