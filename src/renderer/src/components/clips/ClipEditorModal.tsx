@@ -16,6 +16,7 @@ function TrimTimeline({
   startSec,
   endSec,
   duration,
+  ariaLabel,
   onSeek,
   onStartChange,
   onEndChange,
@@ -24,6 +25,7 @@ function TrimTimeline({
   startSec: number
   endSec: number
   duration: number
+  ariaLabel: string
   onSeek: (s: number) => void
   onStartChange: (s: number) => void
   onEndChange: (s: number) => void
@@ -75,6 +77,20 @@ function TrimTimeline({
 
   const onMouseUp = useCallback(() => setDragging(null), [])
 
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      let next = currentTime
+      if (e.key === 'ArrowRight') next = currentTime + 1
+      else if (e.key === 'ArrowLeft') next = currentTime - 1
+      else if (e.key === 'Home') next = 0
+      else if (e.key === 'End') next = duration
+      else return
+      e.preventDefault()
+      onSeek(Math.max(0, Math.min(duration, next)))
+    },
+    [currentTime, duration, onSeek],
+  )
+
   useEffect(() => {
     if (dragging) {
       window.addEventListener('mousemove', onMouseMove)
@@ -91,9 +107,16 @@ function TrimTimeline({
   return (
     <div
       ref={trackRef}
+      role="slider"
+      aria-label={ariaLabel}
+      aria-valuemin={0}
+      aria-valuemax={duration}
+      aria-valuenow={Math.round(currentTime)}
       className="relative h-8 cursor-pointer select-none"
       style={{ touchAction: 'none' }}
+      tabIndex={0}
       onMouseDown={handleMouseDown}
+      onKeyDown={onKeyDown}
     >
       {/* Track background */}
       <div
@@ -157,7 +180,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const effectiveDuration = realDuration || clip?.duration || 60
   const [fullscreen, setFullscreen] = useState(false)
   const [showOverlay, setShowOverlay] = useState(true)
-  const overlayTimer = useRef<ReturnType<typeof setTimeout>>()
+  const overlayTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const containerRef = useRef<HTMLDivElement>(null)
   const mergeClipsState = useState<string[]>(initialMergePaths ?? (clip ? [clip.path] : []))
   const [mergeClips] = mergeClipsState
@@ -287,17 +310,27 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
 
   const trimDuration = endSec - startSec
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
-      role="presentation"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
+      <button
+        type="button"
+        aria-label={t('close')}
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
       <div
-        className="w-full rounded-xl border shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label={showTrim && clip ? `${t('editClip')}: ${clip.name}` : t('merge')}
+        className="relative w-full rounded-xl border shadow-2xl"
         style={{
           maxWidth: fullscreen ? '100%' : '36rem',
           height: fullscreen ? '100%' : 'auto',
@@ -306,9 +339,6 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
           display: 'flex',
           flexDirection: 'column',
         }}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="presentation"
       >
         {/* Header — hidden in fullscreen */}
         {!fullscreen && (
@@ -324,6 +354,8 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
 
         <div
           ref={containerRef}
+          role="group"
+          aria-label={showTrim && clip ? `${t('editClip')}: ${clip.name}` : t('merge')}
           className={fullscreen ? 'flex flex-1 flex-col' : ''}
           onMouseMove={showOverlayTemporarily}
           style={fullscreen ? { background: '#000', minHeight: 0 } : undefined}
@@ -367,7 +399,9 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     }}
                     onError={() => toast.error(t('videoPreviewFailed'))}
                     preload="auto"
-                  />
+                  >
+                    <track kind="captions" />
+                  </video>
                 </div>
 
                 {/* Overlay controls (fullscreen) — fixed at bottom */}
@@ -384,6 +418,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       startSec={startSec}
                       endSec={endSec}
                       duration={effectiveDuration}
+                      ariaLabel={t('trim')}
                       onSeek={(s) => {
                         setCurrentTime(s)
                         seekTo(s)
@@ -427,6 +462,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       startSec={startSec}
                       endSec={endSec}
                       duration={effectiveDuration}
+                      ariaLabel={t('trim')}
                       onSeek={(s) => {
                         setCurrentTime(s)
                         seekTo(s)
