@@ -3373,3 +3373,42 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: status update com `StatsDetailed()` único (M11)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-02 — MED #2: handler `config` do pipe passa por ValidateAndFix)
+
+### Done
+
+- **MED #2 do code review corrigido** — `IpcMessageHandler.Config.cs` `HandleConfig` copiava valores crus do payload do pipe (Cq, MaxrateKbps, BufsizeKbps, Bframes, Lookahead, OutputDirectory, HotkeyBindings etc.) sem clamp nem anti-path-traversal; a validação só existia no `Load()`.
+- **`ConfigManager.cs` — método novo `ValidateAndFix(AppConfig)`**: extrai a lógica de validação do `Load()` (clamps: `ReplayTimeSeconds` [30,600], `Fps` {30,60,75,120}, `AudioSampleRate` {44100,48000,96000}, `Width`/`Height` 640×480–1920×1080, `BitrateKbps` [500,200000], `Cq` [0,51], `MaxrateKbps` [1000,500000], `BufsizeKbps` [2000,1000000], `Bframes` [0,16], `Lookahead` [0,256], `EncoderPreset` allowlist → default, `MicVolume` [0,4], `PttMode` normalizado, `OutputDirectory` anti-path-traversal com create dir) — chamado no fim do `Load()` **e** no fim do `Update()` (choke point do pipe).
+- **Guarda `config.HotkeyBindings ??= new()`** no `ValidateAndFix`: pipe pode enviar `"HotkeyBindings": null` explícito → antes disso o `foreach` daria NRE dentro do `Update` (rollback de persistência) e o `ApplyHotkeyBindings` do handler também. Restaurado para lista vazia.
+- **Clamp defensivo de `HotkeyBinding.ReplayDurationSeconds`** para [30,600]: protege `EffectiveReplaySeconds` → dimensionamento do `ReplayBuffer` (memória/disk spill). `null` preservado.
+- **`HandleSetReplayTime`** alinhado: clamp `[15,600]` → `[30,600]` (range canônico do frontend, presets 60/120/300 + slider [30,600]).
+- **7 testes novos** em `ConfigManagerTests.cs` (23 no arquivo):
+  - `ValidateAndFix_ClampsInvalidNumericValues` (todos os campos inválidos → defaults)
+  - `ValidateAndFix_ValidValues_Unchanged` (valores válidos intactos)
+  - `ValidateAndFix_RejectsOutputDirectoryOutsideProfile` (`C:\Windows\System32` → `""`)
+  - `ValidateAndFix_ClampsHotkeyReplayDurations` (100000 → null, 60 mantido, `EffectiveReplaySeconds` correto)
+  - `Update_PipeStyleUnclampedValues_AreClamped` (Cq 99 → 20, OutputDirectory traversal → `""`) — **teste-chave do MED #2** (caminho real do pipe)
+  - `Update_HotkeyBindingsNull_RestoresEmptyList` (guarda `??= new()`)
+  - `Update` — testes pré-existentes inalterados
+- **Gotchas de teste**: `AppConfig` construtor inicia `HotkeyBindings` com 3 defaults — teste precisa `Clear()` antes; `EffectiveReplaySeconds` é o **max** entre global e bindings (120 global > 60 binding → espera 120).
+- **Não adicionado** teste de integração `HandleConfig` via reflection: requer `_ptt` (`PushToTalkManager` exige `HotkeyManager` com native hooks) — o `Update_PipeStyleUnclampedValues_AreClamped` cobre o choke point exato usado pelo handler.
+
+### Validado
+
+- **Build**: `dotnet build -c Debug` 0 erros (warnings pré-existentes).
+- **C# tests**: ConfigManagerTests **23/23**; suite completa **1054/1054 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Commit**: `c42368f` — `fix: MED #2 — handler config do pipe passa por ValidateAndFix (clamp + anti-path-traversal)`
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (291 files); 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == `899F8A3B...`**.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo: config via pipe com valores fora de range ou `OutputDirectory` fora do perfil é clampada/rejeitada sem quebrar o estado do engine.
+- Remediação G-series e FASE 8 completas; MED #1 (HEVC CodecPrivate) já corrigido em código (sessões anteriores). Opcional: limpar dead code `preload/api/` restante.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Config/ConfigManager.cs`: `ValidateAndFix()` novo, chamado em `Load()` e `Update()`; guarda `HotkeyBindings ??= new()`; clamp de `ReplayDurationSeconds`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/IpcMessageHandler.Config.cs`: `HandleSetReplayTime` clamp [30,600]
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ConfigManagerTests.cs`: 7 testes novos
+- `AGENTS.md`: resumo de sessão
