@@ -92,47 +92,57 @@ public sealed class RnnoiseFilter : IDisposable
             }
 
             int expectedBytes = byteLen;
-            int totalRead = 0;
-            var sw = Stopwatch.StartNew();
-            while (totalRead < expectedBytes)
+
+            // Leftover de chamadas anteriores (surplus de leituras que excederam o
+            // frame) já está em _readBuf[0.._readOffset]. Só lê quando faltar dado
+            // para completar um frame de saída de tamanho pleno.
+            if (_readOffset < expectedBytes)
             {
-                if (sw.ElapsedMilliseconds > 5000 || cts.Token.IsCancellationRequested)
+                var sw = Stopwatch.StartNew();
+                while (_readOffset < expectedBytes)
                 {
-                    Log.W("RnnoiseFilter", "Read timeout after 5000ms while waiting for filtered audio — returning original frame");
-                    break;
+                    if (sw.ElapsedMilliseconds > 5000 || cts.Token.IsCancellationRequested)
+                    {
+                        Log.W("RnnoiseFilter", "Read timeout after 5000ms while waiting for filtered audio — returning original frame");
+                        break;
+                    }
+                    int free = _readBuf.Length - _readOffset;
+                    if (free <= 0)
+                        break; // buffer cheio de dados não consumidos — nada mais a ler
+                    // Async read com timeout por chamada — impede bloqueio indefinido
+                    var readTask = stdout.ReadAsync(_readBuf, _readOffset, free, cts.Token);
+                    if (!readTask.Wait(2000))
+                    {
+                        Log.W("RnnoiseFilter", "ReadAsync timeout after 2000ms — returning original frame");
+                        break;
+                    }
+                    int read = readTask.Result;
+                    if (read <= 0)
+                        break;
+                    _readOffset += read;
                 }
-                int toRead = Math.Min(_readBuf.Length - _readOffset, expectedBytes - totalRead);
-                // Async read with per-call timeout — prevents indefinite block on hung ffmpeg
-                var readTask = stdout.ReadAsync(_readBuf, _readOffset, toRead, cts.Token);
-                if (!readTask.Wait(2000))
-                {
-                    Log.W("RnnoiseFilter", "ReadAsync timeout after 2000ms — returning original frame");
-                    break;
-                }
-                int read = readTask.Result;
-                if (read <= 0)
-                    break;
-                _readOffset += read;
-                totalRead += read;
             }
 
-            if (totalRead < 4)
+            if (_readOffset < 4)
                 return input;
 
-            int sampleCount = totalRead / 4;
+            // Consome até expectedBytes (alinha ao tamanho do frame original). Em
+            // timeout/EOF consome o que tiver; o surplus vira leftover para a próxima
+            // chamada — a lógica antiga (`_readOffset > totalRead`) nunca disparava
+            // porque totalRead era incrementado junto com _readOffset, então o excedente
+            // de uma leitura maior que o frame ficava preso no pipe e corrompia o
+            // alinhamento do stream na chamada seguinte.
+            int consume = Math.Min(_readOffset, expectedBytes);
+            int sampleCount = consume / 4;
+            if (sampleCount == 0)
+                return input;
             var result = new float[sampleCount];
-            System.Buffer.BlockCopy(_readBuf, 0, result, 0, totalRead);
+            System.Buffer.BlockCopy(_readBuf, 0, result, 0, consume);
 
-            if (_readOffset > totalRead)
-            {
-                int leftover = _readOffset - totalRead;
-                System.Buffer.BlockCopy(_readBuf, totalRead, _readBuf, 0, leftover);
-                _readOffset = leftover;
-            }
-            else
-            {
-                _readOffset = 0;
-            }
+            int leftover = _readOffset - consume;
+            if (leftover > 0)
+                System.Buffer.BlockCopy(_readBuf, consume, _readBuf, 0, leftover);
+            _readOffset = leftover;
 
             return result;
         }

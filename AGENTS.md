@@ -3223,3 +3223,68 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Buffer/ReplayBuffer.cs`: `GetSegments` (ReadAll fora do lock, trim libera RAM+disk, `MergeSpilledPackets` seam)
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ReplayBufferTests.cs`: 4 testes G1-3 com `VideoPacketPool.Rent(100)` (harness fix)
+
+## Session Summary (2026-08-02 — C8: drenagem de stderr nos filtros de áudio ffmpeg)
+
+### Done
+
+- **C8 — deadlock por pipe de stderr cheio corrigido** nos 2 filtros de áudio que spawnam ffmpeg long-lived e redirecionavam `StandardError` sem ler:
+  - `Audio/RnnoiseFilter.cs` (após `_process.Start()`): `BeginErrorReadLine()` + handler `ErrorDataReceived` que loga `Log.W("RnnoiseFilter", $"ffmpeg stderr: {e.Data}")` — sem a leitura async, o buffer do pipe de erro (64KB) enchia e o ffmpeg bloqueava em `stderr` write, travando o pipeline.
+  - `Audio/MaxineAfxFilter.cs` (idem, após `Start()`/`PriorityClass`): `BeginErrorReadLine()` + `Log.W("MaxineAfxFilter", ...)`.
+  - Padrão espelha o já existente em `FfmpegAacEncoder.cs:84-95` e `ClipExporter.cs:342-349` (`ErrorDataReceived` + `BeginErrorReadLine`).
+- **C8 auditado**: fluxos `stdin` (`WriteAsync` com timeout já existente) e `stdout` (encoders leem inline) sem risco novo; apenas o stderr estava sem drenagem nos dois filtros.
+
+### Validado
+
+- **C# tests**: suite completa **1040/1040 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Build**: `dotnet build -c Release` 0 erros; `dotnet publish -c Release --self-contained true -r win-x64` OK.
+- **Stage**: `npm run copy-engine` — 291 files staged (DLL staging = `975F10BD...`).
+- **Deploy**: app instalado estava FECHADO (só instância dev `node_modules\electron` rodando); 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 instalado == staging == `975F10BD5C54358E3B0FE8C859008ECB0AF0F5E53839095F218EF63B77860375`.
+- **Commit**: `ccfab3b` — `fix: C8 drena stderr do ffmpeg nos filtros de audio (Rnnoise/Maxine) para evitar deadlock do pipe`
+
+### Key Decisions
+
+- **Drenagem async (`BeginErrorReadLine`) sobre leitura síncrona**: o handler roda em threadpool e nunca bloqueia o pipeline — mesma escolha do AAC encoder e ClipExporter.
+- **Nota de path**: `dotnet publish -o bin/.../publish` a partir de `dinho-clips-poc\` grava em `dinho-clips-poc\bin\...` (raiz), NÃO em `src\DiNho.Capture.Poc\bin\...` — o path canônico para deploy é o staging do `copy-engine` (dll com hash `975F10BD`); o `src\...\publish\DiNho.Capture.Poc.dll` era o build G1-3 (`C2BDF84B`, sem C8).
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessão longa): `RnnoiseFilter`/`MaxineAfxFilter` sem travar o pipeline quando o ffmpeg logar em stderr; watchdog/audio sem deadlocks com noise suppression ou Maxine ativos.
+- Remediação G-series continua: próximos itens da auditoria `AUDIT-REPLAY-BUFFER.md` / `PLANO_EXECUCAO_FASES.md` (FASE 5) após C8.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs`: `BeginErrorReadLine()` + handler `ErrorDataReceived` pós-`Start()` (C8)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/MaxineAfxFilter.cs`: idem pós-`Start()`/`PriorityClass` (C8)
+
+## Session Summary (2026-08-02 — FASE 5: leftover morto do RnnoiseFilter corrigido)
+
+### Done
+
+- **Lógica de leftover corrigida** (`Audio/RnnoiseFilter.cs`, `Process` → leitura de stdout):
+  - O branch antigo `if (_readOffset > totalRead)` era **código morto**: `totalRead` era incrementado junto com `_readOffset` no mesmo loop, então a condição nunca era verdadeira. Se o ffmpeg (`-af anlmdn`) entregasse mais bytes que o frame na mesma leitura (latência/drift do filtro streaming), o excedente ficava preso no pipe e **corrompia o alinhamento do stream** na chamada seguinte (bytes de frames futuros anexados ao frame atual).
+  - **Fix**: a leitura agora preenche o **espaço livre** de `_readBuf` (até 64KB, sobre-leitura captura o surplus); o consume consome `min(_readOffset, expectedBytes)` (alinha ao tamanho do frame original); o surplus restante é deslocado para o início do buffer e vira `_readOffset` (leftover real, preservado para a próxima chamada). Em timeout/EOF consome o que tiver e retorna o frame parcial em vez de perder dado.
+  - Guard `if (_readOffset < 4) return input;` preservado (fallback para o frame original quando não há dado filtrado suficiente).
+  - Comentários em pt-BR explicando o porquê do branch antigo nunca disparar.
+  - `AudioMixer` enfileira `(samples, 0, samples.Length, pts)` — o comprimento variável do resultado é suportado pelo consumidor, então o desalinhamento de frame não quebra o mix.
+
+### Validado
+
+- **Build**: `dotnet build -c Release` 0 erros (21 warnings pré-existentes).
+- **C# tests**: suite completa **1040/1040 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK (path canônico `dinho-clips-poc\bin\...\publish`); `npm run copy-engine` — 291 files staged; app instalado estava FECHADO; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 instalado == staging == `04046570A2330622FAFA720598ACDAB3D6F972F3AEEB3C1138846BB75B4BEA8C`.
+- **Commit**: `--` — `fix: FASE 5 corrige leftover morto no RnnoiseFilter (sobre-leitura de stdout)` (a ser registrado; inclui resumo C8 do AGENTS.md pendente de `ccfab3b`).
+
+### Key Decisions
+
+- **Sobre-leitura + leftover preservado sobre leitura exata**: um filtro streaming (`anlmdn`) tem latência interna e pode emitir bursts maiores que o frame; ler só `expectedBytes` perde o excedente no pipe. Preencher o buffer todo e consumir o frame alinhado mantém o stream íntegro e é O(1) por chamada (BlockCopy do surplus, no máximo 64KB).
+- **Consumir `expectedBytes` quando disponível**: o steady-state do `anlmdn` preserva taxa/canais, então a saída por frame == entrada (byteLen). Alinhar o consume ao frame evita que um burst ocasione frames maiores que os do mixer.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessão longa com noise suppression): áudio do mic sem cliques/corrupção por desalinhamento de frame do `anlmdn`.
+- Remediação G-series continua: próximos itens de `AUDIT-REPLAY-BUFFER.md` / `PLANO_EXECUCAO_FASES.md` (FASE 5/6).
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/RnnoiseFilter.cs`: loop de leitura do stdout reescrito (espaço livre + consume `min(off, expected)` + leftover real via BlockCopy)
