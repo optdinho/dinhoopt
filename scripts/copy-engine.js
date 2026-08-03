@@ -103,6 +103,26 @@ try {
   console.log('  WARN: could not copy ffmpeg — engine will fail if ffmpeg is unavailable')
 }
 
+// Copy VC++ runtime DLLs (needed by ApplicationLoopback.dll — the C++ loopback
+// capture is dynamically linked against MSVC CRT, not self-contained).
+// Sources are the redist-installed copies under System32 (same machine that
+// builds/publishes the engine), which are the proven-compatible versions.
+const vcRuntimeDlls = ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll']
+const system32 = process.env.SystemRoot ? join(process.env.SystemRoot, 'System32') : null
+if (system32 && existsSync(system32)) {
+  let copiedVc = 0
+  for (const dll of vcRuntimeDlls) {
+    const src = join(system32, dll)
+    if (existsSync(src)) {
+      cpSync(src, join(stagingDir, dll))
+      copiedVc++
+    }
+  }
+  console.log(`  Copied ${copiedVc} VC++ runtime DLLs (${vcRuntimeDlls.join(', ')})`)
+} else {
+  console.log('  WARN: System32 not found — VC++ runtime DLLs not bundled (ApplicationLoopback.dll may fail)')
+}
+
 let fileCount = 0
 function countFiles(dir) {
   for (const entry of readdirSync(dir)) {
