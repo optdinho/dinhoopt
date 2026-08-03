@@ -19,6 +19,7 @@ public sealed class ConfigManagerTests
         Assert.Equal(1280, cfg.Config.Width);
         Assert.Equal(720, cfg.Config.Height);
         Assert.Equal(120, cfg.Config.ReplayTimeSeconds);
+        Assert.Equal(0d, cfg.Config.SharpnessStrength);
     }
 
     [Fact]
@@ -101,6 +102,7 @@ public sealed class ConfigManagerTests
             Bframes = 99,
             Lookahead = -5,
             MicVolume = 9f,
+            SharpnessStrength = 5,
         };
 
         cfg.ValidateAndFix(raw);
@@ -117,6 +119,7 @@ public sealed class ConfigManagerTests
         Assert.Equal(3, raw.Bframes);
         Assert.Equal(32, raw.Lookahead);
         Assert.Equal(1.0f, raw.MicVolume);
+        Assert.Equal(0d, raw.SharpnessStrength);
     }
 
     [Fact]
@@ -137,6 +140,7 @@ public sealed class ConfigManagerTests
             Bframes = 2,
             Lookahead = 16,
             MicVolume = 2.5f,
+            SharpnessStrength = 0.5,
         };
 
         cfg.ValidateAndFix(raw);
@@ -148,6 +152,7 @@ public sealed class ConfigManagerTests
         Assert.Equal(2, raw.Bframes);
         Assert.Equal(16, raw.Lookahead);
         Assert.Equal(2.5f, raw.MicVolume);
+        Assert.Equal(0.5d, raw.SharpnessStrength);
     }
 
     [Fact]

@@ -566,6 +566,62 @@ public sealed class FfmpegEncoderTests
         Assert.Null(result);
     }
 
+    // ─── AppendSharpnessFilter ─────────────────────────────────────────
+
+    [Fact]
+    public void AppendSharpnessFilter_WithScale_AppendsCasAfterScale()
+    {
+        // chain "scale=..." + strength 0.5 → "scale=...,cas=strength=0.5"
+        var result = FfmpegEncoder.AppendSharpnessFilter("scale=1280:720", 0.5);
+        Assert.Equal("scale=1280:720,cas=strength=0.5", result);
+    }
+
+    [Fact]
+    public void AppendSharpnessFilter_Zero_Unchanged()
+    {
+        // sharpnessStrength == 0 = desligado → chain intacta.
+        var result = FfmpegEncoder.AppendSharpnessFilter("scale=1280:720", 0d);
+        Assert.Equal("scale=1280:720", result);
+    }
+
+    [Fact]
+    public void AppendSharpnessFilter_Negative_Unchanged()
+    {
+        var result = FfmpegEncoder.AppendSharpnessFilter("scale=1280:720", -1d);
+        Assert.Equal("scale=1280:720", result);
+    }
+
+    [Fact]
+    public void AppendSharpnessFilter_NaN_Unchanged()
+    {
+        var result = FfmpegEncoder.AppendSharpnessFilter("scale=1280:720", double.NaN);
+        Assert.Equal("scale=1280:720", result);
+    }
+
+    [Fact]
+    public void AppendSharpnessFilter_EmptyChain_ReturnsCas()
+    {
+        // Sem scale (nativo) mas sharpness ligado → só o cas.
+        var result = FfmpegEncoder.AppendSharpnessFilter("", 0.4);
+        Assert.Equal("cas=strength=0.4", result);
+    }
+
+    [Fact]
+    public void AppendSharpnessFilter_ClampsAboveOne()
+    {
+        // Valor > 1 é inválido — clamado para 1 (máximo do cas).
+        var result = FfmpegEncoder.AppendSharpnessFilter("scale=1280:720", 3d);
+        Assert.Equal("scale=1280:720,cas=strength=1", result);
+    }
+
+    [Fact]
+    public void AppendSharpnessFilter_InvariantDecimalSeparator()
+    {
+        // Sempre ponto decimal, mesmo sob cultura que usa vírgula.
+        var result = FfmpegEncoder.AppendSharpnessFilter("scale=1280:720", 0.5);
+        Assert.DoesNotContain(",", result.Split(",").Last());
+    }
+
     // ─── IsAv1Keyframe ──────────────────────────────────────────────────
 
     [Fact]

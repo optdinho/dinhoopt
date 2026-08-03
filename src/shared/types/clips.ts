@@ -117,6 +117,8 @@ export interface ClipsConfig {
   adaptiveQuality?: boolean
   /** Remove black bars (letterboxing) by stretching to fill the full 16:9 frame instead of preserving aspect ratio */
   stretchToFit?: boolean
+  /** Intensidade do filtro de sharpness (cas), 0..1 — 0 = desligado */
+  sharpnessStrength?: number
 }
 
 export interface ClipTrimResult {

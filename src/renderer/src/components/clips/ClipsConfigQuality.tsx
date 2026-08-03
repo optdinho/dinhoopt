@@ -306,6 +306,33 @@ export function QualitySection({
         </div>
       </div>
 
+      {/* Sharpness (cas) */}
+      <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
+        <div className="mb-1.5 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
+              {t('sharpness')}
+            </span>
+            <TipBadge id="sharpness" activeTip={activeTip} setActiveTip={setActiveTip} />
+          </div>
+          <span
+            className="text-[11px] font-medium"
+            style={{ color: (config.sharpnessStrength ?? 0) > 0 ? 'var(--accent)' : 'var(--text-dim)' }}
+          >
+            {(config.sharpnessStrength ?? 0) > 0 ? (config.sharpnessStrength ?? 0).toFixed(1) : t('sharpnessOff')}
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.1}
+          value={config.sharpnessStrength ?? 0}
+          onChange={(e) => handleConfigUpdate({ sharpnessStrength: Number(e.target.value) })}
+          className="w-full"
+        />
+      </div>
+
       {/* Replay Time */}
       <div>
         <p className="mb-1 text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-dim)' }}>
@@ -363,7 +390,7 @@ export function QualitySection({
             </div>
           </div>
         )}
-        {config.replayTimeSeconds > 300 && (
+        {config.replayTimeSeconds >= 300 && (
           <div
             className="mt-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] leading-snug"
             style={{ color: '#f87171' }}

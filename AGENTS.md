@@ -3434,3 +3434,56 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 
 ### Next Steps
 - Validar em campo no app instalado: handles de trim arrastando/teclado em clips longos (120s+), tab order com foco no 1o controle e Escape fechando, sem regressao no preview.
+
+## Session Summary (2026-08-03 — TDD `sharpnessStrength` config: RED → GREEN)
+
+### Done
+
+- **Nova config `sharpnessStrength` (0..1, default 0 = filtro off)** implementada via TDD completo (RED → GREEN → suites), espelhando o padrão `stretchToFit`:
+  - **Filtro ffmpeg `cas`** (Contrast Adaptive Sharpening): `-vf "... ,cas=strength=X"` anexado ao filter chain existente (crop + scale) no `FfmpegEncoder.StartFfmpeg`.
+  - **C# `AppConfig.SharpnessStrength`** (double, default 0) + clamp no `ValidateAndFix` (NaN/`<0`/`>1` → default 0) — vale para Load (arquivo) e Update (pipe, choke point MED #2).
+  - **`FfmpegEncoder`**: campo `_sharpnessStrength`, setter `SetSharpnessStrength(double)`, helper puro `internal static AppendSharpnessFilter(string chain, double strength)` (cultura invariante — ponto decimal mesmo sob pt-BR; NaN/`<=0` retorna cadeia inalterada; `>1` clampado para 1).
+  - **Wiring**: `EngineCoordinator.Capture.cs` chama `fe.SetSharpnessStrength(_config.Config.SharpnessStrength)` logo após `SetStretchToFit` (bônus: removida a linha duplicada `fe.SetStretchToFit(...)` que existia ali).
+  - **TS**: `sharpnessStrength` em `ClipsPersistedConfig` (store, default 0), `ConfigState` (manager, default 0), `baseConfigPayload`/`buildEngineConfig`, `loadPersistedClipsConfig` (`saved.sharpnessStrength ?? 0`), `persistClipsConfig`, tipo `ClipsConfig` (`src/shared/types/clips.ts`).
+  - **IPC**: `CLIPS_SET_CONFIG` aceita `sharpnessStrength` number, clamp `Math.min(1, Math.max(0, ...))`, ignora não-número.
+
+### TDD (RED → GREEN)
+
+- **RED (11 testes novos, todos falhando antes da implementação)**:
+  - TS `clips-config-store.test.ts`: default 0; arquivo salvo 0.6 carrega; persist default 0.
+  - TS `clips-config-manager.test.ts`: `buildEngineConfig` default 0 + propaga 0.6; `loadPersistedClipsConfig` sincroniza 0.6; `persistClipsConfig` persiste 0.6.
+  - TS `clips.ipc.test.ts`: update 0.6; clamp 2.5→1 e −1→0; string `'high'` ignorada (mantém 0.4).
+  - C# `ConfigManagerTests.cs`: default `0d`; `SharpnessStrength=5` clamp→`0d`; `0.5` preservado.
+  - C# `FfmpegEncoderTests.cs`: `AppendSharpnessFilter` — com scale `"scale=1280:720,cas=strength=0.5"`, zero/negativo/NaN inalterado, cadeia vazia → `"cas=strength=0.4"`, `3d` → `"cas=strength=1"`, separador decimal invariante.
+- **GREEN**: implementação acima; suites filtradas 166/166 (TS) e 98/98 (C#) — 0 falhas.
+
+### Validado
+
+- **TS full suite**: **6291 passed | 1 skipped** (200 files) — 0 falhas (+11 testes RED)
+- **C# full suite**: **1063 approved | 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada)
+- **Build**: `dotnet build` implícito no test — 0 erros (warnings pré-existentes apenas)
+
+### UI (slider de nitidez em `ClipsConfigQuality.tsx`)
+
+- Slider `input[type=range]` 0..1 step 0.1 na seção de qualidade, após "Stretch to fit": rótulo `sharpness` + `TipBadge id="sharpness"` (mapa de tooltips em `useClipsState.ts` ganhou `sharpness: t('sharpnessTooltip')`); valor exibido à direita — `(strength).toFixed(1)` quando >0, senão `sharpnessOff`; `onChange` → `handleConfigUpdate({ sharpnessStrength: Number(e.target.value) })`.
+- Locales en/pt/es: chaves `sharpness`/`sharpnessTooltip`/`sharpnessOff`.
+- `ClipsPage.test.tsx` 23/23 pass; `npm run build` OK; biome: só diffs CRLF pré-existentes (confirmado via `git stash`).
+
+### Next Steps
+
+- Publicar engine (`dotnet publish -c Release --self-contained true -r win-x64`) + `npm run copy-engine` + deploy no app instalado (`%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\`) — back/engine novos já wired; UI completa.
+- Validar em campo: slider de nitidez altera o clip (`cas=strength=X` no log), 0 desliga o filtro.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `_sharpnessStrength`, `SetSharpnessStrength`, `AppendSharpnessFilter`, wiring no vf chain + `using System.Globalization`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Config/ConfigManager.cs`: `AppConfig.SharpnessStrength` + clamp `ValidateAndFix`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: `SetSharpnessStrength` call + remoção do `SetStretchToFit` duplicado
+- `src/main/services/clips-config-store.ts`: `sharpnessStrength` na interface + DEFAULTS
+- `src/main/services/clips-config-manager.ts`: ConfigState, config inicial, baseConfigPayload/buildEngineConfig, load sync, persist
+- `src/main/ipc/clips.ipc.ts`: `CLIPS_SET_CONFIG` clamp
+- `src/shared/types/clips.ts`: `sharpnessStrength?: number`
+- `src/renderer/src/components/clips/ClipsConfigQuality.tsx`: slider `sharpnessStrength` (UI)
+- `src/renderer/src/components/clips/useClipsState.ts`: tooltip `sharpness`
+- `src/renderer/src/locales/{en,pt,es}/clips.json`: `sharpness`/`sharpnessTooltip`/`sharpnessOff`
+- Tests: `clips-config-store.test.ts`, `clips-config-manager.test.ts`, `clips.ipc.test.ts`, `ConfigManagerTests.cs`, `FfmpegEncoderTests.cs`

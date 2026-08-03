@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Channels;
 using DiNho.Capture.Poc.Logging;
 using Vortice.Direct3D11;
@@ -40,6 +41,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _outputWidth;
     private int _outputHeight;
     private bool _stretchToFit;
+    private double _sharpnessStrength;
 
     private GpuVideoConverter? _gpuConverter;
     private ID3D11Texture2D? _nv12Staging;
@@ -172,6 +174,32 @@ internal sealed partial class FfmpegEncoder : IEncoder
     public void SetStretchToFit(bool stretchToFit)
     {
         _stretchToFit = stretchToFit;
+    }
+
+    /// <summary>
+    /// Define a intensidade do filtro de sharpness (cas, 0..1). 0 = desliga.
+    /// Valores fora de [0,1] são clampados quando montados no filter chain.
+    /// </summary>
+    public void SetSharpnessStrength(double sharpnessStrength)
+    {
+        _sharpnessStrength = sharpnessStrength;
+    }
+
+    /// <summary>
+    /// Anexa o filtro ffmpeg `cas=strength=X` (Contrast Adaptive Sharpening) à
+    /// cadeia -vf existente. Retorna a cadeia inalterada quando strength é
+    /// inválido (NaN, <= 0) — o filtro só é aplicado para valores em (0, 1].
+    /// Valores acima de 1 são clampados para 1. Usa cultura invariante para
+    /// garantir o ponto decimal mesmo sob locales com vírgula (ex.: pt-BR).
+    /// </summary>
+    internal static string AppendSharpnessFilter(string chain, double strength)
+    {
+        if (double.IsNaN(strength) || strength <= 0d)
+            return chain;
+
+        var clamped = Math.Min(strength, 1d);
+        var sharp = $"cas=strength={clamped.ToString(CultureInfo.InvariantCulture)}";
+        return string.IsNullOrEmpty(chain) ? sharp : $"{chain},{sharp}";
     }
 
     /// <summary>Resolução efetiva dos pacotes emitidos, determinada no StartFfmpeg a partir do
@@ -342,6 +370,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
             var sh = scaleTarget.Value.Height;
             vfParts.Add($"scale={sw}:{sh}");
             Log.I("FfmpegEncoder", $"output scale: {baseW}x{baseH} → {sw}x{sh} (user={( _outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : "native" )}, fallback=1/{_scaleDivisor})");
+        }
+        var sharpnessFilter = AppendSharpnessFilter("", _sharpnessStrength);
+        if (!string.IsNullOrEmpty(sharpnessFilter))
+        {
+            vfParts.Add(sharpnessFilter);
+            Log.I("FfmpegEncoder", $"sharpness: {sharpnessFilter}");
         }
         var cropFilter = vfParts.Count > 0
             ? $" -vf \"{string.Join(",", vfParts)}\""

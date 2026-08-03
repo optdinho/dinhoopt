@@ -344,6 +344,8 @@ export function registerClipsIpc(): void {
       if (typeof c.audioLoopback === 'boolean') C.audioLoopback = c.audioLoopback
       if (typeof c.forceSoftware === 'boolean') C.forceSoftware = c.forceSoftware
       if (typeof c.stretchToFit === 'boolean') C.stretchToFit = c.stretchToFit
+      if (typeof c.sharpnessStrength === 'number' && Number.isFinite(c.sharpnessStrength))
+        C.sharpnessStrength = Math.min(1, Math.max(0, c.sharpnessStrength))
       if (typeof c.gameDetection === 'boolean') C.gameDetection = c.gameDetection
       if (typeof c.gameAudioOnly === 'boolean') C.gameAudioOnly = c.gameAudioOnly
       if (typeof c.customGameProcess === 'string') {

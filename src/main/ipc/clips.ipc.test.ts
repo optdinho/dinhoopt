@@ -733,6 +733,35 @@ describe('CLIPS_SET_CONFIG', () => {
     expect(cfg.stretchToFit).toBe(false)
   })
 
+  it('updates sharpnessStrength value', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { sharpnessStrength: 0.6 })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.sharpnessStrength).toBe(0.6)
+  })
+
+  it('clamps sharpnessStrength to the [0,1] range', async () => {
+    clipsConfig.sharpnessStrength = 0
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { sharpnessStrength: 2.5 })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.sharpnessStrength).toBe(1)
+    await handler({}, { sharpnessStrength: -1 })
+    const cfg2 = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg2.sharpnessStrength).toBe(0)
+  })
+
+  it('ignores non-number sharpnessStrength', async () => {
+    clipsConfig.sharpnessStrength = 0.4
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { sharpnessStrength: 'high' })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.sharpnessStrength).toBe(0.4)
+  })
+
   it('rejects unknown encoderPreset values', async () => {
     clipsConfig.encoderPreset = 'p5'
     const handlers = captureHandlers()
