@@ -19,8 +19,8 @@ import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContai
 import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
 import { useGameModeStore } from '@/stores/game-mode-store'
-import { usePerfStore } from '@/stores/perf-store'
 import { useHistoryStore } from '@/stores/history-store'
+import { usePerfStore } from '@/stores/perf-store'
 import { useScanStore } from '@/stores/scan-store'
 import { useServiceStore } from '@/stores/service-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -32,7 +32,7 @@ import { CLEANER_SCAN_FNS, MiniGaugeSkeleton } from './dashboard/DashboardCompon
 
 export function DashboardPage() {
   const { t } = useTranslation('dashboard')
-  const { features, platform } = usePlatform()
+  const { features } = usePlatform()
   const stats = useStatsStore((s) => s.stats)
   const statsLoaded = useStatsStore((s) => s.loaded)
   const recomputeStats = useStatsStore((s) => s.recompute)
@@ -80,7 +80,10 @@ export function DashboardPage() {
 
   // Fetch disk health once on mount (stored in perf-store for HealthCard to read)
   useEffect(() => {
-    window.dinho?.perfGetDiskHealth?.().then(setDiskHealth).catch(() => {})
+    window.dinho
+      ?.perfGetDiskHealth?.()
+      .then(setDiskHealth)
+      .catch(() => {})
   }, [setDiskHealth])
 
   // ── Health score (memoized) ────────────────────────────────
@@ -348,7 +351,7 @@ export function DashboardPage() {
     setResult(oneClickResult)
     setPhase('done')
     setPhaseLabel('')
-  }, [phase, runCleaners, runRegistry, addEntry, recomputeStats, features])
+  }, [phase, runCleaners, runRegistry, addEntry, recomputeStats, features, t])
 
   const handleFullClean = useCallback(async () => {
     if (phase !== 'idle' && phase !== 'done') return
@@ -471,14 +474,15 @@ export function DashboardPage() {
     addEntry,
     recomputeStats,
     features,
+    t,
   ])
 
   const isRunning = phase === 'scanning' || phase === 'cleaning'
 
   // ── Helpers ────────────────────────────────────────────────
 
-const cpuPct = perf?.cpuPercent ?? 0
-const ramPct = perf?.memPercent ?? 0
+  const cpuPct = perf?.cpuPercent ?? 0
+  const ramPct = perf?.memPercent ?? 0
 
   const loading = !statsLoaded
 

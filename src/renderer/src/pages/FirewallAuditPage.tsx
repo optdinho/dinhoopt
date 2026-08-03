@@ -306,6 +306,7 @@ export function FirewallAuditPage() {
             <div className="mt-2 space-y-1">
               {applyResult.errors.map((e, i) => (
                 <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: same rule name can fail multiple times — index disambiguates
                   key={`${e.name || e.displayName}-${i}`}
                   className="text-[11.5px]"
                   style={{ color: 'var(--text-secondary)' }}

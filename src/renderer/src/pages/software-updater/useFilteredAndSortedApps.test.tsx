@@ -111,13 +111,13 @@ describe('useFilteredAndSortedApps', () => {
   it('reports isBusy when loading or updating', () => {
     mockStore.loading = true
 
-    const { result } = renderHook(() => useFilteredAndSortedApps())
+    const { result, rerender } = renderHook(() => useFilteredAndSortedApps())
     expect(result.current.isBusy).toBe(true)
 
     mockStore.loading = false
     mockStore.updating = true
 
-    const { rerender } = renderHook(() => useFilteredAndSortedApps())
+    rerender()
     expect(result.current.isBusy).toBe(true)
   })
 

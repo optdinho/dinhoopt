@@ -117,9 +117,7 @@ describe('PerfMonitorService', () => {
 
   describe('startMonitoring', () => {
     it('collects initial snapshot immediately', async () => {
-      const cpuData = [
-        { times: { user: 200, nice: 0, sys: 100, idle: 700, irq: 0 } },
-      ]
+      const cpuData = [{ times: { user: 200, nice: 0, sys: 100, idle: 700, irq: 0 } }]
       mockCpus.mockReturnValue(cpuData as any)
       mockedDisksIO.mockResolvedValue({ rIO_sec: 1024, wIO_sec: 2048 } as any)
 

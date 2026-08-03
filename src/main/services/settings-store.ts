@@ -79,7 +79,7 @@ const store = createJsonStore<StoreData>({
   defaults,
   devSuffix: 'DiNho-Dev',
 })
-export function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+export function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
   const result = JSON.parse(JSON.stringify(target))
   for (const key of Object.keys(source) as Array<keyof T>) {
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
@@ -91,7 +91,7 @@ export function deepMerge<T extends Record<string, any>>(target: T, source: Part
       typeof result[key] === 'object' &&
       !Array.isArray(result[key])
     ) {
-      result[key] = deepMerge(result[key] as Record<string, any>, value as Record<string, any>)
+      result[key] = deepMerge(result[key] as Record<string, unknown>, value as Record<string, unknown>)
     } else if (value !== undefined) {
       result[key] = value as T[keyof T]
     }

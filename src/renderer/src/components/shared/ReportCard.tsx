@@ -57,7 +57,6 @@ export function loadReport(): ReportData | null {
 export function ReportCard({
   report,
   icon,
-  onGenerate,
   showGenerateButton,
 }: {
   report: ReportData | null

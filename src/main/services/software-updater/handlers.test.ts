@@ -56,8 +56,13 @@ describe('checkForUpdates', () => {
   it('caches result within TTL', async () => {
     isWingetAvailableMock.mockResolvedValue(true)
     checkForUpdatesWingetMock.mockResolvedValue({
-      apps: [], totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0,
-      packageManagerAvailable: true, packageManagerName: 'winget',
+      apps: [],
+      totalCount: 0,
+      majorCount: 0,
+      minorCount: 0,
+      patchCount: 0,
+      packageManagerAvailable: true,
+      packageManagerName: 'winget',
     })
 
     await checkForUpdates()
@@ -69,8 +74,13 @@ describe('checkForUpdates', () => {
   it('clears cache when clearUpdateCache is called', async () => {
     isWingetAvailableMock.mockResolvedValue(true)
     checkForUpdatesWingetMock.mockResolvedValue({
-      apps: [], totalCount: 0, majorCount: 0, minorCount: 0, patchCount: 0,
-      packageManagerAvailable: true, packageManagerName: 'winget',
+      apps: [],
+      totalCount: 0,
+      majorCount: 0,
+      minorCount: 0,
+      patchCount: 0,
+      packageManagerAvailable: true,
+      packageManagerName: 'winget',
     })
 
     await checkForUpdates()

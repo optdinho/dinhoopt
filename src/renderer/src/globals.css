@@ -139,7 +139,7 @@
 
     --glow-amber: rgba(245, 158, 11, 0.18);
     --glow-blue: rgba(59, 130, 246, 0.14);
-    --glow-green: rgba(34, 197, 94, 0.10);
+    --glow-green: rgba(34, 197, 94, 0.1);
     --glass-inset: rgba(255, 255, 255, 0.05);
     --grid-line: rgba(255, 255, 255, 0.04);
 
@@ -176,7 +176,7 @@
     --text-on-accent: #ffffff;
     --toast-text: #18181b;
 
-    --glow-amber: rgba(245, 158, 11, 0.10);
+    --glow-amber: rgba(245, 158, 11, 0.1);
     --glow-blue: rgba(59, 130, 246, 0.07);
     --glow-green: rgba(34, 197, 94, 0.06);
     --glass-inset: rgba(255, 255, 255, 0.8);
@@ -229,7 +229,9 @@
   }
 
   html {
-    transition: background-color 0.2s ease, border-color 0.2s ease;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
   }
 }
 
@@ -237,14 +239,20 @@
   .glass-card {
     background: var(--bg-subtle);
     border: 1px solid var(--border-default);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), 0 0 1px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.18),
+      0 0 1px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 var(--glass-inset);
     transition: all 0.2s ease;
   }
 
   .glass-card-hover:hover {
     background: var(--bg-surface);
     border-color: var(--border-medium);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.3), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.25),
+      0 0 1px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 var(--glass-inset);
     transform: translateY(-2px);
   }
 
@@ -253,7 +261,10 @@
   }
 
   .glow-amber:hover {
-    box-shadow: 0 0 32px rgba(245, 158, 11, 0.15), 0 0 8px rgba(245, 158, 11, 0.08), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 0 32px rgba(245, 158, 11, 0.15),
+      0 0 8px rgba(245, 158, 11, 0.08),
+      inset 0 1px 0 var(--glass-inset);
   }
 
   .glow-blue {
@@ -261,7 +272,10 @@
   }
 
   .glow-blue:hover {
-    box-shadow: 0 0 32px rgba(59, 130, 246, 0.15), 0 0 8px rgba(59, 130, 246, 0.08), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 0 32px rgba(59, 130, 246, 0.15),
+      0 0 8px rgba(59, 130, 246, 0.08),
+      inset 0 1px 0 var(--glass-inset);
   }
 
   .glow-green {
@@ -269,21 +283,36 @@
   }
 
   .glow-green:hover {
-    box-shadow: 0 0 32px rgba(34, 197, 94, 0.15), 0 0 8px rgba(34, 197, 94, 0.08), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 0 32px rgba(34, 197, 94, 0.15),
+      0 0 8px rgba(34, 197, 94, 0.08),
+      inset 0 1px 0 var(--glass-inset);
   }
 
   .depth-mid {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18), 0 0 1px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.18),
+      0 0 1px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 var(--glass-inset);
   }
 
   .depth-emphasis {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), 0 0 1px rgba(0, 0, 0, 0.3), inset 0 1px 0 var(--glass-inset);
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.22),
+      0 0 1px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 var(--glass-inset);
   }
 }
 
 @keyframes logo-glow {
-  0% { opacity: 0.6; transform: scale(1); }
-  100% { opacity: 1; transform: scale(1.08); }
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -294,6 +323,7 @@
   *.animate-glow-pulse,
   *.animate-stagger-fade,
   *.animate-spin {
+    /* biome-ignore lint/complexity/noImportantStyles: required to override Tailwind animation utilities for reduced motion */
     animation: none !important;
   }
 }

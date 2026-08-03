@@ -8,8 +8,6 @@ const mocks = vi.hoisted(() => ({
   lookupServiceSafety: vi.fn(),
   logger: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }))
-type ServiceScanResult = any
-type ServiceApplyResult = any
 
 vi.mock('electron', () => ({
   ipcMain: { handle: (...args: unknown[]) => mocks.ipcHandle(...args) },
@@ -35,7 +33,6 @@ vi.mock('@shared/service-safety-kb', () => ({
 }))
 
 import { IPC } from '@shared/channels'
-// biome-ignore lint/suspicious/noRedeclare: test
 import type { ServiceApplyResult, ServiceScanProgress, ServiceScanResult } from '@shared/types'
 import { applyServiceChanges, registerServiceManagerIpc, scanServices } from './service-manager.ipc'
 

@@ -43,9 +43,9 @@ export function ApplyResultCard({ result, showErrors }: ApplyResultCardProps) {
       </div>
       {showErrors && result.errors.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
-          {result.errors.map((err, i) => (
+          {result.errors.map((err) => (
             <div
-              key={`${err.entryId}-${i}`}
+              key={err.entryId}
               className="flex items-start gap-3 px-5 py-3"
               style={{
                 borderBottom: i < result.errors.length - 1 ? '1px solid var(--bg-subtle)' : 'none',

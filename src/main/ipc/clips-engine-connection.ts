@@ -2,9 +2,9 @@ import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { app, BrowserWindow } from 'electron'
-import type { ClipInfo, ClipsEngineStatus } from '@shared/types'
 import { IPC } from '@shared/channels'
+import type { ClipInfo, ClipsEngineStatus } from '@shared/types'
+import { app, BrowserWindow } from 'electron'
 import { buildEngineConfig, config as C, getDefaultOutputDir } from '../services/clips-config-manager'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
@@ -200,9 +200,7 @@ export async function getDurationsForClips(
 }
 
 // Compute missing durations in background, update cache, and notify renderer
-function computeMissingDurations(
-  missing: Array<{ path: string; mtimeMs: number }>,
-): void {
+function computeMissingDurations(missing: Array<{ path: string; mtimeMs: number }>): void {
   runWithConcurrency(
     missing.map((clip) => async () => {
       const duration = await getVideoDuration(clip.path)

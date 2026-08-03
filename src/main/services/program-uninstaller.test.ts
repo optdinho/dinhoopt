@@ -9,7 +9,6 @@ const mockExecFile = vi.fn()
 vi.mock('child_process', () => {
   const { promisify } = require('node:util')
   const execFileFn = (...args: unknown[]) =>
-    // biome-ignore lint/suspicious/noAssignInExpressions: test mock
     (mockExecFile(...args)(
       // Add custom promisify so that promisify(execFile) returns {stdout, stderr}
       execFileFn as any,

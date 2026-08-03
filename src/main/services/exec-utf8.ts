@@ -21,10 +21,7 @@ function execFileAsync(
   args: readonly string[],
   options?: import('node:child_process').ExecFileOptions,
 ): ReturnType<typeof _execFileAsync> & { child?: import('node:child_process').ChildProcess } {
-  getLogger().info(
-    'exec-utf8',
-    `execFileAsync: ${file} ${args.slice(0, 4).join(' ')}${args.length > 4 ? ' ...' : ''}`,
-  )
+  getLogger().info('exec-utf8', `execFileAsync: ${file} ${args.slice(0, 4).join(' ')}${args.length > 4 ? ' ...' : ''}`)
   return _execFileAsync(file, args, options) as ReturnType<typeof _execFileAsync> & {
     child?: import('node:child_process').ChildProcess
   }

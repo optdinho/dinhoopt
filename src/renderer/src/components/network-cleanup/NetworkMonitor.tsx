@@ -230,6 +230,7 @@ export function NetworkMonitor() {
                 const isSusp = suspiciousPids.has(key)
                 return (
                   <tr
+                    // biome-ignore lint/suspicious/noArrayIndexKey: duplicate connections share pid/port/addr — index disambiguates
                     key={`${key}-${i}`}
                     style={{
                       background: isSusp ? 'rgba(239,68,68,0.03)' : i % 2 === 0 ? 'transparent' : 'var(--bg-subtle)',

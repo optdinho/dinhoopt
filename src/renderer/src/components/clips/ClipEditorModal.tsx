@@ -407,11 +407,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
-      <div
-        aria-hidden="true"
-        className="absolute inset-0"
-        onMouseDown={onClose}
-      />
+      <div aria-hidden="true" className="absolute inset-0" onMouseDown={onClose} />
       <div
         ref={dialogRef}
         role="dialog"

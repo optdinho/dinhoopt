@@ -57,7 +57,8 @@ vi.mock('better-sqlite3', () => {
     throw err
   }
   return {
-    default: vi.fn(function() {
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock — arrow functions are not constructible (vitest 4.x)
+    default: vi.fn(function () {
       return {
         pragma: vi.fn().mockReturnValue('wal'),
         exec: vi.fn(),
@@ -85,22 +86,23 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('./services/perf-monitor', () => ({
-  PerfMonitorService: vi.fn(function() {
+  // biome-ignore lint/complexity/useArrowFunction: constructor mock — arrow functions are not constructible (vitest 4.x)
+  PerfMonitorService: vi.fn(function () {
     return {
       getSystemInfo: vi.fn().mockResolvedValue({
-      cpuModel: 'Test CPU',
-      cpuCores: 4,
-      cpuThreads: 8,
-      totalMemBytes: 8589934592,
-      osVersion: 'Windows 11',
-      hostname: 'TEST-PC',
-    }),
-    getDiskHealth: vi
-      .fn()
-      .mockResolvedValue([
-        { model: 'SSD', type: 'SSD', healthStatus: 'Good', temperature: 35, remainingLife: 90, powerOnHours: 1000 },
-      ]),
-    killProcess: vi.fn().mockResolvedValue({ success: true, pid: 1234 }),
+        cpuModel: 'Test CPU',
+        cpuCores: 4,
+        cpuThreads: 8,
+        totalMemBytes: 8589934592,
+        osVersion: 'Windows 11',
+        hostname: 'TEST-PC',
+      }),
+      getDiskHealth: vi
+        .fn()
+        .mockResolvedValue([
+          { model: 'SSD', type: 'SSD', healthStatus: 'Good', temperature: 35, remainingLife: 90, powerOnHours: 1000 },
+        ]),
+      killProcess: vi.fn().mockResolvedValue({ success: true, pid: 1234 }),
     }
   }),
 }))
@@ -2576,7 +2578,6 @@ describe('legacy scan functions', () => {
     it('cleans recycle bin via COM successfully', async () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
-      const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
       // Need both scan and clean to happen: scan must return items, clean must succeed
       ;(execFile as unknown as ReturnType<typeof vi.fn>)
@@ -2630,7 +2631,6 @@ describe('legacy scan functions', () => {
     it('handles non-Error exception during clean', async () => {
       const { getPlatform } = await import('./platform')
       const { execFile } = await import('node:child_process')
-      const { scanDirectory } = await import('./services/file-utils')
       ;(getPlatform as ReturnType<typeof vi.fn>).mockReturnValue(makePlatform({ trashPath: () => null }))
       ;(execFile as unknown as ReturnType<typeof vi.fn>)
         .mockImplementationOnce(
@@ -3125,7 +3125,7 @@ describe('legacy scan functions', () => {
 
     it('scans with single target, finds db', async () => {
       const { getPlatform } = await import('./platform')
-      const { statSync, readdirSync, openSync, readSync } = await import('node:fs')
+      const { statSync, openSync, readSync } = await import('node:fs')
       statSync.mockImplementation((p: string) => {
         if (p.endsWith('-wal')) throw new Error('no wal')
         return { size: 50000, mtimeMs: Date.now() }
@@ -3624,7 +3624,6 @@ describe('legacy scan functions', () => {
       const dbMock = (betterSqlite3.default as ReturnType<typeof vi.fn>).mock.results[0]?.value
       if (dbMock) dbMock.pragma.mockReturnValue('delete')
 
-      const { scanDatabaseCli } = await import('./cli/commands/legacy')
       const { statSync: fsStatSync, openSync, readSync } = await import('node:fs')
       fsStatSync.mockReset()
       fsStatSync.mockImplementation((p: string) => {
@@ -3646,7 +3645,6 @@ describe('legacy scan functions', () => {
       )
 
       process.argv = ['node.exe', 'script.js', '--cli', '--system']
-      const { runCli } = await import('./cli')
       // Need scan + clean to test: scan to find db, then clean to vacuum
       // But the scan already found it (via runLegacyScanClean).
       // Just test cleanDatabasesCli directly for the non-WAL branch
@@ -3675,7 +3673,8 @@ describe('legacy scan functions', () => {
       const origDb = betterSqlite3.default
       const err = new Error('db locked') as Error & { code: string }
       err.code = 'SQLITE_BUSY'
-      betterSqlite3.default = vi.fn(function() {
+      // biome-ignore lint/complexity/useArrowFunction: constructor mock — arrow functions are not constructible (vitest 4.x)
+      betterSqlite3.default = vi.fn(function () {
         throw err
       })
 

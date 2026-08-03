@@ -198,6 +198,7 @@ export function CategoryResultsPanel({
                         const checked = store.selectedItems.has(item.id)
                         const pathLabel = item.path.split(/[/\\]/).slice(-2).join('/') || item.path
                         return (
+                          // biome-ignore lint/a11y/noStaticElementInteractions: hover-only highlight on a row whose real control is the nested Checkbox
                           <div
                             key={item.id}
                             className="flex items-center gap-3 px-4 py-2 pl-14 cursor-pointer transition-colors"

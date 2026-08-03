@@ -110,6 +110,7 @@ export function AudioSection({
               </span>
               {config.pushToTalkKeys.map((vk, i) => (
                 <span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: duplicate VK codes possible — index disambiguates
                   key={`${vk}-${i}`}
                   className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium"
                   style={{ borderColor: 'var(--border-medium)', color: 'var(--text-primary)' }}

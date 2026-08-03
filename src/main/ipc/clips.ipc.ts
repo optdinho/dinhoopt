@@ -555,11 +555,7 @@ export function registerClipsIpc(): void {
       if (Array.isArray(resp.payload)) {
         // 0x1414 = Microsoft Basic Render Driver (software fallback, no hw encoder)
         return (resp.payload as GpuInfo[]).filter(
-          (gpu) =>
-            gpu &&
-            typeof gpu === 'object' &&
-            typeof gpu.vendorId === 'number' &&
-            gpu.vendorId !== 0x1414,
+          (gpu) => gpu && typeof gpu === 'object' && typeof gpu.vendorId === 'number' && gpu.vendorId !== 0x1414,
         )
       }
       return []

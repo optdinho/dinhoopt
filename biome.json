@@ -34,6 +34,11 @@
       "trailingCommas": "all"
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "files": {
     "includes": ["**", "!**/src/main/services/coverage/**", "!node_modules", "!out", "!dist", "!coverage", "!**/*.json", "!**/*.md"]
   },

@@ -71,7 +71,6 @@ export const FlyoutMenu = memo(function FlyoutMenu({
       ref={popoverRef}
       className="fixed z-[200] animate-scale-in"
       style={{ top: pos.top, left: pos.left, transformOrigin: 'left top' }}
-      onKeyDown={handleKeyDown}
     >
       <div
         role="menu"
@@ -80,6 +79,7 @@ export const FlyoutMenu = memo(function FlyoutMenu({
           background: 'var(--flyout-bg)',
           boxShadow: '0 12px 40px rgba(0,0,0,0.4), inset 0 1px 0 var(--glass-inset)',
         }}
+        onKeyDown={handleKeyDown}
       >
         {items.map((child) => {
           const isChildActive = location.pathname === child.path

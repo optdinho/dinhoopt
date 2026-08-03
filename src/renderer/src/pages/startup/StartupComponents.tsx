@@ -57,7 +57,14 @@ export function safetyIcon(score: number) {
 export function SafetyTooltip({ children, text }: { children: React.ReactNode; text: string }) {
   const [show, setShow] = useState(false)
   return (
-    <div className="relative" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover tooltip wrapper; focus/blur parity provided for keyboard users
+    <div
+      className="relative"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+    >
       {children}
       {show && (
         <div

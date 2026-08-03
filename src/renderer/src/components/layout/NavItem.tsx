@@ -109,6 +109,7 @@ export const NavItem = memo(function NavItem({
         {!collapsed && <span className="flex-1 text-left">{item.labelKey ? t(item.labelKey) : item.label}</span>}
         {!collapsed && (badge || (badgeCount != null && badgeCount > 0)) && (
           <span
+            role="status"
             className="flex h-[16px] min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
             style={{
               background: 'linear-gradient(135deg, #f59e0b, #d97706)',

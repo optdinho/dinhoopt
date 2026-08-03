@@ -5,7 +5,6 @@ import { ipcMain } from 'electron'
 import { getLogger } from '../services/logger.service'
 import { PerfMonitorService } from '../services/perf-monitor'
 
-
 // ── Lightweight CPU sampling for dashboard gauges ────────────
 // Uses Node.js os.cpus() which has near-zero cost and no
 // systeminformation dependency. Compares two samples to get %.

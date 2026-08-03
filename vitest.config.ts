@@ -30,6 +30,7 @@ export default defineConfig({
         'src/renderer/src/lib/hosts-recommendations.ts',
         'src/renderer/src/lib/languages.ts',
         'src/main/services/elevation.ts',
+        'src/**/*.html',
       ],
     },
   },

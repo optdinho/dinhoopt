@@ -111,7 +111,7 @@ import type { AudioSessionInfo, ClipInfo, ClipMergeResult, ClipTrimResult, MicDe
 import { ipcMain, shell } from 'electron'
 import { config as clipsConfig } from '../services/clips-config-manager'
 import { registerClipsIpc } from './clips.ipc'
-import { stopEngineProcess, resetClipsCache } from './clips-engine-connection'
+import { resetClipsCache, stopEngineProcess } from './clips-engine-connection'
 
 function captureHandlers(): Map<string, (...args: unknown[]) => unknown> {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()

@@ -166,7 +166,7 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
           transition={{ duration: 0.15 }}
         >
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+          <div aria-hidden="true" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onMouseDown={onClose} />
 
           {/* Modal */}
           <motion.div
@@ -354,7 +354,16 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
                               background: checked ? 'rgba(245,158,11,0.04)' : 'var(--card-bg)',
                               border: checked ? '1px solid rgba(245,158,11,0.2)' : '1px solid var(--border-default)',
                             }}
+                            role="checkbox"
+                            aria-checked={checked}
+                            tabIndex={0}
                             onClick={() => toggleItem(item.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                toggleItem(item.id)
+                              }
+                            }}
                           >
                             <Checkbox checked={checked} onChange={() => toggleItem(item.id)} />
                             <CatIcon

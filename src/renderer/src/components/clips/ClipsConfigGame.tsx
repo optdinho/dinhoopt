@@ -201,11 +201,16 @@ export function ProcessPicker({
   t: (key: string) => string
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div
+      aria-hidden="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onMouseDown={onClose}
+    >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: popover panel that must intercept mousedown to prevent backdrop close */}
       <div
         className="w-80 max-h-96 rounded-xl border p-4 shadow-xl"
         style={{ background: 'var(--card-bg)', borderColor: 'var(--border-subtle)' }}
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-3 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
           {t('selectProcess')}

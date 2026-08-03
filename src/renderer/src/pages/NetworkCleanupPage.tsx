@@ -422,6 +422,7 @@ export function NetworkCleanupPage() {
                     const checked = selectedIds.has(item.id)
                     const CatIcon = categories.find((c) => c.type === item.type)?.icon || Network
                     return (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: hover-only highlight on a row whose real control is the nested Checkbox
                       <div
                         key={item.id}
                         className={cn(

@@ -25,7 +25,6 @@ export function parseCatalogHtml(html: string, driver: StaleDriver): DriverUpdat
   const rowRegex = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi
   let rowMatch: RegExpExecArray | null
 
-  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop pattern
   while ((rowMatch = rowRegex.exec(html)) !== null) {
     const fullRow = rowMatch[0] // includes <tr> tag with attributes
     const rowHtml = rowMatch[1] // content between <tr> and </tr>
@@ -55,7 +54,6 @@ export function parseCatalogHtml(html: string, driver: StaleDriver): DriverUpdat
     const cellRegex = /<td\b[^>]*>([\s\S]*?)<\/td>/gi
     const cells: string[] = []
     let cellMatch: RegExpExecArray | null
-    // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop pattern
     while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
       // Strip HTML tags, collapse whitespace, trim
       const text = cellMatch[1]

@@ -196,9 +196,7 @@ export async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
       }
     }
 
-    const apps = parseWingetUpgradeOutput(stdout).filter(
-      (a) => a.currentVersion !== a.availableVersion,
-    )
+    const apps = parseWingetUpgradeOutput(stdout).filter((a) => a.currentVersion !== a.availableVersion)
 
     return {
       apps: apps,

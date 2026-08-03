@@ -14,6 +14,7 @@ vi.mock('react', async (importOriginal) => {
         mockRefCurrent = undefined
         return result
       }
+      // biome-ignore lint/correctness/useHookAtTopLevel: deliberate — delegating to real useRef inside vi.mock factory for tests
       return actual.useRef(initialValue)
     },
   }

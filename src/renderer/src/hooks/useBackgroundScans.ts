@@ -20,10 +20,7 @@ export function useBackgroundScans(): void {
     // Software update check (silent — no toasts)
     // Load ignored IDs first so setApps() can partition correctly
     const runSoftwareCheck = async () => {
-      logger.info(
-        'useBackgroundScans',
-        'Starting background software update check (winget)...',
-      )
+      logger.info('useBackgroundScans', 'Starting background software update check (winget)...')
       try {
         const settings = await window.dinho.settingsGet()
         if (settings.ignoredSoftwareUpdates?.length) {

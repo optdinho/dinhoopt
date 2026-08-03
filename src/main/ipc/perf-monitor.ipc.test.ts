@@ -32,8 +32,6 @@ vi.mock('../services/perf-monitor', () => ({
   PerfMonitorService: mocks.perfMonitorService,
 }))
 
-
-
 import { _resetPerfCache, registerPerfMonitorIpc } from './perf-monitor.ipc'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
@@ -48,6 +46,7 @@ describe('registerPerfMonitorIpc', () => {
     vi.resetModules()
     _resetPerfCache()
     // Restore default mockService implementation (cleared by resetAllMocks)
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock — arrow functions are not constructible (vitest 4.x)
     mocks.perfMonitorService.mockImplementation(function () {
       return mocks.mockService
     })

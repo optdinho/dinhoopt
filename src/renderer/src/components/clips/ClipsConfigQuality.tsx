@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { useState } from 'react'
 import { TogglePill } from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
@@ -14,13 +14,14 @@ export function TipBadge({
 }) {
   return (
     <span className="relative inline-flex" data-tip={id}>
-      <span
+      <button
+        type="button"
         className="inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold"
         style={{ background: 'rgba(113,113,122,0.15)', color: 'var(--text-dim)' }}
         onClick={() => setActiveTip(activeTip === id ? null : id)}
       >
         ?
-      </span>
+      </button>
     </span>
   )
 }
@@ -205,7 +206,7 @@ export function QualitySection({
             </button>
             {gpuOpen && (
               <>
-                <div className="fixed inset-0 z-20" onClick={() => setGpuOpen(false)} />
+                <div aria-hidden="true" className="fixed inset-0 z-20" onMouseDown={() => setGpuOpen(false)} />
                 <div
                   className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-lg py-1"
                   style={{

@@ -377,7 +377,6 @@ describe('checkForUpdatesWinget', () => {
     expect(result.packageManagerAvailable).toBe(true)
     expect(result.apps).toEqual([])
   })
-
 })
 
 // ─── runUpdatesWinget ────────────────────────────────────────

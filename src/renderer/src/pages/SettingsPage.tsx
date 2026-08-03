@@ -12,7 +12,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 
 export function SettingsPage() {
   const { t } = useTranslation('settings')
-  const { features, platform } = usePlatform()
+  const { platform } = usePlatform()
   const { settings, updateSettings, setSettings } = useSettingsStore()
   const [newExclusion, setNewExclusion] = useState('')
 

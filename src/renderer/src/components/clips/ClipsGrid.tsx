@@ -138,6 +138,7 @@ export function ClipsGrid({
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders have no stable id
               key={`skel-${i}`}
               className="rounded-xl border overflow-hidden"
               style={{ borderColor: 'var(--border-subtle)' }}

@@ -15,6 +15,7 @@ export function DnsCacheEntry({ item, checked, categoryIcons, onToggle }: DnsCac
   const CatIcon = categoryIcons[item.type] || Network
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover-only highlight on a row whose real control is the nested Checkbox
     <div
       className={cn(
         'flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3.5 transition-all',

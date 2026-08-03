@@ -33,7 +33,10 @@ export const useLicenseStore = create<LicenseState>((set) => ({
   activate: async (key: string) => {
     set({ isActivating: true, error: null })
     try {
-      const result = (await window.dinho?.licenseActivate?.(key)) ?? { valid: false, reason: i18n.t('activationError', { ns: 'license' }) }
+      const result = (await window.dinho?.licenseActivate?.(key)) ?? {
+        valid: false,
+        reason: i18n.t('activationError', { ns: 'license' }),
+      }
       set({ isActivating: false, status: result })
       if (!result.valid) set({ error: result.reason ?? null })
       return result
@@ -47,7 +50,10 @@ export const useLicenseStore = create<LicenseState>((set) => ({
   checkStatus: async () => {
     set({ loading: true })
     try {
-      const result = (await window.dinho?.licenseStatus?.()) ?? { valid: false, reason: i18n.t('noConnection', { ns: 'license' }) }
+      const result = (await window.dinho?.licenseStatus?.()) ?? {
+        valid: false,
+        reason: i18n.t('noConnection', { ns: 'license' }),
+      }
       set({ status: result, loading: false })
       return result
     } catch (_e: unknown) {

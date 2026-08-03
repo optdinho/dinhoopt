@@ -197,8 +197,6 @@ describe('parseWingetListOutput', () => {
   })
 })
 
-
-
 // ─── isValidAppId ────────────────────────────────────────────
 
 describe('isValidAppId', () => {
@@ -300,8 +298,6 @@ describe('checkForUpdates (win32)', () => {
     // Should still succeed with upgrade result, just not up-to-date list
     expect(result.packageManagerAvailable).toBe(true)
   })
-
-
 })
 
 // ─── runUpdates — win32: winget pipeline ────────────────────
@@ -467,7 +463,7 @@ describe('runUpdates (win32) — winget', () => {
     const result = await runUpdates(['Some.App'], vi.fn(), 'winget')
     expect(result.failed).toBe(1)
     expect(result.errors[0]?.reason).toMatch(/\.\.\.$/)
-    expect(result.errors[0]?.reason!.length).toBeLessThanOrEqual(203)
+    expect(result.errors[0]?.reason?.length).toBeLessThanOrEqual(203)
   })
 
   it('skips elevation when already admin', async () => {
@@ -487,8 +483,6 @@ describe('runUpdates (win32) — winget', () => {
     expect(result.failed).toBe(0)
   })
 })
-
-
 
 // ─── runUpdates — win32: fallback order ─────────────────────
 

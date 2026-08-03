@@ -87,6 +87,7 @@ import {
   isEngineRunning,
   isPipeConnected,
   readClipsFromDisk,
+  resetClipsCache,
   sendPipeCommand,
   sendPipeCommandLongRunning,
   sendWithFallback,
@@ -94,7 +95,6 @@ import {
   startClipCapture,
   startEngine,
   stopEngineProcess,
-  resetClipsCache,
 } from './clips-engine-connection'
 import { disconnectPipe } from './clips-pipe'
 

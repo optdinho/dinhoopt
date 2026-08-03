@@ -44,11 +44,16 @@ export function ClipsPage() {
       </div>
 
       {state.activeTip && state.tooltipContent[state.activeTip] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => state.setActiveTip(null)}>
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onMouseDown={() => state.setActiveTip(null)}
+        >
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip panel that must intercept mousedown to prevent backdrop close */}
           <div
             className="max-w-xs rounded-xl border bg-[#1a1a2e] p-5 text-sm leading-relaxed shadow-2xl"
             style={{ borderColor: 'var(--border-medium)', color: 'var(--text-muted)' }}
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             {state.tooltipContent[state.activeTip]}
           </div>

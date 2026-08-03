@@ -357,7 +357,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    const fsToggle = screen.getByText('forceSoftware').parentElement!.parentElement!.querySelector('button')!
+    const row = screen.getByText('forceSoftware').parentElement!.parentElement!
+    const buttons = row.querySelectorAll('button')
+    const fsToggle = buttons[buttons.length - 1]
     fsToggle.click()
     expect(mockSetConfig).toHaveBeenCalledWith({ forceSoftware: true })
   })

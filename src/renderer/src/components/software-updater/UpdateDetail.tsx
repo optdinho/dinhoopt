@@ -23,7 +23,6 @@ export interface UpdateDetailProps {
 export function UpdateDetail({
   hasChecked,
   packageManagerAvailable,
-  packageManagerName,
   appsCount,
   error,
   majorCount,

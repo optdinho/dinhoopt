@@ -29,7 +29,6 @@ const TYPE_COLORS: Record<string, string> = {
 
 export function OverviewView({
   stats,
-  timelineData,
   typeBreakdown,
   categoryBreakdown,
   weeklyData,
@@ -206,8 +205,8 @@ export function OverviewView({
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-2 space-y-1.5">
-                {typeBreakdown.map((item, i) => (
-                  <div key={`${item.name}-${i}`} className="flex items-center gap-2">
+                {typeBreakdown.map((item) => (
+                  <div key={item.name} className="flex items-center gap-2">
                     <div
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
