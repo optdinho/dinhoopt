@@ -176,4 +176,86 @@ public sealed class PipelineWatchdogTests
         // Drop-rate path: _droppedFrames (5) < BadFrameThreshold (10) → also blocked
         Assert.False(wd.ShouldReinit());
     }
+
+    // ─── Consecutive-drop reinit (DIM MISMATCH class) ──────────────────
+
+    [Fact]
+    public void ShouldReinit_ConsecutiveDrops_TriggersWithoutStaleIssueTime()
+    {
+        var wd = new PipelineWatchdog
+        {
+            ConsecutiveDropsThreshold = 30
+        };
+
+        // Simulates DIM MISMATCH: frames arrive fine but encode drops every single one.
+        // Each drop refreshes _lastIssueTime, so the time-based paths (quick 3s, drop-rate 5s)
+        // would NEVER fire. The consecutive-drop counter must trigger regardless of freshness.
+        for (int i = 0; i < 30; i++)
+            wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+
+        Assert.True(wd.ShouldReinit(), "30 consecutive drops must trigger reinit even with a fresh _lastIssueTime");
+    }
+
+    [Fact]
+    public void ShouldReinit_ConsecutiveDrops_DefaultThresholdIsReachedAt60()
+    {
+        var wd = new PipelineWatchdog();
+
+        for (int i = 0; i < 59; i++)
+            wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+        Assert.False(wd.ShouldReinit(), "59 consecutive drops below default threshold (60) must not trigger");
+
+        wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+        Assert.True(wd.ShouldReinit(), "60th consecutive drop must trigger reinit");
+    }
+
+    [Fact]
+    public void ShouldReinit_ConsecutiveDrops_ResetByGoodFrame()
+    {
+        var wd = new PipelineWatchdog
+        {
+            ConsecutiveDropsThreshold = 30
+        };
+
+        for (int i = 0; i < 20; i++)
+            wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+
+        // A single good frame must reset the consecutive-drop counter — the pipeline recovered
+        wd.ReportGoodFrame(16.0);
+
+        for (int i = 0; i < 20; i++)
+            wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+
+        Assert.False(wd.ShouldReinit(), "20+20 drops separated by a good frame must not reach the 30 consecutive threshold");
+    }
+
+    [Fact]
+    public void ShouldReinit_ConsecutiveDrops_ResetClearsCounter()
+    {
+        var wd = new PipelineWatchdog
+        {
+            ConsecutiveDropsThreshold = 10
+        };
+
+        for (int i = 0; i < 10; i++)
+            wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+        Assert.True(wd.ShouldReinit());
+
+        wd.Reset();
+        for (int i = 0; i < 5; i++)
+            wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+        Assert.False(wd.ShouldReinit(), "after Reset, 5 drops must be below the 10-drop threshold");
+    }
+
+    [Fact]
+    public void Health_ExposesConsecutiveDrops()
+    {
+        var wd = new PipelineWatchdog();
+        wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+        wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+        wd.ReportDroppedFrame(PipelineIssue.EncodeError);
+
+        var h = wd.GetHealth();
+        Assert.Equal(3, h.ConsecutiveDrops);
+    }
 }

@@ -23,6 +23,7 @@ public sealed class PipelineHealth
     public double P95FrameTimeMs { get; set; }
     public PipelineIssue? LastIssue { get; set; }
     public int ConsecutiveGoodFrames { get; set; }
+    public int ConsecutiveDrops { get; set; }
     public int ApiSwitches { get; set; }
     public int ExportStalls { get; set; }
     public bool ReinitRequested { get; set; }
@@ -35,6 +36,7 @@ public sealed class PipelineWatchdog
     private int _totalFrames;
     private int _droppedFrames;
     private int _consecutiveGood;
+    private int _consecutiveDrops;
     private PipelineIssue? _lastIssue;
     private DateTime _lastFrameTime = DateTime.MinValue;
     private DateTime _lastIssueTime = DateTime.MinValue;
@@ -43,12 +45,14 @@ public sealed class PipelineWatchdog
 
     public int BadFrameThreshold { get; set; } = 10;
     public int ConsecutiveGoodReset { get; set; } = 30;
+    public int ConsecutiveDropsThreshold { get; set; } = 60;
     public double MaxStableFrameMs { get; set; } = 33.0;
 
     public void ReportGoodFrame(double durationMs)
     {
         _totalFrames++;
         _consecutiveGood = Math.Min(_consecutiveGood + 1, ConsecutiveGoodReset * 2);
+        _consecutiveDrops = 0;
         _lastFrameTime = DateTime.UtcNow;
 
         var now = _lastFrameTime;
@@ -65,6 +69,7 @@ public sealed class PipelineWatchdog
         _totalFrames++;
         _droppedFrames++;
         _consecutiveGood = 0;
+        _consecutiveDrops++;
         _lastIssue = issue;
         _lastIssueTime = DateTime.UtcNow;
     }
@@ -84,6 +89,14 @@ public sealed class PipelineWatchdog
 
     public bool ShouldReinit()
     {
+        // Consecutive-drop reinit: every single frame is failing (e.g. DIM MISMATCH on the
+        // GPU convert path). This is the ONLY signal that does NOT require a stale
+        // _lastIssueTime — each drop refreshes it, so the time-based paths below would
+        // never fire even with a 100% drop rate that persists indefinitely. A full second
+        // (60fps) of unbroken failures is a broken pipeline, not a transient blip.
+        if (_consecutiveDrops >= ConsecutiveDropsThreshold)
+            return true;
+
         // Quick reinit: no good frames at all for 3+ seconds
         if (_consecutiveGood == 0 && _lastIssueTime != DateTime.MinValue
             && (DateTime.UtcNow - _lastIssueTime).TotalSeconds > 3)
@@ -129,6 +142,7 @@ public sealed class PipelineWatchdog
             P95FrameTimeMs = p95,
             LastIssue = _lastIssue,
             ConsecutiveGoodFrames = _consecutiveGood,
+            ConsecutiveDrops = _consecutiveDrops,
             ApiSwitches = _apiSwitches,
             ExportStalls = _exportStalls,
             ReinitRequested = ShouldReinit()
@@ -140,6 +154,7 @@ public sealed class PipelineWatchdog
         _totalFrames = 0;
         _droppedFrames = 0;
         _consecutiveGood = 0;
+        _consecutiveDrops = 0;
         _lastIssue = null;
         _lastFrameTime = DateTime.MinValue;
         _lastIssueTime = DateTime.MinValue;
