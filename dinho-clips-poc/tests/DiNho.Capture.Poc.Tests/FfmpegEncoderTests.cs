@@ -522,6 +522,50 @@ public sealed class FfmpegEncoderTests
         Assert.Equal((1152, 720), result!.Value);
     }
 
+    [Fact]
+    public void ComputeScaleTarget_StretchToFit_21by9Source_Fills16by9Box()
+    {
+        // "Remover bordas pretas": captura 3440×1440 (21:9) + preset 1920×1080 (16:9)
+        // → preenche o box inteiro (1920×1080, esticado) em vez de 1920×804.
+        var result = FfmpegEncoder.ComputeScaleTarget(3440, 1440, 1920, 1080, 1, stretchToFit: true);
+        Assert.NotNull(result);
+        Assert.Equal((1920, 1080), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_StretchToFit_16by10Source_Fills16by9Box()
+    {
+        // Captura 2560×1600 (16:10) + preset 1920×1080 (16:9) → 1920×1080 (esticado).
+        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 1920, 1080, 1, stretchToFit: true);
+        Assert.NotNull(result);
+        Assert.Equal((1920, 1080), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_StretchToFit_16by9Source_Unchanged()
+    {
+        // Fonte já é 16:9 → stretch não muda nada (mesmo result de sempre).
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 1, stretchToFit: true);
+        Assert.NotNull(result);
+        Assert.Equal((1280, 720), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_StretchToFit_Native_ReturnsNull()
+    {
+        // Sem resolução explícita (nativo) → stretch é no-op (0×0 vira a entrada).
+        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 0, 0, 1, stretchToFit: true);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_StretchToFit_StillNeverUpscales()
+    {
+        // "Remover bordas pretas" NÃO habilita upscale — captura menor que o alvo permanece.
+        var result = FfmpegEncoder.ComputeScaleTarget(1280, 720, 1920, 1080, 1, stretchToFit: true);
+        Assert.Null(result);
+    }
+
     // ─── IsAv1Keyframe ──────────────────────────────────────────────────
 
     [Fact]

@@ -115,6 +115,8 @@ export interface ClipsConfig {
   noiseSuppression?: boolean
   /** RAM-aware adaptive quality: adjusts CQ/resolution/replay based on available system RAM */
   adaptiveQuality?: boolean
+  /** Remove black bars (letterboxing) by stretching to fill the full 16:9 frame instead of preserving aspect ratio */
+  stretchToFit?: boolean
 }
 
 export interface ClipTrimResult {

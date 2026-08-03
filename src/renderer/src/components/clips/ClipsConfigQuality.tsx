@@ -289,6 +289,23 @@ export function QualitySection({
         </div>
       </div>
 
+      {/* Stretch to fit (remove black bars) */}
+      <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
+              {t('stretchToFit')}
+            </span>
+            <TipBadge id="stretch-to-fit" activeTip={activeTip} setActiveTip={setActiveTip} />
+          </div>
+          <TogglePill
+            enabled={config.stretchToFit ?? false}
+            accent="blue"
+            onToggle={() => handleConfigUpdate({ stretchToFit: !(config.stretchToFit ?? false) })}
+          />
+        </div>
+      </div>
+
       {/* Replay Time */}
       <div>
         <p className="mb-1 text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-dim)' }}>

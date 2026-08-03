@@ -50,6 +50,7 @@ describe('clips-config-store', () => {
     expect(cfg.outputDirectory).toBe('')
     expect(cfg.useExcludeMode).toBe(false)
     expect(cfg.excludeProcessId).toBe(0)
+    expect(cfg.stretchToFit).toBe(false)
   })
 
   it('loads saved config when file exists', () => {
@@ -71,6 +72,7 @@ describe('clips-config-store', () => {
         encoderPreset: 'p4',
         outputDirectory: 'D:\\Clips',
         forceSoftware: true,
+        stretchToFit: true,
         hotkeys: [],
         pushToTalk: 'hold',
         pushToTalkKeys: [0x7a, 0x7b],
@@ -98,6 +100,7 @@ describe('clips-config-store', () => {
     expect(cfg.pushToTalkKeys).toEqual([0x7a, 0x7b])
     expect(cfg.gameDetection).toBe(true)
     expect(cfg.gameAudioOnly).toBe(true)
+    expect(cfg.stretchToFit).toBe(true)
   })
 
   it('falls back to defaults on corrupt JSON', () => {

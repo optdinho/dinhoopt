@@ -133,6 +133,17 @@ describe('clips-config-manager', () => {
       config.micDeviceId = '{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}'
     })
 
+    it('includes stretchToFit false by default', () => {
+      config.stretchToFit = false
+      expect(buildEngineConfig().stretchToFit).toBe(false)
+    })
+
+    it('propagates stretchToFit true to the engine payload', () => {
+      config.stretchToFit = true
+      expect(buildEngineConfig().stretchToFit).toBe(true)
+      config.stretchToFit = false
+    })
+
     it('uses config hotkeys when non-empty', () => {
       const customHk = [
         { id: 'test', vk: 0x31, modifiers: [], action: 'saveClip', replayDurationSeconds: 30, enabled: true },
@@ -333,6 +344,7 @@ describe('clips-config-manager', () => {
       expect(config.audioSampleRate).toBe(48000)
       expect(config.autoCleanupEnabled).toBe(true)
       expect(config.autoCleanupThresholdGB).toBe(20)
+      expect(config.stretchToFit).toBe(false)
     })
 
     it('syncs replayTimeSeconds and fps from store', () => {
@@ -394,6 +406,14 @@ describe('clips-config-manager', () => {
       expect(saved.bitrateKbps).toBe(40000)
       expect(saved.replayTimeSeconds).toBe(300)
       expect(saved.fps).toBe(60)
+    })
+
+    it('persists stretchToFit from config', () => {
+      config.stretchToFit = true
+      persistClipsConfig()
+      const saved = vi.mocked(saveClipsConfig).mock.calls[0][0] as Record<string, unknown>
+      expect(saved.stretchToFit).toBe(true)
+      config.stretchToFit = false
     })
 
     it('includes outputDirectory from getDefaultOutputDir', () => {

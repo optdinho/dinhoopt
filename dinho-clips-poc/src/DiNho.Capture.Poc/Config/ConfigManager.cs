@@ -52,6 +52,9 @@ public sealed class AppConfig
     public int Height { get; set; } = 720;
     public int BitrateKbps { get; set; } = 30000;
 
+    /// <summary>"Remover bordas pretas": preenche o box alvo inteiro no scale (sem preservar aspect).</summary>
+    public bool StretchToFit { get; set; } = false;
+
     // CRF+VBV quality params (usados por NVENC/AV1)
     public int Cq { get; set; } = 20;
     public int MaxrateKbps { get; set; } = 30000;

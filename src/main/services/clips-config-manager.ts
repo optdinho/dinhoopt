@@ -44,6 +44,7 @@ export interface ConfigState {
   autoCleanupEnabled: boolean
   autoCleanupThresholdGB: number
   adaptiveQuality: boolean
+  stretchToFit: boolean
 }
 
 export const config: ConfigState = {
@@ -82,6 +83,7 @@ export const config: ConfigState = {
   autoCleanupEnabled: true,
   autoCleanupThresholdGB: 20,
   adaptiveQuality: true,
+  stretchToFit: false,
 }
 
 function defaultHotkeys(): HotkeyBinding[] {
@@ -128,6 +130,7 @@ function baseConfigPayload(): Record<string, unknown> {
     autoCleanupThresholdGB: c.autoCleanupThresholdGB,
     noiseSuppression: c.noiseSuppression,
     adaptiveQuality: c.adaptiveQuality,
+    stretchToFit: c.stretchToFit,
   }
 }
 
@@ -205,6 +208,7 @@ export function loadPersistedClipsConfig(): void {
   config.selectedAudioSessions = saved.selectedAudioSessions ?? []
   config.noiseSuppression = saved.noiseSuppression ?? false
   config.adaptiveQuality = saved.adaptiveQuality ?? true
+  config.stretchToFit = saved.stretchToFit ?? false
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
   config.autoCleanupThresholdGB = saved.autoCleanupThresholdGB ?? 20
@@ -244,6 +248,7 @@ export function persistClipsConfig(): void {
     selectedAudioSessions: config.selectedAudioSessions,
     noiseSuppression: config.noiseSuppression,
     adaptiveQuality: config.adaptiveQuality,
+    stretchToFit: config.stretchToFit,
     audioSampleRate: config.audioSampleRate,
     autoCleanupEnabled: config.autoCleanupEnabled,
     autoCleanupThresholdGB: config.autoCleanupThresholdGB,

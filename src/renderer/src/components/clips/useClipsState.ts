@@ -119,6 +119,7 @@ export function useClipsState(): ClipsState {
       fps: t('tooltipFps'),
       replay: t('tooltipReplay'),
       'force-software': t('forceSoftwareTooltip'),
+      'stretch-to-fit': t('stretchToFitTooltip'),
       mic: t('tooltipMic'),
       loopback: t('tooltipLoopback'),
       ptt: t('pushToTalkTooltip'),

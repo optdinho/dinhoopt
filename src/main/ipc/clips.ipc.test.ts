@@ -716,6 +716,23 @@ describe('CLIPS_SET_CONFIG', () => {
     expect(cfg.autoCleanupThresholdGB).toBe(20)
   })
 
+  it('updates stretchToFit flag', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { stretchToFit: true })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.stretchToFit).toBe(true)
+  })
+
+  it('ignores non-boolean stretchToFit', async () => {
+    clipsConfig.stretchToFit = false
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { stretchToFit: 'yes' })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.stretchToFit).toBe(false)
+  })
+
   it('rejects unknown encoderPreset values', async () => {
     clipsConfig.encoderPreset = 'p5'
     const handlers = captureHandlers()

@@ -37,6 +37,7 @@ interface ClipsPersistedConfig {
   autoCleanupEnabled: boolean
   autoCleanupThresholdGB: number
   adaptiveQuality: boolean
+  stretchToFit: boolean
 }
 
 const DEFAULTS: ClipsPersistedConfig = {
@@ -100,6 +101,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   autoCleanupEnabled: true,
   autoCleanupThresholdGB: 20,
   adaptiveQuality: true,
+  stretchToFit: false,
 }
 
 const store = createJsonStore<ClipsPersistedConfig>({

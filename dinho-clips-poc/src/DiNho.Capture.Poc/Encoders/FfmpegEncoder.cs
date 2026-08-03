@@ -39,6 +39,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     // acontece dentro do ffmpeg via -vf "scale=..." antes do encoder.
     private int _outputWidth;
     private int _outputHeight;
+    private bool _stretchToFit;
 
     private GpuVideoConverter? _gpuConverter;
     private ID3D11Texture2D? _nv12Staging;
@@ -163,6 +164,16 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _outputHeight = height > 0 ? height & ~1 : 0;
     }
 
+    /// <summary>
+    /// "Remover bordas pretas": quando true, o scale preenche o box alvo inteiro
+    /// (deixa de preservar o aspect da captura — leve distorção). Sempre desliga
+    /// o box-fit, mas o "nunca upscale" continua valendo.
+    /// </summary>
+    public void SetStretchToFit(bool stretchToFit)
+    {
+        _stretchToFit = stretchToFit;
+    }
+
     /// <summary>Resolução efetiva dos pacotes emitidos, determinada no StartFfmpeg a partir do
     /// scale aplicado (usuário + divisor) e do crop. Cobre tanto o scale do usuário quanto o
     /// cascading fallback — evita que o header do MKV (EncodedPacket.Width/Height) divirja do
@@ -184,7 +195,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// escolhida (filosofia OBS: output resolution é decisão do usuário).
     /// </summary>
     internal static (int Width, int Height)? ComputeScaleTarget(
-        int inputW, int inputH, int outputW, int outputH, int scaleDivisor)
+        int inputW, int inputH, int outputW, int outputH, int scaleDivisor, bool stretchToFit = false)
     {
         int outW = outputW > 0 ? outputW : inputW;
         int outH = outputH > 0 ? outputH : inputH;
@@ -196,8 +207,11 @@ internal sealed partial class FfmpegEncoder : IEncoder
         // Nunca faz upscale — limita à resolução de entrada (mesma regra do EngineCoordinator)
         outW = Math.Min(outW, inputW);
         outH = Math.Min(outH, inputH);
-        // Preserva o aspect ratio da captura quando o alvo do usuário tem proporção distinta.
-        if (outW > 0 && outH > 0)
+        // "Remover bordas pretas" (stretchToFit): pula a preservação de aspect — o scale
+        // preenche o box alvo inteiro (leve distorção). Upscale continua bloqueado acima.
+        // Sem stretch, preserva o aspect ratio da captura quando o alvo do usuário tem
+        // proporção distinta (ex.: 16:10/21:9 + preset 16:9) — ajusta dentro do box sem esticar.
+        if (!stretchToFit && outW > 0 && outH > 0)
         {
             double inAr = (double)inputW / inputH;
             double outAr = (double)outW / outH;
@@ -319,7 +333,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             vfParts.Add($"crop={cw}:{ch}:{_cropX}:{_cropY}");
         int baseW = cw > 0 && ch > 0 ? cw : _width;
         int baseH = cw > 0 && ch > 0 ? ch : _height;
-        var scaleTarget = ComputeScaleTarget(baseW, baseH, _outputWidth, _outputHeight, _scaleDivisor);
+        var scaleTarget = ComputeScaleTarget(baseW, baseH, _outputWidth, _outputHeight, _scaleDivisor, _stretchToFit);
         _encodedW = scaleTarget?.Width ?? baseW;
         _encodedH = scaleTarget?.Height ?? baseH;
         if (scaleTarget.HasValue)

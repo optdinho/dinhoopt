@@ -128,6 +128,8 @@
   "noiseSuppressionTooltip": "Reduces background noise from the microphone using built-in audio filters (anlmdn/arnndn). Helps eliminate keyboard, fan, or ambient noise.",
   "adaptiveQuality": "Adaptive Quality",
   "adaptiveQualityTooltip": "Automatically adjusts recording quality based on available RAM. Reduces CQ, resolution and buffer on low-memory systems to prevent stuttering. Disable for maximum quality at all times.",
+  "stretchToFit": "Remove black bars",
+  "stretchToFitTooltip": "Stretches the image to fill the full 16:9 frame, removing black bars (letterboxing). Disables aspect ratio preservation — may distort the image if the game runs at a different resolution.",
   "videoPreviewFailed": "Failed to load video preview",
   "presetMuitoAlta": "Very High",
   "presetAlta": "High",

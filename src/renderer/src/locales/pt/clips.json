@@ -128,6 +128,8 @@
   "noiseSuppressionTooltip": "Reduz ruídos de fundo do microfone usando filtros de áudio integrados (anlmdn/arnndn). Ajuda a eliminar barulhos de teclado, ventoinha ou ambiente.",
   "adaptiveQuality": "Qualidade Adaptativa",
   "adaptiveQualityTooltip": "Ajusta automaticamente a qualidade da gravação conforme a RAM disponível. Reduz CQ, resolução e buffer em PCs com pouca memória para evitar travamentos. Desative para qualidade máxima sempre.",
+  "stretchToFit": "Remover bordas pretas",
+  "stretchToFitTooltip": "Estica a imagem para preencher o quadro 16:9, removendo as barras pretas (letterbox). Desativa a preservação da proporção — pode distorcer a imagem se o jogo rodar em resolução diferente.",
   "videoPreviewFailed": "Falha ao carregar visualização do vídeo",
   "presetMuitoAlta": "Muito Alta",
   "presetAlta": "Alta",
