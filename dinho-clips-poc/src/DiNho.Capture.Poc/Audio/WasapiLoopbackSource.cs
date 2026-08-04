@@ -20,7 +20,19 @@ public sealed class WasapiLoopbackSource : IAudioSource
     {
         _sampleRate = sampleRate;
         using var enumerator = new MMDeviceEnumerator();
-        _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        try
+        {
+            _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            Log.W("WasapiLoopbackSource", "Default render device not found — trying first available");
+            var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+            if (devices.Count == 0)
+                throw new InvalidOperationException("No audio render devices available on this system");
+            _device = devices[0];
+            Log.I("WasapiLoopbackSource", $"Using fallback device: {_device.FriendlyName}");
+        }
     }
 
     public void Start()

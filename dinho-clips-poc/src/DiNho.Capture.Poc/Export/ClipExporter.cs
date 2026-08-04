@@ -307,6 +307,7 @@ public sealed partial class ClipExporter : IDisposable
             args = $"-y -loglevel warning " +
                    $"-f matroska -i \"{videoPath}\" " +
                    $"-f aac -i \"{adtsPath}\" " +
+                   $"-max_muxing_queue_size 4096 " +
                    $"-map 0:v:0 -map 1:a:0 " +
                    $"-c:v copy -c:a copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
@@ -321,6 +322,7 @@ public sealed partial class ClipExporter : IDisposable
             Log.W("Exporter", $"Áudio disponível ({adtsPath ?? "null"}) mas arquivo ADTS não existe — exportando vídeo sem áudio!");
             args = $"-y -loglevel warning " +
                    $"-f matroska -i \"{videoPath}\" " +
+                   $"-max_muxing_queue_size 4096 " +
                    $"-map 0:v:0 -c:v copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";
@@ -329,6 +331,7 @@ public sealed partial class ClipExporter : IDisposable
         {
             args = $"-y -loglevel warning " +
                    $"-f matroska -i \"{videoPath}\" " +
+                   $"-max_muxing_queue_size 4096 " +
                    $"-map 0:v:0 -c:v copy " +
                    $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +
                    $"-movflags +faststart \"{outputPath}\"";

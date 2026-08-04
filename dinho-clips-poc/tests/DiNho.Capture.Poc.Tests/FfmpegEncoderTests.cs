@@ -2,6 +2,8 @@ using DiNho.Capture.Poc.Encoders;
 using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Channels;
+using Vortice.Direct3D11;
+using Vortice.DXGI;
 
 namespace DiNho.Capture.Poc.Tests;
 
@@ -566,6 +568,83 @@ public sealed class FfmpegEncoderTests
         Assert.Null(result);
     }
 
+    // ─── ResolveOutput (O1 — onde o downscale acontece: conversão vs vf) ─
+
+    [Fact]
+    public void ResolveOutput_NoCrop_User720p_MovesScaleToNv12_NoScaleInVf()
+    {
+        // O1: captura 1920×1080 + user 720p, sem crop → a NV12 JÁ sai em 1280×720
+        // (downscale na conversão) e o ffmpeg recebe rawvideo nessa resolução (-s),
+        // SEM filtro scale no vf (ScaleW/H = null).
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 1280, 720, 1);
+        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));
+        Assert.Null(r.ScaleW);
+        Assert.Null(r.ScaleH);
+    }
+
+    [Fact]
+    public void ResolveOutput_NoCrop_Native_NoScaleAnywhere()
+    {
+        // Sem crop e sem resolução do usuário (nativo) → nada muda: encoded == capture,
+        // NV12 == capture, sem scale.
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 0, 0, 1);
+        Assert.Equal((1920, 1080), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1920, 1080), (r.Nv12W, r.Nv12H));
+        Assert.Null(r.ScaleW);
+    }
+
+    [Fact]
+    public void ResolveOutput_NoCrop_FallbackDivisor_DownscaleInNv12()
+    {
+        // Nativo + fallback 1/2 → 960×540 na NV12 (conversão), sem scale no vf.
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 0, 0, 2);
+        Assert.Equal((960, 540), (r.EncodedW, r.EncodedH));
+        Assert.Equal((960, 540), (r.Nv12W, r.Nv12H));
+        Assert.Null(r.ScaleW);
+    }
+
+    [Fact]
+    public void ResolveOutput_NoCrop_User720p_FallbackKeepsUserFloor()
+    {
+        // User 720p é o piso — fallback 1/2 NÃO degrada a resolução escolhida (OBS philosophy).
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 1280, 720, 2);
+        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));
+        Assert.Null(r.ScaleW);
+    }
+
+    [Fact]
+    public void ResolveOutput_CropActive_KeepsNv12AtCapture_ScaleInVf()
+    {
+        // Crop (código morto hoje) → NV12 sai nas dims da captura (ffmpeg faz crop+scale no vf).
+        // Crop 1600×900 na captura 1920×1080 + user 720p → scale 1280×720 vai no vf.
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 1600, 900, 1280, 720, 1);
+        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1920, 1080), (r.Nv12W, r.Nv12H));
+        Assert.Equal(1280, r.ScaleW);
+        Assert.Equal(720, r.ScaleH);
+    }
+
+    [Fact]
+    public void ResolveOutput_CropActive_NoUserOutput_ScaleInVfNull()
+    {
+        // Crop sem resolução do usuário → scale não é necessário (crop define a saída).
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 1280, 720, 0, 0, 1);
+        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1920, 1080), (r.Nv12W, r.Nv12H));
+        Assert.Null(r.ScaleW);
+    }
+
+    [Fact]
+    public void ResolveOutput_CropClampedTo320x240()
+    {
+        // Crop menor que 320×240 é elevado ao mínimo (mesma regra do StartFfmpeg).
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 100, 100, 0, 0, 1);
+        Assert.Equal((320, 240), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1920, 1080), (r.Nv12W, r.Nv12H));
+    }
+
     // ─── AppendSharpnessFilter ─────────────────────────────────────────
 
     [Fact]
@@ -789,6 +868,137 @@ public sealed class FfmpegEncoderTests
     {
         Assert.Equal(FfmpegEncoder.StdinWriteTimeoutMs, FfmpegEncoder.ComputeStdinWriteTimeout(1));
         Assert.Equal(FfmpegEncoder.StdinWriteTimeoutMs, FfmpegEncoder.ComputeStdinWriteTimeout(9001));
+    }
+
+    // ─── CanUseDirectInput (O2 — evita a cópia redundante p/ texturas SR) ──
+
+    [Theory]
+    [InlineData(BindFlags.ShaderResource, true)]
+    [InlineData(BindFlags.ShaderResource | BindFlags.RenderTarget, true)]
+    [InlineData(BindFlags.None, false)]
+    [InlineData(BindFlags.RenderTarget, false)]
+    public void CanUseDirectInput_ChecksShaderResourceFlag(BindFlags flags, bool expected)
+    {
+        var desc = new Texture2DDescription
+        {
+            Width = 1920, Height = 1080, MipLevels = 1, ArraySize = 1,
+            Format = Format.B8G8R8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = flags,
+            CPUAccessFlags = CpuAccessFlags.None
+        };
+        Assert.Equal(expected, FfmpegEncoder.CanUseDirectInput(desc));
+    }
+
+    // ─── DownscaleBgra (O1 — fallback CPU em escala de saída) ────────────
+
+    private static byte[] Bgra(byte r, byte g, byte b, byte a = 255) => new[] { b, g, r, a };
+
+    [Fact]
+    public void DownscaleBgra_IdentityDimensions_ReturnsCopyUnchanged()
+    {
+        // 2x2 vermelho → 2x2 (dst == src): mesmos bytes, mesmas dims.
+        var src = new byte[] { 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255 };
+        var dst = FfmpegEncoder.DownscaleBgra(src, 2, 2, 8, 2, 2);
+        Assert.Equal(16, dst.Length);
+        Assert.Equal(src, dst);
+    }
+
+    [Fact]
+    public void DownscaleBgra_SolidColor_AveragesToSameColor()
+    {
+        // 4x4 cinza (128,128,128) → 2x2: todos os pixels seguem iguais.
+        var src = new byte[4 * 4 * 4];
+        for (int i = 0; i < src.Length; i += 4)
+        {
+            src[i] = 128; src[i + 1] = 128; src[i + 2] = 128; src[i + 3] = 255;
+        }
+        var dst = FfmpegEncoder.DownscaleBgra(src, 4, 4, 16, 2, 2);
+        Assert.Equal(16, dst.Length);
+        for (int i = 0; i < dst.Length; i += 4)
+        {
+            Assert.Equal(128, dst[i]); Assert.Equal(128, dst[i + 1]);
+            Assert.Equal(128, dst[i + 2]); Assert.Equal(255, dst[i + 3]);
+        }
+    }
+
+    [Fact]
+    public void DownscaleBgra_Bilinear_QuadrantsAverageCenter()
+    {
+        // 2x2 quadrantes assimétricos → 1x1 média bilinear: TL=vermelho(255,0,0),
+        // TR=preto(0,0,0), BL=preto(0,0,0), BR=branco(255,255,255).
+        // Centro = (0.5,0.5): R=(255+0+0+255)/4=127.5→128, G=(0+0+0+255)/4=63.75→64,
+        // B=(0+0+0+255)/4=63.75→64.
+        var src = new byte[]
+        {
+            0, 0, 255, 255,  0, 0, 0, 255,
+            0, 0, 0, 255,  255, 255, 255, 255,
+        };
+        var dst = FfmpegEncoder.DownscaleBgra(src, 2, 2, 8, 1, 1);
+        Assert.Equal(4, dst.Length);
+        Assert.Equal(64, dst[0]);   // B
+        Assert.Equal(64, dst[1]);   // G
+        Assert.Equal(128, dst[2]);  // R
+        Assert.Equal(255, dst[3]);  // A
+    }
+
+    [Fact]
+    public void DownscaleBgra_OddSource_DownscalesToEvenTarget()
+    {
+        // 3x3 sólido → 2x2: dims corretas e cor preservada.
+        var src = new byte[3 * 3 * 4];
+        for (int i = 0; i < src.Length; i += 4)
+        {
+            src[i] = 10; src[i + 1] = 200; src[i + 2] = 40; src[i + 3] = 255;
+        }
+        var dst = FfmpegEncoder.DownscaleBgra(src, 3, 3, 12, 2, 2);
+        Assert.Equal(16, dst.Length);
+        for (int i = 0; i < dst.Length; i += 4)
+        {
+            Assert.Equal(10, dst[i]); Assert.Equal(200, dst[i + 1]);
+            Assert.Equal(40, dst[i + 2]); Assert.Equal(255, dst[i + 3]);
+        }
+    }
+
+    [Fact]
+    public void DownscaleBgra_InvalidDims_ReturnsEmpty()
+    {
+        var src = new byte[16];
+        Assert.Empty(FfmpegEncoder.DownscaleBgra(src, 2, 2, 8, 0, 0));
+        Assert.Empty(FfmpegEncoder.DownscaleBgra(src, 0, 0, 0, 2, 2));
+    }
+
+    // ─── BgraToNv12 (O1 — conversão BGRA→NV12 em escala de saída) ───────
+
+    [Fact]
+    public void BgraToNv12_Gray2x2_LimitedRanges()
+    {
+        // Cinza (128,128,128): Y=126 (BT.601 limited), U=V=128.
+        var src = new byte[2 * 2 * 4];
+        for (int i = 0; i < src.Length; i += 4)
+        {
+            src[i] = 128; src[i + 1] = 128; src[i + 2] = 128; src[i + 3] = 255;
+        }
+        var nv12 = new byte[2 * 2 + (2 / 2) * 2];
+        FfmpegEncoder.BgraToNv12(src, 8, 2, 2, nv12);
+        Assert.Equal(6, nv12.Length);
+        Assert.Equal(new byte[] { 126, 126, 126, 126, 128, 128 }, nv12);
+    }
+
+    [Fact]
+    public void BgraToNv12_Red2x2_UvInterleavedAtCorrectOffset()
+    {
+        // Vermelho puro (255,0,0): Y=82, U=90, V=240 (clamp BT.601 limited).
+        var src = new byte[]
+        {
+            0, 0, 255, 255,  0, 0, 255, 255,
+            0, 0, 255, 255,  0, 0, 255, 255,
+        };
+        var nv12 = new byte[2 * 2 + (2 / 2) * 2];
+        FfmpegEncoder.BgraToNv12(src, 8, 2, 2, nv12);
+        // Y plane (4): 82 82 82 82 — UV plane (2): U=90, V=240
+        Assert.Equal(new byte[] { 82, 82, 82, 82, 90, 240 }, nv12);
     }
 
     // Streams de teste para TryWriteStdin — sem depender de um processo ffmpeg real.

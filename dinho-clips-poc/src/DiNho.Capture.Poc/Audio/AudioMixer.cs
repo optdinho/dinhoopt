@@ -21,7 +21,7 @@ public sealed class AudioMixer : IDisposable
 {
     // Fontes
     private readonly IAudioSource _loopbackSource;
-    private readonly IAudioSource _micSource;
+    private readonly IAudioSource? _micSource;
     private readonly MasterClock _clock;
 
     // Filas internas — protegidas por _lock
@@ -124,32 +124,33 @@ public sealed class AudioMixer : IDisposable
     public event Action<EncodedPacket>? OnMixedAudio;
     public event Action<float>? OnMicLevel;
 
-    public AudioMixer(IAudioSource loopbackSource, IAudioSource micSource, MasterClock clock)
+    public AudioMixer(IAudioSource loopbackSource, IAudioSource? micSource, MasterClock clock)
     {
         _loopbackSource = loopbackSource;
         _micSource = micSource;
         _clock = clock;
 
         _loopbackSource.OnAudioData += OnLoopbackData;
-        _micSource.OnAudioData += OnMicData;
+        if (_micSource != null)
+            _micSource.OnAudioData += OnMicData;
     }
 
     public void Start()
     {
         _loopbackSource.Start();
-        _micSource.Start();
+        _micSource?.Start();
         _sampleRate = _loopbackSource.SampleRate;
         _channels = _loopbackSource.Channels;
         Log.I("AudioMixer",
             $"Iniciado: SR={_sampleRate} Ch={_channels} " +
             $"loopback={_loopbackSource.GetType().Name} " +
-            $"mic={_micSource.GetType().Name}");
+            $"mic={_micSource?.GetType().Name ?? "none"}");
     }
 
     public void Stop()
     {
         _loopbackSource.Stop();
-        _micSource.Stop();
+        _micSource?.Stop();
         lock (_lock)
         {
             _loopbackQueue.Clear();
@@ -450,7 +451,8 @@ public sealed class AudioMixer : IDisposable
     {
         Stop();
         _loopbackSource.OnAudioData -= OnLoopbackData;
-        _micSource.OnAudioData -= OnMicData;
+        if (_micSource != null)
+            _micSource.OnAudioData -= OnMicData;
         (_loopbackSource as IDisposable)?.Dispose();
         (_micSource as IDisposable)?.Dispose();
         _noiseFilter?.Dispose();

@@ -1,5 +1,6 @@
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
+using DiNho.Capture.Poc.Logging;
 
 namespace DiNho.Capture.Poc.Audio;
 
@@ -22,8 +23,17 @@ public sealed class WasapiMicSource : IAudioSource
         using var enumerator = new MMDeviceEnumerator();
         if (!string.IsNullOrEmpty(deviceId))
         {
-            DeviceId = deviceId;
-            _device = enumerator.GetDevice(deviceId);
+            try
+            {
+                _device = enumerator.GetDevice(deviceId);
+                DeviceId = deviceId;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                Log.W("WasapiMicSource", $"Microfone '{deviceId}' não encontrado (0x{ex.ErrorCode:X8}) — usando default");
+                _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+                DeviceId = "";
+            }
         }
         else
         {

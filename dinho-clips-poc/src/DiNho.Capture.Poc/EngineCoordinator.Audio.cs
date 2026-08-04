@@ -13,17 +13,38 @@ public sealed partial class EngineCoordinator
         var cfg = _config.Config;
         var sampleRate = cfg.AudioSampleRate is 44100 or 48000 or 96000 ? cfg.AudioSampleRate : 48000;
 
-        // GameAudioOnly=true  → CppLoopbackSource (só jogo + mic via C++ DLL)
-        // GameAudioOnly=false → WasapiLoopbackSource (áudio completo do sistema)
-        // GameAudioOnly vem do Electron, controlado pelos toggles na UI
+        // ── Loopback source (independente do mic) ──
+        _loopbackSource = CreateLoopbackSource(sampleRate);
 
-        if (cfg.UseExcludeMode && cfg.ExcludeProcessId > 0)
+        // ── Mic source (independente do loopback) ──
+        _micSource = CreateMicSource(sampleRate);
+
+        // Limpa DeviceId inválido do config (só depois que _micSource já foi atribuído)
+        if (_micSource is WasapiMicSource wasapiMic && string.IsNullOrEmpty(wasapiMic.DeviceId) && !string.IsNullOrEmpty(_config.Config.MicDeviceId))
         {
-            Log.I("EngineCoordinator", $"Áudio: EXCLUDE mode (C++ DLL) — excluindo PID {cfg.ExcludeProcessId} (e filhos), capturando TODO o resto");
-            _loopbackSource = new CppLoopbackSource(cfg.ExcludeProcessId, includeTree: false, sampleRate: sampleRate);
+            Log.I("EngineCoordinator", $"Limpando MicDeviceId inválido '{_config.Config.MicDeviceId}' — usando default");
+            _config.Update(c => c.MicDeviceId = "");
         }
-        else
+
+        if (_loopbackSource == null && _micSource == null)
         {
+            Log.W("EngineCoordinator", "Nenhum dispositivo de áudio disponível — captura será SOMENTE VÍDEO");
+        }
+
+        return new AudioMixer(_loopbackSource, _micSource, _clock);
+    }
+
+    private IAudioSource? CreateLoopbackSource(int sampleRate)
+    {
+        var cfg = _config.Config;
+        try
+        {
+            if (cfg.UseExcludeMode && cfg.ExcludeProcessId > 0)
+            {
+                Log.I("EngineCoordinator", $"Áudio: EXCLUDE mode (C++ DLL) — excluindo PID {cfg.ExcludeProcessId} (e filhos), capturando TODO o resto");
+                return new CppLoopbackSource(cfg.ExcludeProcessId, includeTree: false, sampleRate: sampleRate);
+            }
+
             var selectedPids = cfg.SelectedAudioSessions;
 
             if (selectedPids.Count > 0)
@@ -36,30 +57,56 @@ public sealed partial class EngineCoordinator
                     foreach (var (pid, name) in processes)
                         Log.I("EngineCoordinator", $"PID alvo {pid}: {name}");
 
-                    // VAD INCLUDE mode captura o processo + filhos (includeTree=true)
-                    // Para múltiplos PIDs, capturamos apenas o primeiro (includeTree já pega filhos)
-                    var (targetPid, procName) = processes[0];
-                    _loopbackSource = new CppLoopbackSource(targetPid, includeTree: true, sampleRate: sampleRate);
-
+                    var (targetPid, _) = processes[0];
                     _audioFallback = false;
+                    return new CppLoopbackSource(targetPid, includeTree: true, sampleRate: sampleRate);
                 }
-                else
-                {
-                    Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
-                    _loopbackSource = new WasapiLoopbackSource(sampleRate);
-                }
+
+                Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
             }
             else
             {
-                _loopbackSource = new WasapiLoopbackSource(sampleRate);
                 Log.I("EngineCoordinator", "Áudio: captura completa (loopback) — NENHUM filtro ativo");
             }
-        }
 
-        _micSource = string.IsNullOrEmpty(_config.Config.MicDeviceId)
-            ? new WasapiMicSource(sampleRate, null)
-            : new WasapiMicSource(sampleRate, _config.Config.MicDeviceId);
-        return new AudioMixer(_loopbackSource, _micSource, _clock);
+            return new WasapiLoopbackSource(sampleRate);
+        }
+        catch (Exception ex)
+        {
+            Log.W("EngineCoordinator", $"Loopback indisponível: {ex.Message}");
+
+            // Fallback: tenta WasapiLoopbackSource genérico se o C++ DLL falhou
+            if (ex is not InvalidOperationException)
+            {
+                try
+                {
+                    Log.I("EngineCoordinator", "Tentando fallback para WasapiLoopbackSource...");
+                    return new WasapiLoopbackSource(sampleRate);
+                }
+                catch (Exception ex2)
+                {
+                    Log.W("EngineCoordinator", $"Fallback loopback também falhou: {ex2.Message}");
+                }
+            }
+
+            return null;
+        }
+    }
+
+    private IAudioSource? CreateMicSource(int sampleRate)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(_config.Config.MicDeviceId))
+                return new WasapiMicSource(sampleRate, _config.Config.MicDeviceId);
+            else
+                return new WasapiMicSource(sampleRate, null);
+        }
+        catch (Exception ex)
+        {
+            Log.W("EngineCoordinator", $"Microfone indisponível — captura continua sem mic: {ex.Message}");
+            return null;
+        }
     }
 
     private int _audioPacketCount;

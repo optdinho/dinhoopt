@@ -75,7 +75,11 @@ public sealed class TexturePool : IDisposable
             Format = format,
             SampleDescription = new SampleDescription(1, 0),
             Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.None,
+            // ShaderResource habilita o D3D11 VideoProcessor (VideoProcessorBlt) a ler a
+            // textura diretamente como entrada — evita uma cópia redundante (CopyResource)
+            // no caminho WGC. O VideoProcessor usa ID3D11VideoProcessorInputView, que exige
+            // bind como SR; texturas BindFlags.None não podem ser usadas nessa conversão.
+            BindFlags = BindFlags.ShaderResource,
             CPUAccessFlags = CpuAccessFlags.None,
         });
 }

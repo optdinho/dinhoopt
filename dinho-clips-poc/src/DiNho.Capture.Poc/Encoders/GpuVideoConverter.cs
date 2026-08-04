@@ -12,21 +12,29 @@ internal sealed class GpuVideoConverter : IDisposable
     private ID3D11VideoContext1? _videoContext1;
     private readonly int _width;
     private readonly int _height;
+    private readonly int _outW;
+    private readonly int _outH;
     private ID3D11Texture2D? _cachedOutput;
     private ID3D11VideoProcessorInputView? _cachedInputView;
     private ID3D11VideoProcessorOutputView? _cachedOutputView;
     private ID3D11Texture2D? _cachedInputViewTexture;
     private bool _disposed;
 
-    public GpuVideoConverter(ID3D11Device device, int width, int height)
+    public GpuVideoConverter(ID3D11Device device, int width, int height, int outputWidth = 0, int outputHeight = 0)
     {
         if (width < 64 || height < 64)
             throw new ArgumentException($"GpuVideoConverter: dimensão ({width}x{height}) abaixo do mínimo 64x64 — crop muito pequeno causa E_INVALIDARG no VideoProcessorBlt");
         _width = width;
         _height = height;
+        _outW = (outputWidth > 0 ? outputWidth : width) & ~1;
+        _outH = (outputHeight > 0 ? outputHeight : height) & ~1;
+        if (_outW < 2) _outW = 2;
+        if (_outH < 2) _outH = 2;
 
         ID3D11VideoDevice? videoDevice = null;
         ID3D11VideoContext? videoContext = null;
+        ID3D11VideoProcessorEnumerator? enumerator = null;
+        ID3D11VideoProcessor? processor = null;
         try
         {
             videoDevice = device.QueryInterface<ID3D11VideoDevice>();
@@ -42,8 +50,8 @@ internal sealed class GpuVideoConverter : IDisposable
                 InputWidth = (uint)width,
                 InputHeight = (uint)height,
                 OutputFrameRate = new Rational(60, 1),
-                OutputWidth = (uint)width,
-                OutputHeight = (uint)height,
+                OutputWidth = (uint)_outW,
+                OutputHeight = (uint)_outH,
                 // OptimalQuality (não PlaybackNormal): este VideoProcessor é usado para conversão
                 // de captura BGRA→NV12 frame-accurate, NÃO para playback. O modo PlaybackNormal
                 // permite o driver aplicar noise reduction + edge enhancement (filtros de "TV
@@ -54,8 +62,10 @@ internal sealed class GpuVideoConverter : IDisposable
                 Usage = VideoUsage.OptimalQuality
             };
 
-            _videoDevice.CreateVideoProcessorEnumerator(ref contentDesc, out _enumerator).CheckError();
-            _videoDevice.CreateVideoProcessor(_enumerator, 0, out _videoProcessor).CheckError();
+            _videoDevice.CreateVideoProcessorEnumerator(ref contentDesc, out enumerator).CheckError();
+            _videoDevice.CreateVideoProcessor(enumerator, 0, out processor).CheckError();
+            _enumerator = enumerator;
+            _videoProcessor = processor;
 
             // Define o espaço de cores correto: entrada BGRA full-range BT.709 → saída NV12
             // limited-range BT.709. Sem isso o D3D11 VideoProcessor mantém o default BT.601 e o
@@ -77,8 +87,8 @@ internal sealed class GpuVideoConverter : IDisposable
 
             var nv12Desc = new Texture2DDescription
             {
-                Width = (uint)_width,
-                Height = (uint)_height,
+                Width = (uint)_outW,
+                Height = (uint)_outH,
                 MipLevels = 1,
                 ArraySize = 1,
                 Format = Format.NV12,
@@ -91,6 +101,8 @@ internal sealed class GpuVideoConverter : IDisposable
         }
         catch
         {
+            processor?.Dispose();
+            enumerator?.Dispose();
             videoDevice?.Dispose();
             videoContext?.Dispose();
             _videoContext1?.Dispose();
@@ -151,6 +163,16 @@ internal sealed class GpuVideoConverter : IDisposable
 
         return _cachedOutput;
     }
+
+    public ID3D11Texture2D? OutputTexture => _cachedOutput;
+
+    public int OutputWidth => _outW;
+
+    public int OutputHeight => _outH;
+
+    public int InputWidth => _width;
+
+    public int InputHeight => _height;
 
     public void Dispose()
     {

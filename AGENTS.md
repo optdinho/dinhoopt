@@ -3487,3 +3487,42 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - `src/renderer/src/components/clips/useClipsState.ts`: tooltip `sharpness`
 - `src/renderer/src/locales/{en,pt,es}/clips.json`: `sharpness`/`sharpnessTooltip`/`sharpnessOff`
 - Tests: `clips-config-store.test.ts`, `clips-config-manager.test.ts`, `clips.ipc.test.ts`, `ConfigManagerTests.cs`, `FfmpegEncoderTests.cs`
+
+## Session Summary (2026-08-04 — O1/O2 GPU: revisao aplicada + deploy + smoke)
+
+### Done
+
+- **Revisao concluida (PASS, sem CRITICAL/HIGH)** com 2 MEDs reais + LOWs — todos corrigidos e validados:
+  - **MED #1 (leak COM no ctor)**: GpuVideoConverter ctor — _enumerator/_videoProcessor agora sao locals (numerator/processor), atribuidos so apos sucesso; catch faz dispose de processor, numerator, ideoDevice, ideoContext, _videoContext1 antes de rethrow.
+  - **MED #2 (LOH alloc no downscale)**: novo overload DownscaleBgra(src, srcW, srcH, srcRowPitch, dstW, dstH, byte[] dst) grava no buffer do chamador; campos _downscaleScratch/_downscaleScratchW/_downscaleScratchH cacheados por (nv12W, nv12H); overload de 5 args (testes) aloca 
+ew byte[dstW*dstH*4]; identidade usa src.CopyTo(dst).
+  - **LOW (altura impar)**: branch direto do ConvertCpuNv12 ampliado para 	exW == nv12W && (texH == nv12H || texH == nv12H + 1) — evita bilinear de frame inteiro para altura impar.
+  - **LOW (formato staging)**: _cpuStaging cacheado por dims **e** formato (_cpuStagingFormat = texDesc.Format), espelhando o chaveamento do _inputCopy.
+
+- **Build Release**: exit 0, 0 erros (22 warnings pre-existentes).
+- **Filtro de testes da feature** (ResolveOutput|DownscaleBgra|BgraToNv12|CanUseDirectInput): **18/18 GREEN**.
+- **Suite completa**: 1087 ok / 13 falhas — **todas ambientais ou pre-existentes, nenhuma das mudancas**:
+  - 9 testes ffmpeg-probe (Win32Exception: cannot find 'ffmpeg') — ffmpeg.exe ausente do PATH do shell e do staging (ambiente, nao codigo; confirmado: spawnam ProcessStartInfo("ffmpeg")).
+  - 3 ConfigManager/EngineCoordinator pre-existentes (preset p5/p4) + 1 MasterClock flaky.
+- **Deploy**: publish (812CDAAB...) -> 
+pm run copy-engine (293 files, **ffmpeg nao copiado** — erro pre-existente do script) -> 5 arquivos DiNho.Capture.Poc.* copiados para %LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\; SHA256 instalado == staging == 812CDAAB9C4C93BE9BA7431FC90BCE376A7582EBFA6A1FD53BB840144B5885A8.
+- **Smoke de hardware** (do dir instalado, onde ffmpeg.exe existe): Ffmpeg... OK (libx264), FfmpegHw... OK — **probed OK: HW native (h264_nvenc)**, initialized (codec=h264_nvenc), GPU detectada (fix OverflowException da VRAM funciona), sem restart loop.
+
+### Key Decisions
+
+- **Overload de 7 args com buffer do chamador para o downscale**: evita alocar LOH por frame em 720p+; o cache _downscaleScratch por (nv12W, nv12H) faz reset de tamanho barato e preserva o buffer entre frames.
+- **Branch direto (identidade) tambem para 	exH == nv12H + 1**: altura impar de captura (ex.: 1081) nao precisa de bilinear no eixo Y quando ja bate as dims — apenas o crop de 1 linha.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (captura real): WGC com SR direto (sem _inputCopy), PrintWindow/Hybrid via fallback, VPBlt 720p, e fallback CPU em dims impares.
+- Nota: 
+pm run copy-engine nao copia ffmpeg.exe (erro pre-existente do script (Get-Command ffmpeg.exe)); o app instalado ja tem ffmpeg do pacote, mas rebuilds de instalador devem resolver isso.
+
+### Relevant Files Changed
+
+- dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/GpuVideoConverter.cs: ctor sem leak (locals + dispose no catch)
+- dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.GpuConvert.cs: DownscaleBgra overload cacheado, branch direto altura impar, _cpuStagingFormat
+- dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs: EncoderOutputResolve/ResolveOutput, StartFfmpeg, _nv12W/_nv12H
+- dinho-clips-poc/src/DiNho.Capture.Poc/Capture/TexturePool.cs: BindFlags.ShaderResource
+- dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs: 18 testes GREEN

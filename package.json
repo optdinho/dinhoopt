@@ -84,7 +84,7 @@
     "zustand": "^5.0.13"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^13.0.1"
+    "better-sqlite3": "^13.0.2"
   },
   "engines": {
     "node": ">=22.0.0"

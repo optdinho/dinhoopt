@@ -49,6 +49,13 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _inputCopyW, _inputCopyH, _stagingW, _stagingH;
     private Format _inputCopyFormat;
 
+    // Dimensões da NV12 emitida (encoded dims). Sem crop, o scale acontece no GPU/CPU
+    // (VideoProcessorBlt / DownscaleBgra) — a NV12 já sai na resolução final e o ffmpeg
+    // recebe rawvideo direto nela, sem filtro scale. Com crop (código morto) mantém-se
+    // _width/_height e o scale no vf. Setadas no StartFfmpeg; 0 = fallback para captura.
+    private int _nv12W;
+    private int _nv12H;
+
     private readonly Queue<EncodedPacket> _pendingOutputs = new();
     private bool _processFailed;
     private int _frameCount;
@@ -258,11 +265,41 @@ internal sealed partial class FfmpegEncoder : IEncoder
         return (outW, outH);
     }
 
+    /// <summary>Resultado do ResolveOutput — quais dims o ffmpeg recebe (-s), quais a NV12
+    /// produzida tem (Nv12W/H) e se o scale vai no filtro vf (ScaleW/H não-nulos = crop ativo).</summary>
+    internal readonly record struct EncoderOutputResolve(
+        int EncodedW, int EncodedH,
+        int Nv12W, int Nv12H,
+        int? ScaleW, int? ScaleH);
+
+    /// <summary>
+    /// Decisão central de resolução do O1: onde o downscale acontece.
+    /// Sem crop (caminho normal): o scale do ComputeScaleTarget é aplicado NA CONVERSÃO
+    /// (GPU VideoProcessorBlt / CPU DownscaleBgra) — a NV12 já sai em Nv12W×Nv12H e o ffmpeg
+    /// recebe rawvideo direto nela via -s, SEM filtro scale no vf.
+    /// Com crop (código morto hoje): a NV12 sai nas dims da captura (Nv12W=EncodedW base = input)
+    /// e o scale vai no vf, sobre o frame cortado.
+    /// </summary>
+    internal static EncoderOutputResolve ResolveOutput(
+        int inputW, int inputH, int cropW, int cropH,
+        int outputW, int outputH, int scaleDivisor, bool stretchToFit = false)
+    {
+        bool hasCrop = cropW > 0 && cropH > 0;
+        int baseW = hasCrop ? Math.Max(cropW, 320) : inputW;
+        int baseH = hasCrop ? Math.Max(cropH, 240) : inputH;
+        var scaleTarget = ComputeScaleTarget(baseW, baseH, outputW, outputH, scaleDivisor, stretchToFit);
+        int encodedW = scaleTarget?.Width ?? baseW;
+        int encodedH = scaleTarget?.Height ?? baseH;
+        if (hasCrop)
+            return new EncoderOutputResolve(encodedW, encodedH, inputW, inputH, scaleTarget?.Width, scaleTarget?.Height);
+        return new EncoderOutputResolve(encodedW, encodedH, encodedW, encodedH, null, null);
+    }
+
     /// <summary>
     /// Define parâmetros de qualidade CRF+VBV para NVENC/AV1.
     /// bitrateKbps ainda é usado como fallback para AMF/QSV/libx264.
     /// </summary>
-    public void SetQualityParams(int cq, int maxrateKbps, int bufsizeKbps, int bframes = 2, int lookahead = 4, string preset = "p5", string? codec = null)
+    public void SetQualityParams(int cq, int maxrateKbps, int bufsizeKbps, int bframes = 2, int lookahead = 4, string preset = "p4", string? codec = null)
     {
         _cq = cq;
         _maxrateKbps = maxrateKbps;
@@ -336,9 +373,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
         {
             "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high",
             "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
-            "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
-            "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass fullres -nonref_p 1 -g 120 -keyint_min 120",
+            "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
+            "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "h264_qsv" => $"-preset veryslow -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
@@ -346,7 +383,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
         };
 
         int cw = _cropW, ch = _cropH;
-        if (cw > 0 && ch > 0)
+        bool hasCrop = cw > 0 && ch > 0;
+        if (hasCrop)
         {
             cw = Math.Max(cw, 320);
             ch = Math.Max(ch, 240);
@@ -357,19 +395,25 @@ internal sealed partial class FfmpegEncoder : IEncoder
         // O scale é relativo à resolução PÓS-crop — se um crop estiver ativo, o "nunca upscale"
         // e o divisor do fallback aplicam-se ao frame cortado, não ao frame cheio.
         var vfParts = new List<string>();
-        if (cw > 0 && ch > 0)
+        if (hasCrop)
             vfParts.Add($"crop={cw}:{ch}:{_cropX}:{_cropY}");
-        int baseW = cw > 0 && ch > 0 ? cw : _width;
-        int baseH = cw > 0 && ch > 0 ? ch : _height;
-        var scaleTarget = ComputeScaleTarget(baseW, baseH, _outputWidth, _outputHeight, _scaleDivisor, _stretchToFit);
-        _encodedW = scaleTarget?.Width ?? baseW;
-        _encodedH = scaleTarget?.Height ?? baseH;
-        if (scaleTarget.HasValue)
+
+        // O1: sem crop, o downscale acontece na conversão (GPU VideoProcessorBlt ou CPU
+        // DownscaleBgra) — a NV12 já sai em Nv12W×Nv12H e o ffmpeg recebe rawvideo direto
+        // na resolução final via -s, sem filtro scale. Com crop (código morto hoje), a NV12
+        // sai nas dims da captura e o scale fica no vf sobre o frame cortado.
+        var resolve = ResolveOutput(_width, _height, hasCrop ? cw : 0, hasCrop ? ch : 0,
+            _outputWidth, _outputHeight, _scaleDivisor, _stretchToFit);
+        _encodedW = resolve.EncodedW;
+        _encodedH = resolve.EncodedH;
+        _nv12W = resolve.Nv12W;
+        _nv12H = resolve.Nv12H;
+        if (resolve.ScaleW.HasValue && resolve.ScaleH.HasValue)
         {
-            var sw = scaleTarget.Value.Width;
-            var sh = scaleTarget.Value.Height;
-            vfParts.Add($"scale={sw}:{sh}");
-            Log.I("FfmpegEncoder", $"output scale: {baseW}x{baseH} → {sw}x{sh} (user={( _outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : "native" )}, fallback=1/{_scaleDivisor})");
+            vfParts.Add($"scale={resolve.ScaleW}:{resolve.ScaleH}");
+            int baseW = hasCrop ? cw : _width;
+            int baseH = hasCrop ? ch : _height;
+            Log.I("FfmpegEncoder", $"output scale: {baseW}x{baseH} → {resolve.ScaleW}:{resolve.ScaleH} (user={( _outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : "native" )}, fallback=1/{_scaleDivisor})");
         }
         var sharpnessFilter = AppendSharpnessFilter("", _sharpnessStrength);
         if (!string.IsNullOrEmpty(sharpnessFilter))
@@ -406,7 +450,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         {
             StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
                             args: $"-y -loglevel info " +
-                            $"-f rawvideo -pix_fmt nv12 -s {_width}x{_height} " +
+                            $"-f rawvideo -pix_fmt nv12 -s {_nv12W}x{_nv12H} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +
                             $"{cropFilter} -c:v {_codec} {tune} " +

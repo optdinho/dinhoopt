@@ -13,6 +13,114 @@ internal partial class FfmpegEncoder
 
     private ID3D11Texture2D? _cpuStaging;
     private int _cpuStagingW, _cpuStagingH;
+    private Format _cpuStagingFormat;
+    private byte[]? _downscaleScratch;
+    private int _downscaleScratchW, _downscaleScratchH;
+
+    // O2: o D3D11 VideoProcessor (VideoProcessorBlt) lê a textura de entrada via
+    // ID3D11VideoProcessorInputView, que exige bind como ShaderResource. Texturas criadas
+    // com BindFlags.None (PrintWindow/Hybrid) precisam da cópia _inputCopy; texturas do
+    // TexturePool (WGC) já saem com ShaderResource e podem ser lidas direto — evita a
+    // cópia redundante de ~9,9MB por frame (1080p BGRA).
+    internal static bool CanUseDirectInput(Texture2DDescription desc) =>
+        (desc.BindFlags & BindFlags.ShaderResource) != 0;
+
+    /// <summary>
+    /// Downscale bilinear BGRA. Preserva o aspect ao operar sobre a frame inteira
+    /// (dst já traz o aspect ajustado pelo ComputeScaleTarget). Identidade = cópia.
+    /// </summary>
+    internal static byte[] DownscaleBgra(ReadOnlySpan<byte> src, int srcW, int srcH, int srcRowPitch, int dstW, int dstH)
+        => DownscaleBgra(src, srcW, srcH, srcRowPitch, dstW, dstH, new byte[dstW * dstH * 4]);
+
+    /// <summary>
+    /// Overload que grava num buffer de destino fornecido pelo chamador (cacheado),
+    /// evitando o alloc de LOH por frame no fallback CPU (MED #2).
+    /// </summary>
+    internal static byte[] DownscaleBgra(ReadOnlySpan<byte> src, int srcW, int srcH, int srcRowPitch, int dstW, int dstH, byte[] dst)
+    {
+        if (srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0 || src.Length == 0)
+            return Array.Empty<byte>();
+        if (dstW == srcW && dstH == srcH)
+        {
+            src.CopyTo(dst);
+            return dst;
+        }
+
+        int dstBytes = dstW * dstH * 4;
+        // Mapeamento centro-a-centro: o centro do pixel de destino é projetado na origem
+        // ((dst+0.5)*srcW/dstW - 0.5). Evita viés para os pixels de borda e coincide com o
+        // filtro do VideoProcessor (box/bilinear na resolução final). Em identidade (dst==src)
+        // cai no branch de cópia acima — nunca chega aqui.
+        float xScale = (float)srcW / dstW;
+        float yScale = (float)srcH / dstH;
+        for (int dy = 0; dy < dstH; dy++)
+        {
+            float fy = (dy + 0.5f) * yScale - 0.5f;
+            if (fy < 0) fy = 0;
+            int y0 = (int)fy;
+            if (y0 > srcH - 2) y0 = srcH - 2;
+            float wy = fy - y0;
+            int y1 = y0 + 1;
+            for (int dx = 0; dx < dstW; dx++)
+            {
+                float fx = (dx + 0.5f) * xScale - 0.5f;
+                if (fx < 0) fx = 0;
+                int x0 = (int)fx;
+                if (x0 > srcW - 2) x0 = srcW - 2;
+                float wx = fx - x0;
+                int x1 = x0 + 1;
+
+                int p00 = y0 * srcRowPitch + x0 * 4;
+                int p01 = y0 * srcRowPitch + x1 * 4;
+                int p10 = y1 * srcRowPitch + x0 * 4;
+                int p11 = y1 * srcRowPitch + x1 * 4;
+                int o = (dy * dstW + dx) * 4;
+                for (int c = 0; c < 4; c++)
+                {
+                    float top = src[p00 + c] * (1 - wx) + src[p01 + c] * wx;
+                    float bottom = src[p10 + c] * (1 - wx) + src[p11 + c] * wx;
+                    float v = top * (1 - wy) + bottom * wy;
+                    dst[o + c] = (byte)Math.Round(v);
+                }
+            }
+        }
+        return dst;
+    }
+
+    /// <summary>
+    /// Converte BGRA (largura = srcRowPitch, sem padding assumido nas linhas) → NV12.
+    /// NV12: plane Y (width*height) seguida de UV interleaved ((height/2)*width*2),
+    /// BT.601 limited range (mesmas fórmulas do caminho GPU/ffmpeg).
+    /// </summary>
+    internal static void BgraToNv12(ReadOnlySpan<byte> bgra, int srcRowPitch, int width, int height, byte[] nv12)
+    {
+        int ySize = width * height;
+        for (int row = 0; row < height; row++)
+        {
+            var srcRow = bgra.Slice(row * srcRowPitch, width * 4);
+            for (int col = 0; col < width; col++)
+            {
+                byte b = srcRow[col * 4 + 0];
+                byte g = srcRow[col * 4 + 1];
+                byte r = srcRow[col * 4 + 2];
+
+                int y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+                nv12[row * width + col] = (byte)(y < 16 ? 16 : y > 235 ? 235 : y);
+
+                if ((row & 1) == 0 && (col & 1) == 0)
+                {
+                    int u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                    int v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                    int uvIdx = ySize + (row / 2) * width + col;
+                    nv12[uvIdx] = (byte)(u < 16 ? 16 : u > 240 ? 240 : u);
+                    nv12[uvIdx + 1] = (byte)(v < 16 ? 16 : v > 240 ? 240 : v);
+                }
+            }
+        }
+    }
+
+    private int Nv12W => _nv12W > 0 ? _nv12W : _width;
+    private int Nv12H => _nv12H > 0 ? _nv12H : _height;
 
     private unsafe byte[]? ConvertGpuNv12(ID3D11Texture2D texture)
     {
@@ -42,9 +150,19 @@ internal partial class FfmpegEncoder
         if (_gpuConverter == null && DateTime.UtcNow < _gpuConverterFailedUntil)
             return ConvertCpuNv12(texture, device);
 
+        int nv12W = Nv12W, nv12H = Nv12H;
         try
         {
-            _gpuConverter ??= new GpuVideoConverter(device, _width, _height);
+            // Recria se as dims mudaram (cascading fallback altera o scale target).
+            if (_gpuConverter == null
+                || _gpuConverter.InputWidth != _width
+                || _gpuConverter.InputHeight != _height
+                || _gpuConverter.OutputWidth != nv12W
+                || _gpuConverter.OutputHeight != nv12H)
+            {
+                _gpuConverter?.Dispose();
+                _gpuConverter = new GpuVideoConverter(device, _width, _height, nv12W, nv12H);
+            }
             _gpuConverterFailedUntil = DateTime.MinValue;
         }
         catch (Exception ex)
@@ -57,10 +175,17 @@ internal partial class FfmpegEncoder
 
         try
         {
-            EnsureInputCopy(texture, device);
-            ctx.CopyResource(_inputCopy, texture);
+            // O2: textura ShaderResource (WGC) é lida direto pelo VideoProcessor — sem cópia.
+            // BindFlags.None (PrintWindow/Hybrid) precisa da cópia _inputCopy (SR|RT).
+            var source = texture;
+            if (!CanUseDirectInput(texDesc))
+            {
+                EnsureInputCopy(texture, device);
+                ctx.CopyResource(_inputCopy, texture);
+                source = _inputCopy;
+            }
 
-            var nv12Tex = _gpuConverter.Convert(_inputCopy);
+            var nv12Tex = _gpuConverter.Convert(source);
             EnsureStaging(device);
             ctx.CopyResource(_nv12Staging, nv12Tex);
 
@@ -101,14 +226,14 @@ internal partial class FfmpegEncoder
             var texDesc = texture.Description;
             int texW = (int)texDesc.Width;
             int texH = (int)texDesc.Height;
-            // Staging texture must match source size for CopyResource, but we only convert _height rows
-            if (_cpuStaging == null || _cpuStagingW != texW || _cpuStagingH != texH)
+            // Staging texture must match source size AND format for CopyResource, but we only convert _height rows
+            if (_cpuStaging == null || _cpuStagingW != texW || _cpuStagingH != texH || _cpuStagingFormat != texDesc.Format)
             {
                 _cpuStaging?.Dispose();
                 _cpuStaging = device.CreateTexture2D(new Texture2DDescription
                 {
                     Width = (uint)texW, Height = (uint)texH, MipLevels = 1, ArraySize = 1,
-                    Format = Format.B8G8R8A8_UNorm,
+                    Format = texDesc.Format,
                     SampleDescription = new SampleDescription(1, 0),
                     Usage = ResourceUsage.Staging,
                     BindFlags = BindFlags.None,
@@ -116,51 +241,75 @@ internal partial class FfmpegEncoder
                 });
                 _cpuStagingW = texW;
                 _cpuStagingH = texH;
-                Log.W("FfmpegEncoder", $"CPU BGRA→NV12 fallback active (capture={texW}x{texH} encode={_width}x{_height})");
+                _cpuStagingFormat = texDesc.Format;
+                Log.W("FfmpegEncoder", $"CPU BGRA→NV12 fallback active (capture={texW}x{texH} encode={_width}x{_height} fmt={texDesc.Format})");
             }
 
+            int nv12W = Nv12W, nv12H = Nv12H;
             var ctx = device.ImmediateContext;
             ctx.CopyResource(_cpuStaging, texture);
             var map = ctx.Map(_cpuStaging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
             try
             {
                 int srcPitch = (int)map.RowPitch;
-                int ySize = _height * _width;
-                int totalSize = ySize + (_height / 2) * _width;
+                int ySize = nv12H * nv12W;
+                int totalSize = ySize + (nv12H / 2) * nv12W;
 
                 if (_nv12Scratch == null || _nv12Scratch.Length != totalSize)
                     _nv12Scratch = new byte[totalSize];
 
                 var src = (byte*)map.DataPointer.ToPointer();
-                fixed (byte* dst = _nv12Scratch)
+                // texH == nv12H + 1 (altura ímpar) pode usar o branch direto: só converte as
+                // primeiras nv12H linhas e descarta a última — evita bilinear do frame inteiro.
+                if (texW == nv12W && (texH == nv12H || texH == nv12H + 1))
                 {
-                    byte* yPlane = dst;
-                    byte* uvPlane = dst + ySize;
-
-                    // Only convert _height rows (may be 1 less than texH if odd)
-                    for (int row = 0; row < _height; row++)
+                    fixed (byte* dst = _nv12Scratch)
                     {
-                        var srcRow = src + row * srcPitch;
-                        for (int col = 0; col < _width; col++)
+                        byte* yPlane = dst;
+                        byte* uvPlane = dst + ySize;
+
+                        // Only convert _height rows (may be 1 less than texH if odd)
+                        for (int row = 0; row < nv12H; row++)
                         {
-                            byte b = srcRow[col * 4 + 0];
-                            byte g = srcRow[col * 4 + 1];
-                            byte r = srcRow[col * 4 + 2];
-
-                            int y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-                            yPlane[row * _width + col] = (byte)(y < 16 ? 16 : y > 235 ? 235 : y);
-
-                            // NV12: U and V are interleaved in the same plane (U V U V ...)
-                            if ((row & 1) == 0 && (col & 1) == 0)
+                            var srcRow = src + row * srcPitch;
+                            for (int col = 0; col < nv12W; col++)
                             {
-                                int u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-                                int v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
-                                int uvIdx = (row / 2) * _width + col;
-                                uvPlane[uvIdx] = (byte)(u < 16 ? 16 : u > 240 ? 240 : u);
-                                uvPlane[uvIdx + 1] = (byte)(v < 16 ? 16 : v > 240 ? 240 : v);
+                                byte b = srcRow[col * 4 + 0];
+                                byte g = srcRow[col * 4 + 1];
+                                byte r = srcRow[col * 4 + 2];
+
+                                int y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+                                yPlane[row * nv12W + col] = (byte)(y < 16 ? 16 : y > 235 ? 235 : y);
+
+                                // NV12: U and V are interleaved in the same plane (U V U V ...)
+                                if ((row & 1) == 0 && (col & 1) == 0)
+                                {
+                                    int u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                                    int v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                                    int uvIdx = (row / 2) * nv12W + col;
+                                    uvPlane[uvIdx] = (byte)(u < 16 ? 16 : u > 240 ? 240 : u);
+                                    uvPlane[uvIdx + 1] = (byte)(v < 16 ? 16 : v > 240 ? 240 : v);
+                                }
                             }
                         }
                     }
+                }
+                else
+                {
+                    // O1: downscale bilinear + conversão na resolução final (uma única cópia
+                    // da staging → scratch, sem passar pelo scale do ffmpeg).
+                    if (_downscaleScratch == null
+                        || _downscaleScratchW != nv12W
+                        || _downscaleScratchH != nv12H)
+                    {
+                        _downscaleScratch = new byte[nv12W * nv12H * 4];
+                        _downscaleScratchW = nv12W;
+                        _downscaleScratchH = nv12H;
+                    }
+                    DownscaleBgra(
+                        new ReadOnlySpan<byte>(src, srcPitch * texH),
+                        texW, texH, srcPitch, nv12W, nv12H, _downscaleScratch);
+                    BgraToNv12(_downscaleScratch, nv12W * 4, nv12W, nv12H, _nv12Scratch);
                 }
                 return _nv12Scratch;
             }
@@ -197,26 +346,28 @@ internal partial class FfmpegEncoder
 
     private void EnsureStaging(ID3D11Device device)
     {
-        if (_nv12Staging != null && _stagingW == _width && _stagingH == _height) return;
+        int nv12W = Nv12W, nv12H = Nv12H;
+        if (_nv12Staging != null && _stagingW == nv12W && _stagingH == nv12H) return;
         _nv12Staging?.Dispose();
         _nv12Staging = device.CreateTexture2D(new Texture2DDescription
         {
-            Width = (uint)_width, Height = (uint)_height, MipLevels = 1, ArraySize = 1,
+            Width = (uint)nv12W, Height = (uint)nv12H, MipLevels = 1, ArraySize = 1,
             Format = Format.NV12,
             SampleDescription = new SampleDescription(1, 0),
             Usage = ResourceUsage.Staging,
             BindFlags = BindFlags.None,
             CPUAccessFlags = CpuAccessFlags.Read,
         });
-        _stagingW = _width;
-        _stagingH = _height;
+        _stagingW = nv12W;
+        _stagingH = nv12H;
     }
 
     private unsafe byte[] PackNv12(MappedSubresource map)
     {
         int srcPitch = (int)map.RowPitch;
-        int ySize = _height * _width;
-        int totalSize = ySize + _height / 2 * _width;
+        int nv12W = Nv12W, nv12H = Nv12H;
+        int ySize = nv12H * nv12W;
+        int totalSize = ySize + nv12H / 2 * nv12W;
 
         if (_nv12Scratch?.Length != totalSize)
             _nv12Scratch = new byte[totalSize];
@@ -225,27 +376,27 @@ internal partial class FfmpegEncoder
 
         // Bulk copy Y plane (1620 individual CopyBlock calls → 1 bulk copy for 1080p)
         int yBytes = ySize;
-        if (srcPitch == _width)
+        if (srcPitch == nv12W)
         {
             Unsafe.CopyBlockUnaligned(ref _nv12Scratch[0], ref src[0], (uint)yBytes);
         }
         else
         {
-            for (int y = 0; y < _height; y++)
-                Unsafe.CopyBlockUnaligned(ref _nv12Scratch[y * _width], ref src[y * srcPitch], (uint)_width);
+            for (int y = 0; y < nv12H; y++)
+                Unsafe.CopyBlockUnaligned(ref _nv12Scratch[y * nv12W], ref src[y * srcPitch], (uint)nv12W);
         }
 
         // Bulk copy UV plane
-        int uvSrcBase = srcPitch * _height;
-        int uvBytes = _height / 2 * _width;
-        if (srcPitch == _width)
+        int uvSrcBase = srcPitch * nv12H;
+        int uvBytes = nv12H / 2 * nv12W;
+        if (srcPitch == nv12W)
         {
             Unsafe.CopyBlockUnaligned(ref _nv12Scratch[yBytes], ref src[uvSrcBase], (uint)uvBytes);
         }
         else
         {
-            for (int y = 0; y < _height / 2; y++)
-                Unsafe.CopyBlockUnaligned(ref _nv12Scratch[yBytes + y * _width], ref src[uvSrcBase + y * srcPitch], (uint)_width);
+            for (int y = 0; y < nv12H / 2; y++)
+                Unsafe.CopyBlockUnaligned(ref _nv12Scratch[yBytes + y * nv12W], ref src[uvSrcBase + y * srcPitch], (uint)nv12W);
         }
 
         return _nv12Scratch;
