@@ -118,21 +118,16 @@ public sealed class AppConfig
     public int AutoCleanupThresholdGB { get; set; } = 20;
 
     /// <summary>
-    /// Retorna a maior duração de replay necessária com base
-    /// no global ReplayTimeSeconds e em todos os bindings ativos.
+    /// Duração do replay buffer = global ReplayTimeSeconds (o teto).
+    /// O global (configurado no front) é o limite MÁXIMO de replay — nenhuma
+    /// hotkey pode salvar MAIS que ele. Hotkeys com duração própria salvam
+    /// MENOS (customDuration &lt;= global, clampado em SaveClipAsync contra o
+    /// buffer), mas nunca mais. Antes, o buffer era dimensionado pelo maior
+    /// valor entre global e bindings habilitados — fazia F12 (5 min) salvar
+    /// 5 min mesmo com o global em 2 min, e gastava RAM retendo o máximo.
     /// </summary>
     [JsonIgnore]
-    public int EffectiveReplaySeconds
-    {
-        get
-        {
-            int max = ReplayTimeSeconds;
-            foreach (var b in HotkeyBindings)
-                if (b.Enabled && b.ReplayDurationSeconds.HasValue && b.ReplayDurationSeconds.Value > max)
-                    max = b.ReplayDurationSeconds.Value;
-            return max;
-        }
-    }
+    public int EffectiveReplaySeconds => ReplayTimeSeconds;
 }
 
 public sealed class ConfigManager : IDisposable
