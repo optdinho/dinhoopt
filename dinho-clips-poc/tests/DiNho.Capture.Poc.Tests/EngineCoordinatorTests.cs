@@ -473,11 +473,14 @@ public sealed class EngineCoordinatorTests
     }
 
     [Fact]
-    public void AppConfig_EffectiveReplaySeconds_ReturnsMaxBindingDuration()
+    public void AppConfig_EffectiveReplaySeconds_CapsBindingDurationAtGlobal()
     {
+        // Global vira o teto: uma hotkey pode salvar MENOS que o global, nunca MAIS.
+        // O buffer é dimensionado pelo global — o save clamp em SaveClipAsync
+        // (Math.Min(customDuration, BufferMaxDuration)) capa hotkeys maiores.
         var cfg = new AppConfig { ReplayTimeSeconds = 120 };
         cfg.HotkeyBindings[0].ReplayDurationSeconds = 300;
-        Assert.Equal(300, cfg.EffectiveReplaySeconds);
+        Assert.Equal(120, cfg.EffectiveReplaySeconds);
     }
 
     [Fact]
@@ -490,13 +493,16 @@ public sealed class EngineCoordinatorTests
     }
 
     [Fact]
-    public void AppConfig_EffectiveReplaySeconds_TakesMaxOfAllBindings()
+    public void AppConfig_EffectiveReplaySeconds_BindingsNeverExceedGlobal()
     {
+        // Global vira o teto — mesmo com bindings maiores que o global, o buffer
+        // retém apenas o global (economia de RAM); hotkeys menores seguem menores
+        // (salvas por customDuration no SaveClipAsync).
         var cfg = new AppConfig { ReplayTimeSeconds = 60 };
         cfg.HotkeyBindings[0].ReplayDurationSeconds = 120;
         cfg.HotkeyBindings[1].ReplayDurationSeconds = 200;
         cfg.HotkeyBindings[2].ReplayDurationSeconds = 90;
-        Assert.Equal(200, cfg.EffectiveReplaySeconds);
+        Assert.Equal(60, cfg.EffectiveReplaySeconds);
     }
 
     [Fact]
