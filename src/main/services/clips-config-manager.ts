@@ -161,11 +161,13 @@ export function clipPathInOutputDir(inputPath: string): string | null {
   const outputDir = getDefaultOutputDir()
   try {
     const resolved = resolve(outputDir, inputPath)
+    const normalized = outputDir.toLowerCase()
     const prefix =
-      outputDir.toLowerCase().endsWith('\\') || outputDir.toLowerCase().endsWith('/')
-        ? outputDir.toLowerCase()
-        : `${outputDir.toLowerCase()}\\`
-    if (!resolved.toLowerCase().startsWith(prefix)) return null
+      normalized.endsWith('\\') || normalized.endsWith('/')
+        ? normalized
+        : `${normalized}\\`
+    const isDirItself = resolved.toLowerCase() === normalized
+    if (!isDirItself && !resolved.toLowerCase().startsWith(prefix)) return null
     return resolved
   } catch {
     return null

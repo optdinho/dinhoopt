@@ -36,7 +36,9 @@ publish:
   repo: dinhoopt
   private: true
 
-npmRebuild: true
+# better-sqlite3 v13 loads its prebuilt from prebuilds/win32-x64.node via N-API
+# (no compilation needed) — skip @electron/rebuild, which would require Python+MSVC.
+npmRebuild: false
 
 asarUnpack:
   - "node_modules/better-sqlite3/**"

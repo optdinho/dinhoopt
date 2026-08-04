@@ -248,6 +248,16 @@ describe('clips-config-manager', () => {
       expect(result).toBe(join(mockUserProfile, 'Desktop', 'DiNhoClips', 'clip.mp4'))
     })
 
+    it('accepts the output directory itself (open folder)', () => {
+      const dir = join(mockUserProfile, 'Desktop', 'DiNhoClips')
+      expect(clipPathInOutputDir(dir)).toBe(dir)
+    })
+
+    it('accepts the output directory itself with trailing separator', () => {
+      const dir = join(mockUserProfile, 'Desktop', 'DiNhoClips')
+      expect(clipPathInOutputDir(`${dir}\\`)).toBe(dir)
+    })
+
     it('returns null for path traversal attempt', () => {
       expect(clipPathInOutputDir('..\\..\\Windows\\system.ini')).toBeNull()
     })

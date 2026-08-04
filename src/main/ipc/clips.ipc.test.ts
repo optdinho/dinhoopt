@@ -437,6 +437,15 @@ describe('CLIPS_OPEN_CLIP', () => {
     expect(shell.openPath).toHaveBeenCalledWith('C:\\clips\\clip.mp4')
   })
 
+  it('opens the output directory itself (open folder button)', async () => {
+    vi.mocked(shell.openPath).mockResolvedValue('')
+    clipsConfig.outputDirectory = 'C:\\clips'
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_CLIP)
+    await handler({}, 'C:\\clips')
+    expect(shell.openPath).toHaveBeenCalledWith('C:\\clips')
+  })
+
   it('ignores non-string path', async () => {
     clipsConfig.outputDirectory = 'C:\\clips'
     const handlers = captureHandlers()

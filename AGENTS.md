@@ -3562,3 +3562,28 @@ pm run copy-engine nao copia ffmpeg.exe (erro pre-existente do script (Get-Comma
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/WasapiMicSource.cs`: fallback Multimedia→first-available (Role.Communications pode não existir)
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/AudioMixerTests.cs`: 8 testes RED → GREEN (stub FakeAudioSource + MasterClock)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-04 — Botão "Abrir Pasta" dos clips corrigido)
+
+### Root cause
+
+- **Sintoma**: botão de abrir dos clips "parecia não encontrar o caminho do vídeo" (nada acontecia).
+- **Diagnóstico**: o botão "Abrir Pasta" de `ClipsConfigPanel.tsx:69` passa `config.outputDirectory` (a **pasta** em si) para `handleOpenClip` → `CLIPS_OPEN_CLIP` → `clipPathInOutputDir`. O check usava `resolved.toLowerCase().startsWith(outputDir + '\\')` — como a pasta não tem separador final, o prefixo nunca casava → `null` → o handler retornava em silêncio (sem `shell.openPath`, sem feedback).
+- O botão "Abrir" por-clip (arquivo `clip.path`) já passava: o path absoluto dentro do outputDir casa com o prefixo. Confirmado com a config real da máquina (`%APPDATA%\dinho-optimizer\clips-config.json` → `outputDirectory = C:\Users\WENDEL\Desktop\DiNhoClips`, 2 MP4s lá).
+
+### Fix (TDD RED → GREEN)
+
+- **`clipPathInOutputDir`** (`clips-config-manager.ts`): adicionada condição `isDirItself` — se o path resolvido **é** o próprio outputDir (com ou sem separador final), passa na validação; resto inalterado (traversal e absolutos fora do dir continuam rejeitados). Segurança preservada: subpastas/arquivos dentro do dir seguem permitidos; a pasta em si é inofensiva para `shell.openPath`.
+- **RED**: 2 testes em `clips-config-manager.test.ts` (aceita a pasta em si; aceita com separador final) + 1 em `clips.ipc.test.ts` (`opens the output directory itself`) — todos falhando antes.
+- **GREEN**: implementação + 3 testes passando.
+
+### Validado
+
+- **TS**: suíte completa **6679 passed | 1 skipped | 1 failed** (219 files). A única falha é pré-existente e ambiental: `yara-engine.test.ts` usa `mkdtemp('/tmp/yara-test-XXXXXX')` (path Unix inexistente no Windows) — confirmado idêntico com `git stash` (baseline).
+- Clips: `clips-config-manager.test.ts` + `clips.ipc.test.ts` + `clip-video-protocol.test.ts` = **178/178 pass** (3 novas).
+
+### Relevant Files Changed
+
+- `src/main/services/clips-config-manager.ts`: `clipPathInOutputDir` aceita o outputDir em si (`isDirItself`)
+- `src/main/services/clips-config-manager.test.ts`: 2 testes novos
+- `src/main/ipc/clips.ipc.test.ts`: 1 teste novo (open folder)
