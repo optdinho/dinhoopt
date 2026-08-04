@@ -224,6 +224,12 @@ export const IPC = {
   SOFTWARE_UPDATE_RUN: 'software-update:run',
   SOFTWARE_UPDATE_PROGRESS: 'software-update:progress',
 
+  // App Installer
+  APP_INSTALLER_LIST_AVAILABLE: 'app-installer:list-available',
+  APP_INSTALLER_INSTALL: 'app-installer:install',
+  APP_INSTALLER_CANCEL: 'app-installer:cancel',
+  APP_INSTALLER_PROGRESS: 'app-installer:progress',
+
   // History push events (main -> renderer)
   HISTORY_CHANGED: 'history:changed',
 

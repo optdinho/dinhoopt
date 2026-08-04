@@ -19,6 +19,9 @@ const DebloaterPage = lazy(() => import('./pages/DebloaterPage').then((m) => ({ 
 const SoftwareUpdaterPage = lazy(() =>
   import('./pages/SoftwareUpdaterPage').then((m) => ({ default: m.SoftwareUpdaterPage })),
 )
+const AppInstallerPage = lazy(() =>
+  import('./pages/AppInstallerPage').then((m) => ({ default: m.AppInstallerPage })),
+)
 const DriverManagerPage = lazy(() =>
   import('./pages/DriverManagerPage').then((m) => ({ default: m.DriverManagerPage })),
 )
@@ -277,6 +280,7 @@ function AnimatedRoutes() {
         <Route path="/power-plans" element={wrap(<PowerPlansPage />)} />
         <Route path="/debloater" element={wrap(<DebloaterPage />)} />
         <Route path="/updates" element={wrap(<SoftwareUpdaterPage />)} />
+        <Route path="/installer" element={wrap(<AppInstallerPage />)} />
         <Route path="/schedules" element={wrap(<SchedulesPage />)} />
         <Route path="/activation" element={wrap(<LicensePage />)} />
         <Route path="/updater" element={<Navigate to="/updates" replace />} />
@@ -325,6 +329,7 @@ const ROUTE_TITLES: Record<string, { key: string; ns?: string } | string> = {
   '/power-plans': 'Power Plans',
   '/debloater': 'Bloatware Remover',
   '/updates': 'Software Updates',
+  '/installer': 'App Installer',
   '/activation': 'Activation',
   '/schedules': { key: 'schedules' },
   '/drivers': 'Driver Updates',

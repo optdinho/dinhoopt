@@ -26,6 +26,7 @@ import {
   Menu,
   MousePointerClick,
   Package,
+  PackageCheck,
   PackageMinus,
   Rocket,
   Scan,
@@ -103,6 +104,7 @@ const navGroups: NavGroup[] = [
         path: '/software',
         children: [
           { icon: Download, labelKey: 'softwareUpdates', path: '/updates' },
+          { icon: PackageCheck, labelKey: 'appInstaller', path: '/installer' },
           { icon: Cpu, labelKey: 'driverUpdates', path: '/drivers' },
           { icon: Trash2, labelKey: 'uninstaller', path: '/uninstaller' },
           { icon: PackageMinus, labelKey: 'bloatwareRemover', path: '/debloater' },

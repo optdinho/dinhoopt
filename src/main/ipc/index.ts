@@ -27,6 +27,7 @@ import {
   setSettings,
 } from '../services/settings-store'
 import { registerAppCleanerIpc } from './app-cleaner.ipc'
+import { registerAppInstallerIpc } from './app-installer.ipc'
 import { registerBenchmarkIpc } from './benchmark.ipc'
 import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
 import { registerClipsIpc } from './clips.ipc'
@@ -104,6 +105,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerServiceManagerIpc(getWindow)
   registerFirewallAuditIpc(getWindow)
   registerSoftwareUpdaterIpc(getWindow)
+  registerAppInstallerIpc(getWindow)
   registerStartupSafetyIpc()
   registerProgramSafetyIpc()
   registerFileShredderIpc(getWindow)

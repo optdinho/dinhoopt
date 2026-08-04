@@ -456,6 +456,16 @@ describe('preload API bridge', () => {
     }
   })
 
+  describe('app installer', () => {
+    for (const m of ['appInstallerListAvailable', 'appInstallerInstall', 'appInstallerCancel']) {
+      it(`${m} calls invoke`, async () => {
+        mockIpc.invoke.mockResolvedValueOnce(null)
+        await (api[m] as (...a: unknown[]) => Promise<unknown>)([])
+        expect(mockIpc.invoke).toHaveBeenCalled()
+      })
+    }
+  })
+
   describe('duplicates', () => {
     for (const m of [
       'duplicatesSelectDir',

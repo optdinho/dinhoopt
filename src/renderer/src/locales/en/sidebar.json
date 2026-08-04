@@ -31,6 +31,7 @@
   "firewallAudit": "Firewall Audit",
   "powerPlans": "Power Plans",
   "softwareUpdates": "Software Updates",
+  "appInstaller": "App Installer",
   "driverUpdates": "Driver Updates",
   "uninstaller": "Uninstaller",
   "bloatwareRemover": "Bloatware Remover",

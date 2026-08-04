@@ -1,6 +1,9 @@
 import { IPC, RENDERER_LOG } from '@shared/channels'
 import type { AgentEvaluationResult } from '@shared/driver-agent-types'
 import type {
+  AppInstallProgress,
+  AppInstallResult,
+  AppInstallerListResult,
   BenchmarkProgress,
   BenchmarkResult,
   ComplianceApplyResult,
@@ -305,6 +308,13 @@ export const systemMethods = {
     ipcRenderer.invoke(IPC.SOFTWARE_UPDATE_RUN, appIds, source),
   onSoftwareUpdateProgress: (callback: (data: UpdateProgress) => void) =>
     onEvent(IPC.SOFTWARE_UPDATE_PROGRESS, callback),
+
+  appInstallerListAvailable: (): Promise<AppInstallerListResult> => ipcRenderer.invoke(IPC.APP_INSTALLER_LIST_AVAILABLE),
+  appInstallerInstall: (appIds: string[]): Promise<AppInstallResult> =>
+    ipcRenderer.invoke(IPC.APP_INSTALLER_INSTALL, appIds),
+  appInstallerCancel: (): Promise<void> => ipcRenderer.invoke(IPC.APP_INSTALLER_CANCEL),
+  onAppInstallerProgress: (callback: (data: AppInstallProgress) => void) =>
+    onEvent(IPC.APP_INSTALLER_PROGRESS, callback),
 
   duplicatesSelectDir: (): Promise<string | null> => ipcRenderer.invoke(IPC.DUPLICATES_SELECT_DIR),
   duplicatesScan: (options: DuplicateScanOptions): Promise<DuplicateScanResult> =>

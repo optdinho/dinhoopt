@@ -1,4 +1,5 @@
 export type { IpcError, IpcResult, IpcSuccess } from './ipc-types'
+export * from './types/app-installer'
 export * from './types/clips'
 export * from './types/common'
 export * from './types/file-tools'
