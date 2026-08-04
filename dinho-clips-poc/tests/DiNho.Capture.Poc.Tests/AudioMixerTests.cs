@@ -1,4 +1,5 @@
 using DiNho.Capture.Poc.Audio;
+using DiNho.Capture.Poc.Sync;
 
 namespace DiNho.Capture.Poc.Tests;
 
@@ -125,5 +126,97 @@ public sealed class AudioMixerTests
         Assert.Equal(2, result.Length);
         Assert.Equal(0.0f, result[0], 3);
         Assert.Equal(0.0f, result[1], 3);
+    }
+
+    // --- Resiliência sem loopback (SOMENTE VÍDEO / loopback indisponível) ---
+    // Regressão do HIGH do code review 7edd3b0: ctor/Start/Stop/Dispose
+    // dereferenciavam _loopbackSource incondicionalmente → NRE quando
+    // CreateLoopbackSource retorna null (nenhum device de render).
+
+    private sealed class FakeAudioSource : IAudioSource
+    {
+        public int SampleRate { get; }
+        public int Channels { get; }
+        public event Action<AudioBuffer>? OnAudioData;
+        public FakeAudioSource(int sampleRate = 48000, int channels = 2)
+        {
+            SampleRate = sampleRate;
+            Channels = channels;
+        }
+        public void Start() { }
+        public void Stop() { }
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void Ctor_AllSourcesNull_DoesNotThrow()
+    {
+        using var clock = new MasterClock();
+        using var mixer = new AudioMixer(null, null, clock);
+        Assert.NotNull(mixer);
+    }
+
+    [Fact]
+    public void Ctor_LoopbackNull_MicPresent_DoesNotThrow()
+    {
+        using var clock = new MasterClock();
+        using var mic = new FakeAudioSource(44100, 1);
+        using var mixer = new AudioMixer(null, mic, clock);
+        Assert.NotNull(mixer);
+    }
+
+    [Fact]
+    public void Start_AllSourcesNull_DoesNotThrow()
+    {
+        using var clock = new MasterClock();
+        using var mixer = new AudioMixer(null, null, clock);
+        mixer.Start();
+    }
+
+    [Fact]
+    public void Start_LoopbackNull_UsesMicSampleRate()
+    {
+        using var clock = new MasterClock();
+        using var mic = new FakeAudioSource(44100, 1);
+        using var mixer = new AudioMixer(null, mic, clock);
+        mixer.Start();
+        Assert.Equal(44100, mixer.SampleRate);
+        Assert.Equal(1, mixer.Channels);
+    }
+
+    [Fact]
+    public void Start_LoopbackNull_UsesDefaultSampleRateWhenNoMic()
+    {
+        using var clock = new MasterClock();
+        using var mixer = new AudioMixer(null, null, clock);
+        mixer.Start();
+        Assert.Equal(48000, mixer.SampleRate);
+        Assert.Equal(2, mixer.Channels);
+    }
+
+    [Fact]
+    public void Stop_AllSourcesNull_DoesNotThrow()
+    {
+        using var clock = new MasterClock();
+        using var mixer = new AudioMixer(null, null, clock);
+        mixer.Start();
+        mixer.Stop();
+    }
+
+    [Fact]
+    public void Dispose_AllSourcesNull_DoesNotThrow()
+    {
+        using var clock = new MasterClock();
+        var mixer = new AudioMixer(null, null, clock);
+        mixer.Dispose();
+    }
+
+    [Fact]
+    public void Dispose_LoopbackNull_MicPresent_DoesNotThrow()
+    {
+        using var clock = new MasterClock();
+        using var mic = new FakeAudioSource(44100, 1);
+        var mixer = new AudioMixer(null, mic, clock);
+        mixer.Dispose();
     }
 }

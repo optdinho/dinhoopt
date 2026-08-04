@@ -20,7 +20,7 @@ public enum AudioStreamKind { Game, Mic, Mixed }
 public sealed class AudioMixer : IDisposable
 {
     // Fontes
-    private readonly IAudioSource _loopbackSource;
+    private readonly IAudioSource? _loopbackSource;
     private readonly IAudioSource? _micSource;
     private readonly MasterClock _clock;
 
@@ -124,32 +124,37 @@ public sealed class AudioMixer : IDisposable
     public event Action<EncodedPacket>? OnMixedAudio;
     public event Action<float>? OnMicLevel;
 
-    public AudioMixer(IAudioSource loopbackSource, IAudioSource? micSource, MasterClock clock)
+    public AudioMixer(IAudioSource? loopbackSource, IAudioSource? micSource, MasterClock clock)
     {
         _loopbackSource = loopbackSource;
         _micSource = micSource;
         _clock = clock;
 
-        _loopbackSource.OnAudioData += OnLoopbackData;
+        if (_loopbackSource != null)
+            _loopbackSource.OnAudioData += OnLoopbackData;
         if (_micSource != null)
             _micSource.OnAudioData += OnMicData;
     }
 
     public void Start()
     {
-        _loopbackSource.Start();
+        _loopbackSource?.Start();
         _micSource?.Start();
-        _sampleRate = _loopbackSource.SampleRate;
-        _channels = _loopbackSource.Channels;
+
+        // Sem loopback (nenhum device de render) — deriva sample rate/canais do mic
+        // quando disponível, senão defaults. TryMix só emite quando há dados de
+        // loopback, então com ambos null a captura é SOMENTE VÍDEO.
+        _sampleRate = _loopbackSource?.SampleRate ?? _micSource?.SampleRate ?? 48000;
+        _channels = _loopbackSource?.Channels ?? _micSource?.Channels ?? 2;
         Log.I("AudioMixer",
             $"Iniciado: SR={_sampleRate} Ch={_channels} " +
-            $"loopback={_loopbackSource.GetType().Name} " +
+            $"loopback={_loopbackSource?.GetType().Name ?? "none"} " +
             $"mic={_micSource?.GetType().Name ?? "none"}");
     }
 
     public void Stop()
     {
-        _loopbackSource.Stop();
+        _loopbackSource?.Stop();
         _micSource?.Stop();
         lock (_lock)
         {
@@ -450,7 +455,8 @@ public sealed class AudioMixer : IDisposable
     public void Dispose()
     {
         Stop();
-        _loopbackSource.OnAudioData -= OnLoopbackData;
+        if (_loopbackSource != null)
+            _loopbackSource.OnAudioData -= OnLoopbackData;
         if (_micSource != null)
             _micSource.OnAudioData -= OnMicData;
         (_loopbackSource as IDisposable)?.Dispose();

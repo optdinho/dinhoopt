@@ -27,18 +27,29 @@ public sealed class WasapiMicSource : IAudioSource
             {
                 _device = enumerator.GetDevice(deviceId);
                 DeviceId = deviceId;
+                return;
             }
             catch (System.Runtime.InteropServices.COMException ex)
             {
                 Log.W("WasapiMicSource", $"Microfone '{deviceId}' não encontrado (0x{ex.ErrorCode:X8}) — usando default");
-                _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
-                DeviceId = "";
             }
         }
-        else
+
+        // Fallback: default Multimedia primeiro (o padrão Communications pode não
+        // existir em máquinas sem headset VoIP), senão primeiro device de captura ativo.
+        DeviceId = "";
+        try
         {
-            DeviceId = "";
-            _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+            _device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            Log.W("WasapiMicSource", "Default capture device not found — trying first available");
+            var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+            if (devices.Count == 0)
+                throw new InvalidOperationException("No audio capture devices available on this system");
+            _device = devices[0];
+            Log.I("WasapiMicSource", $"Using fallback device: {_device.FriendlyName}");
         }
     }
 
