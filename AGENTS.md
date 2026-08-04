@@ -3526,3 +3526,39 @@ pm run copy-engine nao copia ffmpeg.exe (erro pre-existente do script (Get-Comma
 - dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs: EncoderOutputResolve/ResolveOutput, StartFfmpeg, _nv12W/_nv12H
 - dinho-clips-poc/src/DiNho.Capture.Poc/Capture/TexturePool.cs: BindFlags.ShaderResource
 - dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs: 18 testes GREEN
+
+## Session Summary (2026-08-04 — HIGH do review fixado: áudio resiliente sem NRE quando loopback ausente)
+
+### Done
+
+- **Revisor pós-commit `7edd3b0` retornou CHANGES REQUESTED (1 HIGH)**: `EngineCoordinator.Audio.cs:29-34` loga "SOMENTE VÍDEO" quando ambos os sources são null mas continua chamando `new AudioMixer(null, ...)`. O ctor do `AudioMixer` tinha `IAudioSource loopbackSource` não-nullable e dereferenciava `_loopbackSource.OnAudioData += ...` incondicionalmente → NRE. `Start()`/`Stop()`/`Dispose()` idem. Como `WasapiLoopbackSource` lança `InvalidOperationException` sem device de render, o cenário SOMENTE VÍDEO (e o de mic presente sem loopback) crashavam — exatamente o que a feature deveria suportar.
+
+- **TDD completo (RED → GREEN → suítes → deploy)**:
+  - **RED (8 testes novos em `AudioMixerTests.cs`)**: stub `FakeAudioSource : IAudioSource` + `using DiNho.Capture.Poc.Sync;`; casos ctor/Start/Stop/Dispose com loopback null (all-null e mic-present); `Start_LoopbackNull_UsesMicSampleRate` (44100/1), `Start_LoopbackNull_UsesDefaultSampleRateWhenNoMic` (48000/2). Confirmado: 8 falharam (NRE) / 10 existentes passaram.
+  - **GREEN (`AudioMixer.cs`)**: campo e parâmetro `IAudioSource? _loopbackSource`; ctor guarda `if (_loopbackSource != null)`; `Start()` usa `?.` e deriva `_sampleRate/_channels` de `_loopbackSource ?? _micSource ?? 48000/2`; `Stop()` `?.`; `Dispose()` guarda o unsubscribe. 18/18 GREEN.
+  - **2 LOWs do mesmo review**: `WasapiMicSource.cs` ctor reescrito — fallback default agora `Role.Multimedia` primeiro (o `Role.Communications` pode não existir em máquinas sem headset) e primeiro device de captura ativo como último recurso (erro claro se não houver nenhum); inválido-deviceId cai no mesmo fallback. `MMDeviceCollection` não é IDisposable em NAudio — sem Dispose (revertido).
+  - Call sites confirmados seguros: `EngineCoordinator.Capture.cs:192-206` (`_audioMixer.SampleRate`/`.Start()`/`OnMixedAudio`), `IpcMessageHandler.Mic.cs` reinit.
+
+- **Validado**:
+  - C# suite: **1096 aprovados / 12 falhas — todas ambientais pré-existentes documentadas** (9 ffmpeg-probe — ffmpeg.exe ausente do PATH do shell; 3 ConfigManager/EngineCoordinator preset p5/p4 + lookahead; MasterClock flaky passou desta vez). Nenhuma das mudanças.
+  - Build Release: 0 erros.
+
+- **Commit**: `17f787e` — `fix: áudio resiliente sem NRE quando loopback ausente (SOMENTE VÍDEO) + fallback de mic robusto`
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (293 files; ffmpeg não copiado — erro pre-existente do script, app instalado já tem ffmpeg); 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == publish == `01A4A4DFD733C6D66037AEFF8D8D25B5B4131FF78ED7A7CBC1716EABAA1E822C`**.
+
+### Key Decisions
+
+- **`IAudioSource?` no AudioMixer sobre `AudioMixer?` nos call sites**: menor diff; o mixer continua criado sempre (Start/OnMixedAudio/SampleRate válidos em SOMENTE VÍDEO) e os guards de source ficam centralizados no mixer.
+- **Derivar SR/Channels do mic quando loopback null**: TryMix só emite com dados de loopback, então com ambos null a captura é SOMENTE VÍDEO sem produção de áudio — mas o mixer ainda reporta SR/Channels consistentes para o AAC encoder.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo: máquina sem device de render (ou com render desligado) não deve crashar — engine roda SOMENTE VÍDEO sem áudio; mic sem device default/headset usa Multimedia/first-available em vez de falhar.
+- (Opcional) `npm run copy-engine` não copia ffmpeg.exe (Get-Command falha no shell) — corrigir script em rebuild de instalador.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/AudioMixer.cs`: `IAudioSource?` ctor/campo, guards em ctor/Start/Stop/Dispose, SR/Channels derivados de loopback→mic→default
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Audio/WasapiMicSource.cs`: fallback Multimedia→first-available (Role.Communications pode não existir)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/AudioMixerTests.cs`: 8 testes RED → GREEN (stub FakeAudioSource + MasterClock)
+- `AGENTS.md`: resumo de sessão
