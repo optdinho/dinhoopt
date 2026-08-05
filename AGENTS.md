@@ -3685,3 +3685,30 @@ pm run copy-engine nao copia ffmpeg.exe (erro pre-existente do script (Get-Comma
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Config/ConfigManager.cs`: `ValidateAndFix` normaliza `ReplayBufferMode` lowercase
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ConfigManagerTests.cs`: +4 testes (RED → GREEN)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-05b — Installer embarca ffmpeg 9.0 + NVENC weighted_pred fix)
+
+### Done
+
+- **ffmpeg 9.0 no instalador**: winget install --id Gyan.FFmpeg -e instalou 9.0-full_build-www.gyan.dev; binário real copiado de %LocalAppData%\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0-full_build\bin\ffmpeg.exe para esources\ffmpeg-custom\ffmpeg.exe (212MB) — candidato priority-1 do copy-engine.js. 
+pm run copy-engine agora copia ffmpeg 9.0 (294 files), resolvendo o bug pré-existente de staging sem ffmpeg.
+- **CRITICAL — regressão ffmpeg 9.0 encontrada e corrigida**: 9.0 (NVENC SDK 11.1+) **hard-fail** em -weighted_pred 1 com B-frames: InitializeEncoder failed: invalid param (8): Weighted Prediction not supported with B-frames. (8.1.2 ignorava silenciosamente). Engine passava -weighted_pred 1 -bf 2 (default bframes=2 do SetQualityParams) em h264/hevc_nvenc → qualquer gravação falharia no instalador (gatilho do restart loop).
+  - **Fix**: novo seam internal static BuildWeightedPredArg(bool bframesZero) (FfmpegEncoder.cs) — " -weighted_pred 1" só com _bframes == 0 (preset Boa); com B-frames o arg é omitido. Aplicado via interpolação em h264_nvenc/hevc_nvenc. av1_nvenc nunca usou weighted_pred.
+  - Verificado com encodes reais no binário 9.0: h264/hevc sem weighted_pred OK (2502/2316KB); av1 OK (3189KB); weighted_pred só válido com -bf 0.
+  - -tune high_quality removido no 9.0 (só -tune hq/int 1-4) — engine já usava -tune hq; nenhum outro arg obsoleto removido é usado.
+- **2 testes novos** (FfmpegEncoderTests.cs): BuildWeightedPredArg_BframesZero_ReturnsWeightedPred, ..._BframesNonZero_ReturnsEmpty. **95/95** no filtro FfmpegEncoderTests.
+- **Publish + stage + deploy**: dotnet publish -c Release --self-contained true -r win-x64 OK; copy-engine (294 files, ffmpeg 9.0 212MB); 5 arquivos DiNho.Capture.Poc.* para %LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\ — SHA256 publish == staging == instalado == 4F5AFABC....
+- **Instaladores rebuildados** (
+pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7.exe (218.8MB), assinados; DLL empacotada == staging (4F5AFABC...); ffmpeg 9.0 212MB embarcado e assinado.
+- **Changelog ffmpeg 9.0** (https://github.com/FFmpeg/FFmpeg/blob/n9.0/RELEASE_NOTES) — destaques para o projeto: AMF novo (f_frc_amf frame rate converter, f_vqe_amf video quality enhancer, HDR no f_vpp_amf, hw memory mapping), 	ranspose_cuda (rotação HW p/ export vertical), bsf split HEVC multi-layer Dolby Vision, backend DNN ONNX Runtime com GPU (features futuras), Animated WebP decoder, HE-AAC 960 (DAB+), SMPTE 2094-50 (HDR10+); removidos deprecated NVENC options e suporte a SDK < 11.1.
+- **Commit**: d29f52e — ix: NVENC weighted_pred gated por bframes (compat ffmpeg 9.0)
+
+### Key Decisions
+
+- **Gate por bframes em vez de remover o arg**: weighted_pred é vantajoso em cenas de baixo movimento; com B-frames o NVENC SDK não o suporta e o 9.0 agora falha em vez de ignorar — manter o arg só no preset Boa (bf 0) preserva o recurso sem risco.
+- **ffmpeg-custom como fonte única**: copy-engine.js já prioriza esources/ffmpeg-custom/ — colocar o binário real lá é o caminho canônico para o instalador herdar a versão testada.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar gravação real: preset com bf 2 (Alta/Muito Alta) sem "invalid param (8)" e preset Boa (bf 0) mantendo weighted_pred.
+- (Opcional) Investigar ganhos do 9.0: 	ranspose_cuda p/ export 9:16 e f_vqe_amf p/ AMD com bitrate menor.
