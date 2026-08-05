@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkForUpdatesWinget, parseWingetListOutput, parseWingetUpgradeOutput, runUpdatesWinget } from './winget'
+import {
+  checkForUpdatesWinget,
+  parseWingetListInstalledNames,
+  parseWingetListOutput,
+  parseWingetUpgradeOutput,
+  runUpdatesWinget,
+} from './winget'
 
 const execFileAsyncMock = vi.hoisted(() => vi.fn())
 const psUtf8Mock = vi.hoisted(() => vi.fn((s: string) => s))
@@ -322,6 +328,70 @@ describe('parseWingetListOutput', () => {
     expect(result).toHaveLength(1)
     expect(result[0]?.currentVersion).toBe('2.0.0')
     expect(result[0]?.source).toBe('winget')
+  })
+})
+
+// ─── parseWingetListInstalledNames ─────────────────────────
+
+describe('parseWingetListInstalledNames', () => {
+  it('returns names from all rows including ARP and MSIX entries', () => {
+    const output = [
+      listHeader,
+      listSeparator,
+      padListCols('Google Chrome', 'ARP\\Machine\\X86\\Google\\Chrome', 'Unknown', 'winget'),
+      padListCols('Discord', 'ARP\\Machine\\User\\Discord\\Discord', 'Unknown', 'winget'),
+      padListCols('7-Zip 26.02 (x64)', 'ARP\\Machine\\X64\\7-Zip', 'Unknown', 'winget'),
+      padListCols('Microsoft Store', 'MSIX\\Microsoft.Store', 'Unknown', 'winget'),
+      padListCols('Mozilla Firefox', 'Mozilla.Firefox', '135.0', 'winget'),
+      '',
+      '42 packages.',
+    ].join('\r\n')
+    expect(parseWingetListInstalledNames(output)).toEqual([
+      'Google Chrome',
+      'Discord',
+      '7-Zip 26.02 (x64)',
+      'Microsoft Store',
+      'Mozilla Firefox',
+    ])
+  })
+
+  it('deduplicates names case-insensitively', () => {
+    const output = [
+      listHeader,
+      listSeparator,
+      padListCols('Google Chrome', 'ARP\\Machine\\X86\\A', 'Unknown', 'winget'),
+      padListCols('google chrome', 'ARP\\Machine\\X86\\B', 'Unknown', 'winget'),
+    ].join('\r\n')
+    expect(parseWingetListInstalledNames(output)).toEqual(['Google Chrome'])
+  })
+
+  it('returns empty when the header does not match', () => {
+    expect(parseWingetListInstalledNames('no header')).toEqual([])
+  })
+
+  it('returns empty for empty output', () => {
+    expect(parseWingetListInstalledNames('')).toEqual([])
+  })
+
+  it('returns empty when no separator follows the header', () => {
+    expect(parseWingetListInstalledNames(listHeader)).toEqual([])
+  })
+
+  it('parses a PT-BR localized list header', () => {
+    const ptHeader = 'Nome                 Id                   Vers\u00e3o              Dispon\u00edvel         Origem'
+    const dataLine = `${'Google Chrome'.padEnd(21)}${'ARP\\Machine\\X86\\Google\\Chrome'}Unknown                                      winget`
+    const output = [ptHeader, listSeparator, dataLine].join('\r\n')
+    expect(parseWingetListInstalledNames(output)).toEqual(['Google Chrome'])
+  })
+
+  it('skips the packages count line', () => {
+    const output = [
+      listHeader,
+      listSeparator,
+      padListCols('App', 'ARP\\Machine\\X86\\A', 'Unknown', 'winget'),
+      '3 packages.',
+    ].join('\r\n')
+    expect(parseWingetListInstalledNames(output)).toEqual(['App'])
   })
 })
 

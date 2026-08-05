@@ -8,7 +8,11 @@ import type {
 import { resolveWebAppIcon } from './app-installer-icons'
 import { isAdmin } from './elevation'
 import { execFileAsync, psUtf8 } from './exec-utf8'
-import { isWingetAvailable, parseWingetListOutput } from './software-updater/checkers/winget'
+import {
+  isWingetAvailable,
+  parseWingetListInstalledNames,
+  parseWingetListOutput,
+} from './software-updater/checkers/winget'
 import { cleanOutput } from './software-updater/utils'
 
 interface AppInstallerEntry {
@@ -372,6 +376,38 @@ export function resolveAppId(id: string): string | null {
   return entry.id
 }
 
+/**
+ * Normalize a display name for fuzzy install detection: lowercase, strip
+ * parenthesized suffixes, collapse whitespace and drop a trailing version-like
+ * token. "7-Zip 26.02 (x64)" → "7-zip", "Google Chrome" → "google chrome".
+ */
+export function normalizeAppName(name: string): string {
+  const lower = String(name ?? '').toLowerCase()
+  const noParens = lower.replace(/\([^)]*\)/g, ' ').trim()
+  const noTrailingVersion = noParens.replace(/\s+\d+(?:[.,]\d+)*$/, '')
+  return noTrailingVersion.trim().replace(/\s+/g, ' ')
+}
+
+/** Below this length a name only matches on exact equality (avoids "Go" ↔ "Google" false hits). */
+const MIN_PREFIX_MATCH_LENGTH = 4
+
+/**
+ * Fuzzy match between a curated allowlist name and a detected installed name.
+ * Exact equality always wins; otherwise the shorter normalized name must be a
+ * word-boundary prefix/suffix of the longer one and at least 4 chars long.
+ * e.g. "Zoom" ↦ "Zoom Workplace", "Process Monitor" ↦ "Microsoft Process Monitor".
+ */
+export function appNameMatches(allowlistName: string, installedName: string): boolean {
+  const a = normalizeAppName(allowlistName)
+  const b = normalizeAppName(installedName)
+  if (!a || !b) return false
+  if (a === b) return true
+  const shorter = a.length <= b.length ? a : b
+  const longer = a.length <= b.length ? b : a
+  if (shorter.length < MIN_PREFIX_MATCH_LENGTH) return false
+  return longer.startsWith(`${shorter} `) || longer.endsWith(` ${shorter}`)
+}
+
 export async function listAvailableApps(): Promise<AppInstallerListResult> {
   const wingetAvailable = await isWingetAvailable()
   const apps: AppInstallerApp[] = APP_INSTALLER_ENTRIES.map((entry) => ({
@@ -395,11 +431,19 @@ export async function listAvailableApps(): Promise<AppInstallerListResult> {
     )
     const installed = parseWingetListOutput(String(stdout))
     const installedById = new Map(installed.map((a) => [a.id.toLowerCase(), a]))
+    const installedNames = parseWingetListInstalledNames(String(stdout)).map(normalizeAppName)
     for (const app of apps) {
       const found = installedById.get(app.id.toLowerCase())
       if (found) {
         app.isInstalled = true
         app.installedVersion = found.currentVersion
+        continue
+      }
+      // Fallback: classic MSI/EXE installs surface as ARP\... rows with a real
+      // display name but no curated ID — detect them by name. No version is set
+      // because ARP rows may report "Unknown".
+      if (installedNames.some((name) => appNameMatches(app.name, name))) {
+        app.isInstalled = true
       }
     }
   } catch {

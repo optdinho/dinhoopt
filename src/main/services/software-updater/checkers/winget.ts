@@ -160,6 +160,50 @@ export function parseWingetListOutput(stdout: string): UpdatableApp[] {
   return apps
 }
 
+/**
+ * Extract installed app NAMES from `winget list` output — including registry/MSI
+ * rows whose ID is `ARP\Machine\X86|X64|User\...` (and `MSIX\...`), which
+ * `parseWingetListOutput` deliberately drops. Used as a fuzzy fallback to detect
+ * classic MSI/EXE installs that never match a curated winget ID. Names are
+ * deduplicated case-insensitively.
+ */
+export function parseWingetListInstalledNames(stdout: string): string[] {
+  const lines = cleanOutput(stdout).split(/\r?\n/)
+
+  let headerIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    const headerLine = lines[i]
+    if (!headerLine) continue
+    if (WINGET_HEADER_RE.test(headerLine)) {
+      headerIdx = i
+      break
+    }
+  }
+  if (headerIdx === -1) return []
+
+  const separatorIdx = headerIdx + 1
+  if (separatorIdx >= lines.length || !/^[-\s]+$/.test(lines[separatorIdx] ?? '')) return []
+
+  const header = lines[headerIdx]
+  if (!header) return []
+  const col = findColumnPositions(header)
+  if (col.id < 0) return []
+
+  const names: string[] = []
+  for (let i = separatorIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line) continue
+    if (!line.trim()) continue
+    if (/^\d+\s+package/i.test(line.trim())) break
+
+    const name = line.substring(0, col.id).trim()
+    if (!name) continue
+    if (names.some((n) => n.toLowerCase() === name.toLowerCase())) continue
+    names.push(name)
+  }
+  return names
+}
+
 export async function isWingetAvailable(): Promise<boolean> {
   try {
     await execFileAsync('winget', ['--version'], {

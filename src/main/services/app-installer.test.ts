@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   APP_INSTALLER_ENTRIES,
+  appNameMatches,
   cancelAppInstall,
   findAllowlistEntry,
   installApps,
   isAllowlisted,
   isValidAppInstallerId,
   listAvailableApps,
+  normalizeAppName,
   resetAppInstallCancel,
   resolveAppId,
 } from './app-installer'
@@ -26,10 +28,12 @@ vi.mock('./elevation', () => ({
 
 const isWingetAvailableMock = vi.hoisted(() => vi.fn(async () => true))
 const parseWingetListOutputMock = vi.hoisted(() => vi.fn())
+const parseWingetListInstalledNamesMock = vi.hoisted(() => vi.fn())
 
 vi.mock('./software-updater/checkers/winget', () => ({
   isWingetAvailable: isWingetAvailableMock,
   parseWingetListOutput: parseWingetListOutputMock,
+  parseWingetListInstalledNames: parseWingetListInstalledNamesMock,
 }))
 
 vi.mock('./software-updater/utils', () => ({
@@ -50,6 +54,8 @@ beforeEach(() => {
   isWingetAvailableMock.mockResolvedValue(true)
   parseWingetListOutputMock.mockReset()
   parseWingetListOutputMock.mockReturnValue([])
+  parseWingetListInstalledNamesMock.mockReset()
+  parseWingetListInstalledNamesMock.mockReturnValue([])
   isAdminMock.mockReset()
   isAdminMock.mockReturnValue(false)
   psUtf8Mock.mockImplementation((s: string) => s)
@@ -136,6 +142,40 @@ describe('resolveAppId', () => {
   })
 })
 
+describe('normalizeAppName / appNameMatches', () => {
+  it('normalizes parenthesized suffixes and trailing versions', () => {
+    expect(normalizeAppName('7-Zip 26.02 (x64)')).toBe('7-zip')
+    expect(normalizeAppName('Google Chrome')).toBe('google chrome')
+    expect(normalizeAppName('Python 3.12')).toBe('python')
+    expect(normalizeAppName('  Discord  (x64) ')).toBe('discord')
+    expect(normalizeAppName('')).toBe('')
+  })
+
+  it('matches exact names after normalization', () => {
+    expect(appNameMatches('Google Chrome', 'Google Chrome')).toBe(true)
+    expect(appNameMatches('7-Zip', '7-Zip 26.02 (x64)')).toBe(true)
+    expect(appNameMatches('Python 3.12', 'Python 3.12.4 (64-bit)')).toBe(true)
+  })
+
+  it('matches word-boundary prefix/suffix for names at least 4 chars', () => {
+    expect(appNameMatches('Zoom', 'Zoom Workplace')).toBe(true)
+    expect(appNameMatches('Process Monitor', 'Microsoft Process Monitor')).toBe(true)
+    expect(appNameMatches('Node.js LTS', 'Node.js')).toBe(true)
+  })
+
+  it('does not prefix-match short names or non-word-boundaries', () => {
+    expect(appNameMatches('Go', 'Google Chrome')).toBe(false)
+    expect(appNameMatches('Git', 'Git for Windows')).toBe(false)
+    expect(appNameMatches('Signal', 'SignalRGB')).toBe(false)
+    expect(appNameMatches('Everything', 'Everything1.5')).toBe(false)
+  })
+
+  it('handles empty inputs', () => {
+    expect(appNameMatches('', 'Google Chrome')).toBe(false)
+    expect(appNameMatches('Google Chrome', '')).toBe(false)
+  })
+})
+
 describe('listAvailableApps', () => {
   it('returns all allowlist entries as not installed when winget is unavailable', async () => {
     isWingetAvailableMock.mockResolvedValue(false)
@@ -179,6 +219,42 @@ describe('listAvailableApps', () => {
     const result = await listAvailableApps()
     expect(result.wingetAvailable).toBe(true)
     expect(result.apps.every((a) => !a.isInstalled)).toBe(true)
+  })
+
+  it('marks apps installed via the ARP/display-name fallback', async () => {
+    parseWingetListOutputMock.mockReturnValue([])
+    parseWingetListInstalledNamesMock.mockReturnValue(['Google Chrome', 'Discord', '7-Zip 26.02 (x64)'])
+    execFileAsyncMock.mockResolvedValue({ stdout: 'fake list output', stderr: '' })
+    const result = await listAvailableApps()
+    const chrome = result.apps.find((a) => a.id === 'Google.Chrome')
+    expect(chrome?.isInstalled).toBe(true)
+    expect(chrome?.installedVersion).toBeUndefined()
+    expect(result.apps.find((a) => a.id === 'Discord.Discord')?.isInstalled).toBe(true)
+    expect(result.apps.find((a) => a.id === '7zip.7zip')?.isInstalled).toBe(true)
+    expect(result.apps.find((a) => a.id === 'Mozilla.Firefox')?.isInstalled).toBe(false)
+    expect(parseWingetListInstalledNamesMock).toHaveBeenCalledWith('fake list output')
+  })
+
+  it('keeps ID-match primary and does not double-flag by name', async () => {
+    parseWingetListOutputMock.mockReturnValue([
+      {
+        id: 'Mozilla.Firefox',
+        currentVersion: '135.0',
+        name: 'Mozilla Firefox',
+        availableVersion: '135.0',
+        source: 'winget',
+        severity: 'unknown',
+        selected: false,
+        isUpToDate: true,
+      },
+    ])
+    parseWingetListInstalledNamesMock.mockReturnValue(['Google Chrome'])
+    execFileAsyncMock.mockResolvedValue({ stdout: 'fake list output', stderr: '' })
+    const result = await listAvailableApps()
+    const firefox = result.apps.find((a) => a.id === 'Mozilla.Firefox')
+    expect(firefox?.isInstalled).toBe(true)
+    expect(firefox?.installedVersion).toBe('135.0')
+    expect(result.apps.find((a) => a.id === 'Google.Chrome')?.isInstalled).toBe(true)
   })
 
   it('propagates the curated popular flag from the allowlist', async () => {
