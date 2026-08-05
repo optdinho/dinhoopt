@@ -207,21 +207,46 @@ public sealed partial class EngineCoordinator
                 Log.I("EngineCoordinator", "[5/7] AAC encoder initialized");
 
                 // Limites do buffer (perfil já resolvido antes do encoder)
-                _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                var replayWindow = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                _buffer.MaxDuration = replayWindow;
                 _buffer.MaxBytes = _activeProfile.MaxBufferBytes;
                 Log.I("EngineCoordinator", "[6/7] Buffer limits aplicados");
 
-                // Enable disk spill when the requested replay duration exceeds what RAM can hold.
-                // Evicted frames are written to a temp file and merged back in GetSegments().
-                long neededBytes = (long)_activeProfile.MaxrateKbps * _activeProfile.ReplaySeconds * 1024L * 13L / 80L;
-                if (neededBytes > _activeProfile.MaxBufferBytes && !_buffer.IsDiskSpillEnabled)
+                if (_config.Config.ReplayBufferMode == "hybrid")
                 {
-                    _buffer.EnableDiskSpill();
-                    Log.I("EngineCoordinator", $"Disk spill ENABLED — need={neededBytes / (1024 * 1024)}MB buf={_activeProfile.MaxBufferBytes / (1024 * 1024)}MB");
+                    // Híbrido: vídeo em RAM é capado em ~3 min (fixos); o excedente é
+                    // evictado para o disco (vídeo-only). Se a RAM segura não couber
+                    // 3 min no bitrate alvo, o cap encolhe para o que couber do
+                    // orçamento (ComputeSafeBudget já clampa no piso de 80MB) —
+                    // nunca excede a RAM segura. MaxBytes é elevado para o byte
+                    // budget do cap (90% vídeo + 10% áudio), então o teto de tempo
+                    // (3 min) é o limitante real — não o byte budget do perfil.
+                    long safeBudget = RamManager.ComputeSafeBudget(RamManager.GetAvailableRamBytes());
+                    var (ramCap, ramCapBytes) = RamManager.ComputeHybridRamCap(
+                        _activeProfile.MaxrateKbps, _activeProfile.ReplaySeconds, safeBudget);
+                    _buffer.VideoRamDuration = ramCap;
+                    _buffer.MaxBytes = ramCapBytes * 10L / 9L;
+                    if (!_buffer.IsDiskSpillEnabled)
+                        _buffer.EnableDiskSpill();
+                    Log.I("EngineCoordinator",
+                        $"Hybrid buffer: RAM cap video={ramCap.TotalSeconds:F0}s ({ramCapBytes / (1024 * 1024)}MB) " +
+                        $"diskSpill=ON budget={safeBudget / (1024 * 1024)}MB");
+                }
+                else
+                {
+                    // Legado 'ram': RAM guarda a janela completa; spill só emergencial
+                    // quando a duração pedida excede o que a RAM segura por bytes.
+                    _buffer.VideoRamDuration = null;
+                    long neededBytes = (long)_activeProfile.MaxrateKbps * _activeProfile.ReplaySeconds * 1024L * 13L / 80L;
+                    if (neededBytes > _activeProfile.MaxBufferBytes && !_buffer.IsDiskSpillEnabled)
+                    {
+                        _buffer.EnableDiskSpill();
+                        Log.I("EngineCoordinator", $"Disk spill ENABLED — need={neededBytes / (1024 * 1024)}MB buf={_activeProfile.MaxBufferBytes / (1024 * 1024)}MB");
+                    }
                 }
 
                 Log.I("EngineCoordinator", $"RAM profile: {_activeProfile.Level} — {_activeProfile.EncodeWidth}x{_activeProfile.EncodeHeight} " +
-                    $"maxRate={_activeProfile.MaxrateKbps}kbps maxBuf={_activeProfile.MaxBufferBytes / (1024 * 1024)}MB " +
+                    $"maxRate={_activeProfile.MaxrateKbps}kbps maxBuf={_buffer.MaxBytes / (1024 * 1024)}MB " +
                     $"replay={_activeProfile.ReplaySeconds}s diskSpill={_buffer.IsDiskSpillEnabled}");
 
                 // Pipeline loop

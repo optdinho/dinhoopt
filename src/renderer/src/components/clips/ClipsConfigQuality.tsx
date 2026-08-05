@@ -334,6 +334,27 @@ export function QualitySection({
         />
       </div>
 
+      {/* Replay buffer mode (RAM + disk) */}
+      <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
+              {t('replayBufferMode')}
+            </span>
+            <TipBadge id="replay-buffer-mode" activeTip={activeTip} setActiveTip={setActiveTip} />
+          </div>
+          <TogglePill
+            enabled={(config.replayBufferMode ?? 'ram') === 'hybrid'}
+            accent="blue"
+            onToggle={() =>
+              handleConfigUpdate({
+                replayBufferMode: (config.replayBufferMode ?? 'ram') === 'hybrid' ? 'ram' : 'hybrid',
+              })
+            }
+          />
+        </div>
+      </div>
+
       {/* Replay Time */}
       <div>
         <p className="mb-1 text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-dim)' }}>

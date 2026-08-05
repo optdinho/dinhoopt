@@ -3648,3 +3648,40 @@ pm run copy-engine nao copia ffmpeg.exe (erro pre-existente do script (Get-Comma
 - src/renderer/src/pages/FirewallAuditPage.tsx: imports FileX + FileWarning adicionados
 - 2e/.journey-audit/report.json: relatório final (25 modules, 15 idle, 0 globalErrors)
 - AGENTS.md: resumo de sessão
+
+## Session Summary (2026-08-05 — Review fix: handler de pipe ignora ReplayBufferMode/StretchToFit/SharpnessStrength)
+
+### Done
+
+- **Reviewer externo retornou CHANGES REQUESTED** com 3 findings nas mudanças não commitadas da feature `replayBufferMode: 'ram'|'hybrid'`. Confirmado manualmente: `IpcMessageHandler.Config.cs` copy block do pipe `config` omitia 3 campos — `ReplayBufferMode` (novo), `StretchToFit` e `SharpnessStrength` (ambos pré-existentes) — então o modo `'hybrid'` era inalcançável em runtime (engine sempre `'ram'`) e stretch/sharpness nunca chegavam ao engine via pipe.
+
+- **Fix 🔴 CRITICAL** (`IpcMessageHandler.Config.cs:127-129`): adicionadas ao `_config.Update(c => ...)`:
+  - `c.StretchToFit = incoming.StretchToFit;`
+  - `c.SharpnessStrength = incoming.SharpnessStrength;`
+  - `c.ReplayBufferMode = incoming.ReplayBufferMode;` (validação/fallback via `ValidateAndFix` já existente)
+- **Fix 🟡 MED** (`ConfigManager.cs:300-302`): `ValidateAndFix` agora **normaliza `ReplayBufferMode` para lowercase** após validar (`ToLowerInvariant`) — `"Hybrid"` validava (comparação case-insensitive de `IsValidReplayBufferMode`) mas o branch em `EngineCoordinator.Capture.cs:215` usava `== "hybrid"` case-sensitive, então rodava como `'ram'`. Normalização resolve a assimetria sem tocar o branch.
+- **4 testes novos** (`ConfigManagerTests.cs`, 27 no arquivo — RED → GREEN):
+  - `Update_PipeStyleHybridReplayBufferMode_PersistsNormalized` — `"Hybrid"` → `"hybrid"` (RED confirmado antes do fix)
+  - `Update_PipeStyleInvalidReplayBufferMode_FallsBackToRam` — `"disk-only"` → `"ram"`
+  - `Update_PipeStyleStretchAndSharpness_Persist` — `true`/`0.6` persistidos via `Update`
+  - `Update_PipeStyleInvalidSharpnessStrength_FallsBackToZero` — `2.5` → `0`
+  - Teste de integração do `HandleConfig` via pipe não é possível (requer `_ptt`/`HotkeyManager` com native hooks — documentado); o choke point `Update()` cobre o caminho exato do handler.
+
+### Validado
+
+- **C#**: ConfigManagerTests **27/27**; suite completa **1110 aprovados / 9 falhas — todas ambientais pré-existentes** (ffmpeg-probe `Win32Exception: cannot find 'ffmpeg'` — ffmpeg.exe ausente do PATH do shell; nenhuma das mudanças).
+- **Publish**: `dotnet publish -c Release --self-contained true -r win-x64` OK.
+- **Deploy**: app instalado parado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\`; **SHA256 publish == instalado == staging == `1EBB7F92...`**.
+- **copy-engine**: 293 files staged (ffmpeg.exe não copiado — bug pré-existente do script, documentado).
+
+### Next Steps
+
+- Reiniciar o app instalado: `replayBufferMode:"hybrid"` agora alcança o engine via pipe (branch `EngineCoordinator.Capture.cs:215` ativa o spill), e `stretchToFit`/`sharpnessStrength` propagam por config.
+- (Opcional) Relançar o reviewer com os 3 findings resolvidos para confirmar.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/IpcMessageHandler.Config.cs`: +3 atribuições no copy block do pipe `config`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Config/ConfigManager.cs`: `ValidateAndFix` normaliza `ReplayBufferMode` lowercase
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/ConfigManagerTests.cs`: +4 testes (RED → GREEN)
+- `AGENTS.md`: resumo de sessão

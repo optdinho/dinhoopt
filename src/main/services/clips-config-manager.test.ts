@@ -155,6 +155,17 @@ describe('clips-config-manager', () => {
       config.sharpnessStrength = 0
     })
 
+    it('includes replayBufferMode ram by default', () => {
+      config.replayBufferMode = 'ram'
+      expect(buildEngineConfig().replayBufferMode).toBe('ram')
+    })
+
+    it('propagates replayBufferMode hybrid to the engine payload', () => {
+      config.replayBufferMode = 'hybrid'
+      expect(buildEngineConfig().replayBufferMode).toBe('hybrid')
+      config.replayBufferMode = 'ram'
+    })
+
     it('uses config hotkeys when non-empty', () => {
       const customHk = [
         { id: 'test', vk: 0x31, modifiers: [], action: 'saveClip', replayDurationSeconds: 30, enabled: true },
@@ -407,12 +418,14 @@ describe('clips-config-manager', () => {
         autoCleanupThresholdGB: 20,
         adaptiveQuality: true,
         sharpnessStrength: 0.6,
+        replayBufferMode: 'hybrid',
       }
       vi.mocked(loadClipsConfig).mockReturnValueOnce(saved)
       loadPersistedClipsConfig()
       expect(config.engineReplayTimeSeconds).toBe(600)
       expect(config.engineFps).toBe(120)
       expect(config.sharpnessStrength).toBe(0.6)
+      expect(config.replayBufferMode).toBe('hybrid')
     })
   })
 
@@ -446,6 +459,14 @@ describe('clips-config-manager', () => {
       const saved = vi.mocked(saveClipsConfig).mock.calls[0][0] as Record<string, unknown>
       expect(saved.sharpnessStrength).toBe(0.6)
       config.sharpnessStrength = 0
+    })
+
+    it('persists replayBufferMode from config', () => {
+      config.replayBufferMode = 'hybrid'
+      persistClipsConfig()
+      const saved = vi.mocked(saveClipsConfig).mock.calls[0][0] as Record<string, unknown>
+      expect(saved.replayBufferMode).toBe('hybrid')
+      config.replayBufferMode = 'ram'
     })
 
     it('includes outputDirectory from getDefaultOutputDir', () => {

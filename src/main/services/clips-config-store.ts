@@ -39,6 +39,7 @@ interface ClipsPersistedConfig {
   adaptiveQuality: boolean
   stretchToFit: boolean
   sharpnessStrength: number
+  replayBufferMode: 'ram' | 'hybrid'
 }
 
 const DEFAULTS: ClipsPersistedConfig = {
@@ -104,6 +105,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   adaptiveQuality: true,
   stretchToFit: false,
   sharpnessStrength: 0,
+  replayBufferMode: 'ram',
 }
 
 const store = createJsonStore<ClipsPersistedConfig>({

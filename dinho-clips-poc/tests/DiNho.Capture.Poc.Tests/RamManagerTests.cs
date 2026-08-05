@@ -34,6 +34,51 @@ public sealed class RamManagerTests
     }
 
     [Fact]
+    public void ComputeHybridRamCap_RoomFor3Min_UsesFullCap()
+    {
+        // 30000 kbps * 3min (180s) = ~898MB < 2GB budget → cap de 180s sem clamp.
+        var (cap, bytes) = RamManager.ComputeHybridRamCap(30_000, 600, 2L * 1024 * 1024 * 1024);
+        Assert.Equal(180, (int)cap.TotalSeconds);
+        Assert.Equal(898_560_000, bytes); // 30000*180*1024*13/80
+    }
+
+    [Fact]
+    public void ComputeHybridRamCap_SmallBudget_ShrinksToFit()
+    {
+        // Budget de 200MB não segura 3min → cap encolhe pro que couber.
+        var (cap, bytes) = RamManager.ComputeHybridRamCap(30_000, 600, 200L * 1024 * 1024);
+        Assert.Equal(200L * 1024 * 1024, bytes);
+        Assert.True((int)cap.TotalSeconds < 180);
+        Assert.True((int)cap.TotalSeconds >= 30);
+    }
+
+    [Fact]
+    public void ComputeHybridRamCap_TinyBudget_FloorsAt30Seconds()
+    {
+        // Piso de 80MB → 16.8s bruto, clampado no mínimo de 30s.
+        var (cap, bytes) = RamManager.ComputeHybridRamCap(30_000, 600, 80L * 1024 * 1024);
+        Assert.Equal(80L * 1024 * 1024, bytes);
+        Assert.Equal(30, (int)cap.TotalSeconds);
+    }
+
+    [Fact]
+    public void ComputeHybridRamCap_ShorterReplay_ClampsToReplay()
+    {
+        // Replay de 100s < cap de 3min → cap = replay window.
+        var (cap, bytes) = RamManager.ComputeHybridRamCap(30_000, 100, 2L * 1024 * 1024 * 1024);
+        Assert.Equal(100, (int)cap.TotalSeconds);
+        Assert.Equal(898_560_000, bytes);
+    }
+
+    [Fact]
+    public void ComputeHybridRamCap_ZeroSafeBudget_FloorsAt30Seconds()
+    {
+        var (cap, bytes) = RamManager.ComputeHybridRamCap(30_000, 600, 0);
+        Assert.Equal(0, bytes);
+        Assert.Equal(30, (int)cap.TotalSeconds);
+    }
+
+    [Fact]
     public void BuildSettings_Full_UsesConfiguredValues()
     {
         var p = RamManager.BuildSettings(

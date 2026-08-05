@@ -771,6 +771,23 @@ describe('CLIPS_SET_CONFIG', () => {
     expect(cfg.sharpnessStrength).toBe(0.4)
   })
 
+  it('updates replayBufferMode to hybrid', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { replayBufferMode: 'hybrid' })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.replayBufferMode).toBe('hybrid')
+  })
+
+  it('ignores invalid replayBufferMode', async () => {
+    clipsConfig.replayBufferMode = 'ram'
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    await handler({}, { replayBufferMode: 'disk-only' })
+    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
+    expect(cfg.replayBufferMode).toBe('ram')
+  })
+
   it('rejects unknown encoderPreset values', async () => {
     clipsConfig.encoderPreset = 'p5'
     const handlers = captureHandlers()

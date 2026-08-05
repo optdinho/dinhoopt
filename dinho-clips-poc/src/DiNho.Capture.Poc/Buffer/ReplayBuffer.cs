@@ -16,6 +16,7 @@ public sealed class ReplayBuffer : IDisposable
     private int _audioTail;
     private int _audioCount;
     private TimeSpan _maxDuration;
+    private TimeSpan? _videoRamDuration;
     private long _maxBytes;
     private long _maxVideoBytes;
     private long _maxAudioBytes;
@@ -137,6 +138,35 @@ public sealed class ReplayBuffer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Hybrid mode RAM cap: limits how much VIDEO the ring retains in RAM.
+    /// Excess video older than this window is evicted to the disk spill, while
+    /// audio (AAC) always stays RAM-only. Null = RAM holds the full replay
+    /// window (legacy 'ram' mode). Setting a value also makes the spill
+    /// video-only — evicted audio is dropped instead of written to disk.
+    /// </summary>
+    public TimeSpan? VideoRamDuration
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _videoRamDuration; }
+            finally { _lock.ExitReadLock(); }
+        }
+        set
+        {
+            List<EncodedPacket>? evicted;
+            _lock.EnterWriteLock();
+            try
+            {
+                _videoRamDuration = value;
+                evicted = TrimExcessVideo();
+            }
+            finally { _lock.ExitWriteLock(); }
+            FlushEvicted(evicted);
+        }
+    }
+
     public int VideoCount
     {
         get
@@ -203,7 +233,11 @@ public sealed class ReplayBuffer : IDisposable
     private List<EncodedPacket>? TrimExcessVideo()
     {
         List<EncodedPacket>? evicted = null;
-        while (_videoCount > 0 && (_totalVideoDuration > _maxDuration || (_maxVideoBytes > 0 && _totalVideoBytes > _maxVideoBytes)))
+        // Hybrid (VideoRamDuration setado): o vídeo em RAM é limitado à janela de
+        // RAM (ex.: 3 min fixos) — o excedente é evictado para o disco, não solto.
+        // Sem o cap (modo 'ram'), a RAM guarda a janela completa (_maxDuration).
+        var window = _videoRamDuration ?? _maxDuration;
+        while (_videoCount > 0 && (_totalVideoDuration > window || (_maxVideoBytes > 0 && _totalVideoBytes > _maxVideoBytes)))
         {
             var oldest = _videoPackets[_videoHead]!;
             _videoPackets[_videoHead] = null;
@@ -245,12 +279,20 @@ public sealed class ReplayBuffer : IDisposable
 
         var spill = _spill;
         var spillEnabled = _diskSpillEnabled;
+        // Híbrido (VideoRamDuration setado): o disco é vídeo-only — áudio (AAC)
+        // evictado é descartado, nunca gravado no spill. Sem o cap (modo 'ram'),
+        // todos os evictados vão pro disco (emergencial por bytes).
+        var videoOnly = _videoRamDuration != null;
         try
         {
             if (spillEnabled && spill != null)
             {
                 foreach (var oldest in evicted)
+                {
+                    if (videoOnly && oldest.Type != MediaType.Video)
+                        continue; // áudio evictado: dropa (não spill)
                     spill.Write(oldest);
+                }
                 spill.TrimOldest(_maxDuration);
             }
         }

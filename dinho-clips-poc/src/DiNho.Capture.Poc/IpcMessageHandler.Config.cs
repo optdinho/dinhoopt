@@ -135,6 +135,9 @@ public sealed partial class EngineCoordinator
                     c.AutoCleanupThresholdGB = incoming.AutoCleanupThresholdGB;
                     if (incoming.SelectedAudioSessions.Count > 0)
                         c.SelectedAudioSessions = incoming.SelectedAudioSessions;
+                    c.StretchToFit = incoming.StretchToFit;
+                    c.SharpnessStrength = incoming.SharpnessStrength;
+                    c.ReplayBufferMode = incoming.ReplayBufferMode;
                 });
 
                 // Aplica GameAudioOnly: auto-filtra áudio para só o jogo + mic

@@ -84,6 +84,23 @@ public sealed class RamManager : IDisposable
         return Math.Clamp(budget, MinBufferBytes, int.MaxValue);
     }
 
+    /// <summary>
+    /// Hybrid buffer sizing: video in RAM is capped at ~3 minutes (fixed); the
+    /// excess is evicted to the disk spill (video-only). If the safe RAM budget
+    /// cannot hold 3 min at the target bitrate, the cap shrinks to what fits
+    /// (ComputeSafeBudget already clamps to an 80MB floor). Never exceeds safe RAM.
+    /// </summary>
+    public static (TimeSpan RamCap, long RamCapBytes) ComputeHybridRamCap(int maxrateKbps, int replaySeconds, long safeBudget)
+    {
+        long ramCapBytes = (long)maxrateKbps * 180L * 1024L * 13L / 80L; // 3 min fixos
+        if (ramCapBytes > safeBudget)
+            ramCapBytes = safeBudget;
+        long capSeconds = ramCapBytes * 80L / Math.Max(1L, (long)maxrateKbps * 1024L * 13L);
+        capSeconds = Math.Max(capSeconds, 30L);
+        var ramCap = TimeSpan.FromSeconds(Math.Min(capSeconds, replaySeconds));
+        return (ramCap, ramCapBytes);
+    }
+
     public static CaptureProfile BuildSettings(
         RamProfileLevel level,
         int captureWidth,

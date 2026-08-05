@@ -106,6 +106,13 @@ describe('clips-config-store', () => {
     expect(cfg.sharpnessStrength).toBe(0.6)
   })
 
+  it('loads saved replayBufferMode hybrid from file', () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ replayBufferMode: 'hybrid' }))
+    const cfg = loadClipsConfig()
+    expect(cfg.replayBufferMode).toBe('hybrid')
+  })
+
   it('falls back to defaults on corrupt JSON', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     vi.mocked(readFileSync).mockReturnValue('not-json')
@@ -191,6 +198,7 @@ describe('clips-config-store', () => {
     expect(callArg.autoCleanupThresholdGB).toBe(20)
     expect(callArg.adaptiveQuality).toBe(true)
     expect(callArg.sharpnessStrength).toBe(0)
+    expect(callArg.replayBufferMode).toBe('ram')
   })
 
   it('mutation safety: modifying returned config does not affect subsequent loads', () => {

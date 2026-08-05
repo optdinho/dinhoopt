@@ -618,6 +618,64 @@ public sealed class ReplayBufferTests
     }
 
     [Fact]
+    public void DiskSpill_Hybrid_VideoSpills_AudioIsDropped()
+    {
+        var dir = TempDir();
+        try
+        {
+            // Byte budget pequeno força eviction de ambos os streams; o modo híbrido
+            // (VideoRamDuration setado) espilha só vídeo — áudio evictado é dropado.
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60), 300);
+            buf.EnableDiskSpill(dir);
+            buf.VideoRamDuration = TimeSpan.FromSeconds(60);
+
+            for (int i = 0; i < 10; i++)
+            {
+                buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), false, 100));
+                buf.AddAudio(MakeAudio(TimeSpan.FromSeconds(i), 100));
+            }
+
+            var stats = buf.SpillStats();
+            Assert.True(stats.diskVideo > 0, "Excesso de vídeo deve ir pro disco");
+            Assert.Equal(0, stats.diskAudio); // áudio evictado é dropado, nunca spillado
+
+            var (video, audio) = buf.GetSegments();
+            Assert.Equal(10, video.Count); // disco + RAM fundidos
+            Assert.True(audio.Count < 10, "Áudio evictado (byte budget) foi dropado");
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void VideoRamDuration_TimeCap_SpillsExcessVideo()
+    {
+        var dir = TempDir();
+        try
+        {
+            // Sem byte budget (0), só o teto de tempo conta.
+            using var buf = new ReplayBuffer(TimeSpan.FromSeconds(60));
+            buf.EnableDiskSpill(dir);
+
+            for (int i = 0; i < 20; i++)
+                buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), false, 100));
+
+            Assert.Equal(20, buf.SpillStats().ramVideo);
+            Assert.Equal(0, buf.SpillStats().diskVideo);
+
+            // Cap de 1ms → todo o vídeo antigo é evictado pro disco.
+            buf.VideoRamDuration = TimeSpan.FromMilliseconds(1);
+
+            var stats = buf.SpillStats();
+            Assert.True(stats.diskVideo > 0, "Vídeo excedente deve ir pro disco após o cap");
+            Assert.Equal(20, stats.ramVideo + stats.diskVideo);
+
+            var (video, _) = buf.GetSegments();
+            Assert.Equal(20, video.Count); // nenhum frame perdido
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
     public void DiskSpill_ADTSAudioBytes_SurviveRoundTrip()
     {
         var dir = TempDir();

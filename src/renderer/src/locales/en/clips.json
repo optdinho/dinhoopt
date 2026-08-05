@@ -133,6 +133,8 @@
   "sharpness": "Sharpness",
   "sharpnessTooltip": "Applies contrast adaptive sharpening (ffmpeg cas) to the recorded image. 0 disables the filter; higher values sharpen edges, which can help low-bitrate or upscaled captures look crisper.",
   "sharpnessOff": "Off",
+  "replayBufferMode": "Disk buffer (hybrid)",
+  "replayBufferModeTooltip": "Keeps the replay in RAM + disk: the last 3 minutes live in memory and the rest spills to disk. Enables long recordings without exhausting system RAM. Audio is always kept in memory.",
   "videoPreviewFailed": "Failed to load video preview",
   "presetMuitoAlta": "Very High",
   "presetAlta": "High",

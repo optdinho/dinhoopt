@@ -119,6 +119,8 @@ export interface ClipsConfig {
   stretchToFit?: boolean
   /** Intensidade do filtro de sharpness (cas), 0..1 — 0 = desligado */
   sharpnessStrength?: number
+  /** Buffer de replay: 'ram' = só RAM (excedente descartado); 'hybrid' = RAM cap 3min + excedente no disco */
+  replayBufferMode?: 'ram' | 'hybrid'
 }
 
 export interface ClipTrimResult {

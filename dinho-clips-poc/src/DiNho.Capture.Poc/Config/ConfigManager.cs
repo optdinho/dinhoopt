@@ -36,6 +36,10 @@ public sealed class AppConfig
     // Replay (fallback global, sobrescrito por binding.DurationSeconds se existir)
     public int ReplayTimeSeconds { get; set; } = 120; // 2 min
 
+    // Buffer de replay: "ram" = só RAM (excedente descartado quando enche);
+    // "hybrid" = RAM com cap de 3 min fixo + excedente vai pro disco (spill vídeo-only).
+    public string ReplayBufferMode { get; set; } = "ram";
+
     // Post-clip buffer: continua gravando N segundos após o save trigger
     // para garantir que o momento não seja cortado (ex: Medal/ShadowPlay)
     public int PostClipDurationSeconds { get; set; } = 5;
@@ -141,6 +145,21 @@ public sealed class ConfigManager : IDisposable
         // erro ffmpeg → restart loop.
         "p1", "p2", "p3", "p4", "p5", "p6", "p7",
     };
+
+    private static readonly HashSet<string> ValidReplayBufferModes = new()
+    {
+        // Alinhado com o allowlist TS (clips.ipc.ts): "ram" (só RAM) e
+        // "hybrid" (RAM 3min fixo + spill no disco). Qualquer outro valor
+        // cai no default "ram".
+        "ram", "hybrid",
+    };
+
+    public static bool IsValidReplayBufferMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+            return false;
+        return ValidReplayBufferModes.Contains(mode.ToLowerInvariant());
+    }
 
     public static bool IsValidEncoderPreset(string? preset)
     {
@@ -277,6 +296,11 @@ public sealed class ConfigManager : IDisposable
             config.EncoderPreset = _defaults.EncoderPreset;
         else if (!IsValidEncoderPreset(config.EncoderPreset))
             config.EncoderPreset = _defaults.EncoderPreset;
+
+        if (string.IsNullOrWhiteSpace(config.ReplayBufferMode) || !IsValidReplayBufferMode(config.ReplayBufferMode))
+            config.ReplayBufferMode = _defaults.ReplayBufferMode;
+        else
+            config.ReplayBufferMode = config.ReplayBufferMode.ToLowerInvariant();
 
         if (config.MicVolume < 0f || config.MicVolume > 4f)
             config.MicVolume = _defaults.MicVolume;

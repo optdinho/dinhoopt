@@ -346,6 +346,8 @@ export function registerClipsIpc(): void {
       if (typeof c.stretchToFit === 'boolean') C.stretchToFit = c.stretchToFit
       if (typeof c.sharpnessStrength === 'number' && Number.isFinite(c.sharpnessStrength))
         C.sharpnessStrength = Math.min(1, Math.max(0, c.sharpnessStrength))
+      if (c.replayBufferMode === 'ram' || c.replayBufferMode === 'hybrid')
+        C.replayBufferMode = c.replayBufferMode
       if (typeof c.gameDetection === 'boolean') C.gameDetection = c.gameDetection
       if (typeof c.gameAudioOnly === 'boolean') C.gameAudioOnly = c.gameAudioOnly
       if (typeof c.customGameProcess === 'string') {

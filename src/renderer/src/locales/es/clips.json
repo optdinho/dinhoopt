@@ -133,6 +133,8 @@
   "sharpness": "Nitidez",
   "sharpnessTooltip": "Aplica nitidez adaptativa por contraste (ffmpeg cas) a la imagen grabada. 0 desactiva el filtro; valores más altos acentúan bordes, lo que puede hacer que capturas de bajo bitrate o ampliadas se vean más nítidas.",
   "sharpnessOff": "Desactivado",
+  "replayBufferMode": "Buffer en disco (híbrido)",
+  "replayBufferModeTooltip": "Mantiene el replay en RAM + disco: los últimos 3 minutos viven en memoria y el resto va al disco. Permite grabaciones largas sin agotar la RAM del sistema. El audio siempre se mantiene en memoria.",
   "videoPreviewFailed": "Error al cargar la vista previa del video",
   "presetMuitoAlta": "Muy Alta",
   "presetAlta": "Alta",

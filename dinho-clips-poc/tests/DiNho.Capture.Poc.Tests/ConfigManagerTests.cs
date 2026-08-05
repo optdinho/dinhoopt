@@ -208,4 +208,49 @@ public sealed class ConfigManagerTests
         Assert.Empty(cfg.Config.HotkeyBindings);
         Assert.Equal(120, cfg.Config.EffectiveReplaySeconds);
     }
+
+    [Fact]
+    public void Update_PipeStyleHybridReplayBufferMode_PersistsNormalized()
+    {
+        var cfg = CreateClean();
+
+        cfg.Update(c => c.ReplayBufferMode = "Hybrid");
+
+        Assert.Equal("hybrid", cfg.Config.ReplayBufferMode);
+    }
+
+    [Fact]
+    public void Update_PipeStyleInvalidReplayBufferMode_FallsBackToRam()
+    {
+        var cfg = CreateClean();
+
+        cfg.Update(c => c.ReplayBufferMode = "disk-only");
+
+        Assert.Equal("ram", cfg.Config.ReplayBufferMode);
+    }
+
+    [Fact]
+    public void Update_PipeStyleStretchAndSharpness_Persist()
+    {
+        var cfg = CreateClean();
+
+        cfg.Update(c =>
+        {
+            c.StretchToFit = true;
+            c.SharpnessStrength = 0.6;
+        });
+
+        Assert.True(cfg.Config.StretchToFit);
+        Assert.Equal(0.6, cfg.Config.SharpnessStrength);
+    }
+
+    [Fact]
+    public void Update_PipeStyleInvalidSharpnessStrength_FallsBackToZero()
+    {
+        var cfg = CreateClean();
+
+        cfg.Update(c => c.SharpnessStrength = 2.5);
+
+        Assert.Equal(0d, cfg.Config.SharpnessStrength);
+    }
 }
