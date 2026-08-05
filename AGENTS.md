@@ -3772,8 +3772,9 @@ pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7
 
 ### Next Steps
 
-- Smoke test em modo **packaged** (instalador) quando houver release — única validação restante
+- ~~Smoke test em modo packaged~~ ✅ **feito (2026-08-05)**: instaladores rebuildados (`npm run package`) — `DiNho-Optimizer-Setup-1.0.7.exe` 219.2MB + portable 218.9MB; engine DLL hash staging==packaged (`717B98AC...`), ffmpeg 9.0 211.9MB embarcado/assinado; smoke do win-unpacked limpo (renderer OK, license OK, background scans rodaram, zero erros no log)
 - `npm outdated` limpo exceto `electron-vite` (5.0.0 latest vs 6.0.0-beta.1 instalado) — esperado
+- Pendente (LOW): React warning `<button>` aninhado em `<button>` no `ClipsConfigPanel`/`ConfigSection` (dev-mode, pré-existente)
 
 ### Relevant Files Changed
 
