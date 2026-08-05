@@ -3782,3 +3782,80 @@ pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7
 - `src/renderer/src/pages/GameModePage.tsx`: `[store]`→`[]` (fix Biome)
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/DiNho.Capture.Poc.Tests.csproj`: xunit/test-sdk/coverlet
 - `AGENTS.md`: bloco "Agent 4: Vite" atualizado (BLOCKED → ATUALIZADO)
+
+
+## Session Summary (2026-08-05c — av1_amf tune/rawFmt fix: seams testaveis)
+
+### Done
+
+- **Bug real da auditoria AMD corrigido (TDD RED→GREEN→suites→deploy)**: v1_amf faltava nos switches de encode real em FfmpegEncoder.cs:
+  - **switch tune** (~383-400): sem caso v1_amf → caia no default libx264 (-crf… -bf 0 -profile:v high), args invalidos para AMF → ffmpeg exit + restart loop (mesma classe do incidente weighted_pred av1_nvenc)
+  - **switch rawFmt** (~450-455): sem v1_amf → produzia "h264" em vez de "av1" (container/packetizacao errada, mux IVF errado)
+  - O probe (EncoderManager.cs:406,414) ja tinha v1_amf com -quality speed e rawFmt "av1" — por isso o probe passava mas a rota real falhava (bug invisivel no smoke)
+- **2 seams extraidos como puros (mesmo padrao BuildWeightedPredArg)**:
+  - BuildEncoderTuneArgs(codec, cq, maxrateKbps, bufsizeKbps, bframes, lookahead, nvencPreset) — todo o switch tune, testavel sem processo ffmpeg
+  - GetRawFormatForCodec(codec) — switch rawFmt (av1_amf → "av1")
+  - StartFfmpeg agora chama os seams; dead vars framesArg/lookaheadArg removidas (nunca usadas)
+- **Args av1_amf definidos com base no help real do ffmpeg 9.0 embarcado** (fmpeg -h encoder=av1_amf): mesmos do h264/hevc_amf (-quality quality -rc vbr_peak -qp_i/-qp_p -maxrate/-bufsize -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true) **exceto -me_quarter_pel** (opcao inexistente no av1_amf — passada causaria erro de opcao)
+- **12 testes novos** em FfmpegEncoderTests.cs:
+  - BuildEncoderTuneArgs_AmfCodecs_UseAmfArgs (Theory av1/h264/hevc_amf: contem -quality quality/-rc vbr_peak, NAO contem -crf/-preset veryfast/-profile:v high)
+  - BuildEncoderTuneArgs_Av1Amf_DoesNotUseCpuFallbackArgs (regressao do bug), ..._NoMeQuarterPel, BuildEncoderTuneArgs_H264Amf_KeepsMeQuarterPel
+  - GetRawFormatForCodec_ReturnsExpected (Theory av1_amf/av1_nvenc/libsvtav1/av1_d3d12va→av1; hevc_amf→hevc; h264_amf/libx264→h264)
+
+### Validado
+
+- **C# tests**: FfmpegEncoderTests **108/108** (era 96; +12); suite completa **1126/1126 aprovados, 0 falhas** ("Execucao de Teste Anulada." = flakiness pre-existente do ConsoleLogger/vstest documentada)
+- **Build**: dotnet build -c Release 0 erros (warnings pre-existentes apenas)
+- **Publish + stage + deploy**: dotnet publish -c Release --self-contained true -r win-x64 OK; 
+pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquivos DiNho.Capture.Poc.* copiados para %LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\ — **SHA256 publish == staging == instalado == D40F74A3...**
+- **Commit**: 3c2c70 — ix: av1_amf cai em args libx264 (tune) e rawFmt h264 — seams BuildEncoderTuneArgs/GetRawFormatForCodec extraidos p/ teste
+
+### Key Decisions
+
+- **Seam estatico em vez de switch privado**: o switch tune e o coracao dos args de cada codec — extrair como puro internal static permite teste determinístico sem spawn de ffmpeg (que depende do hardware/ambiente)
+- **av1_amf sem -me_quarter_pel**: opcao so existe em h264/hevc_amf; inclui-la no av1_amf reproduziria o mesmo erro de opcao que o fix previne (validado no help real do encoder)
+- **Bug invisivel no smoke**: probe passa (ja tinha av1_amf) mas rota real falha — reforca a necessidade de seams testaveis para cada cadeia de args, nao so do probe
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (GPU AMD RDNA3+/RX 7000): codec "av1" → initialized (codec=av1_amf) SEM restart loop, rawFmt "av1" → clip com ideo>0 e mux IVF correto
+- (Opcional) Mesma classe de bug pode afetar h264_qsv/v1_d3d12va em outros hosts — seams agora cobrem todos os codecs nos testes
+
+## Session Summary (2026-08-05d — QSV real no encode: av1_qsv + init_hw_device + extra_hw_frames removido)
+
+### Done
+
+- **Lacuna Intel QSV fechada (mesma classe do bug av1_amf da sessao 2026-08-05c)** — rota real usava `libsvtav1` para Intel e string QSV com `-extra_hw_frames`:
+  - **`EncoderManager.VendorAv1Codecs[0x8086]`**: `"libsvtav1"` → `"av1_qsv"` — Intel Arc/GPU agora usa encoder HW para AV1.
+  - **`SupportsAv1Hardware` 0x8086**: `true` cego → `CheckFfmpegEncoder("av1_qsv")` (gate Arc Alchemist+, espelha padrao NVIDIA).
+  - **`FfmpegEncoder.IsAv1`**: agora `"av1_nvenc" or "libsvtav1" or "av1_amf" or "av1_qsv"` — corrige tambem bug latente (av1_amf ausente antes → RawFormat errado).
+  - **`BuildEncoderTuneArgs`**: string `h264_qsv`/`hevc_qsv` (com `-rdo 1 -low_power 0 -mbbrc 1 -async_depth 1`) e novo branch `av1_qsv` (mesmo padrao sem `-rdo`/`-low_power`/`-mbbrc`); **`-extra_hw_frames 40` REMOVIDO** — ffmpeg 9 rejeita como opcao de encoder ("not a encoding option"); e opcao frame-level (`hwupload=extra_hw_frames=...`). Comentario no codigo documenta.
+  - **`StartFfmpeg`**: novo `isQsv = _codec.EndsWith("_qsv")` + arg `-init_hw_device qsv ` — sem isso ffmpeg 9 falha com "Error creating a MFX session: -9".
+  - **`BuildProbeArgs`**: tune switch agora `"h264_qsv" or "hevc_qsv" or "av1_qsv" => "-preset fastest"`; rawFmt inclui av1_qsv; `isQsv` + `hwDeviceArg` combina `-init_hw_device d3d12va=hw=0` + `-init_hw_device qsv`.
+- **Validacao real do parse** (dev sem iGPU, ffmpeg 9.0): av1_qsv e hevc_qsv com tune completo (incl. `-rdo 1 -mbbrc 1` no av1_qsv) + `-init_hw_device qsv` → unico erro `Failed to find d3d11va adapter by vendor id 0x8086` (esperado) — args passam no parse. Confirma `rdo`/`mbbrc` validos para av1_qsv tambem.
+- **Testes novos**: `FfmpegEncoderTests` — `BuildEncoderTuneArgs_QsvCodecs_UseQsvArgs` (Theory h264/hevc/av1_qsv), `..._H264HevcQsv_UseRdoMbbrc`, `..._Qsv_DoesNotIncludeExtraHwFrames`, `GetRawFormatForCodec_ReturnsExpected` ganhou InlineData `av1_qsv→av1`/`h264_qsv→h264`/`hevc_qsv→hevc`; `EncoderManagerTests` — `MapUserCodec_av1_Intel_ReturnsAv1Qsv` + `MapUserCodec_av1_Amd_ReturnsAv1Amf`.
+
+### Validado
+
+- **Build**: `dotnet build src\...\DiNho.Capture.Poc.csproj -c Release` 0 erros.
+- **C# tests**: filtro FfmpegEncoder+EncoderManager **168/168**; suite completa **1137/1137 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pre-existente do ConsoleLogger/vstest documentada).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (294 files, ffmpeg 9.0 212MB copiado); 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == `0910CAC6...`**.
+- **Commit**: `b26a351` — `fix: QSV real no encode (av1_qsv no lugar de libsvtav1, extra_hw_frames removido, init_hw_device qsv)`.
+
+### Key Decisions
+
+- **`-init_hw_device qsv` obrigatorio**: ffmpeg 9 abandona o auto-init; sem o device o QSV falha com MFX session error antes de qualquer encode.
+- **Gate de suporte por `CheckFfmpegEncoder`**: em maquina sem iGPU/Arc o probe falha → fallback correto; em Intel o probe passa → av1_qsv ativo. Evita falso-positivo de `true` cego.
+- **Sem `-extra_hw_frames`**: opcao frame-level (aplicada no vf via hwupload), nunca como arg de encoder — ffmpeg 9 hard-fail.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (Intel iGPU/Arc): codec "av1" → initialized (codec=av1_qsv) SEM restart loop, sem "invalid param (8)"; clip com video>0 e mux IVF correto.
+- Validações de usuario pendentes acumuladas: AMD RDNA3+ (av1_amf), `-filler`/`-enforce_hrd` no av1_amf, AMD enhance (sr_amf/frc_amf).
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/EncoderManager.cs`: VendorAv1Codecs, SupportsAv1Hardware, BuildProbeArgs (isQsv/hwDeviceArg/tune/rawFmt)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: IsAv1, BuildEncoderTuneArgs (sem extra_hw_frames; hevc_qsv/av1_qsv), GetRawFormatForCodec, StartFfmpeg (isQsv + init_hw_device qsv)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 4 testes qsv + InlineData rawFmt
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EncoderManagerTests.cs`: MapUserCodec av1 Intel/AMD
