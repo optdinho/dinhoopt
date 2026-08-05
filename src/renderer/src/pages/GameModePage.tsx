@@ -91,7 +91,7 @@ export function GameModePage() {
     return () => {
       delete (window as unknown as Record<string, unknown>).__GAME_MODE_STORE__
     }
-  }, [store])
+  }, [])
 
   const isBusy = status !== 'idle'
 
