@@ -10,6 +10,10 @@ export interface ImportedRule {
   fileMask: string
   recurse: boolean
   removeSelf: boolean
+  /** Section had `Warning=1` — UI should surface it before cleaning. */
+  warning?: boolean
+  /** Section default selection state (`Default=0` → not pre-selected). Absent = selected. */
+  default?: boolean
 }
 
 const WINAPP2_RAW_URL = 'https://raw.githubusercontent.com/MoscaDotTo/Winapp2/master/Winapp2.ini'
@@ -78,6 +82,8 @@ export async function downloadAndCacheRules(): Promise<number> {
         fileMask: fk.fileMask,
         recurse: fk.recurse,
         removeSelf: fk.removeSelf,
+        warning: section.warning,
+        default: section.default,
       })
     }
   }

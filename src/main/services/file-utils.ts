@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, renameSync } from 'node:fs'
-import { open, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { existsSync, constants as fsConstants, renameSync } from 'node:fs'
+import { lstat, open, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CleanerType } from '@shared/enums'
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
@@ -34,8 +34,10 @@ export function isExcluded(filePath: string, exclusions: string[]): boolean {
       // Extension glob: *.log, *.tmp etc.
       if (normalized.endsWith(pattern.substring(1))) return true
     } else {
-      // Path prefix match
-      if (normalized.startsWith(pattern) || normalized === pattern) return true
+      // Path prefix match — require a separator boundary so `C:\Windows` does not
+      // exclude `C:\Windows10`. Trailing separators are normalized away.
+      const boundary = pattern.endsWith(sep) ? pattern : `${pattern}${sep}`
+      if (normalized === pattern || normalized.startsWith(boundary)) return true
     }
   }
   return false
@@ -45,26 +47,29 @@ export function isExcluded(filePath: string, exclusions: string[]): boolean {
  * Overwrite a single file's contents with random data, then zeros, before deletion.
  * For directories, recursively overwrite all files within.
  *
- * TOCTOU mitigation: open the file handle first, then `fstat()` via the fd so an
- * attacker cannot swap the path to a symlink between the stat and open calls.
+ * Symlink safety: the target is first inspected with `lstat` (never follows links)
+ * and then opened with `O_NOFOLLOW`. A path that resolves to (or races into) a
+ * symlink is left untouched — only the link itself is removed later by `rm`.
  * Directory entries are still subject to TOCTOU (no `openat` in Node.js).
  */
 async function secureOverwrite(filePath: string): Promise<void> {
-  const fh = await open(filePath, 'r+')
-  try {
-    const stats = await fh.stat()
+  const stats = await lstat(filePath)
 
-    if (stats.isDirectory()) {
-      await fh.close()
-      const entries = await readdir(filePath, { withFileTypes: true })
-      for (const entry of entries) {
-        await secureOverwrite(join(filePath, entry.name))
-      }
-      return
+  // Detect directories via lstat BEFORE opening: on Windows `open(dir, 'r+')`
+  // throws EISDIR, so the old post-open isDirectory() branch was unreachable.
+  if (stats.isDirectory()) {
+    const entries = await readdir(filePath, { withFileTypes: true })
+    for (const entry of entries) {
+      await secureOverwrite(join(filePath, entry.name))
     }
+    return
+  }
 
-    if (!stats.isFile() || stats.size === 0) return
+  // Skip symlinks, special files and empty files without touching them.
+  if (!stats.isFile() || stats.size === 0) return
 
+  const fh = await open(filePath, fsConstants.O_RDWR | fsConstants.O_NOFOLLOW)
+  try {
     const size = stats.size
     const CHUNK = 1024 * 1024 // 1 MB chunks
 
@@ -201,7 +206,7 @@ export async function scanDirectory(
       if (isExcluded(fullPath, exclusions)) return
 
       try {
-        const stats = await stat(fullPath)
+        const stats = await lstat(fullPath)
 
         if (stats.mtimeMs > cutoff) return
 
@@ -276,7 +281,7 @@ export async function scanFile(filePath: string, category: CleanerType, subcateg
   }
 
   try {
-    const stats = await stat(filePath)
+    const stats = await lstat(filePath)
     if (!stats.isFile()) {
       return { category, subcategory, items: [], totalSize: 0, itemCount: 0 }
     }
@@ -313,7 +318,7 @@ export async function scanDirectoriesAsItems(
     if (isExcluded(dirPath, exclusions)) continue
 
     try {
-      const stats = await stat(dirPath)
+      const stats = await lstat(dirPath)
       if (!stats.isDirectory()) continue
       const size = await getDirectorySize(dirPath, 3)
       if (size < 1024) continue
@@ -368,6 +373,8 @@ export async function resolveChildSubdirs(paths: string[], childSubdir?: string)
  * Only `*` (any chars) and `?` (single char) are supported.
  */
 function wildcardToRe(pattern: string): RegExp {
+  // On Windows `*.*` matches every file, including those without an extension.
+  if (pattern === '*.*') return /^.*$/i
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
   const reStr = escaped.replace(/\?/g, '.').replace(/\*/g, '.*')
   return new RegExp(`^${reStr}$`, 'i')
@@ -383,6 +390,7 @@ export async function scanWithFileMask(
   recurse: boolean,
   category: CleanerType,
   subcategory: string,
+  removeSelf = false,
   skipRecentMinutes = getSettings().cleaner.skipRecentMinutes ?? 60,
 ): Promise<ScanResult> {
   const items: ScanItem[] = []
@@ -408,8 +416,8 @@ export async function scanWithFileMask(
         if (recurse) await walk(fullPath, depth + 1)
       } else if (entry.isFile() && pattern.test(entry.name)) {
         try {
-          const stats = await stat(fullPath)
-          if (stats.mtimeMs > cutoff) continue
+          const stats = await lstat(fullPath)
+          if (!stats.isFile() || stats.mtimeMs > cutoff) continue
           items.push({
             id: nextItemId(),
             path: fullPath,
@@ -429,6 +437,28 @@ export async function scanWithFileMask(
 
   await walk(dirPath, 0)
 
+  // REMOVESELF: the rule also owns the directory itself, so offer it as one item.
+  if (removeSelf) {
+    try {
+      const dirStats = await lstat(dirPath)
+      if (dirStats.isDirectory()) {
+        const dirSize = await getDirectorySize(dirPath, 10)
+        items.push({
+          id: nextItemId(),
+          path: dirPath,
+          size: dirSize,
+          category,
+          subcategory,
+          lastModified: dirStats.mtimeMs,
+          selected: true,
+        })
+        totalSize += dirSize
+      }
+    } catch {
+      // Directory doesn't exist — nothing to add
+    }
+  }
+
   return { category, subcategory, items, totalSize, itemCount: items.length }
 }
 
@@ -440,10 +470,10 @@ export async function getDirectorySize(dirPath: string, maxDepth = 3): Promise<n
     for (const entry of entries) {
       const fullPath = join(dirPath, entry.name)
       try {
-        const stats = await stat(fullPath)
+        const stats = await lstat(fullPath)
         if (stats.isDirectory()) {
           size += await getDirectorySize(fullPath, maxDepth - 1)
-        } else {
+        } else if (stats.isFile()) {
           size += stats.size
         }
       } catch {

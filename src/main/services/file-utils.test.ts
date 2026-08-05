@@ -1,17 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('fs/promises', () => ({
-  rm: vi.fn(),
-  stat: vi.fn(),
-  readdir: vi.fn(),
-  open: vi.fn(),
-  writeFile: vi.fn(),
-}))
+vi.mock('fs/promises', () => {
+  const statFn = vi.fn()
+  return {
+    rm: vi.fn(),
+    stat: statFn,
+    lstat: statFn,
+    readdir: vi.fn(),
+    open: vi.fn(),
+    writeFile: vi.fn(),
+  }
+})
 
-vi.mock('fs', () => ({
-  existsSync: vi.fn(),
-  renameSync: vi.fn(),
-}))
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    existsSync: vi.fn(),
+    renameSync: vi.fn(),
+  }
+})
 
 vi.mock('crypto', () => ({
   randomBytes: (size: number, cb?: (err: Error | null, buf: Buffer) => void) => {
@@ -30,7 +38,7 @@ vi.mock('./scan-cache', () => ({
   getCachedItems: vi.fn(),
 }))
 
-import { existsSync, renameSync } from 'node:fs'
+import { existsSync, constants as fsConstants, renameSync } from 'node:fs'
 import { open, readdir, rm, stat, writeFile } from 'node:fs/promises'
 
 import { CleanerType } from '../../shared/enums'
@@ -137,6 +145,13 @@ describe('isExcluded', () => {
   it('extension pattern requires dot', () => {
     expect(isExcluded('C:\\temp\\catalog', ['*.log'])).toBe(false)
   })
+  it('does not over-match sibling prefixes', () => {
+    expect(isExcluded('C:\\Windows10\\file.txt', ['C:\\Windows'])).toBe(false)
+    expect(isExcluded('C:\\Windows\\System32\\file.txt', ['C:\\Windows'])).toBe(true)
+  })
+  it('matches exclusion with trailing separator', () => {
+    expect(isExcluded('C:\\Windows\\System32\\file.txt', ['C:\\Windows\\'])).toBe(true)
+  })
 })
 
 // ─────────────────────────────────────────────
@@ -187,20 +202,18 @@ describe('safeDelete', () => {
 
   it('calls secureOverwrite when secureDelete is enabled', async () => {
     mockSettings.cleaner.secureDelete = true
+    mockedStat.mockResolvedValue(mockFileStats(1024))
     const mockFd = {
       write: vi.fn(),
       datasync: vi.fn(),
       close: vi.fn(),
-      stat: vi.fn().mockResolvedValue(mockFileStats(1024)),
     }
-    const mockFileHandle = { ...mockFd, on: vi.fn() }
-    mockedOpen.mockResolvedValue(mockFileHandle as any)
+    mockedOpen.mockResolvedValue(mockFd as any)
     mockedRm.mockResolvedValue(undefined)
 
     const result = await safeDelete('C:\\temp\\file.tmp')
     expect(result.success).toBe(true)
-    expect(mockedOpen).toHaveBeenCalledWith('C:\\temp\\file.tmp', 'r+')
-    expect(mockFd.stat).toHaveBeenCalled()
+    expect(mockedOpen).toHaveBeenCalledWith('C:\\temp\\file.tmp', fsConstants.O_RDWR | fsConstants.O_NOFOLLOW)
     expect(mockFd.write).toHaveBeenCalled()
     expect(mockFd.datasync).toHaveBeenCalled()
     expect(mockFd.close).toHaveBeenCalled()
@@ -447,6 +460,26 @@ describe('scanDirectory', () => {
     const result = await scanDirectory('C:\\bulk', CleanerType.System, 'bulk')
     expect(result.items).toHaveLength(5000)
   })
+
+  it('sizes symlinks via lstat (does not follow into the target)', async () => {
+    const symEntry = {
+      name: 'link.log',
+      isDirectory: () => false,
+      isFile: () => false,
+      isSymbolicLink: () => true,
+    }
+    mockedReaddir.mockResolvedValue([symEntry as any])
+    mockedStat.mockResolvedValue({
+      size: 64,
+      mtimeMs: OLD,
+      isFile: () => false,
+      isDirectory: () => false,
+    })
+
+    const result = await scanDirectory('C:\\logs', CleanerType.System, 'logs')
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]!.size).toBe(64)
+  })
 })
 
 // ─────────────────────────────────────────────
@@ -577,42 +610,51 @@ describe('resolveChildSubdirs', () => {
 // secureOverwrite (tested indirectly via safeDelete)
 // ─────────────────────────────────────────────
 describe('secureOverwrite (via safeDelete)', () => {
-  it('overwrites file with random data then zeros for directories', async () => {
+  it('recursively overwrites directory contents', async () => {
     mockSettings.cleaner.secureDelete = true
     mockedReaddir.mockResolvedValue([mockDirEntry('child.dat', false)])
-    const dirFd = { write: vi.fn(), datasync: vi.fn(), close: vi.fn(), stat: vi.fn().mockResolvedValue(mockDirStats()) }
+    mockedStat
+      .mockResolvedValueOnce(mockDirStats()) // lstat(dir) → isDirectory
+      .mockResolvedValueOnce(mockFileStats(50)) // lstat(dir/child.dat)
     const fileFd = {
       write: vi.fn(),
       datasync: vi.fn(),
       close: vi.fn(),
-      stat: vi.fn().mockResolvedValue(mockFileStats(50)),
     }
-    mockedOpen.mockResolvedValueOnce(dirFd as any)
-    mockedOpen.mockResolvedValueOnce(fileFd as any)
+    mockedOpen.mockResolvedValue(fileFd as any)
     mockedRm.mockResolvedValue(undefined)
 
     const result = await safeDelete('C:\\dir')
     expect(result.success).toBe(true)
-    expect(mockedOpen).toHaveBeenCalledWith('C:\\dir\\child.dat', 'r+')
+    expect(mockedOpen).toHaveBeenCalledWith('C:\\dir\\child.dat', fsConstants.O_RDWR | fsConstants.O_NOFOLLOW)
+    expect(fileFd.write).toHaveBeenCalled()
+    expect(fileFd.close).toHaveBeenCalled()
   })
 
   it('does not overwrite zero-size files', async () => {
     mockSettings.cleaner.secureDelete = true
-    const mockFd = {
-      write: vi.fn(),
-      datasync: vi.fn(),
-      close: vi.fn(),
-      stat: vi.fn().mockResolvedValue(mockFileStats(0)),
-    }
-    mockedOpen.mockResolvedValue(mockFd as any)
+    mockedStat.mockResolvedValue(mockFileStats(0))
     mockedRm.mockResolvedValue(undefined)
 
     const result = await safeDelete('C:\\empty.tmp')
     expect(result.success).toBe(true)
-    expect(mockedOpen).toHaveBeenCalledWith('C:\\empty.tmp', 'r+')
-    expect(mockFd.stat).toHaveBeenCalled()
-    expect(mockFd.write).not.toHaveBeenCalled()
-    expect(mockFd.close).toHaveBeenCalled()
+    expect(mockedOpen).not.toHaveBeenCalled()
+  })
+
+  it('skips symlinks without opening them', async () => {
+    mockSettings.cleaner.secureDelete = true
+    mockedStat.mockResolvedValue({
+      isFile: () => false,
+      isDirectory: () => false,
+      isSymbolicLink: () => true,
+      size: 10,
+      mtimeMs: 0,
+    } as any)
+    mockedRm.mockResolvedValue(undefined)
+
+    const result = await safeDelete('C:\\temp\\link.tmp')
+    expect(result.success).toBe(true)
+    expect(mockedOpen).not.toHaveBeenCalled()
   })
 })
 
@@ -721,5 +763,37 @@ describe('scanWithFileMask', () => {
     const result = await scanWithFileMask('C:\\temp', 'file?.txt', false, CleanerType.System, 'SingleChar')
 
     expect(result.itemCount).toBe(2) // file1.txt, file2.txt — NOT file10.txt (too long)
+  })
+
+  it('matches *.* including files without an extension', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('README'), fileEntry('data.txt')])
+    mockedStat.mockResolvedValue(mockFileStats(10, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', '*.*', false, CleanerType.System, 'All')
+
+    expect(result.itemCount).toBe(2)
+  })
+
+  it('adds the directory itself when removeSelf=true', async () => {
+    mockedReaddir.mockResolvedValueOnce([fileEntry('a.log')]).mockResolvedValueOnce([])
+    mockedStat
+      .mockResolvedValueOnce(mockFileStats(100, OLD)) // a.log file
+      .mockResolvedValueOnce(mockDirStats()) // lstat(dirPath) → isDirectory
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'Self', true)
+
+    expect(result.itemCount).toBe(2)
+    expect(result.items[1]!.path).toBe('C:\\temp')
+    expect(result.items[1]!.selected).toBe(true)
+  })
+
+  it('does not add the directory itself when removeSelf=false', async () => {
+    mockedReaddir.mockResolvedValue([fileEntry('a.log')])
+    mockedStat.mockResolvedValue(mockFileStats(100, OLD))
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'NoSelf')
+
+    expect(result.itemCount).toBe(1)
+    expect(result.items[0]!.path).not.toBe('C:\\temp')
   })
 })

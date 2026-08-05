@@ -326,6 +326,51 @@ describe('SYSTEM_SCAN handler', () => {
     const results = await handler()
     expect(results).toHaveLength(0)
   })
+
+  it('forwards removeSelf to scanWithFileMask', async () => {
+    mockSystemCleanTargets.mockReturnValue([])
+    mockSingleFileCleanTargets.mockReturnValue([])
+    mockGetImportedRules.mockReturnValue([
+      { path: '${APPDATA}\\Foo', fileMask: '*.*', recurse: false, subcategory: 'Foo', removeSelf: true },
+    ])
+    mockScanWithFileMask.mockResolvedValue({
+      category: 'system',
+      subcategory: 'Foo',
+      items: [{ id: 'f1', path: '/tmp/foo', size: 50 }],
+      totalSize: 50,
+      itemCount: 1,
+    })
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:scan')
+    await handler()
+    expect(mockScanWithFileMask).toHaveBeenCalledWith(expect.any(String), '*.*', false, expect.any(String), 'Foo', true)
+  })
+
+  it('unselects items from rules with default=false', async () => {
+    mockSystemCleanTargets.mockReturnValue([])
+    mockSingleFileCleanTargets.mockReturnValue([])
+    mockGetImportedRules.mockReturnValue([
+      { path: '${LOCALAPPDATA}\\Temp', fileMask: '*', recurse: false, subcategory: 'Optional', default: false },
+    ])
+    mockScanWithFileMask.mockResolvedValue({
+      category: 'system',
+      subcategory: 'Optional',
+      items: [
+        { id: 'o1', path: '/tmp/optional/a', size: 100, selected: true },
+        { id: 'o2', path: '/tmp/optional/b', size: 100, selected: true },
+      ],
+      totalSize: 200,
+      itemCount: 2,
+    })
+
+    registerSystemCleanerIpc(() => null)
+    const handler = getHandler('cleaner:system:scan')
+    const results = await handler()
+    expect(results).toHaveLength(1)
+    expect(results[0]!.items.every((i) => i.selected === false)).toBe(true)
+    expect(results[0]!.itemCount).toBe(2)
+  })
 })
 
 describe('SYSTEM_CLEAN handler', () => {

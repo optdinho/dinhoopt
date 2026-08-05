@@ -94,10 +94,27 @@ export async function handleSystemScan(getWindow: WindowGetter): Promise<ScanRes
   for (const rule of importedRules) {
     try {
       const resolvedPath = resolveWinapp2Path(rule.path)
-      const ruleResult = await scanWithFileMask(resolvedPath, rule.fileMask, rule.recurse, category, rule.subcategory)
-      if (ruleResult.items.length > 0) {
-        cacheItems(ruleResult.items)
-        results.push(ruleResult)
+      const ruleResult = await scanWithFileMask(
+        resolvedPath,
+        rule.fileMask,
+        rule.recurse,
+        category,
+        rule.subcategory,
+        rule.removeSelf,
+      )
+      let items = ruleResult.items
+      // Rules flagged Default=False are offered but not pre-selected.
+      if (rule.default === false) {
+        items = items.map((item) => ({ ...item, selected: false }))
+      }
+      if (items.length > 0) {
+        cacheItems(items)
+        results.push({
+          ...ruleResult,
+          items,
+          totalSize: items.reduce((s, i) => s + i.size, 0),
+          itemCount: items.length,
+        })
       }
     } catch {
       getLogger().warning('system-cleaner', `Skipped Winapp2 target: ${rule.path}`)

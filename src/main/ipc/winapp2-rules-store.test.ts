@@ -138,6 +138,33 @@ describe('winapp2-rules-store', () => {
       })
       await expect(downloadAndCacheRules()).rejects.toThrow('HTTP 500')
     })
+
+    it('propagates section warning/default flags to rules', async () => {
+      const content =
+        '[WarningSection]\r\nWarn=True\r\nFileKey1=%Temp%\\a|*.*|RECURSE\r\n\r\n[OptOutSection]\r\nDefault=False\r\nFileKey1=%Temp%\\b|*.log\r\n'
+      const dataListeners: Record<string, (chunk?: Buffer) => void> = {}
+      mocks.httpsGet.mockImplementation((_url: string, cb: (res: unknown) => void) => {
+        cb({
+          statusCode: 200,
+          on: (ev: string, fn: (chunk?: Buffer) => void) => {
+            dataListeners[ev] = fn
+          },
+        })
+        return { on: vi.fn() }
+      })
+
+      const promise = downloadAndCacheRules()
+      dataListeners.data?.(Buffer.from(content))
+      dataListeners.end?.()
+      await promise
+
+      const all = getImportedRules()
+      expect(all).toHaveLength(2)
+      expect(all[0]!.subcategory).toBe('WarningSection')
+      expect(all[0]!.warning).toBe(true)
+      expect(all[1]!.subcategory).toBe('OptOutSection')
+      expect(all[1]!.default).toBe(false)
+    })
   })
 
   describe('ensureRulesLoaded', () => {
