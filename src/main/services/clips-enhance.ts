@@ -44,6 +44,33 @@ export function buildAmfEnhanceVf(enhance: EnhanceOption, srcW: number, srcH: nu
   return chain.length > 0 ? chain.join(',') : null
 }
 
+/**
+ * Normalizes a raw sharpness value (0..1) from IPC.
+ *
+ * - finite number -> clamped to [0, 1]
+ * - anything else (undefined, string, NaN, Infinity, boolean) -> 0 (off)
+ */
+export function normalizeSharpness(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+}
+
+/**
+ * Appends a `cas` (Contrast Adaptive Sharpening) filter to a `-vf` filter chain.
+ *
+ * - strength <= 0 or NaN -> the chain is returned unchanged (sharpening off)
+ * - strength > 1          -> clamped to 1
+ * - strength is formatted with a decimal point (JS number toString is
+ *   locale-independent), so ffmpeg always parses it correctly
+ *
+ * Returns null when the chain was null and the filter is off.
+ */
+export function appendSharpnessFilter(chain: string | null, strength: number): string | null {
+  if (!Number.isFinite(strength) || strength <= 0) return chain
+  const s = Math.min(1, strength)
+  const cas = `cas=strength=${s}`
+  return chain && chain.length > 0 ? `${chain},${cas}` : cas
+}
+
 export interface VideoResolution {
   w: number
   h: number

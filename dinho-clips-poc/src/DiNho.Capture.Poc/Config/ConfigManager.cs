@@ -59,9 +59,6 @@ public sealed class AppConfig
     /// <summary>"Remover bordas pretas": preenche o box alvo inteiro no scale (sem preservar aspect).</summary>
     public bool StretchToFit { get; set; } = false;
 
-    /// <summary>Intensidade do filtro de sharpness (cas), 0..1 — 0 = desligado.</summary>
-    public double SharpnessStrength { get; set; } = 0;
-
     // CRF+VBV quality params (usados por NVENC/AV1)
     public int Cq { get; set; } = 20;
     public int MaxrateKbps { get; set; } = 30000;
@@ -304,9 +301,6 @@ public sealed class ConfigManager : IDisposable
 
         if (config.MicVolume < 0f || config.MicVolume > 4f)
             config.MicVolume = _defaults.MicVolume;
-
-        if (double.IsNaN(config.SharpnessStrength) || config.SharpnessStrength < 0 || config.SharpnessStrength > 1)
-            config.SharpnessStrength = _defaults.SharpnessStrength;
 
         config.PttMode = config.PttMode?.ToLowerInvariant() switch
         {

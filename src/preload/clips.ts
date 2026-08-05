@@ -52,10 +52,11 @@ export const clipsMethods = {
     endSeconds: number,
     reEncode?: boolean,
     enhance?: EnhanceOption,
+    sharpness?: number,
   ): Promise<ClipTrimResult> =>
-    ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode, enhance),
-  clipsMergeClips: (clipPaths: string[], enhance?: EnhanceOption): Promise<ClipMergeResult> =>
-    ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths, enhance),
+    ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode, enhance, sharpness),
+  clipsMergeClips: (clipPaths: string[], enhance?: EnhanceOption, sharpness?: number): Promise<ClipMergeResult> =>
+    ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths, enhance, sharpness),
   clipsGetVideoUrl: (clipPath: string): string => buildClipVideoUrl(clipPath),
   clipsOnEngineStatus: (callback: (status: ClipsEngineStatus) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: ClipsEngineStatus) => callback(status)

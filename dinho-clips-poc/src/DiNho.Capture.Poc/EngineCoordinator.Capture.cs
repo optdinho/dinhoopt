@@ -175,7 +175,6 @@ public sealed partial class EngineCoordinator
                     Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead}");
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
                 fe.SetStretchToFit(_config.Config.StretchToFit);
-                fe.SetSharpnessStrength(_config.Config.SharpnessStrength);
                 }
                 _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
                 _status.Update(s =>

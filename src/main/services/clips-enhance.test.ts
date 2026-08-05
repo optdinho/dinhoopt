@@ -1,6 +1,13 @@
 import { execFile } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { AMD_VENDOR_ID, buildAmfEnhanceVf, parseEnhanceOption, probeVideoResolution } from './clips-enhance'
+import {
+  AMD_VENDOR_ID,
+  appendSharpnessFilter,
+  buildAmfEnhanceVf,
+  normalizeSharpness,
+  parseEnhanceOption,
+  probeVideoResolution,
+} from './clips-enhance'
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
@@ -50,6 +57,64 @@ describe('buildAmfEnhanceVf', () => {
     expect(buildAmfEnhanceVf('sr+frc', 960, 540)).toBe(
       'sr_amf=w=1920:h=1080:format=nv12:algorithm=sr1-1,frc_amf=profile=high:fallback_mode=blend',
     )
+  })
+})
+
+describe('normalizeSharpness', () => {
+  it('clamps a valid number into [0, 1]', () => {
+    expect(normalizeSharpness(0.5)).toBe(0.5)
+    expect(normalizeSharpness(0)).toBe(0)
+    expect(normalizeSharpness(1)).toBe(1)
+  })
+
+  it('clamps values above 1 to 1 and below 0 to 0', () => {
+    expect(normalizeSharpness(2.5)).toBe(1)
+    expect(normalizeSharpness(-1)).toBe(0)
+  })
+
+  it('returns 0 for non-numbers and non-finite numbers', () => {
+    expect(normalizeSharpness(undefined)).toBe(0)
+    expect(normalizeSharpness('high')).toBe(0)
+    expect(normalizeSharpness(true)).toBe(0)
+    expect(normalizeSharpness(Number.NaN)).toBe(0)
+    expect(normalizeSharpness(Number.POSITIVE_INFINITY)).toBe(0)
+  })
+})
+
+describe('appendSharpnessFilter', () => {
+  it('appends cas to an existing chain', () => {
+    expect(appendSharpnessFilter('scale=1280:720', 0.5)).toBe('scale=1280:720,cas=strength=0.5')
+  })
+
+  it('returns just the cas filter for an empty chain', () => {
+    expect(appendSharpnessFilter('', 0.4)).toBe('cas=strength=0.4')
+  })
+
+  it('returns just the cas filter for a null chain', () => {
+    expect(appendSharpnessFilter(null, 0.4)).toBe('cas=strength=0.4')
+  })
+
+  it('clamps strength above 1 to 1', () => {
+    expect(appendSharpnessFilter(null, 3)).toBe('cas=strength=1')
+  })
+
+  it('returns the chain unchanged for strength 0 (off)', () => {
+    expect(appendSharpnessFilter('scale=1280:720', 0)).toBe('scale=1280:720')
+    expect(appendSharpnessFilter(null, 0)).toBeNull()
+  })
+
+  it('returns the chain unchanged for negative strength', () => {
+    expect(appendSharpnessFilter('scale=1280:720', -1)).toBe('scale=1280:720')
+  })
+
+  it('returns the chain unchanged for NaN', () => {
+    expect(appendSharpnessFilter('scale=1280:720', Number.NaN)).toBe('scale=1280:720')
+    expect(appendSharpnessFilter(null, Number.NaN)).toBeNull()
+  })
+
+  it('formats the strength with a decimal point regardless of locale', () => {
+    expect(appendSharpnessFilter(null, 0.1)).toBe('cas=strength=0.1')
+    expect(appendSharpnessFilter(null, 0.9)).toBe('cas=strength=0.9')
   })
 })
 

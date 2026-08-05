@@ -46,6 +46,38 @@ function EnhanceSelect({
   )
 }
 
+function SharpnessSlider({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number
+  onChange: (v: number) => void
+  disabled?: boolean
+}) {
+  const { t } = useTranslation('clips')
+  return (
+    <label
+      className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[10px]"
+      style={{ background: 'rgba(0,0,0,0.2)' }}
+      title={t('sharpnessTooltip')}
+    >
+      <span style={{ color: 'var(--text-secondary)' }}>{t('sharpness')}</span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.1}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="flex-1 disabled:opacity-40"
+      />
+      <span style={{ color: 'var(--text-primary)' }}>{value > 0 ? value.toFixed(1) : t('sharpnessOff')}</span>
+    </label>
+  )
+}
+
 function TrimTimeline({
   currentTime,
   startSec,
@@ -266,6 +298,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const [reEncode, setReEncode] = useState(false)
   const [enhance, setEnhance] = useState<EnhanceOption>('none')
   const [enhanceSupported, setEnhanceSupported] = useState(false)
+  const [sharpness, setSharpness] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [realDuration, setRealDuration] = useState(clip?.duration || 0)
@@ -387,7 +420,14 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
     }
     setTrimming(true)
     try {
-      const result: ClipTrimResult = await window.dinho.clipsTrimClip(clip!.path, startSec, endSec, reEncode, enhance)
+      const result: ClipTrimResult = await window.dinho.clipsTrimClip(
+        clip!.path,
+        startSec,
+        endSec,
+        reEncode,
+        enhance,
+        sharpness,
+      )
       if (result.success) {
         toast.success(t('trimSuccess'))
         onSave()
@@ -407,7 +447,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
       return
     }
     try {
-      const result: ClipMergeResult = await window.dinho.clipsMergeClips(mergeClips, enhance)
+      const result: ClipMergeResult = await window.dinho.clipsMergeClips(mergeClips, enhance, sharpness)
       if (result.success) {
         toast.success(t('mergeSuccess'))
         onSave()
@@ -701,6 +741,8 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     title={enhanceSupported ? t('enhanceTooltip') : t('enhanceUnavailable')}
                   />
 
+                  <SharpnessSlider value={sharpness} onChange={setSharpness} disabled={!reEncode} />
+
                   <button
                     type="button"
                     onClick={handleTrim}
@@ -752,6 +794,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
               disabled={!enhanceSupported}
               title={enhanceSupported ? t('enhanceTooltip') : t('enhanceUnavailable')}
             />
+            <SharpnessSlider value={sharpness} onChange={setSharpness} />
             <button
               type="button"
               onClick={handleMerge}

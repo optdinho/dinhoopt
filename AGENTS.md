@@ -3884,3 +3884,31 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/TexturePool.cs`: `BindFlags.ShaderResource` → `ShaderResource | RenderTarget` + comentário corrigido (requisito real do driver NV)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-05 — Sharpness no editor de clips: UI conectada ao wire)
+
+### Done
+
+- **Sharpness conectada da UI ao wire completo de edicao (trim/merge)**, completando o slider de nitidez (sessao 2026-08-03: config + wire IPC/preload):
+  - `ClipEditorModal.tsx`: novo componente `SharpnessSlider` (range 0..1 step 0.1, valor exibido `X.X` ou `sharpnessOff` quando 0, tooltip `sharpnessTooltip`), estado `const [sharpness, setSharpness] = useState(0)`.
+  - `handleTrim`: `clipsTrimClip(path, start, end, reEncode, enhance, sharpness)`.
+  - `handleMerge`: `clipsMergeClips(paths, enhance, sharpness)`.
+  - UI trim: `SharpnessSlider` apos `EnhanceSelect`, `disabled={!reEncode}` (sharpness requer re-encode no trim — main loga warning e ignora sem reEncode).
+  - UI merge: `SharpnessSlider` sempre habilitado (sharpness sozinho no merge ja forca re-encode libx264 com `-vf cas=...`).
+  - Chaves de locale reutilizadas: `sharpness`/`sharpnessTooltip`/`sharpnessOff` (ja existiam nos 3 idiomas).
+
+### Validado
+
+- **TS**: clips suites `clips.ipc.test.ts` + `preload/clips.test.ts` + `clips-enhance.test.ts` **199/199 pass**; `ClipsPage.test.tsx` **23/23 pass**.
+- **Biome**: `--write` aplicado (format da chamada `clipsTrimClip` multi-linha); sem erros nos 4 arquivos de codigo.
+- **Build**: `npm run build` OK (1.05s).
+
+### Next Steps
+
+- Nenhum build de engine necessario (mudancas 100% TS/UI).
+- Validar em campo: trim com re-encode + sharpness > 0 → `-vf cas=strength=X` no log do ffmpeg; merge sozinho com sharpness → re-encode libx264 com `cas`; sharpness 0 → `-c copy` (sem re-encode).
+
+### Relevant Files Changed
+
+- `src/renderer/src/components/clips/ClipEditorModal.tsx`: `SharpnessSlider` (novo), estado `sharpness`, chamadas trim/merge com o valor, sliders nos blocos trim/merge
+- `AGENTS.md`: resumo de sessao

@@ -144,17 +144,6 @@ describe('clips-config-manager', () => {
       config.stretchToFit = false
     })
 
-    it('includes sharpnessStrength 0 by default', () => {
-      config.sharpnessStrength = 0
-      expect(buildEngineConfig().sharpnessStrength).toBe(0)
-    })
-
-    it('propagates sharpnessStrength to the engine payload', () => {
-      config.sharpnessStrength = 0.6
-      expect(buildEngineConfig().sharpnessStrength).toBe(0.6)
-      config.sharpnessStrength = 0
-    })
-
     it('includes replayBufferMode ram by default', () => {
       config.replayBufferMode = 'ram'
       expect(buildEngineConfig().replayBufferMode).toBe('ram')
@@ -377,7 +366,6 @@ describe('clips-config-manager', () => {
       expect(config.autoCleanupEnabled).toBe(true)
       expect(config.autoCleanupThresholdGB).toBe(20)
       expect(config.stretchToFit).toBe(false)
-      expect(config.sharpnessStrength).toBe(0)
     })
 
     it('syncs replayTimeSeconds and fps from store', () => {
@@ -417,14 +405,12 @@ describe('clips-config-manager', () => {
         autoCleanupEnabled: true,
         autoCleanupThresholdGB: 20,
         adaptiveQuality: true,
-        sharpnessStrength: 0.6,
         replayBufferMode: 'hybrid',
       }
       vi.mocked(loadClipsConfig).mockReturnValueOnce(saved)
       loadPersistedClipsConfig()
       expect(config.engineReplayTimeSeconds).toBe(600)
       expect(config.engineFps).toBe(120)
-      expect(config.sharpnessStrength).toBe(0.6)
       expect(config.replayBufferMode).toBe('hybrid')
     })
   })
@@ -451,14 +437,6 @@ describe('clips-config-manager', () => {
       const saved = vi.mocked(saveClipsConfig).mock.calls[0][0] as Record<string, unknown>
       expect(saved.stretchToFit).toBe(true)
       config.stretchToFit = false
-    })
-
-    it('persists sharpnessStrength from config', () => {
-      config.sharpnessStrength = 0.6
-      persistClipsConfig()
-      const saved = vi.mocked(saveClipsConfig).mock.calls[0][0] as Record<string, unknown>
-      expect(saved.sharpnessStrength).toBe(0.6)
-      config.sharpnessStrength = 0
     })
 
     it('persists replayBufferMode from config', () => {

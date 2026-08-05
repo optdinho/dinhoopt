@@ -45,7 +45,6 @@ export interface ConfigState {
   autoCleanupThresholdGB: number
   adaptiveQuality: boolean
   stretchToFit: boolean
-  sharpnessStrength: number
   replayBufferMode: 'ram' | 'hybrid'
 }
 
@@ -86,7 +85,6 @@ export const config: ConfigState = {
   autoCleanupThresholdGB: 20,
   adaptiveQuality: true,
   stretchToFit: false,
-  sharpnessStrength: 0,
   replayBufferMode: 'ram',
 }
 
@@ -135,7 +133,6 @@ function baseConfigPayload(): Record<string, unknown> {
     noiseSuppression: c.noiseSuppression,
     adaptiveQuality: c.adaptiveQuality,
     stretchToFit: c.stretchToFit,
-    sharpnessStrength: c.sharpnessStrength,
     replayBufferMode: c.replayBufferMode,
   }
 }
@@ -165,10 +162,7 @@ export function clipPathInOutputDir(inputPath: string): string | null {
   try {
     const resolved = resolve(outputDir, inputPath)
     const normalized = outputDir.toLowerCase()
-    const prefix =
-      normalized.endsWith('\\') || normalized.endsWith('/')
-        ? normalized
-        : `${normalized}\\`
+    const prefix = normalized.endsWith('\\') || normalized.endsWith('/') ? normalized : `${normalized}\\`
     const isDirItself = resolved.toLowerCase() === normalized
     if (!isDirItself && !resolved.toLowerCase().startsWith(prefix)) return null
     return resolved
@@ -217,7 +211,6 @@ export function loadPersistedClipsConfig(): void {
   config.noiseSuppression = saved.noiseSuppression ?? false
   config.adaptiveQuality = saved.adaptiveQuality ?? true
   config.stretchToFit = saved.stretchToFit ?? false
-  config.sharpnessStrength = saved.sharpnessStrength ?? 0
   config.replayBufferMode = saved.replayBufferMode ?? 'ram'
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
@@ -259,7 +252,6 @@ export function persistClipsConfig(): void {
     noiseSuppression: config.noiseSuppression,
     adaptiveQuality: config.adaptiveQuality,
     stretchToFit: config.stretchToFit,
-    sharpnessStrength: config.sharpnessStrength,
     replayBufferMode: config.replayBufferMode,
     audioSampleRate: config.audioSampleRate,
     autoCleanupEnabled: config.autoCleanupEnabled,

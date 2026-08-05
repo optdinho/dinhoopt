@@ -743,35 +743,6 @@ describe('CLIPS_SET_CONFIG', () => {
     expect(cfg.stretchToFit).toBe(false)
   })
 
-  it('updates sharpnessStrength value', async () => {
-    const handlers = captureHandlers()
-    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
-    await handler({}, { sharpnessStrength: 0.6 })
-    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
-    expect(cfg.sharpnessStrength).toBe(0.6)
-  })
-
-  it('clamps sharpnessStrength to the [0,1] range', async () => {
-    clipsConfig.sharpnessStrength = 0
-    const handlers = captureHandlers()
-    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
-    await handler({}, { sharpnessStrength: 2.5 })
-    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
-    expect(cfg.sharpnessStrength).toBe(1)
-    await handler({}, { sharpnessStrength: -1 })
-    const cfg2 = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
-    expect(cfg2.sharpnessStrength).toBe(0)
-  })
-
-  it('ignores non-number sharpnessStrength', async () => {
-    clipsConfig.sharpnessStrength = 0.4
-    const handlers = captureHandlers()
-    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
-    await handler({}, { sharpnessStrength: 'high' })
-    const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
-    expect(cfg.sharpnessStrength).toBe(0.4)
-  })
-
   it('updates replayBufferMode to hybrid', async () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
@@ -1726,6 +1697,73 @@ describe('CLIPS_TRIM_CLIP', () => {
     const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
     expect(trimArgs).not.toContain('-vf')
   })
+
+  it('appends cas=strength to the vf chain when sharpness is set with re-encode', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true, 'none', 0.6)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs).toContain('-vf')
+    expect(trimArgs.join(' ')).toContain('cas=strength=0.6')
+  })
+
+  it('clamps sharpness above 1 to cas=strength=1', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true, 'none', 2.5)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs.join(' ')).toContain('cas=strength=1')
+  })
+
+  it('ignores sharpness when re-encode is not enabled', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, false, 'none', 0.6)) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs).not.toContain('-vf')
+  })
 })
 
 describe('CLIPS_MERGE_CLIPS', () => {
@@ -1962,6 +2000,54 @@ describe('CLIPS_MERGE_CLIPS', () => {
     expect(args).toContain('copy')
     expect(args).not.toContain('libx264')
     expect(args).not.toContain('-vf')
+  })
+
+  it('re-encodes with cas vf when sharpness is set', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'], 'none', 0.6)) as ClipMergeResult
+    expect(result.success).toBe(true)
+    const mergeCall = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('concat'))?.[1] as string[]
+    expect(mergeCall).toContain('libx264')
+    expect(mergeCall).toContain('-vf')
+    expect(mergeCall.join(' ')).toContain('cas=strength=0.6')
+  })
+
+  it('keeps -c copy when sharpness is zero', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'], 'none', 0)) as ClipMergeResult
+    expect(result.success).toBe(true)
+    const mergeCall = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('concat'))?.[1] as string[]
+    expect(mergeCall).toContain('copy')
+    expect(mergeCall).not.toContain('libx264')
+    expect(mergeCall).not.toContain('-vf')
   })
 })
 

@@ -136,7 +136,6 @@ public sealed partial class EngineCoordinator
                     if (incoming.SelectedAudioSessions.Count > 0)
                         c.SelectedAudioSessions = incoming.SelectedAudioSessions;
                     c.StretchToFit = incoming.StretchToFit;
-                    c.SharpnessStrength = incoming.SharpnessStrength;
                     c.ReplayBufferMode = incoming.ReplayBufferMode;
                 });
 

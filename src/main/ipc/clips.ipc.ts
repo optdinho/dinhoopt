@@ -22,7 +22,14 @@ import {
   getDefaultOutputDir,
   persistClipsConfig,
 } from '../services/clips-config-manager'
-import { AMD_VENDOR_ID, buildAmfEnhanceVf, parseEnhanceOption, probeVideoResolution } from '../services/clips-enhance'
+import {
+  AMD_VENDOR_ID,
+  appendSharpnessFilter,
+  buildAmfEnhanceVf,
+  normalizeSharpness,
+  parseEnhanceOption,
+  probeVideoResolution,
+} from '../services/clips-enhance'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
@@ -347,8 +354,6 @@ export function registerClipsIpc(): void {
       if (typeof c.audioLoopback === 'boolean') C.audioLoopback = c.audioLoopback
       if (typeof c.forceSoftware === 'boolean') C.forceSoftware = c.forceSoftware
       if (typeof c.stretchToFit === 'boolean') C.stretchToFit = c.stretchToFit
-      if (typeof c.sharpnessStrength === 'number' && Number.isFinite(c.sharpnessStrength))
-        C.sharpnessStrength = Math.min(1, Math.max(0, c.sharpnessStrength))
       if (c.replayBufferMode === 'ram' || c.replayBufferMode === 'hybrid') C.replayBufferMode = c.replayBufferMode
       if (typeof c.gameDetection === 'boolean') C.gameDetection = c.gameDetection
       if (typeof c.gameAudioOnly === 'boolean') C.gameAudioOnly = c.gameAudioOnly
@@ -613,6 +618,7 @@ export function registerClipsIpc(): void {
       endSeconds: number,
       reEncode?: boolean,
       enhance?: unknown,
+      sharpness?: unknown,
     ): Promise<ClipTrimResult> => {
       if (!clipPath || typeof clipPath !== 'string') {
         getLogger().warning('clips', 'TrimClip failed: Invalid clip path')
@@ -667,6 +673,11 @@ export function registerClipsIpc(): void {
           }
         }
       }
+      const sharpnessVal = normalizeSharpness(sharpness)
+      if (sharpnessVal > 0 && !reEncode) {
+        getLogger().warning('clips', 'TrimClip sharpness ignored: sharpening requires re-encode')
+      }
+      const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
       return new Promise((resolve) => {
         const args = [
           '-y',
@@ -678,7 +689,7 @@ export function registerClipsIpc(): void {
           String(endSeconds),
           '-i',
           safePath,
-          ...(reEncode ? [...reEncodeArgs, ...(enhanceVf ? ['-vf', enhanceVf] : [])] : copyArgs),
+          ...(reEncode ? [...reEncodeArgs, ...(vfChain ? ['-vf', vfChain] : [])] : copyArgs),
           outPath,
         ]
         const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
@@ -710,7 +721,7 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(
     IPC.CLIPS_MERGE_CLIPS,
-    async (_event, clipPaths: string[], enhance?: unknown): Promise<ClipMergeResult> => {
+    async (_event, clipPaths: string[], enhance?: unknown, sharpness?: unknown): Promise<ClipMergeResult> => {
       if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
         getLogger().warning(
           'clips',
@@ -749,8 +760,10 @@ export function registerClipsIpc(): void {
           }
         }
       }
+      const sharpnessVal = normalizeSharpness(sharpness)
+      const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
       const streamArgs =
-        enhanceVf !== null
+        vfChain !== null
           ? [
               '-c:v',
               'libx264',
@@ -763,7 +776,7 @@ export function registerClipsIpc(): void {
               '-bufsize',
               `${C.bufsizeKbps}K`,
               '-vf',
-              enhanceVf,
+              vfChain,
               '-c:a',
               'copy',
             ]

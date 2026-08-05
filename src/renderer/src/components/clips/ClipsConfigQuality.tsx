@@ -307,33 +307,6 @@ export function QualitySection({
         </div>
       </div>
 
-      {/* Sharpness (cas) */}
-      <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
-        <div className="mb-1.5 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
-              {t('sharpness')}
-            </span>
-            <TipBadge id="sharpness" activeTip={activeTip} setActiveTip={setActiveTip} />
-          </div>
-          <span
-            className="text-[11px] font-medium"
-            style={{ color: (config.sharpnessStrength ?? 0) > 0 ? 'var(--accent)' : 'var(--text-dim)' }}
-          >
-            {(config.sharpnessStrength ?? 0) > 0 ? (config.sharpnessStrength ?? 0).toFixed(1) : t('sharpnessOff')}
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.1}
-          value={config.sharpnessStrength ?? 0}
-          onChange={(e) => handleConfigUpdate({ sharpnessStrength: Number(e.target.value) })}
-          className="w-full"
-        />
-      </div>
-
       {/* Replay buffer mode (RAM + disk) */}
       <div className="rounded-lg px-2.5 py-2" style={{ background: 'rgba(113,113,122,0.06)' }}>
         <div className="flex items-center justify-between">

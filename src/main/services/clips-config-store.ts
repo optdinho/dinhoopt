@@ -38,7 +38,6 @@ interface ClipsPersistedConfig {
   autoCleanupThresholdGB: number
   adaptiveQuality: boolean
   stretchToFit: boolean
-  sharpnessStrength: number
   replayBufferMode: 'ram' | 'hybrid'
 }
 
@@ -104,7 +103,6 @@ const DEFAULTS: ClipsPersistedConfig = {
   autoCleanupThresholdGB: 20,
   adaptiveQuality: true,
   stretchToFit: false,
-  sharpnessStrength: 0,
   replayBufferMode: 'ram',
 }
 

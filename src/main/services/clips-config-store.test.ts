@@ -51,7 +51,6 @@ describe('clips-config-store', () => {
     expect(cfg.useExcludeMode).toBe(false)
     expect(cfg.excludeProcessId).toBe(0)
     expect(cfg.stretchToFit).toBe(false)
-    expect(cfg.sharpnessStrength).toBe(0)
   })
 
   it('loads saved config when file exists', () => {
@@ -74,7 +73,6 @@ describe('clips-config-store', () => {
         outputDirectory: 'D:\\Clips',
         forceSoftware: true,
         stretchToFit: true,
-        sharpnessStrength: 0.6,
         hotkeys: [],
         pushToTalk: 'hold',
         pushToTalkKeys: [0x7a, 0x7b],
@@ -103,7 +101,6 @@ describe('clips-config-store', () => {
     expect(cfg.gameDetection).toBe(true)
     expect(cfg.gameAudioOnly).toBe(true)
     expect(cfg.stretchToFit).toBe(true)
-    expect(cfg.sharpnessStrength).toBe(0.6)
   })
 
   it('loads saved replayBufferMode hybrid from file', () => {
@@ -197,7 +194,6 @@ describe('clips-config-store', () => {
     expect(callArg.autoCleanupEnabled).toBe(true)
     expect(callArg.autoCleanupThresholdGB).toBe(20)
     expect(callArg.adaptiveQuality).toBe(true)
-    expect(callArg.sharpnessStrength).toBe(0)
     expect(callArg.replayBufferMode).toBe('ram')
   })
 
