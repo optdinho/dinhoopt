@@ -3712,3 +3712,30 @@ pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7
 
 - Reiniciar o app instalado e validar gravação real: preset com bf 2 (Alta/Muito Alta) sem "invalid param (8)" e preset Boa (bf 0) mantendo weighted_pred.
 - (Opcional) Investigar ganhos do 9.0: 	ranspose_cuda p/ export 9:16 e f_vqe_amf p/ AMD com bitrate menor.
+
+## Session Summary (2026-08-05 — FASE 2 AMD AMF enhance `sr_amf`/`frc_amf` no trim/merge: testes IPC + deploy do plano)
+
+### Done
+
+- **FASE 2 do plano ffmpeg-9 (AMD AMF enhance) completa end-to-end** — `sr_amf` (super-resolution) e `frc_amf` (frame-rate conversion) aplicáveis em trim e merge de clips:
+  - **`src/main/services/clips-enhance.ts`** (novo): helpers puros `parseEnhanceOption` (valores válidos → passthrough, inválido → `'none'`), `buildAmfEnhanceVf` (SR upscales 720p→1080p cap 1920x1080; frc só; sr+frc encadeado com `,`; `'none'`/dims<=0 → null), `probeVideoResolution` (ffmpeg `-hide_banner -i` stderr parse de `Stream #0:0: Video: ... WxH`, retorna null em stream de áudio/stderr vazio/ENOENT/timeout), `AMD_VENDOR_ID = 0x1002`.
+  - **`clips.ipc.ts`**: importa helpers; `_amdDetected: boolean | null` cache setado em `CLIPS_GET_GPUS` (`gpu.vendorId === AMD_VENDOR_ID`); handler novo `CLIPS_GET_ENHANCE_SUPPORT` (→ `{ amd: _amdDetected === true }`); `CLIPS_TRIM_CLIP` ganhou 5º param `enhance` — só aplica com `reEncode && _amdDetected` e probe de resolução OK, injeta `-vf <chain>` via `...reEncodeArgs, ...(enhanceVf ? ['-vf', enhanceVf] : [])`, warnings logados (não-fatal) quando reEncode ausente/não-AMD/probe falha; `CLIPS_MERGE_CLIPS` ganhou 2º param `enhance` — AMD+probe → re-encode libx264 (`-c:v libx264 -preset veryfast -crf C.cq -maxrate -bufsize -vf ... -c:a copy`), senão `['-c','copy']`.
+  - **`src/preload/clips.ts`**: `clipsGetEnhanceSupport`, `clipsTrimClip` 5 args, `clipsMergeClips` 2 args; `src/shared/channels.ts` + `src/shared/types/clips.ts` (EnhanceOption).
+  - **UI `ClipEditorModal.tsx`**: componente `EnhanceSelect` (label `t('enhance')`, 4 opções none/sr/frc/sr+frc), estado `enhance` + `enhanceSupported` (probe via `clipsGetEnhanceSupport` no mount), dropdowns desabilitados conforme `reEncode && enhanceSupported` (trim) / `enhanceSupported` (merge); locale en/pt/es +7 chaves (`enhance`, `enhanceNone`, `enhanceSr`, `enhanceFrc`, `enhanceSrFrc`, `enhanceTooltip`, `enhanceUnavailable`).
+- **Testes**:
+  - `clips-enhance.test.ts` (novo): parse/build/probe/constante — inclui cap 1920x1080, cadeia sr+frc, probe com stream de áudio/stderr vazio/ENOENT/timeout.
+  - `clips.ipc.test.ts`: count handlers 24→25 + `CLIPS_GET_ENHANCE_SUPPORT` (3 testes) + enhance no trim (5) e merge (3). Padrão: `_amdDetected` é estado de módulo persistente — testes setam via `CLIPS_GET_GPUS` com vendor 0x1002/4318 antes; probe mockado por args `-hide_banner` (probe) vs `-ss`/`-f concat` (trim/merge real); merge assert procura call com `concat` (1º execFile é o probe).
+  - `clips.test.ts` (preload): `clipsGetEnhanceSupport` + args novos; testes de args omitidos (undefined) p/ reEncode/enhance.
+- **Validado**: suite clips+preload **633/633**; full suite **6841 passed | 1 skipped | 0 failed** (225 files); biome 7 arquivos limpos (import sort em `clips.ipc.ts` + format em test/ClipEditorModal); `npm run build` OK (8.9s).
+
+### Key Decisions
+
+- **Gate AMD por GPU vendorId via pipe** em vez de `isAMDSupported()` no cliente: engine já enumera GPUs (`CLIPS_GET_GPUS`); reusa esse dado sem novo comando no engine. Cache `_amdDetected` persiste até o próximo GET_GPUS.
+- **Enhance preso ao re-encode**: `sr_amf`/`frc_amf` exigem decodificar+re-codificar — incoerente com `-c copy`; quando reEncode=false ou GPU não-AMD, o enhance é silenciosamente ignorado com warning (não-fatal).
+- **SR cap 1920x1080**: upscaling além de 1080p não é suportado pelo `sr_amf` e adicionaria latência/VRAM sem ganho; 720p→1080p é o caso de uso real (clips de jogo).
+
+### Next Steps
+
+- Publicar engine não é necessário (mudanças 100% TS/UI — nenhum código C# tocado).
+- Rebuild do instalador quando houver release: inclui FASE 2 automaticamente.
+- Validação em campo (GPU AMD): trim/merge com enhance → conferir log do ffmpeg com `sr_amf`/`frc_amf` ativos e clip resultante sem macroblocos. `docs\ffmpeg-9-features-plan.md` F2 flipa para done após validação do usuário.

@@ -53,10 +53,11 @@ describe('clipsMethods invoke wrappers', () => {
     { name: 'clipsGetMicDevices', args: [], channel: IPC.CLIPS_GET_MIC_DEVICES },
     { name: 'clipsSetMicDevice', args: ['mic-device-1'], channel: IPC.CLIPS_SET_MIC_DEVICE },
     { name: 'clipsGetGpus', args: [], channel: IPC.CLIPS_GET_GPUS },
+    { name: 'clipsGetEnhanceSupport', args: [], channel: IPC.CLIPS_GET_ENHANCE_SUPPORT },
     { name: 'clipsGetRunningProcesses', args: [], channel: IPC.CLIPS_GET_RUNNING_PROCESSES },
     { name: 'clipsSetFavorite', args: ['clip.mp4', true], channel: IPC.CLIPS_SET_FAVORITE },
-    { name: 'clipsTrimClip', args: ['clip.mp4', 10, 20, true], channel: IPC.CLIPS_TRIM_CLIP },
-    { name: 'clipsMergeClips', args: [['a.mp4', 'b.mp4']], channel: IPC.CLIPS_MERGE_CLIPS },
+    { name: 'clipsTrimClip', args: ['clip.mp4', 10, 20, true, 'none'], channel: IPC.CLIPS_TRIM_CLIP },
+    { name: 'clipsMergeClips', args: [['a.mp4', 'b.mp4'], 'none'], channel: IPC.CLIPS_MERGE_CLIPS },
   ]
 
   for (const { name, args, channel } of invokeCases) {
@@ -67,10 +68,16 @@ describe('clipsMethods invoke wrappers', () => {
     })
   }
 
-  it('clipsTrimClip passes reEncode as explicit fourth argument when omitted', async () => {
+  it('clipsTrimClip passes undefined for omitted reEncode/enhance', async () => {
     const fn = clipsMethods.clipsTrimClip as (...a: unknown[]) => unknown
     await fn('clip.mp4', 0, 5)
-    expect(mockIpc.invoke).toHaveBeenCalledWith(IPC.CLIPS_TRIM_CLIP, 'clip.mp4', 0, 5, undefined)
+    expect(mockIpc.invoke).toHaveBeenCalledWith(IPC.CLIPS_TRIM_CLIP, 'clip.mp4', 0, 5, undefined, undefined)
+  })
+
+  it('clipsMergeClips passes undefined enhance when omitted', async () => {
+    const fn = clipsMethods.clipsMergeClips as (...a: unknown[]) => unknown
+    await fn(['a.mp4', 'b.mp4'])
+    expect(mockIpc.invoke).toHaveBeenCalledWith(IPC.CLIPS_MERGE_CLIPS, ['a.mp4', 'b.mp4'], undefined)
   })
 
   it('clipsGetVideoUrl builds a clip-video URL without invoking IPC', () => {

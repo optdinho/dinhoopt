@@ -134,3 +134,6 @@ export interface ClipMergeResult {
   path?: string
   error?: string
 }
+
+/** AMF enhancement applied during re-encode (AMD GPUs only). 'none' = no enhancement. */
+export type EnhanceOption = 'none' | 'sr' | 'frc' | 'sr+frc'

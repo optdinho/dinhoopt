@@ -406,4 +406,5 @@ export const IPC = {
   CLIPS_CLIP_SAVED: 'clips:clip-saved',
   CLIPS_RAM_PRESSURE: 'clips:ram-pressure',
   CLIPS_DURATIONS_READY: 'clips:durations-ready',
+  CLIPS_GET_ENHANCE_SUPPORT: 'clips:get-enhance-support',
 } as const

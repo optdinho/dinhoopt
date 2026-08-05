@@ -7,6 +7,7 @@ import type {
   ClipsConfig,
   ClipsEngineStatus,
   ClipTrimResult,
+  EnhanceOption,
   MicDeviceInfo,
 } from '@shared/types'
 import { ipcRenderer } from 'electron'
@@ -40,6 +41,7 @@ export const clipsMethods = {
     ipcRenderer.invoke(IPC.CLIPS_SET_MIC_DEVICE, deviceId),
   clipsGetGpus: (): Promise<Array<{ index: number; name: string; vendorId: number }>> =>
     ipcRenderer.invoke(IPC.CLIPS_GET_GPUS),
+  clipsGetEnhanceSupport: (): Promise<{ amd: boolean }> => ipcRenderer.invoke(IPC.CLIPS_GET_ENHANCE_SUPPORT),
   clipsGetRunningProcesses: (): Promise<Array<{ name: string; pid: number }>> =>
     ipcRenderer.invoke(IPC.CLIPS_GET_RUNNING_PROCESSES),
   clipsSetFavorite: (clipName: string, favorite: boolean): Promise<{ success: boolean; error?: string }> =>
@@ -49,9 +51,11 @@ export const clipsMethods = {
     startSeconds: number,
     endSeconds: number,
     reEncode?: boolean,
-  ): Promise<ClipTrimResult> => ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode),
-  clipsMergeClips: (clipPaths: string[]): Promise<ClipMergeResult> =>
-    ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths),
+    enhance?: EnhanceOption,
+  ): Promise<ClipTrimResult> =>
+    ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode, enhance),
+  clipsMergeClips: (clipPaths: string[], enhance?: EnhanceOption): Promise<ClipMergeResult> =>
+    ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths, enhance),
   clipsGetVideoUrl: (clipPath: string): string => buildClipVideoUrl(clipPath),
   clipsOnEngineStatus: (callback: (status: ClipsEngineStatus) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: ClipsEngineStatus) => callback(status)

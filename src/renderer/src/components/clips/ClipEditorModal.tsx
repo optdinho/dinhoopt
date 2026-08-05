@@ -1,4 +1,4 @@
-import type { ClipInfo, ClipMergeResult, ClipTrimResult } from '@shared/types'
+import type { ClipInfo, ClipMergeResult, ClipTrimResult, EnhanceOption } from '@shared/types'
 import { Combine, Maximize, Minimize, Pause, Play, Scissors, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +9,41 @@ interface ClipEditorModalProps {
   initialMergePaths?: string[]
   onClose: () => void
   onSave: () => void
+}
+
+function EnhanceSelect({
+  value,
+  onChange,
+  disabled,
+  title,
+}: {
+  value: EnhanceOption
+  onChange: (v: EnhanceOption) => void
+  disabled?: boolean
+  title?: string
+}) {
+  const { t } = useTranslation('clips')
+  return (
+    <label
+      className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[10px]"
+      style={{ background: 'rgba(0,0,0,0.2)' }}
+      title={title}
+    >
+      <span style={{ color: 'var(--text-secondary)' }}>{t('enhance')}</span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as EnhanceOption)}
+        className="flex-1 rounded border bg-transparent px-1 py-0.5 text-[10px] disabled:opacity-40"
+        style={{ borderColor: 'var(--border-medium)', color: 'var(--text-primary)' }}
+      >
+        <option value="none">{t('enhanceNone')}</option>
+        <option value="sr">{t('enhanceSr')}</option>
+        <option value="frc">{t('enhanceFrc')}</option>
+        <option value="sr+frc">{t('enhanceSrFrc')}</option>
+      </select>
+    </label>
+  )
 }
 
 function TrimTimeline({
@@ -229,6 +264,8 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const [endSec, setEndSec] = useState(clip?.duration || 60)
   const [trimming, setTrimming] = useState(false)
   const [reEncode, setReEncode] = useState(false)
+  const [enhance, setEnhance] = useState<EnhanceOption>('none')
+  const [enhanceSupported, setEnhanceSupported] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [realDuration, setRealDuration] = useState(clip?.duration || 0)
@@ -245,6 +282,21 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+
+  useEffect(() => {
+    let active = true
+    window.dinho
+      .clipsGetEnhanceSupport()
+      .then((r) => {
+        if (active) setEnhanceSupported(r.amd)
+      })
+      .catch(() => {
+        if (active) setEnhanceSupported(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const videoUrl = clip ? window.dinho.clipsGetVideoUrl(clip.path) : ''
 
@@ -335,7 +387,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
     }
     setTrimming(true)
     try {
-      const result: ClipTrimResult = await window.dinho.clipsTrimClip(clip!.path, startSec, endSec, reEncode)
+      const result: ClipTrimResult = await window.dinho.clipsTrimClip(clip!.path, startSec, endSec, reEncode, enhance)
       if (result.success) {
         toast.success(t('trimSuccess'))
         onSave()
@@ -355,7 +407,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
       return
     }
     try {
-      const result: ClipMergeResult = await window.dinho.clipsMergeClips(mergeClips)
+      const result: ClipMergeResult = await window.dinho.clipsMergeClips(mergeClips, enhance)
       if (result.success) {
         toast.success(t('mergeSuccess'))
         onSave()
@@ -642,6 +694,13 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     <span style={{ color: 'var(--text-secondary)' }}>{t('reEncode')}</span>
                   </label>
 
+                  <EnhanceSelect
+                    value={enhance}
+                    onChange={setEnhance}
+                    disabled={!reEncode || !enhanceSupported}
+                    title={enhanceSupported ? t('enhanceTooltip') : t('enhanceUnavailable')}
+                  />
+
                   <button
                     type="button"
                     onClick={handleTrim}
@@ -687,6 +746,12 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                 </div>
               ))}
             </div>
+            <EnhanceSelect
+              value={enhance}
+              onChange={setEnhance}
+              disabled={!enhanceSupported}
+              title={enhanceSupported ? t('enhanceTooltip') : t('enhanceUnavailable')}
+            />
             <button
               type="button"
               onClick={handleMerge}

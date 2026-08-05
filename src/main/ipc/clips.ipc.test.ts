@@ -160,6 +160,7 @@ describe('registerClipsIpc', () => {
       IPC.CLIPS_SET_MIC_DEVICE,
       IPC.CLIPS_SET_FAVORITE,
       IPC.CLIPS_GET_GPUS,
+      IPC.CLIPS_GET_ENHANCE_SUPPORT,
       IPC.CLIPS_TRIM_CLIP,
       IPC.CLIPS_MERGE_CLIPS,
       IPC.CLIPS_GET_DURATIONS,
@@ -168,7 +169,7 @@ describe('registerClipsIpc', () => {
     for (const ch of expectedChannels) {
       expect(handlers.has(ch)).toBe(true)
     }
-    expect(handlers.size).toBe(24)
+    expect(handlers.size).toBe(25)
   })
 })
 
@@ -1317,6 +1318,48 @@ describe('CLIPS_GET_GPUS', () => {
   })
 })
 
+describe('CLIPS_GET_ENHANCE_SUPPORT', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+  })
+
+  it('returns amd=false when no GPU scan has run', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_ENHANCE_SUPPORT)
+    const result = (await handler()) as { amd: boolean }
+    expect(result.amd).toBe(false)
+  })
+
+  it('returns amd=true after GET_GPUS detects an AMD GPU', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'AMD Radeon RX 9070', vendorId: 0x1002 }],
+    })
+    let handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_ENHANCE_SUPPORT)
+    const result = (await handler()) as { amd: boolean }
+    expect(result.amd).toBe(true)
+  })
+
+  it('returns amd=false when only NVIDIA GPUs are present', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'NVIDIA RTX 5050', vendorId: 4318 }],
+    })
+    let handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_ENHANCE_SUPPORT)
+    const result = (await handler()) as { amd: boolean }
+    expect(result.amd).toBe(false)
+  })
+})
+
 describe('CLIPS_SET_FAVORITE', () => {
   beforeEach(() => {
     vi.resetAllMocks()
@@ -1580,6 +1623,109 @@ describe('CLIPS_TRIM_CLIP', () => {
     expect(result.success).toBe(false)
     expect(result.error).toBe('spawn failed')
   })
+
+  async function setAmdDetected(amd: boolean) {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: amd
+        ? [{ index: 0, name: 'AMD Radeon', vendorId: 0x1002 }]
+        : [{ index: 0, name: 'NVIDIA', vendorId: 4318 }],
+    })
+    const handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+  }
+
+  function mockProbeThenTrim() {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (!cb) return mockFFProc as never
+        if (args.includes('-hide_banner')) {
+          cb(null, '', '  Stream #0:0: Video: h264 (High), yuv420p, 1280x720, 60 fps, 60 tbr')
+        } else {
+          cb(null, '', '')
+        }
+        return mockFFProc as never
+      },
+    )
+  }
+
+  it('applies sr_amf vf when AMD detected and re-encode enabled', async () => {
+    await setAmdDetected(true)
+    mockProbeThenTrim()
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true, 'sr')) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs).toContain('-vf')
+    expect(trimArgs.join(' ')).toContain('sr_amf=w=1920:h=1080')
+  })
+
+  it('chains frc_amf when enhance is sr+frc', async () => {
+    await setAmdDetected(true)
+    mockProbeThenTrim()
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true, 'sr+frc')) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    const vf = (trimArgs.join(' ').match(/-vf ([^ ]+)/)?.[1] ?? '') as string
+    expect(vf).toContain('sr_amf=')
+    expect(vf).toContain('frc_amf=')
+  })
+
+  it('ignores enhance when re-encode is not enabled', async () => {
+    await setAmdDetected(true)
+    mockProbeThenTrim()
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, false, 'sr')) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs).not.toContain('-vf')
+  })
+
+  it('ignores enhance when no AMD GPU detected', async () => {
+    await setAmdDetected(false)
+    mockProbeThenTrim()
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true, 'sr')) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs).not.toContain('-vf')
+  })
+
+  it('ignores enhance when source resolution cannot be probed', async () => {
+    await setAmdDetected(true)
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const result = (await handler({}, 'clip.mp4', 10, 20, true, 'sr')) as ClipTrimResult
+    expect(result.success).toBe(true)
+    const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
+    expect(trimArgs).not.toContain('-vf')
+  })
 })
 
 describe('CLIPS_MERGE_CLIPS', () => {
@@ -1725,6 +1871,97 @@ describe('CLIPS_MERGE_CLIPS', () => {
     const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
     expect(result.success).toBe(false)
     expect(result.error).toBe('write-error')
+  })
+
+  it('uses -c copy stream args when enhance is not set', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'])) as ClipMergeResult
+    expect(result.success).toBe(true)
+    const args = vi.mocked(execFile).mock.calls[0][1] as string[]
+    expect(args).toContain('copy')
+    expect(args).not.toContain('libx264')
+    expect(args).not.toContain('-vf')
+  })
+
+  it('re-encodes with sr_amf vf when AMD detected and enhance set', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'AMD Radeon', vendorId: 0x1002 }],
+    })
+    let handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (!cb) return mockFFProc as never
+        if (args.includes('-hide_banner')) {
+          cb(null, '', '  Stream #0:0: Video: h264 (High), yuv420p, 1280x720, 60 fps, 60 tbr')
+        } else {
+          cb(null, '', '')
+        }
+        return mockFFProc as never
+      },
+    )
+    handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'], 'sr')) as ClipMergeResult
+    expect(result.success).toBe(true)
+    const mergeCall = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('concat'))?.[1] as string[]
+    expect(mergeCall).toContain('libx264')
+    expect(mergeCall).toContain('-vf')
+    expect(mergeCall.join(' ')).toContain('sr_amf=w=1920:h=1080')
+  })
+
+  it('keeps -c copy when AMD not detected despite enhance set', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'NVIDIA', vendorId: 4318 }],
+    })
+    let handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(mkdirSync).mockReturnValue(undefined as never)
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[],
+        _opts: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (cb) cb(null, '', '')
+        return mockFFProc as never
+      },
+    )
+    handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const result = (await handler({}, ['clip1.mp4', 'clip2.mp4'], 'sr')) as ClipMergeResult
+    expect(result.success).toBe(true)
+    const args = vi.mocked(execFile).mock.calls[0][1] as string[]
+    expect(args).toContain('copy')
+    expect(args).not.toContain('libx264')
+    expect(args).not.toContain('-vf')
   })
 })
 

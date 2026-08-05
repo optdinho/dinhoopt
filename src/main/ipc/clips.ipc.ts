@@ -22,6 +22,7 @@ import {
   getDefaultOutputDir,
   persistClipsConfig,
 } from '../services/clips-config-manager'
+import { AMD_VENDOR_ID, buildAmfEnhanceVf, parseEnhanceOption, probeVideoResolution } from '../services/clips-enhance'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
@@ -44,6 +45,8 @@ import {
 
 let _micDevicesCache: MicDeviceInfo[] | null = null
 let _micDevicesCacheTs = 0
+
+let _amdDetected: boolean | null = null
 
 const VALID_ENCODER_PRESETS = new Set(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
 
@@ -346,8 +349,7 @@ export function registerClipsIpc(): void {
       if (typeof c.stretchToFit === 'boolean') C.stretchToFit = c.stretchToFit
       if (typeof c.sharpnessStrength === 'number' && Number.isFinite(c.sharpnessStrength))
         C.sharpnessStrength = Math.min(1, Math.max(0, c.sharpnessStrength))
-      if (c.replayBufferMode === 'ram' || c.replayBufferMode === 'hybrid')
-        C.replayBufferMode = c.replayBufferMode
+      if (c.replayBufferMode === 'ram' || c.replayBufferMode === 'hybrid') C.replayBufferMode = c.replayBufferMode
       if (typeof c.gameDetection === 'boolean') C.gameDetection = c.gameDetection
       if (typeof c.gameAudioOnly === 'boolean') C.gameAudioOnly = c.gameAudioOnly
       if (typeof c.customGameProcess === 'string') {
@@ -556,15 +558,21 @@ export function registerClipsIpc(): void {
       const resp = await sendPipeCommand('getGpus')
       if (Array.isArray(resp.payload)) {
         // 0x1414 = Microsoft Basic Render Driver (software fallback, no hw encoder)
-        return (resp.payload as GpuInfo[]).filter(
+        const gpus = (resp.payload as GpuInfo[]).filter(
           (gpu) => gpu && typeof gpu === 'object' && typeof gpu.vendorId === 'number' && gpu.vendorId !== 0x1414,
         )
+        _amdDetected = gpus.some((gpu) => gpu.vendorId === AMD_VENDOR_ID)
+        return gpus
       }
       return []
     } catch {
       return []
     }
   })
+
+  ipcMain.handle(IPC.CLIPS_GET_ENHANCE_SUPPORT, (): { amd: boolean } => ({
+    amd: _amdDetected === true,
+  }))
 
   ipcMain.handle(IPC.CLIPS_SET_FAVORITE, async (_event, clipName: unknown, favorite: unknown): Promise<IpcResult> => {
     if (typeof clipName !== 'string' || !clipName) {
@@ -604,6 +612,7 @@ export function registerClipsIpc(): void {
       startSeconds: number,
       endSeconds: number,
       reEncode?: boolean,
+      enhance?: unknown,
     ): Promise<ClipTrimResult> => {
       if (!clipPath || typeof clipPath !== 'string') {
         getLogger().warning('clips', 'TrimClip failed: Invalid clip path')
@@ -642,6 +651,22 @@ export function registerClipsIpc(): void {
         '-c:a',
         'copy',
       ]
+      const enhanceOption = parseEnhanceOption(enhance)
+      let enhanceVf: string | null = null
+      if (enhanceOption !== 'none') {
+        if (!reEncode) {
+          getLogger().warning('clips', 'TrimClip enhance ignored: enhancement requires re-encode')
+        } else if (_amdDetected !== true) {
+          getLogger().warning('clips', 'TrimClip enhance ignored: no AMD GPU detected')
+        } else {
+          const res = await probeVideoResolution(getFfmpegPath(), safePath)
+          if (res) {
+            enhanceVf = buildAmfEnhanceVf(enhanceOption, res.w, res.h)
+          } else {
+            getLogger().warning('clips', 'TrimClip enhance ignored: could not probe source resolution')
+          }
+        }
+      }
       return new Promise((resolve) => {
         const args = [
           '-y',
@@ -653,7 +678,7 @@ export function registerClipsIpc(): void {
           String(endSeconds),
           '-i',
           safePath,
-          ...(reEncode ? reEncodeArgs : copyArgs),
+          ...(reEncode ? [...reEncodeArgs, ...(enhanceVf ? ['-vf', enhanceVf] : [])] : copyArgs),
           outPath,
         ]
         const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
@@ -683,72 +708,120 @@ export function registerClipsIpc(): void {
     },
   )
 
-  ipcMain.handle(IPC.CLIPS_MERGE_CLIPS, async (_event, clipPaths: string[]): Promise<ClipMergeResult> => {
-    if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
-      getLogger().warning(
-        'clips',
-        `MergeClips failed: At least 2 clips required (got ${Array.isArray(clipPaths) ? clipPaths.length : 0})`,
-      )
-      return { success: false, error: 'At least 2 clips required' }
-    }
-    const safePaths: string[] = []
-    for (const p of clipPaths) {
-      if (typeof p !== 'string') {
-        getLogger().warning('clips', 'MergeClips failed: Invalid clip path (not a string)')
-        return { success: false, error: 'Invalid clip path' }
+  ipcMain.handle(
+    IPC.CLIPS_MERGE_CLIPS,
+    async (_event, clipPaths: string[], enhance?: unknown): Promise<ClipMergeResult> => {
+      if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
+        getLogger().warning(
+          'clips',
+          `MergeClips failed: At least 2 clips required (got ${Array.isArray(clipPaths) ? clipPaths.length : 0})`,
+        )
+        return { success: false, error: 'At least 2 clips required' }
       }
-      const safe = clipPathInOutputDir(p)
-      if (!safe || !existsSync(safe)) {
-        getLogger().warning('clips', `MergeClips failed: Clip not found '${p}'`)
-        return { success: false, error: `Clip not found: ${p}` }
+      const safePaths: string[] = []
+      for (const p of clipPaths) {
+        if (typeof p !== 'string') {
+          getLogger().warning('clips', 'MergeClips failed: Invalid clip path (not a string)')
+          return { success: false, error: 'Invalid clip path' }
+        }
+        const safe = clipPathInOutputDir(p)
+        if (!safe || !existsSync(safe)) {
+          getLogger().warning('clips', `MergeClips failed: Clip not found '${p}'`)
+          return { success: false, error: `Clip not found: ${p}` }
+        }
+        safePaths.push(safe)
       }
-      safePaths.push(safe)
-    }
-    const outDir = getDefaultOutputDir()
-    if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
-    const concatFile = join(outDir, `concat_${Date.now()}.txt`)
-    const outPath = join(outDir, `merged_${Date.now()}.mp4`)
-    try {
-      const lines = safePaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
-      writeFileSync(concatFile, lines.join('\n'), 'utf-8')
-      return await new Promise((resolve) => {
-        const args = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', outPath]
-        const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
-          try {
-            unlinkSync(concatFile)
-          } catch {}
-          if (err) {
+      const outDir = getDefaultOutputDir()
+      if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
+      const concatFile = join(outDir, `concat_${Date.now()}.txt`)
+      const outPath = join(outDir, `merged_${Date.now()}.mp4`)
+      const enhanceOption = parseEnhanceOption(enhance)
+      let enhanceVf: string | null = null
+      if (enhanceOption !== 'none') {
+        if (_amdDetected !== true) {
+          getLogger().warning('clips', 'MergeClips enhance ignored: no AMD GPU detected')
+        } else {
+          const res = await probeVideoResolution(getFfmpegPath(), safePaths[0])
+          if (res) {
+            enhanceVf = buildAmfEnhanceVf(enhanceOption, res.w, res.h)
+          } else {
+            getLogger().warning('clips', 'MergeClips enhance ignored: could not probe source resolution')
+          }
+        }
+      }
+      const streamArgs =
+        enhanceVf !== null
+          ? [
+              '-c:v',
+              'libx264',
+              '-preset',
+              'veryfast',
+              '-crf',
+              String(C.cq),
+              '-maxrate',
+              `${C.maxrateKbps}K`,
+              '-bufsize',
+              `${C.bufsizeKbps}K`,
+              '-vf',
+              enhanceVf,
+              '-c:a',
+              'copy',
+            ]
+          : ['-c', 'copy']
+      try {
+        const lines = safePaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
+        writeFileSync(concatFile, lines.join('\n'), 'utf-8')
+        return await new Promise((resolve) => {
+          const args = [
+            '-y',
+            '-loglevel',
+            'error',
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            concatFile,
+            ...streamArgs,
+            outPath,
+          ]
+          const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
+            try {
+              unlinkSync(concatFile)
+            } catch {}
+            if (err) {
+              try {
+                unlinkSync(outPath)
+              } catch {
+                /* ignore cleanup error */
+              }
+              getLogger().warning('clips', `MergeClips ffmpeg failed: ${err.message}`)
+              resolve({ success: false, error: err.message })
+            } else {
+              invalidateClipsCache()
+              resolve({ success: true, path: outPath })
+            }
+          })
+          proc.on('error', (e) => {
+            try {
+              unlinkSync(concatFile)
+            } catch {}
             try {
               unlinkSync(outPath)
             } catch {
               /* ignore cleanup error */
             }
-            getLogger().warning('clips', `MergeClips ffmpeg failed: ${err.message}`)
-            resolve({ success: false, error: err.message })
-          } else {
-            invalidateClipsCache()
-            resolve({ success: true, path: outPath })
-          }
+            getLogger().warning('clips', `MergeClips process error: ${e.message}`)
+            resolve({ success: false, error: e.message })
+          })
         })
-        proc.on('error', (e) => {
-          try {
-            unlinkSync(concatFile)
-          } catch {}
-          try {
-            unlinkSync(outPath)
-          } catch {
-            /* ignore cleanup error */
-          }
-          getLogger().warning('clips', `MergeClips process error: ${e.message}`)
-          resolve({ success: false, error: e.message })
-        })
-      })
-    } catch (err) {
-      try {
-        unlinkSync(concatFile)
-      } catch {}
-      getLogger().warning('clips', `MergeClips failed: ${err instanceof Error ? err.message : String(err)}`)
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  })
+      } catch (err) {
+        try {
+          unlinkSync(concatFile)
+        } catch {}
+        getLogger().warning('clips', `MergeClips failed: ${err instanceof Error ? err.message : String(err)}`)
+        return { success: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
 }

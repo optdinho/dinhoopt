@@ -166,6 +166,13 @@
   "trimHint": "drag handles or use I/O",
   "reEncode": "Re-encode (fix macroblocks)",
   "reEncodeTooltip": "Re-encodes the trimmed segment to remove macroblocks/artifacts left by the fast copy. Slower but cleaner output.",
+  "enhance": "Enhance",
+  "enhanceNone": "None",
+  "enhanceSr": "Upscale (AMD SR)",
+  "enhanceFrc": "Frame rate (AMD FRC)",
+  "enhanceSrFrc": "Upscale + Frame rate",
+  "enhanceTooltip": "Uses AMD VCN Super Resolution (sr_amf) to upscale the clip and/or AMD Fluid Motion Frames (frc_amf) to double the frame rate. Requires an AMD GPU with VCN. Only available when re-encoding.",
+  "enhanceUnavailable": "AMD enhance (sr_amf/frc_amf) requires an AMD GPU with VCN — not detected on this machine.",
   "ramPressureCritical": "Low memory detected",
   "ramPressureCriticalDesc": "RAM usage is at {{pct}}%. Replay buffer was reduced to keep recording stable.",
   "ramPressureNormal": "Memory restored to normal"
