@@ -75,11 +75,14 @@ public sealed class TexturePool : IDisposable
             Format = format,
             SampleDescription = new SampleDescription(1, 0),
             Usage = ResourceUsage.Default,
-            // ShaderResource habilita o D3D11 VideoProcessor (VideoProcessorBlt) a ler a
-            // textura diretamente como entrada — evita uma cópia redundante (CopyResource)
-            // no caminho WGC. O VideoProcessor usa ID3D11VideoProcessorInputView, que exige
-            // bind como SR; texturas BindFlags.None não podem ser usadas nessa conversão.
-            BindFlags = BindFlags.ShaderResource,
+            // SR|RT em vez de só SR: o VideoProcessor (VideoProcessorBlt) exige a textura de
+            // entrada com bind RenderTarget + ShaderResource — em RTX 5050 (NV) uma textura
+            // SR-only devolve E_INVALIDARG (0x80070057) em TODOS os frames do caminho GPU.
+            // O MSDN diz que SR basta para o ID3D11VideoProcessorInputView, mas o driver NV
+            // falha sem RT (o _inputCopy, sempre SR|RT, nunca falhou). SR habilita a leitura
+            // direta (sem _inputCopy); RT é o requisito real do driver. Compatível com o
+            // CopyResource de WGC/DXGI/Hybrid (bind flags são irrelevantes para CopyResource).
+            BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
             CPUAccessFlags = CpuAccessFlags.None,
         });
 }

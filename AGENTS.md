@@ -3859,3 +3859,28 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: IsAv1, BuildEncoderTuneArgs (sem extra_hw_frames; hevc_qsv/av1_qsv), GetRawFormatForCodec, StartFfmpeg (isQsv + init_hw_device qsv)
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 4 testes qsv + InlineData rawFmt
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EncoderManagerTests.cs`: MapUserCodec av1 Intel/AMD
+
+## Session Summary (2026-08-05e — E_INVALIDARG fix: pool texture SR→SR|RT)
+
+### Done
+
+- **Root cause fechado com evidência de campo (31.996 `VideoProcessorBlt E_INVALIDARG` em uma noite de gravação)**: regressão do commit `7edd3b0` — pool textures criadas SR-only (`BindFlags.ShaderResource`) para "leitura direta" no video processor. Em RTX 5050 (NV), o driver exige bind **RenderTarget + ShaderResource** na textura de entrada do `VideoProcessorBlt`; SR-only devolve `E_INVALIDARG (0x80070057)` em TODOS os frames do caminho GPU. O `_inputCopy` (sempre SR|RT) nunca falhou — assinatura consistente com o requisito de RT.
+- **Fix aplicado** (`Capture/TexturePool.cs`): `BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget` — pool texture agora tem a MESMA forma do `_inputCopy` conhecido-bom. Comentário reescrito (documenta requisito real do driver NV vs MSDN). Compatível com o `CopyResource` de WGC/DXGI/Hybrid (bind flags são irrelevantes para CopyResource; ambos Default usage).
+- **`CanUseDirectInput` inalterado** (`FfmpegEncoder.GpuConvert.cs:25`): `(desc.BindFlags & BindFlags.ShaderResource) != 0` continua true com SR|RT — caminho direto (sem `_inputCopy`) permanece ativo, agora com textura válida.
+- **Gotcha de deploy descoberto**: `Copy-Item -Path a,b\ -Force` (sem `-Destination` explícito) misparsa multi-path no PowerShell e copiou para o CWD em vez do destino — hash instalado ficou stale por 2 tentativas. Corrigido com `-Destination` explícito por arquivo; 5 arquivos copiados com hash conferido. Stragglers removidos do workspace root.
+
+### Validado
+
+- **Build**: `dotnet build -c Release` 0 erros (22 warnings pré-existentes).
+- **C# tests**: filtro FfmpegEncoder+EncoderManager+GpuVideoConverter **168/168 pass** — 0 falhas (CanUseDirectInput SR|RT continua green).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (294 files, ffmpeg 9.0 212MB); app instalado FECHADO para o deploy (estava rodando → DLL lockada); 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == publish == staging == `099C8A03...`**.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (RTX 5050, WGC capture): gravação GPU com `RENT F=...` mostrando **SR|RT** no pool, **zero `VideoProcessorBlt E_INVALIDARG`**, sem fallback CPU (`GPU convert failed`), clip com `video>0`.
+- (Opcional) Repetir a gravação longa de uma noite e confirmar que a contagem de E_INVALIDARG não cresce.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/TexturePool.cs`: `BindFlags.ShaderResource` → `ShaderResource | RenderTarget` + comentário corrigido (requisito real do driver NV)
+- `AGENTS.md`: resumo de sessão
