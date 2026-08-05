@@ -717,6 +717,65 @@ public sealed class FfmpegEncoderTests
         Assert.Equal("", FfmpegEncoder.BuildWeightedPredArg(false));
     }
 
+    // ─── BuildEncoderTuneArgs ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_UseAmfArgs(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-quality quality", args);
+        Assert.Contains("-rc vbr_peak", args);
+        Assert.DoesNotContain("-crf", args);
+        Assert.DoesNotContain("-preset veryfast", args);
+        Assert.DoesNotContain("-profile:v high", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_Av1Amf_DoesNotUseCpuFallbackArgs()
+    {
+        // Bug: av1_amf caía no default libx264 → -crf/-bf 0/-profile:v high inválidos p/ AMF.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("av1_amf", 22, 40000, 80000, 2, 32, "p4");
+        Assert.DoesNotContain("-crf", args);
+        Assert.DoesNotContain("-preset veryfast", args);
+        Assert.DoesNotContain("-profile:v high", args);
+        Assert.Contains("-quality quality", args);
+        Assert.Contains("-preanalysis true", args);
+        Assert.Contains("-pa_taq_mode 2", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_Av1Amf_NoMeQuarterPel()
+    {
+        // av1_amf não expõe -me_quarter_pel (só h264/hevc_amf) — passá-lo causa erro de opção.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("av1_amf", 22, 40000, 80000, 2, 32, "p4");
+        Assert.DoesNotContain("me_quarter_pel", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_H264Amf_KeepsMeQuarterPel()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("h264_amf", 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("me_quarter_pel true", args);
+    }
+
+    // ─── GetRawFormatForCodec ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData("av1_amf", "av1")]
+    [InlineData("av1_nvenc", "av1")]
+    [InlineData("libsvtav1", "av1")]
+    [InlineData("av1_d3d12va", "av1")]
+    [InlineData("hevc_amf", "hevc")]
+    [InlineData("h264_amf", "h264")]
+    [InlineData("libx264", "h264")]
+    public void GetRawFormatForCodec_ReturnsExpected(string codec, string expected)
+    {
+        Assert.Equal(expected, FfmpegEncoder.GetRawFormatForCodec(codec));
+    }
+
     // ─── IsAv1Keyframe ──────────────────────────────────────────────────
 
     [Fact]

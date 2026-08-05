@@ -215,6 +215,49 @@ internal sealed partial class FfmpegEncoder : IEncoder
     internal static string BuildWeightedPredArg(bool bframesZero) =>
         bframesZero ? " -weighted_pred 1" : "";
 
+    /// <summary>Args do encoder no StartFfmpeg, por codec. Extraído como seam puro (sem estado)
+    /// para permitir teste unitário da cadeia de tune de cada codec. AMF: preanalysis + pa_taq_mode 2
+    /// + vbaq + scene change detection + me_quarter_pel (só h264/hevc_amf — av1_amf não expõe
+    /// me_quarter_pel). av1_amf usa os mesmos parâmetros de qualidade do h264/hevc_amf, mas sem
+    /// me_quarter_pel (opção inexistente) e sem filler (opção `-filler` também só nos codecs H26x).</summary>
+    internal static string BuildEncoderTuneArgs(string codec, double cq, int maxrateKbps, int bufsizeKbps,
+        int bframes, int lookahead, string nvencPreset)
+    {
+        // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
+        // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
+        // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
+        var cpuCq = Math.Clamp(cq, 1, 51);
+        var amfQp = Math.Clamp(cq - 4, 0, 51);
+        return codec switch
+        {
+            "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
+            "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
+            "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
+            "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
+            "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
+            "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
+            "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
+            "av1_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true",
+            "h264_qsv" => $"-preset veryslow -global_quality {amfQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
+            // D3D12VA: só aceita frames no pixel format d3d12 (via hwupload no vf chain).
+            // RC modes: 1=CQP, 2=CBR, 3=VBR, 4=QVBR. -bf 0 garante ordem de saída = entrada
+            // (requisito do PTS pipeline). GOP 120 espelha NVENC/QSV.
+            "h264_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
+            "hevc_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
+            "av1_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
+            _ => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high"
+        };
+    }
+
+    /// <summary>Formato raw dos dados de vídeo na saída do ffmpeg, por codec — necessário para o
+    /// mux (IVF p/ AV1 vs raw p/ H264/HEVC) e para o detector de formato no ReaderLoop.</summary>
+    internal static string GetRawFormatForCodec(string codec) => codec switch
+    {
+        "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "hevc_d3d12va" or "libx265" => "hevc",
+        "av1_nvenc" or "libsvtav1" or "av1_d3d12va" or "av1_amf" => "av1",
+        _ => "h264"
+    };
+
     /// <summary>Resolução efetiva dos pacotes emitidos, determinada no StartFfmpeg a partir do
     /// scale aplicado (usuário + divisor) e do crop. Cobre tanto o scale do usuário quanto o
     /// cascading fallback — evita que o header do MKV (EncodedPacket.Width/Height) divirja do
@@ -370,34 +413,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
              QSV:   veryslow + extbrc + rdo 1 + adaptive_i/b + b_strategy + mbbrc
            Cor BT.709: tagging no output → NVENC escreve VUI → atom `colr` no MP4 (players corretos).
            GOP 120 (~2s a 60fps): OBS recomenda, ~10% menos bits que GOP 60. */
-        var bframesArg = _bframes > 0 ? $"-bf {_bframes}" : "-bf 0";
-        var lookaheadArg = $"-rc-lookahead {_lookahead}";
-        // ffmpeg 9.0 (NVENC SDK 11.1+): weighted_pred é rejeitado quando bframes > 0
-        // ("invalid param (8): Weighted Prediction not supported with B-frames") — gate
-        // por bframes preserva o recurso no preset Boa (bf 0) e evita o restart loop no resto.
-        var weightedPredArg = BuildWeightedPredArg(_bframes == 0);
-        // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
-        // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
-        // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
-        var cpuCq = Math.Clamp(_cq, 1, 51);
-        var tune = _codec switch
-        {
-            "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high",
-            "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{weightedPredArg} -nonref_p 1 -g 120 -keyint_min 120",
-            "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{weightedPredArg} -nonref_p 1 -g 120 -keyint_min 120",
-            "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
-            "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
-            "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
-            "h264_qsv" => $"-preset veryslow -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
-            // D3D12VA: só aceita frames no pixel format d3d12 (via hwupload no vf chain).
-            // RC modes: 1=CQP, 2=CBR, 3=VBR, 4=QVBR. -bf 0 garante ordem de saída = entrada
-            // (requisito do PTS pipeline). GOP 120 espelha NVENC/QSV.
-            "h264_d3d12va" => $"-rc 1 -qp {Math.Clamp(_cq, 0, 52)} -bf 0 -g 120",
-            "hevc_d3d12va" => $"-rc 1 -qp {Math.Clamp(_cq, 0, 52)} -bf 0 -g 120",
-            "av1_d3d12va" => $"-rc 1 -qp {Math.Clamp(_cq, 0, 52)} -bf 0 -g 120",
-            _ => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high"
-        };
+        var tune = BuildEncoderTuneArgs(_codec, _cq, _maxrateKbps, _bufsizeKbps, _bframes, _lookahead, _nvencPreset);
 
         int cw = _cropW, ch = _cropH;
         bool hasCrop = cw > 0 && ch > 0;
@@ -447,12 +463,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             ? $" -vf \"{string.Join(",", vfParts)}\""
             : "";
 
-        var rawFmt = _codec switch
-        {
-            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "hevc_d3d12va" or "libx265" => "hevc",
-            "av1_nvenc" or "libsvtav1" or "av1_d3d12va" => "av1",
-            _ => "h264"
-        };
+        var rawFmt = GetRawFormatForCodec(_codec);
 
         // For AV1, use IVF container (explicit frame boundaries with 12-byte headers).
         // Raw AV1 OBU data is not parseable by our AnnexB/AVCC detector.
