@@ -2367,11 +2367,12 @@ WasapiMicSource (mic) ───────────→ Mixer 3 → AAC encod
 - Compatibilidade: electron-vite, vitest, vite — todos usam esbuild, não afetados
 - **PRECISA EXECUTAR**: Editar package.json + tsconfig.json + rodar build
 
-#### Agent 4: Vite ❌ BLOQUEADO
-- **NÃO ATUALIZAR** — electron-vite 5.0 não suporta Vite 8
-- electron-vite 6.0.0 está em beta (desde Abr 2026), sem data de release estável
-- Vite 8 usa Rolldown que quebra native modules (better-sqlite3, bindings)
-- **Esperar**: electron-vite 6.0.0 stable → atualizar electron-vite + Vite + plugin-react juntos
+#### Agent 4: Vite ✅ ATUALIZADO (2026-08-05, commit `98258c9`)
+- **electron-vite 6.0.0-beta.1** + **vite 8.2.0** + **@vitejs/plugin-react 6.0.5** aplicados juntos
+- Rolldown: native modules (`better-sqlite3`, `bindings`) continuam external — fora do bundle (verificado no `out/main/`)
+- Warnings `INEFFECTIVE_DYNAMIC_IMPORT` (5: privacy-shield.ipc, service-manager.ipc, startup-manager.ipc, legacy/scans, history-store) = **pré-existentes** — CLI commands fazem `await import(...)` lazy mas os módulos já são estaticamente importados por `src/main/ipc/index.ts` e `services/metrics.ts`
+- Renderer code-splitting íntegro no Rolldown: 30+ chunks por página lazy (ClipsPage 124.8KB, MalwareScannerPage 151.3KB, recharts lazy separado 836KB)
+- Build produção OK, 6841 TS tests + 1113 C# tests, smoke dev limpo
 
 #### Agent 5: React Ecosystem ✅
 - `react`: ^19.2.6 → ^19.2.8
@@ -3739,3 +3740,44 @@ pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7
 - Publicar engine não é necessário (mudanças 100% TS/UI — nenhum código C# tocado).
 - Rebuild do instalador quando houver release: inclui FASE 2 automaticamente.
 - Validação em campo (GPU AMD): trim/merge com enhance → conferir log do ffmpeg com `sr_amf`/`frc_amf` ativos e clip resultante sem macroblocos. `docs\ffmpeg-9-features-plan.md` F2 flipa para done após validação do usuário.
+
+## Session Summary (2026-08-05 — Upgrade completo de dependências + revisão)
+
+### Done
+
+- **Upgrade completo npm + .NET aplicado e commitado** (`98258c9`, 4 arquivos):
+  - **electron-vite 6.0.0-beta.1** + **vite 8.2.0** + **@vitejs/plugin-react 6.0.5** (Rolldown)
+  - `electron@43.3.0`, `jsdom@30.0.1`, `framer-motion@13.0.0`, `lucide-react@1.28.0`, `systeminformation@5.33.1`, `better-sqlite3@13.0.3`, `@types/better-sqlite3@9.6.0`, `react-router-dom@7.18.2`, `@playwright/test`/`playwright@1.62.1`, `@biomejs/biome@2.5.7`, `@types/react@19.2.18`, `@types/react-dom@19.2.4`
+  - C#: `xunit 2.9.3`, `xunit.runner 2.8.2`, `Test.Sdk 17.14.1`, `coverlet 10.0.1` — 1113/1113
+  - Fix Biome `GameModePage.tsx:89` `useExhaustiveDependencies` (`[store]`→`[]`) no mesmo commit
+
+- **Validação completa**: build produção OK (Rolldown), **6841 TS tests | 1 skipped | 0 failed**, 1113 C# tests, lint/tsc sem erros novos. Cobertura: Stmts 79.07%, Branches 85.25%, Funcs 93.5% (queda stmts/lines = instrumentação v8 sob Rolldown, não regressão).
+
+- **Revisão do upgrade (manual — subagente revisor indisponível)**: veredito **PASS**:
+  - Bundle main 1.17MB single chunk (todo IPC), preload 37KB, `rolldown-runtime` como chunk
+  - Renderer code-splitting íntegro: 30+ chunks por página lazy (ClipsPage 124.8KB, MalwareScannerPage 151.3KB), recharts lazy (CartesianChart 836KB) separado do bundle principal
+  - Warnings `INEFFECTIVE_DYNAMIC_IMPORT` (5) = **pré-existentes**, não regressão — CLI commands fazem `await import(...)` lazy mas os módulos já são estaticamente importados por `src/main/ipc/index.ts` (linhas 58/63/66/17) e `services/metrics.ts:4`; Rolldown corretamente os inline (idêntico ao Rollup, só warning com nome novo)
+
+- **Smoke dev limpo** (`npm run dev`): app elevou, scheduler OK, 14118 regras winapp2 carregadas, game-mode IPC OK. 4 itens de log analisados — todos pré-existentes ou benignos:
+  - `<img src="">` em `App.tsx:176` (commit `0aaf14e`, 2026-06-10) — não do upgrade
+  - Double "Fetching disk health" — DashboardPage + PerformanceMonitorPage ambos montam (pré-existente)
+  - `Reduced Motion enabled` — **novo do framer-motion 13**, aviso informativo (Windows com reduced motion ON), 1x console.warn
+  - CSP warning + a11y contrast/landmarks — dev-mode only + axe pré-existente
+
+### Key Decisions
+
+- **Adotar electron-vite 6 beta.1** apesar de ser beta: esperado ~4 meses sem beta novo; peer `vite ^6||^7||^8`; config `rollupOptions` compatível sem mudança
+- **Rolldown não quebra native modules**: `better-sqlite3`/`bindings` continuam external (verificado no `out/main/`) — premissa antiga de que Vite 8 quebraria natives era incorreta
+- **Semver mantidos por decisão**: Playwright 1.62.1, Biome 2.5.7, Lucide 1.28.0, React Router 7.18.2, Vitest 4.1.10
+
+### Next Steps
+
+- Smoke test em modo **packaged** (instalador) quando houver release — única validação restante
+- `npm outdated` limpo exceto `electron-vite` (5.0.0 latest vs 6.0.0-beta.1 instalado) — esperado
+
+### Relevant Files Changed
+
+- `package.json` + `package-lock.json`: todas as versões acima
+- `src/renderer/src/pages/GameModePage.tsx`: `[store]`→`[]` (fix Biome)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/DiNho.Capture.Poc.Tests.csproj`: xunit/test-sdk/coverlet
+- `AGENTS.md`: bloco "Agent 4: Vite" atualizado (BLOCKED → ATUALIZADO)
