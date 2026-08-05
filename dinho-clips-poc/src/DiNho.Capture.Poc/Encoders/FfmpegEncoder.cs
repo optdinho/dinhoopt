@@ -390,6 +390,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "h264_qsv" => $"-preset veryslow -global_quality {Math.Clamp(_cq - 4, 0, 51)} -bf 0 -g 60 -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
+            // D3D12VA: só aceita frames no pixel format d3d12 (via hwupload no vf chain).
+            // RC modes: 1=CQP, 2=CBR, 3=VBR, 4=QVBR. -bf 0 garante ordem de saída = entrada
+            // (requisito do PTS pipeline). GOP 120 espelha NVENC/QSV.
+            "h264_d3d12va" => $"-rc 1 -qp {Math.Clamp(_cq, 0, 52)} -bf 0 -g 120",
+            "hevc_d3d12va" => $"-rc 1 -qp {Math.Clamp(_cq, 0, 52)} -bf 0 -g 120",
+            "av1_d3d12va" => $"-rc 1 -qp {Math.Clamp(_cq, 0, 52)} -bf 0 -g 120",
             _ => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high"
         };
 
@@ -432,14 +438,19 @@ internal sealed partial class FfmpegEncoder : IEncoder
             vfParts.Add(sharpnessFilter);
             Log.I("FfmpegEncoder", $"sharpness: {sharpnessFilter}");
         }
+        // D3D12VA só aceita frames no pixel format d3d12 — hwupload sobe o frame NV12
+        // para o device D3D12 antes do encoder (mesmo padrão validado no probe).
+        var isD3d12va = _codec.EndsWith("_d3d12va", StringComparison.Ordinal);
+        if (isD3d12va)
+            vfParts.Add("hwupload=extra_hw_frames=16,format=d3d12");
         var cropFilter = vfParts.Count > 0
             ? $" -vf \"{string.Join(",", vfParts)}\""
             : "";
 
         var rawFmt = _codec switch
         {
-            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265" => "hevc",
-            "av1_nvenc" or "libsvtav1" => "av1",
+            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "hevc_d3d12va" or "libx265" => "hevc",
+            "av1_nvenc" or "libsvtav1" or "av1_d3d12va" => "av1",
             _ => "h264"
         };
 
@@ -461,6 +472,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         {
             StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
                             args: $"-y -loglevel info " +
+                            (isD3d12va ? "-init_hw_device d3d12va=hw=0 " : "") +
                             $"-f rawvideo -pix_fmt nv12 -s {_nv12W}x{_nv12H} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +

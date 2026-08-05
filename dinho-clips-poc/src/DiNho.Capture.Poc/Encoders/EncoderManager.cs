@@ -392,6 +392,7 @@ public sealed class EncoderManager : IDisposable
 
     private static string BuildProbeArgs(string codec, int width, int height, int fps)
     {
+        var isD3d12va = codec.EndsWith("_d3d12va", StringComparison.Ordinal);
         var tune = codec switch
         {
             "libx264" => "-preset veryfast -tune zerolatency -threads 1",
@@ -403,13 +404,14 @@ public sealed class EncoderManager : IDisposable
             "hevc_amf" => "-quality speed",
             "h264_qsv" => "-preset fastest",
             "av1_amf" => "-quality speed",
+            "h264_d3d12va" or "hevc_d3d12va" or "av1_d3d12va" => "-rc 1 -qp 22",
             _ => "-preset veryfast",
         };
 
         var rawFmt = codec switch
         {
-            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265" => "hevc",
-            "av1_nvenc" or "libsvtav1" or "av1_amf" => "av1",
+            "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "hevc_d3d12va" or "libx265" => "hevc",
+            "av1_nvenc" or "libsvtav1" or "av1_amf" or "av1_d3d12va" => "av1",
             _ => "h264"
         };
 
@@ -417,10 +419,16 @@ public sealed class EncoderManager : IDisposable
         // OBU data is not frame-delimited without IVF headers.
         string outputFmt = rawFmt == "av1" ? "ivf" : rawFmt;
 
-        return $"-y -loglevel error " +
+        // D3D12VA só aceita frames no pixel format d3d12 — exige hwupload com
+        // format=d3d12. -init_hw_device d3d12va=hw=0 cria o device D3D12 antes do input.
+        // RC modes D3D12VA: 1=CQP, 2=CBR, 3=VBR, 4=QVBR (CQP com -qp = qualidade).
+        var hwDeviceArg = isD3d12va ? "-init_hw_device d3d12va=hw=0 " : "";
+        var vfArg = isD3d12va ? "-vf \"hwupload=extra_hw_frames=16,format=d3d12\" " : "";
+
+        return $"-y -loglevel error {hwDeviceArg}" +
                $"-f rawvideo -pix_fmt nv12 -s {width}x{height} " +
                $"-r {fps} -i pipe:0 " +
-               $"-c:v {codec} {tune} -frames:v 5 " +
+               $"{vfArg}-c:v {codec} {tune} -frames:v 5 " +
                $"-f {outputFmt} pipe:1";
     }
 
@@ -529,10 +537,13 @@ public sealed class EncoderManager : IDisposable
 
     /// <summary>
     /// Build a cascading fallback chain for the given user codec preference.
-    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → CPU veryfast.
+    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → D3D12VA → CPU veryfast.
     /// Each entry includes the codec and optional resolution scale divisor.
     /// The scale divisor only takes effect when the user did NOT choose an explicit
     /// output resolution (native); a user-chosen target is the floor and is preserved.
+    /// The D3D12VA step (F3) is hardware-agnostic and probe-gated — it's inserted
+    /// between vendor HW and CPU when a GPU is present and no software codec was
+    /// explicitly requested. Probe failure falls through to CPU.
     /// </summary>
     public static List<FallbackEntry> BuildFallbackChain(string userCodec, int vendorId)
     {
@@ -572,6 +583,25 @@ public sealed class EncoderManager : IDisposable
                 ScaleDivisor = 4,
                 Label = $"HW 1/4 ({hwCodec})",
             });
+
+        // D3D12VA fallback — hardware-agnostic (Windows 10+, qualquer vendor).
+        // Usa a API D3D12 em vez dos SDKs de vendor (NVENC/AMF/QSV). Útil quando o
+        // encoder de vendor falha (ex.: limite de sessões NVENC, driver desatualizado)
+        // mas o hardware ainda suporta encode via D3D12. O probe gate decide: se o
+        // encoder d3d12va falhar no probe real (ex.: NVIDIA RTX com "Encode failed:
+        // Unknown error occurred"), a cadeia cai para o CPU. Só entra quando há GPU
+        // detectada e o usuário não pediu explicitamente um codec de software.
+        var isSoftwareRequest = userCodec.ToLowerInvariant() is "libx264" or "libx265";
+        if (vendorId != 0 && !isSoftwareRequest)
+        {
+            var d3d12Codec = userCodec.ToLowerInvariant() switch
+            {
+                "hevc" => "hevc_d3d12va",
+                "av1" => "av1_d3d12va",
+                _ => "h264_d3d12va", // auto, h264
+            };
+            chain.Add(new FallbackEntry { Codec = d3d12Codec, Label = $"D3D12VA ({d3d12Codec})" });
+        }
 
         // CPU fallback
         var cpuCodec = userCodec.ToLowerInvariant() switch

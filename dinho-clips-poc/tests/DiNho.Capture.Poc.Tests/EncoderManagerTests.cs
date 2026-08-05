@@ -85,6 +85,68 @@ public sealed class EncoderManagerTests
         Assert.Contains(chain, e => e.Codec == "libx264");
     }
 
+    // ── BuildFallbackChain — D3D12VA step (F3) ──────────────────────
+
+    [Fact]
+    public void BuildFallbackChain_auto_Nvidia_IncludesD3d12va()
+    {
+        var chain = EncoderManager.BuildFallbackChain("auto", 0x10DE);
+        Assert.Contains(chain, e => e.Codec == "h264_d3d12va");
+        // D3D12VA step must come AFTER vendor HW and BEFORE CPU
+        var d3dIdx = chain.FindIndex(e => e.Codec == "h264_d3d12va");
+        var nvencIdx = chain.FindIndex(e => e.Codec.Contains("nvenc"));
+        var cpuIdx = chain.FindIndex(e => e.Codec == "libx264");
+        Assert.True(d3dIdx > nvencIdx, "D3D12VA must come after vendor HW");
+        Assert.True(d3dIdx < cpuIdx, "D3D12VA must come before CPU");
+    }
+
+    [Fact]
+    public void BuildFallbackChain_hevc_Nvidia_IncludesHevcD3d12va()
+    {
+        var chain = EncoderManager.BuildFallbackChain("hevc", 0x10DE);
+        Assert.Contains(chain, e => e.Codec == "hevc_d3d12va");
+    }
+
+    [Fact]
+    public void BuildFallbackChain_av1_Nvidia_IncludesAv1D3d12va()
+    {
+        var chain = EncoderManager.BuildFallbackChain("av1", 0x10DE);
+        Assert.Contains(chain, e => e.Codec == "av1_d3d12va");
+    }
+
+    [Fact]
+    public void BuildFallbackChain_auto_Amd_IncludesD3d12va()
+    {
+        var chain = EncoderManager.BuildFallbackChain("auto", 0x1002);
+        Assert.Contains(chain, e => e.Codec == "h264_d3d12va");
+    }
+
+    [Fact]
+    public void BuildFallbackChain_libx264_DoesNotIncludeD3d12va()
+    {
+        // Software request explicit — no hardware steps, incl. D3D12VA
+        var chain = EncoderManager.BuildFallbackChain("libx264", 0x10DE);
+        Assert.DoesNotContain(chain, e => e.Codec.Contains("d3d12va"));
+    }
+
+    [Fact]
+    public void BuildFallbackChain_auto_NoGPU_DoesNotIncludeD3d12va()
+    {
+        var chain = EncoderManager.BuildFallbackChain("auto", 0);
+        Assert.DoesNotContain(chain, e => e.Codec.Contains("d3d12va"));
+    }
+
+    [Fact]
+    public void ProbeEncoder_h264_d3d12va_DoesNotThrow()
+    {
+        // On this NVIDIA machine the D3D12VA probe fails (Encode failed: Unknown error
+        // occurred) — that's the intended gate. The test just verifies the probe runs
+        // with the d3d12va-specific args (init_hw_device + hwupload) without throwing.
+        var result = EncoderManager.ProbeEncoder("h264_d3d12va");
+        Assert.Equal("h264_d3d12va", result.Codec);
+        Assert.IsType<bool>(result.Success);
+    }
+
     [Fact]
     public void BuildFallbackChain_IncludesReducedResolutionSteps()
     {
