@@ -152,7 +152,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     public byte[]? AvccCache => _cachedAvcc;
     public byte[]? HvccCache => _cachedHvcc;
     private bool IsHevc => _codec is "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "libx265";
-    private bool IsAv1 => _codec is "av1_nvenc" or "libsvtav1";
+    private bool IsAv1 => _codec is "av1_nvenc" or "libsvtav1" or "av1_amf" or "av1_qsv";
     public string RawFormat => IsHevc ? "hevc" : IsAv1 ? "av1" : "h264";
     public void SetD3DManager(IMFDXGIDeviceManager? manager) { }
 
@@ -238,7 +238,13 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "av1_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true",
-            "h264_qsv" => $"-preset veryslow -global_quality {amfQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -extra_hw_frames 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
+            // QSV: veryslow + global_quality + extbrc/rdo/adaptive/mbbrc. Sem -extra_hw_frames:
+            // ffmpeg 9 rejeita extra_hw_frames como opção de encoder ("not a encoding option") —
+            // é opção frame-level (valida p/ vf hwupload=...). QSV precisa de -init_hw_device qsv
+            // (adicionado no StartFfmpeg/probe) para criar a sessão MFX; sem ele o ffmpeg 9 falha
+            // com "Error creating a MFX session: -9" mesmo em máquina Intel.
+            "h264_qsv" or "hevc_qsv" => $"-preset veryslow -global_quality {amfQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
+            "av1_qsv" => $"-preset veryslow -global_quality {amfQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -async_depth 1",
             // D3D12VA: só aceita frames no pixel format d3d12 (via hwupload no vf chain).
             // RC modes: 1=CQP, 2=CBR, 3=VBR, 4=QVBR. -bf 0 garante ordem de saída = entrada
             // (requisito do PTS pipeline). GOP 120 espelha NVENC/QSV.
@@ -254,7 +260,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     internal static string GetRawFormatForCodec(string codec) => codec switch
     {
         "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "hevc_d3d12va" or "libx265" => "hevc",
-        "av1_nvenc" or "libsvtav1" or "av1_d3d12va" or "av1_amf" => "av1",
+        "av1_nvenc" or "libsvtav1" or "av1_d3d12va" or "av1_amf" or "av1_qsv" => "av1",
         _ => "h264"
     };
 
@@ -459,6 +465,10 @@ internal sealed partial class FfmpegEncoder : IEncoder
         var isD3d12va = _codec.EndsWith("_d3d12va", StringComparison.Ordinal);
         if (isD3d12va)
             vfParts.Add("hwupload=extra_hw_frames=16,format=d3d12");
+        // QSV precisa de -init_hw_device qsv para criar a sessão MFX — sem isso o ffmpeg 9
+        // falha com "Error creating a MFX session: -9" mesmo em máquina Intel. O encoder
+        // QSV faz o upload internamente (aceita frames NV12 de sistema), não usa hwupload.
+        var isQsv = _codec.EndsWith("_qsv", StringComparison.Ordinal);
         var cropFilter = vfParts.Count > 0
             ? $" -vf \"{string.Join(",", vfParts)}\""
             : "";
@@ -484,6 +494,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(
                             args: $"-y -loglevel info " +
                             (isD3d12va ? "-init_hw_device d3d12va=hw=0 " : "") +
+                            (isQsv ? "-init_hw_device qsv " : "") +
                             $"-f rawvideo -pix_fmt nv12 -s {_nv12W}x{_nv12H} " +
                             $"-r {_frameRate} -i pipe:0 " +
                             $"-colorspace bt709 -color_primaries bt709 -color_trc bt709 " +

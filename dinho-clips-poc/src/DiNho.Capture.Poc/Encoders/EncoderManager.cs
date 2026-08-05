@@ -108,12 +108,13 @@ public sealed class EncoderManager : IDisposable
         [0x8086] = "hevc_qsv",
     };
 
-    /// <summary>Vendor → AV1 encoder map (NVENC only, others fall back to libsvtav1).</summary>
+    /// <summary>Vendor → AV1 encoder map. Intel Arc (Alchemist+) expõe av1_qsv via MFX;
+    /// o probe gate decide se o hardware real suporta (iGPU antiga sem AV1 cai p/ libsvtav1).</summary>
     public static readonly Dictionary<int, string> VendorAv1Codecs = new()
     {
         [0x10DE] = "av1_nvenc",
         [0x1002] = "av1_amf",
-        [0x8086] = "libsvtav1",
+        [0x8086] = "av1_qsv",
     };
 
     // ── Probe result ─────────────────────────────────────────────────
@@ -393,6 +394,7 @@ public sealed class EncoderManager : IDisposable
     private static string BuildProbeArgs(string codec, int width, int height, int fps)
     {
         var isD3d12va = codec.EndsWith("_d3d12va", StringComparison.Ordinal);
+        var isQsv = codec.EndsWith("_qsv", StringComparison.Ordinal);
         var tune = codec switch
         {
             "libx264" => "-preset veryfast -tune zerolatency -threads 1",
@@ -403,6 +405,8 @@ public sealed class EncoderManager : IDisposable
             "h264_amf" => "-quality speed",
             "hevc_amf" => "-quality speed",
             "h264_qsv" => "-preset fastest",
+            "hevc_qsv" => "-preset fastest",
+            "av1_qsv" => "-preset fastest",
             "av1_amf" => "-quality speed",
             "h264_d3d12va" or "hevc_d3d12va" or "av1_d3d12va" => "-rc 1 -qp 22",
             _ => "-preset veryfast",
@@ -411,7 +415,7 @@ public sealed class EncoderManager : IDisposable
         var rawFmt = codec switch
         {
             "hevc_nvenc" or "hevc_amf" or "hevc_qsv" or "hevc_d3d12va" or "libx265" => "hevc",
-            "av1_nvenc" or "libsvtav1" or "av1_amf" or "av1_d3d12va" => "av1",
+            "av1_nvenc" or "libsvtav1" or "av1_amf" or "av1_d3d12va" or "av1_qsv" => "av1",
             _ => "h264"
         };
 
@@ -422,7 +426,9 @@ public sealed class EncoderManager : IDisposable
         // D3D12VA só aceita frames no pixel format d3d12 — exige hwupload com
         // format=d3d12. -init_hw_device d3d12va=hw=0 cria o device D3D12 antes do input.
         // RC modes D3D12VA: 1=CQP, 2=CBR, 3=VBR, 4=QVBR (CQP com -qp = qualidade).
-        var hwDeviceArg = isD3d12va ? "-init_hw_device d3d12va=hw=0 " : "";
+        // QSV exige -init_hw_device qsv para criar a sessão MFX; sem ele o ffmpeg 9
+        // falha com "Error creating a MFX session: -9" mesmo em máquina Intel.
+        var hwDeviceArg = (isD3d12va ? "-init_hw_device d3d12va=hw=0 " : "") + (isQsv ? "-init_hw_device qsv " : "");
         var vfArg = isD3d12va ? "-vf \"hwupload=extra_hw_frames=16,format=d3d12\" " : "";
 
         return $"-y -loglevel error {hwDeviceArg}" +
@@ -496,7 +502,7 @@ public sealed class EncoderManager : IDisposable
         {
             0x10DE => DetectNvidiaGeneration() >= 89, // Ada Lovelace = compute capability 8.9 (RTX 40+)
             0x1002 => DetectAmdGeneration() >= 3,      // RDNA3+ (simplified: check if av1_amf exists)
-            0x8086 => true,                             // All Intel Arc support AV1
+            0x8086 => CheckFfmpegEncoder("av1_qsv"),  // Arc Alchemist+ tem av1_qsv; HD/UHD antiga não
             _ => false,
         };
     }

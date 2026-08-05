@@ -376,6 +376,19 @@ public sealed class EncoderManagerTests
     }
 
     [Fact]
+    public void MapUserCodec_av1_Intel_ReturnsAv1Qsv()
+    {
+        // Lacuna Intel fechada: VendorAv1Codecs[0x8086] era "libsvtav1" (nunca usava av1_qsv).
+        Assert.Equal("av1_qsv", EncoderManager.MapUserCodec("av1", 0x8086));
+    }
+
+    [Fact]
+    public void MapUserCodec_av1_Amd_ReturnsAv1Amf()
+    {
+        Assert.Equal("av1_amf", EncoderManager.MapUserCodec("av1", 0x1002));
+    }
+
+    [Fact]
     public void SupportsAv1Hardware_VendorZero_ReturnsFalse()
     {
         Assert.False(EncoderManager.SupportsAv1Hardware(0));

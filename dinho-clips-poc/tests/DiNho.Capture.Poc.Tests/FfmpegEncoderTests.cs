@@ -761,6 +761,41 @@ public sealed class FfmpegEncoderTests
         Assert.Contains("me_quarter_pel true", args);
     }
 
+    // ─── QSV (Intel) ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("h264_qsv")]
+    [InlineData("hevc_qsv")]
+    [InlineData("av1_qsv")]
+    public void BuildEncoderTuneArgs_QsvCodecs_UseQsvArgs(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-preset veryslow", args);
+        Assert.Contains("-global_quality", args);
+        Assert.Contains("-extbrc 1", args);
+        Assert.Contains("-maxrate 40000K", args);
+        Assert.DoesNotContain("-crf", args);
+        Assert.DoesNotContain("-profile:v high", args);
+    }
+
+    [Theory]
+    [InlineData("h264_qsv")]
+    [InlineData("hevc_qsv")]
+    public void BuildEncoderTuneArgs_H264HevcQsv_UseRdoMbbrc(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-rdo 1", args);
+        Assert.Contains("-mbbrc 1", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_Qsv_DoesNotIncludeExtraHwFrames()
+    {
+        // ffmpeg 9 rejeita -extra_hw_frames como opção de encoder ("not a encoding option").
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("h264_qsv", 22, 40000, 80000, 2, 32, "p4");
+        Assert.DoesNotContain("extra_hw_frames", args);
+    }
+
     // ─── GetRawFormatForCodec ───────────────────────────────────────────
 
     [Theory]
@@ -768,8 +803,11 @@ public sealed class FfmpegEncoderTests
     [InlineData("av1_nvenc", "av1")]
     [InlineData("libsvtav1", "av1")]
     [InlineData("av1_d3d12va", "av1")]
+    [InlineData("av1_qsv", "av1")]
     [InlineData("hevc_amf", "hevc")]
     [InlineData("h264_amf", "h264")]
+    [InlineData("h264_qsv", "h264")]
+    [InlineData("hevc_qsv", "hevc")]
     [InlineData("libx264", "h264")]
     public void GetRawFormatForCodec_ReturnsExpected(string codec, string expected)
     {
