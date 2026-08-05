@@ -39,7 +39,7 @@
     "name": "DiNho",
     "email": "contato@dinhooptimizer.com"
   },
-  "license": "MIT",
+  "license": "Commercial",
   "devDependencies": {
     "@axe-core/react": "^4.12.1",
     "@biomejs/biome": "2.5.5",

@@ -5,14 +5,14 @@
 <h1 align="center">🛡️ DiNho Optimizer</h1>
 
 <p align="center">
-  <strong>Plataforma completa de otimização, segurança e privacidade para Windows 10/11 — 55+ módulos</strong>
+  <strong>Plataforma completa de otimização, segurança e privacidade para Windows 10/11 — 60+ módulos</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-1.0.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-1.0.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-80%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-90%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 
@@ -30,14 +30,14 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_1.0.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_1.0.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
 | Componente | Tamanho |
 |------------|---------|
-| Instalador (NSIS) | ~128 MB |
-| Portable | ~65 MB (win-unpacked) |
+| Instalador (NSIS) | ~125 MB |
+| Portable | ~272 MB |
 
 > **⚠️ Requer:** Windows 10 (build 19041+) ou Windows 11, 4 GB RAM, 500 MB de espaço livre.
 
@@ -163,34 +163,48 @@
 
 </details>
 
+<details open>
+<summary><strong>🎮 Game Clips</strong> — 6 módulos</summary>
+
+| Módulo | Descrição |
+|--------|-----------|
+| **Gravador de Clipes** | Captura replay buffer de jogos (WGC + NVENC/AV1) |
+| **Modo Só Jogo** | Captura apenas o jogo + microfone, mute de outras apps |
+| **Editor de Clipes** | Trim (fast copy ou re-encode) e merge via ffmpeg |
+| **Preview de Vídeo** | Player integrado com seek por HTTP Range |
+| **Configuração de Qualidade** | Presets CQ+VBV, resolução, nitidez (CAS), stretch |
+| **Notificações & Hotkeys** | Hotkeys personalizáveis, toast ao salvar clip |
+
+</details>
+
 ---
 
 ## 🛠️ Tecnologias
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
-  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Electron-43-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
+  <img src="https://img.shields.io/badge/TypeScript-7-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
   <img src="https://img.shields.io/badge/shadcn/ui-latest-000000?style=flat-square&logo=shadcnui&logoColor=white" alt="shadcn/ui" />
   <img src="https://img.shields.io/badge/Zustand-5-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand" />
-  <img src="https://img.shields.io/badge/electron--vite-latest-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-vite" />
-  <img src="https://img.shields.io/badge/YARA--X-5-00ADD8?style=flat-square&logo=python&logoColor=white" alt="YARA-X" />
-  <img src="https://img.shields.io/badge/Vitest-3-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
+  <img src="https://img.shields.io/badge/electron--vite-5-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-vite" />
+  <img src="https://img.shields.io/badge/YARA--X-0.7-00ADD8?style=flat-square&logo=python&logoColor=white" alt="YARA-X" />
+  <img src="https://img.shields.io/badge/Vitest-4-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
   <img src="https://img.shields.io/badge/Playwright-latest-45BA4B?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
   <img src="https://img.shields.io/badge/electron--builder-26-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-builder" />
 </p>
 
 | Categoria | Tecnologias |
 |-----------|-------------|
-| **Runtime** | Electron 42, Node.js 20+ |
-| **Linguagem** | TypeScript 5.8 (strict mode) |
+| **Runtime** | Electron 43, Node.js 22+ |
+| **Linguagem** | TypeScript 7 (strict mode) |
 | **Frontend** | React 19, Tailwind CSS 4, shadcn/ui, Recharts |
 | **Estado** | Zustand 5 |
-| **Build** | electron-vite, electron-builder (NSIS) |
-| **Testes** | Vitest 3, Playwright, Testing Library |
-| **Segurança** | YARA-X (bindings nativas), crypto (Node.js) |
-| **Banco de Dados** | better-sqlite3 (SQLite), lowdb |
+| **Build** | electron-vite 5, electron-builder (NSIS) |
+| **Testes** | Vitest 4, Playwright, Testing Library |
+| **Segurança** | YARA-X 0.7 (bindings nativas), crypto (Node.js) |
+| **Banco de Dados** | better-sqlite3 (SQLite) |
 
 ---
 
@@ -203,7 +217,7 @@
 │  │              Renderer (React 19)               │  │
 │  │  ┌─────────┐ ┌──────────┐ ┌────────────────┐  │  │
 │  │  │  Pages   │ │  Stores  │ │  Components    │  │  │
-│  │  │  (33)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
+│  │  │  (42)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
 │  │  └────┬────┘ └────┬─────┘ └───────┬────────┘  │  │
 │  │       │           │               │            │  │
 │  │  ┌────▼───────────▼───────────────▼────────┐  │  │
@@ -215,7 +229,7 @@
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (33)               │      │
+│  │              IPC Handlers (45)               │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -242,10 +256,10 @@
 src/
 ├── main/                       # Processo principal (Node.js)
 │   ├── index.ts                # Entry point + gerenciamento de janela
-│   ├── cli.ts                  # Modo linha de comando (headless)
+│   ├── cli/                    # Modo linha de comando (headless)
 │   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # 33 handlers IPC (1 por módulo)
-│   ├── services/               # Lógica de negócio (~40 serviços)
+│   ├── ipc/                    # 45 handlers IPC (1 por módulo)
+│   ├── services/               # Lógica de negócio (~58 serviços)
 │   ├── platform/               # Abstração de plataforma
 │   │   └── win32/              # Implementação Windows (registry, WMI, API)
 │   └── constants/              # Paths, safelists, configurações
@@ -253,8 +267,8 @@ src/
 ├── renderer/                   # Interface React
 │   └── src/
 │       ├── App.tsx             # Router + layout principal
-│       ├── pages/              # 33 páginas (uma por módulo funcional)
-│       ├── stores/             # Estado global (Zustand, 30+ stores)
+│       ├── pages/              # 42 páginas (uma por módulo funcional)
+│       ├── stores/             # Estado global (Zustand, 37 stores)
 │       ├── components/         # Componentes reutilizáveis (~60)
 │       ├── hooks/              # Hooks customizados
 │       ├── lib/                # Utilitários e helpers
@@ -323,7 +337,7 @@ npx playwright test
 ```
 
 ```
-📊 Cobertura atual: 80.3% — 161 arquivos de teste, 4.476 testes
+📊 Cobertura atual: ~90%+ — 219 arquivos de teste, ~6.700 testes
 ```
 
 ---
@@ -332,15 +346,15 @@ npx playwright test
 
 | Métrica | Valor |
 |---------|-------|
-| Módulos | 55+ |
-| Páginas | 33 |
-| Stores (Zustand) | 30+ |
+| Módulos | 60+ |
+| Páginas | 42 |
+| Stores (Zustand) | 37 |
 | Componentes React | 60+ |
-| Serviços | ~40 |
-| Handlers IPC | 33 |
-| Arquivos de teste | 161 |
-| Testes | 4.476 |
-| Cobertura | 80.3% |
+| Serviços | ~58 |
+| Handlers IPC | 45 |
+| Arquivos de teste | 219 |
+| Testes | ~6.700 |
+| Cobertura | ~90%+ |
 | Linhas de código | ~100.000+ |
 
 ---

@@ -106,13 +106,29 @@ if (process.argv.includes('--cli')) {
 }
 
 function initGui(): void {
-  // Auto-elevate if not running as admin on Windows
+  // Auto-elevate if not running as admin on Windows.
   if (process.platform === 'win32' && !isAdmin()) {
     getLogger().info('app', 'Not running as admin — spawning UAC elevation via PowerShell')
-    const exePath = app.getPath('exe')
-    const escapedExe = exePath.replace(/'/g, "''")
-    const argList = dataDirFlag ? ` -ArgumentList '${dataDirFlag.replace(/'/g, "''")}'` : ''
-    const psScript = `Start-Process -FilePath '${escapedExe}'${argList} -Verb RunAs`
+    let psScript: string
+    if (app.isPackaged) {
+      // Packaged: relaunch the app exe directly (it has the entry point).
+      const exePath = app.getPath('exe')
+      const escapedExe = exePath.replace(/'/g, "''")
+      const argList = dataDirFlag ? ` -ArgumentList '${dataDirFlag.replace(/'/g, "''")}'` : ''
+      psScript = `Start-Process -FilePath '${escapedExe}'${argList} -Verb RunAs`
+    } else {
+      // Dev: relaunch the whole `npm run dev` command elevated.
+      // We cannot just relaunch electron.exe (app.getPath('exe') is the bare
+      // binary, no entry point) AND the Vite dev server dies with the electron
+      // child (electron-vite does `ps.on('close', process.exit)`), so the
+      // elevated instance would find localhost:5173 gone. Re-running the full
+      // `npm run dev` from the project dir starts a fresh electron-vite +
+      // elevated electron, which binds the port the original just released.
+      const projectRoot = app.getAppPath()
+      const escapedRoot = projectRoot.replace(/'/g, "''")
+      const devFlag = dataDirFlag ? ` -- ${dataDirFlag.replace(/'/g, "''")}` : ''
+      psScript = `Start-Process -FilePath 'cmd.exe' -ArgumentList '/c cd /d "${escapedRoot}" && npm run dev${devFlag}' -WorkingDirectory '${escapedRoot}' -Verb RunAs`
+    }
     execFile('powershell.exe', ['-NoProfile', '-Command', psUtf8(psScript)], { windowsHide: true }, (err) => {
       if (!err) {
         getLogger().info('app', 'UAC elevation launched — exiting un-elevated instance')

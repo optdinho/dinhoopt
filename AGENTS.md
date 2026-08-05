@@ -55,6 +55,17 @@ Use parallel execution for independent operations.
 - Proper error handling — never silently swallow errors
 - File organization by feature/domain, not by type
 
+## Running Dev (Windows)
+
+The app requires admin privileges (`requestedExecutionLevel: requireAdministrator`). `npm run dev` auto-elevates itself: the un-elevated instance detects `!isAdmin()` and relaunches the **whole `npm run dev` command** elevated via UAC (`Start-Process cmd.exe -ArgumentList '/c cd /d <project> && npm run dev' -Verb RunAs`), then exits. Accept the UAC prompt and the app opens elevated with the renderer on `localhost:5173`.
+
+```powershell
+cd C:\Users\WENDEL\Desktop\001
+npm run dev   # prompts UAC once, then runs elevated
+```
+
+**Why relaunch the whole command (not just electron.exe):** in dev `app.getPath('exe')` is the bare `electron.exe` (no entry point), and electron-vite kills the Vite dev server when the electron child exits (`ps.on('close', process.exit)`). Re-running `npm run dev` elevated starts a fresh electron-vite + elevated electron, which binds the port the original instance just released. Production builds elevate correctly via the manifest + runtime auto-elevation (`src/main/index.ts`).
+
 ## Testing Requirements
 
 **Minimum coverage: 80%**
@@ -66,12 +77,12 @@ Use parallel execution for independent operations.
 
 Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, test, chore, perf
 
-## Lint Status (2026-07-24)
+## Lint Status (2026-08-04)
 
-- **558 errors, 35 warnings** (checked 714 files)
+- **Biome 2.5.5** — `npx biome check src/`: **0 errors, 0 warnings** (check pass)
 - `noExplicitAny`: **error** (enabled Jun 13, 2026) — all violations cleaned up
-- `noConsoleLog`: **error** — all violations in main process replaced with `getLogger()`
-- Pre-existing: majority of errors are `noBannedTypes`/`Function` in test files + CRLF format diffs
+- `noConsoleLog`: **removed in Biome 2.x** — all violations in main process already replaced with `getLogger()`
+- Remaining noise: only 4 pre-existing format diffs (CRLF) in `clips-config-manager.ts`, `preload/system.ts`, `App.tsx` — not lint errors
 
 ## Session Summary (2026-06-15)
 
@@ -426,22 +437,9 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
   | registry-store.ts | 98.33% | **100%** | 96.66% | 97.95% |
   | scan-store.ts | 99.09% | **95.45%** | 100% | 100% |
 
-## Session Summary (2026-06-21i)
+## Session Summary (2026-06-21h)
 
 ### Done
-
-- **Build error fix**: `export { AllowlistEntry, ... }` → `export type { ... }` para interfaces TS que o Rollup não conseguia resolver (AllowlistEntry, RegistryPersistenceResult, LOLBinPattern, QuarantineEntry)
-- **"Página fantasma" nas transições**: Suspense fallback skeleton removido (`fallback={null}`) — o `PageTransition` (fade+slide 0.2s) já faz a transição visual sem flash de esqueleto
-- **P4**: 3 dead barrel `index.ts` removidos (malware-scanner/index.ts, privacy-shield/scanners/index.ts, privacy-shield/fixes/index.ts)
-
-- **Full suite**: **5159 tests**, 173 files — **0 failures**
-- **Build**: `electron-vite build` — OK (main + preload + renderer)
-
-### Key Decisions
-
-- Suspense fallback removido porque cada rota já tem `PageTransition` com `initial={{ opacity: 0, y: 12 }}` — não precisa de skeleton intermediário
-
-## Session Summary (2026-06-21h)
   - **F1-C1**: `FALLBACK_TOKEN` mantido com `logger.warning` quando usado como fallback — remote auth preservado
   - **F1-A2**: `resolveBackupPath()` com validação anti-path-traversal + 7 testes
   - **F1-A3**: `overwriteFile` atômico (tmp + rename) + 4 testes
@@ -468,6 +466,21 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - Arquivos grandes quebrados extraindo helpers puros, mantendo o arquivo orquestrador como re-export fino para compatibilidade de imports de teste
 - Renderer logging usa canal IPC `RENDERER_LOG` em vez de importar `getLogger()` (main-process only)
 - UX4/UX5/P2/P3 avaliados e mantidos como estão (ErrorBoundary router-level já mitiga, framer-motion é decorativo, better-sqlite3 é esperado em Electron)
+
+## Session Summary (2026-06-21i)
+
+### Done
+
+- **Build error fix**: `export { AllowlistEntry, ... }` → `export type { ... }` para interfaces TS que o Rollup não conseguia resolver (AllowlistEntry, RegistryPersistenceResult, LOLBinPattern, QuarantineEntry)
+- **"Página fantasma" nas transições**: Suspense fallback skeleton removido (`fallback={null}`) — o `PageTransition` (fade+slide 0.2s) já faz a transição visual sem flash de esqueleto
+- **P4**: 3 dead barrel `index.ts` removidos (malware-scanner/index.ts, privacy-shield/scanners/index.ts, privacy-shield/fixes/index.ts)
+
+- **Full suite**: **5159 tests**, 173 files — **0 failures**
+- **Build**: `electron-vite build` — OK (main + preload + renderer)
+
+### Key Decisions
+
+- Suspense fallback removido porque cada rota já tem `PageTransition` com `initial={{ opacity: 0, y: 12 }}` — não precisa de skeleton intermediário
 
 ## Session Summary (2026-06-22)
 
@@ -590,7 +603,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: `SelectCaptureSource()` — `HasNoRedirectionBitmap`, reordenamento fallback, `VideoSupport` em 2 locais, `WindowsMessagePump` class
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: `VideoSupport` no device creation, `_hasReceivedFrame`, cold-start timeout de 500ms
 
-## Session Summary (2026-06-23b)
+## Session Summary (2026-06-23b — Teste FiveM: root cause Message Pump)
 
 ### Done (antes)
 - 4 correções no C# engine (VideoSupport, WS_EX_NOREDIRECTIONBITMAP, fallback chain, cold-start timeout)
@@ -620,7 +633,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - Confirmação: "ta resolvido"
 - WGC agora é o backend padrão (qualidade superior ao DXGI)
 
-## Session Summary (2026-06-23b)
+## Session Summary (2026-06-23b — Fix WGC + hotkeys Mouse4/Mouse5)
 
 ### Done
 
@@ -895,7 +908,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - Test if game detection now correctly identifies known games (Fortnite, CS2, Valorant, etc.)
 - If WGC still fails in installed mode, investigate `DispatcherQueueController` alternativo
 
-## Session Summary (2026-06-25)
+## Session Summary (2026-06-25 — ClipsPage badge + orphan engine + copy-engine script)
 
 ### Done
 
@@ -922,7 +935,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - `src/renderer/src/pages/ClipsPage.test.tsx`: mock uses `replayBufferBytes`
 - `src/main/ipc/clips.ipc.test.ts`: mockSocket fix, cross-test isolation, 4 new tests
 
-## Session Summary (2026-06-25)
+## Session Summary (2026-06-25 — Engine crash packaged: ffmpeg bundling + symlink fix)
 
 ### Done
 
@@ -998,7 +1011,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - `src/main/services/clips-config-store.test.ts`: expect 20000
 - `src/main/ipc/clips.ipc.test.ts`: expect 20000
 
-## Session Summary (2026-06-25)
+## Session Summary (2026-06-25 — CRF+VBV encoding + presets CQ)
 
 ### Done
 
@@ -1029,7 +1042,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 - **C# unit tests**: **73 passed** — 0 falhas (+19 de 54)
 - **C# build**: `dotnet build` + `dotnet publish -c Release --self-contained true -r win-x64` — 0 erros
 
-## Session Summary (2026-06-25)
+## Session Summary (2026-06-25 — DiNho UI detection fix + games.json expandido)
 
 ### Done
 
@@ -1045,22 +1058,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 - **73 testes C#** (+7 de 66): `NonGameProcessesTests` (70+ assertions), `GameDatabaseTests` (7 testes). games.json copiado para output via `<CopyToOutputDirectory>`.
 
-## Future: Clip Editor (registered 2026-06-25) — ✅ Complete
-
-**Opção A (trim + merge textual) implemented** in session 2026-06-25:
-- `CLIPS_TRIM_CLIP` / `CLIPS_MERGE_CLIPS` IPC handlers with ffmpeg `-c copy`
-- `ClipEditorModal` React component with timeline UI, I/O hotkeys, video preview
-- `clip-video://` custom protocol (later switched to `file://` with CSP fix)
-
-### Opção B — Editor visual com timeline + preview (still future)
-- **Esforço:** ~2-3 semanas
-- Timeline scrubber + drag handles + slow-mo + texto overlay via ffmpeg filter graph
-
-### Opção C — Editor completo (estilo Medal)
-- **Esforço:** ~1-2 meses
-- Opção B + transições, efeitos, multi-track, legendas automáticas
-
-## Session Summary (2026-06-25)
+## Session Summary (2026-06-25 — WGC FiveM restart loop + VideoSupport fix)
 
 ### Done
 
