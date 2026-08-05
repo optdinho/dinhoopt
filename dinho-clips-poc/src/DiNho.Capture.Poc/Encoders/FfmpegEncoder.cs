@@ -209,6 +209,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
         return string.IsNullOrEmpty(chain) ? sharp : $"{chain},{sharp}";
     }
 
+    /// <summary>Gate do NVENC weighted_pred: ffmpeg 9.0 (SDK 11.1+) rejeita weighted_pred quando
+    /// bframes &gt; 0 ("invalid param (8): Weighted Prediction not supported with B-frames") —
+    /// aplica apenas com bframes = 0 (preset Boa) para preservar o recurso sem restart loop.</summary>
+    internal static string BuildWeightedPredArg(bool bframesZero) =>
+        bframesZero ? " -weighted_pred 1" : "";
+
     /// <summary>Resolução efetiva dos pacotes emitidos, determinada no StartFfmpeg a partir do
     /// scale aplicado (usuário + divisor) e do crop. Cobre tanto o scale do usuário quanto o
     /// cascading fallback — evita que o header do MKV (EncodedPacket.Width/Height) divirja do
@@ -357,14 +363,19 @@ internal sealed partial class FfmpegEncoder : IEncoder
            AMF/QSV/libx264: fallback com bitrateKbps alvo (esses codecs não têm CRF+VBV bom).
            Melhorias de qualidade sem alterar CQ/res:
              NVENC: spatial-aq 1 + temporal-aq 1 + multipass fullres + weighted_pred + nonref_p
-                    (weighted_pred apenas em H264/HEVC — av1_nvenc rejeita e falha com
-                     "No capable devices found"; remoção confirmada em ffmpeg 8.1.2)
+                    (weighted_pred apenas em H264/HEVC e apenas com bframes=0 — ffmpeg 9.0
+                     rejeita com "invalid param (8): Weighted Prediction not supported with
+                     B-frames"; av1_nvenc rejeita weighted_pred sempre)
              AMF:   preanalysis + pa_taq_mode 2 + vbaq + scene change detection + me_quarter_pel
              QSV:   veryslow + extbrc + rdo 1 + adaptive_i/b + b_strategy + mbbrc
            Cor BT.709: tagging no output → NVENC escreve VUI → atom `colr` no MP4 (players corretos).
            GOP 120 (~2s a 60fps): OBS recomenda, ~10% menos bits que GOP 60. */
         var bframesArg = _bframes > 0 ? $"-bf {_bframes}" : "-bf 0";
         var lookaheadArg = $"-rc-lookahead {_lookahead}";
+        // ffmpeg 9.0 (NVENC SDK 11.1+): weighted_pred é rejeitado quando bframes > 0
+        // ("invalid param (8): Weighted Prediction not supported with B-frames") — gate
+        // por bframes preserva o recurso no preset Boa (bf 0) e evita o restart loop no resto.
+        var weightedPredArg = BuildWeightedPredArg(_bframes == 0);
         // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
         // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
         // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
@@ -373,8 +384,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
         {
             "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -profile:v high",
             "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
-            "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -weighted_pred 1 -nonref_p 1 -g 120 -keyint_min 120",
+            "h264_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v high -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{weightedPredArg} -nonref_p 1 -g 120 -keyint_min 120",
+            "hevc_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -profile:v main10 -bf {_bframes} -b_ref_mode middle -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{weightedPredArg} -nonref_p 1 -g 120 -keyint_min 120",
             "av1_nvenc" => $"-preset {_nvencPreset} -tune hq -rc vbr -b:v 0 -cq {_cq} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf {_bframes} -rc-lookahead {_lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
             "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
             "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {Math.Clamp(_cq - 4, 0, 51)} -qp_p {Math.Clamp(_cq - 4, 0, 51)} -maxrate {_maxrateKbps}K -bufsize {_bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",

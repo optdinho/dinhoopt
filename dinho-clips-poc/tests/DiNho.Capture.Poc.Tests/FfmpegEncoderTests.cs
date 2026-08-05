@@ -701,6 +701,22 @@ public sealed class FfmpegEncoderTests
         Assert.DoesNotContain(",", result.Split(",").Last());
     }
 
+    // ─── BuildWeightedPredArg ─────────────────────────────────────────────
+
+    [Fact]
+    public void BuildWeightedPredArg_BframesZero_ReturnsWeightedPred()
+    {
+        // Preset Boa (bf 0): weighted_pred é válido e aplicado.
+        Assert.Equal(" -weighted_pred 1", FfmpegEncoder.BuildWeightedPredArg(true));
+    }
+
+    [Fact]
+    public void BuildWeightedPredArg_BframesNonZero_ReturnsEmpty()
+    {
+        // ffmpeg 9.0 rejeita weighted_pred com B-frames ("invalid param (8)") — omitido.
+        Assert.Equal("", FfmpegEncoder.BuildWeightedPredArg(false));
+    }
+
     // ─── IsAv1Keyframe ──────────────────────────────────────────────────
 
     [Fact]
