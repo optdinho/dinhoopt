@@ -39,6 +39,7 @@
   "noAppsMatch": "Ninguna app coincide con tus filtros",
   "toggleSelect": "Seleccionar/deseleccionar",
   "installedBadge": "Instalada",
+  "popularBadge": "Popular",
   "installButton": "Instalar",
   "listFailed": "Error al cargar la lista de apps",
   "installError": "Error al instalar las aplicaciones",

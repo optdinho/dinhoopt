@@ -39,6 +39,7 @@
   "noAppsMatch": "No apps match your filters",
   "toggleSelect": "Toggle selection",
   "installedBadge": "Installed",
+  "popularBadge": "Popular",
   "installButton": "Install",
   "listFailed": "Failed to load the app list",
   "installError": "Failed to install the apps",

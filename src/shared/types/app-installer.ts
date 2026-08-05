@@ -15,6 +15,10 @@ export interface AppInstallerApp {
   description?: string
   isInstalled: boolean
   installedVersion?: string
+  /** Optional data:image URL for the installed app's icon. */
+  icon?: string
+  /** Curated flag — app is among the most popular in the allowlist. */
+  popular?: boolean
 }
 
 export interface AppInstallerListResult {

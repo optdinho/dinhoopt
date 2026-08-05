@@ -85,6 +85,14 @@ export function GameModePage() {
     return () => clearTimeout(timer)
   }, [lastResult])
 
+  // Expose store for E2E tests
+  useEffect(() => {
+    ;(window as unknown as Record<string, unknown>).__GAME_MODE_STORE__ = store
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__GAME_MODE_STORE__
+    }
+  }, [store])
+
   const isBusy = status !== 'idle'
 
   const handleActivate = useCallback(async () => {

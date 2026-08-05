@@ -1,6 +1,8 @@
 import type { FirewallAction, FirewallScanProgress } from '@shared/types'
 import {
   CircleCheckBig,
+  FileWarning,
+  FileX,
   Globe,
   Inbox,
   Loader2,

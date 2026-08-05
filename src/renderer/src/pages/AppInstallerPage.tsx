@@ -438,7 +438,7 @@ export function AppInstallerPage() {
       {/* App list */}
       {hasLoaded && !loading && filteredApps.length > 0 && (
         <div className="mb-6">
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {filteredApps.map((app) => {
               const selected = selectedIds.has(app.id)
               return (
@@ -466,9 +466,42 @@ export function AppInstallerPage() {
                     )}
                   </button>
 
+                  {app.icon ? (
+                    <img
+                      src={app.icon}
+                      alt=""
+                      className="h-9 w-9 shrink-0 rounded-lg object-contain"
+                      style={{
+                        background: 'var(--bg-hover-2)',
+                        border: '1px solid var(--border-medium)',
+                        padding: '2px',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      aria-hidden="true"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                      style={{
+                        background: 'var(--bg-hover-2)',
+                        color: 'var(--text-muted)',
+                        border: '1px solid var(--border-medium)',
+                      }}
+                    >
+                      {(app.name.charAt(0) || '?').toUpperCase()}
+                    </div>
+                  )}
+
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-[13px] font-semibold text-zinc-200">{app.name}</span>
+                      {app.popular && (
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'rgba(250,204,21,0.12)', color: '#facc15' }}
+                        >
+                          {t('popularBadge')}
+                        </span>
+                      )}
                       {app.isInstalled && (
                         <span
                           className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"

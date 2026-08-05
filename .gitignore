@@ -67,3 +67,10 @@ PEDIDO_*.md
 PLANO_*.md
 RELATORIO_*.md
 auditoria-*.md
+
+e2e/.e2e-userdata-*/
+e2e/.ipc-audit/
+e2e/.journey-audit/
+e2e/.session-record/
+e2e/.dbg-userdata/
+.esbuild-tmp/

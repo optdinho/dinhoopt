@@ -8,7 +8,7 @@ let page: Page
 
 test.beforeAll(async () => {
   electronApp = await electron.launch({
-    args: [resolve(__dirname, '../out/main/index.js')],
+    args: [resolve(__dirname, '../out/main/index.js'), `--dinho-data-dir=${resolve(__dirname, '.e2e-userdata-compliance')}`],
     env: { ...process.env, NODE_ENV: 'test', DINHO_E2E: '1' },
   })
   page = await electronApp.firstWindow()

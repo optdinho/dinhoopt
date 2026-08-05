@@ -8,7 +8,7 @@ let page: Page
 
 test.beforeAll(async () => {
   electronApp = await electron.launch({
-    args: [resolve(__dirname, '../out/main/index.js')],
+    args: [resolve(__dirname, '../out/main/index.js'), `--dinho-data-dir=${resolve(__dirname, '.e2e-userdata-memory')}`],
     env: { ...process.env, NODE_ENV: 'test', DINHO_E2E: '1' },
   })
   page = await electronApp.firstWindow()
@@ -86,7 +86,7 @@ test('should have a Refresh button', async () => {
 
 test('should display top processes section', async () => {
   const hasTopProcesses = await page.evaluate(() => {
-    return document.body.textContent?.includes('Top Processos')
+    return document.body.textContent?.includes('Principais Processos')
   })
   expect(hasTopProcesses).toBe(true)
 })

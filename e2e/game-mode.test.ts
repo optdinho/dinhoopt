@@ -8,7 +8,7 @@ let page: Page
 
 test.beforeAll(async () => {
   electronApp = await electron.launch({
-    args: [resolve(__dirname, '../out/main/index.js')],
+    args: [resolve(__dirname, '../out/main/index.js'), `--dinho-data-dir=${resolve(__dirname, '.e2e-userdata-game-mode')}`],
     env: { ...process.env, NODE_ENV: 'test', DINHO_E2E: '1' },
   })
   page = await electronApp.firstWindow()
@@ -107,6 +107,11 @@ test('should have audit section with run button', async () => {
 })
 
 test('should show session stats when game mode is active', async () => {
+  // Activate via the exposed store (UI state only — no real IPC optimization runs)
+  await page.evaluate(() => {
+    ;(window as any).__GAME_MODE_STORE__?.getState()?.setActive(true, new Date().toISOString())
+  })
+  await page.waitForTimeout(500)
   const hasStats = await page.evaluate(() => {
     return (
       document.body.textContent?.includes('Otimizações ativas') ||

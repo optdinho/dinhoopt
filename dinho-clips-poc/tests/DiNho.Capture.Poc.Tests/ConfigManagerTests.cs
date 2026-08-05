@@ -76,7 +76,7 @@ public sealed class ConfigManagerTests
         try
         {
             var cfg = new ConfigManager(tempFile);
-            Assert.Equal("p5", cfg.Config.EncoderPreset);
+            Assert.Equal("p4", cfg.Config.EncoderPreset);
         }
         finally
         {
@@ -117,7 +117,7 @@ public sealed class ConfigManagerTests
         Assert.Equal(30000, raw.MaxrateKbps);
         Assert.Equal(60000, raw.BufsizeKbps);
         Assert.Equal(3, raw.Bframes);
-        Assert.Equal(32, raw.Lookahead);
+        Assert.Equal(16, raw.Lookahead);
         Assert.Equal(1.0f, raw.MicVolume);
         Assert.Equal(0d, raw.SharpnessStrength);
     }

@@ -486,7 +486,7 @@ describe('scanFileWithLock', () => {
     await e.loadRules([], [RULE_HELLO])
     setActiveEngine(e)
 
-    const tmp = (await import('node:fs')).mkdtempSync('/tmp/yara-test-')
+    const tmp = (await import('node:fs')).mkdtempSync(path.join(os.tmpdir(), 'yara-test-'))
     const fp = (await import('node:path')).join(tmp, 'data.bin')
     ;(await import('node:fs')).writeFileSync(fp, 'hello scan')
     const result = await scanFileWithLock(fp)

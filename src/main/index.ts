@@ -107,7 +107,9 @@ if (process.argv.includes('--cli')) {
 
 function initGui(): void {
   // Auto-elevate if not running as admin on Windows.
-  if (process.platform === 'win32' && !isAdmin()) {
+  // Skip elevation during E2E tests — the runner launches non-admin and would
+  // otherwise block on a UAC prompt that never gets accepted.
+  if (process.platform === 'win32' && !isAdmin() && process.env.DINHO_E2E !== '1') {
     getLogger().info('app', 'Not running as admin — spawning UAC elevation via PowerShell')
     let psScript: string
     if (app.isPackaged) {

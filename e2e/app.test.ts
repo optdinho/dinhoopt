@@ -8,7 +8,7 @@ let page: Page
 
 test.beforeAll(async () => {
   electronApp = await electron.launch({
-    args: [resolve(__dirname, '../out/main/index.js')],
+    args: [resolve(__dirname, '../out/main/index.js'), `--dinho-data-dir=${resolve(__dirname, '.e2e-userdata-app')}`],
     env: {
       ...process.env,
       NODE_ENV: 'test',
@@ -36,8 +36,8 @@ test('should display the app window', async () => {
   expect(title).toBeTruthy()
 })
 
-test('should expose kudu API in the renderer', async () => {
-  const hasKudu = await page.evaluate(() => typeof window.kudu !== 'undefined')
+test('should expose dinho API in the renderer', async () => {
+  const hasKudu = await page.evaluate(() => typeof window.dinho !== 'undefined')
   expect(hasKudu).toBe(true)
 })
 

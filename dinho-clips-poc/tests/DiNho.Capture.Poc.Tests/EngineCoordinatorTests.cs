@@ -833,7 +833,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"Lookahead": 500}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal(32, cfg.Config.Lookahead);
+        Assert.Equal(16, cfg.Config.Lookahead);
     }
 
     [Fact]

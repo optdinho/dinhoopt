@@ -36,6 +36,11 @@ vi.mock('./software-updater/utils', () => ({
   cleanOutput: (s: string) => s,
 }))
 
+const resolveWebAppIconMock = vi.hoisted(() => vi.fn(async () => null))
+vi.mock('./app-installer-icons', () => ({
+  resolveWebAppIcon: resolveWebAppIconMock,
+}))
+
 const VALID_INSTALL_STDOUT = 'Successfully installed'
 
 beforeEach(() => {
@@ -48,6 +53,8 @@ beforeEach(() => {
   isAdminMock.mockReset()
   isAdminMock.mockReturnValue(false)
   psUtf8Mock.mockImplementation((s: string) => s)
+  resolveWebAppIconMock.mockReset()
+  resolveWebAppIconMock.mockResolvedValue(null)
 })
 
 describe('isValidAppInstallerId', () => {
@@ -172,6 +179,59 @@ describe('listAvailableApps', () => {
     const result = await listAvailableApps()
     expect(result.wingetAvailable).toBe(true)
     expect(result.apps.every((a) => !a.isInstalled)).toBe(true)
+  })
+
+  it('propagates the curated popular flag from the allowlist', async () => {
+    isWingetAvailableMock.mockResolvedValue(false)
+    const result = await listAvailableApps()
+    const popular = result.apps.filter((a) => a.popular)
+    const expected = APP_INSTALLER_ENTRIES.filter((e) => e.popular).map((e) => e.id.toLowerCase())
+    expect(popular).toHaveLength(expected.length)
+    expect(popular.map((a) => a.id.toLowerCase()).sort()).toEqual(expected.sort())
+    expect(result.apps.find((a) => a.id === 'Mozilla.Firefox')?.popular).toBe(true)
+    expect(result.apps.find((a) => a.id === 'WinDirStat.WinDirStat')?.popular).toBeUndefined()
+  })
+})
+
+describe('listAvailableApps icons', () => {
+  it('resolves web icons for every app regardless of installed status', async () => {
+    parseWingetListOutputMock.mockReturnValue([
+      {
+        id: 'Mozilla.Firefox',
+        currentVersion: '135.0',
+        name: 'Mozilla Firefox',
+        availableVersion: '135.0',
+        source: 'winget',
+        severity: 'unknown',
+        selected: false,
+        isUpToDate: true,
+      },
+    ])
+    execFileAsyncMock.mockResolvedValue({ stdout: 'fake list output', stderr: '' })
+    resolveWebAppIconMock.mockResolvedValue('data:image/png;base64,web-icon')
+
+    const result = await listAvailableApps()
+    const firefox = result.apps.find((a) => a.id === 'Mozilla.Firefox')
+    const chrome = result.apps.find((a) => a.id === 'Google.Chrome')
+    expect(firefox?.isInstalled).toBe(true)
+    expect(firefox?.icon).toBe('data:image/png;base64,web-icon')
+    expect(chrome?.isInstalled).toBe(false)
+    expect(chrome?.icon).toBe('data:image/png;base64,web-icon')
+    expect(result.apps.every((a) => a.icon === 'data:image/png;base64,web-icon')).toBe(true)
+    expect(resolveWebAppIconMock).toHaveBeenCalledTimes(result.apps.length)
+  })
+
+  it('keeps apps icon-free when web icon resolution returns null', async () => {
+    execFileAsyncMock.mockResolvedValue({ stdout: 'fake list output', stderr: '' })
+    const result = await listAvailableApps()
+    expect(result.apps.every((a) => a.icon === undefined)).toBe(true)
+  })
+
+  it('keeps apps icon-free when web icon resolution throws', async () => {
+    execFileAsyncMock.mockResolvedValue({ stdout: 'fake list output', stderr: '' })
+    resolveWebAppIconMock.mockRejectedValue(new Error('boom'))
+    const result = await listAvailableApps()
+    expect(result.apps.every((a) => a.icon === undefined)).toBe(true)
   })
 })
 

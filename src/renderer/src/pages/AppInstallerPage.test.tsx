@@ -297,4 +297,33 @@ describe('AppInstallerPage', () => {
     })
     expect(toast.error).toHaveBeenCalledWith('Discord.Discord: rejected')
   })
+
+  it('renders the app icon when the app has one', () => {
+    mockStore.hasLoaded = true
+    mockStore.apps = [{ ...(sampleApps[0] as AppInstallerApp), icon: 'data:image/png;base64,Zm9v' }]
+    const { container } = render(<AppInstallerPage />)
+    const img = container.querySelector('img') as HTMLImageElement | null
+    expect(img).toBeTruthy()
+    expect(img?.src).toBe('data:image/png;base64,Zm9v')
+  })
+
+  it('renders a letter fallback when the app has no icon', () => {
+    mockStore.hasLoaded = true
+    mockStore.apps = [{ ...(sampleApps[0] as AppInstallerApp) }]
+    const { container } = render(<AppInstallerPage />)
+    expect(container.querySelector('img')).toBeNull()
+    expect(screen.getByText('F')).toBeTruthy()
+  })
+
+  it('renders the popular badge for curated popular apps only', () => {
+    mockStore.hasLoaded = true
+    mockStore.apps = [
+      { ...(sampleApps[0] as AppInstallerApp), popular: true },
+      { ...(sampleApps[1] as AppInstallerApp) },
+    ]
+    render(<AppInstallerPage />)
+    expect(screen.getByText('popularBadge')).toBeTruthy()
+    const badges = screen.getAllByText('popularBadge')
+    expect(badges).toHaveLength(1)
+  })
 })

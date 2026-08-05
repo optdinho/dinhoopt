@@ -5,6 +5,7 @@ import type {
   AppInstallProgress,
   AppInstallResult,
 } from '@shared/types'
+import { resolveWebAppIcon } from './app-installer-icons'
 import { isAdmin } from './elevation'
 import { execFileAsync, psUtf8 } from './exec-utf8'
 import { isWingetAvailable, parseWingetListOutput } from './software-updater/checkers/winget'
@@ -15,6 +16,8 @@ interface AppInstallerEntry {
   name: string
   category: AppInstallerCategory
   description?: string
+  /** Curated flag for genuinely most-downloaded apps — shown as a badge. */
+  popular?: boolean
 }
 
 /**
@@ -29,12 +32,14 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
     name: 'Mozilla Firefox',
     category: 'browser',
     description: 'Navegador de código aberto e focado em privacidade',
+    popular: true,
   },
   {
     id: 'Google.Chrome',
     name: 'Google Chrome',
     category: 'browser',
     description: 'Navegador rápido e integrado aos serviços Google',
+    popular: true,
   },
   {
     id: 'Brave.Brave',
@@ -57,6 +62,7 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
     name: 'Discord',
     category: 'communication',
     description: 'Chat de voz e texto para comunidades',
+    popular: true,
   },
   { id: 'SlackTechnologies.Slack', name: 'Slack', category: 'communication', description: 'Comunicação para equipas' },
   { id: 'Zoom.Zoom', name: 'Zoom', category: 'communication', description: 'Videoconferência e reuniões online' },
@@ -82,8 +88,14 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
   { id: 'Microsoft.Skype', name: 'Skype', category: 'communication', description: 'Chamadas e mensagens' },
 
   // Media
-  { id: 'VideoLAN.VLC', name: 'VLC Media Player', category: 'media', description: 'Reprodutor multimédia universal' },
-  { id: 'Spotify.Spotify', name: 'Spotify', category: 'media', description: 'Streaming de música' },
+  {
+    id: 'VideoLAN.VLC',
+    name: 'VLC Media Player',
+    category: 'media',
+    description: 'Reprodutor multimédia universal',
+    popular: true,
+  },
+  { id: 'Spotify.Spotify', name: 'Spotify', category: 'media', description: 'Streaming de música', popular: true },
   { id: 'OBSProject.OBSStudio', name: 'OBS Studio', category: 'media', description: 'Gravação e transmissão de ecrã' },
   { id: 'Audacity.Audacity', name: 'Audacity', category: 'media', description: 'Editor de áudio de código aberto' },
   { id: 'GIMP.GIMP', name: 'GIMP', category: 'media', description: 'Editor de imagens de código aberto' },
@@ -142,6 +154,7 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
     name: 'Visual Studio Code',
     category: 'development',
     description: 'Editor de código da Microsoft',
+    popular: true,
   },
   { id: 'Git.Git', name: 'Git', category: 'development', description: 'Sistema de controlo de versões' },
   {
@@ -177,7 +190,13 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
     category: 'development',
     description: 'Cliente Git gráfico da GitHub',
   },
-  { id: 'Notepad++.Notepad++', name: 'Notepad++', category: 'development', description: 'Editor de texto e código' },
+  {
+    id: 'Notepad++.Notepad++',
+    name: 'Notepad++',
+    category: 'development',
+    description: 'Editor de texto e código',
+    popular: true,
+  },
   {
     id: 'Microsoft.PowerShell',
     name: 'PowerShell 7',
@@ -235,7 +254,7 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
   { id: 'TeamViewer.TeamViewer', name: 'TeamViewer', category: 'system', description: 'Acesso e suporte remoto' },
 
   // Gaming
-  { id: 'Valve.Steam', name: 'Steam', category: 'gaming', description: 'Plataforma de jogos da Valve' },
+  { id: 'Valve.Steam', name: 'Steam', category: 'gaming', description: 'Plataforma de jogos da Valve', popular: true },
   {
     id: 'EpicGames.EpicGamesLauncher',
     name: 'Epic Games Launcher',
@@ -254,8 +273,20 @@ export const APP_INSTALLER_ENTRIES: AppInstallerEntry[] = [
   { id: 'RiotGames.Valorant', name: 'Valorant', category: 'gaming', description: 'Jogo de tiro da Riot Games' },
 
   // Utilities
-  { id: '7zip.7zip', name: '7-Zip', category: 'utilities', description: 'Compactador de ficheiros de código aberto' },
-  { id: 'RARLab.WinRAR', name: 'WinRAR', category: 'utilities', description: 'Compactador de ficheiros' },
+  {
+    id: '7zip.7zip',
+    name: '7-Zip',
+    category: 'utilities',
+    description: 'Compactador de ficheiros de código aberto',
+    popular: true,
+  },
+  {
+    id: 'RARLab.WinRAR',
+    name: 'WinRAR',
+    category: 'utilities',
+    description: 'Compactador de ficheiros',
+    popular: true,
+  },
   { id: 'ShareX.ShareX', name: 'ShareX', category: 'utilities', description: 'Captura de ecrã e partilha' },
   { id: 'Greenshot.Greenshot', name: 'Greenshot', category: 'utilities', description: 'Captura de ecrã leve' },
   { id: 'Rufus.Rufus', name: 'Rufus', category: 'utilities', description: 'Criação de pen drives de arranque' },
@@ -348,6 +379,7 @@ export async function listAvailableApps(): Promise<AppInstallerListResult> {
     name: entry.name,
     category: entry.category,
     ...(entry.description !== undefined ? { description: entry.description } : {}),
+    ...(entry.popular === true ? { popular: true } : {}),
     isInstalled: false,
   }))
 
@@ -372,6 +404,16 @@ export async function listAvailableApps(): Promise<AppInstallerListResult> {
     }
   } catch {
     // Detection is best-effort — apps simply show as not installed.
+  }
+
+  // Icons come from the same source for every app (installed or not).
+  for (const app of apps) {
+    try {
+      const icon = await resolveWebAppIcon(app.id)
+      if (icon) app.icon = icon
+    } catch {
+      // Icon resolution is best-effort — never breaks the app list.
+    }
   }
 
   return { apps, wingetAvailable: true }
