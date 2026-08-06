@@ -2,8 +2,21 @@ using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Tests;
 
-public sealed class VideoPacketPoolTests
+public sealed class VideoPacketPoolTests : IDisposable
 {
+    private const long DefaultMaxIdleBytes = 256L * 1024 * 1024;
+
+    public VideoPacketPoolTests()
+    {
+        VideoPacketPool.MaxIdleBytes = DefaultMaxIdleBytes;
+        VideoPacketPool.ResetForTest();
+    }
+
+    public void Dispose()
+    {
+        VideoPacketPool.MaxIdleBytes = DefaultMaxIdleBytes;
+    }
+
     [Fact]
     public void Rent_ReturnsArray_AtLeastRequestedSize()
     {
@@ -50,5 +63,51 @@ public sealed class VideoPacketPoolTests
         }
 
         Assert.Equal(count, reUsed);
+    }
+
+    [Fact]
+    public void Return_AboveCap_IsDroppedToGc_NotReused()
+    {
+        // Array único maior que o cap idle: não deve ser retido — o próximo
+        // Rent aloca novo em vez de reutilizar. Impede retenção ilimitada.
+        VideoPacketPool.MaxIdleBytes = 1 * 1024 * 1024;
+        var big = VideoPacketPool.Rent(2 * 1024 * 1024);
+        VideoPacketPool.Return(big);
+
+        var reRent = VideoPacketPool.Rent(2 * 1024 * 1024);
+        Assert.NotSame(big, reRent);
+        VideoPacketPool.Return(reRent);
+    }
+
+    [Fact]
+    public void Return_OverflowOfCap_OnlyFirstBatchRetained()
+    {
+        // Cap é por bytes acumulados, não por contagem: primeiro return cabe,
+        // segundo estoura o cap e é descartado ao GC.
+        VideoPacketPool.MaxIdleBytes = 1024 * 1024; // 1MB
+        var a = VideoPacketPool.Rent(700 * 1024);
+        var b = VideoPacketPool.Rent(700 * 1024);
+        VideoPacketPool.Return(a); // 700KB → retido
+        VideoPacketPool.Return(b); // 1.4MB > 1MB cap → descartado
+
+        var reA = VideoPacketPool.Rent(700 * 1024);
+        var reB = VideoPacketPool.Rent(700 * 1024);
+        Assert.Same(a, reA);
+        Assert.NotSame(b, reB);
+        VideoPacketPool.Return(reA);
+        VideoPacketPool.Return(reB);
+    }
+
+    [Fact]
+    public void Return_TooSmallForRent_IsDropped()
+    {
+        // Array pequeno no pool não serve para um Rent maior — é descartado
+        // e um novo é alocado.
+        var small = VideoPacketPool.Rent(100);
+        VideoPacketPool.Return(small);
+
+        var big = VideoPacketPool.Rent(10 * 1024);
+        Assert.NotSame(small, big);
+        VideoPacketPool.Return(big);
     }
 }
