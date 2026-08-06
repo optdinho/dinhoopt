@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Clapperboard, Combine, Film, FolderOpen, Pencil, RefreshCw, Search, Star, Trash2 } from 'lucide-react'
+import { Clapperboard, Combine, Film, FolderOpen, Pencil, RefreshCw, Search, Star, Trash2, Upload } from 'lucide-react'
 import type { ClipsState } from './useClipsState'
 
 export function ClipsGrid({
@@ -20,6 +20,9 @@ export function ClipsGrid({
   handleOpenClip,
   setEditingClip,
   handleRenameClip,
+  handlePublishClip,
+  publishingPath,
+  publishProgress,
   handleDeleteClip,
   toggleFavorite,
   formatSize,
@@ -260,6 +263,16 @@ export function ClipsGrid({
                   </button>
                   <button
                     type="button"
+                    onClick={() => handlePublishClip(clip.name, clip.path)}
+                    disabled={publishingPath !== null}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ color: publishingPath === clip.path ? '#06b6d4' : 'var(--text-dim)' }}
+                  >
+                    <Upload className={`h-3 w-3 ${publishingPath === clip.path ? 'animate-pulse' : ''}`} />
+                    {publishingPath === clip.path ? `${Math.round(publishProgress)}%` : t('publish')}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleDeleteClip(clip.name)}
                     className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-red-500/15"
                     style={{ color: '#ef4444' }}
@@ -268,6 +281,14 @@ export function ClipsGrid({
                     {t('delete')}
                   </button>
                 </div>
+                {publishingPath === clip.path && (
+                  <div className="h-1 w-full" style={{ background: 'rgba(113,113,122,0.15)' }}>
+                    <div
+                      className="h-full transition-all duration-200"
+                      style={{ width: `${Math.max(0, Math.min(100, publishProgress))}%`, background: '#06b6d4' }}
+                    />
+                  </div>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>

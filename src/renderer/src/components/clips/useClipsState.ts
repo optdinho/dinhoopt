@@ -56,6 +56,11 @@ export interface ClipsState {
   handleDeleteSelected: () => Promise<void>
   handleOpenClip: (path: string) => Promise<void>
   handleRenameClip: (oldName: string) => Promise<void>
+  handlePublishClip: (clipName: string, clipPath: string) => Promise<void>
+  publishingPath: string | null
+  publishProgress: number
+  publishResult: { link: string } | null
+  setPublishResult: (r: { link: string } | null) => void
   handleConfigUpdate: (partial: Partial<ClipsConfig>) => Promise<void>
   handleSelectOutputDir: () => Promise<void>
   toggleFavorite: (name: string) => void
@@ -109,6 +114,9 @@ export function useClipsState(): ClipsState {
   const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
   const [statusLoaded, setStatusLoaded] = useState(false)
   const [clipsLoaded, setClipsLoaded] = useState(false)
+  const [publishingPath, setPublishingPath] = useState<string | null>(null)
+  const [publishProgress, setPublishProgress] = useState(0)
+  const [publishResult, setPublishResult] = useState<{ link: string } | null>(null)
 
   const tooltipContent: Record<string, string> = useMemo(
     () => ({
@@ -316,6 +324,18 @@ export function useClipsState(): ClipsState {
     return () => unsub?.()
   }, [refreshClips])
 
+  // Listen for publish progress broadcasts (main forwards per-file progress)
+  const publishingPathRef = useRef<string | null>(null)
+  publishingPathRef.current = publishingPath
+  useEffect(() => {
+    const unsub = window.dinho?.clipsOnPublishProgress?.((data) => {
+      if (data.clipPath === publishingPathRef.current) {
+        setPublishProgress(data.percent ?? 0)
+      }
+    })
+    return () => unsub?.()
+  }, [])
+
   // ── Actions (delegated to useClipsActions) ───────────────
 
   const actions = useClipsActions({
@@ -329,6 +349,9 @@ export function useClipsState(): ClipsState {
     setConfig,
     setFavorites,
     setRebindingId,
+    setPublishingPath,
+    setPublishProgress,
+    setPublishResult,
     refreshClips,
     refreshConfig,
     refreshStatus,
@@ -435,6 +458,11 @@ export function useClipsState(): ClipsState {
     handleDeleteSelected: actions.handleDeleteSelected,
     handleOpenClip: actions.handleOpenClip,
     handleRenameClip: actions.handleRenameClip,
+    handlePublishClip: actions.handlePublishClip,
+    publishingPath,
+    publishProgress,
+    publishResult,
+    setPublishResult,
     handleConfigUpdate: actions.handleConfigUpdate,
     handleSelectOutputDir: actions.handleSelectOutputDir,
     toggleFavorite: actions.toggleFavorite,

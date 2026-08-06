@@ -57,6 +57,22 @@ export const clipsMethods = {
     ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode, enhance, sharpness),
   clipsMergeClips: (clipPaths: string[], enhance?: EnhanceOption, sharpness?: number): Promise<ClipMergeResult> =>
     ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths, enhance, sharpness),
+  clipsPublish: (clipPath: string): Promise<{ success: boolean; link?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_PUBLISH, clipPath),
+  clipsOpenExternal: (url: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_OPEN_EXTERNAL, url),
+  clipsOnPublishProgress: (
+    callback: (data: { clipPath?: string; loaded?: number; total?: number; percent?: number }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      data: { clipPath?: string; loaded?: number; total?: number; percent?: number },
+    ) => callback(data)
+    ipcRenderer.on(IPC.CLIPS_PUBLISH_PROGRESS, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_PUBLISH_PROGRESS, handler)
+    }
+  },
   clipsGetVideoUrl: (clipPath: string): string => buildClipVideoUrl(clipPath),
   clipsOnEngineStatus: (callback: (status: ClipsEngineStatus) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: ClipsEngineStatus) => callback(status)

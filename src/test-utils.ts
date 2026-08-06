@@ -111,6 +111,10 @@ export function mockKudu(): Record<string, Mock> {
     licenseCheck: vi.fn(),
     licenseGetHwid: vi.fn(),
 
+    // Clips
+    clipsPublish: vi.fn(() => Promise.resolve({ success: false })),
+    clipsOpenExternal: vi.fn(() => Promise.resolve({ success: true })),
+
     // Settings
     settingsGet: vi.fn(),
     settingsSet: vi.fn(() => Promise.resolve()),
@@ -157,6 +161,7 @@ export function mockKudu(): Record<string, Mock> {
     onPrivacyProgress: vi.fn(() => vi.fn()),
     onComplianceProgress: vi.fn(() => vi.fn()),
     onVulnerabilityProgress: vi.fn(() => vi.fn()),
+    clipsOnPublishProgress: vi.fn(() => vi.fn()),
   }
 
   if (typeof window === 'undefined') {

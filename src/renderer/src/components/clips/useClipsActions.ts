@@ -14,6 +14,9 @@ interface ClipsActionDeps {
   setConfig: React.Dispatch<React.SetStateAction<ClipsConfig | null>>
   setFavorites: React.Dispatch<React.SetStateAction<Set<string>>>
   setRebindingId: (id: string | null) => void
+  setPublishingPath: (path: string | null) => void
+  setPublishProgress: (pct: number) => void
+  setPublishResult: (r: { link: string } | null) => void
   refreshClips: () => Promise<void>
   refreshConfig: () => Promise<void>
   refreshStatus: () => Promise<void>
@@ -33,6 +36,9 @@ export function useClipsActions(deps: ClipsActionDeps) {
     setConfig,
     setFavorites,
     setRebindingId,
+    setPublishingPath,
+    setPublishProgress,
+    setPublishResult,
     refreshClips,
     refreshConfig,
     refreshStatus,
@@ -182,6 +188,27 @@ export function useClipsActions(deps: ClipsActionDeps) {
     }
   }, [handleConfigUpdate, t])
 
+  const handlePublishClip = useCallback(
+    async (_clipName: string, clipPath: string) => {
+      setPublishingPath(clipPath)
+      setPublishProgress(0)
+      try {
+        const result = await window.dinho?.clipsPublish(clipPath)
+        if (result?.success && result.link) {
+          setPublishResult({ link: result.link })
+        } else {
+          toast.error(result?.error || t('publishFailed'))
+        }
+      } catch (err) {
+        toast.error(t('publishFailed') + (err instanceof Error ? `: ${err.message}` : ''))
+      } finally {
+        setPublishingPath(null)
+        setPublishProgress(0)
+      }
+    },
+    [setPublishingPath, setPublishProgress, setPublishResult, t],
+  )
+
   const toggleFavorite = useCallback(
     (name: string) => {
       const isFavorite = favorites.has(name)
@@ -295,6 +322,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
     handleRenameClip,
     handleConfigUpdate,
     handleSelectOutputDir,
+    handlePublishClip,
     toggleFavorite,
     addHotkey,
     removeHotkey,

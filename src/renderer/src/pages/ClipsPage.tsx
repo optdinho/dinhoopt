@@ -5,6 +5,7 @@ import { ClipEditorModal } from '@/components/clips/ClipEditorModal'
 import { ClipsConfigPanel } from '@/components/clips/ClipsConfigPanel'
 import { ClipsGrid } from '@/components/clips/ClipsGrid'
 import { ClipsStatusBar } from '@/components/clips/ClipsStatusBar'
+import PublishModal from '@/components/clips/PublishModal'
 import { useClipsState } from '@/components/clips/useClipsState'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -78,6 +79,12 @@ export function ClipsPage() {
             state.setEditingClip(null)
             state.refreshClips()
           }}
+        />
+      )}
+      {state.publishResult && (
+        <PublishModal
+          link={state.publishResult.link}
+          onClose={() => state.setPublishResult(null)}
         />
       )}
     </>

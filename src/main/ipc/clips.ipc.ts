@@ -32,6 +32,7 @@ import {
 } from '../services/clips-enhance'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
+import { uploadClipToGofile } from '../services/clips-publish'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
 import {
   getCurrentStatus,
@@ -54,6 +55,8 @@ let _micDevicesCache: MicDeviceInfo[] | null = null
 let _micDevicesCacheTs = 0
 
 let _amdDetected: boolean | null = null
+
+const _publishingPaths = new Set<string>()
 
 const VALID_ENCODER_PRESETS = new Set(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
 
@@ -837,4 +840,55 @@ export function registerClipsIpc(): void {
       }
     },
   )
+
+  ipcMain.handle(IPC.CLIPS_OPEN_EXTERNAL, (_event, url: unknown): IpcResult => {
+    if (typeof url !== 'string') {
+      return { success: false, error: 'Invalid URL' }
+    }
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'https:') {
+        getLogger().warning('clips', `Blocked non-https external URL: ${url}`)
+        return { success: false, error: 'Only https URLs are allowed' }
+      }
+      shell.openExternal(parsed.toString())
+      return { success: true, data: { opened: true } }
+    } catch {
+      getLogger().warning('clips', `Invalid external URL: ${url}`)
+      return { success: false, error: 'Invalid URL' }
+    }
+  })
+
+  ipcMain.handle(IPC.CLIPS_PUBLISH, async (_event, clipPath: unknown): Promise<IpcResult> => {
+    if (typeof clipPath !== 'string' || !clipPath) {
+      getLogger().warning('clips', 'Publish failed: Invalid clip path')
+      return { success: false, error: 'Invalid clip path' }
+    }
+    const safe = clipPathInOutputDir(clipPath)
+    if (!safe || !existsSync(safe)) {
+      getLogger().warning('clips', `Publish failed: Clip file not found '${clipPath}'`)
+      return { success: false, error: 'Clip file not found' }
+    }
+    if (_publishingPaths.has(safe)) {
+      getLogger().warning('clips', 'Publish failed: Upload already in progress')
+      return { success: false, error: 'Upload already in progress' }
+    }
+    _publishingPaths.add(safe)
+    try {
+      const result = await uploadClipToGofile(
+        safe,
+        (progress) => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send(IPC.CLIPS_PUBLISH_PROGRESS, { clipPath: safe, ...progress })
+          }
+        },
+        undefined,
+      )
+      return result.success
+        ? { success: true, data: { link: result.link } }
+        : { success: false, error: result.error ?? 'Upload failed' }
+    } finally {
+      _publishingPaths.delete(safe)
+    }
+  })
 }

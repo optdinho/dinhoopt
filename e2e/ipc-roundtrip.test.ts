@@ -163,6 +163,9 @@ const ARGS: Record<string, unknown[]> = {
   clipsSetFavorite: ['', false],
   clipsTrimClip: ['', 0, 1],
   clipsMergeClips: [[]],
+  clipsPublish: [''],
+  clipsOpenExternal: ['not a url'],
+  clipsGetEnhanceSupport: [],
 }
 
 // Scan read-only podem levar alguns segundos — timeout generoso

@@ -175,5 +175,15 @@
   "enhanceUnavailable": "AMD enhance (sr_amf/frc_amf) requires an AMD GPU with VCN — not detected on this machine.",
   "ramPressureCritical": "Low memory detected",
   "ramPressureCriticalDesc": "RAM usage is at {{pct}}%. Replay buffer was reduced to keep recording stable.",
-  "ramPressureNormal": "Memory restored to normal"
+  "ramPressureNormal": "Memory restored to normal",
+  "publish": "Publish",
+  "publishing": "Publishing...",
+  "publishDone": "Clips published",
+  "publishFailed": "Failed to publish clip",
+  "publishLinkLabel": "Public link of your clip",
+  "copy": "Copy",
+  "copied": "Copied!",
+  "copyFailed": "Failed to copy",
+  "openLink": "Open link",
+  "expiryWarning": "The link expires after 10 days without downloads and downloads are free with ads."
 }

@@ -56,6 +56,7 @@ vi.mock('lucide-react', () => {
     'Settings',
     'Star',
     'Trash2',
+    'Upload',
     'Video',
     'X',
   ]

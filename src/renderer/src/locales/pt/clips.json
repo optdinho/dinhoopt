@@ -175,5 +175,15 @@
   "enhanceUnavailable": "Aprimoramento AMD (sr_amf/frc_amf) requer GPU AMD com VCN — não detectada nesta máquina.",
   "ramPressureCritical": "Memória baixa detectada",
   "ramPressureCriticalDesc": "Uso de RAM está em {{pct}}%. O buffer de replay foi reduzido para manter a gravação estável.",
-  "ramPressureNormal": "Memória restaurada ao normal"
+  "ramPressureNormal": "Memória restaurada ao normal",
+  "publish": "Publicar",
+  "publishing": "Publicando...",
+  "publishDone": "Clipes publicados",
+  "publishFailed": "Falha ao publicar clipe",
+  "publishLinkLabel": "Link público do seu clipe",
+  "copy": "Copiar",
+  "copied": "Copiado!",
+  "copyFailed": "Falha ao copiar",
+  "openLink": "Abrir link",
+  "expiryWarning": "O link expira após 10 dias sem downloads e os downloads são gratuitos com anúncios."
 }

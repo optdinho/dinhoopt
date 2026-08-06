@@ -407,4 +407,7 @@ export const IPC = {
   CLIPS_RAM_PRESSURE: 'clips:ram-pressure',
   CLIPS_DURATIONS_READY: 'clips:durations-ready',
   CLIPS_GET_ENHANCE_SUPPORT: 'clips:get-enhance-support',
+  CLIPS_PUBLISH: 'clips:publish',
+  CLIPS_PUBLISH_PROGRESS: 'clips:publish-progress',
+  CLIPS_OPEN_EXTERNAL: 'clips:open-external',
 } as const

@@ -40,7 +40,7 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
-  shell: { openPath: vi.fn() },
+  shell: { openPath: vi.fn(), openExternal: vi.fn() },
   dialog: { showOpenDialog: vi.fn() },
   BrowserWindow: {
     getFocusedWindow: vi.fn(),
@@ -58,6 +58,11 @@ vi.mock('../services/logger.service', () => ({
     error: vi.fn(),
     warning: vi.fn(),
   }),
+}))
+
+const mockUploadClipToGofile = vi.hoisted(() => vi.fn())
+vi.mock('../services/clips-publish', () => ({
+  uploadClipToGofile: mockUploadClipToGofile,
 }))
 
 const mockIsPipeConnected = vi.hoisted(() => vi.fn().mockReturnValue(false))
@@ -165,11 +170,13 @@ describe('registerClipsIpc', () => {
       IPC.CLIPS_MERGE_CLIPS,
       IPC.CLIPS_GET_DURATIONS,
       IPC.CLIPS_RENAME_CLIP,
+      IPC.CLIPS_PUBLISH,
+      IPC.CLIPS_OPEN_EXTERNAL,
     ]
     for (const ch of expectedChannels) {
       expect(handlers.has(ch)).toBe(true)
     }
-    expect(handlers.size).toBe(25)
+    expect(handlers.size).toBe(27)
   })
 })
 
@@ -2288,5 +2295,112 @@ describe('CLIPS_GET_DURATIONS', () => {
     const keys = Object.keys(result)
     expect(keys).toHaveLength(1)
     expect(result[keys[0]!]).toBe(0)
+  })
+})
+
+describe('CLIPS_OPEN_EXTERNAL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('opens a valid https URL', async () => {
+    vi.mocked(shell.openExternal).mockResolvedValue()
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_EXTERNAL)
+    const result = (await handler({}, 'https://gofile.io/d/abc')) as { success: boolean; data: { opened: boolean } }
+    expect(shell.openExternal).toHaveBeenCalledWith('https://gofile.io/d/abc')
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects non-string URL', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_EXTERNAL)
+    const result = (await handler({}, null)) as { success: boolean; error: string }
+    expect(shell.openExternal).not.toHaveBeenCalled()
+    expect(result).toEqual({ success: false, error: 'Invalid URL' })
+  })
+
+  it('rejects non-https protocol', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_EXTERNAL)
+    const result = (await handler({}, 'http://gofile.io/d/abc')) as { success: boolean; error: string }
+    expect(shell.openExternal).not.toHaveBeenCalled()
+    expect(result).toEqual({ success: false, error: 'Only https URLs are allowed' })
+  })
+
+  it('rejects malformed URL', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_OPEN_EXTERNAL)
+    const result = (await handler({}, 'not a url')) as { success: boolean; error: string }
+    expect(shell.openExternal).not.toHaveBeenCalled()
+    expect(result).toEqual({ success: false, error: 'Invalid URL' })
+  })
+})
+
+describe('CLIPS_PUBLISH', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clipsConfig.outputDirectory = 'C:\\clips'
+  })
+
+  it('rejects non-string clip path', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const result = (await handler({}, 123)) as { success: boolean; error: string }
+    expect(result).toEqual({ success: false, error: 'Invalid clip path' })
+    expect(mockUploadClipToGofile).not.toHaveBeenCalled()
+  })
+
+  it('rejects clip outside output directory', async () => {
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const result = (await handler({}, 'C:\\Windows\\evil.mp4')) as { success: boolean; error: string }
+    expect(result).toEqual({ success: false, error: 'Clip file not found' })
+    expect(mockUploadClipToGofile).not.toHaveBeenCalled()
+  })
+
+  it('rejects nonexistent clip file', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const result = (await handler({}, 'C:\\clips\\missing.mp4')) as { success: boolean; error: string }
+    expect(result).toEqual({ success: false, error: 'Clip file not found' })
+    expect(mockUploadClipToGofile).not.toHaveBeenCalled()
+  })
+
+  it('returns link on successful upload', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockUploadClipToGofile.mockResolvedValue({ success: true, link: 'https://gofile.io/d/abc' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const result = (await handler({}, 'C:\\clips\\clip.mp4')) as { success: boolean; data: { link: string } }
+    expect(mockUploadClipToGofile).toHaveBeenCalledWith('C:\\clips\\clip.mp4', expect.any(Function), undefined)
+    expect(result).toEqual({ success: true, data: { link: 'https://gofile.io/d/abc' } })
+  })
+
+  it('returns error when upload fails', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockUploadClipToGofile.mockResolvedValue({ success: false, error: 'Connection lost during upload' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const result = (await handler({}, 'C:\\clips\\clip.mp4')) as { success: boolean; error: string }
+    expect(result).toEqual({ success: false, error: 'Connection lost during upload' })
+  })
+
+  it('blocks concurrent upload of the same clip', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    let resolveUpload: (v: { success: boolean }) => void = () => {}
+    mockUploadClipToGofile.mockImplementation(
+      () => new Promise<{ success: boolean }>((resolve) => {
+        resolveUpload = resolve
+      }),
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const first = handler({}, 'C:\\clips\\clip.mp4')
+    const second = (await handler({}, 'C:\\clips\\clip.mp4')) as { success: boolean; error: string }
+    expect(second).toEqual({ success: false, error: 'Upload already in progress' })
+    resolveUpload({ success: true })
+    await first
   })
 })
