@@ -295,7 +295,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const [startSec, setStartSec] = useState(0)
   const [endSec, setEndSec] = useState(clip?.duration || 60)
   const [trimming, setTrimming] = useState(false)
-  const [reEncode, setReEncode] = useState(false)
+  const [reEncode, setReEncode] = useState(true)
   const [enhance, setEnhance] = useState<EnhanceOption>('none')
   const [enhanceSupported, setEnhanceSupported] = useState(false)
   const [sharpness, setSharpness] = useState(0)
