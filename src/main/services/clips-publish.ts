@@ -1,7 +1,9 @@
 import { createReadStream, statSync } from 'node:fs'
 import { basename } from 'node:path'
-import { request } from 'node:https'
+import { Readable } from 'node:stream'
 import { getLogger } from './logger.service'
+
+const UPLOAD_TIMEOUT_MS = 120_000
 
 const UPLOAD_URL = 'https://upload.gofile.io/uploadfile'
 const BOUNDARY = '----DiNhoClipUpload' + Date.now().toString(36)
@@ -32,114 +34,92 @@ export function buildMultipartFooter(): string {
   return `\r\n--${BOUNDARY}--\r\n`
 }
 
-export function uploadClipToGofile(
+export async function uploadClipToGofile(
   filePath: string,
   onProgress?: (p: PublishProgress) => void,
   signal?: AbortSignal,
 ): Promise<PublishResult> {
-  return new Promise<PublishResult>((resolve) => {
-    let totalBytes: number
-    try {
-      totalBytes = statSync(filePath).size
-    } catch {
-      resolve({ success: false, error: 'File not found' })
-      return
-    }
+  let totalBytes: number
+  try {
+    totalBytes = statSync(filePath).size
+  } catch {
+    return { success: false, error: 'File not found' }
+  }
 
-    const fileName = basename(filePath)
-    const header = buildMultipartHeader(fileName)
-    const footer = buildMultipartFooter()
-    const contentLength = Buffer.byteLength(header) + totalBytes + Buffer.byteLength(footer)
+  const fileName = basename(filePath)
+  const header = Buffer.from(buildMultipartHeader(fileName), 'utf8')
+  const footer = Buffer.from(buildMultipartFooter(), 'utf8')
+  const fileStream = createReadStream(filePath)
+  let loaded = 0
+  let lastProgress = 0
 
-    const req = request(
-      UPLOAD_URL,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': `multipart/form-data; boundary=${BOUNDARY}`,
-          'Content-Length': String(contentLength),
-          'User-Agent': 'Mozilla/5.0',
-        },
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('error', (err: NodeJS.ErrnoException) => {
-          const message = err.code === 'ECONNRESET' ? 'Connection lost during upload' : err.message
-          getLogger().error('ClipPublish', `gofile response error: ${err.message}`)
-          resolve({ success: false, error: message })
-        })
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.on('end', () => {
-          const body = Buffer.concat(chunks).toString('utf8')
-          if (res.statusCode !== 200) {
-            getLogger().warning(
-              'ClipPublish',
-              `gofile upload failed (HTTP ${res.statusCode}): ${body.slice(0, 200)}`,
-            )
-            resolve({ success: false, error: `Upload failed (HTTP ${res.statusCode})` })
-            return
-          }
-          try {
-            const parsed = JSON.parse(body) as { status?: string; data?: { downloadPage?: string } }
-            const link = parsed.data?.downloadPage
-            if (parsed.status === 'ok' && link) {
-              resolve({ success: true, link })
-            } else {
-              getLogger().warning('ClipPublish', `gofile upload unexpected response: ${body.slice(0, 200)}`)
-              resolve({ success: false, error: 'Upload response was invalid' })
-            }
-          } catch {
-            getLogger().warning('ClipPublish', `gofile upload returned non-JSON: ${body.slice(0, 200)}`)
-            resolve({ success: false, error: 'Upload response was invalid' })
-          }
-        })
-      },
-    )
-
-    req.setTimeout(120_000, () => {
-      req.destroy(new Error('Upload timed out'))
-    })
-
-    req.on('error', (err: NodeJS.ErrnoException) => {
-      const message = err.code === 'ECONNRESET' ? 'Connection lost during upload' : err.message
-      getLogger().error('ClipPublish', `gofile upload error: ${err.message}`)
-      resolve({ success: false, error: message })
-    })
-
-    if (signal) {
-      const abort = (): void => {
-        req.destroy(new Error('Aborted'))
-      }
-      if (signal.aborted) {
-        abort()
-      } else {
-        signal.addEventListener('abort', abort, { once: true })
-      }
-    }
-
-    req.write(header)
-
-    const stream = createReadStream(filePath)
-    let loaded = 0
-    let lastProgress = 0
-    stream.on('data', (chunk: Buffer) => {
-      loaded += chunk.length
+  async function* body(): AsyncGenerator<Uint8Array> {
+    yield header
+    for await (const chunk of fileStream) {
+      const buf = chunk as Buffer
+      loaded += buf.length
       if (onProgress && loaded - lastProgress >= totalBytes / 100) {
         lastProgress = loaded
         onProgress({ loaded, total: totalBytes, percent: Math.min(100, (loaded / totalBytes) * 100) })
       }
-    })
-    stream.on('error', (err: NodeJS.ErrnoException) => {
-      req.destroy(err)
-      resolve({ success: false, error: err.message })
-    })
-    stream.on('end', () => {
-      if (onProgress) {
-        onProgress({ loaded: totalBytes, total: totalBytes, percent: 100 })
-      }
-      req.end(footer)
-    })
+      yield buf
+    }
+    if (onProgress && lastProgress < totalBytes) {
+      onProgress({ loaded: totalBytes, total: totalBytes, percent: 100 })
+    }
+    yield footer
+  }
 
-    stream.pipe(req, { end: false })
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error('Upload timed out')), UPLOAD_TIMEOUT_MS)
+  const onExternalAbort = (): void => controller.abort(new Error('Aborted'))
+  if (signal?.aborted) {
+    controller.abort(new Error('Aborted'))
+  } else {
+    signal?.addEventListener('abort', onExternalAbort, { once: true })
+  }
+
+  try {
+    const res = await fetch(UPLOAD_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${BOUNDARY}`,
+        'User-Agent': 'Mozilla/5.0',
+      },
+      body: Readable.toWeb(Readable.from(body())) as unknown as BodyInit,
+      duplex: 'half',
+      signal: controller.signal,
+    } as unknown as RequestInit)
+    const text = await res.text()
+    if (res.status !== 200) {
+      getLogger().warning('ClipPublish', `gofile upload failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+      return { success: false, error: `Upload failed (HTTP ${res.status})` }
+    }
+    try {
+      const parsed = JSON.parse(text) as { status?: string; data?: { downloadPage?: string } }
+      const link = parsed.data?.downloadPage
+      if (parsed.status === 'ok' && link) {
+        return { success: true, link }
+      }
+      getLogger().warning('ClipPublish', `gofile upload unexpected response: ${text.slice(0, 200)}`)
+      return { success: false, error: 'Upload response was invalid' }
+    } catch {
+      getLogger().warning('ClipPublish', `gofile upload returned non-JSON: ${text.slice(0, 200)}`)
+      return { success: false, error: 'Upload response was invalid' }
+    }
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException
+    const message =
+      e.message === 'Upload timed out' || e.message === 'Aborted'
+        ? e.message
+        : e.code === 'ECONNRESET'
+          ? 'Connection lost during upload'
+          : e.message
+    getLogger().error('ClipPublish', `gofile upload error: ${e.message}`)
+    return { success: false, error: message }
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onExternalAbort)
+    fileStream.destroy()
+  }
 }
