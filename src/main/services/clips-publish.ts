@@ -3,7 +3,8 @@ import { basename } from 'node:path'
 import { Readable } from 'node:stream'
 import { getLogger } from './logger.service'
 
-const UPLOAD_TIMEOUT_MS = 120_000
+const UPLOAD_TIMEOUT_MS = 600_000
+const UPLOAD_IDLE_TIMEOUT_MS = 60_000
 
 const UPLOAD_URL = 'https://upload.gofile.io/uploadfile'
 const BOUNDARY = '----DiNhoClipUpload' + Date.now().toString(36)
@@ -58,6 +59,7 @@ export async function uploadClipToGofile(
     for await (const chunk of fileStream) {
       const buf = chunk as Buffer
       loaded += buf.length
+      armIdle()
       if (onProgress && loaded - lastProgress >= totalBytes / 100) {
         lastProgress = loaded
         onProgress({ loaded, total: totalBytes, percent: Math.min(100, (loaded / totalBytes) * 100) })
@@ -71,7 +73,14 @@ export async function uploadClipToGofile(
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new Error('Upload timed out')), UPLOAD_TIMEOUT_MS)
+  const abort = (): void => controller.abort(new Error('Upload timed out'))
+  const absoluteTimer = setTimeout(abort, UPLOAD_TIMEOUT_MS)
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  const armIdle = (): void => {
+    clearTimeout(idleTimer)
+    idleTimer = setTimeout(abort, UPLOAD_IDLE_TIMEOUT_MS)
+  }
+  armIdle()
   const onExternalAbort = (): void => controller.abort(new Error('Aborted'))
   if (signal?.aborted) {
     controller.abort(new Error('Aborted'))
@@ -118,7 +127,8 @@ export async function uploadClipToGofile(
     getLogger().error('ClipPublish', `gofile upload error: ${e.message}`)
     return { success: false, error: message }
   } finally {
-    clearTimeout(timer)
+    clearTimeout(absoluteTimer)
+    clearTimeout(idleTimer)
     signal?.removeEventListener('abort', onExternalAbort)
     fileStream.destroy()
   }

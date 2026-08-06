@@ -57,6 +57,51 @@ function mockFetchReject(error: unknown): void {
   )
 }
 
+function mockFetchAbortAware(): ReturnType<typeof vi.fn> {
+  const fn = vi.fn(
+    (_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal?.aborted) {
+          reject(signal.reason)
+          return
+        }
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }),
+  )
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
+function mockFetchSlowAbortAware(response: Response, perChunkMs: number): ReturnType<typeof vi.fn> {
+  const fn = vi.fn(
+    (_url: string, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        const signal = init?.signal
+        const onAbort = () => reject(signal?.reason)
+        if (signal?.aborted) {
+          reject(signal.reason)
+          return
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
+        void (async () => {
+          const body = init?.body as AsyncIterable<Uint8Array> | undefined
+          const footer = buildMultipartFooter()
+          if (body) {
+            for await (const _chunk of body) {
+              if (Buffer.compare(Buffer.from(_chunk), Buffer.from(footer)) === 0) break
+              await new Promise((r) => setTimeout(r, perChunkMs))
+            }
+          }
+          signal?.removeEventListener('abort', onAbort)
+          resolve(response)
+        })()
+      }),
+  )
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
 function mockFetchRespond(response: Response): ReturnType<typeof vi.fn> {
   const fn = vi.fn(async (_url: string, init?: RequestInit) => {
     const body = init?.body as AsyncIterable<Uint8Array> | undefined
@@ -159,13 +204,40 @@ describe('uploadClipToGofile', () => {
     expect(result).toEqual({ success: false, error: 'ENOTFOUND' })
   })
 
-  it('resolves a timeout after 120s', async () => {
+  it('resolves a timeout at the absolute 600s limit', async () => {
     vi.useFakeTimers()
-    mockFetchReject(new Error('Upload timed out'))
+    mockFetchAbortAware()
     vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
 
     const promise = uploadClipToGofile('C:\\clips\\clip.mp4')
-    await vi.advanceTimersByTimeAsync(120_000)
+    await vi.advanceTimersByTimeAsync(600_000)
+    const result = await promise
+    expect(result).toEqual({ success: false, error: 'Upload timed out' })
+  })
+
+  it('does not time out at 120s while upload keeps progressing', async () => {
+    vi.useFakeTimers()
+    mockFetchSlowAbortAware(
+      makeFetchResponse(200, JSON.stringify({ status: 'ok', data: { downloadPage: 'https://gofile.io/d/abc' } })),
+      50_000,
+    )
+    vi.mocked(createReadStream).mockReturnValue(
+      makeAsyncChunks([Buffer.alloc(250), Buffer.alloc(250), Buffer.alloc(250), Buffer.alloc(250)]) as never,
+    )
+
+    const promise = uploadClipToGofile('C:\\clips\\clip.mp4')
+    await vi.advanceTimersByTimeAsync(260_000)
+    const result = await promise
+    expect(result).toEqual({ success: true, link: 'https://gofile.io/d/abc' })
+  })
+
+  it('aborts after 60s of idle upload with no progress', async () => {
+    vi.useFakeTimers()
+    mockFetchAbortAware()
+    vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+
+    const promise = uploadClipToGofile('C:\\clips\\clip.mp4')
+    await vi.advanceTimersByTimeAsync(60_000)
     const result = await promise
     expect(result).toEqual({ success: false, error: 'Upload timed out' })
   })
