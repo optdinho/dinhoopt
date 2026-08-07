@@ -194,8 +194,9 @@ export function useClipsActions(deps: ClipsActionDeps) {
       setPublishProgress(0)
       try {
         const result = await window.dinho?.clipsPublish(clipPath)
-        if (result?.success && result.link) {
-          setPublishResult({ link: result.link })
+        const publishLink = result?.data?.link
+        if (result?.success && publishLink) {
+          setPublishResult({ link: publishLink })
         } else {
           toast.error(result?.error || t('publishFailed'))
         }

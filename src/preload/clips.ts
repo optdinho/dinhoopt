@@ -57,7 +57,7 @@ export const clipsMethods = {
     ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode, enhance, sharpness),
   clipsMergeClips: (clipPaths: string[], enhance?: EnhanceOption, sharpness?: number): Promise<ClipMergeResult> =>
     ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths, enhance, sharpness),
-  clipsPublish: (clipPath: string): Promise<{ success: boolean; link?: string; error?: string }> =>
+  clipsPublish: (clipPath: string): Promise<{ success: boolean; data?: { link?: string }; error?: string }> =>
     ipcRenderer.invoke(IPC.CLIPS_PUBLISH, clipPath),
   clipsOpenExternal: (url: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.CLIPS_OPEN_EXTERNAL, url),

@@ -28,6 +28,7 @@ function mockDinho(): Dinho {
     clipsOpen: vi.fn(),
     clipsSelectOutputDir: vi.fn(),
     clipsSetFavorite: vi.fn(),
+    clipsPublish: vi.fn(),
   }
   window.dinho = base as never
   return base
@@ -452,6 +453,76 @@ describe('useClipsActions', () => {
       })
 
       expect(toast.error).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('handlePublishClip', () => {
+    function publishDeps(overrides: Record<string, unknown> = {}) {
+      return getDeps(
+        makeDeps({
+          setPublishingPath: vi.fn(),
+          setPublishProgress: vi.fn(),
+          setPublishResult: vi.fn(),
+          ...overrides,
+        }),
+      )
+    }
+
+    it('sets the publish result from data.link on success', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockResolvedValue({ success: true, data: { link: 'https://gofile.io/d/abc' } })
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(dinho.clipsPublish).toHaveBeenCalledWith('C:\\clips\\x.mp4')
+      expect(deps.setPublishResult).toHaveBeenCalledWith({ link: 'https://gofile.io/d/abc' })
+      expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('shows engine error when upload fails', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockResolvedValue({ success: false, error: 'Connection lost during upload' })
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('Connection lost during upload')
+      expect(deps.setPublishResult).not.toHaveBeenCalled()
+    })
+
+    it('falls back to generic toast when neither success link nor error is present', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockResolvedValue({ success: false })
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('publishFailed')
+    })
+
+    it('surfaces unexpected errors', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockRejectedValue(new Error('boom'))
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('publishFailed: boom')
+      expect(deps.setPublishingPath).toHaveBeenLastCalledWith(null)
+      expect(deps.setPublishProgress).toHaveBeenLastCalledWith(0)
     })
   })
 
