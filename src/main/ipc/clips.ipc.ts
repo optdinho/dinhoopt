@@ -57,6 +57,7 @@ let _micDevicesCacheTs = 0
 let _amdDetected: boolean | null = null
 
 const _publishingPaths = new Set<string>()
+const _publishingControllers = new Map<string, AbortController>()
 
 const VALID_ENCODER_PRESETS = new Set(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
 
@@ -418,7 +419,7 @@ export function registerClipsIpc(): void {
       if (typeof c.audioSampleRate === 'number') C.audioSampleRate = c.audioSampleRate
       if (typeof c.autoCleanupEnabled === 'boolean') C.autoCleanupEnabled = c.autoCleanupEnabled
       if (typeof c.autoCleanupThresholdGB === 'number')
-        C.autoCleanupThresholdGB = Math.max(1, Math.min(50, c.autoCleanupThresholdGB))
+        C.autoCleanupThresholdGB = Math.max(1, Math.min(100, c.autoCleanupThresholdGB))
       if (typeof c.adaptiveQuality === 'boolean') C.adaptiveQuality = c.adaptiveQuality
     }
     persistClipsConfig()
@@ -747,8 +748,11 @@ export function registerClipsIpc(): void {
       }
       const outDir = getDefaultOutputDir()
       if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
+      const now = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
       const concatFile = join(outDir, `concat_${Date.now()}.txt`)
-      const outPath = join(outDir, `merged_${Date.now()}.mp4`)
+      const outPath = join(outDir, `DiNho Clipes ${ts}.mp4`)
       const enhanceOption = parseEnhanceOption(enhance)
       let enhanceVf: string | null = null
       if (enhanceOption !== 'none') {
@@ -873,7 +877,9 @@ export function registerClipsIpc(): void {
       getLogger().warning('clips', 'Publish failed: Upload already in progress')
       return { success: false, error: 'Upload already in progress' }
     }
+    const controller = new AbortController()
     _publishingPaths.add(safe)
+    _publishingControllers.set(safe, controller)
     try {
       const result = await uploadClipToGofile(
         safe,
@@ -882,13 +888,32 @@ export function registerClipsIpc(): void {
             win.webContents.send(IPC.CLIPS_PUBLISH_PROGRESS, { clipPath: safe, ...progress })
           }
         },
-        undefined,
+        controller.signal,
       )
       return result.success
         ? { success: true, data: { link: result.link } }
-        : { success: false, error: result.error ?? 'Upload failed' }
+        : {
+            success: false,
+            error: result.error ?? 'Upload failed',
+            code: result.cancelled ? 'ABORTED' : undefined,
+          }
     } finally {
       _publishingPaths.delete(safe)
+      _publishingControllers.delete(safe)
     }
+  })
+
+  ipcMain.handle(IPC.CLIPS_PUBLISH_CANCEL, (_event, clipPath: unknown): IpcResult => {
+    if (typeof clipPath !== 'string' || !clipPath) {
+      return { success: false, error: 'Invalid clip path' }
+    }
+    const safe = clipPathInOutputDir(clipPath)
+    const controller = safe ? _publishingControllers.get(safe) : undefined
+    if (!safe || !controller) {
+      getLogger().warning('clips', 'Publish cancel failed: no upload in progress')
+      return { success: false, error: 'No upload in progress' }
+    }
+    controller.abort(new Error('Aborted'))
+    return { success: true }
   })
 }

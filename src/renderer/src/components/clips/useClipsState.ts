@@ -59,10 +59,13 @@ export interface ClipsState {
   handleOpenClip: (path: string) => Promise<void>
   handleRenameClip: (oldName: string, newName: string) => Promise<void>
   handlePublishClip: (clipName: string, clipPath: string) => Promise<void>
+  handleCancelPublish: (clipPath: string) => Promise<void>
   publishingPath: string | null
   publishProgress: number
   publishResult: { link: string } | null
   setPublishResult: (r: { link: string } | null) => void
+  publishedLinks: Record<string, string>
+  setPublishedLink: (path: string, link: string) => void
   handleConfigUpdate: (partial: Partial<ClipsConfig>) => Promise<void>
   handleSelectOutputDir: () => Promise<void>
   toggleFavorite: (name: string) => void
@@ -120,6 +123,14 @@ export function useClipsState(): ClipsState {
   const [publishingPath, setPublishingPath] = useState<string | null>(null)
   const [publishProgress, setPublishProgress] = useState(0)
   const [publishResult, setPublishResult] = useState<{ link: string } | null>(null)
+  const [publishedLinks, setPublishedLinks] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('clips-published')
+      return saved ? (JSON.parse(saved) as Record<string, string>) : {}
+    } catch {
+      return {}
+    }
+  })
 
   const tooltipContent: Record<string, string> = useMemo(
     () => ({
@@ -157,6 +168,11 @@ export function useClipsState(): ClipsState {
   useEffect(() => {
     localStorage.setItem('clips-favorites', JSON.stringify([...favorites]))
   }, [favorites])
+
+  // Persist published links to localStorage
+  useEffect(() => {
+    localStorage.setItem('clips-published', JSON.stringify(publishedLinks))
+  }, [publishedLinks])
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -341,6 +357,10 @@ export function useClipsState(): ClipsState {
 
   // ── Actions (delegated to useClipsActions) ───────────────
 
+  const setPublishedLink = useCallback((path: string, link: string) => {
+    setPublishedLinks((prev) => (prev[path] === link ? prev : { ...prev, [path]: link }))
+  }, [])
+
   const actions = useClipsActions({
     config,
     status,
@@ -355,6 +375,7 @@ export function useClipsState(): ClipsState {
     setPublishingPath,
     setPublishProgress,
     setPublishResult,
+    setPublishedLink,
     refreshClips,
     refreshConfig,
     refreshStatus,
@@ -464,10 +485,13 @@ export function useClipsState(): ClipsState {
     handleOpenClip: actions.handleOpenClip,
     handleRenameClip: actions.handleRenameClip,
     handlePublishClip: actions.handlePublishClip,
+    handleCancelPublish: actions.handleCancelPublish,
     publishingPath,
     publishProgress,
     publishResult,
     setPublishResult,
+    publishedLinks,
+    setPublishedLink,
     handleConfigUpdate: actions.handleConfigUpdate,
     handleSelectOutputDir: actions.handleSelectOutputDir,
     toggleFavorite: actions.toggleFavorite,

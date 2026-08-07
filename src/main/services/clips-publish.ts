@@ -19,6 +19,7 @@ export interface PublishResult {
   success: boolean
   link?: string
   error?: string
+  cancelled?: boolean
 }
 
 export function buildMultipartHeader(fileName: string): string {
@@ -124,6 +125,10 @@ export async function uploadClipToGofile(
         : e.code === 'ECONNRESET'
           ? 'Connection lost during upload'
           : e.message
+    if (message === 'Aborted') {
+      getLogger().info('ClipPublish', `gofile upload cancelled for '${basename(filePath)}'`)
+      return { success: false, cancelled: true, error: 'Upload cancelled' }
+    }
     getLogger().error('ClipPublish', `gofile upload error: ${e.message}`)
     return { success: false, error: message }
   } finally {

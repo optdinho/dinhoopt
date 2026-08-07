@@ -3912,3 +3912,18 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - `src/renderer/src/components/clips/ClipEditorModal.tsx`: `SharpnessSlider` (novo), estado `sharpness`, chamadas trim/merge com o valor, sliders nos blocos trim/merge
 - `AGENTS.md`: resumo de sessao
+
+## Session Summary (2026-08-07 — Link publicado: cache localStorage + testes)
+
+### Done
+
+- **Link publicado no card do clip (tarefa da playlist completa)**: `useClipsState.ts` — interface `ClipsState` ganhou `publishedLinks: Record<string,string>` + `setPublishedLink(path, link)`; lazy init de `localStorage('clips-published')` (try/catch); useEffect persiste o mapa; `setPublishedLink` useCallback com short-circuit (evita re-render se igual). `useClipsActions.ts` — chama `setPublishedLink(clipPath, publishLink)` no sucesso do publish (junto de `setPublishResult`). `ClipsGrid.tsx` — botão ciano (`#06b6d4`, ícone Link, label `t('openLink')`) no card quando `publishedLinks[clip.path]`; clique abre `window.dinho?.clipsOpenExternal(url)` (preload `src/preload/clips.ts` L66-67 → main `clips.ipc.ts` L848-864 valida `https:` + `shell.openExternal` — já existiam, sem mudança). Locales: `openLink` em en/pt/es `clips.json`.
+
+- **Testes**: `useClipsActions.test.tsx` — `setPublishedLink: vi.fn()` no `makeDeps` e `publishDeps`; novo teste "does not cache the link when the publish response has no link"; asserção de cache no teste de sucesso. **56/56 pass**.
+- **Bug pré-existente corrigido**: `clips-publish.test.ts:252` esperava `{ success: false, error: 'Aborted' }`, mas o código (`clips-publish.ts:128-130`) mapeia abort para `{ success: false, cancelled: true, error: 'Upload cancelled' }` — asserção atualizada. **15/15 pass**.
+- **Suite completa**: **6893 passed | 1 skipped | 0 failed** (npx vitest run --pool=forks). Build OK (1s). Biome limpo nos arquivos tocados (auto-fix em ClipsGrid.tsx).
+- Nenhuma mudança em engine C# — sem publish/copy-engine/deploy necessário.
+
+### Next Steps
+
+- Validar em campo no app instalado: publicar um clipe → botão de link ciano aparece no card → clique abre o navegador; reiniciar o app → link persiste (localStorage `clips-published`).

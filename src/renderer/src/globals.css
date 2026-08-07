@@ -321,9 +321,10 @@
   *.animate-scale-in,
   *.animate-shimmer,
   *.animate-glow-pulse,
-  *.animate-stagger-fade,
-  *.animate-spin {
+  *.animate-stagger-fade {
     /* biome-ignore lint/complexity/noImportantStyles: required to override Tailwind animation utilities for reduced motion */
     animation: none !important;
   }
+  /* Spinners (animate-spin) são indicadores funcionais de progresso — sem animação
+     parecem quebrados, então permanecem ativos mesmo com reduced motion no SO. */
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { TipBadge } from './ClipsConfigQuality'
 import { CollapsibleMini, ToggleItem, TogglePill, VK_MAP, VolumeSlider } from './clips-utils'
 import type { ClipsState } from './useClipsState'
@@ -225,24 +226,7 @@ export function AudioSection({
             onToggle={() => handleConfigUpdate({ autoCleanupEnabled: !(config.autoCleanupEnabled ?? true) })}
           />
         </div>
-        {(config.autoCleanupEnabled ?? true) && (
-          <div className="flex gap-1">
-            {[1, 2, 5, 10, 20, 50].map((gb) => (
-              <button
-                key={gb}
-                type="button"
-                onClick={() => handleConfigUpdate({ autoCleanupThresholdGB: gb })}
-                className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
-                style={{
-                  background: (config.autoCleanupThresholdGB ?? 20) === gb ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
-                  color: (config.autoCleanupThresholdGB ?? 20) === gb ? '#fff' : 'var(--text-primary)',
-                }}
-              >
-                {gb} GB
-              </button>
-            ))}
-          </div>
-        )}
+        {(config.autoCleanupEnabled ?? true) && <AutoCleanupThresholdPicker value={config.autoCleanupThresholdGB ?? 20} onChange={(gb) => handleConfigUpdate({ autoCleanupThresholdGB: gb })} />}
       </div>
 
       {/* Microphone Device Selector */}
@@ -273,6 +257,64 @@ export function AudioSection({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function AutoCleanupThresholdPicker({ value, onChange }: { value: number; onChange: (gb: number) => void }) {
+  const presets = [10, 20, 50]
+  const isPreset = presets.includes(value)
+  const [draft, setDraft] = useState(String(value))
+
+  const commit = (raw: string) => {
+    const n = Number(raw)
+    if (Number.isNaN(n)) {
+      setDraft(String(value))
+      return
+    }
+    const clamped = Math.max(1, Math.min(100, Math.round(n)))
+    setDraft(String(clamped))
+    if (clamped !== value) onChange(clamped)
+  }
+
+  return (
+    <div className="flex gap-1">
+      {presets.map((gb) => (
+        <button
+          key={gb}
+          type="button"
+          onClick={() => {
+            setDraft(String(gb))
+            onChange(gb)
+          }}
+          className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
+          style={{
+            background: value === gb ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
+            color: value === gb ? '#fff' : 'var(--text-primary)',
+          }}
+        >
+          {gb} GB
+        </button>
+      ))}
+      <input
+        type="number"
+        min={1}
+        max={100}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            commit((e.target as HTMLInputElement).value)
+            ;(e.target as HTMLInputElement).blur()
+          }
+        }}
+        className="w-16 rounded-lg border bg-transparent px-1.5 py-1 text-center text-[10px] font-medium outline-none"
+        style={{
+          borderColor: !isPreset ? 'var(--accent)' : 'var(--border-medium)',
+          color: 'var(--text-primary)',
+        }}
+      />
     </div>
   )
 }

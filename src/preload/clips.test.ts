@@ -58,6 +58,7 @@ describe('clipsMethods invoke wrappers', () => {
     { name: 'clipsSetFavorite', args: ['clip.mp4', true], channel: IPC.CLIPS_SET_FAVORITE },
     { name: 'clipsTrimClip', args: ['clip.mp4', 10, 20, true, 'none', 0.5], channel: IPC.CLIPS_TRIM_CLIP },
     { name: 'clipsMergeClips', args: [['a.mp4', 'b.mp4'], 'none', 0.5], channel: IPC.CLIPS_MERGE_CLIPS },
+    { name: 'clipsPublishCancel', args: ['C:\\clips\\clip.mp4'], channel: IPC.CLIPS_PUBLISH_CANCEL },
   ]
 
   for (const { name, args, channel } of invokeCases) {

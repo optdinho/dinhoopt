@@ -29,6 +29,7 @@ function mockDinho(): Dinho {
     clipsSelectOutputDir: vi.fn(),
     clipsSetFavorite: vi.fn(),
     clipsPublish: vi.fn(),
+    clipsPublishCancel: vi.fn(),
   }
   window.dinho = base as never
   return base
@@ -50,6 +51,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     setConfig: vi.fn(),
     setFavorites: vi.fn(),
     setRebindingId: vi.fn(),
+    setPublishedLink: vi.fn(),
     refreshClips: vi.fn().mockResolvedValue(undefined),
     refreshConfig: vi.fn().mockResolvedValue(undefined),
     refreshStatus: vi.fn().mockResolvedValue(undefined),
@@ -471,6 +473,7 @@ describe('useClipsActions', () => {
           setPublishingPath: vi.fn(),
           setPublishProgress: vi.fn(),
           setPublishResult: vi.fn(),
+          setPublishedLink: vi.fn(),
           ...overrides,
         }),
       )
@@ -488,7 +491,21 @@ describe('useClipsActions', () => {
 
       expect(dinho.clipsPublish).toHaveBeenCalledWith('C:\\clips\\x.mp4')
       expect(deps.setPublishResult).toHaveBeenCalledWith({ link: 'https://gofile.io/d/abc' })
+      expect(deps.setPublishedLink).toHaveBeenCalledWith('C:\\clips\\x.mp4', 'https://gofile.io/d/abc')
       expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('does not cache the link when the publish response has no link', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockResolvedValue({ success: true })
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(deps.setPublishedLink).not.toHaveBeenCalled()
     })
 
     it('shows engine error when upload fails', async () => {
@@ -531,6 +548,81 @@ describe('useClipsActions', () => {
       expect(toast.error).toHaveBeenCalledWith('publishFailed: boom')
       expect(deps.setPublishingPath).toHaveBeenLastCalledWith(null)
       expect(deps.setPublishProgress).toHaveBeenLastCalledWith(0)
+    })
+
+    it('shows an info toast when the upload is cancelled', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockResolvedValue({ success: false, code: 'ABORTED' })
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(toast.info).toHaveBeenCalledWith('publishCancelled')
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(deps.setPublishResult).not.toHaveBeenCalled()
+    })
+
+    it('resets publishing state after cancellation', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublish.mockResolvedValue({ success: false, code: 'ABORTED' })
+      const deps = publishDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handlePublishClip('x.mp4', 'C:\\clips\\x.mp4')
+      })
+
+      expect(deps.setPublishingPath).toHaveBeenLastCalledWith(null)
+      expect(deps.setPublishProgress).toHaveBeenLastCalledWith(0)
+    })
+  })
+
+  describe('handleCancelPublish', () => {
+    function cancelDeps(overrides: Record<string, unknown> = {}) {
+      return getDeps(makeDeps(overrides))
+    }
+
+    it('requests cancellation for the given clip path', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublishCancel.mockResolvedValue({ success: true })
+      const deps = cancelDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleCancelPublish('C:\\clips\\x.mp4')
+      })
+
+      expect(dinho.clipsPublishCancel).toHaveBeenCalledWith('C:\\clips\\x.mp4')
+      expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('shows an error toast when cancellation fails', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublishCancel.mockResolvedValue({ success: false, error: 'No upload in progress' })
+      const deps = cancelDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleCancelPublish('C:\\clips\\x.mp4')
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('No upload in progress')
+    })
+
+    it('falls back to generic toast when cancellation fails without an error', async () => {
+      const dinho = mockDinho()
+      dinho.clipsPublishCancel.mockResolvedValue({ success: false })
+      const deps = cancelDeps()
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleCancelPublish('C:\\clips\\x.mp4')
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('publishCancelFailed')
     })
   })
 

@@ -1,5 +1,18 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Clapperboard, Combine, Film, FolderOpen, Pencil, RefreshCw, Search, Star, Trash2, Upload } from 'lucide-react'
+import {
+  Clapperboard,
+  Combine,
+  Film,
+  FolderOpen,
+  Link,
+  Pencil,
+  RefreshCw,
+  Search,
+  Star,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react'
 import type { ClipsState } from './useClipsState'
 
 export function ClipsGrid({
@@ -21,8 +34,10 @@ export function ClipsGrid({
   setEditingClip,
   setRenameTarget,
   handlePublishClip,
+  handleCancelPublish,
   publishingPath,
   publishProgress,
+  publishedLinks,
   handleDeleteClip,
   toggleFavorite,
   formatSize,
@@ -233,7 +248,10 @@ export function ClipsGrid({
                 </div>
 
                 {/* Bottom actions */}
-                <div className="flex flex-wrap items-center gap-x-0.5 border-t px-1.5 py-1" style={{ borderColor: 'var(--border-subtle)' }}>
+                <div
+                  className="flex flex-wrap items-center gap-x-0.5 border-t px-1.5 py-1"
+                  style={{ borderColor: 'var(--border-subtle)' }}
+                >
                   <button
                     type="button"
                     onClick={() => handleOpenClip(clip.path)}
@@ -252,16 +270,42 @@ export function ClipsGrid({
                     <Film className="h-3.5 w-3.5" />
                     {t('edit')}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePublishClip(clip.name, clip.path)}
-                    disabled={publishingPath !== null}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ color: publishingPath === clip.path ? '#06b6d4' : 'var(--text-dim)' }}
-                  >
-                    <Upload className={`h-3.5 w-3.5 ${publishingPath === clip.path ? 'animate-pulse' : ''}`} />
-                    {publishingPath === clip.path ? `${Math.round(publishProgress)}%` : t('publish')}
-                  </button>
+                  {publishingPath === clip.path ? (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelPublish(clip.path)}
+                      title={t('cancelPublish')}
+                      aria-label={t('cancelPublish')}
+                      className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-red-500/15"
+                      style={{ color: '#ef4444' }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      {t('cancelPublish')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handlePublishClip(clip.name, clip.path)}
+                      disabled={publishingPath !== null}
+                      className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ color: 'var(--text-dim)' }}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {t('publish')}
+                    </button>
+                  )}
+                  {publishedLinks[clip.path] && (
+                    <button
+                      type="button"
+                      onClick={() => window.dinho?.clipsOpenExternal(publishedLinks[clip.path])}
+                      title={t('openLink')}
+                      aria-label={t('openLink')}
+                      className="rounded-md p-1.5 transition-colors hover:bg-cyan-500/15"
+                      style={{ color: '#06b6d4' }}
+                    >
+                      <Link className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setRenameTarget(clip.name)}

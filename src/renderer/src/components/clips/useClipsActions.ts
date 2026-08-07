@@ -17,6 +17,7 @@ interface ClipsActionDeps {
   setPublishingPath: (path: string | null) => void
   setPublishProgress: (pct: number) => void
   setPublishResult: (r: { link: string } | null) => void
+  setPublishedLink: (path: string, link: string) => void
   refreshClips: () => Promise<void>
   refreshConfig: () => Promise<void>
   refreshStatus: () => Promise<void>
@@ -39,6 +40,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
     setPublishingPath,
     setPublishProgress,
     setPublishResult,
+    setPublishedLink,
     refreshClips,
     refreshConfig,
     refreshStatus,
@@ -197,6 +199,9 @@ export function useClipsActions(deps: ClipsActionDeps) {
         const publishLink = result?.data?.link
         if (result?.success && publishLink) {
           setPublishResult({ link: publishLink })
+          setPublishedLink(clipPath, publishLink)
+        } else if (result?.code === 'ABORTED') {
+          toast.info(t('publishCancelled'))
         } else {
           toast.error(result?.error || t('publishFailed'))
         }
@@ -207,7 +212,17 @@ export function useClipsActions(deps: ClipsActionDeps) {
         setPublishProgress(0)
       }
     },
-    [setPublishingPath, setPublishProgress, setPublishResult, t],
+    [setPublishingPath, setPublishProgress, setPublishResult, setPublishedLink, t],
+  )
+
+  const handleCancelPublish = useCallback(
+    async (clipPath: string) => {
+      const result = await window.dinho?.clipsPublishCancel(clipPath)
+      if (!result?.success) {
+        toast.error(result?.error || t('publishCancelFailed'))
+      }
+    },
+    [t],
   )
 
   const toggleFavorite = useCallback(
@@ -324,6 +339,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
     handleConfigUpdate,
     handleSelectOutputDir,
     handlePublishClip,
+    handleCancelPublish,
     toggleFavorite,
     addHotkey,
     removeHotkey,

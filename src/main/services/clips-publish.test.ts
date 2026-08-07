@@ -249,7 +249,7 @@ describe('uploadClipToGofile', () => {
     const controller = new AbortController()
     controller.abort()
     const result = await uploadClipToGofile('C:\\clips\\clip.mp4', undefined, controller.signal)
-    expect(result).toEqual({ success: false, error: 'Aborted' })
+    expect(result).toEqual({ success: false, cancelled: true, error: 'Upload cancelled' })
   })
 
   it('emits progress at 1% thresholds and 100% on end', async () => {

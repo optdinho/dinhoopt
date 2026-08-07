@@ -171,12 +171,13 @@ describe('registerClipsIpc', () => {
       IPC.CLIPS_GET_DURATIONS,
       IPC.CLIPS_RENAME_CLIP,
       IPC.CLIPS_PUBLISH,
+      IPC.CLIPS_PUBLISH_CANCEL,
       IPC.CLIPS_OPEN_EXTERNAL,
     ]
     for (const ch of expectedChannels) {
       expect(handlers.has(ch)).toBe(true)
     }
-    expect(handlers.size).toBe(27)
+    expect(handlers.size).toBe(28)
   })
 })
 
@@ -2374,7 +2375,7 @@ describe('CLIPS_PUBLISH', () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
     const result = (await handler({}, 'C:\\clips\\clip.mp4')) as { success: boolean; data: { link: string } }
-    expect(mockUploadClipToGofile).toHaveBeenCalledWith('C:\\clips\\clip.mp4', expect.any(Function), undefined)
+    expect(mockUploadClipToGofile).toHaveBeenCalledWith('C:\\clips\\clip.mp4', expect.any(Function), expect.any(AbortSignal))
     expect(result).toEqual({ success: true, data: { link: 'https://gofile.io/d/abc' } })
   })
 
@@ -2402,5 +2403,61 @@ describe('CLIPS_PUBLISH', () => {
     expect(second).toEqual({ success: false, error: 'Upload already in progress' })
     resolveUpload({ success: true })
     await first
+  })
+
+  it('returns ABORTED code when upload is cancelled', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    mockUploadClipToGofile.mockResolvedValue({ success: false, cancelled: true, error: 'Upload cancelled' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const result = (await handler({}, 'C:\\clips\\clip.mp4')) as { success: boolean; error: string; code?: string }
+    expect(result).toEqual({ success: false, error: 'Upload cancelled', code: 'ABORTED' })
+  })
+})
+
+describe('CLIPS_PUBLISH_CANCEL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clipsConfig.outputDirectory = 'C:\\clips'
+  })
+
+  it('rejects non-string clip path', () => {
+    const handlers = captureHandlers()
+    const handler = handlers.get(IPC.CLIPS_PUBLISH_CANCEL)!
+    expect(handler({})).toEqual({ success: false, error: 'Invalid clip path' })
+  })
+
+  it('rejects clip outside output directory', () => {
+    const handlers = captureHandlers()
+    const handler = handlers.get(IPC.CLIPS_PUBLISH_CANCEL)!
+    expect(handler({}, 'C:\\Windows\\evil.mp4')).toEqual({ success: false, error: 'No upload in progress' })
+  })
+
+  it('reports no upload in progress', () => {
+    const handlers = captureHandlers()
+    const handler = handlers.get(IPC.CLIPS_PUBLISH_CANCEL)!
+    expect(handler({}, 'C:\\clips\\clip.mp4')).toEqual({ success: false, error: 'No upload in progress' })
+  })
+
+  it('aborts an in-flight upload for the clip path', async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    let signal: AbortSignal | undefined
+    mockUploadClipToGofile.mockImplementation(
+      (_path: string, _onProgress?: unknown, sig?: AbortSignal) =>
+        new Promise<{ success: boolean }>((resolve) => {
+          signal = sig
+          if (sig) {
+            sig.addEventListener('abort', () => resolve({ success: false }))
+          }
+        }),
+    )
+    const handlers = captureHandlers()
+    const publish = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const inFlight = publish({}, 'C:\\clips\\clip.mp4')
+    expect(signal?.aborted).toBe(false)
+    const cancel = handlers.get(IPC.CLIPS_PUBLISH_CANCEL)! as (_e: unknown, p: string) => { success: boolean }
+    expect(cancel({}, 'C:\\clips\\clip.mp4')).toEqual({ success: true })
+    expect(signal?.aborted).toBe(true)
+    await inFlight
   })
 })

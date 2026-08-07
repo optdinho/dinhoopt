@@ -164,6 +164,7 @@ const ARGS: Record<string, unknown[]> = {
   clipsTrimClip: ['', 0, 1],
   clipsMergeClips: [[]],
   clipsPublish: [''],
+  clipsPublishCancel: [''],
   clipsOpenExternal: ['not a url'],
   clipsGetEnhanceSupport: [],
 }

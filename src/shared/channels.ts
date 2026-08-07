@@ -409,5 +409,6 @@ export const IPC = {
   CLIPS_GET_ENHANCE_SUPPORT: 'clips:get-enhance-support',
   CLIPS_PUBLISH: 'clips:publish',
   CLIPS_PUBLISH_PROGRESS: 'clips:publish-progress',
+  CLIPS_PUBLISH_CANCEL: 'clips:publish-cancel',
   CLIPS_OPEN_EXTERNAL: 'clips:open-external',
 } as const
