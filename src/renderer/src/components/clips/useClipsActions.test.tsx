@@ -66,7 +66,6 @@ function getDeps(deps: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   window.confirm = vi.fn(() => true) as never
-  window.prompt = vi.fn(() => null) as never
 })
 
 describe('useClipsActions', () => {
@@ -388,12 +387,11 @@ describe('useClipsActions', () => {
     it('renames the clip when a new name is given', async () => {
       const dinho = mockDinho()
       dinho.clipsRename.mockResolvedValue({ success: true })
-      window.prompt = vi.fn(() => 'new.mp4') as never
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
 
       await act(async () => {
-        await result.current.handleRenameClip('old.mp4')
+        await result.current.handleRenameClip('old.mp4', 'new.mp4')
       })
 
       expect(dinho.clipsRename).toHaveBeenCalledWith('old.mp4', 'new.mp4')
@@ -402,12 +400,23 @@ describe('useClipsActions', () => {
 
     it('returns early when the name is unchanged', async () => {
       const dinho = mockDinho()
-      window.prompt = vi.fn(() => 'old.mp4') as never
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
 
       await act(async () => {
-        await result.current.handleRenameClip('old.mp4')
+        await result.current.handleRenameClip('old.mp4', 'old.mp4')
+      })
+
+      expect(dinho.clipsRename).not.toHaveBeenCalled()
+    })
+
+    it('returns early when the name is blank', async () => {
+      const dinho = mockDinho()
+      const deps = getDeps(makeDeps())
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleRenameClip('old.mp4', '   ')
       })
 
       expect(dinho.clipsRename).not.toHaveBeenCalled()
@@ -416,12 +425,11 @@ describe('useClipsActions', () => {
     it('shows the engine error when rename fails', async () => {
       const dinho = mockDinho()
       dinho.clipsRename.mockResolvedValue({ success: false, error: 'exists' })
-      window.prompt = vi.fn(() => 'new.mp4') as never
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
 
       await act(async () => {
-        await result.current.handleRenameClip('old.mp4')
+        await result.current.handleRenameClip('old.mp4', 'new.mp4')
       })
 
       expect(toast.error).toHaveBeenCalledWith('exists')

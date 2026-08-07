@@ -155,11 +155,11 @@ export function useClipsActions(deps: ClipsActionDeps) {
   }, [selectedClips, setSelectedClips, refreshClips, t])
 
   const handleRenameClip = useCallback(
-    async (oldName: string) => {
-      const newName = window.prompt(t('renamePrompt'), oldName)
-      if (!newName || newName === oldName) return
+    async (oldName: string, newName: string) => {
+      const trimmed = newName.trim()
+      if (!trimmed || trimmed === oldName) return
       try {
-        const result = await window.dinho?.clipsRename(oldName, newName)
+        const result = await window.dinho?.clipsRename(oldName, trimmed)
         if (result?.success) {
           await refreshClips()
         } else {
@@ -169,7 +169,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         toast.error(String(err))
       }
     },
-    [refreshClips, t],
+    [refreshClips],
   )
 
   const handleOpenClip = useCallback(async (path: string) => {

@@ -758,8 +758,8 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
           )}
         </div>
 
-        {/* Merge section — hidden in fullscreen */}
-        {!fullscreen && (
+        {/* Merge section — only in merge mode, hidden in edit mode and fullscreen */}
+        {!showTrim && !fullscreen && (
           <div className="mb-5 rounded-lg p-3" style={{ background: 'rgba(113,113,122,0.08)' }}>
             <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
               <Combine className="h-3.5 w-3.5" />

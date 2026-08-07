@@ -40,6 +40,8 @@ export interface ClipsState {
   setActiveTip: (tip: string | null) => void
   editingClip: ClipInfo | null
   setEditingClip: (clip: ClipInfo | null) => void
+  renameTarget: string | null
+  setRenameTarget: (name: string | null) => void
   mergeModePaths: string[] | null
   setMergeModePaths: (paths: string[] | null) => void
   filteredClips: ClipInfo[]
@@ -55,7 +57,7 @@ export interface ClipsState {
   handleDeleteClip: (name: string) => Promise<void>
   handleDeleteSelected: () => Promise<void>
   handleOpenClip: (path: string) => Promise<void>
-  handleRenameClip: (oldName: string) => Promise<void>
+  handleRenameClip: (oldName: string, newName: string) => Promise<void>
   handlePublishClip: (clipName: string, clipPath: string) => Promise<void>
   publishingPath: string | null
   publishProgress: number
@@ -111,6 +113,7 @@ export function useClipsState(): ClipsState {
   })
   const [activeTip, setActiveTip] = useState<string | null>(null)
   const [editingClip, setEditingClip] = useState<ClipInfo | null>(null)
+  const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
   const [statusLoaded, setStatusLoaded] = useState(false)
   const [clipsLoaded, setClipsLoaded] = useState(false)
@@ -442,6 +445,8 @@ export function useClipsState(): ClipsState {
     setActiveTip,
     editingClip,
     setEditingClip,
+    renameTarget,
+    setRenameTarget,
     mergeModePaths,
     setMergeModePaths,
     filteredClips,

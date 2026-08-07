@@ -19,7 +19,7 @@ export function ClipsGrid({
   setMergeModePaths,
   handleOpenClip,
   setEditingClip,
-  handleRenameClip,
+  setRenameTarget,
   handlePublishClip,
   publishingPath,
   publishProgress,
@@ -168,7 +168,7 @@ export function ClipsGrid({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ delay: index * 0.03 }}
-                className="group relative rounded-xl border overflow-hidden transition-colors hover:bg-white/5"
+                className="group relative rounded-xl border transition-colors hover:bg-white/5"
                 style={{ borderColor: 'var(--border-subtle)' }}
               >
                 {/* Selection checkbox */}
@@ -194,7 +194,7 @@ export function ClipsGrid({
 
                 {/* Thumbnail */}
                 <div
-                  className="flex aspect-video items-center justify-center overflow-hidden"
+                  className="flex aspect-video items-center justify-center overflow-hidden rounded-t-xl"
                   style={{ background: 'rgba(113,113,122,0.08)' }}
                 >
                   {thumbnails[clip.name] ? (
@@ -233,52 +233,54 @@ export function ClipsGrid({
                 </div>
 
                 {/* Bottom actions */}
-                <div className="flex border-t px-2.5 py-1.5" style={{ borderColor: 'var(--border-subtle)' }}>
+                <div className="flex flex-wrap items-center gap-x-0.5 border-t px-1.5 py-1" style={{ borderColor: 'var(--border-subtle)' }}>
                   <button
                     type="button"
                     onClick={() => handleOpenClip(clip.path)}
-                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10"
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10"
                     style={{ color: 'var(--text-dim)' }}
                   >
-                    <FolderOpen className="h-3 w-3" />
+                    <FolderOpen className="h-3.5 w-3.5" />
                     {t('open')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingClip(clip)}
-                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10"
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10"
                     style={{ color: 'var(--text-dim)' }}
                   >
-                    <Film className="h-3 w-3" />
+                    <Film className="h-3.5 w-3.5" />
                     {t('edit')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRenameClip(clip.name)}
-                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10"
-                    style={{ color: 'var(--text-dim)' }}
-                  >
-                    <Pencil className="h-3 w-3" />
-                    {t('rename')}
                   </button>
                   <button
                     type="button"
                     onClick={() => handlePublishClip(clip.name, clip.path)}
                     disabled={publishingPath !== null}
-                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ color: publishingPath === clip.path ? '#06b6d4' : 'var(--text-dim)' }}
                   >
-                    <Upload className={`h-3 w-3 ${publishingPath === clip.path ? 'animate-pulse' : ''}`} />
+                    <Upload className={`h-3.5 w-3.5 ${publishingPath === clip.path ? 'animate-pulse' : ''}`} />
                     {publishingPath === clip.path ? `${Math.round(publishProgress)}%` : t('publish')}
                   </button>
                   <button
                     type="button"
+                    onClick={() => setRenameTarget(clip.name)}
+                    title={t('rename')}
+                    aria-label={t('rename')}
+                    className="rounded-md p-1.5 transition-colors hover:bg-white/10"
+                    style={{ color: 'var(--text-dim)' }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleDeleteClip(clip.name)}
-                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-red-500/15"
+                    title={t('delete')}
+                    aria-label={t('delete')}
+                    className="ml-auto rounded-md p-1.5 transition-colors hover:bg-red-500/15"
                     style={{ color: '#ef4444' }}
                   >
-                    <Trash2 className="h-3 w-3" />
-                    {t('delete')}
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
                 {publishingPath === clip.path && (

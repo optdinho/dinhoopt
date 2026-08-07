@@ -25,6 +25,7 @@
   "renameExists": "Já existe um clipe com esse nome",
   "renamePrompt": "Digite o novo nome (sem .mp4):",
   "renameSuccess": "Clipe renomeado com sucesso",
+  "actions": "Ações do clipe",
   "failedToStart": "Falha ao iniciar gravação",
   "captureStarted": "Captura iniciada",
   "captureStopped": "Captura parada",

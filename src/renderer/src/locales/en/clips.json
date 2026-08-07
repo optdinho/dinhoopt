@@ -25,6 +25,7 @@
   "renameExists": "A clip with that name already exists",
   "renamePrompt": "Enter new name (without .mp4):",
   "renameSuccess": "Clip renamed successfully",
+  "actions": "Clip actions",
   "failedToStart": "Failed to start recording",
   "captureStarted": "Capture started",
   "captureStopped": "Capture stopped",

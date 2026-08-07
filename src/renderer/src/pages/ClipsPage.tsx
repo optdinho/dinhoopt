@@ -6,6 +6,7 @@ import { ClipsConfigPanel } from '@/components/clips/ClipsConfigPanel'
 import { ClipsGrid } from '@/components/clips/ClipsGrid'
 import { ClipsStatusBar } from '@/components/clips/ClipsStatusBar'
 import PublishModal from '@/components/clips/PublishModal'
+import { RenameDialog } from '@/components/clips/RenameDialog'
 import { useClipsState } from '@/components/clips/useClipsState'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -87,6 +88,17 @@ export function ClipsPage() {
           onClose={() => state.setPublishResult(null)}
         />
       )}
+
+      <RenameDialog
+        open={state.renameTarget !== null}
+        oldName={state.renameTarget ?? ''}
+        onConfirm={(newName) => {
+          const oldName = state.renameTarget
+          if (oldName) state.handleRenameClip(oldName, newName)
+          state.setRenameTarget(null)
+        }}
+        onCancel={() => state.setRenameTarget(null)}
+      />
     </>
   )
 }
