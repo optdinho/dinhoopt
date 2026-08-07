@@ -249,26 +249,28 @@ export function ClipsGrid({
 
                 {/* Bottom actions */}
                 <div
-                  className="flex flex-wrap items-center gap-x-0.5 border-t px-1.5 py-1"
+                  className="flex items-center justify-center gap-x-0.5 border-t px-1.5 py-1"
                   style={{ borderColor: 'var(--border-subtle)' }}
                 >
                   <button
                     type="button"
                     onClick={() => handleOpenClip(clip.path)}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+                    title={t('open')}
+                    aria-label={t('open')}
+                    className="rounded-md p-1.5 transition-colors hover:bg-white/10"
                     style={{ color: 'var(--text-dim)' }}
                   >
                     <FolderOpen className="h-3.5 w-3.5" />
-                    {t('open')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingClip(clip)}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+                    title={t('edit')}
+                    aria-label={t('edit')}
+                    className="rounded-md p-1.5 transition-colors hover:bg-white/10"
                     style={{ color: 'var(--text-dim)' }}
                   >
                     <Film className="h-3.5 w-3.5" />
-                    {t('edit')}
                   </button>
                   {publishingPath === clip.path ? (
                     <button
@@ -276,22 +278,22 @@ export function ClipsGrid({
                       onClick={() => handleCancelPublish(clip.path)}
                       title={t('cancelPublish')}
                       aria-label={t('cancelPublish')}
-                      className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-red-500/15"
+                      className="rounded-md p-1.5 transition-colors hover:bg-red-500/15"
                       style={{ color: '#ef4444' }}
                     >
                       <X className="h-3.5 w-3.5" />
-                      {t('cancelPublish')}
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => handlePublishClip(clip.name, clip.path)}
                       disabled={publishingPath !== null}
-                      className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      title={t('publish')}
+                      aria-label={t('publish')}
+                      className="rounded-md p-1.5 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                       style={{ color: 'var(--text-dim)' }}
                     >
                       <Upload className="h-3.5 w-3.5" />
-                      {t('publish')}
                     </button>
                   )}
                   {publishedLinks[clip.path] && (
@@ -321,7 +323,7 @@ export function ClipsGrid({
                     onClick={() => handleDeleteClip(clip.name)}
                     title={t('delete')}
                     aria-label={t('delete')}
-                    className="ml-auto rounded-md p-1.5 transition-colors hover:bg-red-500/15"
+                    className="rounded-md p-1.5 transition-colors hover:bg-red-500/15"
                     style={{ color: '#ef4444' }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />

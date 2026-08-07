@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </button>
       <motion.div
         className="relative z-10 shrink-0 overflow-hidden"
-        animate={{ width: sidebarCollapsed ? 60 : 260 }}
+        animate={{ width: sidebarCollapsed ? 60 : 250 }}
         layout
         transition={{ duration: DURATION.slow, ease: 'easeInOut' }}
       >

@@ -645,7 +645,7 @@ export function registerClipsIpc(): void {
       const outDir = getDefaultOutputDir()
       if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
       const baseName = basename(safePath, '.mp4')
-      const outPath = join(outDir, `${baseName}_trimmed_${Date.now()}.mp4`)
+      const outPath = join(outDir, `${baseName} DiNho Clipe ${Date.now()}.mp4`)
       const copyArgs = ['-c', 'copy']
       const reEncodeArgs = [
         '-c:v',
