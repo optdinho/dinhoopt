@@ -3927,3 +3927,127 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Validar em campo no app instalado: publicar um clipe → botão de link ciano aparece no card → clique abre o navegador; reiniciar o app → link persiste (localStorage `clips-published`).
+
+## Session Summary (2026-08-11 — AMD h264_amf restart loop fix: -filler → -filler_data)
+
+### Done
+
+- **Root cause fechada com log real da máquina AMD** (`C:\Users\WENDEL\Downloads\2026-08-11.jsonl`): engine (Radeon RX 5700 XT, codec "auto") entrava em loop de restart (~16/s) com `[ffmpeg] Unrecognized option 'filler'.` a cada tentativa — todos os fallbacks falhavam, `max restart attempts reached, no codec fallback`.
+- **`FfmpegEncoder.cs` `BuildEncoderTuneArgs`**: `-filler 0` → `-filler_data 0` nos 3 codecs AMF (`h264_amf`, `hevc_amf`, `av1_amf`). `-filler` não existe no ffmpeg 9 — a opção real é `-filler_data` (boolean, válida nos 3). Mesma classe do bug av1_nvenc weighted_pred (opção inexistente → abort no parse).
+- Comentário do seam atualizado (`-filler_data` válida nos 3; `me_quarter_pel` só H26x confirmado).
+- Validação das demais opções AMF via `-h encoder={h264,hevc,av1}_amf` do ffmpeg 9.0 local: `-pa_taq_mode 2` (range -1..2 OK), `-pa_lookahead_buffer_depth 40` (range -1..41 OK), `-pa_paq_mode 1` (range -1..1 OK), `-enforce_hrd`, `-preanalysis`, `-vbaq`, `-pa_adaptive_mini_gop`, `-pa_scene_change_detection_enable`, `-high_motion_quality_boost_enable`, `-quality quality`, `-rc vbr_peak`, `-qp_i/-qp_p`, `-bf 0`, `-g 60` — todas existem no ffmpeg 9; só `-filler` era o abort.
+- **2 testes novos** em `FfmpegEncoderTests.cs`:
+  - `BuildEncoderTuneArgs_AmfCodecs_UsesFillerData_NotFiller` (Theory av1/h264/hevc_amf) — regressão do bug: contém `-filler_data 0`, não contém ` -filler `.
+  - `BuildEncoderTuneArgs_AmfCodecs_AllOptionsExistInFfmpeg9` — todas as opções AMF presentes nos 3 codecs (evita futuro abort por opção inexistente).
+
+### Validado
+
+- **C# tests**: FfmpegEncoderTests **114/114 pass**; suite completa **1121 aprovados / 2 falhas** — as 2 falhas (`RamManagerTests.ComputeHybridRamCap_*`) são **pré-existentes e ambientais** (teste espera cap de 3min/180s, mas o código do buffer híbrido usa cap fixo de 2min/120s desde `a7a9fee`; falham isoladas também, sem relação com a mudança AMF — confirmado via `git status` que só FfmpegEncoder.cs + teste foram tocados).
+- **Build**: `dotnet publish -c Release --self-contained true -r win-x64` 0 erros.
+- **Stage**: `npm run copy-engine` — 294 files, ffmpeg 9.0 212MB copiado.
+- **Deploy**: app instalado fechado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == publish == staging == `A7FDD7DE...`**.
+
+### Key Decisions
+
+- **`-filler_data 0` em vez de remover o arg**: manter o comportamento explícito (sem filler) preservando compatibilidade com ffmpeg ≥9; o teste `UsesFillerData_NotFiller` trava a forma correta.
+- **Teste de presença de todas as opções**: a classe de bug (opção inexistente → abort no parse → restart loop) já mordeu 3x (weighted_pred av1_nvenc, -filler AMF, extra_hw_frames QSV) — teste estrutural garante que a cadeia AMF não regrida.
+
+### Next Steps
+
+- Reiniciar o app instalado na máquina AMD e validar em campo (codec "auto" / h264_amf): conferir no JSONL que `Unrecognized option 'filler'` sumiu, `initialized (codec=h264_amf)` sem restart loop, e clip com `video>0`.
+- (Opcional) Corrigir o teste desatualizado `RamManagerTests.ComputeHybridRamCap_*` (espera 180s, código usa 120s) — pré-existente, fora do escopo desta sessão.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: `-filler 0` → `-filler_data 0` (3 codecs AMF) + comentário do seam
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 2 testes novos
+- `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-11b — AMD encoder 0.55x: preset speed AMF corta preanalysis chain)
+
+### Root cause (fps=35 / speed=0.569x na RX 5700 XT com o fix -filler_data)
+
+- Log de campo pós-fix `-filler_data` (máquina `michael`, RX 5700 XT): encoder h264_amf inicializava sem restart loop, MAS rodava a **~0.55x speed** (`frame= 2984 fps= 35 ... speed=0.569x` constante). Drift A/V preso em **1.35–1.9s** (DriftMonitor avisava a cada 5s), clips exportavam com `activeFps=36`, `audio=3559 vs video=2636` (vídeo ~1.7s atrasado, áudio final cortado).
+- **Causa raiz**: args AMF eram preset de qualidade **MÁXIMA** — `-quality quality -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true`. A cadeia preanalysis + lookahead 40 é o modo mais pesado do AMF (projetado p/ encode offline) — RDNA1 (VCN 1.0) não sustenta 60fps realtime com ele.
+
+### Fix aplicado (FfmpegEncoder.cs BuildEncoderTuneArgs, 3 codecs AMF)
+
+- `-quality quality` → **`-quality speed`** (preset rápido do AMF) em `h264_amf`/`hevc_amf`/`av1_amf`.
+- **Cadeia preanalysis removida**: `-preanalysis true`, `-pa_taq_mode 2`, `-pa_lookahead_buffer_depth 40`, `-pa_paq_mode 1`, `-pa_adaptive_mini_gop true`, `-pa_scene_change_detection_enable true`, `-high_motion_quality_boost_enable true` — todos eliminados.
+- Mantidos: `-rc vbr_peak`, `-qp_i/-qp_p`, `-maxrate/-bufsize`, `-bf 0`, `-g 60`, `-filler_data 0`, `-enforce_hrd 0`, `-vbaq true` (barato, ganho de qualidade), `-me_quarter_pel true` (só h264/hevc_amf).
+- Doc comment do seam reescrito explicando o porquê (0.55x em RDNA1) + nota `-filler`/`-filler_data`.
+
+### TDD (RED → GREEN)
+
+- **RED**: 3 testes atualizados + 1 novo em `FfmpegEncoderTests.cs`:
+  - `BuildEncoderTuneArgs_AmfCodecs_UseAmfArgs`: `-quality quality` → `-quality speed`
+  - `BuildEncoderTuneArgs_Av1Amf_DoesNotUseCpuFallbackArgs`: asserts `quality`/`preanalysis`/`pa_taq_mode` removidos, mantém `-quality speed`
+  - `BuildEncoderTuneArgs_AmfCodecs_AllOptionsExistInFfmpeg9`: removidas as 7 opções preanalysis da lista de presença
+  - `BuildEncoderTuneArgs_AmfCodecs_DoesNotIncludePreanalysisChain` (novo): asserta que `preanalysis`/`pa_taq_mode`/`pa_lookahead_buffer_depth`/`pa_paq_mode`/`pa_adaptive_mini_gop`/`pa_scene_change_detection`/`high_motion_quality_boost` NÃO aparecem nos 3 codecs AMF
+  - RED confirmado: 6 falhas (filtro BuildEncoderTuneArgs 6/17 falhando)
+- **GREEN**: args atualizados; filtro BuildEncoderTuneArgs **17/17**, filtro FfmpegEncoderTests **115/115** (+1 novo).
+
+### Validado
+
+- **C# suite completa**: **1123 aprovados / 2 falhas** — as 2 falhas são as **pré-existentes** `RamManagerTests.ComputeHybridRamCap_*` (esperam cap 180s, código usa 120s desde `a7a9fee`; falham isoladas, sem relação com a mudança AMF — documentadas na sessão 2026-08-11).
+- **Publish**: `dotnet publish src\...\DiNho.Capture.Poc.csproj -c Release --self-contained true -r win-x64 -o bin/Release/net10.0-windows10.0.26100.0/publish` — 0 erros (warnings pré-existentes).
+- **Stage**: `npm run copy-engine` — 294 files, ffmpeg 9.0 212MB copiado.
+- **Deploy**: app instalado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == publish == `D0EE606D...`**.
+
+### Key Decisions
+
+- **`-quality speed` + vbaq, sem preanalysis**: preset quality/preanalysis/lookahead 40 é o modo offline do AMF — inaplicável a captura realtime em RDNA1. `speed` mantém VBR (CQ + maxrate cap) com custo ínfimo, `vbaq` é barato e preserva qualidade em áreas escuras; a cadeia preanalysis inteira era o gargalo.
+- **Manter `-rc vbr_peak` e `-qp_i/-qp_p`**: o controle de qualidade continua via CQ do usuário + VBV — mesmo padrão CRF+VBV do NVENC; só o preset de performance mudou.
+- **Teste estrutural ampliado**: além do `AllOptionsExistInFfmpeg9`, novo teste `DoesNotIncludePreanalysisChain` trava a remoção — evita reintroduzir o gargalo de desempenho sem tocar no teste de compatibilidade ffmpeg.
+
+### Next Steps
+
+- Reiniciar o app instalado na máquina AMD e validar em campo (codec "auto" / h264_amf): conferir no log `fps=` estável ~60 e `speed≈1.0x` (não mais 0.55x), drift A/V <0.5s (DriftMonitor sem warning), e clips com `video≈audio` (sem áudio cortado).
+- Se `speed` ainda ficar abaixo de 1.0x em cenário de carga: subir para preset `-quality speed` já ativo e reduzir `-pa_lookahead` (não aplicável — removido) — alternativa seria rebaixar resolução do usuário, mas isso viola a regra "alvo do usuário é o piso" (sessão 2026-07-31b).
+- (Opcional) Corrigir `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: args AMF `-quality speed` sem cadeia preanalysis (3 codecs) + doc comment do seam
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 3 testes atualizados + 1 novo (`DoesNotIncludePreanalysisChain`)
+- `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-11c — Preset AMF adaptativo por máquina: probe real em quality/balanced/speed)
+
+### Done
+
+- **Preset AMF adaptativo por hardware implementado via TDD completo (RED → GREEN → suites → publish → deploy)**: GPUs AMD fortes (RDNA2+/VCN 2.0+) mantêm `quality`; GPU fraca (RX 5700 XT / RDNA1 VCN 1.0) degrada automático para `balanced`/`speed` com base em probe real de encode na resolução/fps da captura.
+  - **`EncoderManager.SelectAmfPreset(string codec, int width, int height, int fps) → string`** (internal static): escada `quality → balanced → speed`; mantém preset quando `achievedFps >= fps * 0.85`; cache estático chaveado por `codec|widthxheight@fps` (1 probe por combinação por sessão); falha de probe (exceção/null) = não sustenta → degrada ao próximo (fail-safe `speed`).
+  - **`EncoderManager.ProbeAmfSpeed`** (internal static): spawna ffmpeg real em `width×height@fps` com o preset (normalizado via `FfmpegEncoder.NormalizeAmfPreset`), 5 frames NV12 dummy (`Y = 80 + i*20`, `U = V = 128`), `-rc vbr_peak -bf 0 -g 60 -frames:v 5`, output `ivf` p/ av1 senão `h264`, `PriorityClass.Idle`, `WaitForExit(15000)`, retorna `frameCount*1000/ElapsedMs`; null em exit≠0/exceção.
+  - **`ProbeAmfSpeedProbe`** (internal static `Func<string,int,int,int,string,double?>`) — seam trocável nos testes (try/finally) + **`ResetAmfPresetCache()`**.
+  - **`EncoderManager.IsAmfCodec(string)`** — `h264_amf`/`hevc_amf`/`av1_amf`.
+  - **`FfmpegEncoder.BuildEncoderTuneArgs`** ganhou 8º param `amfPreset = "speed"`; branches AMF usam `-quality {NormalizeAmfPreset(amfPreset)}` (demais flags intactas).
+  - **`FfmpegEncoder.NormalizeAmfPreset(string?)`** (internal static) — normaliza `quality`/`balanced`/`speed`; inválido/vazio/null → `"speed"`.
+  - **Fiação**: `FfmpegEncoder.Initialize` define `_amfPreset = EncoderManager.IsAmfCodec(_codec) ? SelectAmfPreset(_codec, _width, _height, _frameRate) : "speed"` (log inclui `amfPreset=`); call do seam em `StartFfmpeg` passa `_amfPreset`.
+- **Loop de degradação corrigido (RED→GREEN)**: `catch { break; }`/`if (achieved == null) break;` → `continue` — exceção/null no probe degrada ao próximo preset (teste `SelectAmfPreset_ProbeThrows_DegradesToSpeed` esperava 3 chamadas `[quality, balanced, speed]`).
+
+### Validado
+
+- **C# tests**: filtro `SelectAmfPreset|ProbeAmfSpeed|NormalizeAmfPreset|BuildEncoderTuneArgs` **39/39**; suite completa **1144 aprovados / 2 falhas** — as 2 falhas são as **pré-existentes** `RamManagerTests.ComputeHybridRamCap_*` (baseline documentada 2026-08-11). Nenhuma regressão.
+- **Build**: `dotnet build` implícito — 0 erros (warnings pré-existentes).
+- **Publish**: `dotnet publish src\...\DiNho.Capture.Poc.csproj -c Release --self-contained true -r win-x64 -o bin/Release/net10.0-windows10.0.26100.0/publish` — 0 erros. Staging (copy-engine 294 files) == ROOTPUB == instalado — **SHA256 `A632DD26...`** (SRCPUB `A7FDD7DE` é o build anterior da sessão 2026-08-11, stale).
+- **Deploy**: app instalado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 instalado == staging (`A632DD26...`).
+
+### Key Decisions
+
+- **Probe real no arranque em vez de heurística por VCN**: detectar VCN por device é frágil (driver expõe vendor não GPU family); um encode curto de 5 frames na resolução/fps exata da captura mede o que importa — achievedFps vs alvo. Cache por combinação evita re-probe por sessão.
+- **Escada em vez de default global**: AMD forte não penalizada (mantém quality); AMD fraca degrada só o necessário; threshold 0.85 deixa folga para jitter.
+- **Fail-safe `speed`**: qualquer falha (ffmpeg ausente, probe crash, exit≠0) cai no preset mais leve já validado em campo — nunca arrisca restart loop por opção inválida.
+
+### Next Steps
+
+- Reiniciar o app instalado na máquina AMD e validar em campo (codec "auto" / h264_amf): conferir no log `amfPreset=quality` (RDNA2+) ou `amfPreset=balanced/speed` (RX 5700 XT), `fps≈60`, `speed≈1.0x`, drift A/V <0.5s, clips com `video≈audio`.
+- (Opcional) Corrigir `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/EncoderManager.cs`: `ProbeAmfSpeedProbe`, `AmfPresetCacheLock`, `_amfPresetCache`, `ResetAmfPresetCache`, `IsAmfCodec`, `SelectAmfPreset`, `ProbeAmfSpeed` (seção entre `ProbeEncoder` e `BuildProbeArgs`)
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: seam `BuildEncoderTuneArgs` 8º param `amfPreset` + `NormalizeAmfPreset`; campo `_amfPreset`; fiação em `Initialize` + `StartFfmpeg`
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EncoderManagerTests.cs`: testes RED→GREEN de `SelectAmfPreset`/`ProbeAmfSpeed`
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: testes RED→GREEN de preset AMF (`BuildEncoderTuneArgs`/`NormalizeAmfPreset`)
+- `AGENTS.md`: resumo de sessão

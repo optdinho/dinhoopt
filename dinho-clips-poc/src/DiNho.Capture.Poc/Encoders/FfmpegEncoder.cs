@@ -73,6 +73,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _bframes = 0;
     private int _lookahead = 0;
     private string _nvencPreset = "p2";
+    private string _amfPreset = "speed";
 
     // Reusable NV12 scratch buffer — elimina alocação de 3.1MB no LOH a cada frame
     private byte[]? _nv12Scratch;
@@ -188,18 +189,20 @@ internal sealed partial class FfmpegEncoder : IEncoder
         bframesZero ? " -weighted_pred 1" : "";
 
     /// <summary>Args do encoder no StartFfmpeg, por codec. Extraído como seam puro (sem estado)
-    /// para permitir teste unitário da cadeia de tune de cada codec. AMF: preanalysis + pa_taq_mode 2
-    /// + vbaq + scene change detection + me_quarter_pel (só h264/hevc_amf — av1_amf não expõe
-    /// me_quarter_pel). av1_amf usa os mesmos parâmetros de qualidade do h264/hevc_amf, mas sem
-    /// me_quarter_pel (opção inexistente) e sem filler (opção `-filler` também só nos codecs H26x).</summary>
+    /// para permitir teste unitário da cadeia de tune de cada codec. AMF: preset `speed` + vbaq +
+    /// me_quarter_pel (só h264/hevc_amf — av1_amf não expõe me_quarter_pel). O preset antigo
+    /// `quality` + preanalysis + lookahead 40 era pesado demais pra RDNA1 (VCN 1.0): encoder a
+    /// ~0.55x speed → drift A/V crescente e clips com ~36fps em vez de 60. `-filler` não existe no
+    /// ffmpeg 9 — a opção é `-filler_data` (boolean), válida nos 3 codecs AMF.</summary>
     internal static string BuildEncoderTuneArgs(string codec, double cq, int maxrateKbps, int bufsizeKbps,
-        int bframes, int lookahead, string nvencPreset)
+        int bframes, int lookahead, string nvencPreset, string amfPreset = "speed")
     {
         // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
         // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
         // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
         var cpuCq = Math.Clamp(cq, 1, 51);
         var amfQp = Math.Clamp(cq - 4, 0, 51);
+        var amfPresetNorm = NormalizeAmfPreset(amfPreset);
         return codec switch
         {
             "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
@@ -207,9 +210,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
-            "h264_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
-            "hevc_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true -me_quarter_pel true",
-            "av1_amf" => $"-quality quality -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true",
+            "h264_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
+            "hevc_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
+            "av1_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -vbaq true",
             // QSV: veryslow + global_quality + extbrc/rdo/adaptive/mbbrc. Sem -extra_hw_frames:
             // ffmpeg 9 rejeita extra_hw_frames como opção de encoder ("not a encoding option") —
             // é opção frame-level (valida p/ vf hwupload=...). QSV precisa de -init_hw_device qsv
@@ -225,6 +228,16 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "av1_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
             _ => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high"
         };
+    }
+
+    /// <summary>Normaliza o preset AMF para um dos três valores válidos do ffmpeg 9
+    /// (quality/balanced/speed). Case-insensitive com trim; inválido, vazio ou null → "speed"
+    /// (preset default mais seguro — RDNA1 sustenta ~1.0x mesmo em resolução alta).</summary>
+    internal static string NormalizeAmfPreset(string? preset)
+    {
+        if (string.IsNullOrWhiteSpace(preset)) return "speed";
+        var p = preset.Trim().ToLowerInvariant();
+        return p is "quality" or "balanced" or "speed" ? p : "speed";
     }
 
     /// <summary>Formato raw dos dados de vídeo na saída do ffmpeg, por codec — necessário para o
@@ -360,7 +373,10 @@ internal sealed partial class FfmpegEncoder : IEncoder
             _fallbackChain = EncoderManager.BuildFallbackChain(_userCodec ?? "auto", vendorId);
             _currentFallbackIndex = 0;
         }
-        Log.I("FfmpegEncoder", $"codec={_codec} bitrate={_bitrateKbps}Kbps cq={_cq} maxrate={_maxrateKbps}Kbps bufsize={_bufsizeKbps}Kbps res={width}x{height}@{frameRate}fps preset={_nvencPreset} _useHardware={_useHardware}");
+        _amfPreset = EncoderManager.IsAmfCodec(_codec)
+            ? EncoderManager.SelectAmfPreset(_codec, _width, _height, _frameRate)
+            : "speed";
+        Log.I("FfmpegEncoder", $"codec={_codec} bitrate={_bitrateKbps}Kbps cq={_cq} maxrate={_maxrateKbps}Kbps bufsize={_bufsizeKbps}Kbps res={width}x{height}@{frameRate}fps preset={_nvencPreset} amfPreset={_amfPreset} _useHardware={_useHardware}");
         StartFfmpeg();
 
         _readerCts = new CancellationTokenSource();
@@ -391,7 +407,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
              QSV:   veryslow + extbrc + rdo 1 + adaptive_i/b + b_strategy + mbbrc
            Cor BT.709: tagging no output → NVENC escreve VUI → atom `colr` no MP4 (players corretos).
            GOP 120 (~2s a 60fps): OBS recomenda, ~10% menos bits que GOP 60. */
-        var tune = BuildEncoderTuneArgs(_codec, _cq, _maxrateKbps, _bufsizeKbps, _bframes, _lookahead, _nvencPreset);
+        var tune = BuildEncoderTuneArgs(_codec, _cq, _maxrateKbps, _bufsizeKbps, _bframes, _lookahead, _nvencPreset, _amfPreset);
 
         int cw = _cropW, ch = _cropH;
         bool hasCrop = cw > 0 && ch > 0;

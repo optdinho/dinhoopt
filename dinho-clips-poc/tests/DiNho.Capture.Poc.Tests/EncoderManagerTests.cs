@@ -419,6 +419,171 @@ public sealed class EncoderManagerTests
             $"AV1 fallback must be non-empty — got '{resolved}'");
     }
 
+    // ─── SelectAmfPreset (preset AMF adaptativo por máquina) ────────────
+
+    [Fact]
+    public void SelectAmfPreset_QualitySustains_ReturnsQuality_ProbesWithCaptureDims()
+    {
+        // GPU forte: preset quality sustenta ≥ 0.85× do fps alvo → fica quality.
+        // O probe recebe a resolução/fps reais da captura, não dados sintéticos.
+        EncoderManager.ResetAmfPresetCache();
+        var calls = new System.Collections.Generic.List<(string codec, int w, int h, int fps, string preset)>();
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (codec, w, h, fps, preset) =>
+            {
+                calls.Add((codec, w, h, fps, preset));
+                return fps * 0.9;
+            };
+            Assert.Equal("quality", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+            var first = Assert.Single(calls);
+            Assert.Equal("h264_amf", first.codec);
+            Assert.Equal(1920, first.w);
+            Assert.Equal(1080, first.h);
+            Assert.Equal(60, first.fps);
+            Assert.Equal("quality", first.preset);
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
+    [Fact]
+    public void SelectAmfPreset_QualitySlow_BalancedSustains_ReturnsBalanced()
+    {
+        // Escada: quality não sustenta (<0.85×) → balanced sustenta → balanced.
+        EncoderManager.ResetAmfPresetCache();
+        var presets = new System.Collections.Generic.List<string>();
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (_, _, _, fps, preset) =>
+            {
+                presets.Add(preset);
+                return preset == "quality" ? fps * 0.5 : fps * 0.95;
+            };
+            Assert.Equal("balanced", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+            Assert.Equal(new[] { "quality", "balanced" }, presets);
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
+    [Fact]
+    public void SelectAmfPreset_AllSlow_ReturnsSpeed()
+    {
+        // GPU muito fraca: nenhum preset sustenta → último degrau (speed) é retornado.
+        EncoderManager.ResetAmfPresetCache();
+        var presets = new System.Collections.Generic.List<string>();
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (_, _, _, fps, preset) =>
+            {
+                presets.Add(preset);
+                return fps * 0.5;
+            };
+            Assert.Equal("speed", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+            Assert.Equal(new[] { "quality", "balanced", "speed" }, presets);
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
+    [Fact]
+    public void SelectAmfPreset_ProbeThrows_DegradesToSpeed()
+    {
+        // Exceção no probe = não sustenta → degrada; se todos falham, speed (fail-safe).
+        EncoderManager.ResetAmfPresetCache();
+        var presets = new System.Collections.Generic.List<string>();
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (_, _, _, _, preset) =>
+            {
+                presets.Add(preset);
+                throw new System.Exception("probe boom");
+            };
+            Assert.Equal("speed", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+            Assert.Equal(new[] { "quality", "balanced", "speed" }, presets);
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
+    [Fact]
+    public void SelectAmfPreset_ProbeReturnsNull_ReturnsSpeed()
+    {
+        // Probe sem medição (ffmpeg ausente/erro) → degrada até speed (preset mais leve, seguro).
+        EncoderManager.ResetAmfPresetCache();
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (_, _, _, _, _) => null;
+            Assert.Equal("speed", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
+    [Fact]
+    public void SelectAmfPreset_NonAmfCodec_ReturnsSpeed_WithoutProbe()
+    {
+        // Codec não-AMF (NVENC/QSV/CPU) não passa pelo probe — retorna speed direto.
+        EncoderManager.ResetAmfPresetCache();
+        var count = 0;
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (_, _, _, fps, _) => { count++; return fps * 0.9; };
+            Assert.Equal("speed", EncoderManager.SelectAmfPreset("h264_nvenc", 1920, 1080, 60));
+            Assert.Equal(0, count);
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
+    [Fact]
+    public void SelectAmfPreset_CachesByCodecResolutionFps()
+    {
+        // Cache estático chaveado por codec|res|fps — 1 probe por combinação por sessão.
+        EncoderManager.ResetAmfPresetCache();
+        var count = 0;
+        var old = EncoderManager.ProbeAmfSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeAmfSpeedProbe = (_, _, _, fps, _) => { count++; return fps * 0.9; };
+            Assert.Equal("quality", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+            Assert.Equal("quality", EncoderManager.SelectAmfPreset("h264_amf", 1920, 1080, 60));
+            Assert.Equal(1, count);
+            EncoderManager.SelectAmfPreset("h264_amf", 1280, 720, 60);
+            Assert.Equal(2, count);
+        }
+        finally
+        {
+            EncoderManager.ProbeAmfSpeedProbe = old;
+            EncoderManager.ResetAmfPresetCache();
+        }
+    }
+
     private static FfmpegEncoder CreateUninitializedEncoder(bool hardware)
     {
         var enc = (FfmpegEncoder)System.Runtime.Serialization.FormatterServices

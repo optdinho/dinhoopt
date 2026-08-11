@@ -391,6 +391,119 @@ public sealed class EncoderManager : IDisposable
         }
     }
 
+    // ── AMF preset adaptativo ────────────────────────────────────────
+
+    /// <summary>Delegado de probe trocável nos testes. Retorna achievedFps (double?) do encode
+    /// de teste na resolução/fps alvo, ou null quando o probe falha (sem encoder disponível).
+    /// Exceções são permitidas — degradam para "speed".</summary>
+    internal static Func<string, int, int, int, string, double?> ProbeAmfSpeedProbe = ProbeAmfSpeed;
+
+    private static readonly object AmfPresetCacheLock = new();
+    private static Dictionary<string, string>? _amfPresetCache;
+
+    /// <summary>Limpa o cache de preset AMF (usado nos testes entre cenários).</summary>
+    internal static void ResetAmfPresetCache()
+    {
+        lock (AmfPresetCacheLock) _amfPresetCache = null;
+    }
+
+    internal static bool IsAmfCodec(string codec) =>
+        codec is "h264_amf" or "hevc_amf" or "av1_amf";
+
+    /// <summary>Seleciona o preset AMF por máquina: tenta quality, degrada para balanced/speed
+    /// quando o encode real não sustenta ≥85% do fps alvo na resolução da captura. AMD forte
+    /// (RDNA2+/VCN 2.0+) mantém quality; RDNA1 (RX 5700 XT, VCN 1.0) degrada automático.
+    /// Cache por codec|res|fps — um probe por combinação por sessão.</summary>
+    internal static string SelectAmfPreset(string codec, int width, int height, int fps)
+    {
+        if (!IsAmfCodec(codec)) return "speed";
+        var key = $"{codec}|{width}x{height}@{fps}";
+        lock (AmfPresetCacheLock)
+        {
+            if (_amfPresetCache != null && _amfPresetCache.TryGetValue(key, out var cached))
+                return cached;
+        }
+
+        var result = "speed";
+        foreach (var preset in new[] { "quality", "balanced", "speed" })
+        {
+            double? achieved;
+            try { achieved = ProbeAmfSpeedProbe(codec, width, height, fps, preset); }
+            catch { continue; }
+            if (achieved == null) continue;
+            if (achieved >= fps * 0.85) { result = preset; break; }
+        }
+
+        lock (AmfPresetCacheLock)
+        {
+            _amfPresetCache ??= new Dictionary<string, string>();
+            _amfPresetCache[key] = result;
+        }
+        return result;
+    }
+
+    /// <summary>Probe real do preset AMF: codifica 5 frames dummy NV12 na resolução/fps alvo com o
+    /// preset dado e mede achievedFps = frames entregues / tempo real decorrido. O preset
+    /// `-quality` em h264_amf/hevc_amf/av1_amf define o equilíbrio quality/speed.</summary>
+    internal static double? ProbeAmfSpeed(string codec, int width, int height, int fps, string preset)
+    {
+        var presetNorm = FfmpegEncoder.NormalizeAmfPreset(preset);
+        var outputFmt = codec.Contains("av1", StringComparison.Ordinal) ? "ivf" : "h264";
+        var args = $"-y -loglevel error -f rawvideo -pix_fmt nv12 -s {width}x{height} " +
+                   $"-r {fps} -i pipe:0 -c:v {codec} -quality {presetNorm} -rc vbr_peak " +
+                   $"-bf 0 -g 60 -frames:v 5 -f {outputFmt} pipe:1";
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: args, redirectInput: true, redirectOutput: true, redirectError: true)
+            };
+            process.Start();
+            try { process.PriorityClass = ProcessPriorityClass.Idle; } catch { }
+
+            var frameSize = width * height * 3 / 2; // NV12
+            const int frameCount = 5;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var stdin = process.StandardInput.BaseStream;
+                for (int i = 0; i < frameCount; i++)
+                {
+                    var dummy = new byte[frameSize];
+                    var val = (byte)(80 + i * 20);
+                    for (int p = 0; p < dummy.Length; p += 3)
+                    {
+                        dummy[p] = val;     // Y
+                        dummy[p + 1] = 128; // U
+                        dummy[p + 2] = 128; // V
+                    }
+                    stdin.Write(dummy, 0, dummy.Length);
+                }
+                stdin.Close();
+            }
+            catch { /* encoder rejeitou input → exit code trata */ }
+
+            var drainTask = Task.Run(() =>
+            {
+                var buf = new byte[64 * 1024];
+                int n;
+                while ((n = process.StandardOutput.BaseStream.Read(buf, 0, buf.Length)) > 0) { }
+            });
+            var stderrTask = Task.Run(() => { while (process.StandardError.ReadLine() != null) { } });
+
+            process.WaitForExit(15000);
+            Task.WaitAll(new[] { drainTask, stderrTask }, 5000);
+            sw.Stop();
+
+            if (process.ExitCode != 0) return null;
+            return Math.Round(frameCount * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds), 2);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string BuildProbeArgs(string codec, int width, int height, int fps)
     {
         var isD3d12va = codec.EndsWith("_d3d12va", StringComparison.Ordinal);

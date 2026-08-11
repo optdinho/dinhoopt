@@ -670,7 +670,7 @@ public sealed class FfmpegEncoderTests
     public void BuildEncoderTuneArgs_AmfCodecs_UseAmfArgs(string codec)
     {
         var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
-        Assert.Contains("-quality quality", args);
+        Assert.Contains("-quality speed", args);
         Assert.Contains("-rc vbr_peak", args);
         Assert.DoesNotContain("-crf", args);
         Assert.DoesNotContain("-preset veryfast", args);
@@ -685,9 +685,7 @@ public sealed class FfmpegEncoderTests
         Assert.DoesNotContain("-crf", args);
         Assert.DoesNotContain("-preset veryfast", args);
         Assert.DoesNotContain("-profile:v high", args);
-        Assert.Contains("-quality quality", args);
-        Assert.Contains("-preanalysis true", args);
-        Assert.Contains("-pa_taq_mode 2", args);
+        Assert.Contains("-quality speed", args);
     }
 
     [Fact]
@@ -703,6 +701,108 @@ public sealed class FfmpegEncoderTests
     {
         var args = FfmpegEncoder.BuildEncoderTuneArgs("h264_amf", 22, 40000, 80000, 2, 32, "p4");
         Assert.Contains("me_quarter_pel true", args);
+    }
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_UsesFillerData_NotFiller(string codec)
+    {
+        // Bug (2026-08-11): -filler 0 não existe no ffmpeg 9 — o encoder AMF abortava com
+        // "Unrecognized option 'filler'" a cada restart (exit code, restart loop). Opção real: -filler_data.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-filler_data 0", args);
+        Assert.DoesNotContain(" -filler ", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_AmfCodecs_AllOptionsExistInFfmpeg9()
+    {
+        // Se qualquer opção AMF aqui não existir no ffmpeg 9, o encoder aborta com "Unrecognized option".
+        foreach (var codec in new[] { "av1_amf", "h264_amf", "hevc_amf" })
+        {
+            var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+            Assert.Contains("-quality speed", args);
+            Assert.Contains("-rc vbr_peak", args);
+            Assert.Contains("-qp_i ", args);
+            Assert.Contains("-qp_p ", args);
+            Assert.Contains("-maxrate ", args);
+            Assert.Contains("-bufsize ", args);
+            Assert.Contains("-bf 0", args);
+            Assert.Contains("-g 60", args);
+            Assert.Contains("-filler_data 0", args);
+            Assert.Contains("-enforce_hrd 0", args);
+            Assert.Contains("-vbaq true", args);
+        }
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_AmfCodecs_DoesNotIncludePreanalysisChain()
+    {
+        // Preset quality (default antigo) + preanalysis + lookahead 40 era pesado demais pra RDNA1
+        // (VCN 1.0): encoder AMF rodava a ~0.55x speed → drift A/V crescente ~1.6-1.9s e clips com
+        // activeFps=36 em vez de 60. Agora usa -quality speed (preset rápido) sem a cadeia preanalysis.
+        foreach (var codec in new[] { "av1_amf", "h264_amf", "hevc_amf" })
+        {
+            var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+            Assert.DoesNotContain("preanalysis", args);
+            Assert.DoesNotContain("pa_taq_mode", args);
+            Assert.DoesNotContain("pa_lookahead_buffer_depth", args);
+            Assert.DoesNotContain("pa_paq_mode", args);
+            Assert.DoesNotContain("pa_adaptive_mini_gop", args);
+            Assert.DoesNotContain("pa_scene_change_detection", args);
+            Assert.DoesNotContain("high_motion_quality_boost", args);
+        }
+    }
+
+    // ─── AMF adaptive preset (param amfPreset no seam) ──────────────────
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_UseCustomAmfPreset(string codec)
+    {
+        // Preset adaptativo (SelectAmfPreset) escolhido por machine: GPU forte fica quality,
+        // GPU fraca degrada para balanced/speed. O seam deve injetar o preset escolhido.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4", "balanced");
+        Assert.Contains("-quality balanced", args);
+    }
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_DefaultPresetIsSpeed(string codec)
+    {
+        // Chamadas sem o param amfPreset (testes pré-existentes / fallback de produção)
+        // mantêm -quality speed — preset leve nunca causa restart loop nem lentidão.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-quality speed", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_AmfCodecs_NormalizesInvalidPresetToSpeed()
+    {
+        // Preset inválido nunca chega ao ffmpeg — o seam normaliza para speed.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("h264_amf", 22, 40000, 80000, 2, 32, "p4", "ultra");
+        Assert.Contains("-quality speed", args);
+        Assert.DoesNotContain("-quality ultra", args);
+    }
+
+    [Theory]
+    [InlineData("quality", "quality")]
+    [InlineData("balanced", "balanced")]
+    [InlineData("speed", "speed")]
+    [InlineData("QUALITY", "quality")]
+    [InlineData(" Balanced ", "balanced")]
+    [InlineData("ultra", "speed")]
+    [InlineData("", "speed")]
+    [InlineData(null, "speed")]
+    public void NormalizeAmfPreset_ReturnsNormalizedOrSpeed(string? input, string expected)
+    {
+        Assert.Equal(expected, FfmpegEncoder.NormalizeAmfPreset(input));
     }
 
     // ─── QSV (Intel) ────────────────────────────────────────────────────
