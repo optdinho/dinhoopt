@@ -456,102 +456,123 @@ public sealed class WgcCaptureSource : ICaptureSource
     /// </summary>
     private void ConfigureSession3()
     {
-        if (_session is null) return;
+        // Acesso às interfaces derivadas IGraphicsCaptureSession2/3/4/5/6 via QI bruto.
+        // Por que não cast dinâmico nem AsInterface<T>():
+        //   - `((object)_session) is IX` retorna FALSE em runtime: GraphicsCaptureSession
+        //     implementa IDynamicInterfaceCastable, que só resolve interfaces declaradas
+        //     na projeção (Microsoft.Windows.SDK.NET). Interfaces [ComImport] escritas à
+        //     mão não estão nesse registry — IsInterfaceImplemented responde false sem
+        //     sequer tentar QI na instância COM.
+        //   - AsInterface<T>() lança PlatformNotSupportedException: não há Marshaler<T>
+        //     gerado para as interfaces manuais ("Marshalling as IInspectable is not
+        //     supported").
+        // QI por IID é o mecanismo base do COM: a interface derivada é só outro IID no
+        // mesmo objeto; independe de marshaller WinRT ou do registry da projeção.
+        // Layout vtable (interfaces flat, confirmado por reflexão no SDK 26100 — cada
+        // SessionN deriva direto de IInspectable, sem herança entre si):
+        //   IUnknown (0-2) + IInspectable (3-5) + get_prop (6) + set_prop (7)
+        // ABI: bool = 4 bytes; enum = 4 bytes; Windows.Foundation.TimeSpan = long 8 bytes.
+        if (_session is not IWinRTObject winrt) return;
 
-        var sessionPtr = Marshal.GetIUnknownForObject(_session);
+        var nativePtr = winrt.NativeObject.GetRef();
         try
         {
-            // IGraphicsCaptureSession2 — IsCursorCaptureEnabled (Win10 1903+)
-            var iid2 = typeof(IGraphicsCaptureSession2).GUID;
-            if (Marshal.QueryInterface(sessionPtr, ref iid2, out var ptr2) == 0 && ptr2 != IntPtr.Zero)
-            {
-                try
-                {
-                    var session2 = (IGraphicsCaptureSession2)Marshal.GetObjectForIUnknown(ptr2);
-                    session2.IsCursorCaptureEnabled = false;
-                    Log.I("WGC", "Session2: cursor capture disabled");
-                }
-                catch (Exception ex) { Log.D("WGC", $"Session2 config skipped: {ex.Message}"); }
-                finally { Marshal.Release(ptr2); }
-            }
-
-            // IGraphicsCaptureSession3 — IsBorderRequired (Win11 21H2+)
-            var iid3 = typeof(IGraphicsCaptureSession3).GUID;
-            if (Marshal.QueryInterface(sessionPtr, ref iid3, out var ptr3) == 0 && ptr3 != IntPtr.Zero)
-            {
-                try
-                {
-                    var session3 = (IGraphicsCaptureSession3)Marshal.GetObjectForIUnknown(ptr3);
-                    session3.IsBorderRequired = false;
-                    Log.I("WGC", "Session3: border indicator disabled");
-                }
-                catch (Exception ex) { Log.D("WGC", $"Session3 config skipped: {ex.Message}"); }
-                finally { Marshal.Release(ptr3); }
-            }
-
-            // IGraphicsCaptureSession5 — MinUpdateInterval + IncludeSecondaryWindows (Win11 24H2+)
-            // MinUpdateInterval=0: DWM envia frames no máximo frame rate (sem throttling).
-            //   Em 24H2+, WGC por padrão throttleia frames quando conteúdo não muda —
-            //   isso causa "Success=false texture/null" em cenas estáticas do jogo.
-            // IncludeSecondaryWindows=true: captura janelas filhas (popups, tooltips, menus).
-            var iid5 = typeof(IGraphicsCaptureSession5).GUID;
-            if (Marshal.QueryInterface(sessionPtr, ref iid5, out var ptr5) == 0 && ptr5 != IntPtr.Zero)
-            {
-                try
-                {
-                    var session5 = (IGraphicsCaptureSession5)Marshal.GetObjectForIUnknown(ptr5);
-                    session5.MinUpdateInterval = TimeSpan.Zero;
-                    session5.IncludeSecondaryWindows = true;
-                    Log.I("WGC", "Session5: MinUpdateInterval=0 (no throttle), IncludeSecondaryWindows=true");
-                }
-                catch (Exception ex)
-                {
-                    Log.W("WGC", $"Session5 config failed (may need SDK 26100+): {ex.Message}");
-                }
-                finally { Marshal.Release(ptr5); }
-            }
-            else
-            {
-                Log.D("WGC", "Session5 not available (needs Win11 24H2+ SDK 26100)");
-            }
-
-            // DirtyRegionMode = ReportAndRender — tells DWM to only composite dirty regions.
-            // Reduces GPU copy overhead by ~30-40% when combined with IDirect3D11CaptureFrame2.
-            // No numbered COM interface — use reflection to call SetDirtyRegionMode(1).
-            try
-            {
-                var drmType = Type.GetType("Windows.Graphics.Capture.DirtyRegionMode, Windows.Graphics.Capture");
-                if (drmType != null)
-                {
-                    var reportAndRender = Enum.Parse(drmType, "ReportAndRender");
-                    var setMethod = _session.GetType().GetMethod("SetDirtyRegionMode");
-                    if (setMethod != null)
-                    {
-                        setMethod.Invoke(_session, new object[] { reportAndRender });
-                        Log.I("WGC", "DirtyRegionMode=ReportAndRender — DWM will only composite dirty regions");
-                    }
-                    else
-                    {
-                        Log.D("WGC", "DirtyRegionMode: SetDirtyRegionMode method not found on session type");
-                    }
-                }
-                else
-                {
-                    Log.D("WGC", "DirtyRegionMode type not available (needs Win11 24H2+ SDK)");
-                }
-            }
-            catch (TargetInvocationException tex)
-            {
-                Log.D("WGC", $"DirtyRegionMode reflection failed: {tex.InnerException?.Message ?? tex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Log.D("WGC", $"DirtyRegionMode config skipped: {ex.Message}");
-            }
+            TrySetSessionBool(nativePtr, S2_CURSOR_ENABLED, "Session2: IsCursorCaptureEnabled=false", value: false);
+            TrySetSessionBool(nativePtr, S3_BORDER_REQUIRED, "Session3: IsBorderRequired=false", value: false);
+            TrySetSessionEnum(nativePtr, S4_DIRTY_REGION_MODE, "Session4: DirtyRegionMode=ReportAndRender", value: 1);
+            TrySetSessionTimeSpan(nativePtr, S5_MIN_UPDATE_INTERVAL, "Session5: MinUpdateInterval=0 (no throttle)", durationTicks: 0);
+            TrySetSessionBool(nativePtr, S6_INCLUDE_SECONDARY, "Session6: IncludeSecondaryWindows=true", value: true);
         }
         finally
         {
-            Marshal.Release(sessionPtr);
+            Marshal.Release(nativePtr);
+        }
+    }
+
+    private static readonly Guid S2_CURSOR_ENABLED = new("2C39AE40-7D2E-5044-804E-8B6799D4CF9E");
+    private static readonly Guid S3_BORDER_REQUIRED = new("F2CDD966-22AE-5EA1-9596-3A289344C3BE");
+    private static readonly Guid S4_DIRTY_REGION_MODE = new("AE99813C-C257-5759-8ED0-668C9B557ED4");
+    private static readonly Guid S5_MIN_UPDATE_INTERVAL = new("67C0EA62-1F85-5061-925A-239BE0AC09CB");
+    private static readonly Guid S6_INCLUDE_SECONDARY = new("D7419236-BE20-5E9F-BCD6-C4E98FD6AFDC");
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SetBoolDelegate(IntPtr thisPtr, int value);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SetEnumDelegate(IntPtr thisPtr, int value);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SetTimeSpanDelegate(IntPtr thisPtr, long durationTicks);
+
+    /// <summary>QI por IID na sessão e invoca o setter (vtable slot 7). Loga em Debug quando a interface não está disponível.</summary>
+    private static void TrySetSessionBool(IntPtr nativePtr, Guid iid, string name, bool value)
+    {
+        var hr = Marshal.QueryInterface(nativePtr, ref iid, out var ifacePtr);
+        if (hr != 0 || ifacePtr == IntPtr.Zero)
+        {
+            Log.D("WGC", $"{name}: interface não disponível (hr=0x{hr:X8})");
+            return;
+        }
+        try
+        {
+            var vtable = Marshal.ReadIntPtr(ifacePtr);
+            var setterFn = Marshal.ReadIntPtr(vtable, 7 * IntPtr.Size);
+            var setter = Marshal.GetDelegateForFunctionPointer<SetBoolDelegate>(setterFn);
+            var setHr = setter(ifacePtr, value ? 1 : 0);
+            if (setHr == 0) Log.I("WGC", $"{name}: OK");
+            else Log.W("WGC", $"{name}: setter falhou (hr=0x{setHr:X8})");
+        }
+        finally
+        {
+            Marshal.Release(ifacePtr);
+        }
+    }
+
+    /// <summary>Idem para propriedade enum (DirtyRegionMode).</summary>
+    private static void TrySetSessionEnum(IntPtr nativePtr, Guid iid, string name, int value)
+    {
+        var hr = Marshal.QueryInterface(nativePtr, ref iid, out var ifacePtr);
+        if (hr != 0 || ifacePtr == IntPtr.Zero)
+        {
+            Log.D("WGC", $"{name}: interface não disponível (hr=0x{hr:X8})");
+            return;
+        }
+        try
+        {
+            var vtable = Marshal.ReadIntPtr(ifacePtr);
+            var setterFn = Marshal.ReadIntPtr(vtable, 7 * IntPtr.Size);
+            var setter = Marshal.GetDelegateForFunctionPointer<SetEnumDelegate>(setterFn);
+            var setHr = setter(ifacePtr, value);
+            if (setHr == 0) Log.I("WGC", $"{name}: OK");
+            else Log.W("WGC", $"{name}: setter falhou (hr=0x{setHr:X8})");
+        }
+        finally
+        {
+            Marshal.Release(ifacePtr);
+        }
+    }
+
+    /// <summary>Idem para propriedade TimeSpan (Windows.Foundation.TimeSpan = long 8 bytes).</summary>
+    private static void TrySetSessionTimeSpan(IntPtr nativePtr, Guid iid, string name, long durationTicks)
+    {
+        var hr = Marshal.QueryInterface(nativePtr, ref iid, out var ifacePtr);
+        if (hr != 0 || ifacePtr == IntPtr.Zero)
+        {
+            Log.D("WGC", $"{name}: interface não disponível (hr=0x{hr:X8})");
+            return;
+        }
+        try
+        {
+            var vtable = Marshal.ReadIntPtr(ifacePtr);
+            var setterFn = Marshal.ReadIntPtr(vtable, 7 * IntPtr.Size);
+            var setter = Marshal.GetDelegateForFunctionPointer<SetTimeSpanDelegate>(setterFn);
+            var setHr = setter(ifacePtr, durationTicks);
+            if (setHr == 0) Log.I("WGC", $"{name}: OK");
+            else Log.W("WGC", $"{name}: setter falhou (hr=0x{setHr:X8})");
+        }
+        finally
+        {
+            Marshal.Release(ifacePtr);
         }
     }
 
@@ -584,46 +605,6 @@ internal interface IDirect3DDxgiInterfaceAccess
 }
 
 /// <summary>
-/// WinRT IGraphicsCaptureSession3 — Win11 21H2+.
-/// Provides IsBorderRequired (removes yellow capture border indicator).
-/// </summary>
-[ComImport]
-[Guid("f2cdd966-22ae-5ea1-9596-3a289344c3be")]
-[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
-internal interface IGraphicsCaptureSession3
-{
-    bool IsBorderRequired { get; set; }
-}
-
-/// <summary>
-/// WinRT IGraphicsCaptureSession2 — Win10 1903+.
-/// Provides IsCursorCaptureEnabled (software cursor causes DWM composition overhead).
-/// </summary>
-[ComImport]
-[Guid("2c39ae40-7d2e-5044-804e-8b6799d4cf9e")]
-[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
-internal interface IGraphicsCaptureSession2
-{
-    bool IsCursorCaptureEnabled { get; set; }
-}
-
-/// <summary>
-/// WinRT IGraphicsCaptureSession5 — Win11 24H2+ (SDK 26100).
-/// MinUpdateInterval: controls minimum time between frame updates.
-///   TimeSpan.Zero = maximum frame rate (no DWM throttling).
-///   Default throttles frames when screen content is static — causes frame drops in games.
-/// IncludeSecondaryWindows: captures child windows (popups, tooltips, menus).
-/// </summary>
-[ComImport]
-[Guid("67C0EA62-1F85-5061-925A-239BE0AC09CB")]
-[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
-internal interface IGraphicsCaptureSession5
-{
-    TimeSpan MinUpdateInterval { get; set; }
-    bool IncludeSecondaryWindows { get; set; }
-}
-
-/// <summary>
 /// WinRT IDirect3D11CaptureFrame2 — Win11 22H2+ (SDK 22621).
 /// DirtyRegions: list of rectangles that changed since last frame.
 /// Enables selective GPU copy — only copy dirty regions instead of full texture.
@@ -647,3 +628,12 @@ internal interface IDirect3D11CaptureFrameDirtyRegion
     // Default property: Rect DirtyRect
     // Accessed via IPropertyValue since COM interface layout is tricky for WinRT structs
 }
+
+// Nota: IGraphicsCaptureSession2/3/4/5/6 NÃO são declaradas aqui.
+// A projeção do SDK 26100 expõe essas interfaces derivadas, mas o acesso via
+// cast dinâmico retorna false em runtime (IDynamicInterfaceCastable só resolve
+// interfaces declaradas na projeção) e AsInterface<T>() lança
+// PlatformNotSupportedException (sem Marshaler<T>). O acesso real usa QI bruto
+// por IID + setter via vtable (slot 7) — ver ConfigureSession3() e os GUIDs
+// S2_CURSOR_ENABLED / S3_BORDER_REQUIRED / S4_DIRTY_REGION_MODE /
+// S5_MIN_UPDATE_INTERVAL / S6_INCLUDE_SECONDARY.

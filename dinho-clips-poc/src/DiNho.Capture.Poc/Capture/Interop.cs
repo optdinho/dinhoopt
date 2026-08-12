@@ -11,8 +11,10 @@ namespace DiNho.Capture.Poc.Capture
 {
     internal static class GraphicsCaptureItemHelper
     {
+        // PreserveSig=false: last native out param (void**) becomes the C# return value.
+        // Declared as IntPtr return (no out param) — matches Direct3D11Helper below.
         [DllImport("combase.dll", PreserveSig = false)]
-        private static extern void RoGetActivationFactory(IntPtr activatableClassId, ref Guid iid, out IntPtr factory);
+        private static extern IntPtr RoGetActivationFactory(IntPtr activatableClassId, ref Guid iid);
 
         [DllImport("combase.dll", PreserveSig = true)]
         private static extern int WindowsCreateString([MarshalAs(UnmanagedType.LPWStr)] string sourceString, int length, out IntPtr hstring);
@@ -23,13 +25,14 @@ namespace DiNho.Capture.Poc.Capture
         private const string RuntimeClassName = "Windows.Graphics.Capture.GraphicsCaptureItem";
 
         // IInspectable GUID — every WinRT activation factory implements this
-        private static readonly Guid IInspectableGuid = new("AF86E2E0-B12D-4C6A-9C5A-D78A0574605B");
+        private static readonly Guid IInspectableGuid = new("AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90");
 
         // IGraphicsCaptureItemInterop — COM interface on the activation factory for monitor/window capture
-        private static readonly Guid IGraphicsCaptureItemInteropGuid = new("1EB64011-96F5-463A-A87B-4B1E9BFAE9F9");
+        private static readonly Guid IGraphicsCaptureItemInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
 
-        // GraphicsCaptureItem GUID — passed to CreateForWindow/CreateForMonitor as riid
-        private static readonly Guid GraphicsCaptureItemGuid = typeof(GraphicsCaptureItem).GUID;
+        // GraphicsCaptureItem default interface IID — passed to CreateForWindow/CreateForMonitor as riid.
+        // typeof(GraphicsCaptureItem).GUID is the runtime-class GUID (E79F1DD1-...) — NOT the interface IID.
+        private static readonly Guid GraphicsCaptureItemGuid = new("79C3F95B-31F7-4EC2-A464-632EF5D30760");
 
         // Raw vtable delegates — bypass COM interop marshaling entirely.
         // COM vtable methods use stdcall convention on Windows.
@@ -57,7 +60,7 @@ namespace DiNho.Capture.Poc.Capture
             try
             {
                 var iid = IInspectableGuid;
-                RoGetActivationFactory(hstr, ref iid, out var factoryPtr);
+                var factoryPtr = RoGetActivationFactory(hstr, ref iid);
                 return factoryPtr;
             }
             finally

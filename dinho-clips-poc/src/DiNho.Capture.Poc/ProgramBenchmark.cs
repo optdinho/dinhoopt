@@ -202,22 +202,25 @@ internal static class ProgramBenchmark
                 Console.WriteLine($"  Device: {desc.Description} (FL {featureLevel})");
 
                 ICaptureSource capture;
+                WindowsMessagePump? pump = null;
                 try
                 {
+                    Console.WriteLine("  (TEMP WGC-FIRST SMOKE)");
+                    var wgc = new WgcCaptureSource();
+                    pump = new WindowsMessagePump();
+                    pump.Invoke(() => { wgc.Initialize(); wgc.StartFramePump(); });
+                    capture = wgc;
+                    result.CaptureBackend = "WGC";
+                    Console.WriteLine($"  Captura: Windows Graphics Capture");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  WGC falhou: {ex.Message}, tentando DXGI...");
                     var dxgi = new DxgiCaptureSource();
                     dxgi.Initialize(device);
                     capture = dxgi;
                     result.CaptureBackend = "DXGI";
-                    Console.WriteLine($"  Captura: DXGI Desktop Duplication");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  DXGI falhou: {ex.Message}, tentando WGC...");
-                    var wgc = new WgcCaptureSource();
-                    wgc.Initialize(device);
-                    capture = wgc;
-                    result.CaptureBackend = "WGC";
-                    Console.WriteLine($"  Captura: Windows Graphics Capture (fallback)");
+                    Console.WriteLine($"  Captura: DXGI Desktop Duplication (fallback)");
                 }
 
                 using (capture)
@@ -354,6 +357,8 @@ internal static class ProgramBenchmark
 
                     Console.WriteLine($"  CPU: média={result.Cpu.AvgCpuPercent:F1}%  pico={result.Cpu.PeakCpuPercent:F1}%");
                 }
+
+                pump?.Dispose();
             }
         }
         catch (Exception ex)
@@ -431,27 +436,33 @@ internal static class ProgramBenchmark
 
     private static async Task TestCaptureLatencyBenchmark()
     {
-        Console.WriteLine("--- Fase 0: Latência DXGI Desktop Duplication ---");
+        Console.WriteLine("--- Fase 0: Latência WGC Desktop Duplication (TEMP WGC-FIRST SMOKE) ---");
 
-        ICaptureSource? capture = new DxgiCaptureSource();
+        ICaptureSource? capture = new WgcCaptureSource();
+        WindowsMessagePump? pump = null;
 
         try
         {
-            capture.Initialize();
-            Console.WriteLine($"  [{capture.Name}] Inicializado.");
+            pump = new WindowsMessagePump();
+            pump.Invoke(() =>
+            {
+                capture.Initialize();
+                ((WgcCaptureSource)capture).StartFramePump();
+                Console.WriteLine($"  [{capture.Name}] Inicializado.");
+            });
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"  DXGI indisponível: {ex.Message}");
+            Console.WriteLine($"  WGC indisponível: {ex.Message}");
             try
             {
-                capture = new WgcCaptureSource();
+                capture = new DxgiCaptureSource();
                 capture.Initialize();
                 Console.WriteLine($"  [{capture.Name}] Inicializado.");
             }
             catch (Exception ex2)
             {
-                Console.WriteLine($"  WGC indisponível: {ex2.Message}");
+                Console.WriteLine($"  DXGI indisponível: {ex2.Message}");
                 Console.WriteLine("  Pulando benchmark de captura.");
                 capture?.Dispose();
                 return;
@@ -486,6 +497,7 @@ internal static class ProgramBenchmark
         }
 
         capture.Dispose();
+        pump?.Dispose();
 
         if (totalLat2.Count == 0)
         {
