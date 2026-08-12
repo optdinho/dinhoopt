@@ -3979,7 +3979,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - **C#**: filtro `EngineCoordinatorCaptureTests` **119/119**; suite completa **1190/1190 aprovados, 0 falhas**.
 - **TS**: `clips-engine-connection.test.ts` 105/105; `npm run build` OK (0 erros).
 - **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (294 files, ffmpeg 9.0 212MB); 5 binarios para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` - **5/5 hashes OK** (DLL `785AD262`).
-- **Commit**: pendente (git add + commit do diff P1-P4).
+- **Commit**: `cd27259` - "fix: P1-P4 log/robustez do engine pos-crash AMD".
 
 ### Key Decisions
 
