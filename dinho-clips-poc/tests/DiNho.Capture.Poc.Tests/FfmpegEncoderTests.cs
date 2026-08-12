@@ -725,16 +725,67 @@ public sealed class FfmpegEncoderTests
             var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
             Assert.Contains("-quality speed", args);
             Assert.Contains("-rc vbr_peak", args);
-            Assert.Contains("-qp_i ", args);
-            Assert.Contains("-qp_p ", args);
             Assert.Contains("-maxrate ", args);
             Assert.Contains("-bufsize ", args);
             Assert.Contains("-bf 0", args);
-            Assert.Contains("-g 60", args);
+            Assert.Contains("-g 120", args);
             Assert.Contains("-filler_data 0", args);
             Assert.Contains("-enforce_hrd 0", args);
             Assert.Contains("-vbaq true", args);
         }
+    }
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_DoesNotSetQp(string codec)
+    {
+        // Bug (issue obs-ffmpeg #12994): AMF com -qp_i/-qp_p setado + RC de bitrate (vbr_peak) faz
+        // o QP sobrepor o bitrate alvo (-b:v é ignorado/distorcido) → qualidade imprevisível. OBS
+        // não seta QP em modo VBR/CBR (só CQP). RC AMF decide o QP livremente.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.DoesNotContain("-qp_i", args);
+        Assert.DoesNotContain("-qp_p", args);
+    }
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_UsesGop2Seconds(string codec)
+    {
+        // GOP 120 = keyframe/2s @60fps — padrão de gravação AMF (GPUOpen), OBS e NVENC. Menos
+        // I-frames (~10% mais compressão) com seek/trim ainda em intervalos de 2s.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-g 120", args);
+        Assert.DoesNotContain("-g 60", args);
+    }
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_IncludeExplicitBitrateTarget(string codec)
+    {
+        // Bug (qualidade ruim na RX 5700 XT): -rc vbr_peak sem -b:v alvo fazia o AMF subalocar
+        // (~3 Mbps em 720p60 com QP 16), imagem borrada. -b:v explícito garante o target.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-b:v 20000K", args);
+        Assert.Contains("-maxrate 40000K", args);
+        Assert.Contains("-bufsize 80000K", args);
+    }
+
+    [Theory]
+    [InlineData(40000, 20000)]
+    [InlineData(80000, 40000)]
+    [InlineData(30000, 15000)]
+    [InlineData(12000, 8000)] // metade (6000) abaixo do piso de 8 Mbps
+    [InlineData(6000, 6000)]  // metade abaixo do piso mas nunca acima do maxrate
+    [InlineData(0, 8000)]
+    public void ComputeAmfBitrateTarget_ReturnsHalfOfMaxrateClamped(int maxrateKbps, int expected)
+    {
+        Assert.Equal(expected, FfmpegEncoder.ComputeAmfBitrateTarget(maxrateKbps));
     }
 
     [Fact]

@@ -203,6 +203,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         var cpuCq = Math.Clamp(cq, 1, 51);
         var amfQp = Math.Clamp(cq - 4, 0, 51);
         var amfPresetNorm = NormalizeAmfPreset(amfPreset);
+        var amfBitrate = ComputeAmfBitrateTarget(maxrateKbps);
         return codec switch
         {
             "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
@@ -210,9 +211,13 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
-            "h264_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
-            "hevc_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
-            "av1_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -qp_i {amfQp} -qp_p {amfQp} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -vbaq true",
+            // AMF: vbr_peak com -b:v alvo (sem ele subaloca ~3 Mbps → borrado), SEM -qp_i/-qp_p
+            // (issue obs-ffmpeg #12994: QP setado + RC de bitrate faz o QP sobrepor o alvo, -b:v
+            // ignorado — OBS não seta QP em VBR/CBR). GOP 120 = keyframe/2s @60fps (padrão
+            // recording GPUOpen/OBS/NVENC). PA/preanalysis fora (RDNA1 VCN 1.0 overload).
+            "h264_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -b:v {amfBitrate}K -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
+            "hevc_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -b:v {amfBitrate}K -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
+            "av1_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -b:v {amfBitrate}K -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true",
             // QSV: veryslow + global_quality + extbrc/rdo/adaptive/mbbrc. Sem -extra_hw_frames:
             // ffmpeg 9 rejeita extra_hw_frames como opção de encoder ("not a encoding option") —
             // é opção frame-level (valida p/ vf hwupload=...). QSV precisa de -init_hw_device qsv
@@ -233,6 +238,16 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// <summary>Normaliza o preset AMF para um dos três valores válidos do ffmpeg 9
     /// (quality/balanced/speed). Case-insensitive com trim; inválido, vazio ou null → "speed"
     /// (preset default mais seguro — RDNA1 sustenta ~1.0x mesmo em resolução alta).</summary>
+    /// <summary>Target de bitrate (Kbps) p/ AMF vbr_peak. Sem -b:v alvo o AMF subaloca (~3 Mbps em
+    /// 720p60 mesmo com QP 16) → imagem borrada. Metade do maxrate, piso de 8 Mbps (qualidade
+    /// mínima decente p/ 720p) e nunca acima do maxrate.</summary>
+    internal static int ComputeAmfBitrateTarget(int maxrateKbps)
+    {
+        if (maxrateKbps <= 0) return 8000;
+        var target = Math.Max(maxrateKbps / 2, 8000);
+        return Math.Min(target, maxrateKbps);
+    }
+
     internal static string NormalizeAmfPreset(string? preset)
     {
         if (string.IsNullOrWhiteSpace(preset)) return "speed";
