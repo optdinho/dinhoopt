@@ -278,4 +278,25 @@ public sealed class NonGameProcessesTests
         Assert.Contains("DiNho Optimizer", set);
         Assert.Contains("dinho-optimizer", set);
     }
+
+    [Fact]
+    public void NonGameProcesses_ContainsRemoteDesktopApps()
+    {
+        var field = typeof(EngineCoordinator).GetField("NonGameProcesses",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        var set = field.GetValue(null) as HashSet<string>;
+        Assert.NotNull(set);
+
+        Assert.Contains("AnyDesk", set);
+        Assert.Contains("rustdesk", set);
+        Assert.Contains("TeamViewer", set);
+        Assert.Contains("Parsec", set);
+        Assert.Contains("Moonlight", set);
+        Assert.Contains("Sunshine", set);
+        Assert.Contains("todesk", set);
+        Assert.Contains("vnc", set);
+        Assert.Contains("remotedesktop", set);
+    }
 }

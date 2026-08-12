@@ -424,9 +424,20 @@ public sealed partial class EngineCoordinator
             if (_appliedGameAudioOnly && _appliedGameAudioPid == game.ProcessId)
                 return;
 
+            // Cooldown: evita churn de restarts quando o foreground oscila entre
+            // o jogo e outras janelas do mesmo processo (ex: popup, launcher interno).
+            var nowMs = Environment.TickCount64;
+            var sinceLast = nowMs - _lastGameAudioOnlyRestartUtc;
+            if (_lastGameAudioOnlyRestartUtc != 0 && sinceLast < 10_000)
+            {
+                Log.D("EngineCoordinator", $"GameAudioOnly: restart para '{game.ProcessName}' ignorado por cooldown ({sinceLast}ms < 10s)");
+                return;
+            }
+
             Log.I("EngineCoordinator", $"GameAudioOnly: jogo mudou para '{game.ProcessName}' PID={game.ProcessId} — atualizando filtro");
             _appliedGameAudioOnly = true;
             _appliedGameAudioPid = game.ProcessId;
+            _lastGameAudioOnlyRestartUtc = nowMs;
             ApplyAudioSessionsInternal([game.ProcessId]);
         }
 
@@ -596,6 +607,10 @@ public sealed partial class EngineCoordinator
         "mbam", "mbamtray",
         "avast", "avg", "bitdefender", "kaspersky",
         "norton", "mcafee", "eset", "sophos",
+        // === Remote Desktop (janela em si, nao o jogo) ===
+        "AnyDesk", "rustdesk", "RustDesk", "TeamViewer", "Parsec",
+        "Moonlight", "Sunshine", "todesk", "vnc", "RealVNC", "TightVNC",
+        "remotedesktop",
         // === Launchers (janela em si, não o jogo) ===
         "steam", "steamwebhelper",
         "epicgameslauncher", "epicgames",

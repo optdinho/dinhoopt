@@ -188,9 +188,19 @@ public sealed partial class EngineCoordinator
                     return;
                 }
 
+                // Cooldown: evita churn de restarts quando o foreground oscila
+                var nowMs = Environment.TickCount64;
+                var sinceLast = nowMs - _lastGameAudioOnlyRestartUtc;
+                if (_lastGameAudioOnlyRestartUtc != 0 && sinceLast < 10_000)
+                {
+                    Log.D("EngineCoordinator", $"GameAudioOnly: restart para '{game.ProcessName}' ignorado por cooldown ({sinceLast}ms < 10s)");
+                    return;
+                }
+
                 Log.I("EngineCoordinator", $"GameAudioOnly ON — filtrando áudio para '{game.ProcessName}' PID={game.ProcessId}");
                 _appliedGameAudioOnly = true;
                 _appliedGameAudioPid = game.ProcessId;
+                _lastGameAudioOnlyRestartUtc = nowMs;
                 ApplyAudioSessionsInternal([game.ProcessId]);
             }
             else

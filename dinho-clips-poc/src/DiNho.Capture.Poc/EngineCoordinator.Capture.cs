@@ -578,7 +578,7 @@ public sealed partial class EngineCoordinator
                     if (!loggedFirstFailFrame)
                     {
                         loggedFirstFailFrame = true;
-                        Log.W("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={frame.WaitEndTicks - frame.CaptureStartTicks}. Monitorando...");
+                        Log.W("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={(frame.WaitEndTicks - frame.CaptureStartTicks) * 1000.0 / Stopwatch.Frequency:F1}. Monitorando...");
                     }
                     if (_starvationStart == default)
                     {
@@ -600,9 +600,16 @@ public sealed partial class EngineCoordinator
                     // Se o jogo ESTÁ em foreground mas os frames não chegam, não é
                     // alt-tab — é stall do WGC (ex: DWM parou de entregar frames).
                     // Nesse caso cai no else-if e o watchdog/starvation podem reiniciar.
-                    if (_capture is WgcCaptureSource && _captureTargetGame.IsValid &&
+                    // Se o foreground atual é um processo não-jogo conhecido
+                    // (AnyDesk, explorer, navegador...), não reinicia — o usuário
+                    // está fora do jogo e vai voltar. Aplica a TODOS os backends
+                    // (WGC/DXGI/hybrid), não só WGC per-window.
+                    bool fgIsNonGame = IsForegroundNonGame();
+
+                    if ((_capture is WgcCaptureSource && _captureTargetGame.IsValid &&
                         IsTargetProcessAlive() &&
                         !IsTargetGameForeground())
+                        || fgIsNonGame)
                     {
                         _bgDropCount++;
                         if (_bgDropCount >= BG_DEBOUNCE_DROPS)
@@ -757,6 +764,25 @@ public sealed partial class EngineCoordinator
         catch (Exception ex)
         {
             Log.D("EngineCoordinator", $"IsTargetGameForeground failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// True se o foreground atual é um processo não-jogo conhecido
+    /// (explorer, navegadores, apps remotos como AnyDesk/rustdesk, etc.).
+    /// Usado para suprimir reinit quando o usuário alt-tabou para fora do jogo.
+    /// </summary>
+    private bool IsForegroundNonGame()
+    {
+        try
+        {
+            var fg = _gameDetector.CurrentGame;
+            return fg.IsValid && !string.IsNullOrEmpty(fg.ProcessName) &&
+                   NonGameProcesses.Contains(fg.ProcessName);
+        }
+        catch (Exception ex)
+        {
+            Log.D("EngineCoordinator", $"IsForegroundNonGame failed: {ex.Message}");
             return false;
         }
     }

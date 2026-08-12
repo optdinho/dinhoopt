@@ -811,6 +811,99 @@ public sealed class EngineCoordinatorGameTests : IDisposable
     }
 
     [Fact]
+    public void OnGameChanged_GameAudioOnly_SamePid_DoesNotRestart()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_recording", true);
+        SetField(coord, "_appliedGameAudioOnly", true);
+        SetField(coord, "_appliedGameAudioPid", 1234);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", Environment.TickCount64);
+
+        var game = new GameInfo(
+            processName: "FiveM",
+            executablePath: @"C:\FiveM\FiveM.exe",
+            windowTitle: "FiveM",
+            windowClass: "grcWindow",
+            displayMode: DisplayMode.FullscreenExclusive,
+            processId: 1234,
+            hwnd: new IntPtr(0xABCD));
+
+        InvokeOnGameChanged(coord, game);
+
+        Assert.Equal(1234, GetField<int>(coord, "_appliedGameAudioPid"));
+    }
+
+    [Fact]
+    public void OnGameChanged_GameAudioOnly_Cooldown_IgnoresRestart()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_recording", true);
+        SetField(coord, "_appliedGameAudioOnly", false);
+        SetField(coord, "_appliedGameAudioPid", 0);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", Environment.TickCount64);
+
+        var game = new GameInfo(
+            processName: "FiveM",
+            executablePath: @"C:\FiveM\FiveM.exe",
+            windowTitle: "FiveM",
+            windowClass: "grcWindow",
+            displayMode: DisplayMode.FullscreenExclusive,
+            processId: 1234,
+            hwnd: new IntPtr(0xABCD));
+
+        InvokeOnGameChanged(coord, game);
+
+        Assert.False(GetField<bool>(coord, "_appliedGameAudioOnly"));
+    }
+
+    [Fact]
+    public void OnGameChanged_GameAudioOnly_CooldownElapsed_AppliesFilter()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_recording", true);
+        SetField(coord, "_appliedGameAudioOnly", false);
+        SetField(coord, "_appliedGameAudioPid", 0);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", Environment.TickCount64 - 11_000);
+
+        var game = new GameInfo(
+            processName: "FiveM",
+            executablePath: @"C:\FiveM\FiveM.exe",
+            windowTitle: "FiveM",
+            windowClass: "grcWindow",
+            displayMode: DisplayMode.FullscreenExclusive,
+            processId: 1234,
+            hwnd: new IntPtr(0xABCD));
+
+        InvokeOnGameChanged(coord, game);
+
+        Assert.True(GetField<bool>(coord, "_appliedGameAudioOnly"));
+        Assert.Equal(1234, GetField<int>(coord, "_appliedGameAudioPid"));
+    }
+
+    [Fact]
+    public void OnGameChanged_GameAudioOnly_NonGameProcess_Skips()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_recording", true);
+        SetField(coord, "_appliedGameAudioOnly", false);
+        SetField(coord, "_appliedGameAudioPid", 0);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", 0);
+
+        var game = new GameInfo(
+            processName: "AnyDesk",
+            executablePath: @"C:\AnyDesk\AnyDesk.exe",
+            windowTitle: "AnyDesk",
+            windowClass: "",
+            displayMode: DisplayMode.Unknown,
+            processId: 5678,
+            hwnd: new IntPtr(0x1111));
+
+        InvokeOnGameChanged(coord, game);
+
+        Assert.False(GetField<bool>(coord, "_appliedGameAudioOnly"));
+    }
+
+    [Fact]
     public void OnGameChanged_UserStopped_DifferentProcess_ClearsStoppedProcess()
     {
         var coord = CreateWithConfig();

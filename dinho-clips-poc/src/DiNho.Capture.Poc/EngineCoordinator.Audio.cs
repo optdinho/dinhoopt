@@ -281,9 +281,11 @@ public sealed partial class EngineCoordinator
             mixer.MicEnabled = active;
         Log.I("EngineCoordinator", $"[pttEvent] Microfone (PTT): {(active ? "ATIVO" : "MUTO")}");
     }
-
     private bool _appliedGameAudioOnly;
+
     private int _appliedGameAudioPid;
+
+    private long _lastGameAudioOnlyRestartUtc;
 
     private void ApplyAudioSessionsInternal(List<int> pids)
     {
