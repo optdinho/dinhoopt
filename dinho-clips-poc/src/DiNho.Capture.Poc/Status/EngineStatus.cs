@@ -23,6 +23,7 @@ public sealed class EngineStatusSnapshot
     public long ReplayBufferAudioBytes { get; set; } = 0;
     public bool AudioFallback { get; set; } = false;
     public string OutputDirectory { get; set; } = "";
+    public long DroppedFrames { get; set; } = 0;
 }
 
 public sealed class EngineStatus : IDisposable
@@ -83,6 +84,7 @@ public sealed class EngineStatus : IDisposable
                 ReplayBufferAudioBytes = _current.ReplayBufferAudioBytes,
                 AudioFallback = _current.AudioFallback,
                 OutputDirectory = _current.OutputDirectory,
+                DroppedFrames = _current.DroppedFrames,
             };
             OnStatusUpdate?.Invoke(snapshot);
             Heartbeat();

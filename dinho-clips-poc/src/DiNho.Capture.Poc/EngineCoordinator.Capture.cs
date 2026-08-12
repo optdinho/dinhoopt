@@ -7,6 +7,7 @@ using DiNho.Capture.Poc.Memory;
 using DiNho.Capture.Poc.Watchdog;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.MediaFoundation;
@@ -314,6 +315,8 @@ public sealed partial class EngineCoordinator
             _gameBackgrounded = false;
             _bgDropCount = 0;
             _fgGoodCount = 0;
+            _consecutiveDrops = 0;
+            _droppedFrames = 0;
 
             _pipelineCts?.Cancel();
             try
@@ -396,6 +399,13 @@ public sealed partial class EngineCoordinator
     #region WDA_EXCLUDEFROMCAPTURE — exclude DnHo window from capture
 
     private readonly List<IntPtr> _dinhoHwnds = new();
+    private int _wdaRetryCount;
+
+    // Seams p/ teste determinístico do retry (P4).
+    internal static int WdaRetryDelayMs = 2000;
+    internal static Func<int, List<IntPtr>>? EnumerateDinhoHwndsProbe = null;
+    internal static Func<IntPtr, bool>? WdaExcludeProbe = null;
+    internal static Action<IntPtr>? WdaRestoreProbe = null;
 
     /// <summary>
     /// Finds DnHo windows by Electron PID and sets WDA_EXCLUDEFROMCAPTURE.
@@ -407,25 +417,82 @@ public sealed partial class EngineCoordinator
         if (electronPid <= 0) return;
         try
         {
-            _dinhoHwnds.Clear();
-            PInvoke.EnumWindows((hwnd, _) =>
+            var enumerated = EnumerateDinhoHwndsProbe != null
+                ? EnumerateDinhoHwndsProbe(electronPid)
+                : EnumerateDinhoHwnds(electronPid);
+
+            lock (_dinhoHwnds)
             {
-                uint pid;
-                PInvoke.GetWindowThreadProcessId(hwnd, &pid);
-                if (pid == electronPid && PInvoke.IsWindowVisible(hwnd))
+                _dinhoHwnds.Clear();
+                var excluded = 0;
+                foreach (var hwnd in enumerated)
                 {
-                    _dinhoHwnds.Add((IntPtr)hwnd);
-                    WdaHelper.ExcludeWindowFromCapture(hwnd);
+                    var ok = WdaExcludeProbe != null
+                        ? WdaExcludeProbe(hwnd)
+                        : WdaHelper.ExcludeWindowFromCapture(hwnd);
+                    if (ok) excluded++;
+                    _dinhoHwnds.Add(hwnd);
                 }
-                return true;
-            }, default);
-            if (_dinhoHwnds.Count > 0)
-                Log.I("EngineCoordinator", $"WDA: excluded {_dinhoHwnds.Count} DnHo window(s) from capture (PID={electronPid})");
+
+                if (excluded > 0)
+                {
+                    Log.I("EngineCoordinator", $"WDA: excluded {excluded} DnHo window(s) from capture (PID={electronPid})");
+                    return;
+                }
+            }
+
+            ScheduleWdaRetryIfNeeded();
         }
         catch (Exception ex)
         {
             Log.W("EngineCoordinator", $"WDA exclude failed: {ex.Message}");
+            ScheduleWdaRetryIfNeeded();
         }
+    }
+
+    private unsafe List<IntPtr> EnumerateDinhoHwnds(int electronPid)
+    {
+        var result = new List<IntPtr>();
+        PInvoke.EnumWindows((hwnd, _) =>
+        {
+            uint pid;
+            PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == electronPid && PInvoke.IsWindowVisible(hwnd))
+                result.Add((IntPtr)hwnd);
+            return true;
+        }, default);
+        return result;
+    }
+
+    /// <summary>
+    /// Agenda um único retry (atrasado) para tentar excluir de novo.
+    /// _wdaRetryCount == 0 => retry pendente/possível; == 1 => já agendado (at-most-once).
+    /// RestoreDinhoWindowCapture zera o contador e cancela o retry pendente.
+    /// </summary>
+    private void ScheduleWdaRetryIfNeeded()
+    {
+        lock (_dinhoHwnds)
+        {
+            if (_wdaRetryCount != 0) return;
+            _wdaRetryCount = 1;
+        }
+        Log.W("EngineCoordinator", "WDA: excluding failed — scheduling one retry to hide DnHo window(s)");
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(WdaRetryDelayMs);
+            lock (_dinhoHwnds)
+            {
+                if (_wdaRetryCount == 0) return;
+                try
+                {
+                    ExcludeDinhoWindowFromCapture();
+                }
+                catch (Exception ex)
+                {
+                    Log.W("EngineCoordinator", $"WDA retry failed: {ex.Message}");
+                }
+            }
+        });
     }
 
     /// <summary>
@@ -433,21 +500,63 @@ public sealed partial class EngineCoordinator
     /// </summary>
     private void RestoreDinhoWindowCapture()
     {
-        if (_dinhoHwnds.Count == 0) return;
+        List<IntPtr> toRestore;
+        lock (_dinhoHwnds)
+        {
+            _wdaRetryCount = 0;
+            if (_dinhoHwnds.Count == 0) return;
+            toRestore = new List<IntPtr>(_dinhoHwnds);
+            _dinhoHwnds.Clear();
+        }
+
         try
         {
-            foreach (var hwnd in _dinhoHwnds)
-                WdaHelper.RestoreWindowCapture(hwnd);
-            Log.I("EngineCoordinator", $"WDA: restored {_dinhoHwnds.Count} DnHo window(s) visibility");
+            foreach (var hwnd in toRestore)
+            {
+                if (WdaRestoreProbe != null) WdaRestoreProbe(hwnd);
+                else WdaHelper.RestoreWindowCapture(hwnd);
+            }
+            Log.I("EngineCoordinator", $"WDA: restored {toRestore.Count} DnHo window(s) visibility");
         }
         catch (Exception ex)
         {
             Log.W("EngineCoordinator", $"WDA restore failed: {ex.Message}");
         }
-        _dinhoHwnds.Clear();
     }
 
     #endregion
+
+    // ── Agregação de frames dropped ──────────────────────────────────────────
+    // Em vez de logar cada frame dropped (91 linhas numa rajada GPU típica),
+    // loga no 1º drop e a cada 25 totais; ao recuperar, resume a rajada.
+    internal static bool ShouldLogDrop(long totalDrops)
+        => totalDrops == 1 || totalDrops % 25 == 0;
+
+    internal static bool ShouldLogRecovery(int consecutiveDrops)
+        => consecutiveDrops >= 5;
+
+    private void ReportDrop(string reason)
+    {
+        _consecutiveDrops++;
+        _droppedFrames++;
+        if (ShouldLogDrop(_droppedFrames))
+        {
+            Log.W("Pipeline", $"Frame dropped — drop #{_consecutiveDrops} consecutivo (total {_droppedFrames}). {reason}");
+        }
+    }
+
+    private void LogRecoveryIfDropped()
+    {
+        if (_consecutiveDrops == 0)
+        {
+            return;
+        }
+        if (ShouldLogRecovery(_consecutiveDrops))
+        {
+            Log.I("Pipeline", $"Captura recuperada após {_consecutiveDrops} drops consecutivos (total {_droppedFrames} na sessão).");
+        }
+        _consecutiveDrops = 0;
+    }
 
     private async Task PipelineLoop(CancellationToken ct)
     {
@@ -558,10 +667,12 @@ public sealed partial class EngineCoordinator
                             var elapsedMs = (Stopwatch.GetTimestamp() - beforeCapture) * 1000.0 / Stopwatch.Frequency;
                             _watchdog.ReportGoodFrame(elapsedMs);
                             _hasEverBeenHealthy = true;
+                            LogRecoveryIfDropped();
                         }
                         else
                         {
                             _watchdog.ReportDroppedFrame(PipelineIssue.EncodeError);
+                            ReportDrop("Encoder não produziu frame (encode error).");
                         }
                     }
                     else
@@ -578,7 +689,7 @@ public sealed partial class EngineCoordinator
                     if (!loggedFirstFailFrame)
                     {
                         loggedFirstFailFrame = true;
-                        Log.W("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={(frame.WaitEndTicks - frame.CaptureStartTicks) * 1000.0 / Stopwatch.Frequency:F1}. Monitorando...");
+                        Log.D("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={(frame.WaitEndTicks - frame.CaptureStartTicks) * 1000.0 / Stopwatch.Frequency:F1}. Monitorando...");
                     }
                     if (_starvationStart == default)
                     {
@@ -586,6 +697,7 @@ public sealed partial class EngineCoordinator
                         Log.W("Pipeline", "Frame dropped (Success=false) — possível GPU overload ou device busy. Monitorando...");
                     }
                     _watchdog.ReportDroppedFrame(PipelineIssue.NoFrame);
+                    ReportDrop("Success=false — GPU overload ou device busy.");
                 }
 
                 if (!_needsReinit)
@@ -690,6 +802,7 @@ public sealed partial class EngineCoordinator
                     s.ReplayBufferVideoBytes = d.videoBytes;
                     s.ReplayBufferAudioPackets = d.audioCount;
                     s.ReplayBufferAudioBytes = d.audioBytes;
+                    s.DroppedFrames = _droppedFrames;
                 });
 
                 // Log de RAM a cada ~60 frames (~1s a 60fps) — movido para o topo do

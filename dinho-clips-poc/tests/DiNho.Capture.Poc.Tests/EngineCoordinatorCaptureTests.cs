@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Threading;
 using DiNho.Capture.Poc.Buffer;
 using DiNho.Capture.Poc.Capture;
 using DiNho.Capture.Poc.Config;
@@ -282,6 +283,215 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
 
         var result = GetField<List<IntPtr>>(coord, "_dinhoHwnds")!;
         Assert.Empty(result);
+    }
+
+    #endregion
+
+    #region P4 — WDA retry
+
+    [Fact]
+    public void ExcludeDinhoWindowFromCapture_EmptyEnumeration_SchedulesRetryAndRepopulates()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
+        var config = CreateConfig(c => c.ElectronPid = 1234);
+        SetField(coord, "_config", config);
+
+        var hwnd = new IntPtr(0x1234);
+        var calls = 0;
+        try
+        {
+            EngineCoordinator.WdaRetryDelayMs = 20;
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => calls++ == 0
+                ? new List<IntPtr>()
+                : new List<IntPtr> { hwnd };
+            EngineCoordinator.WdaExcludeProbe = _ => true;
+
+            var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            method.Invoke(coord, null);
+
+            Assert.True(SpinWait.SpinUntil(() =>
+                GetField<List<IntPtr>>(coord, "_dinhoHwnds")!.Count > 0, 2000));
+            Assert.Equal(2, calls);
+            Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
+            Assert.Equal(hwnd, GetField<List<IntPtr>>(coord, "_dinhoHwnds")![0]);
+        }
+        finally
+        {
+            ResetWdaSeams(coord);
+        }
+    }
+
+    [Fact]
+    public void ExcludeDinhoWindowFromCapture_AlwaysEmpty_RetriesAtMostOnce()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
+        var config = CreateConfig(c => c.ElectronPid = 1234);
+        SetField(coord, "_config", config);
+
+        var calls = 0;
+        try
+        {
+            EngineCoordinator.WdaRetryDelayMs = 20;
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { calls++; return new List<IntPtr>(); };
+
+            var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            method.Invoke(coord, null);
+
+            Assert.True(SpinWait.SpinUntil(() => calls >= 2, 2000));
+            Thread.Sleep(80);
+            Assert.Equal(2, calls);
+            Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
+        }
+        finally
+        {
+            ResetWdaSeams(coord);
+        }
+    }
+
+    [Fact]
+    public void ExcludeDinhoWindowFromCapture_AllExclusionsFail_SchedulesRetry()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
+        var config = CreateConfig(c => c.ElectronPid = 1234);
+        SetField(coord, "_config", config);
+
+        var hwnd = new IntPtr(0x1234);
+        var calls = 0;
+        try
+        {
+            EngineCoordinator.WdaRetryDelayMs = 20;
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ =>
+            {
+                calls++;
+                return new List<IntPtr> { hwnd };
+            };
+            EngineCoordinator.WdaExcludeProbe = _ => false;
+
+            var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            method.Invoke(coord, null);
+
+            Assert.True(SpinWait.SpinUntil(() => calls >= 2, 2000));
+            Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
+            Assert.Single(GetField<List<IntPtr>>(coord, "_dinhoHwnds")!);
+        }
+        finally
+        {
+            ResetWdaSeams(coord);
+        }
+    }
+
+    [Fact]
+    public void ExcludeDinhoWindowFromCapture_EnumerationThrows_SchedulesRetry()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
+        var config = CreateConfig(c => c.ElectronPid = 1234);
+        SetField(coord, "_config", config);
+
+        var hwnd = new IntPtr(0x1234);
+        var calls = 0;
+        try
+        {
+            EngineCoordinator.WdaRetryDelayMs = 20;
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ =>
+            {
+                calls++;
+                if (calls == 1) throw new InvalidOperationException("boom");
+                return new List<IntPtr> { hwnd };
+            };
+            EngineCoordinator.WdaExcludeProbe = _ => true;
+
+            var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            method.Invoke(coord, null);
+
+            Assert.True(SpinWait.SpinUntil(() => calls >= 2, 2000));
+            Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
+            Assert.Single(GetField<List<IntPtr>>(coord, "_dinhoHwnds")!);
+        }
+        finally
+        {
+            ResetWdaSeams(coord);
+        }
+    }
+
+    [Fact]
+    public void ExcludeDinhoWindowFromCapture_Success_NoRetryScheduled()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
+        var config = CreateConfig(c => c.ElectronPid = 1234);
+        SetField(coord, "_config", config);
+
+        var hwnd = new IntPtr(0x1234);
+        var calls = 0;
+        try
+        {
+            EngineCoordinator.WdaRetryDelayMs = 20;
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { calls++; return new List<IntPtr> { hwnd }; };
+            EngineCoordinator.WdaExcludeProbe = _ => true;
+
+            var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            method.Invoke(coord, null);
+
+            Assert.Equal(1, calls);
+            Assert.Equal(0, GetField<int>(coord, "_wdaRetryCount"));
+            Assert.Single(GetField<List<IntPtr>>(coord, "_dinhoHwnds")!);
+        }
+        finally
+        {
+            ResetWdaSeams(coord);
+        }
+    }
+
+    [Fact]
+    public void RestoreDinhoWindowCapture_CancelsPendingWdaRetry()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
+        var config = CreateConfig(c => c.ElectronPid = 1234);
+        SetField(coord, "_config", config);
+
+        var calls = 0;
+        try
+        {
+            EngineCoordinator.WdaRetryDelayMs = 20;
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { calls++; return new List<IntPtr>(); };
+
+            var excludeMethod = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            excludeMethod.Invoke(coord, null);
+            Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
+
+            var restoreMethod = CoordinatorType.GetMethod("RestoreDinhoWindowCapture",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            restoreMethod.Invoke(coord, null);
+
+            Thread.Sleep(80);
+            Assert.Equal(1, calls);
+            Assert.Equal(0, GetField<int>(coord, "_wdaRetryCount"));
+        }
+        finally
+        {
+            ResetWdaSeams(coord);
+        }
+    }
+
+    private static void ResetWdaSeams(EngineCoordinator coord)
+    {
+        EngineCoordinator.EnumerateDinhoHwndsProbe = null;
+        EngineCoordinator.WdaExcludeProbe = null;
+        EngineCoordinator.WdaRestoreProbe = null;
+        var restore = CoordinatorType.GetMethod("RestoreDinhoWindowCapture",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        try { restore.Invoke(coord, null); } catch { }
     }
 
     #endregion
@@ -1258,6 +1468,51 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         task.Wait(TimeSpan.FromSeconds(3));
 
         Assert.False(GetField<bool>(coord, "_needsReinit"));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(25)]
+    [InlineData(50)]
+    [InlineData(75)]
+    public void ShouldLogDrop_FirstOrEvery25thTotal_ReturnsTrue(long totalDrops)
+    {
+        Assert.True(EngineCoordinator.ShouldLogDrop(totalDrops));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(24)]
+    [InlineData(26)]
+    [InlineData(99)]
+    public void ShouldLogDrop_OtherTotals_ReturnFalse(long totalDrops)
+    {
+        Assert.False(EngineCoordinator.ShouldLogDrop(totalDrops));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void ShouldLogRecovery_BelowThreshold_ReturnsFalse(int consecutiveDrops)
+    {
+        Assert.False(EngineCoordinator.ShouldLogRecovery(consecutiveDrops));
+    }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void ShouldLogRecovery_AtOrAboveThreshold_ReturnsTrue(int consecutiveDrops)
+    {
+        Assert.True(EngineCoordinator.ShouldLogRecovery(consecutiveDrops));
+    }
+
+    [Fact]
+    public void EngineStatus_DroppedFrames_CanUpdate()
+    {
+        using var status = new EngineStatus();
+        status.Update(s => s.DroppedFrames = 91);
+        Assert.Equal(91, status.Current.DroppedFrames);
     }
 
     #endregion

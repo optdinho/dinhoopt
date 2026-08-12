@@ -663,7 +663,11 @@ internal sealed partial class FfmpegEncoder : IEncoder
                 bool exited = _process?.HasExited == true;
                 string exitInfo = exited ? $" exited={_process!.ExitCode}" : "";
                 int first4 = _pendingBuf != null && _pendingLen >= 4 ? (_pendingBuf[0] << 24) | (_pendingBuf[1] << 16) | (_pendingBuf[2] << 8) | _pendingBuf[3] : 0;
-                Log.W("FfmpegEncoder", $"no output packets after {_frameCount} frames written — ffmpeg exited={exited}{exitInfo}, pendingBytes={_pendingLen}, hadSlice={_hadSlice}, frameIndex={_outputFrameIndex}, pendingFirst4=0x{first4:X8}");
+                string noOutputMsg = $"no output packets after {_frameCount} frames written — ffmpeg exited={exited}{exitInfo}, pendingBytes={_pendingLen}, hadSlice={_hadSlice}, frameIndex={_outputFrameIndex}, pendingFirst4=0x{first4:X8}";
+                if (_frameCount == 1)
+                    Log.D("FfmpegEncoder", noOutputMsg); // cold-start: encoder ainda aquecendo, normal
+                else
+                    Log.W("FfmpegEncoder", noOutputMsg); // stall real: nenhum pacote após N frames
             }
         }
         return null;

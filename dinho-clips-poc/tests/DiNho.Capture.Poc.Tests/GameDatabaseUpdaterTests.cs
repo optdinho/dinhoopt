@@ -21,6 +21,7 @@ public sealed class GameDatabaseUpdaterTests : IDisposable
         _mockHandler = new MockHandler();
         _httpClient = new HttpClient(_mockHandler);
         _updater = new GameDatabaseUpdater(_httpClient, _tempDir);
+        _updater.RetryDelay = TimeSpan.Zero; // keep tests fast — no real 30s backoff
 
         _stateFilePath = Path.Combine(_tempDir, "games-update-check.json");
     }
@@ -339,6 +340,55 @@ public sealed class GameDatabaseUpdaterTests : IDisposable
         Assert.Equal(remoteVersion, savedDb.Version);
     }
 
+    [Fact]
+    public async Task RetriesAndSucceeds_AfterTransientFailure()
+    {
+        var localVersion = GameDatabase.Instance.Version;
+        _mockHandler.SequentialExceptions.Add(new HttpRequestException("Network error"));
+
+        _mockHandler.Response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new
+            {
+                version = localVersion + 1,
+                games = new[]
+                {
+                    new { processName = "test.exe", windowClass = "TestWindow", displayName = "Test Game" }
+                }
+            }))
+        };
+
+        var result = await _updater.CheckForUpdateAsync();
+
+        Assert.True(result, "Should succeed on the retry after a transient failure");
+        Assert.Equal(2, _mockHandler.CallCount);
+    }
+
+    [Fact]
+    public async Task DoesNotRetry_OnHttpClientError()
+    {
+        _mockHandler.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
+
+        var result = await _updater.CheckForUpdateAsync();
+
+        Assert.False(result);
+        Assert.Equal(1, _mockHandler.CallCount);
+    }
+
+    [Fact]
+    public async Task FailsAfterAllRetries_AndDoesNotPersistState()
+    {
+        CleanupStateFile();
+
+        _mockHandler.Exception = new HttpRequestException("Network error");
+
+        var result = await _updater.CheckForUpdateAsync();
+
+        Assert.False(result);
+        Assert.Equal(2, _mockHandler.CallCount);
+        Assert.False(File.Exists(_stateFilePath), "State file should NOT exist after all retries failed");
+    }
+
     private void CleanupStateFile()
     {
         if (File.Exists(_stateFilePath))
@@ -349,12 +399,23 @@ public sealed class GameDatabaseUpdaterTests : IDisposable
     {
         public HttpResponseMessage? Response { get; set; }
         public Exception? Exception { get; set; }
+        public List<Exception> SequentialExceptions { get; } = new();
         public bool WasCalled { get; private set; }
+        public int CallCount { get; private set; }
         public int DelayMs { get; set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             WasCalled = true;
+            CallCount++;
+
+            if (SequentialExceptions.Count > 0)
+            {
+                var ex = SequentialExceptions[0];
+                SequentialExceptions.RemoveAt(0);
+                throw ex;
+            }
+
 
             if (DelayMs > 0)
                 Task.Delay(DelayMs, cancellationToken).GetAwaiter().GetResult();

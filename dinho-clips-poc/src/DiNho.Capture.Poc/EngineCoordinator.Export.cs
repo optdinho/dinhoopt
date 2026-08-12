@@ -234,6 +234,7 @@ public sealed partial class EngineCoordinator
                 MemoryMB = s.MemoryMB,
                 ReplayBufferBytes = s.ReplayBufferBytes,
                 OutputDirectory = _config.Config.OutputDirectory,
+                DroppedFrames = s.DroppedFrames,
             }
         };
     }

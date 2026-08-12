@@ -46,6 +46,7 @@ export interface ClipsEngineStatus {
   replayBufferVideoBytes?: number
   replayBufferAudioPackets?: number
   replayBufferAudioBytes?: number
+  droppedFrames?: number
 }
 
 export interface ClipInfo {

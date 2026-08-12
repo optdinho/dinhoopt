@@ -3963,6 +3963,35 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 2 testes novos
 - `AGENTS.md`: resumo de sessão
 
+## Session Summary (2026-08-11f - P1-P4: log/robustez do engine pos-crash AMD)
+
+### Done
+
+- **P1 - drop log com anti-spam** (`FfmpegEncoder.cs`): contadores `_totalVideoDropped`/`_consecutiveDrops` via `Interlocked` (so thread do ReaderLoop); `LogDrop` so loga no 1o drop (`== 1`) e a cada 25 (`% 25 == 0`), `LogRecovery` so se `consecutiveDrops >= 5`; `_droppedVideoFrames` propagado no status broadcast (`EngineStatus.cs` `DroppedFrames` + TS `ClipsEngineStatus.droppedFrames`/`clips-engine.ts`/`clips-engine-connection.ts`). ~15 logs/frame durante drop transitorio -> 1-2.
+- **P2 - logs de diagnostico demovidos para `Log.D`** (`FfmpegEncoder.cs`): "Primeiro frame Success=false", "Primeiro packet DESCARTADO: !_recording" (1x/sessao) e "no output packets after {N} frames" (aviso de audio sem video - agora Debug).
+- **P3 - `GameDatabaseUpdater.cs` robusto**: `internal TimeSpan RetryDelay` (30s), `MAX_ATTEMPTS = 2`, retry so em resposta transitoria (`408/429/5xx`), sem retry em `HttpRequestException`/4xx; persistencia so em sucesso; task de retry com `Task.Delay` (sem thread bloqueada).
+- **P4 - WDA exclude com retry unico** (`EngineCoordinator.Capture.cs`): `ScheduleWdaRetryIfNeeded()` - agendamento at-most-once (`_wdaRetryCount`), delay `WdaRetryDelayMs` (2000ms), seam `EnumerateDinhoHwndsProbe` (testes deterministicos); `RestoreDinhoWindowCapture` zera o contador (cancela retry pendente).
+- **Fixes MEDIUM do validador externo aplicados**: (1) P3 `ReadAsStringAsync`+parse dentro do loop de retry; (2) P4 acesso a `_dinhoHwnds` serializado com `lock (_dinhoHwnds)` entre retry task e restore (C# lock reentrante - chamadas aninhadas seguras). Tests `SetField` sempre setam lista nao-nula (Ctor `FormatterServices` pula inicializadores).
+- **Bug pre-existente corrigido no teste** `ExcludeDinhoWindowCapture_AllExclusionsFail_SchedulesRetry`: `calls++;` no lambda do probe.
+
+### Validado
+
+- **C#**: filtro `EngineCoordinatorCaptureTests` **119/119**; suite completa **1190/1190 aprovados, 0 falhas**.
+- **TS**: `clips-engine-connection.test.ts` 105/105; `npm run build` OK (0 erros).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; `npm run copy-engine` (294 files, ffmpeg 9.0 212MB); 5 binarios para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` - **5/5 hashes OK** (DLL `785AD262`).
+- **Commit**: pendente (git add + commit do diff P1-P4).
+
+### Key Decisions
+
+- **Anti-spam de log por contador em vez de janela temporal**: frame drops ocorrem em rajadas - janela de tempo exigiria relogio por chamada; contador + modulo e deterministico e barato.
+- **Retry at-most-once no WDA**: excluir janelas e best-effort (falha se a janela ainda nao existe); um unico retry cobre o arranque, e a restauracao sempre zera o contador.
+- **`lock (_dinhoHwnds)`** (objeto de lock = a propria lista): sem campo extra de lock, e compativel com os testes que setam a lista via reflection.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessao longa com drop transitorio): log de drops sem spam e status `droppedFrames` atualizado no renderer.
+- (Opcional) Corrigir `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) - pre-existente.
+
 ## Session Summary (2026-08-11b — AMD encoder 0.55x: preset speed AMF corta preanalysis chain)
 
 ### Root cause (fps=35 / speed=0.569x na RX 5700 XT com o fix -filler_data)

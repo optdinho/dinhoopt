@@ -125,7 +125,7 @@ public sealed partial class EngineCoordinator
         if (!_recording)
         {
             if (_audioPacketCount == 0)
-                Log.W("AudioDiag", $"Primeiro packet DESCARTADO: !_recording. packet pts={packet.Pts.TotalSeconds:F3}s");
+                Log.D("AudioDiag", $"Primeiro packet DESCARTADO: !_recording. packet pts={packet.Pts.TotalSeconds:F3}s");
             _audioPacketCount++;
             return;
         }

@@ -82,6 +82,13 @@ public sealed partial class EngineCoordinator : IDisposable
     private volatile bool _deviceLost;
     private DateTime _starvationStart;
 
+    // Agregação de frames dropped — evita inundar o log JSONL quando o pipeline
+    // dropa frames em rajadas (ex.: RX 5700 XT com NVENC/AMF). _consecutiveDrops
+    // zera na recuperação; _droppedFrames é o total acumulado da sessão (exposto
+    // no status como "droppedFrames").
+    private int _consecutiveDrops;
+    private long _droppedFrames;
+
     // Recursos compartilhados (performance)
     private ID3D11Device? _sharedDevice;
     private IMFDXGIDeviceManager? _dxgiManager;

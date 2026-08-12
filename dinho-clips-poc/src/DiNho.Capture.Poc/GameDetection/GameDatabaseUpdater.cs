@@ -9,6 +9,7 @@ public sealed class GameDatabaseUpdater
     public const string REMOTE_URL = "https://cdn.dinho.app/games.json";
     public const int CHECK_INTERVAL_DAYS = 7;
     private const string STATE_FILE = "games-update-check.json";
+    private const int MAX_ATTEMPTS = 2;
 
     private static readonly Lazy<GameDatabaseUpdater> _instance = new(() => new GameDatabaseUpdater());
     public static GameDatabaseUpdater Instance => _instance.Value;
@@ -16,6 +17,9 @@ public sealed class GameDatabaseUpdater
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly HttpClient _httpClient;
     private string _outputDirectory = AppContext.BaseDirectory;
+
+    /// <summary>Backoff between HTTP attempts. Exposed for tests; real runtime keeps 30s.</summary>
+    internal TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(30);
 
     public GameDatabaseUpdater() : this(CreateDefaultHttpClient()) { }
 
@@ -53,39 +57,39 @@ public sealed class GameDatabaseUpdater
             }
 
             Log.I("GameDatabaseUpdater", $"Checking for updates from {REMOTE_URL}");
-            HttpResponseMessage response;
-            try
+            RemoteGameDatabase? remoteDb = null;
+            string json = null!;
+            for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                response = await _httpClient.GetAsync(REMOTE_URL, cts.Token);
-                response.EnsureSuccessStatusCode();
-            }
-            catch (Exception ex)
-            {
-                Log.W("GameDatabaseUpdater", $"HTTP request failed: {ex.Message}");
-                return false;
-            }
+                if (attempt > 1)
+                {
+                    Log.W("GameDatabaseUpdater", $"Update check failed, retrying in {(int)RetryDelay.TotalSeconds}s (attempt {attempt}/{MAX_ATTEMPTS})");
+                    await Task.Delay(RetryDelay);
+                }
 
-            string json;
-            try
-            {
-                json = await response.Content.ReadAsStringAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.W("GameDatabaseUpdater", $"Failed to read response content: {ex.Message}");
-                return false;
-            }
-
-            RemoteGameDatabase? remoteDb;
-            try
-            {
-                remoteDb = JsonSerializer.Deserialize<RemoteGameDatabase>(json);
-            }
-            catch (Exception ex)
-            {
-                Log.W("GameDatabaseUpdater", $"Failed to parse remote games.json: {ex.Message}");
-                return false;
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    using var response = await _httpClient.GetAsync(REMOTE_URL, cts.Token);
+                    response.EnsureSuccessStatusCode();
+                    json = await response.Content.ReadAsStringAsync();
+                    remoteDb = JsonSerializer.Deserialize<RemoteGameDatabase>(json);
+                    break;
+                }
+                catch (HttpRequestException ex) when (IsClientError(ex))
+                {
+                    Log.W("GameDatabaseUpdater", $"HTTP request failed with status {(int)ex.StatusCode!.Value}: {ex.Message}");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == MAX_ATTEMPTS)
+                    {
+                        Log.W("GameDatabaseUpdater", $"Update check failed after {MAX_ATTEMPTS} attempts: {ex.Message}");
+                        return false;
+                    }
+                    Log.W("GameDatabaseUpdater", $"Update check failed: {ex.Message}");
+                }
             }
 
             if (remoteDb?.Games == null || remoteDb.Games.Count == 0)
@@ -165,6 +169,9 @@ public sealed class GameDatabaseUpdater
         var lastCheck = DateTimeOffset.FromUnixTimeMilliseconds(state.LastCheckUnixMs).UtcDateTime;
         return (DateTime.UtcNow - lastCheck).TotalDays >= CHECK_INTERVAL_DAYS;
     }
+
+    private static bool IsClientError(HttpRequestException ex)
+        => ex.StatusCode.HasValue && (int)ex.StatusCode.Value >= 400 && (int)ex.StatusCode.Value < 500;
 
     private sealed class RemoteGameDatabase
     {

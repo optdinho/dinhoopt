@@ -38,6 +38,7 @@ let _engineReplayBufferVideoFrames = 0
 let _engineReplayBufferVideoBytes = 0
 let _engineReplayBufferAudioPackets = 0
 let _engineReplayBufferAudioBytes = 0
+let _engineDroppedFrames = 0
 
 // ─── Lazy getter for getCurrentStatus (breaks circular dep) ───
 
@@ -78,6 +79,7 @@ function statusUpdater(src: Record<string, unknown>): void {
   if (typeof src.replayBufferVideoBytes === 'number') _engineReplayBufferVideoBytes = src.replayBufferVideoBytes
   if (typeof src.replayBufferAudioPackets === 'number') _engineReplayBufferAudioPackets = src.replayBufferAudioPackets
   if (typeof src.replayBufferAudioBytes === 'number') _engineReplayBufferAudioBytes = src.replayBufferAudioBytes
+  if (typeof src.droppedFrames === 'number') _engineDroppedFrames = src.droppedFrames
   if (typeof src.outputDirectory === 'string' && src.outputDirectory) {
     const engineDir = src.outputDirectory as string
     if (C.outputDirectory && C.outputDirectory !== engineDir) {
@@ -126,6 +128,7 @@ export function readEngineStatus(): {
   replayBufferVideoBytes: number
   replayBufferAudioPackets: number
   replayBufferAudioBytes: number
+  droppedFrames: number
 } {
   return {
     capturing: _engineCapturing,
@@ -143,6 +146,7 @@ export function readEngineStatus(): {
     replayBufferVideoBytes: _engineReplayBufferVideoBytes,
     replayBufferAudioPackets: _engineReplayBufferAudioPackets,
     replayBufferAudioBytes: _engineReplayBufferAudioBytes,
+    droppedFrames: _engineDroppedFrames,
   }
 }
 

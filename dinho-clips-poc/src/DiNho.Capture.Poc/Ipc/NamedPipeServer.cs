@@ -136,6 +136,9 @@ public sealed class EngineStatusValue
 
     [JsonPropertyName("outputDirectory")]
     public string OutputDirectory { get; set; } = "";
+
+    [JsonPropertyName("droppedFrames")]
+    public long DroppedFrames { get; set; } = 0;
 }
 
 public sealed class NamedPipeServer : IDisposable
