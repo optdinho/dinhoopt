@@ -3796,9 +3796,9 @@ pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7
   - BuildEncoderTuneArgs(codec, cq, maxrateKbps, bufsizeKbps, bframes, lookahead, nvencPreset) — todo o switch tune, testavel sem processo ffmpeg
   - GetRawFormatForCodec(codec) — switch rawFmt (av1_amf → "av1")
   - StartFfmpeg agora chama os seams; dead vars framesArg/lookaheadArg removidas (nunca usadas)
-- **Args av1_amf definidos com base no help real do ffmpeg 9.0 embarcado** (fmpeg -h encoder=av1_amf): mesmos do h264/hevc_amf (-quality quality -rc vbr_peak -qp_i/-qp_p -maxrate/-bufsize -bf 0 -g 60 -filler 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true) **exceto -me_quarter_pel** (opcao inexistente no av1_amf — passada causaria erro de opcao)
+- **Args av1_amf definidos com base no help real do ffmpeg 9.0 embarcado** (fmpeg -h encoder=av1_amf): mesmos do h264/hevc_amf (-quality quality -rc cqp -qp_i/-qp_p -bf 0 -g 60 -filler_data 0 -enforce_hrd 0 -preanalysis true -pa_taq_mode 2 -vbaq true -high_motion_quality_boost_enable true -pa_lookahead_buffer_depth 40 -pa_paq_mode 1 -pa_adaptive_mini_gop true -pa_scene_change_detection_enable true) **exceto -me_quarter_pel** (opcao inexistente no av1_amf — passada causaria erro de opcao)
 - **12 testes novos** em FfmpegEncoderTests.cs:
-  - BuildEncoderTuneArgs_AmfCodecs_UseAmfArgs (Theory av1/h264/hevc_amf: contem -quality quality/-rc vbr_peak, NAO contem -crf/-preset veryfast/-profile:v high)
+  - BuildEncoderTuneArgs_AmfCodecs_UseAmfArgs (Theory av1/h264/hevc_amf: contem -quality quality/-rc cqp, NAO contem -crf/-preset veryfast/-profile:v high)
   - BuildEncoderTuneArgs_Av1Amf_DoesNotUseCpuFallbackArgs (regressao do bug), ..._NoMeQuarterPel, BuildEncoderTuneArgs_H264Amf_KeepsMeQuarterPel
   - GetRawFormatForCodec_ReturnsExpected (Theory av1_amf/av1_nvenc/libsvtav1/av1_d3d12va→av1; hevc_amf→hevc; h264_amf/libx264→h264)
 
@@ -3935,7 +3935,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - **Root cause fechada com log real da máquina AMD** (`C:\Users\WENDEL\Downloads\2026-08-11.jsonl`): engine (Radeon RX 5700 XT, codec "auto") entrava em loop de restart (~16/s) com `[ffmpeg] Unrecognized option 'filler'.` a cada tentativa — todos os fallbacks falhavam, `max restart attempts reached, no codec fallback`.
 - **`FfmpegEncoder.cs` `BuildEncoderTuneArgs`**: `-filler 0` → `-filler_data 0` nos 3 codecs AMF (`h264_amf`, `hevc_amf`, `av1_amf`). `-filler` não existe no ffmpeg 9 — a opção real é `-filler_data` (boolean, válida nos 3). Mesma classe do bug av1_nvenc weighted_pred (opção inexistente → abort no parse).
 - Comentário do seam atualizado (`-filler_data` válida nos 3; `me_quarter_pel` só H26x confirmado).
-- Validação das demais opções AMF via `-h encoder={h264,hevc,av1}_amf` do ffmpeg 9.0 local: `-pa_taq_mode 2` (range -1..2 OK), `-pa_lookahead_buffer_depth 40` (range -1..41 OK), `-pa_paq_mode 1` (range -1..1 OK), `-enforce_hrd`, `-preanalysis`, `-vbaq`, `-pa_adaptive_mini_gop`, `-pa_scene_change_detection_enable`, `-high_motion_quality_boost_enable`, `-quality quality`, `-rc vbr_peak`, `-qp_i/-qp_p`, `-bf 0`, `-g 60` — todas existem no ffmpeg 9; só `-filler` era o abort.
+- Validação das demais opções AMF via `-h encoder={h264,hevc,av1}_amf` do ffmpeg 9.0 local: `-pa_taq_mode 2` (range -1..2 OK), `-pa_lookahead_buffer_depth 40` (range -1..41 OK), `-pa_paq_mode 1` (range -1..1 OK), `-enforce_hrd`, `-preanalysis`, `-vbaq`, `-pa_adaptive_mini_gop`, `-pa_scene_change_detection_enable`, `-high_motion_quality_boost_enable`, `-quality quality`, `-rc cqp`, `-qp_i/-qp_p`, `-bf 0`, `-g 60` — todas existem no ffmpeg 9; só `-filler` era o abort.
 - **2 testes novos** em `FfmpegEncoderTests.cs`:
   - `BuildEncoderTuneArgs_AmfCodecs_UsesFillerData_NotFiller` (Theory av1/h264/hevc_amf) — regressão do bug: contém `-filler_data 0`, não contém ` -filler `.
   - `BuildEncoderTuneArgs_AmfCodecs_AllOptionsExistInFfmpeg9` — todas as opções AMF presentes nos 3 codecs (evita futuro abort por opção inexistente).
@@ -4003,7 +4003,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - `-quality quality` → **`-quality speed`** (preset rápido do AMF) em `h264_amf`/`hevc_amf`/`av1_amf`.
 - **Cadeia preanalysis removida**: `-preanalysis true`, `-pa_taq_mode 2`, `-pa_lookahead_buffer_depth 40`, `-pa_paq_mode 1`, `-pa_adaptive_mini_gop true`, `-pa_scene_change_detection_enable true`, `-high_motion_quality_boost_enable true` — todos eliminados.
-- Mantidos: `-rc vbr_peak`, `-qp_i/-qp_p`, `-maxrate/-bufsize`, `-bf 0`, `-g 60`, `-filler_data 0`, `-enforce_hrd 0`, `-vbaq true` (barato, ganho de qualidade), `-me_quarter_pel true` (só h264/hevc_amf).
+- Mantidos: `-rc cqp`, `-qp_i/-qp_p` (QP = cq do front direto), `-bf 0`, `-g 60`, `-filler_data 0`, `-enforce_hrd 0`, `-vbaq true` (barato, ganho de qualidade), `-me_quarter_pel true` (só h264/hevc_amf).
 - Doc comment do seam reescrito explicando o porquê (0.55x em RDNA1) + nota `-filler`/`-filler_data`.
 
 ### TDD (RED → GREEN)
@@ -4026,7 +4026,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Key Decisions
 
 - **`-quality speed` + vbaq, sem preanalysis**: preset quality/preanalysis/lookahead 40 é o modo offline do AMF — inaplicável a captura realtime em RDNA1. `speed` mantém VBR (CQ + maxrate cap) com custo ínfimo, `vbaq` é barato e preserva qualidade em áreas escuras; a cadeia preanalysis inteira era o gargalo.
-- **Manter `-rc vbr_peak` e `-qp_i/-qp_p`**: o controle de qualidade continua via CQ do usuário + VBV — mesmo padrão CRF+VBV do NVENC; só o preset de performance mudou.
+- **Manter `-rc cqp` e `-qp_i/-qp_p`**: o controle de qualidade continua via CQ do usuário (QP = cq direto, sem offset) — mesmo padrão do NVENC (`-cq`); só o preset de performance mudou.
 - **Teste estrutural ampliado**: além do `AllOptionsExistInFfmpeg9`, novo teste `DoesNotIncludePreanalysisChain` trava a remoção — evita reintroduzir o gargalo de desempenho sem tocar no teste de compatibilidade ffmpeg.
 
 ### Next Steps
@@ -4080,3 +4080,33 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EncoderManagerTests.cs`: testes RED→GREEN de `SelectAmfPreset`/`ProbeAmfSpeed`
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: testes RED→GREEN de preset AMF (`BuildEncoderTuneArgs`/`NormalizeAmfPreset`)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-11g - AMF CQP: `-rc cqp` com QP = cq direto no lugar de vbr_peak)
+
+### Done
+
+- **Rate control AMF trocado de `vbr_peak` para `cqp`** (FfmpegEncoder.cs `BuildEncoderTuneArgs`, 3 codecs AMF): `-rc cqp -qp_i {cq} -qp_p {cq}` com o **cq do front direto** (sem offset -4; o -4 permanece só no QSV `-global_quality`, escala própria). Removidos `-b:v {amfBitrate}K -maxrate ...K -bufsize ...K` (CQP não tem teto de bitrate — mesmo padrão NVENC `-cq`/OBS QP).
+- **`ComputeAmfBitrateTarget` deletado** (função + chamada na linha 206 + teste `ComputeAmfBitrateTarget_ReturnsHalfOfMaxrateClamped`) — virou dead code sem `-b:v`.
+- **TDD completo (RED -> GREEN -> suites)**:
+  - RED: `UseAmfArgs` agora espera `-rc cqp`; teste de bitrate fundido + `DoesNotSetQp` viram asserts de `-qp_i/-qp_p` + `DoesNotContain("-b:v "/"-maxrate "/"-bufsize ")`; novos `SetsQpInCqpMode` (cq 22 -> `-qp_i 22`/`-qp_p 22`) e `CqpUsesCqDirectly` (theory av1/h264/hevc_amf, cq 24 -> `-qp_i 24`); `AllOptionsExistInFfmpeg9` corrigido `-qp_i 18` -> `-qp_i 22`.
+  - GREEN: impl dos 3 ramos AMF; docs seam atualizado (CQP + nota `-filler_data`).
+- **Suites**: FfmpegEncoderTests **142/142**; C# completa **1187/1187 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Docs**: AGENTS.md linhas 3799/3801/3938/4006/4029 atualizadas para `-rc cqp` (4050 = probe, mantém `-rc vbr_peak` por design — mede fps de preset, não qualidade).
+
+### Key Decisions
+
+- **CQP com QP = cq direto sobre vbr_peak com alvo calculado**: o AMF sem `-b:v` em VBR subalocava ~3 Mbps em 720p60 (borrado) e com `-b:v` + QP setado o QP sobrepunha o alvo (issue obs-ffmpeg #12994). Em CQP o QP é o parâmetro controlado — cq 18/20/24 do front cai na faixa OBS/AMD (16-23), consistente com NVENC.
+- **Trade-off aceito**: CQP não tem teto -> picos ~600 Mbps em cena forte (mais disco/spill no replay buffer; registrado nas sessões 2026-07-23b/08-01, não quebra).
+- **ProbeAmfSpeed intocado**: mantém `-rc vbr_peak` porque mede só velocidade de preset (5 frames NV12), não qualidade — mesmos fps entre VBR/CQP.
+
+### Next Steps
+
+- Publicar engine (`dotnet publish -c Release --self-contained true -r win-x64`) + `npm run copy-engine` + deploy app instalado (hash conferir).
+- Revisão por revisor (`cavecrew-reviewer` no diff AMF CQP).
+- Validação em campo (máquina AMD RX 5700 XT): codec "auto" -> `initialized (codec=h264_amf)` com `-rc cqp`, fps ~60, clip sem artefato de subalocação e sem macroblocos.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: ramos AMF `-rc cqp -qp_i {cpuCq} -qp_p {cpuCq}` + remoção de `-b:v/-maxrate/-bufsize` e `ComputeAmfBitrateTarget` (função + chamada linha 206); doc seam
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: RED edits (`UseAmfArgs`, teste fundido, `SetsQpInCqpMode`, `CqpUsesCqDirectly`, `DoesNotIncludeBitrateTarget`, remoção do teste de `ComputeAmfBitrateTarget`) + fix `-qp_i 22` no `AllOptionsExistInFfmpeg9`
+- `AGENTS.md`: docs AMF 3799/3801/3938/4006/4029 + resumo de sessão

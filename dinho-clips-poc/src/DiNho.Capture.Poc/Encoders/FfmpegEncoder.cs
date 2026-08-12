@@ -189,11 +189,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
         bframesZero ? " -weighted_pred 1" : "";
 
     /// <summary>Args do encoder no StartFfmpeg, por codec. Extraído como seam puro (sem estado)
-    /// para permitir teste unitário da cadeia de tune de cada codec. AMF: preset `speed` + vbaq +
-    /// me_quarter_pel (só h264/hevc_amf — av1_amf não expõe me_quarter_pel). O preset antigo
-    /// `quality` + preanalysis + lookahead 40 era pesado demais pra RDNA1 (VCN 1.0): encoder a
-    /// ~0.55x speed → drift A/V crescente e clips com ~36fps em vez de 60. `-filler` não existe no
-    /// ffmpeg 9 — a opção é `-filler_data` (boolean), válida nos 3 codecs AMF.</summary>
+    /// para permitir teste unitário da cadeia de tune de cada codec. AMF: CQP (QP = cq do front)
+    /// + preset `speed` + vbaq + me_quarter_pel (só h264/hevc_amf — av1_amf não expõe
+    /// me_quarter_pel). O preset antigo `quality` + preanalysis + lookahead 40 era pesado demais
+    /// pra RDNA1 (VCN 1.0): encoder a ~0.55x speed → drift A/V crescente e clips com ~36fps em
+    /// vez de 60. `-filler` não existe no ffmpeg 9 — a opção é `-filler_data` (boolean), válida
+    /// nos 3 codecs AMF.</summary>
     internal static string BuildEncoderTuneArgs(string codec, double cq, int maxrateKbps, int bufsizeKbps,
         int bframes, int lookahead, string nvencPreset, string amfPreset = "speed")
     {
@@ -201,9 +202,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
         // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
         // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
         var cpuCq = Math.Clamp(cq, 1, 51);
-        var amfQp = Math.Clamp(cq - 4, 0, 51);
+        var qsvQp = Math.Clamp(cq - 4, 0, 51);
         var amfPresetNorm = NormalizeAmfPreset(amfPreset);
-        var amfBitrate = ComputeAmfBitrateTarget(maxrateKbps);
         return codec switch
         {
             "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
@@ -211,20 +211,22 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
-            // AMF: vbr_peak com -b:v alvo (sem ele subaloca ~3 Mbps → borrado), SEM -qp_i/-qp_p
-            // (issue obs-ffmpeg #12994: QP setado + RC de bitrate faz o QP sobrepor o alvo, -b:v
-            // ignorado — OBS não seta QP em VBR/CBR). GOP 120 = keyframe/2s @60fps (padrão
-            // recording GPUOpen/OBS/NVENC). PA/preanalysis fora (RDNA1 VCN 1.0 overload).
-            "h264_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -b:v {amfBitrate}K -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
-            "hevc_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -b:v {amfBitrate}K -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
-            "av1_amf" => $"-quality {amfPresetNorm} -rc vbr_peak -b:v {amfBitrate}K -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true",
+            // AMF: CQP (qualidade constante) com QP = cq do front direto — mesmo padrão OBS/AMD
+            // (QP 16-23; cq 18/20/24 cai na faixa) e NVENC (-cq). Sem -b:v/-maxrate/-bufsize: CQP
+            // não tem teto de bitrate (OBS não mostra bitrate em CQP). O antigo vbr_peak + QP
+            // setado (issue obs-ffmpeg #12994) fazia o QP sobrepor o alvo; e sem -b:v o AMF
+            // subalocava ~3 Mbps (borrado). GOP 120 = keyframe/2s @60fps (padrão recording
+            // GPUOpen/OBS/NVENC). PA/preanalysis fora (RDNA1 VCN 1.0 overload).
+            "h264_amf" => $"-quality {amfPresetNorm} -rc cqp -qp_i {cpuCq} -qp_p {cpuCq} -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
+            "hevc_amf" => $"-quality {amfPresetNorm} -rc cqp -qp_i {cpuCq} -qp_p {cpuCq} -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true -me_quarter_pel true",
+            "av1_amf" => $"-quality {amfPresetNorm} -rc cqp -qp_i {cpuCq} -qp_p {cpuCq} -bf 0 -g 120 -filler_data 0 -enforce_hrd 0 -vbaq true",
             // QSV: veryslow + global_quality + extbrc/rdo/adaptive/mbbrc. Sem -extra_hw_frames:
             // ffmpeg 9 rejeita extra_hw_frames como opção de encoder ("not a encoding option") —
             // é opção frame-level (valida p/ vf hwupload=...). QSV precisa de -init_hw_device qsv
             // (adicionado no StartFfmpeg/probe) para criar a sessão MFX; sem ele o ffmpeg 9 falha
             // com "Error creating a MFX session: -9" mesmo em máquina Intel.
-            "h264_qsv" or "hevc_qsv" => $"-preset veryslow -global_quality {amfQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
-            "av1_qsv" => $"-preset veryslow -global_quality {amfQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -async_depth 1",
+            "h264_qsv" or "hevc_qsv" => $"-preset veryslow -global_quality {qsvQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -rdo 1 -low_power 0 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -mbbrc 1 -async_depth 1",
+            "av1_qsv" => $"-preset veryslow -global_quality {qsvQp} -bf 0 -g 60 -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -extbrc 1 -look_ahead_depth 40 -adaptive_i 1 -adaptive_b 1 -b_strategy 1 -async_depth 1",
             // D3D12VA: só aceita frames no pixel format d3d12 (via hwupload no vf chain).
             // RC modes: 1=CQP, 2=CBR, 3=VBR, 4=QVBR. -bf 0 garante ordem de saída = entrada
             // (requisito do PTS pipeline). GOP 120 espelha NVENC/QSV.
@@ -238,16 +240,6 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// <summary>Normaliza o preset AMF para um dos três valores válidos do ffmpeg 9
     /// (quality/balanced/speed). Case-insensitive com trim; inválido, vazio ou null → "speed"
     /// (preset default mais seguro — RDNA1 sustenta ~1.0x mesmo em resolução alta).</summary>
-    /// <summary>Target de bitrate (Kbps) p/ AMF vbr_peak. Sem -b:v alvo o AMF subaloca (~3 Mbps em
-    /// 720p60 mesmo com QP 16) → imagem borrada. Metade do maxrate, piso de 8 Mbps (qualidade
-    /// mínima decente p/ 720p) e nunca acima do maxrate.</summary>
-    internal static int ComputeAmfBitrateTarget(int maxrateKbps)
-    {
-        if (maxrateKbps <= 0) return 8000;
-        var target = Math.Max(maxrateKbps / 2, 8000);
-        return Math.Min(target, maxrateKbps);
-    }
-
     internal static string NormalizeAmfPreset(string? preset)
     {
         if (string.IsNullOrWhiteSpace(preset)) return "speed";

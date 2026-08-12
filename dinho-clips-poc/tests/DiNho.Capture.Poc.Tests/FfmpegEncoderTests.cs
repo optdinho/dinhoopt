@@ -671,7 +671,7 @@ public sealed class FfmpegEncoderTests
     {
         var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
         Assert.Contains("-quality speed", args);
-        Assert.Contains("-rc vbr_peak", args);
+        Assert.Contains("-rc cqp", args);
         Assert.DoesNotContain("-crf", args);
         Assert.DoesNotContain("-preset veryfast", args);
         Assert.DoesNotContain("-profile:v high", args);
@@ -724,9 +724,12 @@ public sealed class FfmpegEncoderTests
         {
             var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
             Assert.Contains("-quality speed", args);
-            Assert.Contains("-rc vbr_peak", args);
-            Assert.Contains("-maxrate ", args);
-            Assert.Contains("-bufsize ", args);
+            Assert.Contains("-rc cqp", args);
+            Assert.Contains("-qp_i 22", args);
+            Assert.Contains("-qp_p 22", args);
+            Assert.DoesNotContain("-b:v ", args);
+            Assert.DoesNotContain("-maxrate ", args);
+            Assert.DoesNotContain("-bufsize ", args);
             Assert.Contains("-bf 0", args);
             Assert.Contains("-g 120", args);
             Assert.Contains("-filler_data 0", args);
@@ -739,14 +742,31 @@ public sealed class FfmpegEncoderTests
     [InlineData("av1_amf")]
     [InlineData("h264_amf")]
     [InlineData("hevc_amf")]
-    public void BuildEncoderTuneArgs_AmfCodecs_DoesNotSetQp(string codec)
+    public void BuildEncoderTuneArgs_AmfCodecs_SetsQpInCqpMode(string codec)
     {
-        // Bug (issue obs-ffmpeg #12994): AMF com -qp_i/-qp_p setado + RC de bitrate (vbr_peak) faz
-        // o QP sobrepor o bitrate alvo (-b:v é ignorado/distorcido) → qualidade imprevisível. OBS
-        // não seta QP em modo VBR/CBR (só CQP). RC AMF decide o QP livremente.
+        // CQP (RateControlMethod.CQP): QP fixo É o alvo de qualidade — o oposto do bug obs-ffmpeg
+        // #12994 (QP + RC de bitrate = QP sobrepõe o alvo). Em CQP o QP é o parâmetro controlado
+        // (mesma semântica do NVENC -cq / OBS QP 16-23). Sem -b:v/-maxrate/-bufsize (sem alvo).
         var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
-        Assert.DoesNotContain("-qp_i", args);
-        Assert.DoesNotContain("-qp_p", args);
+        Assert.Contains("-rc cqp", args);
+        Assert.Contains("-qp_i 22", args);
+        Assert.Contains("-qp_p 22", args);
+        Assert.DoesNotContain("-b:v ", args);
+        Assert.DoesNotContain("-maxrate ", args);
+        Assert.DoesNotContain("-bufsize ", args);
+    }
+
+    [Theory]
+    [InlineData("av1_amf")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_CqpUsesCqDirectly(string codec)
+    {
+        // CQ do front (18/20/24) vira QP CQP sem offset — o -4 era só do QSV (global_quality),
+        // que tem escala própria. AMF CQP segue OBS/NVENC: QP = cq do usuário.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 24, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-qp_i 24", args);
+        Assert.Contains("-qp_p 24", args);
     }
 
     [Theory]
@@ -766,26 +786,15 @@ public sealed class FfmpegEncoderTests
     [InlineData("av1_amf")]
     [InlineData("h264_amf")]
     [InlineData("hevc_amf")]
-    public void BuildEncoderTuneArgs_AmfCodecs_IncludeExplicitBitrateTarget(string codec)
+    public void BuildEncoderTuneArgs_AmfCodecs_DoesNotIncludeBitrateTarget(string codec)
     {
-        // Bug (qualidade ruim na RX 5700 XT): -rc vbr_peak sem -b:v alvo fazia o AMF subalocar
-        // (~3 Mbps em 720p60 com QP 16), imagem borrada. -b:v explícito garante o target.
+        // CQP é qualidade constante sem teto de bitrate — OBS não mostra bitrate em CQP. Sem
+        // -b:v/-maxrate/-bufsize nos 3 codecs AMF (o antigo bug da RX 5700 XT de subalocar a ~3
+        // Mbps era do vbr_peak; CQP com QP = cq do front elimina a dependência do alvo).
         var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
-        Assert.Contains("-b:v 20000K", args);
-        Assert.Contains("-maxrate 40000K", args);
-        Assert.Contains("-bufsize 80000K", args);
-    }
-
-    [Theory]
-    [InlineData(40000, 20000)]
-    [InlineData(80000, 40000)]
-    [InlineData(30000, 15000)]
-    [InlineData(12000, 8000)] // metade (6000) abaixo do piso de 8 Mbps
-    [InlineData(6000, 6000)]  // metade abaixo do piso mas nunca acima do maxrate
-    [InlineData(0, 8000)]
-    public void ComputeAmfBitrateTarget_ReturnsHalfOfMaxrateClamped(int maxrateKbps, int expected)
-    {
-        Assert.Equal(expected, FfmpegEncoder.ComputeAmfBitrateTarget(maxrateKbps));
+        Assert.DoesNotContain("-b:v ", args);
+        Assert.DoesNotContain("-maxrate ", args);
+        Assert.DoesNotContain("-bufsize ", args);
     }
 
     [Fact]
