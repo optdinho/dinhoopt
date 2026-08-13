@@ -4143,3 +4143,72 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - `AGENTS.md`: resumo de sessão (2026-08-13)
 - Commit `b2fee99`: `src/main/services/store-base.ts`(+`store-base.test.ts`), `src/main/ipc/malware-scanner.ipc.ts`(+`.test.ts`), `src/main/services/clips-config-store.test.ts`, `src/renderer/src/App.tsx`
+
+
+## Session Summary (2026-08-13 — WGC frame sem textura reporta falha ao watchdog)
+
+### Done
+
+- **TDD completo (RED -> GREEN -> suites -> publish -> deploy -> commit)** para o bug da linha 411 do `WgcCaptureSource.TryCaptureFrame`: quando a extracao de textura D3D11 falhava (ambas estrategias de QI, `IDirect3DDxgiInterfaceAccess` e fallback `IDXGISurface`), o frame era construido com `Success=true` e `Texture==null`. O consumidor (`EngineCoordinator.Capture.cs`) nesse branch so seta `_starvationStart` e loga a cada 60 frames — sem `ReportDroppedFrame`/`ReportDrop` ao watchdog -> stall de video silencioso em GPU overload/WGC throttle.
+- **Seam puro extraido** `WgcCaptureSource.CreateNullTextureFrame(startTicks, endTicks, width, height, waitEndTicks, copyEndTicks)` (internal static) — teste via harness sem GPU/D3D; a linha 411 agora chama o seam (caminho de producao ligado ao codigo testado).
+- **RED**: teste `CreateNullTextureFrame_ReportsFailure` (asserte `Success==false`, `Texture==null`, `Width==1920`, `Height==1080`) — falhou com helper retornando `success:true` (bug reproduzido).
+- **GREEN**: seam girado para `success:false`. Frame sem textura agora e drop real -> watchdog conta e reinit apos drops sustentados (~3s). Consistente com os demais caminhos sem textura (todos ja `success:false`).
+- **Correcao de teste**: args invertidos no primeiro red (width/height trocados com wait/copy ticks) — corrigido para `(1, 2, 1920, 1080, 3, 4)`.
+
+### Validado
+
+- **C# tests**: `WgcCaptureSourceTests` **20/20**; `EngineCoordinatorCaptureTests` **119/119**; suite completa **1177/1177 aprovados, 0 falhas** na melhor rodada (1-2 execucoes com flakiness pre-existente: `MasterClockTests.Now_100ms_WithinTolerance` timing-dependent + abort do ConsoleLogger, documentadas 2026-08-04/08-11).
+- **Build**: `dotnet publish -c Release --self-contained true -r win-x64` OK (warnings pre-existentes apenas).
+- **Stage**: `npm run copy-engine` — 294 files (ffmpeg 9.0 212MB copiado).
+- **Deploy**: 5 binarios `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == publish == `8A56A740...`**.
+- **Commit**: `5f23d84` — "fix: frame WGC sem textura reporta Success=false (watchdog ve drop real)".
+
+### Key Decisions
+
+- **Seam puro sobre teste de integracao**: `TryCaptureFrame` exige GPU/D3D real — o seam estatico puro permite teste determinístico do comportamento de falha sem hardware.
+- **`success:false` em vez de reportar starvation**: frame sem textura apos ambas estrategias e falha de extracao real (nao falta de frame) — deve contar como drop e acionar o watchdog, nao apenas starvation silenciosa.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo: GPU overload/WGC throttle com a Janela... deve mostrar `Frame dropped (Success=false)` no log e watchdog reinit apos ~3s, sem stall silencioso de video.
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pre-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: seam `CreateNullTextureFrame` + linha 411 usa o seam (success:true -> false)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/WgcCaptureSourceTests.cs`: teste `CreateNullTextureFrame_ReportsFailure` + correcao de args
+- `AGENTS.md`: resumo de sessao
+
+## Session Summary (2026-08-13b — Otimização A do pipeline GPU descartada: análise registrada)
+
+### Done
+
+- **Revisão do estado real** (`FfmpegEncoder.GpuConvert.cs`, `FfmpegEncoder.cs`) antes de implementar o plano `docs/plano-otimizacoes-pipeline-gpu.md` (FASE 1+2, otimização A = staging→pipe direto sem `PackNv12`):
+  - `ConvertGpuNv12` (GpuConvert.cs:125+) único caller `EncodeFrame` (:593); `PackNv12` (:365-403) já tem branch `srcPitch == nv12W` com `Unsafe.CopyBlockUnaligned`; `BgraToNv12` (sem map) produz `_nv12Scratch` e pode ficar.
+  - O2 já presente no código: `CanUseDirectInput` (:25-26) — texturas do TexturePool (WGC) têm `BindFlags.ShaderResource` e são lidas direto pelo `VideoProcessorBlt`; `BindFlags.None` (PrintWindow/Hybrid) exigem `_inputCopy` (~9,9MB/frame em 1080p BGRA).
+  - `DownscaleBgra` com overload de buffer cacheado (:35-38) evita LOH alloc no fallback CPU; cooldown `_gpuConverterFailedUntil`/`GPU_CONVERTER_COOLDOWN_MS = 5000` (:11-12).
+  - `TryWriteStdin`: `Task.Wait(timeout)` lança `AggregateException` em falha → tratado `Faulted`; task em voo pós-timeout observada só-faulted (processo antigo morre no restart). Stderr thread "FfmpegStderr" `IsBackground` (:523-528); reader thread vive em `FfmpegEncoder.NalParsing.cs`.
+
+- **Achados que descartaram A** (registrados no plano):
+  1. **Benefício ≈ 0**: benchmark do próprio plano (200×1.5MB): `byte[]` 128ms vs unmanaged 133ms = **1.04x = ruído** — memcpy não é o gargalo.
+  2. **Gargalo real é o `Map()` stall** (455-3990µs/frame) → otimização **B** (`MapFlags.DoNotWait`), não A.
+  3. **`WriteAsync(ReadOnlyMemory<byte>)` sobre unmanaged não existe** em API pública — só `Write(span)` síncrono alcança o ponteiro do `Map`.
+  4. **Risco de regressão**: `Write(span)` síncrono bloqueia sem timeout — ffmpeg vivo-mas-travado trava a thread de captura pra sempre (sem EOF, restart nunca dispara). Morreria o fix de stdin timeout da sessão 2026-08-01.
+  5. Alternativa "segura" (writer em thread de fundo + Unmap deferido) preservaria o timeout mas adiciona threadpool pressure + novos modos de falha por ~0 de ganho — rejeitada.
+
+- **Decisão do usuário**: NÃO implementar A. Registrado no plano (`## Análise que descartou A`, header da otimização A marcado ❌ DESCARTADA, `## Decisões` atualizado). **B (`MapFlags.DoNotWait` + retry no próximo frame) é a próxima candidata** — ataca o hotspot real, esforço baixo, risco médio (drop transiente).
+
+### Validado
+
+- Sem código alterado (análise + docs apenas).
+- Plano atualizado: `docs/plano-otimizacoes-pipeline-gpu.md` — status no topo, seção de análise, otimização A como referência-only, decisões.
+
+### Next Steps
+
+- (Quando decidir retomar) Implementar **B** (`MapFlags.DoNotWait` + retry frame seguinte no `ConvertGpuNv12` — hoje usa `MapFlags.None` no :194) com TDD RED→GREEN; watchdog cobre drops transientes (~3s reinit).
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+
+### Relevant Files Changed
+
+- `docs/plano-otimizacoes-pipeline-gpu.md`: análise de descarte de A, status, decisões (sem código)
+- `AGENTS.md`: resumo de sessão

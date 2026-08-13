@@ -420,6 +420,13 @@ public sealed partial class EngineCoordinator
             if (NonGameProcesses.Contains(game.ProcessName))
                 return;
 
+            // Ignora janelas/processos do sistema (PickerHost, dialogs, etc.)
+            // — mesmo guard do auto-start, evita que o PickerHost sequestre o filtro de áudio
+            if (IsSystemWindowClass(game.WindowClass))
+                return;
+            if (IsSystemExecutablePath(game.ExecutablePath))
+                return;
+
             // Evita restart se o filtro já estiver aplicado para este PID
             if (_appliedGameAudioOnly && _appliedGameAudioPid == game.ProcessId)
                 return;

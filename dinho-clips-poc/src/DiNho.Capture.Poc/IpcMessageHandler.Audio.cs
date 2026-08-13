@@ -181,6 +181,17 @@ public sealed partial class EngineCoordinator
             var game = _lastDetectedGame.IsValid ? _lastDetectedGame : _gameDetector.CurrentGame;
             if (game.IsValid && game.ProcessId > 0)
             {
+                // Ignora processos não-jogo (explorer, navegadores, etc.)
+                if (NonGameProcesses.Contains(game.ProcessName))
+                    return;
+
+                // Ignora janelas/processos do sistema (PickerHost, dialogs, etc.)
+                // — mesmo guard do auto-start, evita que o PickerHost sequestre o filtro de áudio
+                if (IsSystemWindowClass(game.WindowClass))
+                    return;
+                if (IsSystemExecutablePath(game.ExecutablePath))
+                    return;
+
                 // Skip restart if already applied to the same PID
                 if (_appliedGameAudioOnly && _appliedGameAudioPid == game.ProcessId)
                 {

@@ -762,6 +762,13 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         method.Invoke(coord, [game]);
     }
 
+    private void InvokeApplyGameAudioOnly(EngineCoordinator coord)
+    {
+        var method = CoordinatorType.GetMethod("ApplyGameAudioOnly",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        method.Invoke(coord, []);
+    }
+
     [Fact]
     public void OnGameChanged_ValidGame_UpdatesLastDetected()
     {
@@ -901,6 +908,80 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         InvokeOnGameChanged(coord, game);
 
         Assert.False(GetField<bool>(coord, "_appliedGameAudioOnly"));
+    }
+
+    [Fact]
+    public void OnGameChanged_GameAudioOnly_SystemWindowClass_Skips()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_recording", true);
+        SetField(coord, "_appliedGameAudioOnly", false);
+        SetField(coord, "_appliedGameAudioPid", 0);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", 0);
+
+        var game = new GameInfo(
+            processName: "PickerHost",
+            executablePath: @"C:\Users\Test\PickerHost.exe",
+            windowTitle: "Open File",
+            windowClass: "#32770",
+            displayMode: DisplayMode.Windowed,
+            processId: 5678,
+            hwnd: new IntPtr(0x2222));
+
+        InvokeOnGameChanged(coord, game);
+
+        Assert.False(GetField<bool>(coord, "_appliedGameAudioOnly"));
+        Assert.Equal(0, GetField<int>(coord, "_appliedGameAudioPid"));
+    }
+
+    [Fact]
+    public void OnGameChanged_GameAudioOnly_SystemExecutablePath_Skips()
+    {
+        var coord = CreateWithConfig();
+        SetField(coord, "_recording", true);
+        SetField(coord, "_appliedGameAudioOnly", false);
+        SetField(coord, "_appliedGameAudioPid", 0);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", 0);
+
+        var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var game = new GameInfo(
+            processName: "PickerHost",
+            executablePath: Path.Combine(windowsDir, "System32", "PickerHost.exe"),
+            windowTitle: "Open File",
+            windowClass: "PickerHostWindow",
+            displayMode: DisplayMode.Windowed,
+            processId: 5678,
+            hwnd: new IntPtr(0x2222));
+
+        InvokeOnGameChanged(coord, game);
+
+        Assert.False(GetField<bool>(coord, "_appliedGameAudioOnly"));
+        Assert.Equal(0, GetField<int>(coord, "_appliedGameAudioPid"));
+    }
+
+    [Fact]
+    public void ApplyGameAudioOnly_SystemExecutablePath_Skips()
+    {
+        var coord = CreateWithConfig(gameAudioOnly: true);
+        SetField(coord, "_appliedGameAudioOnly", false);
+        SetField(coord, "_appliedGameAudioPid", 0);
+        SetField(coord, "_lastGameAudioOnlyRestartUtc", 0);
+
+        var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var game = new GameInfo(
+            processName: "PickerHost",
+            executablePath: Path.Combine(windowsDir, "System32", "PickerHost.exe"),
+            windowTitle: "Open File",
+            windowClass: "PickerHostWindow",
+            displayMode: DisplayMode.Windowed,
+            processId: 5678,
+            hwnd: new IntPtr(0x2222));
+        SetField(coord, "_lastDetectedGame", game);
+
+        InvokeApplyGameAudioOnly(coord);
+
+        Assert.False(GetField<bool>(coord, "_appliedGameAudioOnly"));
+        Assert.Equal(0, GetField<int>(coord, "_appliedGameAudioPid"));
     }
 
     [Fact]
