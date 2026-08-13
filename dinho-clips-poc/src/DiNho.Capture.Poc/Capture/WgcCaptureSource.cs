@@ -345,6 +345,18 @@ public sealed class WgcCaptureSource : ICaptureSource
         return sourceTexture;
     }
 
+    /// <summary>
+    /// Frame WGC onde a extração de textura D3D11 falhou (ambas estratégias).
+    /// Historicamente reportava success:true com textura nula — o consumidor
+    /// (EngineCoordinator.Capture) só monitora starvation nesse branch, nunca
+    /// reporta NoFrame ao watchdog. Stall de vídeo silencioso. Deve ser uma
+    /// FALHA (success:false) para o watchdog contar drop real e reinitar.
+    /// </summary>
+    internal static CapturedFrame CreateNullTextureFrame(long startTicks, long endTicks, int width, int height, long waitEndTicks, long copyEndTicks)
+    {
+        return new CapturedFrame(startTicks, endTicks, width, height, success: false, waitEndTicks: waitEndTicks, copyEndTicks: copyEndTicks);
+    }
+
     public CapturedFrame TryCaptureFrame(int timeoutMs)
     {
         var startTicks = Stopwatch.GetTimestamp();
@@ -408,7 +420,7 @@ public sealed class WgcCaptureSource : ICaptureSource
 
                 if (sourceTexture is null)
                 {
-                    return new CapturedFrame(startTicks, endTicks, size.Width, size.Height, success: true, waitEndTicks: waitEndTicks, copyEndTicks: extractEndTicks);
+                    return CreateNullTextureFrame(startTicks, endTicks, size.Width, size.Height, waitEndTicks, extractEndTicks);
                 }
 
                 var desc = sourceTexture.Description;

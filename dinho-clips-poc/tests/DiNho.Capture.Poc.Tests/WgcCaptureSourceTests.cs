@@ -198,6 +198,22 @@ public sealed class WgcCaptureSourceTests
         Assert.Contains(logs, l => l.Contains("Ambas estratégias falharam"));
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  CreateNullTextureFrame — frame com textura ausente é FALHA
+    //  (o watchdog conta como drop real NoFrame; antes era success:true
+    //   com textura nula — invisível ao watchdog, stall silencioso)
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void CreateNullTextureFrame_ReportsFailure()
+    {
+        var frame = WgcCaptureSource.CreateNullTextureFrame(1, 2, 1920, 1080, 3, 4);
+        Assert.False(frame.Success);
+        Assert.Null(frame.Texture);
+        Assert.Equal(1920, frame.Width);
+        Assert.Equal(1080, frame.Height);
+    }
+
     [Fact]
     public void TryExtractTexture_UnsupportedPointer_DoesNotOverReleaseCallersPointer()
     {
