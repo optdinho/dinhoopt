@@ -422,6 +422,12 @@ public sealed class ReplayBuffer : IDisposable
         var audioStart = audio.Count > 0 ? audio[^1].Pts - maxAge + cutoff : TimeSpan.Zero;
         if (audioStart < TimeSpan.Zero) audioStart = TimeSpan.Zero;
 
+        // Alinha o início do clipe ao primeiro keyframe dentro da janela — o
+        // clipe não começa no meio de um GOP (frames P/B órfãs sem o I-base →
+        // artefatos H.264 até o próximo keyframe; o mux usa -c:v copy, não
+        // conserta). Custo: até ~1 GOP (2s a 60fps) do início é descartado.
+        videoStart = AlignToKeyframe(video, videoStart);
+
         // Trim da janela: pacotes fora da janela são liberados.
         //   - RAM: solta o Retain() do snapshot desta chamada (1 → 0) — o anel
         //     mantém ownership e o Clear() posterior faz o release final (-1).
