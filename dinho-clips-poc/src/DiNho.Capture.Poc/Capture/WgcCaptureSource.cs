@@ -37,6 +37,31 @@ public sealed class WgcCaptureSource : ICaptureSource
     private TexturePool? _texturePool;
     private int _frameArrivedCount;
 
+    // Cap de captura (padrão OBS reset_frame_interval): só converte/codifica 1 frame
+    // a cada intervalo do fps alvo. Frames excedentes do DWM são descartados antes da
+    // cópia D3D11. 0 = sem cap (taxa DWM, comportamento original).
+    private long _capIntervalTicks;
+    private long _lastAcceptedTicks;
+
+    /// <summary>
+    /// Intervalo de captura (ticks de Stopwatch) para o fps alvo.
+    /// fps &lt;= 0 desliga o cap (aceita todos os frames). Divisão truncada:
+    /// 30→333.333, 60→166.666, 75→133.333, 120→83.333, 144→69.444.
+    /// </summary>
+    public static long ComputeCapIntervalTicks(int fps) => fps <= 0 ? 0 : 10_000_000L / fps;
+
+    /// <summary>
+    /// Decide se um frame com timestamp <paramref name="nowTicks"/> deve ser aceito dado o
+    /// último aceito (<paramref name="lastTicks"/>). Boundary inclusiva: aceita quando
+    /// <c>now - last &gt;= interval</c>. <paramref name="capIntervalTicks"/> &lt;= 0 = sem cap
+    /// (sempre aceita). <paramref name="lastTicks"/> == 0 = primeiro frame (aceita).
+    /// </summary>
+    public static bool ShouldAcceptFrame(long nowTicks, long lastTicks, long capIntervalTicks) =>
+        capIntervalTicks <= 0 || lastTicks == 0 || nowTicks - lastTicks >= capIntervalTicks;
+
+    /// <summary>Define o fps alvo do cap de captura (0 = sem cap).</summary>
+    public void SetCaptureFrameRate(int fps) => _capIntervalTicks = ComputeCapIntervalTicks(fps);
+
     public void Initialize(ID3D11Device? sharedDevice = null) =>
         Initialize(sharedDevice, IntPtr.Zero, IntPtr.Zero);
 
@@ -182,6 +207,16 @@ public sealed class WgcCaptureSource : ICaptureSource
 
         var ticks = Stopwatch.GetTimestamp();
         var count = Interlocked.Increment(ref _frameArrivedCount);
+
+        // Cap de captura (OBS reset_frame_interval): descarta frames que chegaram antes
+        // do intervalo do fps alvo. O skip acontece AQUI — antes da extração/cópia D3D11
+        // e do VideoProcessorBlt — então o custo GPU roda na taxa alvo, não na taxa DWM.
+        if (!ShouldAcceptFrame(ticks, _lastAcceptedTicks, _capIntervalTicks))
+        {
+            frame.Dispose();
+            return;
+        }
+        _lastAcceptedTicks = ticks;
 
         if (count == 1)
             Log.I("WGC", $"OnFrameArrived: first frame! size={frame.ContentSize.Width}x{frame.ContentSize.Height} pool={_framePool?.GetType().Name ?? "null"}");
@@ -492,7 +527,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             TrySetSessionBool(nativePtr, S2_CURSOR_ENABLED, "Session2: IsCursorCaptureEnabled=false", value: false);
             TrySetSessionBool(nativePtr, S3_BORDER_REQUIRED, "Session3: IsBorderRequired=false", value: false);
             TrySetSessionEnum(nativePtr, S4_DIRTY_REGION_MODE, "Session4: DirtyRegionMode=ReportAndRender", value: 1);
-            TrySetSessionTimeSpan(nativePtr, S5_MIN_UPDATE_INTERVAL, "Session5: MinUpdateInterval=0 (no throttle)", durationTicks: 0);
+            TrySetSessionTimeSpan(nativePtr, S5_MIN_UPDATE_INTERVAL, $"Session5: MinUpdateInterval={_capIntervalTicks} (cap de captura)", durationTicks: _capIntervalTicks);
             TrySetSessionBool(nativePtr, S6_INCLUDE_SECONDARY, "Session6: IncludeSecondaryWindows=true", value: true);
         }
         finally

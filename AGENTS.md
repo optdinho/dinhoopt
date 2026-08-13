@@ -4212,3 +4212,44 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - `docs/plano-otimizacoes-pipeline-gpu.md`: análise de descarte de A, status, decisões (sem código)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-13 — Cap de captura WGC estilo OBS: TDD completo + deploy + commit)
+
+### Done
+
+- **Cap de captura em `WgcCaptureSource`** (estilo OBS `reset_frame_interval`): capturar/copiar 1 frame a cada intervalo do fps alvo, descartando excedentes do DWM **antes** da conversão/cópia D3D11. O valor do frontend (30/60/75/120) é a regra do cap.
+  - **Seams estáticos puros** (testáveis sem GPU): `ComputeCapIntervalTicks(int fps)` → `fps <= 0 ? 0 : 10_000_000L / fps`; `ShouldAcceptFrame(nowTicks, lastTicks, capIntervalTicks)` → `capIntervalTicks <= 0 || lastTicks == 0 || nowTicks - lastTicks >= capIntervalTicks` (boundary **inclusiva**).
+  - Setter público `SetCaptureFrameRate(int fps)` define `_capIntervalTicks` em runtime (sem recriar sessão); campos `_capIntervalTicks`/`_lastAcceptedTicks`.
+  - Cap aplicado no início de `OnFrameArrived`: frame fora do intervalo → `frame.Dispose(); return;` **antes** de extração/cópia/`VideoProcessorBlt`; `_lastAcceptedTicks = ticks` após aceite.
+  - `ConfigureSession3()` → `TrySetSessionTimeSpan(..., durationTicks: _capIntervalTicks)` — alinha o `MinUpdateInterval` do Session5 (Win11 24H2+) ao cap; fallback pré-24H2 = skip no `OnFrameArrived`.
+- **Wiring dos 4 sites** (`EngineCoordinator.CaptureSource.cs` 52/96/184/220): `wgc.SetCaptureFrameRate(_config.Config.Fps);` **dentro do lambda do `_wgcPump.Invoke(() => ...)`** (mesma thread do `OnFrameArrived`), entre `Initialize(...)` e `StartFramePump()`.
+- **Benchmarks descartados do wiring**: `ProgramBenchmark.cs:209/441` medem latência bruta — cap artificial distorceria a medição.
+- **Eficácia = `min(frontend, refresh do monitor)`** — não reportar 60Hz recebendo 120 como falha.
+- **TDD RED→GREEN**: 7 testes novos dos seams; filtro `WgcCaptureSourceTests|EngineCoordinatorCaptureTests` **153/153**; suite completa **1177/1177 aprovados, 0 falhas** (flakiness pré-existente documentada: MasterClock timing-dependent + abort ConsoleLogger).
+
+### Validado
+
+- **Build**: `dotnet build` Debug 0 erros (warnings pré-existentes apenas: CS8602 WgcCaptureSource 199/200, CS8603 GpuVideoConverter 164, CS9191 ref/in, etc.).
+- **Publish**: `dotnet publish -c Release --self-contained true -r win-x64` OK (copy-engine re-publica + stage).
+- **Stage**: `npm run copy-engine` — 294 files (ffmpeg 9.0 212MB copiado).
+- **Deploy**: app instalado fechado; 5 binários `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == `1C81F46E...`**.
+- **Commit**: `—` — `fix: cap de captura WGC estilo OBS (fps do front é a regra; descarta excedentes do DWM antes da cópia D3D11)` (registrado após deploy).
+
+### Key Decisions
+
+- **Cap na fonte WGC em vez de pace do PipelineLoop**: PipelineLoop já paceia encode/conversão pelo fps — o cap resolve o estágio da origem (menos frames do DWM → menos cópias/conversões/entrada NVENC).
+- **`_lastAcceptedTicks` (tempo do frame aceito) em vez de janela deslizante**: boundary inclusiva `nowTicks - lastTicks >= interval` permite jitter do DWM sem acumular drift; frames em rajada excedentes são descartados de uma vez.
+- **Seams estáticos puros**: `OnFrameArrived`/`TryCaptureFrame` exigem GPU/D3D real — o seam puro permite teste determinístico da decisão de aceite sem hardware.
+- **Same-thread wiring no `_wgcPump.Invoke`**: `SetCaptureFrameRate` escreve campo lido pelo `OnFrameArrived` (mesma thread do pump) — sem race com a session ativa.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo: monitor 60Hz com front 120 → captura/copies a ~60fps (redução de cópias/conversões/entrada NVENC); front 30 → ~30fps.
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Capture/WgcCaptureSource.cs`: campos `_capIntervalTicks`/`_lastAcceptedTicks`, seams `ComputeCapIntervalTicks`/`ShouldAcceptFrame`, `SetCaptureFrameRate`, skip no `OnFrameArrived`, `TrySetSessionTimeSpan` com `durationTicks: _capIntervalTicks`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.CaptureSource.cs`: 4 sites com `SetCaptureFrameRate(_config.Config.Fps)` no lambda do `_wgcPump.Invoke`
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/WgcCaptureSourceTests.cs`: 7 testes novos (33/33 no arquivo)
+- `AGENTS.md`: resumo de sessão

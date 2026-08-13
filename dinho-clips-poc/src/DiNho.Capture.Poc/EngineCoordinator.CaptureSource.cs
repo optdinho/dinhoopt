@@ -56,6 +56,7 @@ public sealed partial class EngineCoordinator
                         _wgcPump.Invoke(() =>
                         {
                             wgc.Initialize(device, gameHwnd);
+                            wgc.SetCaptureFrameRate(_config.Config.Fps);
                             wgc.StartFramePump();
                         });
                         _capture = wgc;
@@ -97,6 +98,7 @@ public sealed partial class EngineCoordinator
             _wgcPump.Invoke(() =>
             {
                 wgc.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
+                wgc.SetCaptureFrameRate(_config.Config.Fps);
                 wgc.StartFramePump();
             });
             _capture = wgc;
@@ -186,6 +188,7 @@ public sealed partial class EngineCoordinator
                     _wgcPump.Invoke(() =>
                     {
                         wgc.Initialize(_sharedDevice, gameHwnd);
+                        wgc.SetCaptureFrameRate(_config.Config.Fps);
                         wgc.StartFramePump();
                     });
                     _capture = wgc;
@@ -221,6 +224,7 @@ public sealed partial class EngineCoordinator
             _wgcPump.Invoke(() =>
             {
                 wgcDesktop.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
+                wgcDesktop.SetCaptureFrameRate(_config.Config.Fps);
                 wgcDesktop.StartFramePump();
             });
             _capture = wgcDesktop;

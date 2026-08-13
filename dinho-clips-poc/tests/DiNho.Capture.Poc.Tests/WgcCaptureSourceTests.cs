@@ -214,6 +214,71 @@ public sealed class WgcCaptureSourceTests
         Assert.Equal(1080, frame.Height);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  ComputeCapIntervalTicks — intervalo mínimo entre frames (cap)
+    //  (seam puro: 1e7 ticks = 1s; 10_000_000L / fps)
+    // ═══════════════════════════════════════════════════════════════
+
+    [Theory]
+    [InlineData(30, 333333)]
+    [InlineData(60, 166666)]
+    [InlineData(75, 133333)]
+    [InlineData(120, 83333)]
+    [InlineData(144, 69444)]
+    public void ComputeCapIntervalTicks_ValidFps_ReturnsExpected(int fps, long expectedTicks)
+    {
+        Assert.Equal(expectedTicks, WgcCaptureSource.ComputeCapIntervalTicks(fps));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-120)]
+    public void ComputeCapIntervalTicks_ZeroOrNegative_ReturnsZero(int fps)
+    {
+        Assert.Equal(0, WgcCaptureSource.ComputeCapIntervalTicks(fps));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ShouldAcceptFrame — fallback manual do cap (pré-24H2)
+    //  (seam puro: aceita quando agora - último >= intervalo)
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ShouldAcceptFrame_NoCap_AlwaysAccepts()
+    {
+        Assert.True(WgcCaptureSource.ShouldAcceptFrame(1000, 0, capIntervalTicks: 0));
+        Assert.True(WgcCaptureSource.ShouldAcceptFrame(1000, 500, capIntervalTicks: 0));
+        Assert.True(WgcCaptureSource.ShouldAcceptFrame(1000, 999, capIntervalTicks: -1));
+    }
+
+    [Fact]
+    public void ShouldAcceptFrame_WithinInterval_Rejects()
+    {
+        // intervalo 166666 ticks (60fps): frame 100_000 ticks após o último → rejeita
+        Assert.False(WgcCaptureSource.ShouldAcceptFrame(500_000, 400_000, 166_666));
+    }
+
+    [Fact]
+    public void ShouldAcceptFrame_ExactlyAtInterval_Accepts()
+    {
+        // agora - último == intervalo exato → aceita (boundary inclusiva)
+        Assert.True(WgcCaptureSource.ShouldAcceptFrame(566_666, 400_000, 166_666));
+    }
+
+    [Fact]
+    public void ShouldAcceptFrame_AfterInterval_Accepts()
+    {
+        Assert.True(WgcCaptureSource.ShouldAcceptFrame(600_000, 400_000, 166_666));
+    }
+
+    [Fact]
+    public void ShouldAcceptFrame_FirstFrame_Accepts()
+    {
+        // último = 0 (inicial): primeiro frame sempre aceito
+        Assert.True(WgcCaptureSource.ShouldAcceptFrame(100_000, 0, 166_666));
+    }
+
     [Fact]
     public void TryExtractTexture_UnsupportedPointer_DoesNotOverReleaseCallersPointer()
     {
