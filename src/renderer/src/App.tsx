@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
@@ -19,9 +19,7 @@ const DebloaterPage = lazy(() => import('./pages/DebloaterPage').then((m) => ({ 
 const SoftwareUpdaterPage = lazy(() =>
   import('./pages/SoftwareUpdaterPage').then((m) => ({ default: m.SoftwareUpdaterPage })),
 )
-const AppInstallerPage = lazy(() =>
-  import('./pages/AppInstallerPage').then((m) => ({ default: m.AppInstallerPage })),
-)
+const AppInstallerPage = lazy(() => import('./pages/AppInstallerPage').then((m) => ({ default: m.AppInstallerPage })))
 const DriverManagerPage = lazy(() =>
   import('./pages/DriverManagerPage').then((m) => ({ default: m.DriverManagerPage })),
 )
@@ -186,33 +184,35 @@ export function App() {
 
   return (
     <PlatformContext value={platformInfo}>
-      <HashRouter>
-        <PageTitleUpdater />
-        {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
-        <LicenseGate>
-          <AppShell>
-            <ErrorBoundary>
-              <Suspense fallback={null}>
-                <AnimatedRoutes />
-              </Suspense>
-            </ErrorBoundary>
-          </AppShell>
-        </LicenseGate>
-        <Toaster
-          position="bottom-right"
-          theme={theme === 'system' ? 'system' : theme}
-          toastOptions={{
-            style: {
-              background: 'var(--toast-bg)',
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              border: '1px solid var(--border-strong)',
-              color: 'var(--toast-text)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 var(--glass-inset)',
-            },
-          }}
-        />
-      </HashRouter>
+      <MotionConfig reducedMotion={import.meta.env.DEV ? 'never' : 'user'}>
+        <HashRouter>
+          <PageTitleUpdater />
+          {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
+          <LicenseGate>
+            <AppShell>
+              <ErrorBoundary>
+                <Suspense fallback={null}>
+                  <AnimatedRoutes />
+                </Suspense>
+              </ErrorBoundary>
+            </AppShell>
+          </LicenseGate>
+          <Toaster
+            position="bottom-right"
+            theme={theme === 'system' ? 'system' : theme}
+            toastOptions={{
+              style: {
+                background: 'var(--toast-bg)',
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--toast-text)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 var(--glass-inset)',
+              },
+            }}
+          />
+        </HashRouter>
+      </MotionConfig>
     </PlatformContext>
   )
 }
