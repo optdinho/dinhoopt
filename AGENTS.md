@@ -4110,3 +4110,36 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.cs`: ramos AMF `-rc cqp -qp_i {cpuCq} -qp_p {cpuCq}` + remoção de `-b:v/-maxrate/-bufsize` e `ComputeAmfBitrateTarget` (função + chamada linha 206); doc seam
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: RED edits (`UseAmfArgs`, teste fundido, `SetsQpInCqpMode`, `CqpUsesCqDirectly`, `DoesNotIncludeBitrateTarget`, remoção do teste de `ComputeAmfBitrateTarget`) + fix `-qp_i 22` no `AllOptionsExistInFfmpeg9`
 - `AGENTS.md`: docs AMF 3799/3801/3938/4006/4029 + resumo de sessão
+
+## Session Summary (2026-08-13 — Commit pendente + registro próxima semana + AMD verificado)
+
+### Done
+
+- **Commit `b2fee99`** — 3 fixes da análise Kudu (6 arquivos, +127/−10) commitados em `main`:
+  - `fix: escrita atômica em store-base, allowlist remove com try/catch, onboarding await`
+  - `store-base.ts`: `writeAtomically` (tmp + rename, 3 tentativas, retry 40ms busy-wait, unlink em falha)
+  - `malware-scanner.ipc.ts`: try/catch no remove da allowlist (retorna `false` + log em rejeição)
+  - `App.tsx`: `handleOnboardingComplete` async com try/catch antes de `setShowOnboarding(false)`
+  - Validado antes do commit: TS full **6915 passed | 1 skipped | 0 failed** (227 files); build OK.
+
+- **Push registrado para outra oportunidade**: `git push origin main` abortado (usuário cancelou dialog de credencial). `main` segue à frente de `origin/main` — pendente quando o usuário fornecer credencial/PAT. **NÃO é bloqueio de desenvolvimento.**
+
+- **AMD verificado conforme testes feitos ontem (2026-08-11)**: rodado o filtro C# `EncoderManagerTests|FfmpegEncoderTests` — **200/200 passed, 0 falhas** (3s). Confirma o estado do código AMF (preset adaptativo `3c2dd0c`, GOP 2s `0c7addf`, rate control CQP `ba47d00`, pós-crash `cd27259`) sem regressão.
+
+### Decisões do Usuário
+
+- **`export 9:16` (transpose_cuda) REJEITADO** — NÃO será implementado. Removido da lista de funcionalidades ffmpeg 9.0 exploráveis.
+- **`af_vqe_amf`** (AMD bitrate menor) — avaliar quando houver GPU AMD disponível para teste real; não bloqueia.
+- Restante das pendências (HEVC CodecPrivate fallback, dead code `preload/api/`, stashes órfãos, React button warning) — OK para manter como estão.
+
+### Próxima Semana (registro)
+
+1. Push `main` → `origin/main` (quando credencial disponível).
+2. Validação em campo AMD (RX 5700 XT): `initialized (codec=h264_amf)` com `-rc cqp`, fps ~60, clip sem artefato — validar preset escolhido pelo probe.
+3. (Opcional) Limpeza: 4 stashes órfãos (`stash@{0}`–`stash@{3}`), dead code `src/preload/api/` (`index.ts`, `scanner.ts`, `system.ts`), React warning `<button>` aninhado.
+4. (Opcional) HEVC CodecPrivate fallback sem teste de integração HEVC.
+
+### Relevant Files Changed
+
+- `AGENTS.md`: resumo de sessão (2026-08-13)
+- Commit `b2fee99`: `src/main/services/store-base.ts`(+`store-base.test.ts`), `src/main/ipc/malware-scanner.ipc.ts`(+`.test.ts`), `src/main/services/clips-config-store.test.ts`, `src/renderer/src/App.tsx`
