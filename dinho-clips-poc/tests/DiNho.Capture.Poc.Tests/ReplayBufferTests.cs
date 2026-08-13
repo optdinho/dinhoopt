@@ -303,6 +303,75 @@ public sealed class ReplayBufferTests
         Assert.True(video[0].Pts >= TimeSpan.FromSeconds(24), $"First frame PTS {video[0].Pts} should be ≥24s");
     }
 
+    // ─── MED: clip deve começar num keyframe ────────────────────────────
+    // Trim da janela por PTS puro pode fazer o clipe iniciar no meio de um GOP
+    // (frame P/B órfã sem o I-base → artefatos H.264 até o próximo keyframe).
+
+    [Fact]
+    public void GetSegments_WithDuration_StartsAtKeyframe()
+    {
+        // GOP de 3s (keyframe a cada 3 frames): 0(I) 1 2 3(I) 4 5 6(I) ...
+        using var buf = new ReplayBuffer(TimeSpan.FromSeconds(30));
+        for (int i = 0; i < 12; i++)
+            buf.AddVideo(MakeVideo(TimeSpan.FromSeconds(i), isKey: i % 3 == 0));
+
+        // Último frame = 11s; maxAge=4s → videoStart=7s → hoje começa em P(7s),
+        // no meio do GOP que começou em 6s. O início deve ser alinhado ao
+        // próximo keyframe (9s).
+        var (video, _) = buf.GetSegments(TimeSpan.FromSeconds(4));
+        Assert.NotEmpty(video);
+        Assert.True(video[0].IsKeyFrame,
+            $"Clipe deve começar num keyframe, primeiro PTS={video[0].Pts.TotalSeconds}s");
+    }
+
+    [Fact]
+    public void AlignToKeyframe_AdvancesToNextKeyframe()
+    {
+        var frames = new List<EncodedPacket>
+        {
+            MakeVideo(TimeSpan.FromSeconds(0), isKey: true),
+            MakeVideo(TimeSpan.FromSeconds(1), isKey: false),
+            MakeVideo(TimeSpan.FromSeconds(2), isKey: false),
+            MakeVideo(TimeSpan.FromSeconds(3), isKey: true),
+        };
+        // cutoff = 1s cai no meio do GOP → avança para o keyframe em 3s.
+        Assert.Equal(TimeSpan.FromSeconds(3),
+            ReplayBuffer.AlignToKeyframe(frames, TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
+    public void AlignToKeyframe_AlreadyOnKeyframe_ReturnsCutoff()
+    {
+        var frames = new List<EncodedPacket>
+        {
+            MakeVideo(TimeSpan.FromSeconds(0), isKey: true),
+            MakeVideo(TimeSpan.FromSeconds(1), isKey: false),
+        };
+        Assert.Equal(TimeSpan.Zero,
+            ReplayBuffer.AlignToKeyframe(frames, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void AlignToKeyframe_NoKeyframeInWindow_ReturnsCutoff()
+    {
+        var frames = new List<EncodedPacket>
+        {
+            MakeVideo(TimeSpan.FromSeconds(0), isKey: false),
+            MakeVideo(TimeSpan.FromSeconds(1), isKey: false),
+            MakeVideo(TimeSpan.FromSeconds(2), isKey: false),
+        };
+        // Nenhum keyframe ≥ 1s → cutoff preservado (comportamento antigo).
+        Assert.Equal(TimeSpan.FromSeconds(1),
+            ReplayBuffer.AlignToKeyframe(frames, TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
+    public void AlignToKeyframe_EmptyList_ReturnsCutoff()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(2),
+            ReplayBuffer.AlignToKeyframe(new List<EncodedPacket>(), TimeSpan.FromSeconds(2)));
+    }
+
     // ─── G1-3 GetSegments sem lock/cópia ───────────────────────────────
 
     [Fact]

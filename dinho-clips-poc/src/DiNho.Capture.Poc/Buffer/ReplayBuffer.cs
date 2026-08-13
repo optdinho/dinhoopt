@@ -510,6 +510,20 @@ public sealed class ReplayBuffer : IDisposable
         return merged;
     }
 
+    // Avança o cutoff para o primeiro keyframe >= cutoff (lista já janelada).
+    // Evita que o clipe salvo comece no meio de um GOP (frame P/B órfã sem o
+    // I-base -> artefatos H.264 até o próximo keyframe). Sem keyframe na janela
+    // o cutoff é preservado (comportamento antigo).
+    public static TimeSpan AlignToKeyframe(List<EncodedPacket> video, TimeSpan cutoff)
+    {
+        foreach (var pkt in video)
+        {
+            if (pkt.IsKeyFrame && pkt.Pts >= cutoff)
+                return pkt.Pts;
+        }
+        return cutoff;
+    }
+
     private static List<EncodedPacket> CopyRing(EncodedPacket?[] buffer, int head, int count)
     {
         var result = new List<EncodedPacket>(count);
