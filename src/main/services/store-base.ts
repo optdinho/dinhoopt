@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 
@@ -19,6 +19,9 @@ export interface JsonStore<T> {
 export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
   const { name, defaults, devSuffix = 'DiNho-Dev' } = options
 
+  const SAVE_ATTEMPTS = 3
+  const SAVE_RETRY_DELAY_MS = 40
+
   let _dataDir: string | null = null
   let _path: string | null = null
 
@@ -36,6 +39,37 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
 
   function ensureDir(): void {
     mkdirSync(getDataDir(), { recursive: true })
+  }
+
+  function sleepSync(ms: number): void {
+    const end = Date.now() + ms
+    while (Date.now() < end) {
+      // busy-wait
+    }
+  }
+
+  // Atomic save: write to a temp file, then rename over the target. A crash
+  // between write and rename leaves only the old, intact config file. Retries
+  // transient fs errors (lock contention, antivirus scans) before failing.
+  function writeAtomically(finalPath: string, content: string): void {
+    const tmpPath = `${finalPath}.tmp`
+    let lastErr: unknown
+    for (let attempt = 1; attempt <= SAVE_ATTEMPTS; attempt++) {
+      try {
+        writeFileSync(tmpPath, content)
+        renameSync(tmpPath, finalPath)
+        return
+      } catch (err) {
+        lastErr = err
+        try {
+          unlinkSync(tmpPath)
+        } catch {
+          // best-effort cleanup — temp file may not exist
+        }
+        if (attempt < SAVE_ATTEMPTS) sleepSync(SAVE_RETRY_DELAY_MS)
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
   }
 
   return {
@@ -56,7 +90,7 @@ export function createJsonStore<T>(options: JsonStoreOptions<T>): JsonStore<T> {
 
     save(data: T): void {
       ensureDir()
-      writeFileSync(storePath(), JSON.stringify(data, null, 2))
+      writeAtomically(storePath(), JSON.stringify(data, null, 2))
     },
 
     update(updater: (data: T) => T): T {

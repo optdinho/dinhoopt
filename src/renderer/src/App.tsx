@@ -137,8 +137,12 @@ export function App() {
     }
   }, [])
 
-  const handleOnboardingComplete = () => {
-    window.dinho?.onboardingSet?.(true).catch(() => {})
+  const handleOnboardingComplete = async () => {
+    try {
+      await window.dinho?.onboardingSet?.(true)
+    } catch {
+      // best-effort — non-fatal if persistence fails
+    }
     setShowOnboarding(false)
   }
 
