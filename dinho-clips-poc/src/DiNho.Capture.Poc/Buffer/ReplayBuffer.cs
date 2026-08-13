@@ -234,7 +234,8 @@ public sealed class ReplayBuffer : IDisposable
     {
         List<EncodedPacket>? evicted = null;
         // Hybrid (VideoRamDuration setado): o vídeo em RAM é limitado à janela de
-        // RAM (ex.: 3 min fixos) — o excedente é evictado para o disco, não solto.
+        // RAM (ex.: 2 min fixos via ComputeHybridRamCap) — o excedente é evictado
+        // para o disco, não solto.
         // Sem o cap (modo 'ram'), a RAM guarda a janela completa (_maxDuration).
         var window = _videoRamDuration ?? _maxDuration;
         while (_videoCount > 0 && (_totalVideoDuration > window || (_maxVideoBytes > 0 && _totalVideoBytes > _maxVideoBytes)))
