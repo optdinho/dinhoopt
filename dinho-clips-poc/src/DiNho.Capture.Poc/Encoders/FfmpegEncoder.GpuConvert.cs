@@ -11,6 +11,16 @@ internal partial class FfmpegEncoder
     private DateTime _gpuConverterFailedUntil = DateTime.MinValue;
     private const int GPU_CONVERTER_COOLDOWN_MS = 5000;
 
+    // Item B: readback do staging sem bloquear a thread de captura. DoNotWait devolve
+    // DXGI_ERROR_WAS_STILL_DRAWING quando a GPU ainda desenha o frame anterior — em vez
+    // de segurar a thread por 0.5-4ms (o hotspot do Map visto no benchmark do pipeline).
+    internal const Vortice.Direct3D11.MapFlags StagingMapFlags = Vortice.Direct3D11.MapFlags.DoNotWait;
+    internal const int DXGI_ERROR_WAS_STILL_DRAWING = unchecked((int)0x887A0021);
+
+    // Classifica exceção do Map como "GPU ocupada" (busy transiente). Só WAS_STILL_DRAWING
+    // é retry no próximo frame; device removed / E_FAIL são falhas reais (contam como drop).
+    internal static bool IsGpuBusyMapError(Exception ex) => ex.HResult == DXGI_ERROR_WAS_STILL_DRAWING;
+
     private ID3D11Texture2D? _cpuStaging;
     private int _cpuStagingW, _cpuStagingH;
     private Format _cpuStagingFormat;
@@ -189,9 +199,21 @@ internal partial class FfmpegEncoder
             EnsureStaging(device);
             ctx.CopyResource(_nv12Staging, nv12Tex);
 
-            // Map() on a staging texture blocks until all preceding GPU work completes.
-            // Explicit Flush() calls were forcing synchronous GPU execution, adding ~1-2ms/frame.
-            var map = ctx.Map(_nv12Staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+            // Map() com DoNotWait: devolve DXGI_ERROR_WAS_STILL_DRAWING quando a GPU ainda
+            // desenha o frame anterior, em vez de bloquear a thread de captura 0.5-4ms.
+            // Busy = drop transiente (return null, retry no próximo frame) SEM contar como
+            // falha de conversão — evita restart loop do encoder; watchdog cobre drops
+            // sustentados. Dados do staging já estão prontos quando o Map não lança.
+            MappedSubresource map;
+            try
+            {
+                map = ctx.Map(_nv12Staging, 0, MapMode.Read, StagingMapFlags);
+            }
+            catch (Exception ex) when (IsGpuBusyMapError(ex))
+            {
+                Log.D("FfmpegEncoder", "GPU busy (0x887A0021) — frame dropped, retry next frame");
+                return null;
+            }
             _gpuConvertFails = 0;
             try
             {

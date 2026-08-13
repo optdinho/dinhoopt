@@ -1251,4 +1251,42 @@ public sealed class FfmpegEncoderTests
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             => Task.FromException<byte[]>(new IOException("pipe closed"));
     }
+
+    // ─── Item B: Map DoNotWait + GPU busy (DXGI_ERROR_WAS_STILL_DRAWING) ─
+
+    [Fact]
+    public void StagingMapFlags_IsDoNotWait()
+    {
+        Assert.Equal(Vortice.Direct3D11.MapFlags.DoNotWait, FfmpegEncoder.StagingMapFlags);
+    }
+
+    [Fact]
+    public void IsGpuBusyMapError_WasStillDrawing_ReturnsTrue()
+    {
+        var ex = new InvalidOperationException("map busy");
+        ex.HResult = unchecked((int)0x887A0021); // DXGI_ERROR_WAS_STILL_DRAWING
+        Assert.True(FfmpegEncoder.IsGpuBusyMapError(ex));
+    }
+
+    [Fact]
+    public void IsGpuBusyMapError_DeviceRemoved_ReturnsFalse()
+    {
+        var ex = new InvalidOperationException("device removed");
+        ex.HResult = unchecked((int)0x887A0005); // DXGI_ERROR_DEVICE_REMOVED
+        Assert.False(FfmpegEncoder.IsGpuBusyMapError(ex));
+    }
+
+    [Fact]
+    public void IsGpuBusyMapError_EFail_ReturnsFalse()
+    {
+        var ex = new InvalidOperationException("efail");
+        ex.HResult = unchecked((int)0x80004005); // E_FAIL
+        Assert.False(FfmpegEncoder.IsGpuBusyMapError(ex));
+    }
+
+    [Fact]
+    public void IsGpuBusyMapError_DefaultHResult_ReturnsFalse()
+    {
+        Assert.False(FfmpegEncoder.IsGpuBusyMapError(new InvalidOperationException("no hresult")));
+    }
 }
