@@ -61,6 +61,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private long _lastRestartTicks;
     private int _gpuConvertFails;
     private int _droppedPackets;
+    private volatile bool _lastFrameBusyDrop;
+    private int _gpuBusyDrops;
 
     // Absolute restart limiter: max 10 restarts in any 30-second window to prevent CLR crash from GC pressure
     private int _restartsInWindow;
@@ -582,10 +584,31 @@ internal sealed partial class FfmpegEncoder : IEncoder
     internal static int ComputeStdinWriteTimeout(long outputFrameIndex) =>
         outputFrameIndex == 0 ? StdinWriteWarmupTimeoutMs : StdinWriteTimeoutMs;
 
+    /// <summary>
+    /// Acessores dos drops por GPU busy (0x887A0021). O flag aponta se o ÚLTIMO frame
+    /// caiu por busy (conversão NV12 no staging) — o pipeline usa para classificar o
+    /// motivo do drop no log/status de forma honesta (busy ≠ encode error).
+    /// </summary>
+    public bool LastFrameBusyDrop => _lastFrameBusyDrop;
+
+    public int GpuBusyDrops => Volatile.Read(ref _gpuBusyDrops);
+
+    /// <summary>
+    /// Reason do drop no pipeline: distingue busy transiente (retry no próximo frame)
+    /// de falha real de encode. Chamado pelo EngineCoordinator quando EncodeFrame
+    /// retorna null.
+    /// </summary>
+    internal static string BuildEncodeDropReason(bool isBusy) =>
+        isBusy
+            ? "GPU busy (0x887A0021) — frame dropped, retry next frame."
+            : "Encoder não produziu frame (encode error).";
+
     public EncodedPacket? EncodeFrame(ID3D11Texture2D texture, TimeSpan pts)
     {
         if (!_initialized) throw new InvalidOperationException("not initialized");
         if (_disposed) return null;
+
+        _lastFrameBusyDrop = false;
 
         if (_processFailed && !TryRestart())
             return null;
@@ -798,6 +821,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _processFailed = false;
         _processFailedCause = null;
         _gpuConvertFails = 0;
+        _gpuBusyDrops = 0;
+        _lastFrameBusyDrop = false;
         _frameCount = 0;
         _outputFrameIndex = 0;
         _lastRealPtsTicks = -1;

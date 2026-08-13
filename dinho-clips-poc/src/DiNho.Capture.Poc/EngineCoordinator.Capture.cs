@@ -672,7 +672,8 @@ public sealed partial class EngineCoordinator
                         else
                         {
                             _watchdog.ReportDroppedFrame(PipelineIssue.EncodeError);
-                            ReportDrop("Encoder não produziu frame (encode error).");
+                            var isBusy = (enc as FfmpegEncoder)?.LastFrameBusyDrop ?? false;
+                            ReportDrop(FfmpegEncoder.BuildEncodeDropReason(isBusy));
                         }
                     }
                     else
@@ -803,6 +804,7 @@ public sealed partial class EngineCoordinator
                     s.ReplayBufferAudioPackets = d.audioCount;
                     s.ReplayBufferAudioBytes = d.audioBytes;
                     s.DroppedFrames = _droppedFrames;
+                    s.GpuBusyDrops = (_encoder as FfmpegEncoder)?.GpuBusyDrops ?? 0;
                 });
 
                 // Log de RAM a cada ~60 frames (~1s a 60fps) — movido para o topo do

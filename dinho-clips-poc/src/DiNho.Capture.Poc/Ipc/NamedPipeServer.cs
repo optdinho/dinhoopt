@@ -139,6 +139,9 @@ public sealed class EngineStatusValue
 
     [JsonPropertyName("droppedFrames")]
     public long DroppedFrames { get; set; } = 0;
+
+    [JsonPropertyName("gpuBusyDrops")]
+    public long GpuBusyDrops { get; set; } = 0;
 }
 
 public sealed class NamedPipeServer : IDisposable

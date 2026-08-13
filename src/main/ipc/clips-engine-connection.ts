@@ -375,6 +375,7 @@ export function getCurrentStatus(): ClipsEngineStatus {
     replayBufferAudioPackets: e.replayBufferAudioPackets || undefined,
     replayBufferAudioBytes: e.replayBufferAudioBytes || undefined,
     droppedFrames: e.droppedFrames || undefined,
+    gpuBusyDrops: e.gpuBusyDrops || undefined,
   }
 }
 

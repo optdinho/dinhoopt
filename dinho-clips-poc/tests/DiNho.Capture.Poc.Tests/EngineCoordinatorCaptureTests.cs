@@ -1515,5 +1515,13 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.Equal(91, status.Current.DroppedFrames);
     }
 
+    [Fact]
+    public void EngineStatus_GpuBusyDrops_CanUpdate()
+    {
+        using var status = new EngineStatus();
+        status.Update(s => s.GpuBusyDrops = 42);
+        Assert.Equal(42, status.Current.GpuBusyDrops);
+    }
+
     #endregion
 }

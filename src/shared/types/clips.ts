@@ -47,6 +47,7 @@ export interface ClipsEngineStatus {
   replayBufferAudioPackets?: number
   replayBufferAudioBytes?: number
   droppedFrames?: number
+  gpuBusyDrops?: number
 }
 
 export interface ClipInfo {

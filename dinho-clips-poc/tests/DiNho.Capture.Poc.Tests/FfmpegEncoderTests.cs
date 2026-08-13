@@ -1289,4 +1289,47 @@ public sealed class FfmpegEncoderTests
     {
         Assert.False(FfmpegEncoder.IsGpuBusyMapError(new InvalidOperationException("no hresult")));
     }
+
+    [Fact]
+    public void BuildEncodeDropReason_Busy_ReturnsGpuBusyMessage()
+    {
+        Assert.Equal("GPU busy (0x887A0021) — frame dropped, retry next frame.", FfmpegEncoder.BuildEncodeDropReason(true));
+    }
+
+    [Fact]
+    public void BuildEncodeDropReason_NotBusy_ReturnsEncodeError()
+    {
+        Assert.Equal("Encoder não produziu frame (encode error).", FfmpegEncoder.BuildEncodeDropReason(false));
+    }
+
+    [Fact]
+    public void GpuBusyDrops_ReadsThroughVolatileField()
+    {
+        using var enc = new FfmpegEncoder();
+        SetField(enc, "_gpuBusyDrops", 3);
+        Assert.Equal(3, enc.GpuBusyDrops);
+    }
+
+    [Fact]
+    public void LastFrameBusyDrop_ReflectsField()
+    {
+        using var enc = new FfmpegEncoder();
+        SetField(enc, "_lastFrameBusyDrop", true);
+        Assert.True(enc.LastFrameBusyDrop);
+    }
+
+    [Fact]
+    public void ResetState_ClearsGpuBusyState()
+    {
+        using var enc = new FfmpegEncoder();
+        SetField(enc, "_lastFrameBusyDrop", true);
+        SetField(enc, "_gpuBusyDrops", 5);
+
+        var reset = typeof(FfmpegEncoder).GetMethod("ResetState", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(reset);
+        reset!.Invoke(enc, null);
+
+        Assert.False(enc.LastFrameBusyDrop);
+        Assert.Equal(0, enc.GpuBusyDrops);
+    }
 }

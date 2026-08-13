@@ -504,6 +504,28 @@ describe('getCurrentStatus', () => {
     expect(s.replayBufferAudioPackets).toBe(1200)
     expect(s.replayBufferAudioBytes).toBe(148576)
   })
+
+  it('includes drop counters when non-zero', async () => {
+    // Start engine to get pipe handlers set up
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: {
+          type: 'engineStatus',
+          droppedFrames: 7,
+          gpuBusyDrops: 3,
+        },
+      })}\n`,
+    )
+    const s = getCurrentStatus()
+    expect(s.droppedFrames).toBe(7)
+    expect(s.gpuBusyDrops).toBe(3)
+  })
 })
 
 // ─── sendPipeCommand ───────────────────────────────────────

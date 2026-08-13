@@ -24,6 +24,7 @@ public sealed class EngineStatusSnapshot
     public bool AudioFallback { get; set; } = false;
     public string OutputDirectory { get; set; } = "";
     public long DroppedFrames { get; set; } = 0;
+    public long GpuBusyDrops { get; set; } = 0;
 }
 
 public sealed class EngineStatus : IDisposable

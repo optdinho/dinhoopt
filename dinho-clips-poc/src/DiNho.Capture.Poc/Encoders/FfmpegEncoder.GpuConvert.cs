@@ -211,6 +211,8 @@ internal partial class FfmpegEncoder
             }
             catch (Exception ex) when (IsGpuBusyMapError(ex))
             {
+                _lastFrameBusyDrop = true;
+                Interlocked.Increment(ref _gpuBusyDrops);
                 Log.D("FfmpegEncoder", "GPU busy (0x887A0021) — frame dropped, retry next frame");
                 return null;
             }
