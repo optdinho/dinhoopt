@@ -14,7 +14,7 @@ public sealed partial class EngineCoordinator
     {
         return action switch
         {
-            "handshake" => HandleHandshake(),
+            "handshake" => HandleHandshake(msg),
             "setReplayTime" => HandleSetReplayTime(msg),
             "startEngine" => HandleStartEngine(),
             "stopEngine" => HandleStopEngine(),
@@ -25,14 +25,37 @@ public sealed partial class EngineCoordinator
         };
     }
 
-    private IpcMessage HandleHandshake()
+    private IpcMessage HandleHandshake(IpcMessage msg)
     {
+        const int protocolVersion = 1;
+        var requested = 0;
+        if (msg.Value.HasValue && msg.Value.Value.TryGetProperty("protoVersion", out var pv) && pv.ValueKind == JsonValueKind.Number)
+            requested = pv.GetInt32();
+
+        if (requested > 0 && requested != protocolVersion)
+        {
+            Log.W("EngineCoordinator", $"Handshake: protocol mismatch — client={requested} engine={protocolVersion}");
+            return new IpcMessage
+            {
+                Action = "handshake_ack",
+                Value = JsonSerializer.SerializeToElement(new
+                {
+                    engineVersion = "1.0.0",
+                    protoVersion = protocolVersion,
+                    requestedProtoVersion = requested,
+                    status = "incompatible",
+                    error = $"protocol mismatch: client={requested} engine={protocolVersion}"
+                })
+            };
+        }
+
         return new IpcMessage
         {
             Action = "handshake_ack",
             Value = JsonSerializer.SerializeToElement(new
             {
                 engineVersion = "1.0.0",
+                protoVersion = protocolVersion,
                 status = "ok"
             })
         };

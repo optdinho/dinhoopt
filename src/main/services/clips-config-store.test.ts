@@ -51,6 +51,8 @@ describe('clips-config-store', () => {
     expect(cfg.useExcludeMode).toBe(false)
     expect(cfg.excludeProcessId).toBe(0)
     expect(cfg.stretchToFit).toBe(false)
+    expect(cfg.customGameProcess).toBe('')
+    expect(cfg.micDeviceId).toBe('')
   })
 
   it('loads saved config when file exists', () => {

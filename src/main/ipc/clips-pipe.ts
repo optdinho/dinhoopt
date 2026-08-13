@@ -8,6 +8,18 @@ export const ENGINE_PIPE = '\\\\.\\pipe\\dinho-clips-engine'
 const PIPE_CONNECT_TIMEOUT = 10_000
 const PIPE_RECONNECT_DELAY = 3_000
 
+// Protocol version shared with the C# engine handshake. Bump when the wire
+// contract changes incompatibly (new required fields, envelope semantics, etc).
+export const PROTO_VERSION = 1
+
+// Set when the engine's handshake_ack reports failure or a protocol mismatch.
+// While set, all commands except a re-handshake are rejected. Cleared on (re)connect.
+let _handshakeError: string | null = null
+
+export function getHandshakeError(): string | null {
+  return _handshakeError
+}
+
 // ─── Pipe types ──────────────────────────────────────────────
 
 export interface PipeEnvelope {
@@ -78,10 +90,32 @@ export function setStatusCallbacks(updater: StatusUpdater, getter: () => ClipsEn
 
 // ─── Pipe commands ───────────────────────────────────────────
 
+function sendHandshake(): void {
+  const envelope: PipeEnvelope = { v: 1, cmd: 'handshake', payload: { protoVersion: PROTO_VERSION } }
+  const line = `${JSON.stringify(envelope)}\n`
+  getLogger().info('clips-pipe', `Sending: cmd=handshake payload=${JSON.stringify(envelope.payload)}`)
+  const timer = setTimeout(() => {
+    pendingRequests.delete('handshake')
+    getLogger().warning('clips-pipe', 'Handshake timed out — engine did not reply (old engine? commands proceed unverified)')
+  }, 5000)
+  pendingRequests.set('handshake', { resolve: () => {}, reject: () => {}, timer })
+  try {
+    _pipeSocket?.write(line)
+  } catch (err) {
+    pendingRequests.delete('handshake')
+    clearTimeout(timer)
+    getLogger().warning('clips-pipe', `Handshake write failed: ${String(err)}`)
+  }
+}
+
 export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>): Promise<PipeMessage> {
   return new Promise((resolve, reject) => {
     if (!_pipeSocket || !_pipeConnected) {
       reject(new Error('Pipe not connected'))
+      return
+    }
+    if (_handshakeError && cmd !== 'handshake') {
+      reject(new Error(_handshakeError))
       return
     }
     const existing = pendingRequests.get(cmd)
@@ -252,6 +286,11 @@ function handlePipeMessage(msg: PipeMessage): void {
     return
   }
 
+  if (msg.cmd === 'handshake_ack') {
+    handleHandshakeAck(msg)
+    return
+  }
+
   const pending = pendingRequests.get(msg.cmd)
   if (pending) {
     pendingRequests.delete(msg.cmd)
@@ -264,6 +303,31 @@ function handlePipeMessage(msg: PipeMessage): void {
   } else {
     getLogger().info('clips-pipe', `No pending request for cmd="${msg.cmd}" (maybe late response)`)
   }
+}
+
+function handleHandshakeAck(msg: PipeMessage): void {
+  const pending = pendingRequests.get('handshake')
+  if (pending) {
+    pendingRequests.delete('handshake')
+    clearTimeout(pending.timer)
+  }
+  const p = (msg.payload ?? {}) as Record<string, unknown>
+  const status = String(p.status ?? 'ok')
+  const engineProto = p.protoVersion === undefined ? undefined : Number(p.protoVersion)
+  if (engineProto !== undefined && engineProto !== PROTO_VERSION) {
+    _handshakeError = `Engine protocol mismatch: client=${PROTO_VERSION} engine=${engineProto}`
+    getLogger().warning('clips-pipe', _handshakeError)
+  } else if (status !== 'ok') {
+    _handshakeError = `Engine handshake failed: ${String(p.error ?? status)}`
+    getLogger().warning('clips-pipe', _handshakeError)
+  } else {
+    _handshakeError = null
+    getLogger().info(
+      'clips-pipe',
+      `Handshake OK: engineVersion=${String(p.engineVersion ?? '?')} protoVersion=${String(engineProto ?? PROTO_VERSION)}`,
+    )
+  }
+  pending?.resolve(msg)
 }
 
 // ─── Connection management ───────────────────────────────────
@@ -294,7 +358,9 @@ export function connectPipe(): void {
 
   sock.on('connect', () => {
     _pipeConnected = true
+    _handshakeError = null
     getLogger().info('clips-pipe', 'Connected to engine pipe')
+    sendHandshake()
     _onReconnect?.()
   })
 

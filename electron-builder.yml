@@ -52,7 +52,7 @@ nsis:
   allowToChangeInstallationDirectory: false
   deleteAppDataOnUninstall: false
   artifactName: DiNho-Optimizer-Setup-${version}.${ext}
-  runAfterFinish: false
+  runAfterFinish: true
   createStartMenuShortcut: true
   createDesktopShortcut: true
 

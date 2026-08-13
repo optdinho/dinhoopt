@@ -96,7 +96,7 @@ import {
   startEngine,
   stopEngineProcess,
 } from './clips-engine-connection'
-import { disconnectPipe } from './clips-pipe'
+import { connectPipe, disconnectPipe } from './clips-pipe'
 
 const ORIG_ENV = { ...process.env }
 
@@ -1549,5 +1549,72 @@ describe('disconnectPipe', () => {
     expect(isPipeConnected()).toBe(false)
     // Should not throw
     disconnectPipe()
+  })
+})
+
+// ─── Handshake (P2) ─────────────────────────────────────────
+describe('handshake', () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockReturnValue(makeMockChild() as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(app).isPackaged = false
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
+  })
+
+  it('sends handshake with protoVersion on connect', async () => {
+    await startEngine()
+    expect(mockSocket.write).toHaveBeenCalledWith(
+      `${JSON.stringify({ v: 1, cmd: 'handshake', payload: { protoVersion: 1 } })}\n`,
+    )
+  })
+
+  it('ok ack unlocks subsequent commands', async () => {
+    await startEngine()
+    triggerPipeData(
+      `${JSON.stringify({ cmd: 'handshake_ack', payload: { engineVersion: '1.0.0', protoVersion: 1, status: 'ok' } })}\n`,
+    )
+    const p = sendPipeCommand('hello')
+    triggerPipeData(`${JSON.stringify({ cmd: 'hello', payload: { ok: true } })}\n`)
+    await expect(p).resolves.toMatchObject({ cmd: 'hello' })
+  })
+
+  it('incompatible ack blocks subsequent commands', async () => {
+    await startEngine()
+    triggerPipeData(
+      `${JSON.stringify({ cmd: 'handshake_ack', payload: { engineVersion: '1.0.0', protoVersion: 99, status: 'incompatible', requestedProtoVersion: 99 } })}\n`,
+    )
+    await expect(sendPipeCommand('hello')).rejects.toThrow(/protocol mismatch/)
+  })
+
+  it('failed ack blocks subsequent commands', async () => {
+    await startEngine()
+    triggerPipeData(
+      `${JSON.stringify({ cmd: 'handshake_ack', payload: { engineVersion: '1.0.0', status: 'error', error: 'engine failed to init' } })}\n`,
+    )
+    await expect(sendPipeCommand('hello')).rejects.toThrow(/engine failed to init/)
+  })
+
+  it('handshake itself is not blocked by its own gate', async () => {
+    await startEngine()
+    triggerPipeData(`${JSON.stringify({ cmd: 'handshake_ack', payload: { status: 'ok' } })}\n`)
+    const p = sendPipeCommand('handshake')
+    triggerPipeData(`${JSON.stringify({ cmd: 'handshake_ack', payload: { status: 'ok' } })}\n`)
+    await expect(p).resolves.toMatchObject({ cmd: 'handshake_ack' })
+  })
+
+  it('reconnect resets a handshake error', async () => {
+    await startEngine()
+    triggerPipeData(
+      `${JSON.stringify({ cmd: 'handshake_ack', payload: { engineVersion: '1.0.0', protoVersion: 99, status: 'incompatible' } })}\n`,
+    )
+    await expect(sendPipeCommand('hello')).rejects.toThrow(/protocol mismatch/)
+    // Simulate reconnect: destroy + new connect (same path as scheduleReconnect)
+    for (const h of closeHandlers) h()
+    disconnectPipe()
+    connectPipe()
+    triggerPipeData(`${JSON.stringify({ cmd: 'handshake_ack', payload: { status: 'ok' } })}\n`)
+    const p = sendPipeCommand('hello')
+    triggerPipeData(`${JSON.stringify({ cmd: 'hello', payload: { ok: true } })}\n`)
+    await expect(p).resolves.toMatchObject({ cmd: 'hello' })
   })
 })

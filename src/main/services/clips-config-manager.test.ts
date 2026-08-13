@@ -37,8 +37,8 @@ vi.mock('./clips-config-store', () => ({
     pushToTalkKeys: [5, 20],
     gameDetection: true,
     gameAudioOnly: true,
-    customGameProcess: 'FiveM_GTAProcess.exe',
-    micDeviceId: '{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}',
+    customGameProcess: '',
+    micDeviceId: '',
     autoStartCapture: true,
     useExcludeMode: false,
     excludeProcessId: 0,
@@ -110,8 +110,8 @@ describe('clips-config-manager', () => {
       expect(result.pushToTalkKeys).toEqual([5, 20])
       expect(result.gameDetection).toBe(true)
       expect(result.gameAudioOnly).toBe(true)
-      expect(result.customGameProcess).toBe('FiveM_GTAProcess.exe')
-      expect(result.micDeviceId).toBe('{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}')
+      expect(result.customGameProcess).toBeUndefined()
+      expect(result.micDeviceId).toBeUndefined()
       expect(result.autoStartCapture).toBe(true)
       expect(result.useExcludeMode).toBe(false)
       expect(result.excludeProcessId).toBe(0)
@@ -124,13 +124,13 @@ describe('clips-config-manager', () => {
     it('returns undefined for falsy customGameProcess', () => {
       config.customGameProcess = ''
       expect(buildEngineConfig().customGameProcess).toBeUndefined()
-      config.customGameProcess = 'FiveM_GTAProcess.exe'
+      config.customGameProcess = 'game.exe'
     })
 
     it('returns undefined for falsy micDeviceId', () => {
       config.micDeviceId = ''
       expect(buildEngineConfig().micDeviceId).toBeUndefined()
-      config.micDeviceId = '{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}'
+      config.micDeviceId = 'mic-1'
     })
 
     it('includes stretchToFit false by default', () => {

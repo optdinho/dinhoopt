@@ -198,7 +198,7 @@ describe('CLIPS_GET_STATUS', () => {
     expect(status.encoder).toBeUndefined()
     expect(status.estimatedRamMB).toBeUndefined()
     expect(status.diskSpaceOk).toBe(true)
-    expect(status.currentGame).toBe('FiveM_GTAProcess.exe')
+    expect(status.currentGame).toBeUndefined()
     expect(status.lastCrashRecovered).toBeUndefined()
   })
 })

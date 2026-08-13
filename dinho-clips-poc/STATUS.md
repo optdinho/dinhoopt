@@ -113,9 +113,21 @@ Uma vez em `libx264`, não há fallback adicional — o encoder tenta 5x e falha
 - `EncodedPacket.IsFavorite` field disponível para metadata
 - Auto Cleanup pula arquivos com sidecar `.favorite`
 
-## Fase 3 — UI Electron
-- Protocolo IPC com envelope v1 estável
-- UI Electron não iniciada
+## Fase 3 — UI Electron ✅
+
+Clips integrado como **módulo** do DiNho Optimizer (`src/` do app Electron). A POC C# (`dinho-clips-poc/`) é a referência da engine; o produto roda dentro do app principal.
+
+### Main process
+- **IPC** (`src/main/ipc/clips.ipc.ts`) — 30+ handlers: engine start/stop, captura, saveClip, listar, durações, delete/rename/open, thumbnail, config get/set, output dir, processos, sessões de áudio, mics, GPUs, favoritos, trim, merge, open external, publish gofile (+ cancel/progress)
+- **Engine bridge** (`clips-engine.ts`, `clips-engine-connection.ts`, `clips-pipe.ts`) — spawn da engine C#, named pipe, status sync, reconfig em reconnect, fallback de câmera de mic (PowerShell WinRT)
+- **Serviços** (`src/main/services/`) — `clips-config-manager`, `clips-config-store`, `clips-enhance` (AMD AMF + sharpness), `clips-publish` (Gofile), `thumbnail-generator`, `ffmpeg-path`, `game-detector`, `trim-history-store`
+- **Preview** (`clip-video-protocol.ts`) — scheme `clip-video://` com HTTP Range manual (seek funcional; contorna bug do file loader do Chromium)
+
+### Renderer (React)
+- `ClipsPage.tsx` (rota `/clips` em `App.tsx`)
+- Componentes (`src/renderer/src/components/clips/`): `ClipsGrid`, `ClipsStatusBar`, `ClipsConfigPanel` (audio/game/quality), `ClipEditorModal` (trim/merge), `PublishModal`, `RenameDialog`, `useClipsState` + `useClipsActions`
+- Preload API completa (`src/preload/clips.ts`) com listeners de status, clip salvo, RAM pressure, durations ready
+- Dashboard: card `GameClipsCard` com polling de status
 
 ## Próximos Passos
 1. ✅ ClipExporter com ffmpeg (remux + AAC)
@@ -131,8 +143,8 @@ Uma vez em `libx264`, não há fallback adicional — o encoder tenta 5x e falha
 11. ✅ RAM monitoring (WorkingSet no EngineStatus)
 12. ✅ Auto Cleanup (deleta clips antigos quando disco > 90%)
 13. ✅ Favorites flag (`IsFavorite` no EncodedPacket)
-14. 🔲 Validar AMF e QSV em hardware AMD/Intel real
-15. 🔲 UI Electron (preload API, ClipsPage, IPC bridge)
+14. ✅ Validar AMF e QSV em hardware real — AMF RX 5700 XT (11 ago: preset adaptativo `3c2dd0c`, qp/GOP `0c7addf`, cqp `ba47d00`, pós-crash `cd27259`); QSV real no encode `b26a351`
+15. ✅ UI Electron (preload API, ClipsPage, IPC bridge) — integrado em `src/`
 
 ### PROCESS_LOOPBACK (22 Jun 2026)
 

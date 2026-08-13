@@ -69,8 +69,8 @@ export const config: ConfigState = {
   pushToTalkKeys: [5, 20],
   gameDetection: true,
   gameAudioOnly: true,
-  customGameProcess: 'FiveM_GTAProcess.exe',
-  micDeviceId: '{0.0.1.00000000}.{72784dd9-f435-4683-bc5a-7265069f0d42}',
+  customGameProcess: '',
+  micDeviceId: '',
   autoStartCapture: true,
   useExcludeMode: false,
   excludeProcessId: 0,
@@ -200,7 +200,7 @@ export function loadPersistedClipsConfig(): void {
   config.pushToTalkKeys = saved.pushToTalkKeys
   config.gameDetection = saved.gameDetection
   config.gameAudioOnly = saved.gameAudioOnly
-  config.customGameProcess = saved.customGameProcess
+  config.customGameProcess = saved.customGameProcess ?? ''
   config.micDeviceId = saved.micDeviceId ?? ''
   config.autoStartCapture = saved.autoStartCapture ?? false
   config.useExcludeMode = saved.useExcludeMode ?? false
