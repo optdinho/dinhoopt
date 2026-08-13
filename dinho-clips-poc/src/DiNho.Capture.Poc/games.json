@@ -204,7 +204,7 @@
     {"processName": "SkyrimSE", "windowClass": "SkyrimSEWindow", "displayName": "The Elder Scrolls V: Skyrim", "aliases": ["Skyrim", "Skyrim SE"], "backends": ["wgc", "dxgi"]},
     {"processName": "Fallout4", "windowClass": "Fallout4Window", "displayName": "Fallout 4", "aliases": ["Fallout 4"], "backends": ["wgc", "dxgi"]},
     {"processName": "Fallout76", "windowClass": "Fallout76Window", "displayName": "Fallout 76", "aliases": ["Fallout 76", "FO76"], "backends": ["wgc", "dxgi"]},
-    {"processName": "FalloutNV", "windowClass": "FalloutNVWindow", "displayName": "Fallout: New Vegas", "aliases": ["Fallout New Vegas", "FO:NV"], "backends": ["wgc", "dxgi"]},
+    {"processName": "FalloutNV", "windowClass": "FalloutNVWindow", "displayName": "Fallout: New Vegas", "aliases": ["Fallout New Vegas", "FONV"], "backends": ["wgc", "dxgi"]},
 
     {"processName": "DOOMEternal", "windowClass": "DOOMEternalWindow", "displayName": "DOOM Eternal", "aliases": ["Doom Eternal"], "backends": ["wgc", "dxgi"]},
     {"processName": "DOOM", "windowClass": "DOOMWindow", "displayName": "DOOM (2016)", "aliases": ["Doom 2016"], "backends": ["wgc", "dxgi"]},

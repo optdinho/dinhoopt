@@ -2,6 +2,7 @@ import type { ExecFileException } from 'node:child_process'
 import { execFile } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join, parse } from 'node:path'
+import { resolveFfmpegOrNull } from './ffmpeg-path'
 import { getLogger } from './logger.service'
 
 function execFileAsync(
@@ -22,60 +23,8 @@ const THUMB_WIDTH = 320
 const DEFAULT_SEEK_SEC = 5
 const FFMPEG_TIMEOUT = 30_000
 
-let _ffmpegPath: string | null | undefined
-let _scanning: Promise<void> | null = null
-
-async function scanFfmpeg(): Promise<void> {
-  if (_ffmpegPath !== undefined) return
-  if (_scanning) return _scanning
-
-  _scanning = (async () => {
-    const candidates = ['ffmpeg.exe', 'ffmpeg']
-    const dirs: string[] = []
-
-    const pf = process.env.ProgramFiles
-    const pf86 = process.env['ProgramFiles(x86)']
-    const localAppData = process.env.LOCALAPPDATA
-    if (pf) dirs.push(join(pf, 'ffmpeg', 'bin'), join(pf, 'FFmpeg', 'bin'))
-    if (pf86) dirs.push(join(pf86, 'ffmpeg', 'bin'), join(pf86, 'FFmpeg', 'bin'))
-    if (localAppData) {
-      dirs.push(
-        join(localAppData, 'Microsoft', 'WinGet', 'Packages', 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe'),
-      )
-    }
-    dirs.push('C:\\ffmpeg\\bin', 'C:\\FFmpeg\\bin', 'C:\\tools\\ffmpeg\\bin')
-
-    for (const dir of dirs) {
-      for (const name of candidates) {
-        const p = join(dir, name)
-        if (existsSync(p)) {
-          _ffmpegPath = p
-          return
-        }
-      }
-    }
-
-    // Try PATH resolution via where.exe (async, non-blocking)
-    try {
-      const { stdout } = await execFileAsync('where.exe', ['ffmpeg'], { encoding: 'utf-8', timeout: 5000 })
-      const firstLine = stdout.split('\n')[0].trim()
-      if (firstLine) {
-        _ffmpegPath = firstLine
-        return
-      }
-    } catch {
-      /* ffmpeg not in PATH */
-    }
-
-    _ffmpegPath = null
-  })()
-
-  await _scanning
-}
-
 export async function hasFfmpeg(): Promise<boolean> {
-  await scanFfmpeg()
-  return _ffmpegPath !== null
+  return resolveFfmpegOrNull() !== null
 }
 
 function getCacheDir(outputDir: string): string {
@@ -100,7 +49,7 @@ export function getCachedThumbnailPath(outputDir: string, clipName: string): str
 }
 
 export async function generateThumbnail(outputDir: string, clipName: string): Promise<string | null> {
-  await scanFfmpeg()
+  const ffmpeg = resolveFfmpegOrNull()
 
   const videoPath = join(outputDir, clipName)
   if (!existsSync(videoPath)) return null
@@ -121,13 +70,13 @@ export async function generateThumbnail(outputDir: string, clipName: string): Pr
     }
   }
 
-  if (!_ffmpegPath) return null
+  if (!ffmpeg) return null
 
   try {
     let seekSec = DEFAULT_SEEK_SEC
 
     try {
-      const { stderr } = await execFileAsync(_ffmpegPath, ['-i', videoPath, '-f', 'null', '-'], {
+      const { stderr } = await execFileAsync(ffmpeg, ['-i', videoPath, '-f', 'null', '-'], {
         timeout: 10_000,
         encoding: 'utf-8',
       })
@@ -145,7 +94,7 @@ export async function generateThumbnail(outputDir: string, clipName: string): Pr
     }
 
     await execFileAsync(
-      _ffmpegPath,
+      ffmpeg,
       [
         '-ss',
         String(seekSec),

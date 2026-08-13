@@ -16,18 +16,7 @@ function findInDirs(dirs: string[]): string | null {
   return null
 }
 
-export function getFfmpegPath(): string {
-  if (_cachedPath && existsSync(_cachedPath)) return _cachedPath
-
-  // Try PATH first (most common: WinGet, scoop, choco, manual)
-  const pathDirs = (process.env.PATH || '').split(';')
-  const found = findInDirs(pathDirs.map((d) => d.trim()).filter(Boolean))
-  if (found) {
-    _cachedPath = found
-    return found
-  }
-
-  // Fall back to common install directories
+function commonDirs(): string[] {
   const dirs: string[] = []
   const pf = process.env.ProgramFiles
   const pf86 = process.env['ProgramFiles(x86)']
@@ -40,22 +29,35 @@ export function getFfmpegPath(): string {
     )
   }
   dirs.push('C:\\ffmpeg\\bin', 'C:\\FFmpeg\\bin', 'C:\\tools\\ffmpeg\\bin')
+  return dirs
+}
 
-  const fromDirs = findInDirs(dirs)
-  if (fromDirs) {
-    _cachedPath = fromDirs
-    return fromDirs
-  }
+function findFfmpeg(): string | null {
+  // Try PATH first (most common: WinGet, scoop, choco, manual)
+  const pathDirs = (process.env.PATH || '').split(';')
+  const found = findInDirs(pathDirs.map((d) => d.trim()).filter(Boolean))
+  if (found) return found
+
+  // Fall back to common install directories
+  const fromDirs = findInDirs(commonDirs())
+  if (fromDirs) return fromDirs
 
   try {
     const result = execFileSync('where.exe', ['ffmpeg'], { encoding: 'utf-8', timeout: 3000 }).trim()
-    if (result) {
-      _cachedPath = result.split('\n')[0].trim()
-      return _cachedPath
-    }
+    if (result) return result.split('\n')[0].trim()
   } catch {
     /* ffmpeg not in PATH */
   }
 
-  return 'ffmpeg'
+  return null
+}
+
+export function resolveFfmpegOrNull(): string | null {
+  if (_cachedPath && existsSync(_cachedPath)) return _cachedPath
+  _cachedPath = findFfmpeg()
+  return _cachedPath
+}
+
+export function getFfmpegPath(): string {
+  return resolveFfmpegOrNull() ?? 'ffmpeg'
 }
