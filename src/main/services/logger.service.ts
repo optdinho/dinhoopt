@@ -113,6 +113,7 @@ class LoggerService {
       for (const line of lines) {
         try {
           const entry = JSON.parse(line) as LogEntry
+          if (!this.isLogEntry(entry)) continue
           if (this.matchesFilter(entry, filter)) {
             allEntries.push(entry)
           }
@@ -187,6 +188,17 @@ class LoggerService {
         }
       }
     }
+  }
+
+  private isLogEntry(value: unknown): value is LogEntry {
+    if (typeof value !== 'object' || value === null) return false
+    const v = value as Record<string, unknown>
+    return (
+      typeof v.timestamp === 'string' &&
+      typeof v.level === 'string' &&
+      typeof v.module === 'string' &&
+      typeof v.message === 'string'
+    )
   }
 
   private matchesFilter(entry: LogEntry, filter?: LogFilter): boolean {

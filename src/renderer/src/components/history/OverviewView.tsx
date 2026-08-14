@@ -205,11 +205,11 @@ export function OverviewView({
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-2 space-y-1.5">
-                {typeBreakdown.map((item) => (
+                {typeBreakdown.map((item, idx) => (
                   <div key={item.name} className="flex items-center gap-2">
                     <div
                       className="h-2.5 w-2.5 rounded-full"
-                      style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                      style={{ background: PIE_COLORS[idx % PIE_COLORS.length] }}
                     />
                     <span className="flex-1 text-[12px] text-zinc-400">{item.name}</span>
                     <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>

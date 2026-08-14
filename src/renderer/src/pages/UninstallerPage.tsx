@@ -36,6 +36,7 @@ export function UninstallerPage() {
   const sortDirection = useUninstallerStore((s) => s.sortDirection)
   const filterMode = useUninstallerStore((s) => s.filterMode)
   const selectedIds = useUninstallerStore((s) => s.selectedIds)
+  const safetyFetched = useUninstallerStore((s) => s.safetyFetched)
 
   const [confirmProgram, setConfirmProgram] = useState<InstalledProgram | null>(null)
   const [confirmForceRemove, setConfirmForceRemove] = useState<InstalledProgram | null>(null)
@@ -80,10 +81,10 @@ export function UninstallerPage() {
   }, [hasLoaded, loading, handleLoad])
 
   useEffect(() => {
-    if (hasLoaded && Object.keys(useUninstallerStore.getState().safetyRatings).length === 0) {
+    if (hasLoaded && !safetyFetched) {
       useUninstallerStore.getState().fetchSafetyRatings()
     }
-  }, [hasLoaded])
+  }, [hasLoaded, safetyFetched])
 
   const handleUninstall = useCallback(async () => {
     if (!confirmProgram) return

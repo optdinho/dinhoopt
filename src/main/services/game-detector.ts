@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { execFileAsync } from './exec-utf8'
 
 // ── Well-known game executables (lowercase) ────────────────────
@@ -89,6 +91,73 @@ const KNOWN_GAME_PROCESSES = new Set([
   'sonsoftheforest.exe',
 ])
 
+// ── Game database (games.json from the clips engine) ───────────
+// Same source of truth as the C# clips engine detection.  Loaded from
+// the engine directory (packaged) or the repo (dev); falls back to
+// KNOWN_GAME_PROCESSES when unavailable.  Entries have no `.exe`
+// suffix, so matching normalizes both sides (lowercase + strip `.exe`).
+
+export function normalizeGameName(name: string): string {
+  return name.toLowerCase().replace(/\.exe$/i, '')
+}
+
+/** Lowercase process names (no `.exe`) that count as games. */
+let gameNames = new Set<string>([...KNOWN_GAME_PROCESSES].map(normalizeGameName))
+let databaseLoaded = false
+
+function gamesJsonCandidates(): string[] {
+  const cwd = process.cwd()
+  const candidates: string[] = []
+  const resourcesPath = (process as { resourcesPath?: string }).resourcesPath
+  if (resourcesPath) {
+    candidates.push(join(resourcesPath, 'clips-engine', 'games.json'))
+  }
+  candidates.push(join(cwd, 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'games.json'))
+  candidates.push(join(cwd, 'games.json'))
+  return candidates
+}
+
+function isGameEntry(value: unknown): value is { processName?: unknown; aliases?: unknown } {
+  return typeof value === 'object' && value !== null
+}
+
+/** Loads the clips engine game database.  An explicit path bypasses the
+ *  candidate search and forces a reload (used by tests). */
+export async function loadGameDatabase(path?: string): Promise<void> {
+  if (!path && databaseLoaded) return
+  const candidates = path ? [path] : gamesJsonCandidates()
+  for (const candidate of candidates) {
+    try {
+      const raw = await readFile(candidate, 'utf8')
+      const db = JSON.parse(raw) as { games?: unknown }
+      const games = db?.games
+      if (!Array.isArray(games) || games.length === 0) continue
+      const names = new Set<string>()
+      for (const entry of games) {
+        if (!isGameEntry(entry)) continue
+        if (typeof entry.processName === 'string' && entry.processName) {
+          names.add(normalizeGameName(entry.processName))
+        }
+        if (Array.isArray(entry.aliases)) {
+          for (const alias of entry.aliases) {
+            if (typeof alias === 'string' && alias) names.add(normalizeGameName(alias))
+          }
+        }
+      }
+      if (names.size === 0) continue
+      gameNames = names
+      databaseLoaded = true
+      return
+    } catch {
+      // try next candidate
+    }
+  }
+}
+
+// Kick off loading as soon as this module is imported (game-mode IPC
+// imports it at startup), so the first poll usually sees the DB ready.
+void loadGameDatabase()
+
 // ── Types ──────────────────────────────────────────────────────
 
 export interface GameAutoEvent {
@@ -120,7 +189,7 @@ async function getRunningProcessNames(): Promise<Set<string>> {
       windowsHide: true,
     })
     const names = new Set<string>()
-    for (const line of stdout.split('\n')) {
+    for (const line of String(stdout).split('\n')) {
       const match = line.match(/^"([^"]+)"/)
       if (match) names.add(match[1]!.toLowerCase())
     }
@@ -130,9 +199,9 @@ async function getRunningProcessNames(): Promise<Set<string>> {
   }
 }
 
-function findGame(running: Set<string>, customGameProcesses: string[]): string | null {
+export function findGame(running: Set<string>, customGameProcesses: string[]): string | null {
   for (const proc of running) {
-    if (KNOWN_GAME_PROCESSES.has(proc)) return proc
+    if (gameNames.has(normalizeGameName(proc))) return proc
   }
   for (const custom of customGameProcesses) {
     if (running.has(custom.toLowerCase())) return custom.toLowerCase()

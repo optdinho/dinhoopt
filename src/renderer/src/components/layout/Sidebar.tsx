@@ -2,7 +2,6 @@ import {
   Activity,
   BatteryCharging,
   Bug,
-  CalendarClock,
   Clapperboard,
   ClipboardCheck,
   Clock,
@@ -38,7 +37,6 @@ import {
   Sliders,
   Sparkles,
   Trash2,
-  Wifi,
   Wrench,
   X,
   Zap,
@@ -91,17 +89,12 @@ const navGroups: NavGroup[] = [
     headingKey: 'sectionClean',
     color: 'blue',
     items: [
-      {
-        icon: Sparkles,
-        labelKey: 'cleaner',
-        path: '/cleaner',
-        children: [{ icon: Wifi, labelKey: 'network', path: '/network' }],
-      },
+      { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner' },
       { icon: Database, labelKey: 'registry', path: '/registry' },
       {
         icon: Package,
         labelKey: 'software',
-        path: '/software',
+        path: '/updates',
         children: [
           { icon: Download, labelKey: 'softwareUpdates', path: '/updates' },
           { icon: PackageCheck, labelKey: 'appInstaller', path: '/installer' },
@@ -134,12 +127,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
       { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
-      {
-        icon: Zap,
-        labelKey: 'startup',
-        path: '/startup',
-        children: [{ icon: CalendarClock, labelKey: 'schedules', path: '/schedules' }],
-      },
+      { icon: Zap, labelKey: 'startup', path: '/startup' },
       { icon: Activity, labelKey: 'performance', path: '/performance' },
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
       {
@@ -214,8 +202,7 @@ function useBadgeCounts(): Record<string, number> {
   const updatesCount = updaterApps.length + driverUpdates.length
 
   return {
-    '/updates': updaterApps.length,
-    '/software': updatesCount,
+    '/updates': updatesCount,
     '/drivers': driverUpdates.length,
     '/game-mode': gameModeActive ? 1 : 0,
   }

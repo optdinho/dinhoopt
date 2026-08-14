@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { LogViewer } from '@/components/shared/LogViewer'
 import { usePlatform } from '@/hooks/usePlatform'
+import { loadLanguage } from '@/i18n'
 import { LANGUAGES } from '@/lib/languages'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -81,8 +82,9 @@ export function SettingsPage() {
         <Row label={t('languageLabel')} desc={t('languageDesc')}>
           <select
             value={settings.language}
-            onChange={(e) => {
+            onChange={async (e) => {
               save({ language: e.target.value })
+              await loadLanguage(e.target.value)
               i18next.changeLanguage(e.target.value)
             }}
             className={selectStyle}

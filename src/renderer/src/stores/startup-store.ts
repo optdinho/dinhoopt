@@ -14,6 +14,7 @@ interface StartupState {
   // Safety ratings
   safetyRatings: Record<string, StartupSafetyRating>
   safetyLoading: boolean
+  safetyFetched: boolean
   expandedItemId: string | null
 
   setItems: (items: StartupItem[]) => void
@@ -44,6 +45,7 @@ export const useStartupStore = create<StartupState>((set) => ({
   deleteTarget: null,
   safetyRatings: {},
   safetyLoading: false,
+  safetyFetched: false,
   expandedItemId: null,
 
   setItems: (items) => set({ items }),
@@ -76,9 +78,10 @@ export const useStartupStore = create<StartupState>((set) => ({
       set({
         safetyRatings: Object.fromEntries(ratings.map((r) => [r.name, r])),
         safetyLoading: false,
+        safetyFetched: true,
       })
     } catch {
-      set({ safetyLoading: false })
+      set({ safetyLoading: false, safetyFetched: true })
     }
   },
   reset: () =>
@@ -91,6 +94,7 @@ export const useStartupStore = create<StartupState>((set) => ({
       deleteTarget: null,
       safetyRatings: {},
       safetyLoading: false,
+      safetyFetched: false,
       expandedItemId: null,
     }),
 }))

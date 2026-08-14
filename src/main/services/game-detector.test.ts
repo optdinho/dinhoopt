@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
@@ -9,37 +12,15 @@ vi.mock('./exec-utf8', () => ({
 }))
 
 import {
+  findGame,
   getDetectedGame,
   isDetectorRunning,
+  loadGameDatabase,
+  normalizeGameName,
   startGameDetector,
   stopGameDetector,
   suppressCurrentGame,
 } from './game-detector'
-
-// Replicate internal functions for testing since they are not exported
-const KNOWN_GAME_PROCESSES = new Set([
-  'cs2.exe',
-  'dota2.exe',
-  'valorant-win64-shipping.exe',
-  'fortniteclient-win64-shipping.exe',
-  'cyberpunk2077.exe',
-  'eldenring.exe',
-  'bg3.exe',
-  'helldivers2.exe',
-  'league of legends.exe',
-  'overwatch.exe',
-  'wow.exe',
-])
-
-function findGame(running: Set<string>, customGameProcesses: string[]): string | null {
-  for (const proc of running) {
-    if (KNOWN_GAME_PROCESSES.has(proc)) return proc
-  }
-  for (const custom of customGameProcesses) {
-    if (running.has(custom.toLowerCase())) return custom.toLowerCase()
-  }
-  return null
-}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -402,5 +383,65 @@ describe('suppressed game exit', () => {
     await vi.advanceTimersByTimeAsync(30_000)
 
     expect(onDetected).toHaveBeenCalledWith('cs2.exe')
+  })
+})
+
+describe('games.json database loading', () => {
+  const tempDb = join(tmpdir(), 'game-detector-test-games.json')
+
+  afterAll(() => {
+    rmSync(tempDb, { force: true })
+  })
+
+  it('normalizeGameName strips .exe and lowercases', () => {
+    expect(normalizeGameName('CS2.EXE')).toBe('cs2')
+    expect(normalizeGameName('cs2')).toBe('cs2')
+  })
+
+  it('loads processName entries from the database', async () => {
+    writeFileSync(
+      tempDb,
+      JSON.stringify({ version: 2, games: [{ processName: 'gris' }, { processName: 'SeaOfThieves' }] }),
+    )
+    await loadGameDatabase(tempDb)
+
+    const running = new Set(['explorer.exe', 'gris.exe'])
+    expect(findGame(running, [])).toBe('gris.exe')
+  })
+
+  it('matches aliases from the database', async () => {
+    writeFileSync(
+      tempDb,
+      JSON.stringify({ version: 2, games: [{ processName: 'sot', aliases: ['seaofthieves.exe', 'sea of thieves'] }] }),
+    )
+    await loadGameDatabase(tempDb)
+
+    const running = new Set(['seaofthieves.exe'])
+    expect(findGame(running, [])).toBe('seaofthieves.exe')
+  })
+
+  it('matches case-insensitively and strips .exe on both sides', async () => {
+    writeFileSync(tempDb, JSON.stringify({ version: 2, games: [{ processName: 'GTA5' }] }))
+    await loadGameDatabase(tempDb)
+
+    const running = new Set(['gta5.exe'])
+    expect(findGame(running, [])).toBe('gta5.exe')
+  })
+
+  it('keeps previously loaded entries when a database path is missing', async () => {
+    writeFileSync(tempDb, JSON.stringify({ version: 2, games: [{ processName: 'gris' }] }))
+    await loadGameDatabase(tempDb)
+    await loadGameDatabase(join(tmpdir(), 'does-not-exist-games.json'))
+
+    const running = new Set(['gris.exe'])
+    expect(findGame(running, [])).toBe('gris.exe')
+  })
+
+  it('returns the original running name (with .exe) for database matches', async () => {
+    writeFileSync(tempDb, JSON.stringify({ version: 2, games: [{ processName: 'dota2' }] }))
+    await loadGameDatabase(tempDb)
+
+    const running = new Set(['DOTA2.exe'])
+    expect(findGame(running, [])).toBe('DOTA2.exe')
   })
 })

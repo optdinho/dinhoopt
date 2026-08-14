@@ -22,6 +22,14 @@ describe('renderer-logger', () => {
     expect(log).toHaveBeenCalledWith('error', '[TestCtx] oops — bad thing')
   })
 
+  it('error logs componentStack for ErrorInfo objects', async () => {
+    const log = vi.fn()
+    window.dinho = { log }
+    const { default: logger } = await import('./renderer-logger')
+    logger.error('TestCtx', 'Caught', { componentStack: '\n    at Card\n    at Page\n' })
+    expect(log).toHaveBeenCalledWith('error', '[TestCtx] Caught — componentStack: | at Card | at Page |')
+  })
+
   it('error logs message without detail when err is undefined', async () => {
     const log = vi.fn()
     window.dinho = { log }

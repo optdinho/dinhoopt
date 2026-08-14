@@ -22,7 +22,7 @@ for (const [path, module] of Object.entries(defaultLocaleModules)) {
   resources[lang][ns] = module.default
 }
 
-async function loadLanguage(lang: string) {
+export async function loadLanguage(lang: string) {
   if (i18n.hasResourceBundle(lang, 'common')) return
 
   const prefix = `./locales/${lang}/`

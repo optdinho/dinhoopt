@@ -21,6 +21,7 @@ interface UninstallerState {
   // Safety ratings
   safetyRatings: Record<string, StartupSafetyRating>
   safetyLoading: boolean
+  safetyFetched: boolean
   expandedItemId: string | null
 
   setPrograms: (programs: InstalledProgram[]) => void
@@ -63,6 +64,7 @@ export const useUninstallerStore = create<UninstallerState>((set) => ({
   selectedIds: new Set<string>(),
   safetyRatings: {},
   safetyLoading: false,
+  safetyFetched: false,
   expandedItemId: null,
 
   setPrograms: (programs) => set({ programs, selectedIds: new Set<string>() }),
@@ -105,9 +107,10 @@ export const useUninstallerStore = create<UninstallerState>((set) => ({
       set({
         safetyRatings: Object.fromEntries(ratings.map((r) => [r.name, r])),
         safetyLoading: false,
+        safetyFetched: true,
       })
     } catch {
-      set({ safetyLoading: false })
+      set({ safetyLoading: false, safetyFetched: true })
     }
   },
   reset: () =>
@@ -126,6 +129,7 @@ export const useUninstallerStore = create<UninstallerState>((set) => ({
       selectedIds: new Set<string>(),
       safetyRatings: {},
       safetyLoading: false,
+      safetyFetched: false,
       expandedItemId: null,
     }),
 }))

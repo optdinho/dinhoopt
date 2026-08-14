@@ -365,6 +365,26 @@ describe('LoggerService', () => {
       expect(result.total).toBe(2)
     })
 
+    it('skips entries that do not conform to LogEntry shape (e.g. audit entries)', async () => {
+      mockReaddir.mockResolvedValue(['audit.jsonl', '2026-01-01.jsonl'])
+      mockReadFile
+        .mockResolvedValueOnce(
+          `${JSON.stringify({
+            timestamp: ts(0),
+            action: 'DEBLOATER_REMOVE',
+            category: 'debloater',
+            details: {},
+            admin: false,
+          })}\n`,
+        )
+        .mockResolvedValueOnce(`${JSON.stringify({ timestamp: ts(0), level: 'info', module: 'm', message: 'ok' })}\n`)
+
+      const logger = getLogger()
+      const result = await logger.list()
+      expect(result.total).toBe(1)
+      expect(result.entries[0]!.message).toBe('ok')
+    })
+
     it('skips files that cannot be read', async () => {
       mockReaddir.mockResolvedValue(['good.jsonl', 'bad.jsonl'])
       mockReadFile

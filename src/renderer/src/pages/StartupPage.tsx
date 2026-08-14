@@ -34,6 +34,7 @@ export function StartupPage() {
   const deleteTarget = useStartupStore((s) => s.deleteTarget)
   const safetyRatings = useStartupStore((s) => s.safetyRatings)
   const safetyLoading = useStartupStore((s) => s.safetyLoading)
+  const safetyFetched = useStartupStore((s) => s.safetyFetched)
   const expandedItemId = useStartupStore((s) => s.expandedItemId)
 
   const isCloudLinked = false
@@ -76,10 +77,10 @@ export function StartupPage() {
   }, [loadItems, loadBootTrace, items, bootTrace])
 
   useEffect(() => {
-    if (Object.keys(safetyRatings).length === 0) {
+    if (!safetyFetched) {
       store.getState().fetchSafetyRatings()
     }
-  }, [safetyRatings])
+  }, [safetyFetched])
 
   const handleToggle = async (item: StartupItem, enabled: boolean) => {
     const startTime = Date.now()
