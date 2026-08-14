@@ -22,7 +22,7 @@ public sealed partial class EngineCoordinator
     private void ToggleCapture()
     {
         if (_captureActive)
-            StopCapture();
+            StopCapture(clearBuffer: true);
         else
             StartCapture();
     }
@@ -303,7 +303,7 @@ public sealed partial class EngineCoordinator
         }
     }
 
-    private void StopCapture()
+    private void StopCapture(bool clearBuffer = false)
     {
         lock (_pipelineLock)
         {
@@ -363,6 +363,13 @@ public sealed partial class EngineCoordinator
                 }
                 _aacEncoder.Dispose();
                 _aacEncoder = null;
+            }
+
+            // Só o stop real do usuário (UI/hotkey) limpa o replay buffer.
+            // Auto-recuperação do pipeline preserva os frames para o próximo save.
+            if (clearBuffer)
+            {
+                _buffer.Clear();
             }
 
             // Reseta contadores entre sessões de captura

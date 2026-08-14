@@ -57,7 +57,7 @@ public sealed partial class EngineCoordinator
 
     private IpcMessage HandleStopCapture()
     {
-        StopCapture();
+        StopCapture(clearBuffer: true);
         return new IpcMessage { Action = "ok" };
     }
 
