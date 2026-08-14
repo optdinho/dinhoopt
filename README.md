@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/versão-1.0.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-90%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-85%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 
@@ -36,8 +36,8 @@
 
 | Componente | Tamanho |
 |------------|---------|
-| Instalador (NSIS) | ~125 MB |
-| Portable | ~272 MB |
+| Instalador (NSIS) | ~219 MB |
+| Portable | ~219 MB |
 
 > **⚠️ Requer:** Windows 10 (build 19041+) ou Windows 11, 4 GB RAM, 500 MB de espaço livre.
 
@@ -188,7 +188,7 @@
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
   <img src="https://img.shields.io/badge/shadcn/ui-latest-000000?style=flat-square&logo=shadcnui&logoColor=white" alt="shadcn/ui" />
   <img src="https://img.shields.io/badge/Zustand-5-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand" />
-  <img src="https://img.shields.io/badge/electron--vite-5-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-vite" />
+  <img src="https://img.shields.io/badge/electron--vite-6-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-vite" />
   <img src="https://img.shields.io/badge/YARA--X-0.7-00ADD8?style=flat-square&logo=python&logoColor=white" alt="YARA-X" />
   <img src="https://img.shields.io/badge/Vitest-4-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
   <img src="https://img.shields.io/badge/Playwright-latest-45BA4B?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
@@ -201,7 +201,7 @@
 | **Linguagem** | TypeScript 7 (strict mode) |
 | **Frontend** | React 19, Tailwind CSS 4, shadcn/ui, Recharts |
 | **Estado** | Zustand 5 |
-| **Build** | electron-vite 5, electron-builder (NSIS) |
+| **Build** | electron-vite 6, electron-builder (NSIS) |
 | **Testes** | Vitest 4, Playwright, Testing Library |
 | **Segurança** | YARA-X 0.7 (bindings nativas), crypto (Node.js) |
 | **Banco de Dados** | better-sqlite3 (SQLite) |
@@ -229,7 +229,7 @@
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (45)               │      │
+│  │              IPC Handlers (230)               │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -258,8 +258,8 @@ src/
 │   ├── index.ts                # Entry point + gerenciamento de janela
 │   ├── cli/                    # Modo linha de comando (headless)
 │   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # 45 handlers IPC (1 por módulo)
-│   ├── services/               # Lógica de negócio (~58 serviços)
+│   ├── ipc/                    # 230 handlers IPC (1 por módulo)
+│   ├── services/               # Lógica de negócio (61 serviços)
 │   ├── platform/               # Abstração de plataforma
 │   │   └── win32/              # Implementação Windows (registry, WMI, API)
 │   └── constants/              # Paths, safelists, configurações
@@ -269,7 +269,7 @@ src/
 │       ├── App.tsx             # Router + layout principal
 │       ├── pages/              # 42 páginas (uma por módulo funcional)
 │       ├── stores/             # Estado global (Zustand, 37 stores)
-│       ├── components/         # Componentes reutilizáveis (~60)
+│       ├── components/         # Componentes reutilizáveis (125)
 │       ├── hooks/              # Hooks customizados
 │       ├── lib/                # Utilitários e helpers
 │       └── locales/            # i18n (inglês, português, espanhol)
@@ -286,7 +286,7 @@ src/
 
 ### Pré-requisitos
 
-- **Node.js** 20+ (LTS)
+- **Node.js** 22+ (LTS)
 - **npm** 10+
 - **Windows** com **Visual Studio Build Tools 2022**
   ```bash
@@ -337,7 +337,7 @@ npx playwright test
 ```
 
 ```
-📊 Cobertura atual: ~90%+ — 219 arquivos de teste, ~6.700 testes
+📊 Cobertura atual: ~85%+ — 227 arquivos de teste, ~6.900 testes
 ```
 
 ---
@@ -349,13 +349,13 @@ npx playwright test
 | Módulos | 60+ |
 | Páginas | 42 |
 | Stores (Zustand) | 37 |
-| Componentes React | 60+ |
-| Serviços | ~58 |
-| Handlers IPC | 45 |
-| Arquivos de teste | 219 |
-| Testes | ~6.700 |
-| Cobertura | ~90%+ |
-| Linhas de código | ~100.000+ |
+| Componentes React | 125 |
+| Serviços | 61 |
+| Handlers IPC | 230 |
+| Arquivos de teste | 227 |
+| Testes | ~6.900 |
+| Cobertura | ~85%+ |
+| Linhas de código | ~106.000+ |
 
 ---
 
