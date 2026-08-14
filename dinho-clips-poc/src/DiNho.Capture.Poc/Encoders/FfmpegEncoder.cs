@@ -585,7 +585,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         outputFrameIndex == 0 ? StdinWriteWarmupTimeoutMs : StdinWriteTimeoutMs;
 
     /// <summary>
-    /// Acessores dos drops por GPU busy (0x887A0021). O flag aponta se o ÚLTIMO frame
+    /// Acessores dos drops por GPU busy (0x887A000A). O flag aponta se o ÚLTIMO frame
     /// caiu por busy (conversão NV12 no staging) — o pipeline usa para classificar o
     /// motivo do drop no log/status de forma honesta (busy ≠ encode error).
     /// </summary>
@@ -600,7 +600,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// </summary>
     internal static string BuildEncodeDropReason(bool isBusy) =>
         isBusy
-            ? "GPU busy (0x887A0021) — frame dropped, retry next frame."
+            ? "GPU busy (0x887A000A) — frame dropped, retry next frame."
             : "Encoder não produziu frame (encode error).";
 
     public EncodedPacket? EncodeFrame(ID3D11Texture2D texture, TimeSpan pts)

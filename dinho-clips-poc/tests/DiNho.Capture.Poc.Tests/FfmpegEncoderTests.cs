@@ -1264,8 +1264,16 @@ public sealed class FfmpegEncoderTests
     public void IsGpuBusyMapError_WasStillDrawing_ReturnsTrue()
     {
         var ex = new InvalidOperationException("map busy");
-        ex.HResult = unchecked((int)0x887A0021); // DXGI_ERROR_WAS_STILL_DRAWING
+        ex.HResult = unchecked((int)0x887A000A); // DXGI_ERROR_WAS_STILL_DRAWING (valor real)
         Assert.True(FfmpegEncoder.IsGpuBusyMapError(ex));
+    }
+
+    [Fact]
+    public void IsGpuBusyMapError_NonCompositedUi_ReturnsFalse()
+    {
+        var ex = new InvalidOperationException("non-composited ui");
+        ex.HResult = unchecked((int)0x887A0021); // DXGI_ERROR_NON_COMPOSITED_UI — NÃO é busy
+        Assert.False(FfmpegEncoder.IsGpuBusyMapError(ex));
     }
 
     [Fact]
@@ -1293,7 +1301,7 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void BuildEncodeDropReason_Busy_ReturnsGpuBusyMessage()
     {
-        Assert.Equal("GPU busy (0x887A0021) — frame dropped, retry next frame.", FfmpegEncoder.BuildEncodeDropReason(true));
+        Assert.Equal("GPU busy (0x887A000A) — frame dropped, retry next frame.", FfmpegEncoder.BuildEncodeDropReason(true));
     }
 
     [Fact]

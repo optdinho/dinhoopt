@@ -15,7 +15,7 @@ internal partial class FfmpegEncoder
     // DXGI_ERROR_WAS_STILL_DRAWING quando a GPU ainda desenha o frame anterior — em vez
     // de segurar a thread por 0.5-4ms (o hotspot do Map visto no benchmark do pipeline).
     internal const Vortice.Direct3D11.MapFlags StagingMapFlags = Vortice.Direct3D11.MapFlags.DoNotWait;
-    internal const int DXGI_ERROR_WAS_STILL_DRAWING = unchecked((int)0x887A0021);
+    internal const int DXGI_ERROR_WAS_STILL_DRAWING = unchecked((int)0x887A000A);
 
     // Classifica exceção do Map como "GPU ocupada" (busy transiente). Só WAS_STILL_DRAWING
     // é retry no próximo frame; device removed / E_FAIL são falhas reais (contam como drop).
@@ -213,7 +213,7 @@ internal partial class FfmpegEncoder
             {
                 _lastFrameBusyDrop = true;
                 Interlocked.Increment(ref _gpuBusyDrops);
-                Log.D("FfmpegEncoder", "GPU busy (0x887A0021) — frame dropped, retry next frame");
+                Log.D("FfmpegEncoder", "GPU busy (0x887A000A) — frame dropped, retry next frame");
                 return null;
             }
             _gpuConvertFails = 0;
