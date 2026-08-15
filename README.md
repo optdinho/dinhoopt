@@ -104,7 +104,7 @@
 | **Ajustes do Windows** | Personaliza desempenho e comportamento do Windows |
 | **Planos de Energia** | Cria, ativa e gerencia planos de energia |
 | **Tarefas Agendadas** | Agenda limpezas e manutenções automáticas |
-| **Pontos de Restauração** | Cria e gerencia pontos de restauração do sistema |
+| ~~Pontos de Restauração~~ | ~~Cria e gerencia pontos de restauração do sistema~~ *(não implementado)* |
 | **Histórico** | Histórico completo de scans e limpezas realizadas |
 
 </details>
@@ -133,7 +133,7 @@
 | **Atualizador de Drivers** | Detecta e atualiza drivers desatualizados |
 | **Auto-Atualizador** | Atualiza o próprio DiNho Optimizer automaticamente |
 | **Desinstalador** | Remove programas e seus resíduos |
-| **Verificador de Segurança** | Verifica se programas são seguros antes de desinstalar |
+| **Verificador de Segurança** | Exibe classificação de segurança de programas (UI pronta; avaliação offline/stub no backend) |
 | **Limpeza de Resíduos** | Remove sobras de desinstalações anteriores |
 
 </details>
@@ -164,16 +164,22 @@
 </details>
 
 <details open>
-<summary><strong>🎮 Game Clips</strong> — 6 módulos</summary>
+<summary><strong>🎮 Game Clips</strong> — 12 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
-| **Gravador de Clipes** | Captura replay buffer de jogos (WGC + NVENC/AV1) |
+| **Gravador de Clipes** | Captura replay buffer de jogos (WGC + NVENC/AMF/QSV) |
 | **Modo Só Jogo** | Captura apenas o jogo + microfone, mute de outras apps |
-| **Editor de Clipes** | Trim (fast copy ou re-encode) e merge via ffmpeg |
+| **Áudio por Aplicativo** | Seleciona quais apps terão áudio no clip (por processo) |
+| **Editor de Clipes** | Trim (fast copy ou re-encode), merge e enhance AMD via ffmpeg |
 | **Preview de Vídeo** | Player integrado com seek por HTTP Range |
+| **Publicação de Clipes** | Upload do clip e geração de link para compartilhar |
+| **Push-to-Talk** | Ativa o microfone por tecla personalizável (hold/toggle) |
+| **Redução de Ruído** | Denoising do microfone em tempo real (ffmpeg anlmdn) |
+| **Replay Buffer** | Modo RAM ou híbrido com spill em disco para clips longos |
+| **Qualidade Adaptativa** | Reduz resolução automaticamente em PC com pouca performance |
 | **Configuração de Qualidade** | Presets CQ+VBV, resolução, nitidez (CAS), stretch |
-| **Notificações & Hotkeys** | Hotkeys personalizáveis, toast ao salvar clip |
+| **Notificações & Hotkeys** | Hotkeys personalizáveis, toast ao salvar clip, favoritos e auto-limpeza |
 
 </details>
 
@@ -217,7 +223,7 @@
 │  │              Renderer (React 19)               │  │
 │  │  ┌─────────┐ ┌──────────┐ ┌────────────────┐  │  │
 │  │  │  Pages   │ │  Stores  │ │  Components    │  │  │
-│  │  │  (42)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
+│  │  │  (45)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
 │  │  └────┬────┘ └────┬─────┘ └───────┬────────┘  │  │
 │  │       │           │               │            │  │
 │  │  ┌────▼───────────▼───────────────▼────────┐  │  │
@@ -229,7 +235,7 @@
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (230)               │      │
+│  │              IPC Handlers (228)               │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -267,7 +273,7 @@ src/
 ├── renderer/                   # Interface React
 │   └── src/
 │       ├── App.tsx             # Router + layout principal
-│       ├── pages/              # 42 páginas (uma por módulo funcional)
+│       ├── pages/              # 45 páginas (uma por módulo funcional)
 │       ├── stores/             # Estado global (Zustand, 37 stores)
 │       ├── components/         # Componentes reutilizáveis (125)
 │       ├── hooks/              # Hooks customizados
@@ -315,7 +321,7 @@ npm run dev
 | `npm run build` | Compila TypeScript + bundler |
 | `npm run package` | Gera instalador NSIS em `dist/` |
 | `npm test` | Executa testes unitários e de integração |
-| `npm run coverage` | Executa testes com relatório de cobertura |
+| `npm run test:coverage` | Executa testes com relatório de cobertura |
 | `npm run lint` | Verifica código com Biome |
 | `npm run lint:fix` | Corrige problemas de formatação automaticamente |
 | `npm run typecheck` | Verificação de tipos TypeScript |
@@ -327,7 +333,7 @@ npm run dev
 npm test
 
 # Com cobertura (80%+ requerido)
-npm run coverage
+npm run test:coverage
 
 # Modo watch
 npx vitest
@@ -347,11 +353,11 @@ npx playwright test
 | Métrica | Valor |
 |---------|-------|
 | Módulos | 60+ |
-| Páginas | 42 |
+| Páginas | 45 |
 | Stores (Zustand) | 37 |
 | Componentes React | 125 |
 | Serviços | 61 |
-| Handlers IPC | 230 |
+| Handlers IPC | 228 |
 | Arquivos de teste | 227 |
 | Testes | ~6.900 |
 | Cobertura | ~85%+ |
