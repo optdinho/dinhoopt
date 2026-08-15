@@ -1558,6 +1558,50 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.True(EngineCoordinator.ShouldLogRecovery(consecutiveDrops));
     }
 
+    // ComputeCaptureTimeoutMs — alinhar o timeout do WaitOne ao intervalo do cap
+    // (ComputeCapIntervalTicks = 10_000_000 / fps). Truncar gerava corrida de fase.
+
+    [Fact]
+    public void ComputeCaptureTimeoutMs_60Fps_Returns17()
+    {
+        Assert.Equal(17, EngineCoordinator.ComputeCaptureTimeoutMs(60));
+    }
+
+    [Theory]
+    [InlineData(30)]
+    [InlineData(60)]
+    [InlineData(75)]
+    [InlineData(120)]
+    public void ComputeCaptureTimeoutMs_AlwaysGreaterOrEqualCapInterval(int fps)
+    {
+        var capIntervalMs = Math.Ceiling(1_000_000.0 / fps / 10_000);
+        Assert.True(EngineCoordinator.ComputeCaptureTimeoutMs(fps) >= capIntervalMs,
+            $"fps={fps}: timeout {EngineCoordinator.ComputeCaptureTimeoutMs(fps)} < cap interval {capIntervalMs}");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-30)]
+    public void ComputeCaptureTimeoutMs_NonPositive_Returns1(int fps)
+    {
+        Assert.Equal(1, EngineCoordinator.ComputeCaptureTimeoutMs(fps));
+    }
+
+    [Fact]
+    public void ComputeCaptureTimeoutMs_VeryLowFps_ClampsTo100()
+    {
+        Assert.Equal(100, EngineCoordinator.ComputeCaptureTimeoutMs(5));
+    }
+
+    [Theory]
+    [InlineData(30, 34)]
+    [InlineData(75, 14)]
+    [InlineData(120, 9)]
+    public void ComputeCaptureTimeoutMs_ReturnsExpected(int fps, int expected)
+    {
+        Assert.Equal(expected, EngineCoordinator.ComputeCaptureTimeoutMs(fps));
+    }
+
     [Fact]
     public void EngineStatus_DroppedFrames_CanUpdate()
     {

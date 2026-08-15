@@ -542,6 +542,13 @@ public sealed partial class EngineCoordinator
     internal static bool ShouldLogRecovery(int consecutiveDrops)
         => consecutiveDrops >= 5;
 
+    // Timeout do WaitOne na captura — deve ser >= intervalo do cap do WGC
+    // (ComputeCapIntervalTicks = 10_000_000 / fps). Truncar (1000 / fps) deixava
+    // o timeout 0,33-0,67ms menor que o intervalo -> drop espúrio por corrida de
+    // fase. Math.Ceiling garante margem >= intervalo; o produtor sinaliza exato.
+    internal static int ComputeCaptureTimeoutMs(int fps)
+        => fps <= 0 ? 1 : Math.Max(1, Math.Min(100, (int)Math.Ceiling(1000.0 / fps)));
+
     private void ReportDrop(string reason)
     {
         _consecutiveDrops++;
@@ -622,7 +629,7 @@ public sealed partial class EngineCoordinator
 
             try
             {
-                int captureTimeout = Math.Max(1, Math.Min(100, 1000 / _config.Config.Fps));
+                int captureTimeout = ComputeCaptureTimeoutMs(_config.Config.Fps);
                 using var frame = cap?.TryCaptureFrame(captureTimeout);
                 if (frame is null)
                 {
