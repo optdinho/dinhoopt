@@ -46,6 +46,16 @@ public sealed class FfmpegAacEncoder : IDisposable
         batchesWritten == 0 ? StdinWriteWarmupTimeoutMs : StdinWriteTimeoutMs;
 
     /// <summary>
+    /// Classifica o fechamento do stdout do ffmpeg AAC (ReaderLoop, read == 0).
+    /// exitCode == 0 = shutdown limpo (stopCapture intencional fecha o stdin → EOF → ffmpeg sai com 0).
+    /// Não é falha: não deve logar Error nem marcar UNHEALTHY (evita falso-positivo de log/telemetria).
+    /// Qualquer outro exit (crash, kill, erro do ffmpeg) = falha real — Error + UNHEALTHY (fail-closed,
+    /// consistente com a política do projeto para checagens de processo).
+    /// </summary>
+    internal static (bool LogAsError, bool MarkUnhealthy) ClassifyStdoutClosed(int exitCode) =>
+        exitCode == 0 ? (LogAsError: false, MarkUnhealthy: false) : (LogAsError: true, MarkUnhealthy: true);
+
+    /// <summary>
     /// Seam de teste — injeta o stdin (e um timeout de escrita fixo) sem spawnar
     /// um processo ffmpeg real. Não inicia o ReaderLoop nem cria o processo;
     /// apenas exercita EncodeAudio/Dispose contra o Stream injetado.
@@ -258,8 +268,16 @@ public sealed class FfmpegAacEncoder : IDisposable
             {
                 int exitCode = -1;
                 try { if (_process is { HasExited: true }) exitCode = _process.ExitCode; } catch { }
-                Log.E("FfmpegAacEncoder", $"ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames} exitCode={exitCode}) — encoder UNHEALTHY");
-                _isHealthy = false;
+                var (logAsError, markUnhealthy) = ClassifyStdoutClosed(exitCode);
+                if (logAsError)
+                {
+                    Log.E("FfmpegAacEncoder", $"ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames} exitCode={exitCode}) — encoder UNHEALTHY");
+                    _isHealthy = false;
+                }
+                else
+                {
+                    Log.D("FfmpegAacEncoder", $"ReaderLoop: stdout closed (reads={totalReads} frames={totalFrames} exitCode={exitCode}) — clean shutdown");
+                }
                 break;
             }
 

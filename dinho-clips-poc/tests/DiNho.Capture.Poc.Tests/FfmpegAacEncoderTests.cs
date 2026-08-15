@@ -106,6 +106,31 @@ public sealed class FfmpegAacEncoderTests
         Assert.Equal(FfmpegAacEncoder.StdinWriteTimeoutMs, FfmpegAacEncoder.ComputeAacWriteTimeout(9001));
     }
 
+    [Fact]
+    public void ClassifyStdoutClosed_ExitCodeZero_IsCleanShutdown()
+    {
+        // stopCapture intencional fecha o stdin do ffmpeg AAC -> ele sai com exitCode=0.
+        // Isso é desligamento limpo, NÃO falha: não deve logar Error nem marcar UNHEALTHY.
+        var (logAsError, markUnhealthy) = FfmpegAacEncoder.ClassifyStdoutClosed(0);
+
+        Assert.False(logAsError, "exitCode=0 (stdin EOF no stop) é shutdown normal — não é erro.");
+        Assert.False(markUnhealthy, "exitCode=0 não deve marcar o encoder UNHEALTHY (falso-positivo de log).");
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(255)]
+    public void ClassifyStdoutClosed_NonZeroExit_IsRealFailure(int exitCode)
+    {
+        // exitCode != 0 (crash, kill, erro do ffmpeg) = falha real — Error + UNHEALTHY (fail-closed).
+        var (logAsError, markUnhealthy) = FfmpegAacEncoder.ClassifyStdoutClosed(exitCode);
+
+        Assert.True(logAsError, $"exitCode={exitCode} não é shutdown limpo — deve logar Error.");
+        Assert.True(markUnhealthy, $"exitCode={exitCode} deve marcar UNHEALTHY (watchdog reinit).");
+    }
+
     // ─── Streams de teste ────────────────────────────────────────────
 
     /// <summary>
