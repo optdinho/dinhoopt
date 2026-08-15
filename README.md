@@ -223,7 +223,7 @@
 │  │              Renderer (React 19)               │  │
 │  │  ┌─────────┐ ┌──────────┐ ┌────────────────┐  │  │
 │  │  │  Pages   │ │  Stores  │ │  Components    │  │  │
-│  │  │  (45)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
+│  │  │  (37)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
 │  │  └────┬────┘ └────┬─────┘ └───────┬────────┘  │  │
 │  │       │           │               │            │  │
 │  │  ┌────▼───────────▼───────────────▼────────┐  │  │
@@ -235,7 +235,7 @@
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (228)               │      │
+│  │              IPC Handlers (237)               │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -264,7 +264,7 @@ src/
 │   ├── index.ts                # Entry point + gerenciamento de janela
 │   ├── cli/                    # Modo linha de comando (headless)
 │   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # 230 handlers IPC (1 por módulo)
+│   ├── ipc/                    # 237 handlers IPC (1 por módulo)
 │   ├── services/               # Lógica de negócio (61 serviços)
 │   ├── platform/               # Abstração de plataforma
 │   │   └── win32/              # Implementação Windows (registry, WMI, API)
@@ -273,7 +273,7 @@ src/
 ├── renderer/                   # Interface React
 │   └── src/
 │       ├── App.tsx             # Router + layout principal
-│       ├── pages/              # 45 páginas (uma por módulo funcional)
+│       ├── pages/              # 37 páginas (uma por módulo funcional)
 │       ├── stores/             # Estado global (Zustand, 37 stores)
 │       ├── components/         # Componentes reutilizáveis (125)
 │       ├── hooks/              # Hooks customizados
@@ -353,11 +353,11 @@ npx playwright test
 | Métrica | Valor |
 |---------|-------|
 | Módulos | 60+ |
-| Páginas | 45 |
+| Páginas | 37 |
 | Stores (Zustand) | 37 |
 | Componentes React | 125 |
 | Serviços | 61 |
-| Handlers IPC | 228 |
+| Handlers IPC | 237 |
 | Arquivos de teste | 227 |
 | Testes | ~6.900 |
 | Cobertura | ~85%+ |
