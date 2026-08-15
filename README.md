@@ -199,6 +199,11 @@
   <img src="https://img.shields.io/badge/Vitest-4-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
   <img src="https://img.shields.io/badge/Playwright-latest-45BA4B?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
   <img src="https://img.shields.io/badge/electron--builder-26-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-builder" />
+  <img src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET" />
+  <img src="https://img.shields.io/badge/ffmpeg-9.0-008000?style=flat-square&logo=ffmpeg&logoColor=white" alt="ffmpeg" />
+  <img src="https://img.shields.io/badge/NVENC/AMF/QSV-HW%20Encoders-76B900?style=flat-square" alt="HW Encoders" />
+  <img src="https://img.shields.io/badge/Windows.Graphics.Capture-WGC-0078D4?style=flat-square&logo=windows&logoColor=white" alt="WGC" />
+  <img src="https://img.shields.io/badge/NAudio-2.3-512BD4?style=flat-square" alt="NAudio" />
 </p>
 
 | Categoria | Tecnologias |
@@ -211,6 +216,25 @@
 | **Testes** | Vitest 4, Playwright, Testing Library |
 | **Segurança** | YARA-X 0.7 (bindings nativas), crypto (Node.js) |
 | **Banco de Dados** | better-sqlite3 (SQLite) |
+| **Motor de Clips** | .NET 10 (C#), ffmpeg 9.0, NVENC/AMF/QSV, WGC, NAudio, RNNoise, Vortice (D3D11) |
+
+### 🎬 Motor de Clips
+
+O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, self-contained, Windows-only) que roda ao lado do app Electron e se comunica via named pipes:
+
+| Tecnologia | Uso |
+|------------|-----|
+| **.NET 10 (C#)** | Motor de captura `DiNho.Capture.Poc` (self-contained, sem runtime externo) |
+| **ffmpeg 9.0** | Encoders, mux MP4/Matroska, trim/merge, thumbnails (embarcado no instalador) |
+| **NVENC / AMF / QSV** | Encoders de hardware NVIDIA / AMD / Intel (h264, HEVC, AV1) |
+| **libx264 / libx265 / SVT-AV1** | Fallback de software quando HW não está disponível |
+| **Windows.Graphics.Capture (WGC)** | Captura de janela/desktop em alta qualidade |
+| **NAudio (WASAPI)** | Captura de áudio (loopback do sistema + microfone) |
+| **Vortice (DXGI/D3D11)** | Renderização, conversão e processamento de frames GPU |
+| **RNNoise (anlmdn)** | Supressão de ruído do microfone |
+| **ApplicationLoopback.dll (C++)** | Áudio por aplicativo (só o jogo, sem Discord/navegador) |
+| **Matroska/EBML + MP4** | Container intermediário com timestamps e mux final |
+| **Named pipes** | IPC engine ↔ Electron (status, comandos, clips salvos) |
 
 ---
 
