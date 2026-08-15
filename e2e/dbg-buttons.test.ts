@@ -1,9 +1,11 @@
 import { resolve } from 'node:path'
 import { test } from '@playwright/test'
 import { _electron as electron } from 'playwright'
+import { createLicenseE2EMarker } from './license-e2e'
 
 test('dump buttons on problem routes', async () => {
   test.setTimeout(180_000)
+  createLicenseE2EMarker(resolve(__dirname, '.dbg-userdata'))
   const app = await electron.launch({
     args: [resolve(__dirname, '../out/main/index.js'), `--dinho-data-dir=${resolve(__dirname, '.dbg-userdata')}`],
     env: { ...process.env, NODE_ENV: 'test', DINHO_E2E: '1' },

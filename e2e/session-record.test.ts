@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { test } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import type { ElectronApplication, Page } from 'playwright'
+import { createLicenseE2EMarker } from './license-e2e'
 
 type RecEvent =
   | { kind: 'console'; level: string; text: string }
@@ -74,6 +75,7 @@ function push(kind: RecEvent['kind'], payload: { text: string; stack?: string; u
 
 test.beforeAll(async () => {
   mkdirSync(resolve(outDir, 'shots'), { recursive: true })
+  createLicenseE2EMarker(resolve(outDir, 'userdata'))
   electronApp = await electron.launch({
     args: [resolve(__dirname, '../out/main/index.js'), `--dinho-data-dir=${resolve(outDir, 'userdata')}`],
     env: {

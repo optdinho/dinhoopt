@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { E2E_MARKER_FILENAME } from '@shared/e2e-license-marker'
 
 // ── Mock state (dynamic per-test) ────────────────────────────────────
 const mockVars = vi.hoisted(() => {
@@ -387,16 +388,53 @@ describe('remote-license', () => {
 
   // ── E2E bypass ───────────────────────────────────────────────────
   describe('DINHO_E2E bypass', () => {
+    function createMarker(): void {
+      fs.writeFileSync(path.join(testRoot, E2E_MARKER_FILENAME), String(Date.now()), 'utf-8')
+    }
+
     afterEach(() => {
       delete process.env.DINHO_E2E
+      delete process.env.DINHO_E2E_KEY
+      try {
+        fs.rmSync(path.join(testRoot, E2E_MARKER_FILENAME), { force: true })
+      } catch {}
     })
 
-    it('returns valid test license when DINHO_E2E is set', async () => {
+    it('returns valid test license when env key and marker are present', async () => {
       process.env.DINHO_E2E = '1'
+      process.env.DINHO_E2E_KEY = 'test-secret'
+      createMarker()
 
       const result = await checkLicense()
       expect(result.valid).toBe(true)
       expect(result.type).toBe('test')
+    })
+
+    it('does not bypass when DINHO_E2E_KEY is missing', async () => {
+      process.env.DINHO_E2E = '1'
+      createMarker()
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Nenhuma licença encontrada')
+    })
+
+    it('does not bypass when the marker file is missing', async () => {
+      process.env.DINHO_E2E = '1'
+      process.env.DINHO_E2E_KEY = 'test-secret'
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Nenhuma licença encontrada')
+    })
+
+    it('does not bypass when DINHO_E2E is not set', async () => {
+      process.env.DINHO_E2E_KEY = 'test-secret'
+      createMarker()
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Nenhuma licença encontrada')
     })
   })
 })

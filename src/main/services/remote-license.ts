@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, net } from 'electron'
+import { E2E_MARKER_FILENAME } from '@shared/e2e-license-marker'
 import { getSecret } from './env-sanitize'
 import { generateHwid } from './hwid'
 import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'
@@ -190,8 +191,20 @@ export async function activateLicense(key: string): Promise<RemoteLicenseResult>
   return result
 }
 
+export function isE2EBypassEnabled(): boolean {
+  if (process.env.DINHO_E2E !== '1') return false
+  if (app.isPackaged) return false
+  if (!process.env.DINHO_E2E_KEY) return false
+  try {
+    const markerPath = join(app.getPath('userData'), E2E_MARKER_FILENAME)
+    return existsSync(markerPath)
+  } catch {
+    return false
+  }
+}
+
 export async function checkLicense(): Promise<RemoteLicenseResult> {
-  if (process.env.DINHO_E2E === '1' && !app.isPackaged) {
+  if (isE2EBypassEnabled()) {
     return { valid: true, type: 'test' }
   }
   ensureInit()

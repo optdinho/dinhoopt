@@ -73,4 +73,6 @@ e2e/.ipc-audit/
 e2e/.journey-audit/
 e2e/.session-record/
 e2e/.dbg-userdata/
+# E2E license bypass marker (created by e2e specs at launch time)
+**/.dinho-e2e-license
 .esbuild-tmp/

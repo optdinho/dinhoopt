@@ -23,6 +23,7 @@ export default defineConfig({
     define: {
       'process.env.LICENSE_API_URL': JSON.stringify(process.env.LICENSE_API_URL),
       'process.env.LICENSE_API_TOKEN': JSON.stringify(process.env.LICENSE_API_TOKEN),
+      'process.env.DINHO_E2E_KEY': JSON.stringify(process.env.DINHO_E2E_KEY),
     },
     resolve: {
       alias: {
