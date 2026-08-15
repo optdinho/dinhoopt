@@ -214,13 +214,13 @@ public sealed partial class EngineCoordinator
 
                 if (_config.Config.ReplayBufferMode == "hybrid")
                 {
-                    // Híbrido: vídeo em RAM é capado em ~3 min (fixos); o excedente é
+                    // Híbrido: vídeo em RAM é capado em ~2 min (fixos); o excedente é
                     // evictado para o disco (vídeo-only). Se a RAM segura não couber
-                    // 3 min no bitrate alvo, o cap encolhe para o que couber do
+                    // 2 min no bitrate alvo, o cap encolhe para o que couber do
                     // orçamento (ComputeSafeBudget já clampa no piso de 80MB) —
                     // nunca excede a RAM segura. MaxBytes é elevado para o byte
                     // budget do cap (90% vídeo + 10% áudio), então o teto de tempo
-                    // (3 min) é o limitante real — não o byte budget do perfil.
+                    // (2 min) é o limitante real — não o byte budget do perfil.
                     long safeBudget = RamManager.ComputeSafeBudget(RamManager.GetAvailableRamBytes());
                     var (ramCap, ramCapBytes) = RamManager.ComputeHybridRamCap(
                         _activeProfile.MaxrateKbps, _activeProfile.ReplaySeconds, safeBudget);
@@ -566,6 +566,13 @@ public sealed partial class EngineCoordinator
         return true;
     }
 
+    // FASE 1 medição de footprint. GC.GetTotalMemory(false) = heap managed atual
+    // (sem forçar coleta); GC.GetTotalAllocatedBytes() = alocado acumulado desde
+    // o arranque (monotônico, útil p/ detectar churn não-recoletado). Delegates
+    // permitem teste determinístico sem depender do estado real do runtime GC.
+    internal static (long managed, long allocated) ReadGcDiagnostics(Func<long> getTotalMemory, Func<long> getAllocatedBytes)
+        => (getTotalMemory(), getAllocatedBytes());
+
     private void ReportDrop(string reason)
     {
         _consecutiveDrops++;
@@ -639,9 +646,17 @@ public sealed partial class EngineCoordinator
                 double audioMb = d.audioBytes / (1024.0 * 1024.0);
                 double totalMb = videoMb + audioMb;
                 long workingSetMb = 0;
-                try { workingSetMb = Process.GetCurrentProcess().WorkingSet64 / (1024L * 1024L); }
+                long gcManagedMb = 0;
+                long allocatedMb = 0;
+                try
+                {
+                    workingSetMb = Process.GetCurrentProcess().WorkingSet64 / (1024L * 1024L);
+                    (gcManagedMb, allocatedMb) = ReadGcDiagnostics(
+                        () => GC.GetTotalMemory(false) / (1024L * 1024L),
+                        () => GC.GetTotalAllocatedBytes() / (1024L * 1024L));
+                }
                 catch (Exception ex) { Log.D("RAM", $"working set sample failed: {ex.Message}"); }
-                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB");
+                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB");
             }
 
             try

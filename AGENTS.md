@@ -4327,3 +4327,59 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: casos de margem (22/39/19/14) + clamp + 2 testes `ShouldDeferTimeoutDrop`
 - `docs/plano-fix-capture-timeout.md`: modelo jitter DWM + opção C (git-ignored, doc de trabalho)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-15 - Deploy do fix AAC shutdown apos reabertura do session summary)
+
+### Done
+
+- **Deploy df04a51 aplicado no app instalado**: commit HEAD = 0ACDADB6... (fix stdout fechado com exitCode 0 nao marca UNHEALTHY). Publish recriado (dotnet publish -c Release --self-contained true -r win-x64), staging atualizado, app fechado pelo usuario, 5 binarios DiNho.Capture.Poc.* copiados para %LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\ - **SHA256 instalado == staging == publish == 0ACDADB6...** (anterior instalado era 68F6DE9B, pre-df04a51).
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessao longa de jogo + gravacao): GPU busy (0x887A000A) - frame dropped sem repeticao consecutiva (retry bloqueante a35b6ab), clip com video>0 (sem Nothing to save), isolados de timeout zerados (038ca58/a81d058).
+
+## Session Summary (2026-08-15b — Validacao de campo ENCERRADA: SEM LEAK + GPU busy fix confirmados)
+
+### Done
+
+- **Veredito final da validacao de campo (logs `2026-08-15.jsonl`, deploy 0ACDADB6)**:
+  - **SEM LEAK confirmado por padrao de `proc`**: platô + degraus de GC, NAO crescimento monotônico.
+    - Sessao 1 (mpc-hc, 10:38-11:02): 190MB → platô ~1189MB, buffer estavel `video=7200frames (~114MB) audio=5625pkts (~2,8MB) total≈116,9MB duracao=120,0s`.
+    - Reset 11:03 (stop): `proc` = 110MB — memoria integralmente devolvida no stop.
+    - Sessao 2 (mpc-hc64, 11:04-11:41): 184MB → 2832MB (11:17) → platô 2833MB → **degraus GC 2833→2772 (11:29:33) → 2769→2649 (11:30:36)** → flat ~2650MB por 11+ min (11:31-11:41). 0 crescimento após 11:30.
+  - Buffer identico entre sessoes (120s cap, ~116MB) — o overhead de ~2.5GB (2650MB proc vs 116MB buffer) NAO vem do ReplayBuffer; e working set do processo (WGC textures, NVENC surfaces, GpuVideoConverter staging, VideoPacketPool buckets retidos). Fonte do `proc` localizada: `EngineCoordinator.Capture.cs:641-644` (`Process.GetCurrentProcess().WorkingSet64`); ffmpeg child nao conta (GetCurrentProcess).
+  - **Fix GPU busy confirmado**: 0 `GPU busy (0x887A000A)` no dia; 4 SAVEs (4×START/4×OK), 0 `EXPORT FAILED`/`Nothing to save`; 0 `restarting ffmpeg`/`Unrecognized option`; 17× `Captura recuperada`; drops 191 (max 7 consecutivos) em rajadas 3-12/min (10:39-11:20) — transientes, recuperados; `video=0frames` so no arranque/ociosidade.
+  - Deploy `0ACDADB6` (fix stdout closed exitCode 0 = shutdown limpo) funcionando — sem UNHEALTHY espurios no shutdown.
+
+### Next Steps
+
+- Nenhum pendente de correcao. Overhead de ~2.5GB de working set acima do buffer (sessao 2 2650MB vs 1189MB na sessao 1) e observacao registrada — investigar so se usuario quiser reduzir footprint (candidatos: WGC TexturePool sizing, VideoPacketPool bucket retention); NAO e leak.
+
+## Session Summary (2026-08-15c — FASE 1 medicao GC: gcManagedMB/allocatedMB no tick [RAM])
+
+### Done
+
+- **FASE 1 do plano de medicao de footprint concluida via TDD completo (RED -> GREEN -> suites -> publish -> deploy)** — instrumenta o tick `[RAM]` com metricas do GC para distinguir heap managed de native/driver (misterio do proc ~2.5GB vs buffer ~117MB):
+  - **Seam puro testavel** `internal static (long managed, long allocated) ReadGcDiagnostics(Func<long> getTotalMemory, Func<long> getAllocatedBytes)` em `EngineCoordinator.Capture.cs` (apos `ShouldDeferTimeoutDrop`, antes de `ReportDrop`) — delegates permitem teste deterministico sem depender do estado real do runtime GC.
+  - **Producao**: `GC.GetTotalMemory(false)` (heap managed atual, sem forcar coleta) + `GC.GetTotalAllocatedBytes()` (acumulado monotonic — crescimento sem teto = churn nao-recoletado).
+  - **Fiacao no tick `[RAM]`**: novas vars `gcManagedMb`/`allocatedMb`; try/catch do working-set ampliado p/ chamar o seam; `Log.I("RAM", ...)` agora inclui `| gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB`.
+- **Testes RED->GREEN** (2 novos em `EngineCoordinatorCaptureTests.cs`, apos `ShouldDeferTimeoutDrop_SecondConsecutiveTimeout_CountsAsDrop`): `ReadGcDiagnostics_ReturnsDelegateValues` (valores repassados), `ReadGcDiagnostics_CallsBothDelegates` (delegates invocados). RED = CS0117 compilacao.
+- **Suites**: filtro `ReadGcDiagnostics` 2/2; `EngineCoordinatorCaptureTests` 137/137; suite completa **1207/1207 aprovados, 0 falhas** (13s; "Execucao de Teste Anulada." = flakiness pre-existente).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK (5 warnings pre-existentes CS8602/CS0169); `npm run copy-engine` (294 files, ffmpeg 9.0 212MB, 3 VC++ runtime DLLs); app fechado; 5 binarios `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == publish == `6B883F33...`** (anterior instalado 0ACDADB6).
+
+### Key Decisions
+
+- **`GC.GetTotalMemory(false)` sem forcar coleta**: mede o heap managed como ele esta, nao sob estado artificial de GC; false evita bloquear o pipeline de captura durante a medicao.
+- **`GC.GetTotalAllocatedBytes()` monotonic como proxy de churn**: crescimento continua sem teto indica alocacoes nao-recoletadas (candidatos: WGC textures, NVENC surfaces, staging do GpuVideoConverter, buckets retidos do VideoPacketPool); se flat com `proc` subindo, o footprint e native.
+- **Seam com delegates sobre chamada direta**: `EngineCoordinatorCaptureTests` nao pode usar GC real (nao-deterministico) — o seam isola a logica de medicao e permite assertions deterministicas.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessao curta): observar `gcManagedMB`/`allocatedMB` no log `[RAM]` — `gcManaged ~100-300MB` => footprint e native/driver; crescimento de `gcManaged` entre sessoes => heap retido; `allocated` linear sem teto => churn.
+- FASE 2 do plano (derivacoes): `native = proc - gcManaged` e `managedRetained = gcManaged - ring - poolIdle` (`ReplayBuffer` ~117MB; `VideoPacketPool.MaxIdleBytes = 256MB`) — p/ conclusao da atribuicao do footprint de ~2.5GB.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seam `ReadGcDiagnostics` + tick `[RAM]` com `gcManagedMb`/`allocatedMb` + try/catch ampliado + Log.I atualizado (linhas deslocadas ~+18 apos insercao do seam)
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: 2 testes novos (`ReadGcDiagnostics_*`)
+- `AGENTS.md`: resumo de sessao

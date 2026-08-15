@@ -1618,6 +1618,31 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.True(pending);
     }
 
+    // ReadGcDiagnostics — FASE 1 medição de footprint. Delegates stub tornam o
+    // teste determinístico (GC.GetTotalMemory/GetTotalAllocatedBytes reais
+    // dependem do estado do runtime).
+
+    [Fact]
+    public void ReadGcDiagnostics_ReturnsDelegateValues()
+    {
+        var (managed, allocated) = EngineCoordinator.ReadGcDiagnostics(
+            () => 123456789L, () => 9876543210L);
+        Assert.Equal(123456789L, managed);
+        Assert.Equal(9876543210L, allocated);
+    }
+
+    [Fact]
+    public void ReadGcDiagnostics_CallsBothDelegates()
+    {
+        long managedCalls = 0;
+        long allocatedCalls = 0;
+        var (_, _) = EngineCoordinator.ReadGcDiagnostics(
+            () => { managedCalls++; return 1L; },
+            () => { allocatedCalls++; return 2L; });
+        Assert.Equal(1L, managedCalls);
+        Assert.Equal(1L, allocatedCalls);
+    }
+
     [Fact]
     public void EngineStatus_DroppedFrames_CanUpdate()
     {
