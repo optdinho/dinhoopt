@@ -4413,3 +4413,57 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seam `DeriveFootprint` (apos `ReadGcDiagnostics`) + tick `[RAM]` com `ringMb`/`poolIdleMb` + Log.I com `native`/`managedRetained`
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: 3 testes novos (`DeriveFootprint_*`)
 - `AGENTS.md`: resumo de sessao
+
+## Session Summary (2026-08-15e — Investigacao estatica de footprint: pools e superfícies GPU)
+
+### Done
+
+- **Investigacao estatica concluida (sem mudanca de codigo)** para atribuir o footprint `proc` ~2.5GB vs buffer ~117MB (observado 2026-08-15b, sessao 2: platô 2650MB):
+  - **`VideoPacketPool`** (`Encoders/VideoPacketPool.cs`): idle `Stack<byte[]>` com lock; `MaxIdleBytes` = 256MB (interno static, mutavel em testes). Return (linha 52): LIFO; acima do teto descarta arrays ao GC. Rent (linha 42): descarta arrays menores que o tamanho pedido. Pior caso = 256MB. Confirmado pelos 6 testes de `VideoPacketPoolTests.cs` (512 arrays de 128KB reutilizados).
+  - **Motivacao do pool**: `ArrayPool.Shared` retem ~16-20 arrays por bucket; frames despejados (arrays >=85KB) caiam no LOH -> sawtooth no working set (~0.8MB/s). `ArrayPool<byte>` custom (256MB / 65536 por bucket) **sem API de trim** -> working set preso no pico historico (~4.8GB: ring ~1.1GB + spill ~1.6GB ao salvar) mesmo apos drenar.
+  - **`TexturePool`** (`Capture/TexturePool.cs`): ping-pong, `poolSize` default 2 (pipeline single-thread: um capturado, um codificado) — mas `WgcCaptureSource` instancia com `poolSize: 3` (linha 186). Recria texturas ao trocar width/height/format. Caller NAO deve dispor texturas alugadas. ~24MB GPU (SR|RT).
+  - **`WgcCaptureSource`** (`Capture/WgcCaptureSource.cs`): pixel format sempre `DirectXPixelFormat.B8G8R8A8UIntNormalized`; HDR apenas loga (DWM faz tone-map). `CreateFreeThreaded(numberOfBuffers: 10)` (linha 178) -> ~79MB GPU. `ConfigureSession3()` falha silencioso em Windows antigo. `FrameArrived` registrado via `StartFramePump()` (pump thread); eventos em worker thread WinRT interna.
+  - **Superficies GPU (WGC/NVENC/DXGI) ficam FORA do `WorkingSet64`**: ~106MB GPU somados, invisiveis no `proc`.
+  - **NVENC roda em child (`ffmpeg.exe`)**: `proc` usa `GetCurrentProcess()` (EngineCoordinator.Capture.cs:641) -> superficies NVENC nem contam.
+  - **Total contabilizado ~380MB max vs 2.5GB observado** -> ~2.1GB restantes = mapeamentos compartilhados DWM do WGC + driver heaps + managed/LOH; so a linha `[RAM]` ao vivo resolve.
+
+### Key Decisions
+
+- **Sem mudanca de codigo na investigacao**: pools sao bounded (~380MB max somado); bucket retention NAO explica os 2.5GB. FASE 2 (tick `[RAM]` com gcManaged/native/managedRetained) ja foi a ferramenta de medicao ao vivo — aguardando 1 linha de log de sessao com captura ativa.
+- **Atribuicao em campo**: `native` alto -> DWM/driver; `managedRetained` >> ring (~117MB) + poolIdle (256MB) -> churn nao-recoletado. Decidir reducao de working-set so apos esses numeros.
+
+### Next Steps
+
+- Coletar 1 linha do log `[RAM]` de sessao com captura ativa (`proc`/`gcManaged`/`allocated`/`native`/`managedRetained`) e fechar a atribuicao dos ~2.1GB.
+- Se usuario quiser reduzir footprint: candidatos = WGC TexturePool sizing, VideoPacketPool bucket retention, NVENC surfaces — com TDD e publish/deploy posterior.
+
+### Relevant Files Changed
+
+- (nenhum codigo alterado nesta sessao)
+- `AGENTS.md`: resumo de sessao
+
+## Session Summary (2026-08-15f — Medicao FASE 2 concluida: atribuicao do footprint fechada)
+
+### Done
+
+- **Analise dos dados da sessao 2026-08-15 (logs \2026-08-15.jsonl\, tick \[RAM]\ com gcManaged/native/managedRetained) — atribuicao do footprint ~2,5GB fechada**:
+  - Platao \proc>=2000MB\: n=76 ticks, janela 13:27:26.878→13:28:50.488 (~84,6s); timeline per-tick em \%TEMP%\opencode\plateau-ticks.csv\.
+  - **Conta fecha nas duas fases (\proc ≈ gcManaged + native\)**:
+    - **Spike (SAVE)**: proc 2540–2581MB com gcManaged ~2330–2364MB (heap gerenciado de serializacao do export) — SAVE START 13:27:26.912 ≈ primeiro tick do platao; SAVE OK 13:27:51.865 encerra a fase.
+    - **Estavel**: proc 2421–2425MB com gcManaged 987–1032MB + native 1389–1423MB — native/driver dominante, managedRetained ≈ 0–144MB.
+  - **Release residual pos-save e majoritariamente native**: tick 25 (13:27:59.876) gc ja ~1004MB mas proc segura 2502MB; tick 27 (13:28:01.912) proc cai -77MB (native -66MB) — superficies GPU/driver liberadas ~10s apos o save.
+  - **Hipoteses**: managed retido DESCARTADA (managedRetained ≈ ring 117MB + poolIdle 256MB + slack); native/driver CONFIRMADA (~1,4GB steady-state = NVENC/DWM-shared/WGC texturas mapeadas no processo). Teto bounded ~2,8GB, sem leak — reducao de footprint e otimizacao opcional (WGC TexturePool sizing, VideoPacketPool retention, NVENC surfaces), NAO correcao.
+  - \llocated\ ~4219–4429MB acumulado com gcManaged flat = coleta normal, sem churn retido.
+- \docs/plano-medicao-footprint.md\ atualizado: status → "MEDICAO COMPLETA... Atribuicao fechada", secao "Resultado FASE 2" com a tabela por fase, FASE 2 de interpretacao marcada CONCLUIDA.
+- Nenhuma mudanca de codigo — analise/documento apenas.
+
+### Next Steps
+
+- Reducao de footprint (opcional, decisao do usuario): \
+ative\ ~1,4GB no platao estavel (WGC TexturePool/NVENC surfaces) e pico managed ~2,3GB durante o save — ambos candidatos com TDD/publish/deploy se o usuario quiser reduzir working set.
+- (Opcional) \RamManagerTests.ComputeHybridRamCap_*\ desatualizado (180s vs 120s) — pre-existente.
+
+### Relevant Files Changed
+
+- \docs/plano-medicao-footprint.md\: status + secao "Resultado FASE 2" + interpretacao CONCLUIDA (sem codigo)
+- \AGENTS.md\: resumo de sessao

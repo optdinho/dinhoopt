@@ -29,6 +29,21 @@ public static class VideoPacketPool
     private static readonly Stack<byte[]> _idle = new();
     private static long _idleBytes;
 
+    /// <summary>
+    /// Bytes atualmente retidos como idle (devolvidos, não re-rentados).
+    /// Uso em testes e na medição de footprint.
+    /// </summary>
+    internal static long IdleBytes
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _idleBytes;
+            }
+        }
+    }
+
     public static byte[] Rent(int minimumLength)
     {
         lock (_sync)
@@ -66,6 +81,24 @@ public static class VideoPacketPool
         {
             _idle.Clear();
             _idleBytes = 0;
+        }
+    }
+
+    /// <summary>
+    /// Descarta arrays idle ao GC até que <see cref="IdleBytes"/> fique ≤ <paramref name="limitBytes"/>.
+    /// LIFO (do topo do stack) — preserva arrays mais recentes no fundo quando possível.
+    /// Valores ≤ 0 esvaziam o pool por completo. Uso em thread de fundo pós-save.
+    /// </summary>
+    internal static void TrimIdleBytes(long limitBytes)
+    {
+        var target = Math.Max(limitBytes, 0);
+        lock (_sync)
+        {
+            while (_idleBytes > target && _idle.Count > 0)
+            {
+                var arr = _idle.Pop();
+                _idleBytes -= arr.Length;
+            }
         }
     }
 }

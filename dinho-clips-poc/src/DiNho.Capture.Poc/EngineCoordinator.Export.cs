@@ -152,6 +152,27 @@ public sealed partial class EngineCoordinator
             {
                 _exportInProgress = false;
             }
+            // Trim pós-save em thread de fundo: devolve RAM sem perder a "quente" do pool.
+            _ = Task.Run(PostSaveTrim);
+        }
+    }
+
+    /// <summary>
+    /// Trim pós-save: reduz o idle do pool para ≤ 1/4 do MaxIdleBytes —
+    /// devolve RAM (working set preso no pico histórico) sem esvaziar o pool
+    /// por completo. Barato e lock-protected; usar em thread de fundo.
+    /// </summary>
+    internal static void PostSaveTrim()
+    {
+        try
+        {
+            var limit = VideoPacketPool.MaxIdleBytes / 4;
+            VideoPacketPool.TrimIdleBytes(limit);
+            Log.I("EngineCoordinator", $"PostSaveTrim: pool idle reduzido para ≤ {limit / (1024 * 1024)} MB");
+        }
+        catch (Exception ex)
+        {
+            Log.W("EngineCoordinator", $"PostSaveTrim falhou: {ex.Message}");
         }
     }
 

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using DiNho.Capture.Poc.Config;
+using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.GameDetection;
 using DiNho.Capture.Poc.Hotkeys;
 using DiNho.Capture.Poc.Status;
@@ -1433,6 +1434,35 @@ public sealed class EngineCoordinatorTests
     public void DisplayMode_FullscreenExclusive_NotEqualToOptimized()
     {
         Assert.NotEqual(DisplayMode.FullscreenExclusive, DisplayMode.FullscreenOptimized);
+    }
+
+    #endregion
+
+    #region PostSaveTrim
+
+    [Fact]
+    public void PostSaveTrim_TrimsIdleToQuarterOfMaxIdleBytes()
+    {
+        const long maxIdleBytes = 8L * 1024 * 1024;
+        VideoPacketPool.MaxIdleBytes = maxIdleBytes;
+        VideoPacketPool.ResetForTest();
+        try
+        {
+            var bufs = new byte[20][];
+            for (int i = 0; i < 20; i++)
+                bufs[i] = VideoPacketPool.Rent(128 * 1024);
+            foreach (var buf in bufs)
+                VideoPacketPool.Return(buf);
+            Assert.True(VideoPacketPool.IdleBytes > maxIdleBytes / 4);
+
+            InvokeStaticNoArgs("PostSaveTrim");
+
+            Assert.True(VideoPacketPool.IdleBytes <= maxIdleBytes / 4);
+        }
+        finally
+        {
+            VideoPacketPool.ResetForTest();
+        }
     }
 
     #endregion

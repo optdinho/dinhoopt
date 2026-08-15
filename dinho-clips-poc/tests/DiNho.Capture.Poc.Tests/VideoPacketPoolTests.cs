@@ -110,4 +110,91 @@ public sealed class VideoPacketPoolTests : IDisposable
         Assert.NotSame(small, big);
         VideoPacketPool.Return(big);
     }
+
+    [Fact]
+    public void TrimIdleBytes_AboveLimit_DiscardsToGc()
+    {
+        // Trim para um limite menor que o retido: arrays excedentes saem do
+        // pool (voltam ao GC) e o próximo Rent não os reutiliza.
+        // Nota: renta TODOS primeiro e devolve depois — Rent/Return intercalados
+        // reusariam o mesmo array (LIFO) e o pool nunca acumularia os 8.
+        const int count = 8;
+        var returned = new byte[count][];
+        for (int i = 0; i < count; i++)
+            returned[i] = VideoPacketPool.Rent(128 * 1024);
+        foreach (var arr in returned)
+            VideoPacketPool.Return(arr);
+        Assert.True(VideoPacketPool.IdleBytes >= count * 128 * 1024);
+
+        VideoPacketPool.TrimIdleBytes(4 * 128 * 1024); // deixa metade
+
+        Assert.True(VideoPacketPool.IdleBytes <= 4 * 128 * 1024);
+
+        // Renta além do retido: apenas os arrays que sobraram são reutilizados —
+        // os descartados não voltam do GC. Sem Return no meio do loop (devolver
+        // refillaria o pool com os arrays mantidos e cada Rent os reutilizaria).
+        var reRented = new byte[count][];
+        var reused = 0;
+        for (int i = 0; i < count; i++)
+        {
+            var reRent = VideoPacketPool.Rent(128 * 1024);
+            reRented[i] = reRent;
+            if (returned.Contains(reRent)) reused++;
+        }
+        Assert.Equal(count / 2, reused);
+        foreach (var arr in reRented)
+            VideoPacketPool.Return(arr);
+    }
+
+    [Fact]
+    public void TrimIdleBytes_BelowLimit_KeepsIdle()
+    {
+        // Trim com limite maior que o retido: nada é descartado, reuso intacto.
+        const int count = 4;
+        var returned = new byte[count][];
+        for (int i = 0; i < count; i++)
+            returned[i] = VideoPacketPool.Rent(128 * 1024);
+        foreach (var arr in returned)
+            VideoPacketPool.Return(arr);
+        long idleBefore = VideoPacketPool.IdleBytes;
+
+        VideoPacketPool.TrimIdleBytes(idleBefore + 1024 * 1024);
+
+        Assert.Equal(idleBefore, VideoPacketPool.IdleBytes);
+
+        var reRent = VideoPacketPool.Rent(128 * 1024);
+        Assert.True(returned.Contains(reRent));
+        VideoPacketPool.Return(reRent);
+    }
+
+    [Fact]
+    public void TrimIdleBytes_Zero_EmptiesPool()
+    {
+        const int count = 6;
+        for (int i = 0; i < count; i++)
+            VideoPacketPool.Return(VideoPacketPool.Rent(128 * 1024));
+        Assert.True(VideoPacketPool.IdleBytes > 0);
+
+        VideoPacketPool.TrimIdleBytes(0);
+
+        Assert.Equal(0, VideoPacketPool.IdleBytes);
+
+        // Pool vazio: próximo Rent aloca novo (nada a reutilizar).
+        var a = VideoPacketPool.Rent(128 * 1024);
+        var b = VideoPacketPool.Rent(128 * 1024);
+        Assert.NotSame(a, b);
+        VideoPacketPool.Return(a);
+        VideoPacketPool.Return(b);
+    }
+
+    [Fact]
+    public void TrimIdleBytes_Negative_TreatsAsZero()
+    {
+        VideoPacketPool.Return(VideoPacketPool.Rent(128 * 1024));
+        Assert.True(VideoPacketPool.IdleBytes > 0);
+
+        VideoPacketPool.TrimIdleBytes(-1);
+
+        Assert.Equal(0, VideoPacketPool.IdleBytes);
+    }
 }
