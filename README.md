@@ -277,6 +277,27 @@ O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, s
 │  │  │  (Registry, WMI, Win32 API, DISM, ...)  │ │      │
 │  │  └────────────────────────────────────────┘ │      │
 │  └─────────────────────────────────────────────┘      │
+│                                                         │
+│            Named Pipe (status, comandos, clips)         │
+│                         │                               │
+└─────────────────────────┼───────────────────────────────┘
+                          │
+┌─────────────────────────┼───────────────────────────────┐
+│            Motor de Clips (.NET 10 / C#)                 │
+│  ┌──────────────────────┴──────────────────────┐        │
+│  │          Windows.Graphics.Capture           │        │
+│  │          + DXGI / D3D11 (Vortice)            │        │
+│  └──────────────────────┬──────────────────────┘        │
+│  ┌──────────────────────┴──────────────────────┐        │
+│  │       Encoders (ffmpeg 9.0)                  │        │
+│  │  NVENC · AMF · QSV · libx264/x265/SVT-AV1   │        │
+│  └──────────────────────┬──────────────────────┘        │
+│  ┌──────────────────────┴──────────────────────┐        │
+│  │   Áudio (NAudio WASAPI + ApplicationLoopback)│        │
+│  └──────────────────────┬──────────────────────┘        │
+│  ┌──────────────────────┴──────────────────────┐        │
+│  │   Replay Buffer + Export (Matroska → MP4)    │        │
+│  └─────────────────────────────────────────────┘        │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -308,6 +329,17 @@ src/
 │   └── channels.ts             # Constantes dos canais IPC
 └── rules/
     └── win32/                  # Regras de limpeza (JSON)
+
+dinho-clips-poc/                # Motor de Clips (.NET 10, self-contained)
+└── src/
+    └── DiNho.Capture.Poc/
+        ├── Capture/            # WGC, DXGI, hotkeys
+        ├── Encoders/           # NVENC/AMF/QSV + fallback software
+        ├── Audio/              # NAudio WASAPI, RNNoise, loopback
+        ├── Buffer/             # Replay buffer (RAM + disk spill)
+        ├── Export/             # Matroska/EBML → MP4, thumbnails
+        ├── GameDetection/      # Detecção de jogos (games.json)
+        └── EngineCoordinator*  # Orquestração + IPC via named pipe
 ```
 
 ---
