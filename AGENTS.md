@@ -4383,3 +4383,33 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seam `ReadGcDiagnostics` + tick `[RAM]` com `gcManagedMb`/`allocatedMb` + try/catch ampliado + Log.I atualizado (linhas deslocadas ~+18 apos insercao do seam)
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: 2 testes novos (`ReadGcDiagnostics_*`)
 - `AGENTS.md`: resumo de sessao
+
+## Session Summary (2026-08-15d — FASE 2 atribuicao de footprint: native/managedRetained no tick [RAM])
+
+### Done
+
+- **FASE 2 do plano de medicao de footprint concluida via TDD completo (RED -> GREEN -> suites -> publish -> deploy)** — deriva o footprint do working set em `native` (proc - gcManaged) e `managedRetained` (gcManaged - ring - poolIdle), fechando a atribuicao do misterio do ~2.5GB:
+  - **Seam puro testavel** `internal static (long native, long managedRetained) DeriveFootprint(long workingSetMb, long gcManagedMb, long ringBytesMb, long poolIdleBytesMb)` em `EngineCoordinator.Capture.cs` (imediatamente apos `ReadGcDiagnostics`) — ambas derivacoes clampadas >= 0 (race de medicao nunca reporta negativo).
+  - **Fiacao no tick `[RAM]`**: `ringMb = (long)Math.Round(totalMb)` (total do buffer existente); `poolIdleMb = VideoPacketPool.MaxIdleBytes / (1024L * 1024L)` (= 256MB no cap atual); `(nativeMb, retainedMb) = DeriveFootprint(...)`; `Log.I("RAM", ...)` agora inclui `| native={nativeMb}MB | managedRetained={retainedMb}MB`.
+  - `using DiNho.Capture.Poc.Encoders;` ja presente (linha 3) — `MaxIdleBytes` internal static acessivel na mesma assembly.
+- **Testes RED->GREEN** (3 novos em `EngineCoordinatorCaptureTests.cs`, apos os testes de `ReadGcDiagnostics`): valores repassados corretamente, clamp de negative, native/retained esperados. RED = CS0117 compilacao.
+- **Suites**: filtro `EngineCoordinatorCaptureTests` **140/140** (137 + 3 novos); suite completa **1264/1264 aprovados, 0 falhas** (12s; "Execucao de Teste Anulada." = flakiness pre-existente do ConsoleLogger/vstest documentada).
+- **Publish + stage + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK (warnings pre-existentes CS8602/CS8604/CS0169); `npm run copy-engine` (294 files, ffmpeg 9.0 212MB, 3 VC++ runtime DLLs); app instalado fechado; 5 binarios `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == publish == `8917E527...`** (anterior instalado 6B883F33).
+
+### Key Decisions
+
+- **Derivacao pura sobre medicao direta**: `native`/`managedRetained` sao calculos aritmeticos sobre valores ja medidos — seam puro (sem side effect) permite teste deterministico; clamps >= 0 evitam valores absurdos em races.
+- **`ringMb` do total do buffer (video+audio)**: e o ownership retido pelo ReplayBuffer — a comparacao de managedRetained contra ring+poolIdle e a fracao nao atribuida (GC gen0/LOH em voo, WGC textures managed, etc.).
+- **PoolIdle do cap estatico (256MB)**: `VideoPacketPool.MaxIdleBytes` e o teto de retencao do pool — incluir na derivacao da o custo de pool conhecido; o restante de managedRetained e churn nao-recoletado.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessao curta): `native` pequeno (centenas MB nativos: WGC textures, NVENC surfaces, GpuVideoConverter staging) + `managedRetained` ≈ ring (~117MB) + poolIdle (256MB) + slack => atribuicao fechada. Se `native` ainda na casa de GB, investigar WGC/NVENC/TexturePool.
+- Se o usuario quiser reduzir footprint: candidatos = WGC TexturePool sizing, VideoPacketPool bucket retention, NVENC surfaces — com TDD e publish/deploy posterior.
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pre-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seam `DeriveFootprint` (apos `ReadGcDiagnostics`) + tick `[RAM]` com `ringMb`/`poolIdleMb` + Log.I com `native`/`managedRetained`
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: 3 testes novos (`DeriveFootprint_*`)
+- `AGENTS.md`: resumo de sessao

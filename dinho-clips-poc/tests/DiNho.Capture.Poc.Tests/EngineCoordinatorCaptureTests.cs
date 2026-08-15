@@ -1643,6 +1643,38 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.Equal(1L, allocatedCalls);
     }
 
+    // DeriveFootprint — FASE 2 derivações de footprint (função pura, clamp ≥0).
+    // native = proc − gcManaged (working set não-managed: WGC textures, NVENC
+    // surfaces, staging do GpuVideoConverter); managedRetained = gcManaged −
+    // ring − poolIdle (heap managed fora do ring e do teto idle do pool).
+
+    [Fact]
+    public void DeriveFootprint_ComputesNativeAndRetained()
+    {
+        var (native, retained) = EngineCoordinator.DeriveFootprint(
+            workingSetMb: 2600, gcManagedMb: 1300, ringBytesMb: 117, poolIdleBytesMb: 256);
+        Assert.Equal(1300, native);
+        Assert.Equal(927, retained);
+    }
+
+    [Fact]
+    public void DeriveFootprint_ClampsNegativeToZero()
+    {
+        var (native, retained) = EngineCoordinator.DeriveFootprint(
+            workingSetMb: 100, gcManagedMb: 500, ringBytesMb: 900, poolIdleBytesMb: 256);
+        Assert.Equal(0, native);
+        Assert.Equal(0, retained);
+    }
+
+    [Fact]
+    public void DeriveFootprint_ZeroRingAndPool_RetainedEqualsManaged()
+    {
+        var (native, retained) = EngineCoordinator.DeriveFootprint(
+            workingSetMb: 2048, gcManagedMb: 1024, ringBytesMb: 0, poolIdleBytesMb: 0);
+        Assert.Equal(1024, native);
+        Assert.Equal(1024, retained);
+    }
+
     [Fact]
     public void EngineStatus_DroppedFrames_CanUpdate()
     {

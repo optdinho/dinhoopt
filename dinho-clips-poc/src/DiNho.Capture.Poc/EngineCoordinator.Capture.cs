@@ -573,6 +573,19 @@ public sealed partial class EngineCoordinator
     internal static (long managed, long allocated) ReadGcDiagnostics(Func<long> getTotalMemory, Func<long> getAllocatedBytes)
         => (getTotalMemory(), getAllocatedBytes());
 
+    // FASE 2 derivação de footprint. native = proc − heap managed (GPU/driver/
+    // memória nativa); managedRetained = heap managed − ring (ReplayBuffer) − pool
+    // ocioso (buckets retidos do VideoPacketPool). Ambos clampados ≥0 — quando a
+    // medição erra o estado (ex.: GC coleta entre amostras), não reporta negativo.
+    internal static (long native, long managedRetained) DeriveFootprint(long workingSetMb, long gcManagedMb, long ringBytesMb, long poolIdleBytesMb)
+    {
+        long native = workingSetMb - gcManagedMb;
+        long managedRetained = gcManagedMb - ringBytesMb - poolIdleBytesMb;
+        if (native < 0) native = 0;
+        if (managedRetained < 0) managedRetained = 0;
+        return (native, managedRetained);
+    }
+
     private void ReportDrop(string reason)
     {
         _consecutiveDrops++;
@@ -656,7 +669,10 @@ public sealed partial class EngineCoordinator
                         () => GC.GetTotalAllocatedBytes() / (1024L * 1024L));
                 }
                 catch (Exception ex) { Log.D("RAM", $"working set sample failed: {ex.Message}"); }
-                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB");
+                var ringMb = (long)Math.Round(totalMb);
+                var poolIdleMb = VideoPacketPool.MaxIdleBytes / (1024L * 1024L);
+                var (nativeMb, retainedMb) = DeriveFootprint(workingSetMb, gcManagedMb, ringMb, poolIdleMb);
+                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB | native={nativeMb}MB | managedRetained={retainedMb}MB");
             }
 
             try
