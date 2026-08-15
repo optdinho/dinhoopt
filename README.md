@@ -118,7 +118,7 @@
 | **Buscador de Duplicatas** | Localiza duplicatas por hash SHA-256 |
 | **Buscador de Arquivos Grandes** | Encontra os maiores arquivos do disco |
 | **Limpeza de Pastas Vazias** | Remove pastas vazias residual |
-| **Destruidor de Arquivos** | Exclusão segura com sobrescrita (3 passadas) |
+| **Destruidor de Arquivos** | Exclusão segura com sobrescrita (2 passadas) |
 | **Reparo de Disco** | SFC, DISM, CHKDSK com um clique |
 | **Manutenção de Disco** | SSD TRIM e otimização de unidades |
 
