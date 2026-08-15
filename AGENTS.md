@@ -4289,3 +4289,41 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.GpuConvert.cs`: seam `TryMapWithBusyRetry` (novo), `ConvertGpuNv12` usa o seam com lambdas fast/blocking, comentário do site atualizado
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 5 testes RED→GREEN + helper `BusyMapException()`
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-14 — captureTimeout opção C: margem +5ms + defer de timeout isolado)
+
+### Done
+
+- **TDD completo (RED → GREEN → suítes → publish → deploy)** para os ~371 `Frame dropped (Success=false)` residuais (~8/s) pós-fix do GPU busy — timeouts de captura por **jitter do DWM** (não corrida de fase fixa):
+  - **Diagnóstico**: cap WGC (`WgcCaptureSource.ComputeCapIntervalTicks`) = 16,67ms @60fps com boundary inclusiva `>=`; `captureTimeout` (`EngineCoordinator.Capture`) era `1000/fps` truncado = **16ms** (0,67ms menor que o cap) + jitter do DWM (1–3ms). Frame que chega atrasado perde o cap por pouco e cai na próxima janela → `Success=false` com `width=0 height=0`. Benigno (não stallava/reiniciava) mas poluía log/telemetria e acumulava watchdog `NoFrame`.
+  - **Fix — Opção C (decisão do usuário)**:
+    1. **Margem**: `internal const int CaptureTimeoutMarginMs = 5`; `ComputeCaptureTimeoutMs(fps) = Math.Max(1, Math.Min(100, (int)Math.Ceiling(1000.0 / fps) + 5))` → **22ms @60fps** (39/22/19/14 para 30/60/75/120). Clamp `[1,100]` preservado. Seam testável extraído (mesmo padrão dos seams das sessões anteriores).
+    2. **Defer do timeout isolado**: seam `internal static bool ShouldDeferTimeoutDrop(ref bool pendingTimeoutDrop)` — 1º timeout (`width=0 height=0`) → `true` + seta `pending`; **consecutivo** → `false` (conta como drop real). Call site no branch `Success=false` cobre só a contagem (`_starvationStart` + `_watchdog.ReportDroppedFrame(NoFrame)` + `ReportDrop`); o branch alt-tab/reinit **continua executando** (background não é jitter). Campo `private bool _pendingTimeoutDrop` em `EngineCoordinator.cs` junto a `_starvationStart`.
+    3. **3 resets de `_pendingTimeoutDrop = false`**: caminho `Success=true` (após `_bgDropCount = 0`), transição de background (após `_watchdog.Reset()`), reinit do pipeline (após `_watchdog.Reset()`).
+  - **Testes RED→GREEN** (`EngineCoordinatorCaptureTests.cs`): `ComputeCaptureTimeoutMs_60Fps_Returns22WithMargin` (reproduz bug: espera 22, código retornava 16), Theory 30/75/120 (39/19/14), clamp 1–100, `ShouldDeferTimeoutDrop_FirstIsolatedTimeout_DefersAndSetsPending`, `ShouldDeferTimeoutDrop_SecondConsecutiveTimeout_CountsAsDrop`.
+  - Plano `docs/plano-fix-capture-timeout.md` atualizado: modelo antigo (fase 16 vs 16,67ms) substituído pelo modelo jitter DWM + opção C.
+
+### Validado
+
+- **C# tests**: filtro `ComputeCaptureTimeoutMs|ShouldDeferTimeoutDrop` **13/13**; suite completa **1224/1224 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Build**: `dotnet build` 0 erros (warnings pré-existentes).
+- **Publish + deploy**: `dotnet publish -c Release --self-contained true -r win-x64` OK; 5 binários `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == publish == `000F73F4...`**.
+
+### Key Decisions
+
+- **Margem +5ms sobre ceil simples**: ceil sozinho (16→17ms) não cobre jitter de 1–3ms; +5ms deixa folga sem reduzir responsiveness. Clamp `[1,100]` mantém fps extremos seguros.
+- **Defer só do timeout isolado (consecutivo conta)**: um único timeout isolado é jitter benigno; timeouts consecutivos indicam stall real do WGC/DWM e devem alimentar o watchdog. O branch background/reinit não foi deferido porque background não é jitter e precisa da contagem de `_bgDropCount`.
+- **3 resets no pipeline**: qualquer frame bom, transição de background ou reinit zera o estado de defer — evita que um timeout antigo "pré-qualifique" o próximo como consecutivo.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessão longa): conferir no `2026-08-14.jsonl` que os ~371 `Success=false` isolados zeram (deferidos), mantendo 0 GPU busy, ~60fps, SAVE OK e `Captura recuperada após N drops` ausente. Drops só em timeouts consecutivos (stall real).
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seams `ComputeCaptureTimeoutMs`/`ShouldDeferTimeoutDrop` (L559), margem no L625, defer no branch `Success=false` (L734), 3 resets de `_pendingTimeoutDrop`
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.cs`: campo `_pendingTimeoutDrop`
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: casos de margem (22/39/19/14) + clamp + 2 testes `ShouldDeferTimeoutDrop`
+- `docs/plano-fix-capture-timeout.md`: modelo jitter DWM + opção C (git-ignored, doc de trabalho)
+- `AGENTS.md`: resumo de sessão

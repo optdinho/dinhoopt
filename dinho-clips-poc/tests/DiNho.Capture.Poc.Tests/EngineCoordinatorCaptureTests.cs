@@ -1562,9 +1562,9 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     // (ComputeCapIntervalTicks = 10_000_000 / fps). Truncar gerava corrida de fase.
 
     [Fact]
-    public void ComputeCaptureTimeoutMs_60Fps_Returns17()
+    public void ComputeCaptureTimeoutMs_60Fps_Returns22WithMargin()
     {
-        Assert.Equal(17, EngineCoordinator.ComputeCaptureTimeoutMs(60));
+        Assert.Equal(22, EngineCoordinator.ComputeCaptureTimeoutMs(60));
     }
 
     [Theory]
@@ -1594,12 +1594,28 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     }
 
     [Theory]
-    [InlineData(30, 34)]
-    [InlineData(75, 14)]
-    [InlineData(120, 9)]
+    [InlineData(30, 39)]
+    [InlineData(75, 19)]
+    [InlineData(120, 14)]
     public void ComputeCaptureTimeoutMs_ReturnsExpected(int fps, int expected)
     {
         Assert.Equal(expected, EngineCoordinator.ComputeCaptureTimeoutMs(fps));
+    }
+
+    [Fact]
+    public void ShouldDeferTimeoutDrop_FirstIsolatedTimeout_DefersAndSetsPending()
+    {
+        var pending = false;
+        Assert.True(EngineCoordinator.ShouldDeferTimeoutDrop(ref pending));
+        Assert.True(pending);
+    }
+
+    [Fact]
+    public void ShouldDeferTimeoutDrop_SecondConsecutiveTimeout_CountsAsDrop()
+    {
+        var pending = true;
+        Assert.False(EngineCoordinator.ShouldDeferTimeoutDrop(ref pending));
+        Assert.True(pending);
     }
 
     [Fact]

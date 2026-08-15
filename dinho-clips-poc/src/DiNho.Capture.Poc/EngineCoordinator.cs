@@ -89,6 +89,12 @@ public sealed partial class EngineCoordinator : IDisposable
     private int _consecutiveDrops;
     private long _droppedFrames;
 
+    // Opção C — timeout isolado do WaitOne (jitter do DWM vs cap do WGC): o frame
+    // chega no instante seguinte, fora da janela do cap. O 1º timeout é diferido;
+    // um frame bom (ou o retorno do alt-tab) zera o flag. Timeouts consecutivos
+    // (stall real do WGC/DWM) contam normalmente.
+    private bool _pendingTimeoutDrop;
+
     // Recursos compartilhados (performance)
     private ID3D11Device? _sharedDevice;
     private IMFDXGIDeviceManager? _dxgiManager;

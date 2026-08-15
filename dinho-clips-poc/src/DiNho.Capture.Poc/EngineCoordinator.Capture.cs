@@ -546,8 +546,25 @@ public sealed partial class EngineCoordinator
     // (ComputeCapIntervalTicks = 10_000_000 / fps). Truncar (1000 / fps) deixava
     // o timeout 0,33-0,67ms menor que o intervalo -> drop espúrio por corrida de
     // fase. Math.Ceiling garante margem >= intervalo; o produtor sinaliza exato.
+    // Margem extra (opção C): o DWM entrega frames com jitter de 1-3ms; sem
+    // folga, ~1/6 dos polls expiravam no instante da rejeição do cap (width=0).
+    internal const int CaptureTimeoutMarginMs = 5;
     internal static int ComputeCaptureTimeoutMs(int fps)
-        => fps <= 0 ? 1 : Math.Max(1, Math.Min(100, (int)Math.Ceiling(1000.0 / fps)));
+        => fps <= 0 ? 1 : Math.Max(1, Math.Min(100, (int)Math.Ceiling(1000.0 / fps) + CaptureTimeoutMarginMs));
+
+    // Timeout isolado do WaitOne pode ser jitter do DWM — o frame chega no
+    // instante seguinte, fora da janela do cap. O 1º timeout é DIFERIDO: se o
+    // próximo frame recuperar, nunca conta como drop nem toca o watchdog. Só
+    // timeouts CONSECUTIVOS (stall real do WGC/DWM) progridem para a contagem.
+    internal static bool ShouldDeferTimeoutDrop(ref bool pendingTimeoutDrop)
+    {
+        if (pendingTimeoutDrop)
+        {
+            return false;
+        }
+        pendingTimeoutDrop = true;
+        return true;
+    }
 
     private void ReportDrop(string reason)
     {
@@ -669,6 +686,7 @@ public sealed partial class EngineCoordinator
                         }
                         _bgDropCount = 0;
                         _starvationStart = default;
+                        _pendingTimeoutDrop = false;
                         // NOTA: NoGCRegion removido aqui. O orçamento fixo de 4MB era
                         // estourado por keyframes grandes, forçando um full GC bloqueante
                         // no EndNoGCRegion (padrão de serra no working set). Com o
@@ -706,13 +724,26 @@ public sealed partial class EngineCoordinator
                         loggedFirstFailFrame = true;
                         Log.D("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={(frame.WaitEndTicks - frame.CaptureStartTicks) * 1000.0 / Stopwatch.Frequency:F1}. Monitorando...");
                     }
-                    if (_starvationStart == default)
+                    // Opção C: frame timeout (width=0 height=0) ISOLADO = jitter do
+                    // DWM (o frame chega no instante seguinte, fora da janela do cap).
+                    // O 1º é DIFERIDO — não conta como drop, não inicia starvation nem
+                    // toca o watchdog. Se o próximo frame recuperar, nunca é contado.
+                    // Só timeouts CONSECUTIVOS (stall real do WGC/DWM) progridem.
+                    // O branch alt-tab/reinit abaixo ainda roda — frames ausentes por
+                    // background não são jitter e precisam da contagem de _bgDropCount.
+                    bool deferred = frame.Width == 0 && frame.Height == 0 &&
+                        ShouldDeferTimeoutDrop(ref _pendingTimeoutDrop);
+
+                    if (!deferred)
                     {
-                        _starvationStart = DateTime.UtcNow;
-                        Log.W("Pipeline", "Frame dropped (Success=false) — possível GPU overload ou device busy. Monitorando...");
+                        if (_starvationStart == default)
+                        {
+                            _starvationStart = DateTime.UtcNow;
+                            Log.W("Pipeline", "Frame dropped (Success=false) — possível GPU overload ou device busy. Monitorando...");
+                        }
+                        _watchdog.ReportDroppedFrame(PipelineIssue.NoFrame);
+                        ReportDrop("Success=false — GPU overload ou device busy.");
                     }
-                    _watchdog.ReportDroppedFrame(PipelineIssue.NoFrame);
-                    ReportDrop("Success=false — GPU overload ou device busy.");
                 }
 
                 if (!_needsReinit)
@@ -748,6 +779,7 @@ public sealed partial class EngineCoordinator
                             }
                             _starvationStart = default;
                             _watchdog.Reset();
+                            _pendingTimeoutDrop = false;
                         }
                     }
                     else if (_watchdog.ShouldReinit()
@@ -1012,6 +1044,7 @@ public sealed partial class EngineCoordinator
             {
                 _starvationStart = default;
                 _watchdog.Reset();
+                _pendingTimeoutDrop = false;
                 _pipelineCts = new CancellationTokenSource();
                 _pipelineTask = Task.Run(() => PipelineLoop(_pipelineCts.Token));
                 _needsReinit = false;
