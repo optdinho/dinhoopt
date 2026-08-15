@@ -1340,4 +1340,72 @@ public sealed class FfmpegEncoderTests
         Assert.False(enc.LastFrameBusyDrop);
         Assert.Equal(0, enc.GpuBusyDrops);
     }
+
+    // ─── Item B-fix: retry bloqueante no MESMO frame quando GPU busy ─
+
+    private static InvalidOperationException BusyMapException()
+    {
+        var ex = new InvalidOperationException("map busy");
+        ex.HResult = unchecked((int)0x887A000A); // DXGI_ERROR_WAS_STILL_DRAWING
+        return ex;
+    }
+
+    [Fact]
+    public void MapWithBusyRetry_FastPathSucceeds_ReturnsTrue_NoBlockingCall()
+    {
+        var blockingCalled = false;
+        var result = FfmpegEncoder.TryMapWithBusyRetry(
+            () => new MappedSubresource(new IntPtr(0x100), 1920, 1920),
+            () => { blockingCalled = true; return new MappedSubresource(new IntPtr(0x200), 1920, 1920); },
+            out var map);
+
+        Assert.True(result);
+        Assert.Equal(new IntPtr(0x100), map.DataPointer);
+        Assert.False(blockingCalled);
+    }
+
+    [Fact]
+    public void MapWithBusyRetry_FastBusy_BlockingRecovers_ReturnsBlockingResult()
+    {
+        var blockingCalled = false;
+        var result = FfmpegEncoder.TryMapWithBusyRetry(
+            () => throw BusyMapException(),
+            () => { blockingCalled = true; return new MappedSubresource(new IntPtr(0x200), 1920, 1920); },
+            out var map);
+
+        Assert.True(result);
+        Assert.True(blockingCalled);
+        Assert.Equal(new IntPtr(0x200), map.DataPointer);
+    }
+
+    [Fact]
+    public void MapWithBusyRetry_FastBusy_BlockingAlsoBusy_ReturnsFalse()
+    {
+        var result = FfmpegEncoder.TryMapWithBusyRetry(
+            () => throw BusyMapException(),
+            () => throw BusyMapException(),
+            out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MapWithBusyRetry_NonBusyError_Propagates()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            FfmpegEncoder.TryMapWithBusyRetry(
+                () => throw new InvalidOperationException("non-busy"),
+                () => throw new InvalidOperationException("blocking should not be called"),
+                out _));
+    }
+
+    [Fact]
+    public void MapWithBusyRetry_BlockingThrowsNonBusy_Propagates()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            FfmpegEncoder.TryMapWithBusyRetry(
+                () => throw BusyMapException(),
+                () => throw new InvalidOperationException("device removed"),
+                out _));
+    }
 }

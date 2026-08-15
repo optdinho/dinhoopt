@@ -4253,3 +4253,39 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.CaptureSource.cs`: 4 sites com `SetCaptureFrameRate(_config.Config.Fps)` no lambda do `_wgcPump.Invoke`
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/WgcCaptureSourceTests.cs`: 7 testes novos (33/33 no arquivo)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-14 — Drop infinito GPU busy: retry bloqueante no MESMO frame)
+
+### Done
+
+- **TDD completo (RED → GREEN → suítes → publish → deploy)** para o incidente de drop infinito de frames sob carga sustentada (jogo + WGC + NVENC):
+  - **Root cause**: `Map` com `MapFlags.DoNotWait` devolve `DXGI_ERROR_WAS_STILL_DRAWING` em TODO frame quando a GPU não alcança sob carga sustentada — o "retry no próximo frame" nunca vence → `video=0frames` → "Nothing to save". GPU nunca fica ociosa o suficiente para o retry seguinte passar.
+  - **Fix**: novo seam `FfmpegEncoder.TryMapWithBusyRetry(fastMap, blockingMap, out map)` — primeira tentativa com DoNotWait (fast-path, não bloqueia quando a GPU está livre); se busy, **retry bloqueante no mesmo frame** com `MapFlags.None` (espera a GPU liberar, ~0.5-4ms) — preserva o frame em vez de descartá-lo. `false` só quando AMBOS falham busy (drop transiente legítimo); erro NÃO-busy (device removed / E_FAIL) propaga como falha real.
+  - **Wiring**: `ConvertGpuNv12` agora chama o seam com os dois lambdas de `ctx.Map`; só incrementa `_gpuBusyDrops`/`_lastFrameBusyDrop` e retorna `null` quando o retry bloqueante também falhar. Comentário do site atualizado (incidente 2026-08-14).
+  - `MappedSubresource` ctor público `(IntPtr, UInt32, UInt32)` confirmado via reflection na `Vortice.Direct3D11.dll` 3.8.3 (net10.0) — habilita testes determinísticos com delegates sem GPU.
+  - **Testes RED→GREEN** (5 novos, `FfmpegEncoderTests.cs`): `MapWithBusyRetry_FastPathSucceeds_ReturnsTrue_NoBlockingCall`, `MapWithBusyRetry_FastBusy_BlockingRecovers_ReturnsBlockingResult`, `MapWithBusyRetry_FastBusy_BlockingAlsoBusy_ReturnsFalse`, `MapWithBusyRetry_NonBusyError_Propagates`, `MapWithBusyRetry_BlockingThrowsNonBusy_Propagates` + helper `BusyMapException()` (HRESULT `0x887A000A`).
+  - **Gotcha de build**: `MapFlags.None` ambíguo (Vortice.DXGI vs Vortice.Direct3D11) no lambda — qualificado `Vortice.Direct3D11.MapFlags.None`.
+
+### Validado
+
+- **Build**: `dotnet build -c Debug` 0 erros (23 warnings pré-existentes).
+- **C# tests**: filtro `MapWithBusyRetry` **5/5**; `FfmpegEncoderTests` **158/158**; suite completa **1234/1234 aprovados, 0 falhas** ("Execução de Teste Anulada." = flakiness pré-existente do ConsoleLogger/vstest documentada).
+- **Publish**: `dotnet publish -c Release --self-contained true -r win-x64` OK.
+- **Stage + deploy**: `npm run copy-engine` (294 files, ffmpeg 9.0 212MB); app instalado FECHADO para o deploy; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == staging == `E1A1CBFA...`**.
+
+### Key Decisions
+
+- **Retry bloqueante no mesmo frame sobre retry no próximo frame**: o retry no próximo frame pressupõe que a GPU eventualmente fique ociosa — inválido sob carga sustentada. `MapFlags.None` bloqueia até a GPU liberar o resource (~0.5-4ms), sacrificando a latência do DoNotWait apenas quando necessário.
+- **DoNotWait mantido como primeira tentativa**: quando a GPU está livre, o fast-path não bloqueia a thread de captura — o bloqueio só ocorre no caminho de exceção (busy).
+- **`false` apenas com duplo busy**: teoricamente `MapFlags.None` nunca devolve WAS_STILL_DRAWING; o `false` é defensivo e mantém a classificação de drop transiente existente (watchdog cobre drops sustentados).
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo (sessão longa de jogo + gravação): conferir no log que `GPU busy (0x887A000A) — frame dropped` não se repete por frames consecutivos (retry bloqueante preserva frames) e que clip salvo tem `video>0` (sem "Nothing to save").
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/Encoders/FfmpegEncoder.GpuConvert.cs`: seam `TryMapWithBusyRetry` (novo), `ConvertGpuNv12` usa o seam com lambdas fast/blocking, comentário do site atualizado
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/FfmpegEncoderTests.cs`: 5 testes RED→GREEN + helper `BusyMapException()`
+- `AGENTS.md`: resumo de sessão

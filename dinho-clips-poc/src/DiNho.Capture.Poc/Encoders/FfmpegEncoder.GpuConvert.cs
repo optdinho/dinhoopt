@@ -18,8 +18,41 @@ internal partial class FfmpegEncoder
     internal const int DXGI_ERROR_WAS_STILL_DRAWING = unchecked((int)0x887A000A);
 
     // Classifica exceção do Map como "GPU ocupada" (busy transiente). Só WAS_STILL_DRAWING
-    // é retry no próximo frame; device removed / E_FAIL são falhas reais (contam como drop).
+    // é retry no mesmo frame; device removed / E_FAIL são falhas reais (contam como drop).
     internal static bool IsGpuBusyMapError(Exception ex) => ex.HResult == DXGI_ERROR_WAS_STILL_DRAWING;
+
+    // Incidente 2026-08-14: DoNotWait devolve WAS_STILL_DRAWING em TODO frame sob carga
+    // sustentada (jogo + WGC + NVENC) — GPU nunca alcança, "retry no próximo frame" nunca
+    // vence → video=0frames → "Nothing to save". Primeiro tenta o fast-path DoNotWait
+    // (não bloqueia a thread quando a GPU está livre); se busy, retenta bloqueante no MESMO
+    // frame com MapFlags.None (espera a GPU liberar, ~0.5-4ms) — preserva o frame em vez de
+    // descartar. False só quando AMBOS falharem busy (drop transiente legítimo).
+    // Erro NÃO-busy em qualquer um dos paths propaga (falha real: device removed / E_FAIL).
+    internal static bool TryMapWithBusyRetry(
+        Func<MappedSubresource> fastMap,
+        Func<MappedSubresource> blockingMap,
+        out MappedSubresource map)
+    {
+        try
+        {
+            map = fastMap();
+            return true;
+        }
+        catch (Exception ex) when (IsGpuBusyMapError(ex))
+        {
+            // Fast-path ocupado: bloqueia no mesmo frame para preservar o frame.
+            try
+            {
+                map = blockingMap();
+                return true;
+            }
+            catch (Exception ex2) when (IsGpuBusyMapError(ex2))
+            {
+                map = default;
+                return false;
+            }
+        }
+    }
 
     private ID3D11Texture2D? _cpuStaging;
     private int _cpuStagingW, _cpuStagingH;
@@ -201,19 +234,21 @@ internal partial class FfmpegEncoder
 
             // Map() com DoNotWait: devolve DXGI_ERROR_WAS_STILL_DRAWING quando a GPU ainda
             // desenha o frame anterior, em vez de bloquear a thread de captura 0.5-4ms.
-            // Busy = drop transiente (return null, retry no próximo frame) SEM contar como
-            // falha de conversão — evita restart loop do encoder; watchdog cobre drops
-            // sustentados. Dados do staging já estão prontos quando o Map não lança.
+            // Incidente 2026-08-14: sob carga SUSTENTADA (jogo + WGC + NVENC) a GPU NUNCA
+            // alcança — DoNotWait falha em TODO frame e o "retry no próximo frame" nunca
+            // vence → video=0frames → "Nothing to save". Fix: retry bloqueante no MESMO
+            // frame com MapFlags.None (bloqueia até a GPU liberar, ~0.5-4ms de espera).
+            // Busy mantido + retry bloqueante ainda falhando = drop transiente SEM contar
+            // como falha de conversão (evita restart loop); watchdog cobre drops sustentados.
             MappedSubresource map;
-            try
-            {
-                map = ctx.Map(_nv12Staging, 0, MapMode.Read, StagingMapFlags);
-            }
-            catch (Exception ex) when (IsGpuBusyMapError(ex))
+            if (!TryMapWithBusyRetry(
+                    () => ctx.Map(_nv12Staging, 0, MapMode.Read, StagingMapFlags),
+                    () => ctx.Map(_nv12Staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None),
+                    out map))
             {
                 _lastFrameBusyDrop = true;
                 Interlocked.Increment(ref _gpuBusyDrops);
-                Log.D("FfmpegEncoder", "GPU busy (0x887A000A) — frame dropped, retry next frame");
+                Log.D("FfmpegEncoder", "GPU busy (0x887A000A) — fast DoNotWait + blocking retry failed, frame dropped");
                 return null;
             }
             _gpuConvertFails = 0;
