@@ -337,7 +337,10 @@ public sealed partial class EngineCoordinator : IDisposable
             };
             _pipeServer.BroadcastRaw(System.Text.Json.JsonSerializer.Serialize(envelope));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log.W("EngineCoordinator", $"Falha ao broadcast clipSaved: {ex}");
+        }
     }
 
     public void Dispose()

@@ -7,6 +7,8 @@ using DiNho.Capture.Poc.Config;
 using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.GameDetection;
 using DiNho.Capture.Poc.Hotkeys;
+using DiNho.Capture.Poc.Ipc;
+using DiNho.Capture.Poc.Logging;
 using DiNho.Capture.Poc.Memory;
 using DiNho.Capture.Poc.Status;
 using DiNho.Capture.Poc.Sync;
@@ -1726,6 +1728,134 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         using var status = new EngineStatus();
         status.Update(s => s.GpuBusyDrops = 42);
         Assert.Equal(42, status.Current.GpuBusyDrops);
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Source, string Message)> Entries { get; } = new();
+
+        public void Debug(string source, string message) => Entries.Add((LogLevel.Debug, source, message));
+        public void Info(string source, string message) => Entries.Add((LogLevel.Info, source, message));
+        public void Warning(string source, string message) => Entries.Add((LogLevel.Warning, source, message));
+        public void Error(string source, string message) => Entries.Add((LogLevel.Error, source, message));
+        public void Log(LogLevel level, string source, string message) => Entries.Add((level, source, message));
+    }
+
+    private static ILogger InstallLogger(RecordingLogger logger)
+    {
+        var original = Log.Instance;
+        Log.Instance = logger;
+        return original;
+    }
+
+    [Fact]
+    public void BroadcastClipSaved_WhenPipeNull_LogsWarningAndDoesNotThrow()
+    {
+        var coord = CreateUninitialized();
+        var logger = new RecordingLogger();
+        var original = InstallLogger(logger);
+        try
+        {
+            var method = CoordinatorType.GetMethod("BroadcastClipSaved", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var ex = Record.Exception(() => method.Invoke(coord, null));
+            Assert.Null(ex);
+            Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning);
+        }
+        finally
+        {
+            Log.Instance = original;
+        }
+    }
+
+    [Fact]
+    public void BroadcastClipSaved_WhenPipeAvailable_NoWarnings()
+    {
+        var coord = CreateUninitialized();
+        SetField(coord, "_pipeServer", new NamedPipeServer());
+        var logger = new RecordingLogger();
+        var original = InstallLogger(logger);
+        try
+        {
+            var method = CoordinatorType.GetMethod("BroadcastClipSaved", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            method.Invoke(coord, null);
+            Assert.DoesNotContain(logger.Entries, e => e.Level == LogLevel.Warning);
+        }
+        finally
+        {
+            Log.Instance = original;
+        }
+    }
+
+    [Fact]
+    public void WaitAbortable_AbortsEarly_WhenConditionFails()
+    {
+        var calls = 0;
+        bool condition()
+        {
+            calls++;
+            return calls < 3;
+        }
+        var result = EngineCoordinator.WaitAbortable(1000, condition, sliceMs: 10);
+        Assert.False(result);
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public void WaitAbortable_RunsFullDuration_WhenConditionStaysTrue()
+    {
+        var calls = 0;
+        bool condition() { calls++; return true; }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = EngineCoordinator.WaitAbortable(60, condition, sliceMs: 10);
+        sw.Stop();
+        Assert.True(result);
+        Assert.True(sw.ElapsedMilliseconds >= 40, $"elapsed={sw.ElapsedMilliseconds}ms");
+        Assert.True(calls >= 3, $"calls={calls}");
+    }
+
+    [Fact]
+    public void WaitAbortable_ZeroOrNegativeTotal_ReturnsTrueWithoutCheckingCondition()
+    {
+        var calls = 0;
+        var result = EngineCoordinator.WaitAbortable(0, () => { calls++; return true; });
+        Assert.True(result);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task WaitAbortableAsync_AbortsEarly_WhenConditionFails()
+    {
+        var calls = 0;
+        bool condition()
+        {
+            calls++;
+            return calls < 3;
+        }
+        await EngineCoordinator.WaitAbortableAsync(1000, condition, sliceMs: 10);
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task WaitAbortableAsync_RunsFullDuration_WhenConditionStaysTrue()
+    {
+        var calls = 0;
+        bool condition() { calls++; return true; }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await EngineCoordinator.WaitAbortableAsync(60, condition, sliceMs: 10);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds >= 40, $"elapsed={sw.ElapsedMilliseconds}ms");
+        Assert.True(calls >= 3, $"calls={calls}");
+    }
+
+    [Fact]
+    public async Task WaitAbortableAsync_ThrowsWhenCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var calls = 0;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => EngineCoordinator.WaitAbortableAsync(1000, () => { calls++; return true; }, sliceMs: 10, ct: cts.Token));
+        Assert.True(calls >= 1);
     }
 
     #endregion

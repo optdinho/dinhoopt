@@ -72,7 +72,7 @@ public sealed partial class EngineCoordinator
                         // Release lock during delay to avoid starving StopCapture, but re-check device on resume
                         bool heldLock = Monitor.IsEntered(_pipelineLock);
                         if (heldLock) Monitor.Exit(_pipelineLock);
-                        try { Thread.Sleep(retryDelayMs); }
+                        try { WaitAbortable(retryDelayMs, () => _captureActive); }
                         finally { if (heldLock) Monitor.Enter(_pipelineLock); }
                     }
                     catch (Exception ex)
@@ -180,6 +180,13 @@ public sealed partial class EngineCoordinator
 
             for (var attempt = 1; attempt <= maxRetries; attempt++)
             {
+                // Capture device reference locally — StopCapture() may dispose it during retry delay
+                var device = _sharedDevice;
+                if (device == null || !_captureActive)
+                {
+                    Log.W("EngineCoordinator", $"WGC retry aborted: device={device != null} active={_captureActive}");
+                    break;
+                }
                 WgcCaptureSource? wgc = null;
                 try
                 {
@@ -187,7 +194,7 @@ public sealed partial class EngineCoordinator
                     // Marshal Initialize + StartFramePump to the pump thread.
                     _wgcPump.Invoke(() =>
                     {
-                        wgc.Initialize(_sharedDevice, gameHwnd);
+                        wgc.Initialize(device, gameHwnd);
                         wgc.SetCaptureFrameRate(_config.Config.Fps);
                         wgc.StartFramePump();
                     });
@@ -203,7 +210,7 @@ public sealed partial class EngineCoordinator
                     if (attempt < maxRetries)
                     {
                         Log.W("EngineCoordinator", $"WGC per-window tentativa {attempt}/{maxRetries} falhou: {ex.Message}{inner} — retry em {retryDelayMs}ms (async)");
-                        await Task.Delay(retryDelayMs);
+                        await WaitAbortableAsync(retryDelayMs, () => _captureActive, ct: _pipelineCts?.Token ?? CancellationToken.None);
                         continue;
                     }
                     else
@@ -290,6 +297,42 @@ public sealed partial class EngineCoordinator
         {
             _mmThreadHandle.Dispose();
             _mmThreadHandle = null;
+        }
+    }
+
+    // Espera abortável em fatias — retorna true quando o tempo total expira,
+    // false se a condição falhar antes (ex.: StopCapture() durante o retry).
+    // Slice em vez de Sleep único permite abortar rápido sem depender de Timer.
+    internal static bool WaitAbortable(int totalMs, Func<bool> continueCondition, int sliceMs = 50)
+    {
+        if (totalMs <= 0) return true;
+        if (sliceMs <= 0) sliceMs = 1;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            if (!continueCondition())
+                return false;
+            var remaining = totalMs - (int)sw.ElapsedMilliseconds;
+            if (remaining <= 0)
+                return true;
+            Thread.Sleep(Math.Min(remaining, sliceMs));
+        }
+    }
+
+    // Versão async com CancellationToken — equivalente ao WaitAbortable.
+    internal static async Task WaitAbortableAsync(int totalMs, Func<bool> continueCondition, int sliceMs = 50, CancellationToken ct = default)
+    {
+        if (totalMs <= 0) return;
+        if (sliceMs <= 0) sliceMs = 1;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            if (!continueCondition())
+                return;
+            var remaining = totalMs - (int)sw.ElapsedMilliseconds;
+            if (remaining <= 0)
+                return;
+            await Task.Delay(Math.Min(remaining, sliceMs), ct);
         }
     }
 }
