@@ -1,6 +1,7 @@
 using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.Ipc;
 using DiNho.Capture.Poc.Logging;
+using DiNho.Capture.Poc.Memory;
 using DiNho.Capture.Poc.Status;
 
 namespace DiNho.Capture.Poc;
@@ -169,6 +170,7 @@ public sealed partial class EngineCoordinator
             var limit = VideoPacketPool.MaxIdleBytes / 4;
             VideoPacketPool.TrimIdleBytes(limit);
             Log.I("EngineCoordinator", $"PostSaveTrim: pool idle reduzido para ≤ {limit / (1024 * 1024)} MB");
+            WorkingSetTrimmer.Trim();
         }
         catch (Exception ex)
         {
