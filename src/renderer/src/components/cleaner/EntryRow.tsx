@@ -27,7 +27,7 @@ export function EntryRow({ entry, isLast, onToggle, onAction }: EntryRowProps) {
         checked={entry.selected}
         disabled={entry.protected}
         onChange={onToggle}
-        aria-label={`select ${entry.displayName}`}
+        aria-label={t('ariaSelectEntry', { name: entry.displayName })}
       />
 
       <div className="flex-1 min-w-0">

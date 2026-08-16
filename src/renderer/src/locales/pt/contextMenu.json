@@ -62,5 +62,6 @@
   "groupHeading": "{{source}} — {{count}}",
   "elevationPrompt": "Algumas entradas selecionadas exigem privilégios de administrador. Reiniciar como administrador?",
   "elevationRelaunch": "Reiniciar como administrador",
-  "ariaToggleAll": "Alternar tudo"
+  "ariaToggleAll": "Alternar tudo",
+  "ariaSelectEntry": "Selecionar {{name}}"
 }
