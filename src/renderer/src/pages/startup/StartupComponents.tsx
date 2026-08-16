@@ -273,9 +273,10 @@ export function BootTracePanel({ trace, loading }: { trace: StartupBootTrace | n
                       }
                     />
                     <Bar dataKey="delay" radius={[0, 6, 6, 0]} maxBarSize={22}>
-                      {barData.map((entry) => (
+                      {barData.map((entry, idx) => (
                         <Cell
-                          key={entry.name}
+                          // biome-ignore lint/suspicious/noArrayIndexKey: distinct entries can share truncated/friendly names — index disambiguates
+                          key={`${entry.name}-${idx}`}
                           fill={impactBarColors[entry.impact] || 'var(--text-muted)'}
                           fillOpacity={0.85}
                         />
