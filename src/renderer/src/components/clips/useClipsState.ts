@@ -1,4 +1,5 @@
 import type { ClipInfo, ClipsConfig, ClipsEngineStatus, MicDeviceInfo } from '@shared/types'
+import type { TFunction } from 'i18next'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -75,7 +76,7 @@ export interface ClipsState {
   formatSize: (bytes: number) => string
   formatDate: (iso: string) => string
   formatSeconds: (s: number) => string
-  t: (key: string) => string
+  t: TFunction<'clips'>
 }
 
 export function useClipsState(): ClipsState {
