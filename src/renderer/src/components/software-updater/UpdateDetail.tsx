@@ -7,7 +7,6 @@ import { useUpdaterStore } from '@/stores/updater-store'
 export interface UpdateDetailProps {
   hasChecked: boolean
   packageManagerAvailable: boolean
-  packageManagerName: string | null
   appsCount: number
   error: string | null
   majorCount: number
