@@ -25,7 +25,8 @@
 - Regex de extração: proc→`$Matches[5]`, gc→6, alloc→7, native→8, retained→9, vid→1, audio→3; timestamps `Substring(0,12)`.
 - Convenção P/Invoke: `[DllImport("kernel32.dll", SetLastError = true, EntryPoint = "...")]` totalmente qualificado; **não alterar** `NativeMethods.txt`.
 - Stack de teste: xunit 2.9.3, Microsoft.NET.Test.Sdk 18.8.1, `net10.0-windows10.0.26100.0`.
-- Deploy hash `B8ADFBB4...`; FASE 1/2 commits `472315c`/`6634957`; trim do VideoPacketPool `0d634fc`; suíte 1257/1257; WorkingSetTrimmer 4/4.
+- Deploy hash `68FFCD40...` (build `e9760fa`, 2026-08-16; anterior `B8ADFBB4...`); FASE 1/2 commits `472315c`/`6634957`; trim do VideoPacketPool `0d634fc`; suíte 1257/1257; WorkingSetTrimmer 4/4.
+- **Resumo de sessão (2026-08-16)**: clips publish concluído — fix biome `useTemplate` em `src/main/services/clips-publish.ts` + deploy do build `e9760fa` (DLL `68FFCD40...` == publish == staging) no app instalado. Validado: `clips-publish.test.ts` 15/15, `useClipsActions.test.tsx` 56/56, TS suite 6888 passed/1 skipped, build OK, .NET 1259/1259. Validação de campo pendente (usuário): publicar clipe → botão de link ciano aparece → abre navegador → link persiste após restart (`localStorage('clips-published')`). Push de `main` ~19 commits adiado.
 
 ## Work State
 ### Completed

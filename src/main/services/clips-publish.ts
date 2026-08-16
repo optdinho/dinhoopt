@@ -7,7 +7,7 @@ const UPLOAD_TIMEOUT_MS = 600_000
 const UPLOAD_IDLE_TIMEOUT_MS = 60_000
 
 const UPLOAD_URL = 'https://upload.gofile.io/uploadfile'
-const BOUNDARY = '----DiNhoClipUpload' + Date.now().toString(36)
+const BOUNDARY = `----DiNhoClipUpload${Date.now().toString(36)}`
 
 export interface PublishProgress {
   loaded: number
