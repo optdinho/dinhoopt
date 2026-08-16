@@ -127,6 +127,9 @@
   "auditModalTitle": "Audit Report",
   "auditRemediation": "Remediation",
   "auditNoChecks": "No checks were performed",
+  "auditPassed": "{{count}} passed",
+  "auditWarnings": "{{count}} warnings",
+  "auditErrors": "{{count}} errors",
 
   "toastAllFailed": "All optimizations failed",
   "toastSomeFailed_one": "{{count}} optimization failed",

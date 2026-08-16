@@ -117,6 +117,9 @@
   "auditModalTitle": "Relatório de Auditoria",
   "auditRemediation": "Correção",
   "auditNoChecks": "Nenhuma verificação foi realizada",
+  "auditPassed": "{{count}} aprovadas",
+  "auditWarnings": "{{count}} avisos",
+  "auditErrors": "{{count}} erros",
 
   "toastAllFailed": "Todas as otimizações falharam",
   "toastSomeFailed_one": "{{count}} otimização falhou",

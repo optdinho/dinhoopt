@@ -70,12 +70,18 @@ export function GameModeAudit({
         {auditReport && (
           <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
             <div className="flex items-center gap-3 text-[12px]">
-              <span style={{ color: '#22c55e' }}>{auditReport.summary.passed} passed</span>
+              <span style={{ color: '#22c55e' }}>
+                {t('auditPassed', '{{count}} passed', { count: auditReport.summary.passed })}
+              </span>
               {auditReport.summary.warnings > 0 && (
-                <span style={{ color: '#f59e0b' }}>{auditReport.summary.warnings} warnings</span>
+                <span style={{ color: '#f59e0b' }}>
+                  {t('auditWarnings', '{{count}} warnings', { count: auditReport.summary.warnings })}
+                </span>
               )}
               {auditReport.summary.errors > 0 && (
-                <span style={{ color: '#ef4444' }}>{auditReport.summary.errors} errors</span>
+                <span style={{ color: '#ef4444' }}>
+                  {t('auditErrors', '{{count}} errors', { count: auditReport.summary.errors })}
+                </span>
               )}
             </div>
             <button
