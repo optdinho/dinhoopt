@@ -43,7 +43,7 @@ export function ApplyResultCard({ result, showErrors }: ApplyResultCardProps) {
       </div>
       {showErrors && result.errors.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
-          {result.errors.map((err) => (
+          {result.errors.map((err, i) => (
             <div
               key={err.entryId}
               className="flex items-start gap-3 px-5 py-3"
