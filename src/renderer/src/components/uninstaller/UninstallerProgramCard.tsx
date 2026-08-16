@@ -10,7 +10,6 @@ import { formatDate, formatLastUsed, isUnused, safetyIcon, safetyScoreColor } fr
 interface UninstallerProgramCardProps {
   prog: InstalledProgram
   uninstalling: boolean
-  filterMode: string
   onUninstall: (prog: InstalledProgram) => void
 }
 

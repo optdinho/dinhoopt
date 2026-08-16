@@ -437,7 +437,6 @@ export function UninstallerPage() {
                 key={prog.id}
                 prog={prog}
                 uninstalling={uninstalling}
-                filterMode={filterMode}
                 onUninstall={setConfirmProgram}
               />
             ))}
