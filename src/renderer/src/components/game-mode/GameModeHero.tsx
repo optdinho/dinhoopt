@@ -79,7 +79,6 @@ interface GameModeHeroProps {
   active: boolean
   activatedAt: string | null
   isBusy: boolean
-  enabledCount: number
   elapsed: number
   deactivateButtonLabel: string
   activateButtonLabel: string

@@ -208,7 +208,6 @@ export function GameModePage() {
           active={active}
           activatedAt={activatedAt}
           isBusy={isBusy}
-          enabledCount={enabledCount}
           elapsed={elapsed}
           activeLabel={t('activeLabel')}
           inactiveLabel={t('inactiveLabel')}
