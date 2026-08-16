@@ -32,6 +32,8 @@
   "replayTime": "Búfer de Reproducción",
   "replayTimeDesc": "Duración del búfer de reproducción en segundos",
   "replayCustom": "Personalizado",
+  "replayMin": "30s",
+  "replayMax": "10 min",
   "replayRamWarning": "Los buffers de más de 5 minutos usan mucha RAM. Asegúrate de que tu sistema tenga suficiente memoria.",
   "outputDir": "Directorio de Salida",
   "openFolder": "Abrir Carpeta",

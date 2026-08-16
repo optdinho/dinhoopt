@@ -32,6 +32,8 @@
   "replayTime": "Buffer de Replay",
   "replayTimeDesc": "Duração do buffer de replay em segundos",
   "replayCustom": "Personalizado",
+  "replayMin": "30s",
+  "replayMax": "10 min",
   "replayRamWarning": "Buffers acima de 5 minutos usam muita RAM. Verifique se seu sistema tem memória suficiente.",
   "outputDir": "Pasta de Saída",
   "openFolder": "Abrir Pasta",

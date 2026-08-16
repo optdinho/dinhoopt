@@ -377,11 +377,11 @@ export function QualitySection({
               className="w-full"
             />
             <div className="mt-1 flex justify-between text-[10px]">
-              <span style={{ color: 'var(--text-dim)' }}>30s</span>
+              <span style={{ color: 'var(--text-dim)' }}>{t('replayMin')}</span>
               <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
                 {formatReplay(config.replayTimeSeconds)}
               </span>
-              <span style={{ color: 'var(--text-dim)' }}>10min</span>
+              <span style={{ color: 'var(--text-dim)' }}>{t('replayMax')}</span>
             </div>
           </div>
         )}

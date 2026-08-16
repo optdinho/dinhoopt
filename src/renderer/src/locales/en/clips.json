@@ -32,6 +32,8 @@
   "replayTime": "Replay Buffer",
   "replayTimeDesc": "Duration of the replay buffer in seconds",
   "replayCustom": "Custom",
+  "replayMin": "30s",
+  "replayMax": "10 min",
   "replayRamWarning": "Buffers above 5 minutes use a lot of RAM. Make sure your system has enough memory.",
   "outputDir": "Output Directory",
   "openFolder": "Open Folder",
