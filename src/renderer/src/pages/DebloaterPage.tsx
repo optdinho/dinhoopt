@@ -119,9 +119,14 @@ export function DebloaterPage({ embedded }: { embedded?: boolean }) {
       recomputeStats()
 
       if (result.removed > 0) {
-        window.dinho.debloaterScan().then((results) => {
-          store.getState().setApps(results)
-        })
+        window.dinho
+          .debloaterScan()
+          .then((results) => {
+            store.getState().setApps(results)
+          })
+          .catch(() => {
+            store.getState().setError(t('debloater.scanFailedError'))
+          })
       }
     },
     onError: () => {
