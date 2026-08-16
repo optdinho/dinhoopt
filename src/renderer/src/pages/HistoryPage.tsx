@@ -36,20 +36,6 @@ export function HistoryPage() {
     return { totalSpace, totalItems, totalErrors, avgDuration, totalScans: entries.length }
   }, [entries])
 
-  const timelineData = useMemo(() => {
-    const byDay: Record<string, { space: number; items: number }> = {}
-    for (const e of filtered) {
-      const key = new Date(e.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-      if (!byDay[key]) byDay[key] = { space: 0, items: 0 }
-      byDay[key].space += e.totalSpaceSaved
-      byDay[key].items += e.totalItemsCleaned
-    }
-    return Object.entries(byDay)
-      .slice(0, 30)
-      .reverse()
-      .map(([date, d]) => ({ date, space: d.space, items: d.items }))
-  }, [filtered])
-
   const typeBreakdown = useMemo(() => {
     const byType: Record<string, { count: number; space: number; items: number }> = {}
     for (const e of entries) {
@@ -167,7 +153,6 @@ export function HistoryPage() {
       {viewMode === 'overview' ? (
         <OverviewView
           stats={stats}
-          timelineData={timelineData}
           typeBreakdown={typeBreakdown}
           categoryBreakdown={categoryBreakdown}
           weeklyData={weeklyData}

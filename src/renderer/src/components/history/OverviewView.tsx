@@ -22,7 +22,6 @@ export function OverviewView({
   entries,
 }: {
   stats: { totalSpace: number; totalItems: number; totalErrors: number; avgDuration: number; totalScans: number }
-  timelineData: { date: string; space: number; items: number }[]
   typeBreakdown: { name: string; count: number; space: number; items: number }[]
   categoryBreakdown: { name: string; items: number; space: number }[]
   weeklyData: { week: string; space: number; items: number; count: number }[]
