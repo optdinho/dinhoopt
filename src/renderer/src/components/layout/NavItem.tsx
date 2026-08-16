@@ -34,7 +34,6 @@ export const NavItem = memo(function NavItem({
   badgeLabel?: string
   isActive?: boolean
   submenuOpen?: boolean
-  openSubmenu?: string | null
   onToggleSubmenu?: (path: string) => void
   onCloseSubmenu?: () => void
   collapsed?: boolean
