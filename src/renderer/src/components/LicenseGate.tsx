@@ -1,5 +1,5 @@
 import { CircleCheck, CircleX, Copy, Info, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLicenseStore } from '../stores/license-store'
 
@@ -11,6 +11,14 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
   const [copied, setCopied] = useState(false)
   const [activationSuccess, setActivationSuccess] = useState(false)
   const [reason, setReason] = useState('')
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  useEffect(() => {
+    return () => {
+      for (const timer of timersRef.current) clearTimeout(timer)
+      timersRef.current = []
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -32,7 +40,7 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
   const handleCopyHwid = () => {
     navigator.clipboard.writeText(hwid)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    timersRef.current.push(setTimeout(() => setCopied(false), 2000))
   }
 
   const handleActivate = async () => {
@@ -42,7 +50,7 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
     const result = await activate(key.trim())
     if (result.valid) {
       setActivationSuccess(true)
-      setTimeout(() => setGateState('unlocked'), 1500)
+      timersRef.current.push(setTimeout(() => setGateState('unlocked'), 1500))
     } else {
       setReason(result.reason || t('invalidKeyDefault'))
     }
