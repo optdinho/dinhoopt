@@ -61,7 +61,6 @@ export function ReportCard({
 }: {
   report: ReportData | null
   icon?: LucideIcon
-  onGenerate?: () => void
   showGenerateButton?: boolean
 }) {
   const { t } = useTranslation('cleaner')
