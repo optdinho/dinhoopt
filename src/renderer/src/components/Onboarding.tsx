@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { Briefcase, Check, ChevronLeft, ChevronRight, Gamepad2, Monitor, Rocket, Shield, Sparkles } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import logoSrc from '@/assets/logo.png'
@@ -363,6 +363,14 @@ function HealthCheckStep({
   const { t } = useTranslation('onboarding')
   const [scanning, setScanning] = useState(false)
   const [progress, setProgress] = useState(0)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const runHealthCheck = async () => {
     setScanning(true)
@@ -376,18 +384,22 @@ function HealthCheckStep({
 
       for (let i = 0; i < steps; i++) {
         await new Promise((resolve) => setTimeout(resolve, stepDuration))
+        if (!isMountedRef.current) return
         setProgress(Math.min(((i + 1) / steps) * 100, 95))
       }
 
       const scanResult = await window.dinho?.systemScan?.()
+      if (!isMountedRef.current) return
       const itemsFound = Array.isArray(scanResult) ? scanResult.reduce((s, r) => s + r.itemCount, 0) : 0
       const spaceRecovered = Array.isArray(scanResult) ? scanResult.reduce((s, r) => s + r.totalSize, 0) : 0
       const duration = Date.now() - startTime
       const score = Math.max(10, 100 - Math.min(itemsFound / 10, 50))
 
       setProgress(100)
+      if (!isMountedRef.current) return
       onResult({ itemsFound, spaceRecovered, score, duration })
     } catch {
+      if (!isMountedRef.current) return
       onResult({ itemsFound: 0, spaceRecovered: 0, score: 100, duration: Date.now() - startTime })
     }
     setScanning(false)
