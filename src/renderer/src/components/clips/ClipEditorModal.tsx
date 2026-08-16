@@ -306,6 +306,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const [fullscreen, setFullscreen] = useState(false)
   const [showOverlay, setShowOverlay] = useState(true)
   const overlayTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const mountedRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const mergeClipsState = useState<string[]>(initialMergePaths ?? (clip ? [clip.path] : []))
   const [mergeClips] = mergeClipsState
@@ -317,6 +318,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   onCloseRef.current = onClose
 
   useEffect(() => {
+    mountedRef.current = true
     let active = true
     window.dinho
       .clipsGetEnhanceSupport()
@@ -328,6 +330,11 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
       })
     return () => {
       active = false
+      mountedRef.current = false
+      if (overlayTimer.current) {
+        clearTimeout(overlayTimer.current)
+        overlayTimer.current = undefined
+      }
     }
   }, [])
 
@@ -430,14 +437,14 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
       )
       if (result.success) {
         toast.success(t('trimSuccess'))
-        onSave()
+        if (mountedRef.current) onSave()
       } else {
         toast.error(result.error || t('trimFailed'))
       }
     } catch {
       toast.error(t('trimFailed'))
     } finally {
-      setTrimming(false)
+      if (mountedRef.current) setTrimming(false)
     }
   }
 
@@ -450,7 +457,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
       const result: ClipMergeResult = await window.dinho.clipsMergeClips(mergeClips, enhance, sharpness)
       if (result.success) {
         toast.success(t('mergeSuccess'))
-        onSave()
+        if (mountedRef.current) onSave()
       } else {
         toast.error(result.error || t('mergeFailed'))
       }
