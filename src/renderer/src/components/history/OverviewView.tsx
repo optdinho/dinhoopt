@@ -5,27 +5,14 @@ import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { formatBytes } from '@/lib/utils'
-import { PIE_COLORS } from './constants'
+import { PIE_COLORS, typeConfigBase } from './constants'
 import { formatDuration } from './formatDuration'
 import { MiniStat } from './MiniStat'
 import { RecentScanRow } from './RecentScanRow'
 
-const TYPE_COLORS: Record<string, string> = {
-  cleaner: '#f59e0b',
-  registry: '#3b82f6',
-  debloater: '#a855f7',
-  network: '#22c55e',
-  drivers: '#8b5cf6',
-  malware: '#ef4444',
-  privacy: '#14b8a6',
-  startup: '#f97316',
-  services: '#6366f1',
-  'software-update': '#06b6d4',
-  compliance: '#8b5cf6',
-  vulnerability: '#ef4444',
-  'delivery-optimization': '#0ea5e9',
-  cookie: '#f59e0b',
-}
+const TYPE_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(typeConfigBase).map(([k, v]) => [k, v.color]),
+)
 
 export function OverviewView({
   stats,
