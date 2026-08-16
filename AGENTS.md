@@ -4467,3 +4467,33 @@ ative\ ~1,4GB no platao estavel (WGC TexturePool/NVENC surfaces) e pico managed 
 
 - \docs/plano-medicao-footprint.md\: status + secao "Resultado FASE 2" + interpretacao CONCLUIDA (sem codigo)
 - \AGENTS.md\: resumo de sessao
+
+## Session Summary (2026-08-16 — FASE 3: breakdown do heap por geracao no tick [RAM])
+
+### Done
+
+- **FASE 3 do plano de medicao de footprint concluida via TDD completo (RED -> GREEN -> suites -> commit)**, commit `313d694` — quebra o heap managed por geracao no tick `[RAM]`, completando a serie de instrumentacao (FASE 1 = gcManaged/allocated, FASE 2 = native/managedRetained, FASE 3 = loh/gen2/gen01/committed/pinned):
+  - **Seam puro testavel** `internal static (long loh, long gen2, long gen01, long committed, long pinned) ReadGcBreakdown(Func<long> lohBytes, Func<long> gen2Bytes, Func<long> gen01Bytes, Func<long> committedBytes, Func<long> pinnedBytes)` em `EngineCoordinator.Capture.cs` (apos `DeriveFootprint`, antes de `ReportDrop`) — 5 delegates com `const long MB = 1048576`; cada valor e `bytes / MB`.
+  - **Mapeamento dos valores crus de `GC.GetGCMemoryInfo()`**: LOH = `GenerationInfo[3].SizeAfterBytes`; gen2 = `[2].SizeAfterBytes`; gen01 = `[0].SizeAfterBytes + [1].SizeAfterBytes`; committed = `TotalCommittedBytes`; 5º delegate = `PinnedObjectsCount` (**contagem, nao bytes** — o .NET nao expoe pinned em bytes; `/MB` resulta ~0 quando nao ha objetos pinados relevantes; comentario no codigo documenta).
+  - **Fiacao no tick `[RAM]`**: novas vars `lohMb`/`gen2Mb`/`gen01Mb`/`committedMb`/`pinnedMb` no mesmo try/catch do working-set; `Log.I("RAM", ...)` agora inclui `| loh={lohMb}MB | gen2={gen2Mb}MB | gen01={gen01Mb}MB | committed={committedMb}MB | pinned={pinnedMb}MB`.
+- **Testes RED->GREEN** (2 novos em `EngineCoordinatorCaptureTests.cs`, apos os testes de `DeriveFootprint`): `ReadGcBreakdown_CallsAllDelegates` (os 5 delegates invocados exatamente 1x cada) e `ReadGcBreakdown_ConvertsBytesToMb` (256/128/64/1024/30 MB -> valores inteiros corretos). RED = CS0117 compilacao.
+- **Suites**: filtro `ReadGcBreakdown` 2/2; suite completa **1224/1224 aprovados, 0 falhas** na rodada limpa (flakiness pre-existente do ConsoleLogger/vstest documentada).
+- **Commit**: `313d694` — 2 arquivos, +64/-1 (Capture.cs +28, testes +37); o commit NAO inclui AGENTS.md (esta sessao adiciona o resumo).
+
+### Key Decisions
+
+- **`GC.GetGCMemoryInfo()` por tick em vez de profiling**: cada tick do `[RAM]` (2s) ja amostra o working set — o breakdown por geracao e mais um snapshot barato do mesmo instante, sem forcar coleta.
+- **`PinnedObjectsCount` (contagem) em vez de bytes**: o runtime nao expoe pinned size; a contagem ajuda a detectar objetos pinados residuais (ex.: buffers fixos que impedem compactacao do LOH), e `/MB` ~0 e um sinal esperado.
+- **Delegates para teste deterministico**: o estado do GC real e nao-deterministico — o seam com 5 delegates isola a logica de conversao e permite assertions exatas (valores repassados / divisao por MB).
+
+### Next Steps
+
+- Reiniciar o app instalado (deploy pendente do `313d694`) e validar em campo: `lohMb` baixo em steady-state confirma que o pico managed no save (FASE 2) e LOH temporario de serializacao; `gen2Mb` alto e constante sugere retencao de objetos long-lived; `pinned` >0 indica buffers fixos.
+- Se `lohMb` subir sem volta entre sessoes: candidato = churn nao-coletado no export — FASE 4 (medicao por subsistema) se o usuario quiser reduzir footprint.
+- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pre-existente.
+
+### Relevant Files Changed
+
+- `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seam `ReadGcBreakdown` (apos `DeriveFootprint`) + tick `[RAM]` com `lohMb`/`gen2Mb`/`gen01Mb`/`committedMb`/`pinnedMb` + Log.I estendido
+- `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: 2 testes novos (`ReadGcBreakdown_CallsAllDelegates`, `ReadGcBreakdown_ConvertsBytesToMb`)
+- `AGENTS.md`: resumo de sessao
