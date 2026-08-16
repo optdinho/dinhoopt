@@ -586,6 +586,20 @@ public sealed partial class EngineCoordinator
         return (native, managedRetained);
     }
 
+    // FASE 3 breakdown do heap por geração. Valores crus do GC.GetGCMemoryInfo()
+    // (bytes) convertidos para MB: LOH = GenerationInfo[3].SizeAfterBytes,
+    // gen2 = [2].SizeAfterBytes, gen01 = [0]+[1].SizeAfterBytes,
+    // committed = TotalCommittedBytes. .NET não expõe pinned em bytes — o 5º
+    // delegate recebe PinnedObjectsCount (contagem, não bytes); /MB resulta ~0
+    // quando não há objetos pinados relevantes.
+    // Delegates permitem teste determinístico sem depender do estado real do GC.
+    internal static (long loh, long gen2, long gen01, long committed, long pinned) ReadGcBreakdown(
+        Func<long> lohBytes, Func<long> gen2Bytes, Func<long> gen01Bytes, Func<long> committedBytes, Func<long> pinnedBytes)
+    {
+        const long MB = 1048576;
+        return (lohBytes() / MB, gen2Bytes() / MB, gen01Bytes() / MB, committedBytes() / MB, pinnedBytes() / MB);
+    }
+
     private void ReportDrop(string reason)
     {
         _consecutiveDrops++;
@@ -661,18 +675,30 @@ public sealed partial class EngineCoordinator
                 long workingSetMb = 0;
                 long gcManagedMb = 0;
                 long allocatedMb = 0;
+                long lohMb = 0;
+                long gen2Mb = 0;
+                long gen01Mb = 0;
+                long committedMb = 0;
+                long pinnedMb = 0;
                 try
                 {
                     workingSetMb = Process.GetCurrentProcess().WorkingSet64 / (1024L * 1024L);
                     (gcManagedMb, allocatedMb) = ReadGcDiagnostics(
                         () => GC.GetTotalMemory(false) / (1024L * 1024L),
                         () => GC.GetTotalAllocatedBytes() / (1024L * 1024L));
+                    var info = GC.GetGCMemoryInfo();
+                    (lohMb, gen2Mb, gen01Mb, committedMb, pinnedMb) = ReadGcBreakdown(
+                        () => info.GenerationInfo[3].SizeAfterBytes,
+                        () => info.GenerationInfo[2].SizeAfterBytes,
+                        () => info.GenerationInfo[0].SizeAfterBytes + info.GenerationInfo[1].SizeAfterBytes,
+                        () => info.TotalCommittedBytes,
+                        () => info.PinnedObjectsCount);
                 }
                 catch (Exception ex) { Log.D("RAM", $"working set sample failed: {ex.Message}"); }
                 var ringMb = (long)Math.Round(totalMb);
                 var poolIdleMb = VideoPacketPool.MaxIdleBytes / (1024L * 1024L);
                 var (nativeMb, retainedMb) = DeriveFootprint(workingSetMb, gcManagedMb, ringMb, poolIdleMb);
-                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB | native={nativeMb}MB | managedRetained={retainedMb}MB");
+                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB | native={nativeMb}MB | managedRetained={retainedMb}MB | loh={lohMb}MB | gen2={gen2Mb}MB | gen01={gen01Mb}MB | committed={committedMb}MB | pinned={pinnedMb}MB");
             }
 
             try

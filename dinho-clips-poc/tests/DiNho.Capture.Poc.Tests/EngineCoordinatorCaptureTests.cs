@@ -1675,6 +1675,43 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.Equal(1024, retained);
     }
 
+    // ReadGcBreakdown — FASE 3 breakdown do heap managed. LOH/gen2/gen01 via
+    // GenerationInfo (índices 3/2/0+1), committed via TotalCommittedBytes, pinned
+    // via PinnedSize. Delegates stub tornam o teste determinístico.
+
+    [Fact]
+    public void ReadGcBreakdown_CallsAllDelegates()
+    {
+        long lohCalls = 0, gen2Calls = 0, gen01Calls = 0, committedCalls = 0, pinnedCalls = 0;
+        var (_, _, _, _, _) = EngineCoordinator.ReadGcBreakdown(
+            () => { lohCalls++; return 1L; },
+            () => { gen2Calls++; return 1L; },
+            () => { gen01Calls++; return 1L; },
+            () => { committedCalls++; return 1L; },
+            () => { pinnedCalls++; return 1L; });
+        Assert.Equal(1L, lohCalls);
+        Assert.Equal(1L, gen2Calls);
+        Assert.Equal(1L, gen01Calls);
+        Assert.Equal(1L, committedCalls);
+        Assert.Equal(1L, pinnedCalls);
+    }
+
+    [Fact]
+    public void ReadGcBreakdown_ConvertsBytesToMb()
+    {
+        var (loh, gen2, gen01, committed, pinned) = EngineCoordinator.ReadGcBreakdown(
+            () => 268435456L,  // 256 MB
+            () => 134217728L,  // 128 MB
+            () => 67108864L,   // 64 MB
+            () => 1073741824L, // 1024 MB
+            () => 31457280L);  // 30 MB
+        Assert.Equal(256, loh);
+        Assert.Equal(128, gen2);
+        Assert.Equal(64, gen01);
+        Assert.Equal(1024, committed);
+        Assert.Equal(30, pinned);
+    }
+
     [Fact]
     public void EngineStatus_DroppedFrames_CanUpdate()
     {
