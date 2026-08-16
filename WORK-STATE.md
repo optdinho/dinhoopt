@@ -36,15 +36,15 @@
 - `WORK-STATE.md` existe em `$PWD\WORK-STATE.md` (Test-Path → True).
 
 ### Active
-- 3 arquivos não commitados pendentes: `Memory/WorkingSetTrimmer.cs`, `tests/.../WorkingSetTrimmerTests.cs`, `EngineCoordinator.Export.cs`.
+- **Resolvido (2026-08-16)**: os 3 arquivos foram commitados — `91b3a86` (`Memory/WorkingSetTrimmer.cs` + `tests/.../WorkingSetTrimmerTests.cs`), `0d634fc` (`EngineCoordinator.Export.cs` PostSaveTrim/TrimIdleBytes). Tree limpa.
 - Veredito negativo e causa-raiz reatribuída registrados neste arquivo.
 
 ### Blocked
-- Direção do próximo fix indefinida: PostSaveTrim provado inefetivo (beco sem saída). Próxima ação (investigar crescimento managed de `ret` via heap dump/profiling de alocação, ou aceitar e encerrar) requer confirmação do usuário.
+- **Resolvido (2026-08-16)**: usuário optou por continuar o plano de medição de footprint (FASE 1/2/3 — gcManaged/native/managedRetained + breakdown por geração no tick `[RAM]`; ver AGENTS.md 2026-08-15c..2026-08-16). Atribuição fechada em campo: pico managed pós-save é serialização LOH transiente; steady-state native ~1,4GB (WGC/NVENC surfaces). Sem leak.
 
 ## Next Move
-1. Perguntar ao usuário a direção: (a) investigar retenção managed (`ret`) crescente — heap dump / profiling de alocação do export; (b) aceitar e encerrar (footprint bounded ~3.8GB, sem leak); (c) outra abordagem de trim.
-2. Commit dos 3 arquivos pendentes conforme decisão.
+1. **Encerrado (2026-08-16)**: direção definida pelo usuário — medição de footprint (FASE 1/2/3, commits `472315c`/`6634957`/`313d694`) em vez de heap dump; validado em campo (FASE 2): pico managed no save é LOH transiente, sem leak.
+2. **Feito (2026-08-16)**: 3 arquivos commitados — `91b3a86` + `0d634fc` (ver linha 39).
 
 ## Relevant Files
 - `C:\Users\WENDEL\Desktop\001\dinho-clips-poc\src\DiNho.Capture.Poc\EngineCoordinator.Export.cs` — wire: `using DiNho.Capture.Poc.Memory` + `WorkingSetTrimmer.Trim()` no `PostSaveTrim` (165-178); `Task.Run(PostSaveTrim)` no finally (~156).
