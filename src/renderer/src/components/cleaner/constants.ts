@@ -2,6 +2,8 @@ import type { ContextMenuEntry, ContextMenuScope, ContextMenuSource, ContextMenu
 
 export const WIN11_NOTICE_KEY = 'kudu.contextMenu.win11Notice.dismissed'
 
+export const UNKNOWN_BINARY = '(unknown)'
+
 export const SOURCE_PILL_COLOR: Record<ContextMenuSource, { bg: string; text: string }> = {
   '7-Zip': { bg: 'rgba(59,130,246,0.10)', text: '#60a5fa' },
   WinRAR: { bg: 'rgba(168,85,247,0.10)', text: '#c084fc' },
@@ -80,7 +82,7 @@ export function binaryNameOf(entry: ContextMenuEntry): string {
     const base = entry.dllPath.split(/[\\/]/).pop()?.trim()
     if (base) return base
   }
-  return entry.name || '(unknown)'
+  return entry.name || UNKNOWN_BINARY
 }
 
 export function groupByBinary(entries: ContextMenuEntry[]): { binary: string; entries: ContextMenuEntry[] }[] {

@@ -63,5 +63,6 @@
   "elevationPrompt": "Algumas entradas selecionadas exigem privilégios de administrador. Reiniciar como administrador?",
   "elevationRelaunch": "Reiniciar como administrador",
   "ariaToggleAll": "Alternar tudo",
-  "ariaSelectEntry": "Selecionar {{name}}"
+  "ariaSelectEntry": "Selecionar {{name}}",
+  "unknownBinary": "(desconhecido)"
 }

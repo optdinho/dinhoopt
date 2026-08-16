@@ -2,7 +2,7 @@ import type { ContextMenuAction, ContextMenuEntry } from '@shared/types'
 import { ChevronDown, MousePointerClick } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenuStore } from '@/stores/context-menu-store'
-import { colorForBinary } from './constants'
+import { colorForBinary, UNKNOWN_BINARY } from './constants'
 import { EntryRow } from './EntryRow'
 
 interface EntryGroupCardProps {
@@ -37,7 +37,9 @@ export function EntryGroupCard({ group, applying, onEntryAction }: EntryGroupCar
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5">
-            <span className="truncate font-mono text-[13px] font-semibold text-zinc-200">{group.binary}</span>
+            <span className="truncate font-mono text-[13px] font-semibold text-zinc-200">
+              {group.binary === UNKNOWN_BINARY ? t('unknownBinary') : group.binary}
+            </span>
             <span
               className="rounded-full px-2 py-0.5 text-[11px] font-medium"
               style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}
