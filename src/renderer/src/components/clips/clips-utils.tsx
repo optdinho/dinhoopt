@@ -168,9 +168,16 @@ export function ConfigSection({
       className="rounded-xl border overflow-hidden transition-all"
       style={{ background: 'var(--card-bg)', borderColor: 'var(--border-medium)' }}
     >
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(!open)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setOpen(!open)
+          }
+        }}
         className="flex w-full items-center gap-2 px-4 py-3 text-xs font-semibold transition-colors hover:bg-white/[0.03]"
         style={{ color: 'var(--text-primary)' }}
       >
@@ -179,7 +186,7 @@ export function ConfigSection({
         <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
           <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--text-dim)' }} />
         </motion.div>
-      </button>
+      </div>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
