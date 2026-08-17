@@ -682,7 +682,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
               <div className={fullscreen ? 'px-6 pb-28' : 'px-0'}>
                 {!fullscreen && (
                   <p className="mb-4 text-xs" style={{ color: 'var(--text-dim)' }}>
-                    {clip.path} · {(clip.size / 1024 / 1024).toFixed(1)}MB · {effectiveDuration.toFixed(1)}s
+                    {clip.path} · {(clip.size / 1024 / 1024).toFixed(1)}{t('megabytes')} · {effectiveDuration.toFixed(1)}{t('seconds')}
                   </p>
                 )}
                 <div
