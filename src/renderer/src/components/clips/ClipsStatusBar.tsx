@@ -76,7 +76,8 @@ export function ClipsStatusBar({
                 </span>
                 <span className="mx-1">&middot;</span>
                 <span>
-                  {t('replayTime')}: {Math.floor(status.replayTimeSeconds / 60)}min
+                  {t('replayTime')}: {Math.floor(status.replayTimeSeconds / 60)}
+                  {t('min')}
                 </span>
                 {status.uptime > 0 && (
                   <>
@@ -118,8 +119,8 @@ export function ClipsStatusBar({
                 <HardDrive className="h-3 w-3" />
                 <span>
                   {status.replayBufferBytes
-                    ? `${Math.round(status.replayBufferBytes / 1024 / 1024)}MB`
-                    : `~${estimatedRamMB}MB`}
+                    ? `${Math.round(status.replayBufferBytes / 1024 / 1024)}${t('megabytes')}`
+                    : `~${estimatedRamMB}${t('megabytes')}`}
                 </span>
               </div>
             )}

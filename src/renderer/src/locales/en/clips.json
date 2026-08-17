@@ -192,5 +192,7 @@
   "copied": "Copied!",
   "copyFailed": "Failed to copy",
   "openLink": "Open link",
-  "expiryWarning": "The link expires after 10 days without downloads and downloads are free with ads."
+  "expiryWarning": "The link expires after 10 days without downloads and downloads are free with ads.",
+  "min": "min",
+  "megabytes": "MB"
 }
