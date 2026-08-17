@@ -15,12 +15,12 @@ export function GameModeGpuTweaks() {
     window.dinho
       ?.gamingVbsGet?.()
       .then((r) => setVbsEnabled(r.enabled))
-      .catch(() => {})
+      .catch((e: unknown) => console.error('[GpuTweaks] vbs status failed:', e))
       .finally(() => setVbsLoading(false))
     window.dinho
       ?.gamingHagsGet?.()
       .then((r) => setHagsEnabled(r.enabled))
-      .catch(() => {})
+      .catch((e: unknown) => console.error('[GpuTweaks] hags status failed:', e))
       .finally(() => setHagsLoading(false))
   }, [])
 
