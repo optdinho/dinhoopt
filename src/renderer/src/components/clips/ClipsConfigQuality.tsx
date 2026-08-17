@@ -44,7 +44,7 @@ export function QualitySection({
   const replayPresets = [30, 120, 300]
   const isCustomReplay = !replayPresets.includes(config.replayTimeSeconds)
   const formatReplay = (s: number) =>
-    s < 60 ? `${s}s` : s % 60 === 0 ? `${s / 60}min` : `${Math.floor(s / 60)}min ${s % 60}s`
+    s < 60 ? `${s}${t('s')}` : s % 60 === 0 ? `${s / 60}${t('min')}` : `${Math.floor(s / 60)}${t('min')} ${s % 60}${t('s')}`
   return (
     <div className="space-y-3">
       {/* Quick Preset */}
@@ -151,7 +151,7 @@ export function QualitySection({
       {/* Codec selector */}
       <div>
         <p className="mb-1 text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-dim)' }}>
-          Codec
+          {t('codec')}
           <TipBadge id="codec" activeTip={activeTip} setActiveTip={setActiveTip} />
         </p>
         <div className="flex flex-wrap gap-1">
@@ -268,7 +268,7 @@ export function QualitySection({
         </div>
         <div>
           <p className="mb-1 text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--text-dim)' }}>
-            FPS
+            {t('fps')}
             <TipBadge id="fps" activeTip={activeTip} setActiveTip={setActiveTip} />
           </p>
           <div className="flex gap-1">
@@ -336,9 +336,9 @@ export function QualitySection({
         </p>
         <div className="flex gap-1">
           {[
-            { s: 30, label: '30s' },
-            { s: 120, label: '2min' },
-            { s: 300, label: '5min' },
+            { s: 30, label: t('replayPreset30s') },
+            { s: 120, label: t('replayPreset2min') },
+            { s: 300, label: t('replayPreset5min') },
           ].map(({ s, label }) => (
             <button
               key={s}
@@ -436,8 +436,8 @@ export function QualitySection({
             <span style={{ color: 'var(--text-dim)' }}>{t('ramLabel')}</span>
             <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
               {_status.replayBufferBytes
-                ? `${Math.round(_status.replayBufferBytes / 1024 / 1024)} MB`
-                : `~${estimatedRamMB} MB`}
+                ? `${Math.round(_status.replayBufferBytes / 1024 / 1024)} ${t('megabytes')}`
+                : `~${estimatedRamMB} ${t('megabytes')}`}
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'rgba(113,113,122,0.12)' }}>

@@ -192,5 +192,12 @@
   "copied": "Copiado!",
   "copyFailed": "Falha ao copiar",
   "openLink": "Abrir link",
-  "expiryWarning": "O link expira após 10 dias sem downloads e os downloads são gratuitos com anúncios."
+  "expiryWarning": "O link expira após 10 dias sem downloads e os downloads são gratuitos com anúncios.",
+  "min": "min",
+  "megabytes": "MB",
+  "s": "s",
+  "codec": "Codec",
+  "replayPreset30s": "30s",
+  "replayPreset2min": "2min",
+  "replayPreset5min": "5min"
 }

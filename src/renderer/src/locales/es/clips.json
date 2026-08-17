@@ -192,5 +192,12 @@
   "copied": "¡Copiado!",
   "copyFailed": "Error al copiar",
   "openLink": "Abrir enlace",
-  "expiryWarning": "El enlace caduca después de 10 días sin descargas y las descargas son gratuitas con anuncios."
+  "expiryWarning": "El enlace caduca después de 10 días sin descargas y las descargas son gratuitas con anuncios.",
+  "min": "min",
+  "megabytes": "MB",
+  "s": "s",
+  "codec": "Codec",
+  "replayPreset30s": "30s",
+  "replayPreset2min": "2min",
+  "replayPreset5min": "5min"
 }

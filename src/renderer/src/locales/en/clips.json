@@ -194,5 +194,10 @@
   "openLink": "Open link",
   "expiryWarning": "The link expires after 10 days without downloads and downloads are free with ads.",
   "min": "min",
-  "megabytes": "MB"
+  "megabytes": "MB",
+  "s": "s",
+  "codec": "Codec",
+  "replayPreset30s": "30s",
+  "replayPreset2min": "2min",
+  "replayPreset5min": "5min"
 }
