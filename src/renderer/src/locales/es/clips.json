@@ -204,5 +204,6 @@
   "failedToDeleteClip": "Error al eliminar clipe",
   "bytes": "B",
   "kilobytes": "KB",
-  "gigabytes": "GB"
+  "gigabytes": "GB",
+  "pidLabel": "PID {{pid}}"
 }

@@ -140,7 +140,7 @@ export function GameSection({
                   >
                     {REPLAY_DURATIONS.map((d) => (
                       <option key={d} value={d}>
-                        {d < 60 ? `${d}s` : `${d / 60}min`}
+                        {d < 60 ? `${d}${t('s')}` : `${d / 60}${t('min')}`}
                       </option>
                     ))}
                   </select>
@@ -240,7 +240,7 @@ export function ProcessPicker({
               >
                 <span className="font-medium">{p.name}</span>
                 <span className="ml-2" style={{ color: 'var(--text-dim)' }}>
-                  PID {p.pid}
+                  {t('pidLabel', { pid: p.pid })}
                 </span>
               </button>
             ))}
