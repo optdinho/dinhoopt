@@ -25,7 +25,7 @@ export function ClipsPage() {
             onClick={() => state.setShowConfig(!state.showConfig)}
             className="mt-1 shrink-0 rounded-lg p-2 transition-colors hover:bg-white/[0.06]"
             style={{ color: state.showConfig ? 'var(--accent)' : 'var(--text-dim)' }}
-            title={state.showConfig ? 'Hide Settings' : 'Settings'}
+            title={state.showConfig ? t('hideSettings') : t('showSettings')}
           >
             <motion.div
               animate={{ rotate: state.showConfig ? 90 : 0 }}
@@ -83,10 +83,7 @@ export function ClipsPage() {
         />
       )}
       {state.publishResult && (
-        <PublishModal
-          link={state.publishResult.link}
-          onClose={() => state.setPublishResult(null)}
-        />
+        <PublishModal link={state.publishResult.link} onClose={() => state.setPublishResult(null)} />
       )}
 
       <RenameDialog

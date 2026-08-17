@@ -209,5 +209,7 @@
   "kilohertz": "kHz",
   "hours": "h",
   "minutes": "m",
-  "seconds": "s"
+  "seconds": "s",
+  "hideSettings": "Ocultar configuración",
+  "showSettings": "Mostrar configuración"
 }
