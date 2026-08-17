@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -11,13 +11,25 @@ interface PublishModalProps {
 export default function PublishModal({ link, onClose }: PublishModalProps) {
   const { t } = useTranslation('clips')
   const [copied, setCopied] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
       toast.success(t('copied'))
-      window.setTimeout(() => setCopied(false), 2000)
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current)
+      }
+      timerRef.current = window.setTimeout(() => setCopied(false), 2000)
     } catch {
       toast.error(t('copyFailed'))
     }
