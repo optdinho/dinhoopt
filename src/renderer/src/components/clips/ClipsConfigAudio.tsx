@@ -182,7 +182,7 @@ export function AudioSection({
                 color: (config.audioSampleRate ?? 48000) === rate ? '#fff' : 'var(--text-primary)',
               }}
             >
-              {rate / 1000}kHz
+              {rate / 1000}{t('kilohertz')}
             </button>
           ))}
         </div>
@@ -293,7 +293,7 @@ function AutoCleanupThresholdPicker({ value, onChange }: { value: number; onChan
             color: value === gb ? '#fff' : 'var(--text-primary)',
           }}
         >
-          {gb} GB
+          {gb} {t('gigabytes')}
         </button>
       ))}
       <input

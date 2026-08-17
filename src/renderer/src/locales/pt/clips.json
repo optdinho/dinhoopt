@@ -205,5 +205,6 @@
   "bytes": "B",
   "kilobytes": "KB",
   "gigabytes": "GB",
-  "pidLabel": "PID {{pid}}"
+  "pidLabel": "PID {{pid}}",
+  "kilohertz": "kHz"
 }
