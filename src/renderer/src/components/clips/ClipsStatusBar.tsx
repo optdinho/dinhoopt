@@ -82,7 +82,7 @@ export function ClipsStatusBar({
                 {status.uptime > 0 && (
                   <>
                     <span className="mx-1">&middot;</span>
-                    <span>{formatUptime(status.uptime)}</span>
+                    <span>{formatUptime(status.uptime, t)}</span>
                   </>
                 )}
               </div>

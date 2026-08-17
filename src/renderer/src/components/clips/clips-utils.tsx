@@ -135,12 +135,12 @@ export const MODIFIER_MAP: Record<number, 'Ctrl' | 'Shift' | 'Alt'> = {
 }
 export const REPLAY_DURATIONS = [30, 60, 120, 300, 600]
 
-export function formatUptime(seconds: number): string {
+export function formatUptime(seconds: number, t: (key: string) => string): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
-  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
+  if (m >= 60) return `${Math.floor(m / 60)}${t('hours')} ${m % 60}${t('minutes')}`
+  if (m > 0) return `${m}${t('minutes')} ${s}${t('seconds')}`
+  return `${s}${t('seconds')}`
 }
 
 export function formatKey(vk: number, modifiers: string[]): string {
