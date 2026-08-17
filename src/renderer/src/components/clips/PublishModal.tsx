@@ -75,7 +75,10 @@ export default function PublishModal({ link, onClose }: PublishModalProps) {
           </button>
         </div>
 
-        <div className="mt-2 flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)' }}>
+        <div
+          className="mt-2 flex items-center gap-2 rounded-lg border px-3 py-2"
+          style={{ borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)' }}
+        >
           <span className="text-xs" style={{ color: '#f59e0b' }}>
             {t('expiryWarning')}
           </span>
