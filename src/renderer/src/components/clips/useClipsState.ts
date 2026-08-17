@@ -499,7 +499,7 @@ export function useClipsState(): ClipsState {
     addHotkey: actions.addHotkey,
     removeHotkey: actions.removeHotkey,
     updateHotkey: actions.updateHotkey,
-    formatSize: formatClipsSize,
+    formatSize: (bytes: number) => formatClipsSize(bytes, t),
     formatDate: formatClipsDate,
     formatSeconds: formatClipsSeconds,
     t,

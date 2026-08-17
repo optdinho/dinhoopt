@@ -115,7 +115,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         toast.success(t('clipSaved'))
         await refreshClips()
       } else {
-        toast.error(result?.error || 'Failed to save clip')
+        toast.error(result?.error || t('failedToSaveClip'))
       }
     } catch (err) {
       toast.error(String(err))
@@ -132,7 +132,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         if (result?.success) {
           await refreshClips()
         } else {
-          toast.error(result?.error || 'Failed to delete clip')
+          toast.error(result?.error || t('failedToDeleteClip'))
         }
       } catch (err) {
         toast.error(String(err))
@@ -165,7 +165,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         if (result?.success) {
           await refreshClips()
         } else {
-          toast.error(result?.error || 'Failed to rename clip')
+          toast.error(result?.error || t('renameError'))
         }
       } catch (err) {
         toast.error(String(err))
@@ -348,11 +348,11 @@ export function useClipsActions(deps: ClipsActionDeps) {
   }
 }
 
-export function formatClipsSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+export function formatClipsSize(bytes: number, t: (key: string) => string): string {
+  if (bytes < 1024) return `${bytes} ${t('bytes')}`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} ${t('kilobytes')}`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} ${t('megabytes')}`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ${t('gigabytes')}`
 }
 
 export function formatClipsDate(iso: string): string {

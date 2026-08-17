@@ -914,13 +914,21 @@ describe('useClipsActions', () => {
 })
 
 describe('formatClipsSize', () => {
+  const unitMap: Record<string, string> = {
+    bytes: 'B',
+    kilobytes: 'KB',
+    megabytes: 'MB',
+    gigabytes: 'GB',
+  }
+  const t = (key: string) => unitMap[key] ?? key
+
   it('formats bytes, KB, MB, and GB', () => {
-    expect(formatClipsSize(0)).toBe('0 B')
-    expect(formatClipsSize(1023)).toBe('1023 B')
-    expect(formatClipsSize(1024)).toBe('1.0 KB')
-    expect(formatClipsSize(1536)).toBe('1.5 KB')
-    expect(formatClipsSize(1024 * 1024)).toBe('1.0 MB')
-    expect(formatClipsSize(1024 * 1024 * 1024)).toBe('1.0 GB')
+    expect(formatClipsSize(0, t)).toBe('0 B')
+    expect(formatClipsSize(1023, t)).toBe('1023 B')
+    expect(formatClipsSize(1024, t)).toBe('1.0 KB')
+    expect(formatClipsSize(1536, t)).toBe('1.5 KB')
+    expect(formatClipsSize(1024 * 1024, t)).toBe('1.0 MB')
+    expect(formatClipsSize(1024 * 1024 * 1024, t)).toBe('1.0 GB')
   })
 })
 

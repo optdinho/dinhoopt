@@ -199,5 +199,10 @@
   "codec": "Codec",
   "replayPreset30s": "30s",
   "replayPreset2min": "2min",
-  "replayPreset5min": "5min"
+  "replayPreset5min": "5min",
+  "failedToSaveClip": "Error al guardar clipe",
+  "failedToDeleteClip": "Error al eliminar clipe",
+  "bytes": "B",
+  "kilobytes": "KB",
+  "gigabytes": "GB"
 }
