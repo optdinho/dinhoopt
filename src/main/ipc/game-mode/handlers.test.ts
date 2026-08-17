@@ -28,6 +28,11 @@ vi.mock('node:fs', () => ({
   readdirSync: vi.fn(() => []),
 }))
 
+vi.mock('node:fs/promises', () => ({
+  access: vi.fn(async () => {}),
+  readdir: vi.fn(async () => []),
+}))
+
 vi.mock('../../services/exec-utf8', () => ({ execFileAsync: vi.fn(async () => ({ stdout: '[]', stderr: '' })) }))
 vi.mock('../../services/logger.service', () => ({ getLogger: () => state.logger }))
 vi.mock('../../services/game-detector', () => ({
@@ -52,6 +57,7 @@ vi.mock('./status', () => ({ getGameModeStatus: vi.fn(() => ({ active: false }))
 vi.mock('./validation', () => ({ validateGameModeConfig: vi.fn() }))
 
 import { existsSync, readdirSync } from 'node:fs'
+import { access, readdir } from 'node:fs/promises'
 import { IPC } from '@shared/channels'
 import { loadClipsConfig } from '../../services/clips-config-store'
 import { execFileAsync } from '../../services/exec-utf8'
@@ -129,6 +135,8 @@ beforeEach(() => {
 
   vi.mocked(existsSync).mockReset()
   vi.mocked(readdirSync).mockReset()
+  vi.mocked(access).mockReset()
+  vi.mocked(readdir).mockReset()
   vi.mocked(execFileAsync).mockReset()
   vi.mocked(isDetectorRunning).mockReset().mockReturnValue(false)
   vi.mocked(startGameDetector).mockReset()
@@ -164,6 +172,16 @@ beforeEach(() => {
     const e = fsTree.get(p)
     if (!e) throw new Error('ENOENT')
     if (opts?.withFileTypes) return e.dirs.map((name) => ({ name, isDirectory: () => true }))
+    return e.files
+  })
+
+  vi.mocked(access).mockImplementation(async (p: unknown) => {
+    if (!fsTree.has(String(p))) throw new Error('ENOENT')
+  })
+  vi.mocked(readdir).mockImplementation(async (p: string, opts?: { withFileTypes?: boolean }) => {
+    const e = fsTree.get(p)
+    if (!e) throw new Error('ENOENT')
+    if (opts?.withFileTypes) return e.dirs.map((name) => ({ name, isDirectory: () => true }) as import('node:fs').Dirent)
     return e.files
   })
 
@@ -327,12 +345,12 @@ describe('checkDirectStorage (via DIRECTSTORAGE_CHECK)', () => {
     fsTree.set(BASE1, { dirs: ['GameA'], files: [] })
     fsTree.set(join(BASE1, 'GameA'), { dirs: [], files: ['directstorage.dll'] })
     fsTree.set(BASE4, { dirs: ['GameA'], files: [] })
-    vi.mocked(readdirSync).mockImplementation((p: unknown, opts?: { withFileTypes?: boolean }) => {
+    vi.mocked(readdir).mockImplementation(async (p: string, opts?: { withFileTypes?: boolean }) => {
       const path = String(p)
       if (path === BASE4) throw new Error('denied')
       const e = fsTree.get(path)
       if (!e) throw new Error('ENOENT')
-      if (opts?.withFileTypes) return e.dirs.map((name) => ({ name, isDirectory: () => true }))
+      if (opts?.withFileTypes) return e.dirs.map((name) => ({ name, isDirectory: () => true }) as import('node:fs').Dirent)
       return e.files
     })
     vi.mocked(execFileAsync).mockResolvedValue({ stdout: '[]', stderr: '' })

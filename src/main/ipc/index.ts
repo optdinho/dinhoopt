@@ -84,7 +84,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerDatabaseOptimizerIpc(getWindow)
   registerRegistryCleanerIpc(getWindow)
   registerContextMenuCleanerIpc(getWindow)
-  registerStartupManagerIpc()
+  registerStartupManagerIpc(getWindow)
   registerDebloaterIpc(getWindow)
   registerDiskAnalyzerIpc(getWindow)
   registerDiskTrimIpc(getWindow)

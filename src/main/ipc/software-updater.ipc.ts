@@ -38,7 +38,9 @@ export function registerSoftwareUpdaterIpc(getWindow: WindowGetter): void {
       getLogger().warning('software-updater', 'No app IDs provided for update')
       return { succeeded: 0, failed: 0, errors: [] }
     }
-    const safeIds = appIds.filter((id) => typeof id === 'string' && id.length > 0 && id.length < 200)
+    const safeIds = appIds.filter(
+      (id) => typeof id === 'string' && id.length > 0 && id.length < 200 && /^[a-zA-Z0-9._-]+$/.test(id),
+    )
     const safeSource = typeof source === 'string' ? source : undefined
     const result = await runUpdates(safeIds, sendProgress, safeSource)
     getLogger().success('software-updater', `Updates complete: ${result.succeeded} succeeded, ${result.failed} failed`)

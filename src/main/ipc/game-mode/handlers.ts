@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { access, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type { DirectStorageStatus, GameModeAuditReport, GameModeConfig, GameModeProgress } from '@shared/types'
@@ -124,12 +124,13 @@ async function checkDirectStorage(): Promise<DirectStorageStatus> {
   for (const basePath of steamPaths) {
     if (supported) break
     try {
-      if (!existsSync(basePath)) continue
-      const games = readdirSync(basePath, { withFileTypes: true }).filter((d) => d.isDirectory())
+      await access(basePath)
+      const entries = await readdir(basePath, { withFileTypes: true })
+      const games = entries.filter((d) => d.isDirectory())
       for (const game of games) {
         const gameDir = join(basePath, game.name)
         try {
-          const files = readdirSync(gameDir)
+          const files = await readdir(gameDir)
           if (files.some((f) => f.toLowerCase() === 'directstorage.dll')) {
             supported = true
             break

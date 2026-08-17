@@ -77,8 +77,8 @@ export async function scanBloatware(): Promise<BloatwareApp[]> {
         })
       }
     }
-  } catch {
-    // Phase 1 failed — continue to provisioned scan
+  } catch (error) {
+    getLogger().warning('debloater', `Phase 1 scan error: ${error}`)
   }
 
   // Phase 2: Scan provisioned AppX packages (staged for new users)
@@ -119,8 +119,8 @@ export async function scanBloatware(): Promise<BloatwareApp[]> {
         })
       }
     }
-  } catch {
-    // Phase 2 failed — return what we have
+  } catch (error) {
+    getLogger().warning('debloater', `Phase 2 scan error: ${error}`)
   }
 
   // Phase 3: Scan Win32 classic programs via registry
@@ -196,8 +196,8 @@ export async function scanBloatware(): Promise<BloatwareApp[]> {
         selected: false,
       })
     }
-  } catch {
-    // Phase 3 failed — return what we have
+  } catch (error) {
+    getLogger().warning('debloater', `Phase 3 scan error: ${error}`)
   }
 
   getLogger().success('debloater', `Scan complete — found ${apps.length} bloatware apps`)
