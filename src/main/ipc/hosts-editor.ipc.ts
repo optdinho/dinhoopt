@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { IPC } from '@shared/channels'
 import type { HostsEntry, HostsFileData, HostsWriteRequest } from '@shared/types'
@@ -131,7 +131,9 @@ export function registerHostsEditorIpc(_getWindow: WindowGetter): void {
         /* file may not exist yet */
       }
 
-      writeFileSync(HOSTS_PATH, content, 'utf-8')
+      const tmpPath = `${HOSTS_PATH}.tmp`
+      writeFileSync(tmpPath, content, 'utf-8')
+      renameSync(tmpPath, HOSTS_PATH)
       const newContentHash = createHash('sha256').update(content).digest('hex').slice(0, 16)
 
       logAudit('HOSTS_WRITE', 'hosts', {

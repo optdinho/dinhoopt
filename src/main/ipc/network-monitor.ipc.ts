@@ -78,23 +78,37 @@ export function isSuspicious(conn: NetworkConnection): boolean {
   return false
 }
 
-async function getProcessName(pid: number): Promise<string> {
-  if (pid === 0) return 'System Idle'
-  if (pid === 4) return 'System'
+async function getProcessNamesBatch(pids: number[]): Promise<Map<number, string>> {
+  const result = new Map<number, string>()
+  const unknownPids: number[] = []
+  for (const pid of pids) {
+    if (pid === 0) { result.set(pid, 'System Idle'); continue }
+    if (pid === 4) { result.set(pid, 'System'); continue }
+    unknownPids.push(pid)
+  }
+  if (unknownPids.length === 0) return result
+
   try {
+    const pidList = unknownPids.map(p => `Get-Process -Id ${p} -ErrorAction SilentlyContinue`).join('; ')
     const { stdout } = await execFileAsync(
       'powershell.exe',
-      [
-        '-NoProfile',
-        '-Command',
-        `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName`,
-      ],
-      { timeout: 3000, windowsHide: true, encoding: 'utf-8' },
+      ['-NoProfile', '-Command', `${pidList} | Select-Object Id,ProcessName | ConvertTo-Json -Compress`],
+      { timeout: 5000, windowsHide: true, encoding: 'utf-8' },
     )
-    return stdout.trim() || 'Unknown'
+    let parsed: unknown
+    try { parsed = JSON.parse(stdout) } catch { return result }
+    const rows = Array.isArray(parsed) ? parsed : [parsed]
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue
+      const r = row as Record<string, unknown>
+      const id = Number(r.Id)
+      const name = String(r.ProcessName || '').trim()
+      if (id && name) result.set(id, name)
+    }
   } catch {
-    return 'Unknown'
+    /* partial result acceptable */
   }
+  return result
 }
 
 export async function getActiveConnections(): Promise<NetworkConnection[]> {
@@ -109,42 +123,43 @@ export async function getActiveConnections(): Promise<NetworkConnection[]> {
       { timeout: 10000, windowsHide: true, encoding: 'utf-8' },
     )
 
-    const parsed: unknown = JSON.parse(stdout)
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(stdout)
+    } catch {
+      getLogger().warning('network-monitor', 'Failed to parse PowerShell output')
+      return []
+    }
     const rows = Array.isArray(parsed) ? parsed : [parsed]
 
-    const connections: NetworkConnection[] = []
-    const pidCache = new Map<number, string>()
-
+    const pids = new Set<number>()
+    const rawRows: Array<{ localAddr: string; localPort: number; remoteAddr: string; remotePort: number; state: string; pid: number }> = []
     for (const row of rows) {
       if (!row || typeof row !== 'object') continue
       const r = row as Record<string, unknown>
-      const localAddr = String(r.LocalAddress || '')
-      const localPort = Number(r.LocalPort) || 0
-      const remoteAddr = String(r.RemoteAddress || '')
-      const remotePort = Number(r.RemotePort) || 0
-      const state = String(r.State || '')
       const pid = Number(r.OwningProcess) || 0
-
-      let processName: string
-      if (pidCache.has(pid)) {
-        processName = pidCache.get(pid)!
-      } else {
-        processName = await getProcessName(pid)
-        pidCache.set(pid, processName)
-      }
-
-      connections.push({
-        localAddress: localAddr,
-        localPort,
-        remoteAddress: remoteAddr,
-        remotePort,
-        state,
+      pids.add(pid)
+      rawRows.push({
+        localAddr: String(r.LocalAddress || ''),
+        localPort: Number(r.LocalPort) || 0,
+        remoteAddr: String(r.RemoteAddress || ''),
+        remotePort: Number(r.RemotePort) || 0,
+        state: String(r.State || ''),
         pid,
-        processName,
       })
     }
 
-    return connections
+    const nameMap = await getProcessNamesBatch([...pids])
+
+    return rawRows.map(r => ({
+      localAddress: r.localAddr,
+      localPort: r.localPort,
+      remoteAddress: r.remoteAddr,
+      remotePort: r.remotePort,
+      state: r.state,
+      pid: r.pid,
+      processName: nameMap.get(r.pid) || 'Unknown',
+    }))
   } catch (err) {
     getLogger().error('network-monitor', `Failed to get connections: ${err}`)
     return []

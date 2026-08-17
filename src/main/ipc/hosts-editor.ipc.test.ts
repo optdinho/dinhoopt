@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   },
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
   execFile: vi.fn(),
   isAdmin: vi.fn(),
 }))
@@ -30,6 +31,7 @@ vi.mock('node:fs', () => ({
   existsSync: (...args: unknown[]) => mocks.existsSync?.(...args) ?? true,
   readFileSync: (...args: unknown[]) => mocks.readFileSync(...args),
   writeFileSync: (...args: unknown[]) => mocks.writeFileSync(...args),
+  renameSync: (...args: unknown[]) => mocks.renameSync?.(...args),
 }))
 
 vi.mock('node:child_process', () => ({
@@ -234,6 +236,7 @@ describe('registerHostsEditorIpc', () => {
       })
       expect(result).toEqual({ success: true })
       expect(mocks.writeFileSync).toHaveBeenCalled()
+      expect(mocks.renameSync).toHaveBeenCalled()
     })
 
     it('returns error on write failure', async () => {
