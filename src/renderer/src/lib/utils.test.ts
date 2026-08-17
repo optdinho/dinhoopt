@@ -140,16 +140,39 @@ describe('cn', () => {
 })
 
 describe('formatDuration', () => {
-  it('returns milliseconds for < 1s', () => {
+  it('returns milliseconds for < 1s (no t)', () => {
     expect(formatDuration(500)).toBe('500ms')
   })
 
-  it('returns seconds for < 60s', () => {
+  it('returns seconds for < 60s (no t)', () => {
     expect(formatDuration(1500)).toBe('1.5s')
   })
 
-  it('returns minutes and seconds for >= 60s', () => {
+  it('returns minutes and seconds for >= 60s (no t)', () => {
     expect(formatDuration(125000)).toBe('2m 5s')
     expect(formatDuration(60000)).toBe('1m 0s')
+  })
+
+  it('uses t for milliseconds when provided', () => {
+    const t = vi.fn((key: string, opts?: Record<string, unknown>) => `${key}:${JSON.stringify(opts)}`)
+    expect(formatDuration(500, t)).toBe('cleaner:durationMs:{"count":500}')
+    expect(t).toHaveBeenCalledWith('cleaner:durationMs', { count: 500 })
+  })
+
+  it('uses t for seconds when provided', () => {
+    const t = vi.fn((key: string, opts?: Record<string, unknown>) => `${key}:${JSON.stringify(opts)}`)
+    expect(formatDuration(1500, t)).toBe('cleaner:durationSec:{"count":"1.5"}')
+    expect(t).toHaveBeenCalledWith('cleaner:durationSec', { count: '1.5' })
+  })
+
+  it('uses t for min/sec when provided', () => {
+    const t = vi.fn((key: string, opts?: Record<string, unknown>) => `${key}:${JSON.stringify(opts)}`)
+    expect(formatDuration(125000, t)).toBe('cleaner:durationMinSec:{"min":2,"sec":5}')
+    expect(t).toHaveBeenCalledWith('cleaner:durationMinSec', { min: 2, sec: 5 })
+  })
+
+  it('uses t for 60s boundary', () => {
+    const t = vi.fn((key: string, opts?: Record<string, unknown>) => `${key}:${JSON.stringify(opts)}`)
+    expect(formatDuration(60000, t)).toBe('cleaner:durationMinSec:{"min":1,"sec":0}')
   })
 })

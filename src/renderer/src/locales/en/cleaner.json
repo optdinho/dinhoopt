@@ -69,5 +69,9 @@
   "summaryBreakdown": "Breakdown by Category",
   "summarySkipped": "{{count}} items skipped (in use or protected)",
   "itemsSelected": "items selected",
-  "networkLink": "Network Cleanup"
+  "networkLink": "Network Cleanup",
+  "unknownBinary": "(unknown)",
+  "durationMs": "{{count}}ms",
+  "durationSec": "{{count}}s",
+  "durationMinSec": "{{min}}m {{sec}}s"
 }

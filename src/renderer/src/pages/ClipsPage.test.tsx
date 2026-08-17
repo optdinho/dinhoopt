@@ -234,7 +234,7 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     expect(await screen.findByText('nvenc')).toBeTruthy()
     expect(screen.getByText('h264')).toBeTruthy()
-    expect(screen.getByText('512MB')).toBeTruthy()
+    expect(screen.getByText('512megabytes')).toBeTruthy()
     expect(screen.getByText('Cyberpunk 2077')).toBeTruthy()
     expect(screen.getByText('crashRecovered')).toBeTruthy()
   })

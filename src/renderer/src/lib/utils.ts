@@ -31,13 +31,13 @@ export function formatSpeed(bytesPerSec: number): string {
   return `${Number.parseFloat((bytesPerSec / k ** i).toFixed(1))} ${sizes[i]}`
 }
 
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
+export function formatDuration(ms: number, t?: (key: string, opts?: Record<string, unknown>) => string): string {
+  if (ms < 1000) return t ? t('cleaner:durationMs', { count: ms }) : `${ms}ms`
   const seconds = ms / 1000
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  if (seconds < 60) return t ? t('cleaner:durationSec', { count: seconds.toFixed(1) }) : `${seconds.toFixed(1)}s`
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds % 60)
-  return `${m}m ${s}s`
+  return t ? t('cleaner:durationMinSec', { min: m, sec: s }) : `${m}m ${s}s`
 }
 
 export function formatDate(date: string | Date): string {

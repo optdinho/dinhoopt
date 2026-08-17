@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { TipBadge } from './ClipsConfigQuality'
 import { CollapsibleMini, ToggleItem, TogglePill, VK_MAP, VolumeSlider } from './clips-utils'
 import type { ClipsState } from './useClipsState'
@@ -262,6 +263,7 @@ export function AudioSection({
 }
 
 function AutoCleanupThresholdPicker({ value, onChange }: { value: number; onChange: (gb: number) => void }) {
+  const { t } = useTranslation('clips')
   const presets = [10, 20, 50]
   const isPreset = presets.includes(value)
   const [draft, setDraft] = useState(String(value))

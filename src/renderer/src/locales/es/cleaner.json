@@ -69,5 +69,9 @@
   "summaryBreakdown": "Desglose por categoría",
   "summarySkipped": "{{count}} elementos omitidos (en uso o protegidos)",
   "itemsSelected": "elementos seleccionados",
-  "networkLink": "Limpieza de Red"
+  "networkLink": "Limpieza de Red",
+  "unknownBinary": "(desconocido)",
+  "durationMs": "{{count}}ms",
+  "durationSec": "{{count}}s",
+  "durationMinSec": "{{min}}m {{sec}}s"
 }
