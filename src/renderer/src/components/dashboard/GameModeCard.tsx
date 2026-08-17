@@ -76,7 +76,7 @@ export function GameModeCard({ gameModeActive }: { gameModeActive: boolean }) {
         className="mb-1 text-sm font-bold tracking-[0.2em]"
         style={{ color: gameModeActive ? '#06b6d4' : 'var(--text-muted)' }}
       >
-        GAME MODE
+        {t('gameModeReady')}
       </span>
 
       <button
