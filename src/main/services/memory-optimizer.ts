@@ -139,7 +139,7 @@ public class MemUtil {
     steps.push({ name: 'workingset', success: true, freedBytes: freed })
   } catch (err) {
     getLogger().error('memory', `Working set trimming failed: ${String(err)}`)
-    steps.push({ name: 'workingset', success: true, freedBytes: 0, error: String(err) })
+    steps.push({ name: 'workingset', success: false, freedBytes: 0, error: String(err) })
   }
 
   return {

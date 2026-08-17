@@ -6,8 +6,10 @@ const mocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   hostname: vi.fn(),
+  userInfo: vi.fn(),
   randomBytes: vi.fn(),
   createHash: vi.fn(),
+  getLogger: vi.fn(),
 }))
 
 vi.mock('node-machine-id', () => ({
@@ -22,6 +24,7 @@ vi.mock('node:fs', () => ({
 
 vi.mock('node:os', () => ({
   hostname: (...args: unknown[]) => mocks.hostname(...args),
+  userInfo: (...args: unknown[]) => mocks.userInfo(...args),
 }))
 
 vi.mock('node:crypto', () => ({
@@ -36,6 +39,10 @@ vi.mock('electron', () => ({
   },
 }))
 
+vi.mock('./logger.service', () => ({
+  getLogger: () => mocks.getLogger(),
+}))
+
 import { generateHwid, getHwProfileRaw } from './hwid'
 
 beforeEach(() => {
@@ -44,6 +51,7 @@ beforeEach(() => {
     update: vi.fn().mockReturnThis(),
     digest: vi.fn().mockReturnValue('abcdef1234567890abcdef1234567890'),
   })
+  mocks.getLogger.mockReturnValue({ warning: vi.fn() })
 })
 
 describe('generateHwid', () => {
@@ -84,6 +92,39 @@ describe('generateHwid', () => {
 
     const hwid = await generateHwid()
     expect(hwid).toBe('unknown-hwid')
+  })
+
+  it('logs warning when writeFileSync fails to persist HWID', async () => {
+    mocks.machineId.mockRejectedValue(new Error('not supported'))
+    mocks.existsSync.mockReturnValue(false)
+    mocks.hostname.mockReturnValue('my-pc')
+    mocks.writeFileSync.mockImplementation(() => {
+      throw new Error('disk full')
+    })
+
+    const hwid = await generateHwid()
+    expect(hwid).toBe('abcdef1234567890abcdef1234567890')
+    expect(mocks.getLogger().warning).toHaveBeenCalledWith(
+      'Hwid',
+      expect.stringContaining('Failed to persist fallback HWID'),
+    )
+  })
+
+  it('logs warning when all HWID sources fail', async () => {
+    mocks.machineId.mockRejectedValue(new Error('not supported'))
+    mocks.existsSync.mockImplementation(() => {
+      throw new Error('fs error')
+    })
+    mocks.createHash.mockImplementation(() => {
+      throw new Error('crypto error')
+    })
+
+    const hwid = await generateHwid()
+    expect(hwid).toBe('unknown-hwid')
+    expect(mocks.getLogger().warning).toHaveBeenCalledWith(
+      'Hwid',
+      expect.stringContaining('All HWID sources failed'),
+    )
   })
 })
 

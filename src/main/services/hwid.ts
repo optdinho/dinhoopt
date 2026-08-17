@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { hostname } from 'node:os'
+import { hostname, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
 import { machineId } from 'node-machine-id'
+import { getLogger } from './logger.service'
 
 export async function generateHwid(): Promise<string> {
   try {
@@ -22,7 +23,7 @@ export async function generateHwid(): Promise<string> {
         parts.push(hostname())
       } catch {}
       try {
-        const { username } = require('node:os').userInfo()
+        const { username } = userInfo()
         parts.push(username)
       } catch {}
       try {
@@ -34,10 +35,13 @@ export async function generateHwid(): Promise<string> {
 
       try {
         writeFileSync(hwidFile, hwid, 'utf-8')
-      } catch {}
+      } catch (err) {
+        getLogger().warning('Hwid', `Failed to persist fallback HWID: ${err}`)
+      }
 
       return hwid
-    } catch {
+    } catch (err) {
+      getLogger().warning('Hwid', `All HWID sources failed, using 'unknown-hwid': ${err}`)
       return 'unknown-hwid'
     }
   }

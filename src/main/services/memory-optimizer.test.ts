@@ -283,8 +283,8 @@ describe('optimizeMemory', () => {
     expect(result.steps).toHaveLength(2)
     expect(result.steps[0]!.success).toBe(false)
     expect(result.steps[0]!.error).toContain('PowerShell error')
-    // Step 2 degrades gracefully: success=true, freedBytes=0, error recorded
-    expect(result.steps[1]!.success).toBe(true)
+    // Step 2 now correctly reports success=false on failure (was incorrectly true before)
+    expect(result.steps[1]!.success).toBe(false)
     expect(result.steps[1]!.freedBytes).toBe(0)
     expect(result.steps[1]!.error).toContain('PowerShell error')
   })

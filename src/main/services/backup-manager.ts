@@ -28,7 +28,7 @@ export function backupFile(sourcePath: string): string | null {
 export function getLatestBackup(sourcePath: string): string | null {
   if (!backupDir || !existsSync(backupDir)) return null
   try {
-    const prefix = sourcePath.replace(/[\\/]/g, '_').replace(/:/g, '_')
+    const prefix = sourcePath.replace(/[\\/]/g, '_').replace(/:/g, '')
     const files = readdirSync(backupDir)
       .filter((f) => f.startsWith(prefix) && f.endsWith('.bak'))
       .sort()

@@ -20,12 +20,12 @@ export function createWin32Elevation(): PlatformElevation {
       try {
         const stdout = execFileSync(getWhoamiPath(), ['/groups'], { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 })
         _isAdmin = stdout.includes('S-1-16-12288')
+        _lastCheck = Date.now()
+        return _isAdmin
       } catch {
-        _isAdmin = false
+        // Transient whoami failure: don't cache, retry next call
+        return _isAdmin ?? false
       }
-
-      _lastCheck = Date.now()
-      return _isAdmin
     },
   }
 }

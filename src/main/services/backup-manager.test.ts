@@ -109,17 +109,17 @@ describe('backup-manager', () => {
     it('returns the newest matching backup file', () => {
       initBackupManager()
       mocks.existsSync.mockReturnValue(true)
-      mocks.readdirSync.mockReturnValue(['C__src_file.txt_1.bak', 'C__src_file.txt_2.bak', 'C__src_file.txt_3.bak'])
+      mocks.readdirSync.mockReturnValue(['C_src_file.txt_1.bak', 'C_src_file.txt_2.bak', 'C_src_file.txt_3.bak'])
       const result = getLatestBackup('C:\\src\\file.txt')
-      expect(result).toBe('C:\\Users\\tester\\AppData\\Roaming\\DiNho-Dev\\backups\\C__src_file.txt_3.bak')
+      expect(result).toBe('C:\\Users\\tester\\AppData\\Roaming\\DiNho-Dev\\backups\\C_src_file.txt_3.bak')
     })
 
     it('filters out non-matching and non-.bak files', () => {
       initBackupManager()
       mocks.existsSync.mockReturnValue(true)
-      mocks.readdirSync.mockReturnValue(['C__src_file.txt_1.bak', 'other.txt.bak', 'C__src_other.txt.bak', 'readme'])
+      mocks.readdirSync.mockReturnValue(['C_src_file.txt_1.bak', 'other.txt.bak', 'C_src_other.txt.bak', 'readme'])
       const result = getLatestBackup('C:\\src\\file.txt')
-      expect(result).toContain('C__src_file.txt_1.bak')
+      expect(result).toContain('C_src_file.txt_1.bak')
     })
 
     it('returns null when no backups match', () => {
