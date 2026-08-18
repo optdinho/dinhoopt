@@ -15,8 +15,10 @@ import type {
 
 const execFileAsync = promisify(execFile)
 
-function runPowerShell(script: string): Promise<string> {
-  return execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script]).then((r) => r.stdout)
+function runPowerShell(script: string, timeoutMs = 30_000): Promise<string> {
+  return execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    timeout: timeoutMs,
+  }).then((r) => r.stdout)
 }
 
 function parseProductState(state: number): {
@@ -202,6 +204,19 @@ $net = net accounts
 $minLength = 0; $maxAge = 0; $minAge = 0; $history = 0; $complexity = $false
 $lockThreshold = 0; $lockDuration = 0; $lockWindow = 0
 $helloEnrolled = $false; $helloFace = $false; $helloFinger = $false; $helloPin = $false
+
+# Parse net accounts output
+foreach ($line in $net) {
+  if ($line -match 'Minimum password length:\\s+(\\d+)') { $minLength = [int]$Matches[1] }
+  elseif ($line -match 'Maximum password age \\(days\\):\\s+(\\d+)') { $maxAge = [int]$Matches[1] }
+  elseif ($line -match 'Minimum password age \\(days\\):\\s+(\\d+)') { $minAge = [int]$Matches[1] }
+  elseif ($line -match 'Length of password history maintained:\\s+(\\d+)') { $history = [int]$Matches[1] }
+  elseif ($line -match 'Password complexity meets requirements:\\s+(Yes|No)') { $complexity = $Matches[1] -eq 'Yes' }
+  elseif ($line -match 'Lockout threshold:\\s+(\\d+)') { $lockThreshold = [int]$Matches[1] }
+  elseif ($line -match 'Lockout duration \\(minutes\\):\\s+(\\d+)') { $lockDuration = [int]$Matches[1] }
+  elseif ($line -match 'Lockout observation window \\(minutes\\):\\s+(\\d+)') { $lockWindow = [int]$Matches[1] }
+}
+
 try {
   $hello = Get-WmiObject -Namespace root\\cimv2\\Security\\MicrosoftPassportContainer -Class PassportContainer | Select-Object -First 1
   if ($hello) { $helloEnrolled = $true }
@@ -215,8 +230,8 @@ try {
   if ($pin) { $helloPin = $true }
 } catch {}
 @{
-  minLength = 0; maxAge = 0; minAge = 0; history = 0; complexity = $false
-  lockoutThreshold = 0; lockoutDuration = 0; lockoutWindow = 0
+  minLength = $minLength; maxAge = $maxAge; minAge = $minAge; history = $history; complexity = $complexity
+  lockoutThreshold = $lockThreshold; lockoutDuration = $lockDuration; lockoutWindow = $lockWindow
   helloEnrolled = $helloEnrolled; helloFace = $helloFace; helloFinger = $helloFinger; helloPin = $helloPin
 } | ConvertTo-Json -Compress
 `)

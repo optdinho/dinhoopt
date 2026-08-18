@@ -60,9 +60,12 @@ import {
   stopScheduler,
 } from './services/scheduler'
 import { getSettings } from './services/settings-store'
+import { getThreatIntelService } from './services/threat-intel.service'
+import { stopPeriodicRuleChecks } from './services/yara-rules-store'
 
 process.on('uncaughtException', (err) => {
   getLogger().error('app', `Uncaught exception: ${err.message}`)
+  app.exit(1)
 })
 
 process.on('unhandledRejection', (reason) => {
@@ -164,7 +167,11 @@ function initGui(): void {
     const iconPath = app.isPackaged
       ? join(process.resourcesPath, 'icon.ico')
       : join(__dirname, '../../resources/icon.ico')
-    return nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+    try {
+      return nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+    } catch {
+      return nativeImage.createEmpty()
+    }
   }
 
   const TASK_NAME = 'DiNhoStartup'
@@ -219,7 +226,7 @@ function initGui(): void {
         '</Task>',
       ].join('\r\n')
 
-      const tmpPath = join(app.getPath('temp'), `${TASK_NAME}.xml`)
+      const tmpPath = join(app.getPath('temp'), `${TASK_NAME}-${Date.now()}.xml`)
       const { writeFile, unlink } = await import('node:fs/promises')
       await writeFile(tmpPath, `\uFEFF${xml}`, 'utf-16le')
 
@@ -542,13 +549,17 @@ function initGui(): void {
     })
 
     // Handle scheduled scan completion notification from renderer
-    ipcMain.on(IPC.SCHEDULE_SCAN_COMPLETE, (_event, totalSize: number, itemCount: number) => {
+    ipcMain.on(IPC.SCHEDULE_SCAN_COMPLETE, (_event, totalSize: unknown, itemCount: unknown) => {
+      if (typeof totalSize !== 'number' || typeof itemCount !== 'number') return
+      if (!Number.isFinite(totalSize) || !Number.isFinite(itemCount)) return
       notifyScheduledScanComplete(totalSize, itemCount)
     })
 
     // Handle multi-schedule run completion
     ipcMain.on(IPC.SCHEDULE_RUN_COMPLETE, (_event, scheduleId: unknown, status: unknown) => {
       if (typeof scheduleId !== 'string' || typeof status !== 'string') return
+      const VALID_STATUSES: ScheduleRunStatus[] = ['completed', 'failed', 'cancelled']
+      if (!(VALID_STATUSES as readonly string[]).includes(status)) return
       completeScheduleRun(scheduleId, status as ScheduleRunStatus)
     })
 
@@ -577,6 +588,8 @@ function initGui(): void {
     getLogger().info('app', 'App shutting down')
     stopScheduler()
     stopEngineProcess()
+    stopPeriodicRuleChecks()
+    getThreatIntelService().stopAutoUpdate()
     // Kill any active child processes (reg.exe, cmd.exe, etc.) to prevent orphans
     killAllChildren()
   })
