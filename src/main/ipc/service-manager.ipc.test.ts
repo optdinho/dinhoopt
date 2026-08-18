@@ -912,6 +912,6 @@ describe('registerServiceManagerIpc', () => {
 
     const result = await handler(null, [{ name: 'Svc', targetStartType: 'Disabled' }], true)
 
-    expect(result).toEqual({ succeeded: 1, failed: 0, errors: [] })
+    expect(result).toEqual({ succeeded: 1, failed: 0, errors: [], skippedNames: [], skippedCount: 0 })
   })
 })

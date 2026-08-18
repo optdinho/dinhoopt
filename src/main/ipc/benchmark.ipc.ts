@@ -35,17 +35,17 @@ function sendProgress(win: ReturnType<WindowGetter>, step: number, label: string
   win?.webContents.send(IPC.BENCHMARK_PROGRESS, { step, totalSteps: STEPS.length, label, detail })
 }
 
-let cancelled = false
+let _benchmarkCancelled = false
 
 export function cancelBenchmark(): void {
-  cancelled = true
+  _benchmarkCancelled = true
 }
 
-async function measureCpuUsage(): Promise<number> {
+async function measureCpuUsage(isCancelled: () => boolean): Promise<number> {
   try {
     let total = 0
     for (let i = 0; i < 10; i++) {
-      if (cancelled) return 50
+      if (isCancelled()) return 50
       const { stdout } = await execFileAsync(
         'powershell.exe',
         [
@@ -89,12 +89,12 @@ async function measureRam(): Promise<{ free: number; total: number }> {
   }
 }
 
-async function measurePing(): Promise<{ avg: number; jitter: number }> {
+async function measurePing(isCancelled: () => boolean): Promise<{ avg: number; jitter: number }> {
   try {
     let total = 0
     const times: number[] = []
     for (let i = 0; i < 10; i++) {
-      if (cancelled) return { avg: 100, jitter: 0 }
+      if (isCancelled()) return { avg: 100, jitter: 0 }
       const { stdout } = await execFileAsync('ping', ['-n', '1', '-w', '3000', '8.8.8.8'], {
         timeout: 5000,
         windowsHide: true,
@@ -116,11 +116,11 @@ async function measurePing(): Promise<{ avg: number; jitter: number }> {
   }
 }
 
-async function measureDpcLatency(): Promise<number> {
+async function measureDpcLatency(isCancelled: () => boolean): Promise<number> {
   try {
     let maxLatency = 0
     for (let i = 0; i < 3; i++) {
-      if (cancelled) return 1000
+      if (isCancelled()) return 1000
       const { stdout } = await execFileAsync(
         'powershell.exe',
         [
@@ -258,7 +258,7 @@ export function scorePowerBonus(plan: string): number {
 
 export function registerBenchmarkIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BENCHMARK_RUN, async () => {
-    cancelled = false
+    _benchmarkCancelled = false
     getLogger().info('benchmark', 'Starting benchmark...')
     const win = getWindow()
     sendProgress(win, 0, STEPS[0]?.label ?? '', STEPS[0]?.detail ?? '')
@@ -266,7 +266,7 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
 
     // CPU
     sendProgress(win, 1, STEPS[1]?.label ?? '', STEPS[1]?.detail ?? '')
-    const cpuUsage = await measureCpuUsage()
+    const cpuUsage = await measureCpuUsage(() => _benchmarkCancelled)
     const cpuScore = scoreCpu(cpuUsage)
     const cpuDetail = `Uso médio: ${cpuUsage.toFixed(1)}%`
 
@@ -279,13 +279,13 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
 
     // Network
     sendProgress(win, 3, STEPS[3]?.label ?? '', STEPS[3]?.detail ?? '')
-    const { avg: pingAvg, jitter } = await measurePing()
+    const { avg: pingAvg, jitter } = await measurePing(() => _benchmarkCancelled)
     const netScore = scoreNetwork(pingAvg, jitter)
     const netDetail = `Ping médio: ${pingAvg}ms, Jitter: ${jitter}ms`
 
     // DPC
     sendProgress(win, 4, STEPS[4]?.label ?? '', STEPS[4]?.detail ?? '')
-    const dpc = await measureDpcLatency()
+    const dpc = await measureDpcLatency(() => _benchmarkCancelled)
     const dpcScore = scoreDpc(dpc)
     const dpcDetail = `Latência DPC: ${dpc}µs`
 
@@ -338,7 +338,7 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(IPC.BENCHMARK_CANCEL, () => {
     getLogger().info('benchmark', 'Benchmark cancelled by user')
-    cancelled = true
+    _benchmarkCancelled = true
   })
 }
 

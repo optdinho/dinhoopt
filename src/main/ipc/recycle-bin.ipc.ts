@@ -11,12 +11,11 @@ import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 
-// Windows: track last scanned size (virtual items have no real path)
-let lastScannedSize = 0
-// macOS/Linux: track last scanned item IDs for cleanItems()
-let lastScannedItemIds: string[] = []
-
 export function registerRecycleBinIpc(): void {
+  // Per-invocation state — scoped to closure so no external mutation
+  let lastScannedSize = 0
+  let lastScannedItemIds: string[] = []
+
   ipcMain.handle(IPC.RECYCLE_BIN_SCAN, async (): Promise<ScanResult[]> => {
     getLogger().info('recycle-bin', 'Scanning recycle bin')
     const trashPath = getPlatform().paths.trashPath()

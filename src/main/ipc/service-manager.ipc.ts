@@ -214,10 +214,13 @@ export async function applyServiceChanges(
     }
   }
 
-  // Validate — reject unsafe services unless forced
+  // Validate — partition into valid vs skipped (unsafe without force)
+  const skippedNames: string[] = []
   const validChanges = changes.filter((c) => {
     const kb = lookupServiceSafety(c.name)
-    return kb.safety !== 'unsafe' || force === true
+    if (kb.safety !== 'unsafe' || force === true) return true
+    skippedNames.push(c.name)
+    return false
   })
 
   // Build a single PowerShell script for all changes
@@ -279,8 +282,11 @@ try {
     })
   }
 
-  getLogger().success('service-manager', `Applied: ${succeeded} succeeded, ${failed} failed`)
-  return { succeeded, failed, errors }
+  getLogger().success(
+    'service-manager',
+    `Applied: ${succeeded} succeeded, ${failed} failed, ${skippedNames.length} skipped`,
+  )
+  return { succeeded, failed, errors, skippedNames, skippedCount: skippedNames.length }
 }
 
 // ── Registration ─────────────────────────────────────────────

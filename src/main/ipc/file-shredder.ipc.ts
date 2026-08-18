@@ -9,8 +9,6 @@ import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
 import { validateSender } from './sender-validation'
 
-let cancelled = false
-
 // ── Safety: paths we must never shred ──
 
 const PROTECTED_WIN32 = [
@@ -94,7 +92,7 @@ function sendProgress(win: BrowserWindow | null, data: ShredderProgress): void {
  * Uses lstat to avoid following symlinks.  Checks the module-level
  * `cancelled` flag between chunks so large files can be interrupted.
  */
-async function shredFile(filePath: string): Promise<void> {
+async function shredFile(filePath: string, isCancelled: () => boolean): Promise<void> {
   const stats = await lstat(filePath)
   if (stats.isSymbolicLink() || !stats.isFile() || stats.size === 0) return
 
@@ -105,7 +103,7 @@ async function shredFile(filePath: string): Promise<void> {
     // Pass 1: random data
     let offset = 0
     while (offset < size) {
-      if (cancelled) return
+      if (isCancelled()) return
       const len = Math.min(CHUNK, size - offset)
       await fh.write(randomBytes(len), 0, len, offset)
       offset += len
@@ -116,7 +114,7 @@ async function shredFile(filePath: string): Promise<void> {
     const zeroBuf = Buffer.alloc(Math.min(CHUNK, size))
     offset = 0
     while (offset < size) {
-      if (cancelled) return
+      if (isCancelled()) return
       const len = Math.min(CHUNK, size - offset)
       await fh.write(zeroBuf, 0, len, offset)
       offset += len
@@ -210,6 +208,8 @@ async function getEntrySize(entryPath: string, depth = 0): Promise<number> {
 }
 
 export function registerFileShredderIpc(getWindow: WindowGetter): void {
+  let cancelled = false
+
   ipcMain.handle(IPC.SHREDDER_SELECT_FILES, async () => {
     getLogger().info('file-shredder', 'Opening file selection dialog')
     const win = getWindow()
@@ -382,7 +382,7 @@ export function registerFileShredderIpc(getWindow: WindowGetter): void {
       }
 
       try {
-        await shredFile(filePath)
+        await shredFile(filePath, () => cancelled)
         await rm(filePath, { force: true })
         const fileSize = fileSizes.get(filePath) || 0
         bytesShredded += fileSize

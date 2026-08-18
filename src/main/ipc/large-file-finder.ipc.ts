@@ -13,8 +13,6 @@ import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
 
-let cancelled = false
-
 function sendProgress(win: BrowserWindow | null, data: LargeFileScanProgress): void {
   if (win && !win.isDestroyed()) {
     win.webContents.send(IPC.LARGE_FILES_PROGRESS, data)
@@ -29,8 +27,9 @@ async function walkDirectory(
   counters: { scanned: number },
   win: BrowserWindow | null,
   lastReport: { time: number },
+  isCancelled: () => boolean,
 ): Promise<void> {
-  if (cancelled) return
+  if (isCancelled()) return
   if (depth > options.maxDepth) return
 
   let entries: import('node:fs').Dirent[]
@@ -41,7 +40,7 @@ async function walkDirectory(
   }
 
   for (const entry of entries) {
-    if (cancelled) return
+    if (isCancelled()) return
 
     const fullPath = join(dirPath, entry.name)
 
@@ -53,7 +52,7 @@ async function walkDirectory(
       )
       if (shouldExclude) continue
 
-      await walkDirectory(fullPath, options, depth + 1, files, counters, win, lastReport)
+      await walkDirectory(fullPath, options, depth + 1, files, counters, win, lastReport, isCancelled)
     } else if (entry.isFile()) {
       try {
         const s = await stat(fullPath)
@@ -87,6 +86,7 @@ async function walkDirectory(
 }
 
 export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
+  let cancelled = false
   ipcMain.handle(IPC.LARGE_FILES_SELECT_DIR, async () => {
     getLogger().info('large-file-finder', 'Opening directory picker')
     const win = getWindow()
@@ -137,7 +137,6 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
     }
 
     // Verify the root directory is readable before starting the walk.
-    // Verify the root directory is readable before starting the walk.
     try {
       await readdir(safeOptions.directory)
     } catch (err) {
@@ -156,7 +155,7 @@ export function registerLargeFileFinderIpc(getWindow: WindowGetter): void {
     const files: LargeFileEntry[] = []
     const counters = { scanned: 0 }
     const lastReport = { time: Date.now() }
-    await walkDirectory(safeOptions.directory, safeOptions, 0, files, counters, win, lastReport)
+    await walkDirectory(safeOptions.directory, safeOptions, 0, files, counters, win, lastReport, () => cancelled)
 
     // Sort by size descending
     files.sort((a, b) => b.size - a.size)

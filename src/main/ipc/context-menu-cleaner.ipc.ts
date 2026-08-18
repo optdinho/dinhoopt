@@ -1,9 +1,14 @@
 import { IPC } from '@shared/channels'
-import type { ContextMenuApplyRequest, ContextMenuApplyResult, ContextMenuScanResult } from '@shared/types'
+import type {
+  ContextMenuApplyRequest,
+  ContextMenuApplyResult,
+  ContextMenuEntry,
+  ContextMenuScanResult,
+} from '@shared/types'
 import { ipcMain } from 'electron'
 import { getLogger } from '../services/logger.service'
 import { applyContextMenu } from './context-menu-cleaner/context-menu-fix'
-import { scanContextMenu, scanSession } from './context-menu-cleaner/context-menu-scan'
+import { scanContextMenu } from './context-menu-cleaner/context-menu-scan'
 import type { WindowGetter } from './index'
 
 // ── Re-export for tests ─────────────────────────────────────────────
@@ -24,10 +29,6 @@ export {
   scanContextMenu,
 } from './context-menu-cleaner/context-menu-scan'
 
-// ── Cancellable scan state ──────────────────────────────────────────
-
-let scanAbort: AbortController | null = null
-
 // ── IPC registration ─────────────────────────────────────────────────
 
 function isApplyRequestArray(input: unknown): input is ContextMenuApplyRequest[] {
@@ -43,6 +44,10 @@ function isApplyRequestArray(input: unknown): input is ContextMenuApplyRequest[]
 }
 
 export function registerContextMenuCleanerIpc(getWindow: WindowGetter): void {
+  // ── Closure-scoped state (per-registration, isolated from concurrent calls) ──
+  let scanAbort: AbortController | null = null
+  const scanSession: Map<string, ContextMenuEntry> = new Map()
+
   ipcMain.handle(IPC.CONTEXT_MENU_SCAN, async (): Promise<ContextMenuScanResult> => {
     if (process.platform !== 'win32') {
       return { entries: [], scanDuration: 0, scanned: 0 }

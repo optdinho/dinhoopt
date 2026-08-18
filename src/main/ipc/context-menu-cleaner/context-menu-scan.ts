@@ -22,14 +22,6 @@ import {
 
 export { SCAN_ROOTS, type ScanRoot }
 
-// ── Cancellable scan state ──────────────────────────────────────────
-
-const _scanAbort: AbortController | null = null
-
-// Session-scoped scan results so apply looks entries up by trusted in-memory
-// state rather than renderer-supplied paths.
-export const scanSession = new Map<string, ContextMenuEntry>()
-
 // ── Pure helpers (exported for tests) ───────────────────────────────
 
 const HIVE_ALIASES: Record<string, ContextMenuHive | null> = {

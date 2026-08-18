@@ -274,6 +274,8 @@ export interface ServiceApplyResult {
   succeeded: number
   failed: number
   errors: { name: string; displayName: string; reason: string }[]
+  skippedNames?: string[]
+  skippedCount?: number
 }
 
 export interface ServiceScanProgress {

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
@@ -198,11 +198,11 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
       const timeout = setTimeout(() => {
         logger.error('winsxs-cleaner', 'DISM cleanup timed out after 10 minutes — killing process')
         child.kill()
-        // Give it a moment to die, then force-kill via taskkill
+        // Give it a moment to die, then force-kill the whole process tree via taskkill
         setTimeout(() => {
           if (child.killed || child.exitCode !== null) return
           try {
-            child.kill()
+            execSync(`taskkill /T /F /PID ${child.pid}`, { windowsHide: true })
           } catch {
             /* already dead */
           }
