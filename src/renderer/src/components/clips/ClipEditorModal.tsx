@@ -1,8 +1,14 @@
 import type { ClipInfo, ClipMergeResult, ClipTrimResult, EnhanceOption } from '@shared/types'
 import { Combine, Maximize, Minimize, Pause, Play, Scissors, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+
+const fmt = (s: number) => {
+  const m = Math.floor(s / 60)
+  const sec = Math.floor(s % 60)
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
 
 interface ClipEditorModalProps {
   clip?: ClipInfo
@@ -103,12 +109,6 @@ function TrimTimeline({
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState<'seek' | 'start' | 'end' | null>(null)
-
-  const fmt = (s: number) => {
-    const m = Math.floor(s / 60)
-    const sec = Math.floor(s % 60)
-    return `${m}:${sec.toString().padStart(2, '0')}`
-  }
 
   const adjustStart = (delta: number) => {
     onStartChange(Math.max(0, Math.min(endSec - 0.1, startSec + delta)))
@@ -316,6 +316,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  const lastTimeUpdateRef = useRef(0)
 
   useEffect(() => {
     mountedRef.current = true
@@ -338,22 +339,16 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
     }
   }, [])
 
-  const videoUrl = clip ? window.dinho.clipsGetVideoUrl(clip.path) : ''
+  const videoUrl = useMemo(() => (clip ? window.dinho.clipsGetVideoUrl(clip.path) : ''), [clip])
 
   const showTrim = clip && !initialMergePaths
 
-  const fmt = (s: number) => {
-    const m = Math.floor(s / 60)
-    const sec = Math.floor(s % 60)
-    return `${m}:${sec.toString().padStart(2, '0')}`
-  }
-
-  const seekTo = (seconds: number) => {
+  const seekTo = useCallback((seconds: number) => {
     const vid = videoRef.current
     if (vid) vid.currentTime = seconds
-  }
+  }, [])
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     const vid = videoRef.current
     if (!vid) return
     if (vid.paused) {
@@ -365,15 +360,20 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
       vid.pause()
       setPlaying(false)
     }
-  }
+  }, [])
 
-  const showOverlayTemporarily = () => {
+  const lastOverlayThrottleRef = useRef(0)
+
+  const showOverlayTemporarily = useCallback(() => {
+    const now = Date.now()
+    if (now - lastOverlayThrottleRef.current < 100) return
+    lastOverlayThrottleRef.current = now
     setShowOverlay(true)
     if (overlayTimer.current) clearTimeout(overlayTimer.current)
     if (fullscreen) {
       overlayTimer.current = setTimeout(() => setShowOverlay(false), 2500)
     }
-  }
+  }, [fullscreen])
 
   useEffect(() => {
     const cb = () => setFullscreen(!!document.fullscreenElement)
@@ -406,7 +406,7 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
     return () => window.removeEventListener('keydown', onKey)
   }, [showTrim, currentTime, endSec, startSec, effectiveDuration])
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       containerRef.current
         ?.requestFullscreen()
@@ -418,7 +418,31 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
         .then(() => setFullscreen(false))
         .catch(() => {})
     }
-  }
+  }, [])
+
+  const handleSeek = useCallback(
+    (s: number) => {
+      setCurrentTime(s)
+      seekTo(s)
+    },
+    [seekTo],
+  )
+
+  const handleStartChange = useCallback(
+    (s: number) => {
+      setStartSec(s)
+      seekTo(s)
+    },
+    [seekTo],
+  )
+
+  const handleEndChange = useCallback(
+    (s: number) => {
+      setEndSec(s)
+      seekTo(s)
+    },
+    [seekTo],
+  )
 
   const handleTrim = async () => {
     if (endSec <= startSec || startSec < 0 || endSec > effectiveDuration) {
@@ -576,7 +600,13 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                     onPlay={() => setPlaying(true)}
                     onPause={() => setPlaying(false)}
                     onTimeUpdate={() => {
-                      if (videoRef.current) setCurrentTime(videoRef.current.currentTime)
+                      if (videoRef.current) {
+                        const t = videoRef.current.currentTime
+                        if (t - lastTimeUpdateRef.current > 0.016) {
+                          lastTimeUpdateRef.current = t
+                          setCurrentTime(t)
+                        }
+                      }
                     }}
                     onError={() => toast.error(t('videoPreviewFailed'))}
                     preload="auto"
@@ -600,18 +630,9 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       ariaLabel={t('trim')}
                       startLabel={t('start')}
                       endLabel={t('end')}
-                      onSeek={(s) => {
-                        setCurrentTime(s)
-                        seekTo(s)
-                      }}
-                      onStartChange={(s) => {
-                        setStartSec(s)
-                        seekTo(s)
-                      }}
-                      onEndChange={(s) => {
-                        setEndSec(s)
-                        seekTo(s)
-                      }}
+                      onSeek={handleSeek}
+                      onStartChange={handleStartChange}
+                      onEndChange={handleEndChange}
                     />
                     <div
                       className="flex items-center gap-3 px-4 py-4"
@@ -646,18 +667,9 @@ export function ClipEditorModal({ clip, initialMergePaths, onClose, onSave }: Cl
                       ariaLabel={t('trim')}
                       startLabel={t('start')}
                       endLabel={t('end')}
-                      onSeek={(s) => {
-                        setCurrentTime(s)
-                        seekTo(s)
-                      }}
-                      onStartChange={(s) => {
-                        setStartSec(s)
-                        seekTo(s)
-                      }}
-                      onEndChange={(s) => {
-                        setEndSec(s)
-                        seekTo(s)
-                      }}
+                      onSeek={handleSeek}
+                      onStartChange={handleStartChange}
+                      onEndChange={handleEndChange}
                     />
                     <div className="flex items-center gap-2 px-1 py-1.5">
                       <button type="button" onClick={togglePlay} className="rounded p-0.5 hover:bg-white/10">
