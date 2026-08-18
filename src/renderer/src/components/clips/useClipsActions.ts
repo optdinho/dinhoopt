@@ -171,7 +171,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         toast.error(String(err))
       }
     },
-    [refreshClips],
+    [refreshClips, t],
   )
 
   const handleOpenClip = useCallback(async (path: string) => {

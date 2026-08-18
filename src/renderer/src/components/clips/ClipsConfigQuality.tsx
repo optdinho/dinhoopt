@@ -44,7 +44,11 @@ export function QualitySection({
   const replayPresets = [30, 120, 300]
   const isCustomReplay = !replayPresets.includes(config.replayTimeSeconds)
   const formatReplay = (s: number) =>
-    s < 60 ? `${s}${t('s')}` : s % 60 === 0 ? `${s / 60}${t('min')}` : `${Math.floor(s / 60)}${t('min')} ${s % 60}${t('s')}`
+    s < 60
+      ? `${s}${t('s')}`
+      : s % 60 === 0
+        ? `${s / 60}${t('min')}`
+        : `${Math.floor(s / 60)}${t('min')} ${s % 60}${t('s')}`
   return (
     <div className="space-y-3">
       {/* Quick Preset */}
