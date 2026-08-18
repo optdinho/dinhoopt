@@ -1,0 +1,18 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "ms-dotnettools.csdevkit",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "vitest.explorer",
+    "ms-vscode.powershell",
+    "ms-playwright.playwright",
+    "christian-kohler.path-intellisense",
+    "mikestead.dotenv",
+    "streetsidesoftware.code-spell-checker"
+  ],
+  "unwantedRecommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ]
+}
