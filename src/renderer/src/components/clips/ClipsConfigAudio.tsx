@@ -183,7 +183,8 @@ export function AudioSection({
                 color: (config.audioSampleRate ?? 48000) === rate ? '#fff' : 'var(--text-primary)',
               }}
             >
-              {rate / 1000}{t('kilohertz')}
+              {rate / 1000}
+              {t('kilohertz')}
             </button>
           ))}
         </div>
@@ -227,7 +228,12 @@ export function AudioSection({
             onToggle={() => handleConfigUpdate({ autoCleanupEnabled: !(config.autoCleanupEnabled ?? true) })}
           />
         </div>
-        {(config.autoCleanupEnabled ?? true) && <AutoCleanupThresholdPicker value={config.autoCleanupThresholdGB ?? 20} onChange={(gb) => handleConfigUpdate({ autoCleanupThresholdGB: gb })} />}
+        {(config.autoCleanupEnabled ?? true) && (
+          <AutoCleanupThresholdPicker
+            value={config.autoCleanupThresholdGB ?? 20}
+            onChange={(gb) => handleConfigUpdate({ autoCleanupThresholdGB: gb })}
+          />
+        )}
       </div>
 
       {/* Microphone Device Selector */}
