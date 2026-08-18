@@ -35,6 +35,10 @@ parse_failures.py
 remaining_errors.txt
 test_output.txt
 tmp_lint.json
+test-results.txt
+
+# Electron-vite temp configs
+electron.vite.config.*.mjs
 
 # Build artifacts
 resources/clips-engine-staging/
