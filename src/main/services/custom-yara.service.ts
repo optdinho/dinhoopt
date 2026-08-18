@@ -31,8 +31,7 @@ export class CustomYaraService {
     return files.map((name) => {
       const fullPath = join(this.customRulesDir, name)
       const content = readFileSync(fullPath, 'utf-8')
-      const stat = existsSync(fullPath) ? readFileSync(fullPath).length : 0
-      return { name, content, size: stat || content.length, addedAt: new Date() }
+      return { name, content, size: Buffer.byteLength(content, 'utf-8'), addedAt: new Date() }
     })
   }
 

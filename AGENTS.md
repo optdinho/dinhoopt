@@ -4497,3 +4497,62 @@ ative\ ~1,4GB no platao estavel (WGC TexturePool/NVENC surfaces) e pico managed 
 - `dinho-clips-poc/src/DiNho.Capture.Poc/EngineCoordinator.Capture.cs`: seam `ReadGcBreakdown` (apos `DeriveFootprint`) + tick `[RAM]` com `lohMb`/`gen2Mb`/`gen01Mb`/`committedMb`/`pinnedMb` + Log.I estendido
 - `dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/EngineCoordinatorCaptureTests.cs`: 2 testes novos (`ReadGcBreakdown_CallsAllDelegates`, `ReadGcBreakdown_ConvertsBytesToMb`)
 - `AGENTS.md`: resumo de sessao
+
+## Session Summary (2026-08-17 — G2 completa + nested button fix + G3 plan)
+
+### Done
+
+- **Série G2 completa (14 commits)**: i18n completa da UI do renderer — routes, clips, dashboard, utils todos localizados em en/pt/es. Commits `1c85080` → `0366908`.
+- **Nested button fix** (commit `93af9cf`): `ConfigSection` header `<button>` → `<div role="button" tabIndex={0}>` com `onKeyDown` Enter/Space. Biome lint clean. Sem testes de clips para regressar (arquivos não existem).
+- **Dead preload code** (`src/preload/api/`) já removido — zero arquivos restantes.
+- **WORK-STATE.md** atualizado: HEAD `0366908` → `93af9cf`.
+
+### Key Decisions
+
+- `/about` route usa `aboutUpdates` key (não `about`) no sidebar.json
+- `clips.json` usa namespace `'clips'` via `useTranslation('clips')`
+- Nested button: `<div role="button">` sobre `<button>` — evita aninhamento `<button>` dentro de `<button>` pai
+
+### Relevant Files Changed
+
+- `src/renderer/src/components/clips/clips-utils.tsx`: nested button fix
+- `WORK-STATE.md`: HEAD atualizado
+
+## G3 Plan — Varredura de Bugs e Inconsistências no Backend (`src/main/`)
+
+### Escopo
+
+Scan completo do backend cobrindo todos os módulos sob `src/main/`:
+
+| Domínio | Caminho | Arquivos (aprox) |
+|---------|---------|-------------------|
+| IPC handlers | `src/main/ipc/` | 40+ `.ipc.ts` + `.test.ts` |
+| Services | `src/main/services/` | 50+ `.ts` + `.test.ts` |
+| CLI | `src/main/cli/` | router + 14+ command files |
+| Rules | `src/main/rules/` | rule definition files |
+| Platform | `src/main/platform/` | platform-specific code |
+| Constants | `src/main/constants/` | shared constants |
+| Entry | `src/main/index.ts` | Electron main process |
+
+### Tipos de Verificação por Arquivo
+
+Para **cada módulo** (IPC handler, service, CLI command):
+
+1. **Error handling**: try/catch engole exceção silenciosamente? Loga sem contexto? Falta cleanup no catch?
+2. **Input validation**: validação de input antes de operações? Path traversal? Injeção de comandos?
+3. **Race conditions**: locks/semaphores corretos? Estado compartilhado protegido? Async sem await?
+4. **Resource leaks**: handles não dispostos? Listeners não removidos? Streams abertas?
+5. **Dead code**: funções/métodos não chamados? Imports não usados? Branches inalcançáveis?
+6. **Type safety**: `any` types? Casts inseguros? Null checks faltando?
+7. **Consistency**: padrão de retorno uniforme? Erros retornados vs lançados? Logging consistente?
+8. **Test coverage**: testes existem? Cobrem edge cases? Mocks corretos?
+
+### Execução
+
+Cada item será registrado como achado (severity: CRITICAL/HIGH/MEDIUM/LOW) com:
+- Arquivo + linha
+- Descrição do problema
+- Sugestão de fix
+- Esforço estimado
+
+Correções delegadas via `cavecrew-builder` para fixes isolados (1-2 arquivos) ou execução direta para fixes triviais.

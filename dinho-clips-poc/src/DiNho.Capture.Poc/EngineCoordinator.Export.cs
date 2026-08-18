@@ -198,16 +198,17 @@ public sealed partial class EngineCoordinator
                 return;
 
             var dir = GetOutputDirectory();
-            var thresholdBytes = (long)_config.Config.AutoCleanupThresholdGB * 1024 * 1024 * 1024;
+            var thresholdBytes = (long)_config.Config.AutoCleanupThresholdGB * 1024L * 1024L * 1024L;
 
-            // Calcula tamanho total dos clips
-            var favoriteMarkers = new HashSet<string>(
-                Directory.GetFiles(dir, "*.favorite"),
+            // Coleta nomes de clips favoritados (extrai nome do marker: .NomeClip.favorite → NomeClip)
+            var favoriteNames = new HashSet<string>(
+                Directory.GetFiles(dir, "*.favorite")
+                    .Select(p => Path.GetFileNameWithoutExtension(p).TrimStart('.')),
                 StringComparer.OrdinalIgnoreCase);
 
             var files = Directory.GetFiles(dir, "*.mp4")
                 .Select(f => new FileInfo(f))
-                .Where(f => !favoriteMarkers.Contains(Path.GetFileNameWithoutExtension(f.Name)))
+                .Where(f => !favoriteNames.Contains(Path.GetFileNameWithoutExtension(f.Name)))
                 .OrderBy(f => f.CreationTime)
                 .ToList();
 
@@ -215,7 +216,8 @@ public sealed partial class EngineCoordinator
             if (totalBytes <= thresholdBytes)
                 return;
 
-            long targetBytes = (long)(_config.Config.AutoCleanupThresholdGB * 0.9) * 1024 * 1024 * 1024; // Limpa até 90% do limite
+            long targetBytes = (long)(_config.Config.AutoCleanupThresholdGB * 0.9) * 1024L * 1024L * 1024L; // Limpa até 90% do limite
+            int count = 0;
             long deleted = 0;
             foreach (var file in files)
             {
@@ -225,12 +227,13 @@ public sealed partial class EngineCoordinator
                 {
                     file.Delete();
                     deleted += file.Length;
+                    count++;
                 }
                 catch { }
             }
 
             if (deleted > 0)
-                Log.E("Cleanup", $"Removidos {deleted / (1024 * 1024)} MB em clips antigos (limite={_config.Config.AutoCleanupThresholdGB}GB)");
+                Log.W("Cleanup", $"Removidos {count} clips ({deleted / (1024 * 1024)} MB) — limite={_config.Config.AutoCleanupThresholdGB}GB");
         }
         catch { }
     }

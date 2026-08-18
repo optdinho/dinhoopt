@@ -172,7 +172,7 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(IPC.CLIPS_LIST_CLIPS, async (): Promise<ClipInfo[]> => {
     invalidateClipsCache()
-    return await readClipsFromDisk()
+    return readClipsFromDisk()
   })
 
   ipcMain.handle(IPC.CLIPS_GET_DURATIONS, async (_event, paths: unknown): Promise<Record<string, number>> => {

@@ -82,7 +82,7 @@ export const config: ConfigState = {
   noiseSuppression: false,
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
-  autoCleanupThresholdGB: 20,
+  autoCleanupThresholdGB: 100,
   adaptiveQuality: true,
   stretchToFit: false,
   replayBufferMode: 'ram',
@@ -214,7 +214,7 @@ export function loadPersistedClipsConfig(): void {
   config.replayBufferMode = saved.replayBufferMode ?? 'ram'
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
-  config.autoCleanupThresholdGB = saved.autoCleanupThresholdGB ?? 20
+  config.autoCleanupThresholdGB = saved.autoCleanupThresholdGB ?? 100
   config.hotkeys = saved.hotkeys
   config.outputDirectory = saved.outputDirectory
   config.engineReplayTimeSeconds = saved.replayTimeSeconds

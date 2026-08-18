@@ -48,17 +48,13 @@ describe('ffmpeg-path', () => {
 
     it('falls back to common install dirs when not in PATH', () => {
       process.env.ProgramFiles = 'C:\\Program Files'
-      existsSyncMock.mockImplementation(
-        (p: unknown) => p === 'C:\\Program Files\\FFmpeg\\bin\\ffmpeg.exe',
-      )
+      existsSyncMock.mockImplementation((p: unknown) => p === 'C:\\Program Files\\FFmpeg\\bin\\ffmpeg.exe')
       expect(resolveFfmpegOrNull()).toBe('C:\\Program Files\\FFmpeg\\bin\\ffmpeg.exe')
     })
 
     it('finds both candidates in a dir', () => {
       process.env.ProgramFiles = 'C:\\Program Files'
-      existsSyncMock.mockImplementation(
-        (p: unknown) => p === 'C:\\Program Files\\ffmpeg\\bin\\ffmpeg',
-      )
+      existsSyncMock.mockImplementation((p: unknown) => p === 'C:\\Program Files\\ffmpeg\\bin\\ffmpeg')
       expect(resolveFfmpegOrNull()).toBe('C:\\Program Files\\ffmpeg\\bin\\ffmpeg')
     })
 

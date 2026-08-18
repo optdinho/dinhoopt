@@ -44,6 +44,9 @@ const mocks = vi.hoisted(() => {
     registerLoggerIpc: vi.fn(),
     registerHostsEditorIpc: vi.fn(),
     registerWinSxSCleanerIpc: vi.fn(),
+    registerNetworkMonitorIpc: vi.fn(),
+    registerAppInstallerIpc: vi.fn(),
+    registerClipsIpc: vi.fn(),
   }
   const ipcHandle = vi.fn()
   const ipcOn = vi.fn()
@@ -298,16 +301,22 @@ vi.mock('./hosts-editor.ipc', () => ({
 vi.mock('./winsxs-cleaner.ipc', () => ({
   registerWinSxSCleanerIpc: (...a: unknown[]) => mocks.registerFns.registerWinSxSCleanerIpc(...a),
 }))
+vi.mock('./network-monitor.ipc', () => ({
+  registerNetworkMonitorIpc: (...a: unknown[]) => mocks.registerFns.registerNetworkMonitorIpc(...a),
+}))
+vi.mock('./app-installer.ipc', () => ({
+  registerAppInstallerIpc: (...a: unknown[]) => mocks.registerFns.registerAppInstallerIpc(...a),
+}))
+vi.mock('./network-cleanup.ipc', () => ({
+  registerNetworkCleanupIpc: (...a: unknown[]) => mocks.registerFns.registerNetworkCleanupIpc(...a),
+}))
 
-// No-arg functions (14 total)
+// No-arg functions
 vi.mock('./recycle-bin.ipc', () => ({
   registerRecycleBinIpc: (...a: unknown[]) => mocks.registerFns.registerRecycleBinIpc(...a),
 }))
 vi.mock('./startup-manager.ipc', () => ({
   registerStartupManagerIpc: (...a: unknown[]) => mocks.registerFns.registerStartupManagerIpc(...a),
-}))
-vi.mock('./network-cleanup.ipc', () => ({
-  registerNetworkCleanupIpc: (...a: unknown[]) => mocks.registerFns.registerNetworkCleanupIpc(...a),
 }))
 vi.mock('./startup-safety.ipc', () => ({
   registerStartupSafetyIpc: (...a: unknown[]) => mocks.registerFns.registerStartupSafetyIpc(...a),
@@ -326,6 +335,9 @@ vi.mock('./logger.ipc', () => ({ registerLoggerIpc: (...a: unknown[]) => mocks.r
 vi.mock('./game-mode.ipc', () => ({
   registerGameModeIpc: (...a: unknown[]) => mocks.registerFns.registerGameModeIpc(...a),
   refreshGameDetector: (...a: unknown[]) => mocks.refreshGameDetector(...a),
+}))
+vi.mock('./clips.ipc', () => ({
+  registerClipsIpc: (...a: unknown[]) => mocks.registerFns.registerClipsIpc(...a),
 }))
 
 import { registerCleanerIpc } from './index'
@@ -378,19 +390,22 @@ describe('registerCleanerIpc', () => {
       'registerBenchmarkIpc',
       'registerHostsEditorIpc',
       'registerWinSxSCleanerIpc',
+      'registerNetworkMonitorIpc',
+      'registerAppInstallerIpc',
       'registerNetworkCleanupIpc',
+      'registerStartupManagerIpc',
     ]
     const withoutArgs: Array<keyof typeof mocks.registerFns> = [
       'registerRecycleBinIpc',
-      'registerStartupManagerIpc',
       'registerStartupSafetyIpc',
       'registerProgramSafetyIpc',
       'registerLicenseIpc',
       'registerPowerPlansIpc',
       'registerLoggerIpc',
+      'registerClipsIpc',
     ]
 
-    it('calls all 41 register*Ipc functions with correct arguments', () => {
+    it('calls all 44 register*Ipc functions with correct arguments', () => {
       registerCleanerIpc(getWindow)
 
       for (const f of withGetWindow) {

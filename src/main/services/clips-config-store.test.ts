@@ -196,7 +196,7 @@ describe('clips-config-store', () => {
     expect(callArg.gameVolume).toBe(1.0)
     expect(callArg.micVolume).toBe(1.0)
     expect(callArg.autoCleanupEnabled).toBe(true)
-    expect(callArg.autoCleanupThresholdGB).toBe(20)
+    expect(callArg.autoCleanupThresholdGB).toBe(100)
     expect(callArg.adaptiveQuality).toBe(true)
     expect(callArg.replayBufferMode).toBe('ram')
   })

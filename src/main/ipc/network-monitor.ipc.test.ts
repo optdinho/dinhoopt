@@ -142,7 +142,7 @@ describe('getActiveConnections', () => {
         stdout: JSON.stringify({ ...row({ OwningProcess: 999, RemoteAddress: '1.2.3.4', RemotePort: 443 }) }),
         stderr: '',
       })
-      .mockResolvedValueOnce({ stdout: 'chrome.exe\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: JSON.stringify([{ Id: 999, ProcessName: 'chrome.exe' }]), stderr: '' })
     const conns = await getActiveConnections()
     expect(conns).toHaveLength(1)
     expect(conns[0]!.pid).toBe(999)
@@ -161,7 +161,7 @@ describe('getActiveConnections', () => {
         ]),
         stderr: '',
       })
-      .mockResolvedValueOnce({ stdout: 'foo.exe\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: JSON.stringify([{ Id: 123, ProcessName: 'foo.exe' }]), stderr: '' })
     const conns = await getActiveConnections()
     expect(conns).toHaveLength(2)
     expect(conns[0]!.processName).toBe('foo.exe')
@@ -175,7 +175,7 @@ describe('getActiveConnections', () => {
         stdout: JSON.stringify([null, { LocalPort: 1234, OwningProcess: 1, RemotePort: 4444 }, 'garbage', 42]),
         stderr: '',
       })
-      .mockResolvedValueOnce({ stdout: 'svchost.exe\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: JSON.stringify([{ Id: 1, ProcessName: 'svchost.exe' }]), stderr: '' })
     const conns = await getActiveConnections()
     expect(conns).toHaveLength(1)
     expect(conns[0]!.localAddress).toBe('')
@@ -207,9 +207,9 @@ describe('getActiveConnections', () => {
     execFileAsyncMock.mockResolvedValueOnce({ stdout: 'not json', stderr: '' })
     const conns = await getActiveConnections()
     expect(conns).toEqual([])
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(mockLogger.warning).toHaveBeenCalledWith(
       'network-monitor',
-      expect.stringContaining('Failed to get connections'),
+      expect.stringContaining('Failed to parse PowerShell output'),
     )
   })
 })
@@ -231,7 +231,7 @@ describe('registerNetworkMonitorIpc', () => {
         ]),
         stderr: '',
       })
-      .mockResolvedValueOnce({ stdout: 'pid2.exe\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: JSON.stringify([{ Id: 2, ProcessName: 'pid2.exe' }]), stderr: '' })
     const res = await getHandler(IPC.NETWORK_GET_CONNECTIONS)()
     expect(res.connections).toHaveLength(3)
     expect(res.suspicious).toHaveLength(1)

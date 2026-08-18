@@ -24,7 +24,12 @@ export async function listPowerPlans(): Promise<PowerPlanInfo[]> {
     15000,
   )
   if (!out || out === '[]' || out === '') return []
-  const parsed = JSON.parse(out)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(out)
+  } catch {
+    return []
+  }
   const arr = Array.isArray(parsed) ? parsed : [parsed]
   return arr.map((p: Record<string, unknown>) => ({
     guid: (p.Guid as string) ?? '',

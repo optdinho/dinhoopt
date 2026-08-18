@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mockGetWindow = vi.fn().mockReturnValue(null)
 const mockExecFile = vi.fn()
 
 // Build an execFile mock that has the custom promisify symbol so that
@@ -81,6 +82,10 @@ vi.mock('electron', () => ({
     handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
       mockHandlers.set(channel, handler)
     },
+  },
+  BrowserWindow: {
+    fromWebContents: vi.fn().mockReturnValue({ id: 1, isDestroyed: () => false }),
+    getAllWindows: vi.fn().mockReturnValue([]),
   },
 }))
 
@@ -1103,7 +1108,7 @@ describe('getBootTrace', () => {
 
 describe('registerStartupManagerIpc', () => {
   it('registers all four IPC handlers', () => {
-    registerStartupManagerIpc()
+    registerStartupManagerIpc(mockGetWindow)
 
     expect(mockHandlers.has('startup:list')).toBe(true)
     expect(mockHandlers.has('startup:toggle')).toBe(true)
@@ -1112,7 +1117,7 @@ describe('registerStartupManagerIpc', () => {
   })
 
   it('STARTUP_TOGGLE handler passes all arguments through', async () => {
-    registerStartupManagerIpc()
+    registerStartupManagerIpc(mockGetWindow)
     const handler = mockHandlers.get('startup:toggle')!
     collectRegCalls()
 
@@ -1121,7 +1126,7 @@ describe('registerStartupManagerIpc', () => {
   })
 
   it('STARTUP_DELETE handler passes all arguments through', async () => {
-    registerStartupManagerIpc()
+    registerStartupManagerIpc(mockGetWindow)
     const handler = mockHandlers.get('startup:delete')!
 
     const result = await handler({}, 'App', HKCU_RUN, 'registry-hkcu')

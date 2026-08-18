@@ -201,8 +201,8 @@ export function useClipsState(): ClipsState {
         setClips(list)
         setThumbnails({})
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.error('refreshClips error:', err)
     }
     setRefreshing(false)
   }, [])

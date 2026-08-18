@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, net } from 'electron'
 import { E2E_MARKER_FILENAME } from '@shared/e2e-license-marker'
+import { app, net } from 'electron'
 import { getSecret } from './env-sanitize'
 import { generateHwid } from './hwid'
 import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'

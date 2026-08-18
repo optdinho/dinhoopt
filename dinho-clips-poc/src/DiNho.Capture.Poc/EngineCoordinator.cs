@@ -14,6 +14,7 @@ using DiNho.Capture.Poc.Memory;
 using DiNho.Capture.Poc.Logging;
 using Windows.Win32;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 
 using Vortice.Direct3D11;

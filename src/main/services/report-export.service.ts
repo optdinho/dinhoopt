@@ -26,11 +26,24 @@ export function exportScanReport(result: MalwareScanResult, format: ExportFormat
   }
 }
 
+function escapeCsv(value: string): string {
+  // Prevent CSV injection by stripping formula-leading chars and escaping quotes
+  const sanitized = value.replace(/^[=+\-@\t\r]/, '')
+  return `"${sanitized.replace(/"/g, '""')}"`
+}
+
 function generateCsv(result: MalwareScanResult): string {
   const headers = 'Threat,Type,Severity,File,Status,Detected At\n'
   const rows = result.threats
-    .map(
-      (t) => `"${t.detectionName}","${t.source}","${t.severity}","${t.path}","detected","${new Date().toISOString()}"`,
+    .map((t) =>
+      [
+        escapeCsv(t.detectionName),
+        escapeCsv(t.source),
+        escapeCsv(t.severity),
+        escapeCsv(t.path),
+        '"detected"',
+        `"${new Date().toISOString()}"`,
+      ].join(','),
     )
     .join('\n')
   return headers + rows

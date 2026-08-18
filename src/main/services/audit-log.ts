@@ -29,7 +29,8 @@ export function logAudit(action: string, category: string, details: Record<strin
   }
   try {
     appendFileSync(auditPath, `${JSON.stringify(entry)}\n`)
-  } catch {
+  } catch (err) {
     /* best effort — audit logging must never crash the app */
+    console.error('Audit log write failed:', err)
   }
 }

@@ -43,5 +43,16 @@ export function addHistoryEntry(entry: ScanHistoryEntry): void {
 }
 
 export function clearHistory(): void {
-  store.save([])
+  const prev = writeLock
+  let unlock: () => void
+  writeLock = new Promise<void>((r) => {
+    unlock = r
+  })
+  prev.then(() => {
+    try {
+      store.save([])
+    } finally {
+      unlock!()
+    }
+  })
 }

@@ -160,8 +160,13 @@ describe('addHistoryEntry', () => {
 })
 
 describe('clearHistory', () => {
-  it('writes empty array', () => {
+  it('writes empty array', async () => {
     clearHistory()
-    expect(mocks.storeSave).toHaveBeenCalledWith([])
+    await vi.waitFor(
+      () => {
+        expect(mocks.storeSave).toHaveBeenCalledWith([])
+      },
+      { timeout: 3000, interval: 50 },
+    )
   })
 })

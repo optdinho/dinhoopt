@@ -100,7 +100,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   selectedAudioSessions: [],
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
-  autoCleanupThresholdGB: 20,
+  autoCleanupThresholdGB: 100,
   adaptiveQuality: true,
   stretchToFit: false,
   replayBufferMode: 'ram',

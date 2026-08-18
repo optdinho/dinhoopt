@@ -76,8 +76,8 @@ process.on('unhandledRejection', (reason) => {
 // native layer picks the X11 ozone backend before app.commandLine
 // switches are processed, and crashes if no X server is running.
 if (process.argv.includes('--daemon') || process.argv.includes('--cli')) {
-  process.env.DISPLAY = undefined
-  process.env.WAYLAND_DISPLAY = undefined
+  delete process.env.DISPLAY
+  delete process.env.WAYLAND_DISPLAY
 
   app.commandLine.appendSwitch('ozone-platform', 'headless')
 }

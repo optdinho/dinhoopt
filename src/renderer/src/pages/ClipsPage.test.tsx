@@ -130,7 +130,7 @@ describe('ClipsPage', () => {
   })
 
   const showSettings = () => {
-    const btn = screen.getByTitle('Settings')
+    const btn = screen.getByTitle('showSettings')
     btn.click()
   }
 

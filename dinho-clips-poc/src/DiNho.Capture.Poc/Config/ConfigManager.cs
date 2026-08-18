@@ -116,7 +116,7 @@ public sealed class AppConfig
     public bool AutoCleanupEnabled { get; set; } = true;
 
     // Limite em GB de espaço total que o usuário quer usar para clips (ex: 20 = limpa quando clips > 20GB)
-    public int AutoCleanupThresholdGB { get; set; } = 20;
+    public int AutoCleanupThresholdGB { get; set; } = 100;
 
     /// <summary>
     /// Duração do replay buffer = global ReplayTimeSeconds (o teto).

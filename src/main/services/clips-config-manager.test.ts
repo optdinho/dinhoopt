@@ -47,7 +47,7 @@ vi.mock('./clips-config-store', () => ({
     selectedAudioSessions: [],
     audioSampleRate: 48000,
     autoCleanupEnabled: true,
-    autoCleanupThresholdGB: 20,
+    autoCleanupThresholdGB: 100,
     adaptiveQuality: true,
   })),
   saveClipsConfig: vi.fn((cfg: Record<string, unknown>) => cfg),
@@ -364,7 +364,7 @@ describe('clips-config-manager', () => {
       expect(config.noiseSuppression).toBe(false)
       expect(config.audioSampleRate).toBe(48000)
       expect(config.autoCleanupEnabled).toBe(true)
-      expect(config.autoCleanupThresholdGB).toBe(20)
+      expect(config.autoCleanupThresholdGB).toBe(100)
       expect(config.stretchToFit).toBe(false)
     })
 
@@ -403,7 +403,7 @@ describe('clips-config-manager', () => {
         selectedAudioSessions: [],
         audioSampleRate: 48000,
         autoCleanupEnabled: true,
-        autoCleanupThresholdGB: 20,
+        autoCleanupThresholdGB: 100,
         adaptiveQuality: true,
         replayBufferMode: 'hybrid',
       }

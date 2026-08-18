@@ -718,7 +718,7 @@ describe('CLIPS_SET_CONFIG', () => {
         noiseSuppression: true,
         audioSampleRate: 48000,
         autoCleanupEnabled: true,
-        autoCleanupThresholdGB: 20,
+        autoCleanupThresholdGB: 100,
       },
     )
     const cfg = getSyncHandler(handlers, IPC.CLIPS_GET_CONFIG)() as Record<string, unknown>
@@ -731,7 +731,7 @@ describe('CLIPS_SET_CONFIG', () => {
     expect(cfg.gameVolume).toBe(0.8)
     expect(cfg.micVolume).toBe(1.2)
     expect(cfg.encoderPreset).toBe('p4')
-    expect(cfg.autoCleanupThresholdGB).toBe(20)
+    expect(cfg.autoCleanupThresholdGB).toBe(100)
   })
 
   it('updates stretchToFit flag', async () => {

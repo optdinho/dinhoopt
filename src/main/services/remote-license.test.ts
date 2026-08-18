@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { E2E_MARKER_FILENAME } from '@shared/e2e-license-marker'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mock state (dynamic per-test) ────────────────────────────────────
 const mockVars = vi.hoisted(() => {
