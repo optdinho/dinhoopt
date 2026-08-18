@@ -9,7 +9,11 @@
     "ms-playwright.playwright",
     "christian-kohler.path-intellisense",
     "mikestead.dotenv",
-    "streetsidesoftware.code-spell-checker"
+    "streetsidesoftware.code-spell-checker",
+    "george2304.ffmpeg-documentation",
+    "ms-vscode.hexeditor",
+    "mfyan.remote-video-preview",
+    "batchnepal.vscode-video-preview"
   ],
   "unwantedRecommendations": [
     "dbaeumer.vscode-eslint",
