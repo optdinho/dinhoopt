@@ -28,9 +28,7 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
           cacheItems(result.items)
           results.push(result)
         }
-      } catch {
-        getLogger().warning('gaming-cleaner', `Skipped launcher: ${launcher.name}`)
-      }
+      } catch { /* skipped */ }
     }
 
     // GPU shader caches — directory-level items, one row per vendor
@@ -41,9 +39,7 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
           cacheItems(result.items)
           results.push(result)
         }
-      } catch {
-        getLogger().warning('gaming-cleaner', `Skipped GPU cache: ${gpu.name}`)
-      }
+      } catch { /* skipped */ }
     }
 
     // Per-game Steam shader caches — one row per game
@@ -51,18 +47,14 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
       const shaderResults = await scanSteamShaderCaches(category)
       for (const r of shaderResults) cacheItems(r.items)
       results.push(...shaderResults)
-    } catch {
-      getLogger().warning('gaming-cleaner', 'Skipped Steam shader cache scan')
-    }
+    } catch { /* skipped */ }
 
     // Per-game redistributables — one row per game
     try {
       const redistResults = await scanSteamRedistributables(category)
       for (const r of redistResults) cacheItems(r.items)
       results.push(...redistResults)
-    } catch {
-      getLogger().warning('gaming-cleaner', 'Skipped Steam redistributables scan')
-    }
+    } catch { /* skipped */ }
 
     const win = getWindow()
     if (win && !win.isDestroyed())
@@ -227,8 +219,8 @@ async function scanSteamShaderCaches(category: CleanerType): Promise<ScanResult[
             totalSize: size,
             itemCount: 1,
           })
-        } catch {
-          // Skip
+        } catch (err) {
+          getLogger().debug('gaming-cleaner', `Skipped shader cache: ${entry.name}: ${err}`)
         }
       }
     } catch {
@@ -282,8 +274,8 @@ async function scanSteamRedistributables(category: CleanerType): Promise<ScanRes
               selected: true,
             })
             gameSize += size
-          } catch {
-            // Skip
+          } catch (err) {
+            getLogger().debug('gaming-cleaner', `Skipped redist: ${redistPath}: ${err}`)
           }
         }
 

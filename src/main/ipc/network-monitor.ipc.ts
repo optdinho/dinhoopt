@@ -36,30 +36,6 @@ const SUSPICIOUS_PORTS = new Set([
   9051, // common proxy ports
 ])
 
-const _KNOWN_SYSTEM_PROCESSES = new Set([
-  'system',
-  'svchost.exe',
-  'lsass.exe',
-  'csrss.exe',
-  'wininit.exe',
-  'services.exe',
-  'smss.exe',
-  'winlogon.exe',
-  'dwm.exe',
-  'fontdrvhost.exe',
-  'searchhost.exe',
-  'startmenuexperiencehost.exe',
-  'shellexperiencehost.exe',
-  'taskhostw.exe',
-  'conhost.exe',
-  'dllhost.exe',
-  'runtimebroker.exe',
-  'spoolsv.exe',
-  'sihost.exe',
-  'ctfmon.exe',
-  'explorer.exe',
-])
-
 export function isSuspicious(conn: NetworkConnection): boolean {
   if (conn.remoteAddress === '0.0.0.0' || conn.remoteAddress === '::' || conn.remoteAddress === '') return false
   if (conn.remoteAddress === '127.0.0.1' || conn.remoteAddress === '::1') return false
@@ -82,21 +58,31 @@ async function getProcessNamesBatch(pids: number[]): Promise<Map<number, string>
   const result = new Map<number, string>()
   const unknownPids: number[] = []
   for (const pid of pids) {
-    if (pid === 0) { result.set(pid, 'System Idle'); continue }
-    if (pid === 4) { result.set(pid, 'System'); continue }
+    if (pid === 0) {
+      result.set(pid, 'System Idle')
+      continue
+    }
+    if (pid === 4) {
+      result.set(pid, 'System')
+      continue
+    }
     unknownPids.push(pid)
   }
   if (unknownPids.length === 0) return result
 
   try {
-    const pidList = unknownPids.map(p => `Get-Process -Id ${p} -ErrorAction SilentlyContinue`).join('; ')
+    const pidList = unknownPids.map((p) => `Get-Process -Id ${p} -ErrorAction SilentlyContinue`).join('; ')
     const { stdout } = await execFileAsync(
       'powershell.exe',
       ['-NoProfile', '-Command', `${pidList} | Select-Object Id,ProcessName | ConvertTo-Json -Compress`],
       { timeout: 5000, windowsHide: true, encoding: 'utf-8' },
     )
     let parsed: unknown
-    try { parsed = JSON.parse(stdout) } catch { return result }
+    try {
+      parsed = JSON.parse(stdout)
+    } catch {
+      return result
+    }
     const rows = Array.isArray(parsed) ? parsed : [parsed]
     for (const row of rows) {
       if (!row || typeof row !== 'object') continue
@@ -133,7 +119,14 @@ export async function getActiveConnections(): Promise<NetworkConnection[]> {
     const rows = Array.isArray(parsed) ? parsed : [parsed]
 
     const pids = new Set<number>()
-    const rawRows: Array<{ localAddr: string; localPort: number; remoteAddr: string; remotePort: number; state: string; pid: number }> = []
+    const rawRows: Array<{
+      localAddr: string
+      localPort: number
+      remoteAddr: string
+      remotePort: number
+      state: string
+      pid: number
+    }> = []
     for (const row of rows) {
       if (!row || typeof row !== 'object') continue
       const r = row as Record<string, unknown>
@@ -151,7 +144,7 @@ export async function getActiveConnections(): Promise<NetworkConnection[]> {
 
     const nameMap = await getProcessNamesBatch([...pids])
 
-    return rawRows.map(r => ({
+    return rawRows.map((r) => ({
       localAddress: r.localAddr,
       localPort: r.localPort,
       remoteAddress: r.remoteAddr,

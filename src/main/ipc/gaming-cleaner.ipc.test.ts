@@ -50,6 +50,11 @@ vi.mock('../services/exec-utf8', () => ({
   execNativeUtf8: (...args: unknown[]) => mockExecNativeUtf8(...args),
 }))
 
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warning: vi.fn(), success: vi.fn() }
+vi.mock('../services/logger.service', () => ({
+  getLogger: () => mockLogger,
+}))
+
 import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
 import { registerGamingCleanerIpc } from './gaming-cleaner.ipc'
 

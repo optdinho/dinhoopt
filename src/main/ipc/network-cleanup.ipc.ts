@@ -289,8 +289,8 @@ export function registerNetworkCleanupIpc(getWindow: WindowGetter): void {
             itemsFound: total,
             sizeFound: 0,
           })
-      } catch {
-        /* skip */
+      } catch (err) {
+        getLogger().debug('network-cleanup', `Progress update failed: ${err}`)
       }
     }).then((result) => {
       getLogger().success(
