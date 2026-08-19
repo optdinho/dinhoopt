@@ -121,10 +121,7 @@ describe('generateHwid', () => {
 
     const hwid = await generateHwid()
     expect(hwid).toBe('unknown-hwid')
-    expect(mocks.getLogger().warning).toHaveBeenCalledWith(
-      'Hwid',
-      expect.stringContaining('All HWID sources failed'),
-    )
+    expect(mocks.getLogger().warning).toHaveBeenCalledWith('Hwid', expect.stringContaining('All HWID sources failed'))
   })
 })
 

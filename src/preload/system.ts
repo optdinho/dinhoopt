@@ -1,9 +1,9 @@
 import { IPC, RENDERER_LOG } from '@shared/channels'
 import type { AgentEvaluationResult } from '@shared/driver-agent-types'
 import type {
+  AppInstallerListResult,
   AppInstallProgress,
   AppInstallResult,
-  AppInstallerListResult,
   BenchmarkProgress,
   BenchmarkResult,
   ComplianceApplyResult,
@@ -309,7 +309,8 @@ export const systemMethods = {
   onSoftwareUpdateProgress: (callback: (data: UpdateProgress) => void) =>
     onEvent(IPC.SOFTWARE_UPDATE_PROGRESS, callback),
 
-  appInstallerListAvailable: (): Promise<AppInstallerListResult> => ipcRenderer.invoke(IPC.APP_INSTALLER_LIST_AVAILABLE),
+  appInstallerListAvailable: (): Promise<AppInstallerListResult> =>
+    ipcRenderer.invoke(IPC.APP_INSTALLER_LIST_AVAILABLE),
   appInstallerInstall: (appIds: string[]): Promise<AppInstallResult> =>
     ipcRenderer.invoke(IPC.APP_INSTALLER_INSTALL, appIds),
   appInstallerCancel: (): Promise<void> => ipcRenderer.invoke(IPC.APP_INSTALLER_CANCEL),

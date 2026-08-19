@@ -96,7 +96,10 @@ function sendHandshake(): void {
   getLogger().info('clips-pipe', `Sending: cmd=handshake payload=${JSON.stringify(envelope.payload)}`)
   const timer = setTimeout(() => {
     pendingRequests.delete('handshake')
-    getLogger().warning('clips-pipe', 'Handshake timed out — engine did not reply (old engine? commands proceed unverified)')
+    getLogger().warning(
+      'clips-pipe',
+      'Handshake timed out — engine did not reply (old engine? commands proceed unverified)',
+    )
   }, 5000)
   pendingRequests.set('handshake', { resolve: () => {}, reject: () => {}, timer })
   try {

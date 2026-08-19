@@ -8,7 +8,12 @@ import { cleanOutput, computeSeverity, emptyResult, stripTrailingVersion } from 
  * Works with localized headers (EN "Version", PT "Versão", ES "Versión", etc.)
  * by matching substrings rather than exact names.
  */
-function findColumnPositions(header: string): { id: number; version: number; available: number; source: number } {
+export function findColumnPositions(header: string): {
+  id: number
+  version: number
+  available: number
+  source: number
+} {
   const upperHeader = header.toUpperCase()
   const idStart = upperHeader.indexOf('ID')
   if (idStart < 0) return { id: -1, version: -1, available: -1, source: -1 }

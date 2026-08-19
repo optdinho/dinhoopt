@@ -28,7 +28,9 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
           cacheItems(result.items)
           results.push(result)
         }
-      } catch { /* skipped */ }
+      } catch {
+        /* skipped */
+      }
     }
 
     // GPU shader caches — directory-level items, one row per vendor
@@ -39,7 +41,9 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
           cacheItems(result.items)
           results.push(result)
         }
-      } catch { /* skipped */ }
+      } catch {
+        /* skipped */
+      }
     }
 
     // Per-game Steam shader caches — one row per game
@@ -47,14 +51,18 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
       const shaderResults = await scanSteamShaderCaches(category)
       for (const r of shaderResults) cacheItems(r.items)
       results.push(...shaderResults)
-    } catch { /* skipped */ }
+    } catch {
+      /* skipped */
+    }
 
     // Per-game redistributables — one row per game
     try {
       const redistResults = await scanSteamRedistributables(category)
       for (const r of redistResults) cacheItems(r.items)
       results.push(...redistResults)
-    } catch { /* skipped */ }
+    } catch {
+      /* skipped */
+    }
 
     const win = getWindow()
     if (win && !win.isDestroyed())

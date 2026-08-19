@@ -21,14 +21,7 @@ export function registerStartupManagerIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(
     IPC.STARTUP_TOGGLE,
-    async (
-      event,
-      name: string,
-      location: string,
-      command: string,
-      source: StartupItem['source'],
-      enabled: boolean,
-    ) => {
+    async (event, name: string, location: string, command: string, source: StartupItem['source'], enabled: boolean) => {
       if (!validateSender(event, getWindow())) return false
       return toggleStartupItem(name, location, command, source, enabled)
     },

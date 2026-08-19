@@ -181,7 +181,8 @@ beforeEach(() => {
   vi.mocked(readdir).mockImplementation(async (p: string, opts?: { withFileTypes?: boolean }) => {
     const e = fsTree.get(p)
     if (!e) throw new Error('ENOENT')
-    if (opts?.withFileTypes) return e.dirs.map((name) => ({ name, isDirectory: () => true }) as import('node:fs').Dirent)
+    if (opts?.withFileTypes)
+      return e.dirs.map((name) => ({ name, isDirectory: () => true }) as import('node:fs').Dirent)
     return e.files
   })
 
@@ -350,7 +351,8 @@ describe('checkDirectStorage (via DIRECTSTORAGE_CHECK)', () => {
       if (path === BASE4) throw new Error('denied')
       const e = fsTree.get(path)
       if (!e) throw new Error('ENOENT')
-      if (opts?.withFileTypes) return e.dirs.map((name) => ({ name, isDirectory: () => true }) as import('node:fs').Dirent)
+      if (opts?.withFileTypes)
+        return e.dirs.map((name) => ({ name, isDirectory: () => true }) as import('node:fs').Dirent)
       return e.files
     })
     vi.mocked(execFileAsync).mockResolvedValue({ stdout: '[]', stderr: '' })

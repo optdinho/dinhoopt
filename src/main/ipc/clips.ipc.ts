@@ -30,9 +30,9 @@ import {
   parseEnhanceOption,
   probeVideoResolution,
 } from '../services/clips-enhance'
+import { uploadClipToGofile } from '../services/clips-publish'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
-import { uploadClipToGofile } from '../services/clips-publish'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
 import {
   getCurrentStatus,

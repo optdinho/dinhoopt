@@ -2375,7 +2375,11 @@ describe('CLIPS_PUBLISH', () => {
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
     const result = (await handler({}, 'C:\\clips\\clip.mp4')) as { success: boolean; data: { link: string } }
-    expect(mockUploadClipToGofile).toHaveBeenCalledWith('C:\\clips\\clip.mp4', expect.any(Function), expect.any(AbortSignal))
+    expect(mockUploadClipToGofile).toHaveBeenCalledWith(
+      'C:\\clips\\clip.mp4',
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
     expect(result).toEqual({ success: true, data: { link: 'https://gofile.io/d/abc' } })
   })
 
@@ -2392,9 +2396,10 @@ describe('CLIPS_PUBLISH', () => {
     vi.mocked(existsSync).mockReturnValue(true)
     let resolveUpload: (v: { success: boolean }) => void = () => {}
     mockUploadClipToGofile.mockImplementation(
-      () => new Promise<{ success: boolean }>((resolve) => {
-        resolveUpload = resolve
-      }),
+      () =>
+        new Promise<{ success: boolean }>((resolve) => {
+          resolveUpload = resolve
+        }),
     )
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
