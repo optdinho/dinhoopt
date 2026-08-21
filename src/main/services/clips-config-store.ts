@@ -39,18 +39,6 @@ interface ClipsPersistedConfig {
   adaptiveQuality: boolean
   stretchToFit: boolean
   replayBufferMode: 'ram' | 'hybrid'
-  customProfile?: {
-    cq: number
-    maxrateKbps: number
-    bufsizeKbps: number
-    encoderPreset: string
-    bframes: number
-    lookahead: number
-    width: number
-    height: number
-    fps: number
-    replayTimeSeconds: number
-  }
 }
 
 const DEFAULTS: ClipsPersistedConfig = {

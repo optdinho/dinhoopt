@@ -40,7 +40,7 @@ export function ClipsConfigPanel({
           animate={{ width: 380, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.2, ease: 'easeInOut' }}
-          className="overflow-hidden shrink-0 will-change-transform"
+          className="overflow-x-hidden overflow-y-visible shrink-0 will-change-transform"
         >
           <div className="w-[380px] space-y-3">
             {/* Output Directory */}

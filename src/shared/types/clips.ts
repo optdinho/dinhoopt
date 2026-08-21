@@ -66,20 +66,6 @@ export interface MicDeviceInfo {
   sampleRate: number
 }
 
-/** Custom quality profile saved by the user (4th preset option) */
-export interface CustomQualityProfile {
-  cq: number
-  maxrateKbps: number
-  bufsizeKbps: number
-  encoderPreset: string
-  bframes: number
-  lookahead: number
-  width: number
-  height: number
-  fps: number
-  replayTimeSeconds: number
-}
-
 export interface ClipsConfig {
   replayTimeSeconds: number
   micEnabled: boolean
@@ -135,8 +121,6 @@ export interface ClipsConfig {
   stretchToFit?: boolean
   /** Buffer de replay: 'ram' = só RAM (excedente descartado); 'hybrid' = RAM cap 3min + excedente no disco */
   replayBufferMode?: 'ram' | 'hybrid'
-  /** Custom quality profile saved by the user (4th preset option) */
-  customProfile?: CustomQualityProfile
 }
 
 export interface ClipTrimResult {
