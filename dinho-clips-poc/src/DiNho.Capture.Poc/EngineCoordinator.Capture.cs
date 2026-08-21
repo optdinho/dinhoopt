@@ -172,8 +172,9 @@ public sealed partial class EngineCoordinator
                         bframes: _activeProfile.Bframes,
                         lookahead: _activeProfile.Lookahead,
                         preset: _config.Config.EncoderPreset,
-                        codec: _config.Config.Codec);
-                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead}");
+                        codec: _config.Config.Codec,
+                        multipass: _config.Config.Multipass);
+                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead} multipass={_config.Config.Multipass}");
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
                 fe.SetStretchToFit(_config.Config.StretchToFit);
                 }
@@ -1091,7 +1092,8 @@ public sealed partial class EngineCoordinator
                     bframes: _activeProfile.Bframes,
                     lookahead: _activeProfile.Lookahead,
                     preset: _config.Config.EncoderPreset,
-                    codec: _config.Config.Codec);
+                    codec: _config.Config.Codec,
+                    multipass: _config.Config.Multipass);
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
             }
             _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);

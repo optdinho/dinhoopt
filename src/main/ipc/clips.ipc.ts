@@ -683,19 +683,19 @@ export function registerClipsIpc(): void {
       }
       const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
       return new Promise((resolve) => {
-        const args = [
-          '-y',
-          '-loglevel',
-          'error',
-          '-ss',
-          String(startSeconds),
-          '-to',
-          String(endSeconds),
-          '-i',
-          safePath,
-          ...(reEncode ? [...reEncodeArgs, ...(vfChain ? ['-vf', vfChain] : [])] : copyArgs),
-          outPath,
-        ]
+        const seekArgs = reEncode
+          ? [
+              '-i',
+              safePath,
+              '-ss',
+              String(startSeconds),
+              '-to',
+              String(endSeconds),
+              ...reEncodeArgs,
+              ...(vfChain ? ['-vf', vfChain] : []),
+            ]
+          : ['-ss', String(startSeconds), '-to', String(endSeconds), '-i', safePath, ...copyArgs]
+        const args = ['-y', '-loglevel', 'error', ...seekArgs, outPath]
         const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
           if (err) {
             try {

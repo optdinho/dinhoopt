@@ -1,4 +1,4 @@
-import type { ClipInfo, ClipsConfig, ClipsEngineStatus, MicDeviceInfo } from '@shared/types'
+import type { ClipInfo, ClipsConfig, ClipsEngineStatus, CustomQualityProfile, MicDeviceInfo } from '@shared/types'
 import type { TFunction } from 'i18next'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -79,6 +79,42 @@ export interface ClipsState {
   t: TFunction<'clips'>
 }
 
+export const QUALITY_PRESETS: Record<string, Partial<ClipsConfig>> = {
+  'muito-alta': {
+    cq: 16,
+    maxrateKbps: 65000,
+    bufsizeKbps: 130000,
+    encoderPreset: 'p5',
+    bframes: 3,
+    lookahead: 32,
+    width: 1920,
+    height: 1080,
+    fps: 60,
+  },
+  alta: {
+    cq: 18,
+    maxrateKbps: 55000,
+    bufsizeKbps: 110000,
+    encoderPreset: 'p5',
+    bframes: 2,
+    lookahead: 32,
+    width: 1920,
+    height: 1080,
+    fps: 60,
+  },
+  boa: {
+    cq: 20,
+    maxrateKbps: 40000,
+    bufsizeKbps: 80000,
+    encoderPreset: 'p5',
+    bframes: 2,
+    lookahead: 32,
+    width: 1280,
+    height: 720,
+    fps: 60,
+  },
+}
+
 export function useClipsState(): ClipsState {
   const { t } = useTranslation('clips')
 
@@ -119,6 +155,16 @@ export function useClipsState(): ClipsState {
   const [editingClip, setEditingClip] = useState<ClipInfo | null>(null)
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
+  const [activeQualityPreset, setActiveQualityPreset] = useState<string>('alta')
+  const [customProfileOpen, setCustomProfileOpen] = useState(false)
+  const [customProfile, setCustomProfile] = useState<CustomQualityProfile>(() => {
+    try {
+      const saved = localStorage.getItem('clips-custom-profile')
+      return saved ? (JSON.parse(saved) as CustomQualityProfile) : {}
+    } catch {
+      return {}
+    }
+  })
   const [statusLoaded, setStatusLoaded] = useState(false)
   const [clipsLoaded, setClipsLoaded] = useState(false)
   const [publishingPath, setPublishingPath] = useState<string | null>(null)
@@ -132,6 +178,61 @@ export function useClipsState(): ClipsState {
       return {}
     }
   })
+
+  // ── Custom quality profile detection ───────────────────────────────
+  const activePresetFromConfig = useMemo(() => {
+    if (!config) return null
+    for (const [key, preset] of Object.entries(QUALITY_PRESETS)) {
+      if (
+        config.cq === preset.cq &&
+        config.maxrateKbps === preset.maxrateKbps &&
+        config.bufsizeKbps === preset.bufsizeKbps &&
+        config.encoderPreset === preset.encoderPreset &&
+        config.bframes === preset.bframes &&
+        config.lookahead === preset.lookahead &&
+        config.width === preset.width &&
+        config.height === preset.height &&
+        config.fps === preset.fps
+      ) {
+        return key
+      }
+    }
+    return null
+  }, [config])
+
+  useEffect(() => {
+    setActiveQualityPreset(activePresetFromConfig ?? 'custom')
+  }, [activePresetFromConfig])
+
+  // Restore custom profile from persisted config on mount
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only
+  useEffect(() => {
+    if (!config || activePresetFromConfig) return
+    // If no preset matches, load the custom profile from localStorage
+    setCustomProfile({
+      cq: config.cq,
+      maxrateKbps: config.maxrateKbps,
+      bufsizeKbps: config.bufsizeKbps,
+      encoderPreset: config.encoderPreset,
+      bframes: config.bframes,
+      lookahead: config.lookahead,
+      width: config.width,
+      height: config.height,
+      fps: config.fps,
+      replayTimeSeconds: config.replayTimeSeconds,
+    })
+  }, [])
+
+  const saveCustomProfile = useCallback(
+    (profile: Partial<ClipsConfig>) => {
+      const merged = { ...customProfile, ...profile }
+      setCustomProfile(merged)
+      localStorage.setItem('clips-custom-profile', JSON.stringify(merged))
+      // Apply all custom fields to config immediately
+      handleConfigUpdate(merged)
+    },
+    [customProfile],
+  )
 
   const tooltipContent: Record<string, string> = useMemo(
     () => ({
@@ -502,6 +603,13 @@ export function useClipsState(): ClipsState {
     formatSize: (bytes: number) => formatClipsSize(bytes, t),
     formatDate: formatClipsDate,
     formatSeconds: formatClipsSeconds,
+    activeQualityPreset,
+    customProfileOpen,
+    setCustomProfileOpen,
+    customProfile,
+    setCustomProfile,
+    QUALITY_PRESETS,
+    saveCustomProfile,
     t,
   }
 }

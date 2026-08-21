@@ -76,6 +76,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int _lookahead = 0;
     private string _nvencPreset = "p2";
     private string _amfPreset = "speed";
+    private bool _multipass = false;
 
     // Reusable NV12 scratch buffer — elimina alocação de 3.1MB no LOH a cada frame
     private byte[]? _nv12Scratch;
@@ -198,7 +199,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// vez de 60. `-filler` não existe no ffmpeg 9 — a opção é `-filler_data` (boolean), válida
     /// nos 3 codecs AMF.</summary>
     internal static string BuildEncoderTuneArgs(string codec, double cq, int maxrateKbps, int bufsizeKbps,
-        int bframes, int lookahead, string nvencPreset, string amfPreset = "speed")
+        int bframes, int lookahead, string nvencPreset, string amfPreset = "speed", bool multipass = false)
     {
         // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
         // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
@@ -210,9 +211,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
         {
             "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
             "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
-            "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
-            "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
-            "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass disabled -nonref_p 1 -g 120 -keyint_min 120",
+            "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass {(multipass ? "fullres" : "disabled")}{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
+            "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass {(multipass ? "fullres" : "disabled")}{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
+            "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass {(multipass ? "fullres" : "disabled")} -nonref_p 1 -g 120 -keyint_min 120",
             // AMF: CQP (qualidade constante) com QP = cq do front direto — mesmo padrão OBS/AMD
             // (QP 16-23; cq 18/20/24 cai na faixa) e NVENC (-cq). Sem -b:v/-maxrate/-bufsize: CQP
             // não tem teto de bitrate (OBS não mostra bitrate em CQP). O antigo vbr_peak + QP
@@ -348,14 +349,15 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// Define parâmetros de qualidade CRF+VBV para NVENC/AV1.
     /// bitrateKbps ainda é usado como fallback para AMF/QSV/libx264.
     /// </summary>
-    public void SetQualityParams(int cq, int maxrateKbps, int bufsizeKbps, int bframes = 2, int lookahead = 4, string preset = "p4", string? codec = null)
+    public void SetQualityParams(int cq, int maxrateKbps, int bufsizeKbps, int bframes = 2, int lookahead = 4, string preset = "p4", string? codec = null, bool multipass = false)
     {
         _cq = cq;
         _maxrateKbps = maxrateKbps;
         _bufsizeKbps = bufsizeKbps;
         _bframes = bframes;
         _lookahead = lookahead;
-        _nvencPreset = preset;
+            _nvencPreset = preset;
+        _multipass = multipass;
         if (!string.IsNullOrEmpty(codec) && codec != "auto")
         {
             _userCodec = codec;
@@ -416,7 +418,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
              QSV:   veryslow + extbrc + rdo 1 + adaptive_i/b + b_strategy + mbbrc
            Cor BT.709: tagging no output → NVENC escreve VUI → atom `colr` no MP4 (players corretos).
            GOP 120 (~2s a 60fps): OBS recomenda, ~10% menos bits que GOP 60. */
-        var tune = BuildEncoderTuneArgs(_codec, _cq, _maxrateKbps, _bufsizeKbps, _bframes, _lookahead, _nvencPreset, _amfPreset);
+        var tune = BuildEncoderTuneArgs(_codec, _cq, _maxrateKbps, _bufsizeKbps, _bframes, _lookahead, _nvencPreset, _amfPreset, _multipass);
 
         int cw = _cropW, ch = _cropH;
         bool hasCrop = cw > 0 && ch > 0;

@@ -78,7 +78,8 @@ public sealed class AppConfig
     public string PttMode { get; set; } = "Hold";
 
     // Forçar encoder software (útil para testes sem GPU / WARP)
-    public bool ForceSoftware { get; set; } = false;
+    public bool ForceSoftware { get; set; }
+    public bool Multipass { get; set; } = false;
 
     // RNNoise/anlmdn noise suppression on microphone
     [JsonPropertyName("noiseSuppression")]

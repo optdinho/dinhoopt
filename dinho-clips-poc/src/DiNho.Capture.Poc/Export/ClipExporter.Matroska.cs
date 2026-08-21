@@ -1,5 +1,6 @@
 using DiNho.Capture.Poc.Logging;
 using System.Text;
+using System.Threading;
 using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Export;
@@ -112,10 +113,11 @@ public sealed partial class ClipExporter
         bw.Write(data, dataOffset, dataLength);
     }
 
-    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null, byte[]? hvccFallback = null)
+    internal static void WriteMatroskaFile(string path, List<EncodedPacket> packets, string rawFormat, byte[]? avccFallback = null, byte[]? hvccFallback = null, long estimatedSize = 0)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+        if (estimatedSize > 0) fs.SetLength(estimatedSize);
         using var bw = new BinaryWriter(fs);
 
         // Re-baseline PTS so the first frame starts at 0.
@@ -230,9 +232,11 @@ public sealed partial class ClipExporter
         const int maxClusterFrames = 1000;
         long clusterBaseTimecode = 0;
 
+        int frameCount = 0;
         foreach (var pkt in packets)
         {
             if (pkt.Type != MediaType.Video) continue;
+            if (++frameCount % 60 == 0) Thread.Sleep(1);
 
             if (!loggedFirstFrame)
             {

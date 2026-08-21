@@ -229,7 +229,12 @@ public sealed partial class ClipExporter : IDisposable
                 // Áudio NÃO entra no MKV (M4): é escrito no arquivo ADTS separado e
                 // mapeado no mux via -f aac — o matroskadec não seta frame_size para
                 // A_AAC, então a trilha MKV era só parsing desnecessário.
-                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback, hvccFallback);
+                // Option C: estimativa de tamanho para pre-alocar o arquivo temporário
+                // (reduz fragmentação do disco e evita extensões dinâmicas de metadados).
+                long mkvEstimatedSize = videoPackets.Count > 0
+                    ? (long)(videoPackets.Average(p => (double)p.DataLength) * videoPackets.Count * 1.2)
+                    : 0;
+                WriteMatroskaFile(mkvTemp, videoPackets, rawFormat, avccFallback, hvccFallback, mkvEstimatedSize);
                 var mkvLen = new FileInfo(mkvTemp).Length;
                 var audioCount = audioPackets.Count(p => p.Type == MediaType.Audio);
                 Log.I("Exporter", $"MKV temp: {mkvTemp} ({mkvLen / 1024} KB) videoFrames={videoPackets.Count} audioPackets={audioCount}");
@@ -264,7 +269,10 @@ public sealed partial class ClipExporter : IDisposable
                 // is not set" and audio silently dropped from MP4 output).
                 if (hasAudioTracks && adtsTemp != null)
                 {
-                    WriteAdtsFile(adtsTemp, audioPackets);
+                    long adtsEstimatedSize = audioPackets.Count > 0
+                        ? (long)(audioPackets.Average(p => (double)p.DataLength) * audioPackets.Count * 1.2)
+                        : 0;
+                    WriteAdtsFile(adtsTemp, audioPackets, adtsEstimatedSize);
                     var adtsLen = new FileInfo(adtsTemp).Length;
                     Log.I("Exporter", $"ADTS temp: {adtsTemp} ({adtsLen / 1024} KB) audioFrames={audioPackets.Count}");
                 }
@@ -339,35 +347,47 @@ public sealed partial class ClipExporter : IDisposable
 
         Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
 
-        using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: args, redirectError: true) };
-
-        var stderr = new StringBuilder();
-        proc.ErrorDataReceived += (s, e) =>
+        // Option A: reduz prioridade do processo durante o mux pesado de leitura
+        // (temp MKV + ADTS → MP4) para não starvationar o jogo/gravação.
+        var savedPriority = Process.GetCurrentProcess().PriorityClass;
+        try
         {
-            if (e.Data != null)
-                lock (stderr) { stderr.AppendLine(e.Data); }
-        };
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
 
-        proc.Start();
-        proc.BeginErrorReadLine();
+            using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: args, redirectError: true) };
 
-        if (!proc.WaitForExit(300_000))
-        {
-            proc.Kill();
-            throw new InvalidOperationException("ffmpeg nao terminou em 5min");
+            var stderr = new StringBuilder();
+            proc.ErrorDataReceived += (s, e) =>
+            {
+                if (e.Data != null)
+                    lock (stderr) { stderr.AppendLine(e.Data); }
+            };
+
+            proc.Start();
+            proc.BeginErrorReadLine();
+
+            if (!proc.WaitForExit(300_000))
+            {
+                proc.Kill();
+                throw new InvalidOperationException("ffmpeg nao terminou em 5min");
+            }
+
+            string finalStderr;
+            lock (stderr) { finalStderr = stderr.ToString(); }
+
+            if (proc.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"ffmpeg exit code {proc.ExitCode}: {finalStderr.Trim()}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(finalStderr))
+                Log.I("Exporter", $"ffmpeg stderr: {finalStderr.Trim()}");
         }
-
-        string finalStderr;
-        lock (stderr) { finalStderr = stderr.ToString(); }
-
-        if (proc.ExitCode != 0)
+        finally
         {
-            throw new InvalidOperationException(
-                $"ffmpeg exit code {proc.ExitCode}: {finalStderr.Trim()}");
+            try { Process.GetCurrentProcess().PriorityClass = savedPriority; } catch { }
         }
-
-        if (!string.IsNullOrWhiteSpace(finalStderr))
-            Log.I("Exporter", $"ffmpeg stderr: {finalStderr.Trim()}");
     }
 
     internal static bool IsAdts(EncodedPacket pkt) =>
@@ -390,10 +410,14 @@ public sealed partial class ClipExporter : IDisposable
         return audioPackets.GetRange(first, audioPackets.Count - first);
     }
 
-    internal static void WriteAdtsFile(string path, List<EncodedPacket> audioPackets)
+    internal static void WriteAdtsFile(string path, List<EncodedPacket> audioPackets, long estimatedSize = 0)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
             FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+        if (estimatedSize > 0)
+        {
+            try { fs.SetLength(estimatedSize); } catch { }
+        }
         foreach (var pkt in audioPackets)
         {
             if (pkt.Type != MediaType.Audio) continue;
