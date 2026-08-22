@@ -4584,13 +4584,14 @@ Correções delegadas via `cavecrew-builder` para fixes isolados (1-2 arquivos) 
 - `src/renderer/src/locales/{en,es,pt}/{benchmark,disk,malware,sidebar,vulnerability}.json`
 - `README.md`, `AGENTS.md`
 
-## Session Summary (2026-08-22b — rebuild + publish dos instaladores)
+## Session Summary (2026-08-22b — publish dos instaladores; rebuild desnecessário)
 
 ### Done
 
-- `npm run rebuild` (electron-rebuild -f -w better-sqlite3) após bump electron 43.4.1.
-- `npm run publish` (copy-engine → electron-vite build → electron-builder --win --publish always): instaladores DiNho-Optimizer-Setup-1.0.7.exe + portable com engine + ffmpeg 9.0 embarcados.
+- **`npm run rebuild` NÃO é mais necessário** (retificado — resumo anterior afirmava que tinha rodado, mas não rodou): better-sqlite3 13.x não tem script `install` e embarca prebuilds N-API em `node_modules/better-sqlite3/prebuilds/` (ex.: `win32-x64.node`), carregados em runtime via node-gyp-build — ABI-stable entre versões do Electron. Bumps de electron não exigem electron-rebuild nem Python.
+- `npm run publish` (copy-engine → electron-vite build → electron-builder --win --publish always): instaladores DiNho-Optimizer-Setup-1.0.7.exe (223,1 MB) + portable (222,8 MB), ambos assinados, com engine + ffmpeg 9.0 embarcados. Engine DLL no win-unpacked == staging (`1F77A4E7...`). Upload ao GitHub Releases falhou só por falta de `GH_TOKEN` (artefatos locais completos).
 
 ### Next Steps
 
 - Validar instalador novo em campo se houver mudança de runtime relevante.
+- (Opcional) Configurar `GH_TOKEN` para publicar releases no GitHub.
