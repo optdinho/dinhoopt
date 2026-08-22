@@ -453,7 +453,7 @@ public sealed class EngineCoordinatorTests
         Assert.True(cfg.AdaptiveQualityEnabled);
         Assert.Equal(5, cfg.PostClipDurationSeconds);
         Assert.True(cfg.AutoCleanupEnabled);
-        Assert.Equal(20, cfg.AutoCleanupThresholdGB);
+        Assert.Equal(100, cfg.AutoCleanupThresholdGB);
     }
 
     [Fact]
