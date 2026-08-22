@@ -327,7 +327,7 @@ export function HostsEditorPage() {
                 border: '1px solid var(--border-medium)',
                 color: 'var(--text-muted)',
               }}
-              placeholder="# Enter header comment..."
+              placeholder={t('placeholderHeader')}
             />
           </div>
 

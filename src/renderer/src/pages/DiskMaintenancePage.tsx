@@ -329,7 +329,7 @@ function DriveRow({
           onChange={onToggle}
           disabled={!selectable || runState === 'running'}
           size="sm"
-          aria-label={`Select ${drive.label}`}
+          aria-label={t('selectDrive', { drive: drive.label })}
         />
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"

@@ -5,6 +5,7 @@
   "running": "Executando benchmark...",
   "cancel": "Cancelar",
   "runAgain": "Executar novamente",
+  "tweaksScanned": "{{applied}}/{{total}} ajustes",
   "score": "Score",
   "cpu": "CPU",
   "ram": "RAM",

@@ -141,7 +141,10 @@ export function BenchmarkPage() {
           label: t('tweakBonus'),
           score: result.details.tweakBonus.score,
           max: 10,
-          detail: `${result.details.tweakBonus.applied}/${result.details.tweakBonus.total} tweaks`,
+          detail: t('tweaksScanned', {
+            applied: result.details.tweakBonus.applied,
+            total: result.details.tweakBonus.total,
+          }),
           color: '#14b8a6',
         },
         {
@@ -296,7 +299,7 @@ export function BenchmarkPage() {
                 className="flex items-center gap-2 rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:text-white"
               >
                 <RefreshCw className="h-4 w-4" />
-                Executar novamente
+                {t('runAgain')}
               </button>
             </div>
           </motion.div>
@@ -314,7 +317,7 @@ export function BenchmarkPage() {
             whileHover={{ boxShadow: '0 0 40px rgba(0,212,255,0.3), 0 0 80px rgba(123,47,255,0.15)' }}
             whileTap={{ scale: 0.98 }}
           >
-            INICIAR BENCHMARK
+            {t('startButton')}
           </motion.button>
         )}
 

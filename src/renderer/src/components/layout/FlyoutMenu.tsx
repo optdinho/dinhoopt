@@ -124,7 +124,7 @@ export const FlyoutMenu = memo(function FlyoutMenu({
                     boxShadow: '0 0 6px rgba(245,158,11,0.3)',
                   }}
                 >
-                  NEW
+                  {t('new')}
                 </span>
               )}
             </button>

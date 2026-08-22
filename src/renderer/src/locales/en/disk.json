@@ -114,5 +114,6 @@
   "statusNotApplicable": "Not applicable",
   "statusDisabled": "Disabled",
   "statusUnknown": "Unknown",
-  "selectDrive": "Select {{drive}}"
+  "selectDrive": "Select {{drive}}",
+  "systemDrive": "System"
 }

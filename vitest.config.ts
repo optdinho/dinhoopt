@@ -24,6 +24,7 @@ export default defineConfig({
         'src/renderer/src/src.d.ts',
         'src/shared/i18n/**',
         'src/shared/channels.ts',
+        'src/renderer/src/locales/**',
         'src/**/coverage/**',
         'src/renderer/src/**/constants.ts',
         'src/renderer/src/i18n.ts',

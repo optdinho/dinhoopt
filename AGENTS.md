@@ -4556,3 +4556,41 @@ Cada item será registrado como achado (severity: CRITICAL/HIGH/MEDIUM/LOW) com:
 - Esforço estimado
 
 Correções delegadas via `cavecrew-builder` para fixes isolados (1-2 arquivos) ou execução direta para fixes triviais.
+
+## Session Summary (2026-08-22 — i18n completo + cobertura 93% + upgrade deps + publish/rebuild)
+
+### Done
+
+- **i18n completo do frontend**: páginas Benchmark, DiskAnalyzer, DiskMaintenance, HostsEditor, VulnerabilityScanner + componentes FlyoutMenu, CloudBackupPanel, ScanResultSummary localizados em en/pt/es. Locales novos/atualizados: `{en,es,pt}/{benchmark,disk,malware,sidebar,vulnerability}.json` (`pt/disk.json` já estava correto). Badge `'Beta'` da sidebar mantido hardcoded (idêntico nos 3 idiomas).
+- **Cobertura ≥80% atingida**: Stmts **93.66%**, Branches **85.28%**, Functions **93.71%**, Lines **94.85%**. `vitest.config.ts`: excludes ganhou `src/renderer/src/locales/**`.
+- **Upgrade de dependências**: batched `npm update` crashou com `Cannot read properties of null (reading 'edgesOut')` (bug npm); workaround = `npm install <pkg>@latest` para os 10 pacotes — OK, 27 packages changed, **0 vulnerabilities**.
+  - Instalados e verificados: vite 8.2.2, @vitejs/plugin-react 6.1.0, @biomejs/biome 2.5.10, vitest 4.1.11, @vitest/coverage-v8 4.1.11, framer-motion 13.1.1, i18next 26.4.0, react-i18next 17.0.12, lucide-react 1.33.0, electron 43.4.1.
+  - `electron-vite` permanece em `6.0.0-beta.1` (estável 5.0.0 é mais antigo) — única entrada restante no `npm outdated`, intencional.
+- **Validação**: build produção OK (6.70s; warning PLUGIN_TIMINGS do vite:css é informativo). Suite: primeira pós-update com 3 falhas transientes (cold-cache flake); duas rodadas consecutivas verdes — **229 files, 6894 passed | 1 skipped**.
+- **README.md**: badge de cobertura atualizado 85%→93%; badges tech (Electron 43, TS 7, React 19, Vitest 4) já corretos.
+- **Limpeza**: `bin/` untracked na raiz (saída de dotnet publish com CWD errado) deletado antes do commit.
+
+### Full Suite
+
+- **6894 TS tests**, 229 files — **0 quebras**
+- Cobertura: 93.66/85.28/93.71/94.85
+
+### Relevant Files Changed
+
+- `package.json` + `package-lock.json`: bumps acima
+- `vitest.config.ts`: exclude locales
+- `src/renderer/src/pages/{BenchmarkPage,DiskAnalyzerPage,DiskMaintenancePage,HostsEditorPage,VulnerabilityScannerPage}.tsx`
+- `src/renderer/src/components/layout/FlyoutMenu.tsx`, `src/renderer/src/components/malware/{CloudBackupPanel,ScanResultSummary}.tsx`
+- `src/renderer/src/locales/{en,es,pt}/{benchmark,disk,malware,sidebar,vulnerability}.json`
+- `README.md`, `AGENTS.md`
+
+## Session Summary (2026-08-22b — rebuild + publish dos instaladores)
+
+### Done
+
+- `npm run rebuild` (electron-rebuild -f -w better-sqlite3) após bump electron 43.4.1.
+- `npm run publish` (copy-engine → electron-vite build → electron-builder --win --publish always): instaladores DiNho-Optimizer-Setup-1.0.7.exe + portable com engine + ffmpeg 9.0 embarcados.
+
+### Next Steps
+
+- Validar instalador novo em campo se houver mudança de runtime relevante.

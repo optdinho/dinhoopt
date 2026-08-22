@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/versão-1.0.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-85%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-93%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 

@@ -121,7 +121,7 @@ export function DiskAnalyzerPage() {
             >
               {(drives.length > 0
                 ? drives
-                : [{ letter: isWin ? 'C' : '/', label: 'System', totalSize: 0, freeSpace: 0, usedSpace: 0 }]
+                : [{ letter: isWin ? 'C' : '/', label: t('systemDrive'), totalSize: 0, freeSpace: 0, usedSpace: 0 }]
               ).map((d) => (
                 <option key={d.letter} value={d.letter}>
                   {isWin ? `${d.letter}: ${d.label}` : `${d.letter} ${d.label}`}
