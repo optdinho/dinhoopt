@@ -144,14 +144,14 @@ describe('clips-config-manager', () => {
       config.stretchToFit = false
     })
 
-    it('includes replayBufferMode ram by default', () => {
-      config.replayBufferMode = 'ram'
-      expect(buildEngineConfig().replayBufferMode).toBe('ram')
-    })
-
-    it('propagates replayBufferMode hybrid to the engine payload', () => {
+    it('includes replayBufferMode hybrid by default', () => {
       config.replayBufferMode = 'hybrid'
       expect(buildEngineConfig().replayBufferMode).toBe('hybrid')
+    })
+
+    it('propagates replayBufferMode ram to the engine payload', () => {
+      config.replayBufferMode = 'ram'
+      expect(buildEngineConfig().replayBufferMode).toBe('ram')
     })
 
     it('uses config hotkeys when non-empty', () => {
@@ -443,7 +443,7 @@ describe('clips-config-manager', () => {
       persistClipsConfig()
       const saved = vi.mocked(saveClipsConfig).mock.calls[0][0] as Record<string, unknown>
       expect(saved.replayBufferMode).toBe('hybrid')
-      config.replayBufferMode = 'ram'
+      config.replayBufferMode = 'hybrid'
     })
 
     it('includes outputDirectory from getDefaultOutputDir', () => {

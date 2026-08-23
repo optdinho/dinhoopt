@@ -85,7 +85,7 @@ export const config: ConfigState = {
   autoCleanupThresholdGB: 100,
   adaptiveQuality: true,
   stretchToFit: false,
-  replayBufferMode: 'ram',
+  replayBufferMode: 'hybrid',
 }
 
 function defaultHotkeys(): HotkeyBinding[] {
@@ -211,7 +211,7 @@ export function loadPersistedClipsConfig(): void {
   config.noiseSuppression = saved.noiseSuppression ?? false
   config.adaptiveQuality = saved.adaptiveQuality ?? true
   config.stretchToFit = saved.stretchToFit ?? false
-  config.replayBufferMode = saved.replayBufferMode ?? 'ram'
+  config.replayBufferMode = saved.replayBufferMode ?? 'hybrid'
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
   config.autoCleanupThresholdGB = saved.autoCleanupThresholdGB ?? 100

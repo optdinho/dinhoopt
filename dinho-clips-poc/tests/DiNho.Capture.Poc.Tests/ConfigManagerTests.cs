@@ -230,13 +230,13 @@ public sealed class ConfigManagerTests
     }
 
     [Fact]
-    public void Update_PipeStyleInvalidReplayBufferMode_FallsBackToRam()
+    public void Update_PipeStyleInvalidReplayBufferMode_FallsBackToDefault()
     {
         var cfg = CreateClean();
 
         cfg.Update(c => c.ReplayBufferMode = "disk-only");
 
-        Assert.Equal("ram", cfg.Config.ReplayBufferMode);
+        Assert.Equal("hybrid", cfg.Config.ReplayBufferMode);
     }
 
     [Fact]

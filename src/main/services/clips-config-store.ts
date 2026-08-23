@@ -103,7 +103,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   autoCleanupThresholdGB: 100,
   adaptiveQuality: true,
   stretchToFit: false,
-  replayBufferMode: 'ram',
+  replayBufferMode: 'hybrid',
 }
 
 const store = createJsonStore<ClipsPersistedConfig>({

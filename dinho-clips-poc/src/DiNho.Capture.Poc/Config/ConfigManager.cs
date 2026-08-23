@@ -37,8 +37,8 @@ public sealed class AppConfig
     public int ReplayTimeSeconds { get; set; } = 120; // 2 min
 
     // Buffer de replay: "ram" = só RAM (excedente descartado quando enche);
-    // "hybrid" = RAM com cap de 3 min fixo + excedente vai pro disco (spill vídeo-only).
-    public string ReplayBufferMode { get; set; } = "ram";
+    // "hybrid" = RAM com cap de 2 min fixo + excedente vai pro disco (spill vídeo-only).
+    public string ReplayBufferMode { get; set; } = "hybrid";
 
     // Post-clip buffer: continua gravando N segundos após o save trigger
     // para garantir que o momento não seja cortado (ex: Medal/ShadowPlay)
@@ -147,8 +147,8 @@ public sealed class ConfigManager : IDisposable
     private static readonly HashSet<string> ValidReplayBufferModes = new()
     {
         // Alinhado com o allowlist TS (clips.ipc.ts): "ram" (só RAM) e
-        // "hybrid" (RAM 3min fixo + spill no disco). Qualquer outro valor
-        // cai no default "ram".
+        // "hybrid" (RAM 2min fixo + spill no disco). Qualquer outro valor
+        // cai no default "hybrid".
         "ram", "hybrid",
     };
 
