@@ -4653,3 +4653,47 @@ pm run copy-engine (296 files, ffmpeg 9.0 212MB); app fechado; DLLs copiadas par
 - dinho-clips-poc/src/DiNho.Capture.Poc/DiNho.Capture.Poc.csproj: NAudio 2.3.0 -> 3.0.1
 - dinho-clips-poc/src/VadTest/VadTest.csproj: NAudio 2.3.0 -> 3.0.1 + TFM net10.0 -> net10.0-windows
 - AGENTS.md: resumo de sessao
+
+## Session Summary (2026-08-23b — Auditoria release notes: melhorias custo-zero aplicadas)
+
+### Done
+
+- **Auditoria de release notes** (.NET 10/C#14, Electron 40-43, Biome 2.x, Vite 8, TS7, React 19.2, ffmpeg 9, Vitest 4) cruzada com o codebase — ~20 oportunidades identificadas, filtradas por risco de regressao (historico: 3x bug de arg ffmpeg inexistente -> restart loop; caminho de audio validado em campo).
+
+- **Aplicado TS/toolchain** (`1d4320a`):
+  - vitest.config.ts: `pool: 'forks'` fixado (crash do threads documentado; rodava --pool=forks manual) + `coverage.enabled: false` por padrao (coverage via flag CLI)
+  - `npx biome migrate --write` -> schema 2.5.10 + preset; 3 arquivos re-formatados
+
+- **Aplicado seguranca/perf main** (`1378305`):
+  - `app.setAppUserModelId('com.dinhooptimizer.win32')` em src/main/index.ts (faltava — notifications agrupavam errado)
+  - `session.setPermissionRequestHandler` deny-all com log (renderer nunca recebe camera/mic/geo via web API)
+  - `autoUpdater.logger` adapter para getLogger() JSONL (interface e `warn`, nao `warning`)
+  - **Electron Fuses** via `electronFuses` nativo do electron-builder 26: runAsNode/nodeOptions/nodeCliInspect OFF, cookieEncryption ON (one-way), asarIntegrity+onlyLoadAppFromAsar ON, grantFileProtocolExtraPrivileges OFF. Seguro: sem ELECTRON_RUN_AS_NODE/NODE_OPTIONS/--inspect no codigo; relaunch UAC usa exe direto; --cli/--daemon nao afetados
+  - electron-builder.yml: `electronLanguages [pt-BR,en-US,es]` (strip ~40 locales Chromium) + `compression: maximum`
+
+- **Aplicado C# engine** (`78c0c54`):
+  - `System.Threading.Lock` em 16 campos `readonly object` (AudioMixer, RamManager, DiskSpillBuffer, ConfigManager, HotkeyManager, PushToTalkManager, ConsoleLogger, Log, EngineCoordinator _exportLock/_restartLock, EncoderManager AmfPresetCacheLock, FfmpegAacEncoder _writeLock, CodecDetection _cacheLock, VideoPacketPool _sync, GameDatabase _loadLock, EngineStatus). `_pipelineLock` NAO convertido (usa Monitor.IsEntered/Exit/Enter). Testes que injetam locks via SetField atualizados p/ `new Lock()`
+  - **BUG PEGO NO REVIEW**: CppLoopbackSource._lock usa Monitor.Pulse/Wait -> revertido para object (build passava, quebraria em runtime)
+  - EngineCoordinator.Game.cs: ToLowerInvariant+Contains removidos -> Contains(StringComparison.OrdinalIgnoreCase) direto (2 blocos IsSystemExecutablePath)
+  - ConfigManager: ValidReplayBufferModes com StringComparer.OrdinalIgnoreCase + IsValidReplayBufferMode sem ToLower (valor e normalizado lowercase depois). ValidEncoderPresets ficou ESTRITO de proposito (preset cru vai pro ffmpeg)
+
+- **Auditados e OK sem mudanca**: selectors zustand todos acesso direto (zero candidatos useShallow); tsconfig ja max strict; sandbox renderer default E20+; setWindowOpenHandler com allowlist ja existe
+
+- **Pesquisado e descartado/registrado**: csproj perf props (TieredPGO/QuickJitForLoops ja ON default; R2R/NativeAOT evitar; ServerGC = experimento futuro com medicao ticks [RAM]); `-lookahead_level auto` NVENC REJEITADO (classe do bug weighted_pred/filler); afftdn vs anlmdn rejeitado (audio validado em campo); av1_amf high_quality sem maquina valida; useEffectEvent so em codigo novo; `<Activity>` deferido; tsc --checkers nao existe no TS 7.0.2
+
+### Validado
+
+- TS: 6909 passed | 1 skipped (228 files) — rodou com pool forks do config
+- C#: 1297/1297 (falhas intermediarias = flakiness documentada vstest)
+- Build producao OK; biome limpo; tsc sem erros novos
+
+### Key Decisions
+
+- Filtro de adocao: beneficio real + risco ~zero; qualquer arg ffmpeg novo exige validacao empirica contra `-h encoder=` antes
+- Presets encoder estritos (case-sensitive): valor validado cru segue pro ffmpeg — case-insensitive aqui reintroduziria classe restart loop
+- Delta updates (.blockmap) bloqueado em infra (GH_TOKEN), nao codigo
+
+### Next Steps
+
+- Proximo `npm run package`: valida fuses + compression maximum + electronLanguages (instalador menor); nota one-way do cookieEncryption
+- Experimento opcional ServerGC com medicao drops/pausas durante save
