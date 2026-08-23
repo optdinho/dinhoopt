@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import dotenv from 'dotenv'
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, screen, session, shell, Tray } from 'electron'
 
 // Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
 if (!app.isPackaged) {
@@ -95,6 +95,13 @@ if (dataDirFlag) {
   if (dir && isAbsolute(dir)) {
     app.setPath('userData', dir)
   }
+}
+
+// ─── AppUserModelId ──────────────────────────────────────────
+// Must match the shortcut/installer appId so Windows groups notifications
+// and toasts correctly (scheduler uses Notification).
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.dinhooptimizer.win32')
 }
 
 // ─── CLI / Daemon mode ───────────────────────────────────────
@@ -401,6 +408,13 @@ function initGui(): void {
         e.preventDefault()
         mainWindow.hide()
       }
+    })
+
+    // Deny all web permissions (camera/mic/geo/etc) — the app never grants
+    // these via web APIs; system features go through IPC instead.
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+      getLogger().warning('app', `Denied web permission request: ${permission}`)
+      callback(false)
     })
 
     mainWindow.webContents.setWindowOpenHandler((details) => {

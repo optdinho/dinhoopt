@@ -44,6 +44,13 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
 
   daemonMode = opts.daemon === true
 
+  // Route updater diagnostics into the structured JSONL logger.
+  autoUpdater.logger = {
+    info: (m) => void getLogger().info('Updater', String(m)),
+    warn: (m) => void getLogger().warning('Updater', String(m)),
+    error: (m) => void getLogger().error('Updater', String(m)),
+  }
+
   // GH_TOKEN was sanitized out of process.env by env-sanitize.ts.
   // electron-updater reads process.env.GH_TOKEN lazily at request time,
   // so we restore it just before each check and clear it after.

@@ -29,6 +29,28 @@ win:
         - x64
   icon: resources/icon.ico
   requestedExecutionLevel: requireAdministrator
+  # Strip unused Chromium locales (~10-15MB) — app ships its own i18n (en/pt/es).
+  electronLanguages:
+    - pt-BR
+    - en-US
+    - es
+
+# ffmpeg.exe (212MB) compresses well — smaller installer at cost of slower build.
+compression: maximum
+
+# Security fuses (applied at package time by electron-builder ≥26).
+# App runs elevated — hardening the binary matters. Verified safe:
+# no ELECTRON_RUN_AS_NODE / NODE_OPTIONS / --inspect usage; relaunch uses exe directly;
+# --cli/--daemon flags are unaffected by these fuses.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableCookieEncryption: true
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+  loadBrowserProcessSpecificV8Snapshot: false
 
 publish:
   provider: github
