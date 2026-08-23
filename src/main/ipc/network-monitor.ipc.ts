@@ -54,109 +54,126 @@ export function isSuspicious(conn: NetworkConnection): boolean {
   return false
 }
 
-async function getProcessNamesBatch(pids: number[]): Promise<Map<number, string>> {
-  const result = new Map<number, string>()
-  const unknownPids: number[] = []
-  for (const pid of pids) {
-    if (pid === 0) {
-      result.set(pid, 'System Idle')
-      continue
-    }
-    if (pid === 4) {
-      result.set(pid, 'System')
-      continue
-    }
-    unknownPids.push(pid)
-  }
-  if (unknownPids.length === 0) return result
+export interface NetstatRow {
+  localAddress: string
+  localPort: number
+  remoteAddress: string
+  remotePort: number
+  state: string
+  pid: number
+}
 
+function splitAddress(field: string): { address: string; port: number } {
+  if (field.startsWith('[')) {
+    const close = field.indexOf(']')
+    if (close === -1) return { address: field, port: 0 }
+    const address = field.slice(1, close)
+    const rest = field.slice(close + 1)
+    if (!rest.startsWith(':')) return { address, port: 0 }
+    const port = Number.parseInt(rest.slice(1), 10)
+    return { address, port: Number.isNaN(port) ? 0 : port }
+  }
+  const colon = field.lastIndexOf(':')
+  if (colon === -1) return { address: field, port: 0 }
+  const address = field.slice(0, colon)
+  const port = Number.parseInt(field.slice(colon + 1), 10)
+  return { address, port: Number.isNaN(port) ? 0 : port }
+}
+
+export function parseNetstatOutput(stdout: string): NetstatRow[] {
+  const rows: NetstatRow[] = []
+  for (const line of stdout.split(/\r?\n/)) {
+    const parts = line.trim().split(/\s+/)
+    if (parts.length < 4 || parts[0]?.toUpperCase() !== 'TCP') continue
+    const pid = Number.parseInt(parts[parts.length - 1]!, 10)
+    if (Number.isNaN(pid)) continue
+    const local = splitAddress(parts[1] ?? '')
+    const remote = splitAddress(parts[2] ?? '')
+    const hasState = parts.length >= 5
+    rows.push({
+      localAddress: local.address,
+      localPort: local.port,
+      remoteAddress: remote.address,
+      remotePort: remote.port,
+      state: hasState ? (parts[3] ?? '') : '',
+      pid,
+    })
+  }
+  return rows
+}
+
+export function parseTasklistOutput(stdout: string): Map<number, string> {
+  const map = new Map<number, string>()
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const cells = trimmed.split('","')
+    if (cells.length < 2) continue
+    const name = cells[0]!.replace(/^"/, '').trim()
+    const pid = Number.parseInt(cells[1]!.replace(/"$/, '').trim(), 10)
+    if (!name || Number.isNaN(pid)) continue
+    map.set(pid, name)
+  }
+  return map
+}
+
+function resolveNames(pids: Set<number>): Map<number, string> {
+  const names = new Map<number, string>()
+  for (const pid of pids) {
+    if (pid === 0) names.set(pid, 'System Idle')
+    else if (pid === 4) names.set(pid, 'System')
+  }
+  return names
+}
+
+export async function fetchProcessNameMap(): Promise<Map<number, string>> {
   try {
-    const pidList = unknownPids.map((p) => `Get-Process -Id ${p} -ErrorAction SilentlyContinue`).join('; ')
-    const { stdout } = await execFileAsync(
-      'powershell.exe',
-      ['-NoProfile', '-Command', `${pidList} | Select-Object Id,ProcessName | ConvertTo-Json -Compress`],
-      { timeout: 5000, windowsHide: true, encoding: 'utf-8' },
-    )
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(stdout)
-    } catch {
-      return result
-    }
-    const rows = Array.isArray(parsed) ? parsed : [parsed]
-    for (const row of rows) {
-      if (!row || typeof row !== 'object') continue
-      const r = row as Record<string, unknown>
-      const id = Number(r.Id)
-      const name = String(r.ProcessName || '').trim()
-      if (id && name) result.set(id, name)
-    }
+    const { stdout } = await execFileAsync('tasklist.exe', ['/FO', 'CSV', '/NH'], {
+      timeout: 10000,
+      windowsHide: true,
+      encoding: 'utf-8',
+    })
+    return parseTasklistOutput(stdout)
   } catch {
     /* partial result acceptable */
+    return new Map()
   }
-  return result
+}
+
+const CACHE_TTL_MS = 3000
+
+let cachedResult: { data: NetworkConnection[]; expires: number } | null = null
+
+export function clearConnectionsCache(): void {
+  cachedResult = null
 }
 
 export async function getActiveConnections(): Promise<NetworkConnection[]> {
+  if (cachedResult && Date.now() < cachedResult.expires) return cachedResult.data
+
+  let connections: NetworkConnection[]
   try {
-    const { stdout } = await execFileAsync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-Command',
-        'Get-NetTCPConnection | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,OwningProcess,State | ConvertTo-Json -Compress',
-      ],
-      { timeout: 10000, windowsHide: true, encoding: 'utf-8' },
-    )
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(stdout)
-    } catch {
-      getLogger().warning('network-monitor', 'Failed to parse PowerShell output')
-      return []
+    const [{ stdout }, nameMap] = await Promise.all([
+      execFileAsync('netstat.exe', ['-ano'], { timeout: 10000, windowsHide: true, encoding: 'utf-8' }),
+      fetchProcessNameMap(),
+    ])
+    const rows = parseNetstatOutput(stdout)
+    const pids = new Set(rows.map((r) => r.pid))
+    const names = resolveNames(pids)
+    for (const [pid, name] of nameMap) {
+      if (pids.has(pid)) names.set(pid, name)
     }
-    const rows = Array.isArray(parsed) ? parsed : [parsed]
-
-    const pids = new Set<number>()
-    const rawRows: Array<{
-      localAddr: string
-      localPort: number
-      remoteAddr: string
-      remotePort: number
-      state: string
-      pid: number
-    }> = []
-    for (const row of rows) {
-      if (!row || typeof row !== 'object') continue
-      const r = row as Record<string, unknown>
-      const pid = Number(r.OwningProcess) || 0
-      pids.add(pid)
-      rawRows.push({
-        localAddr: String(r.LocalAddress || ''),
-        localPort: Number(r.LocalPort) || 0,
-        remoteAddr: String(r.RemoteAddress || ''),
-        remotePort: Number(r.RemotePort) || 0,
-        state: String(r.State || ''),
-        pid,
-      })
-    }
-
-    const nameMap = await getProcessNamesBatch([...pids])
-
-    return rawRows.map((r) => ({
-      localAddress: r.localAddr,
-      localPort: r.localPort,
-      remoteAddress: r.remoteAddr,
-      remotePort: r.remotePort,
-      state: r.state,
-      pid: r.pid,
-      processName: nameMap.get(r.pid) || 'Unknown',
+    connections = rows.map((r) => ({
+      ...r,
+      processName: names.get(r.pid) || 'Unknown',
     }))
   } catch (err) {
     getLogger().error('network-monitor', `Failed to get connections: ${err}`)
     return []
   }
+
+  cachedResult = { data: connections, expires: Date.now() + CACHE_TTL_MS }
+  return connections
 }
 
 export function registerNetworkMonitorIpc(_getWindow: WindowGetter): void {
