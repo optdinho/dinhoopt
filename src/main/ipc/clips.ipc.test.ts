@@ -512,7 +512,7 @@ describe('CLIPS_GET_CONFIG', () => {
     expect(cfg.bufsizeKbps).toBe(60000)
     expect(cfg.bframes).toBe(3)
     expect(cfg.lookahead).toBe(16)
-    expect(cfg.encoderPreset).toBe('p6')
+    expect(cfg.encoderPreset).toBe('p5')
     expect(cfg.outputDirectory).toContain('DiNhoClips')
     expect(cfg.forceSoftware).toBe(false)
     expect(cfg.pushToTalk).toBe('hold')
