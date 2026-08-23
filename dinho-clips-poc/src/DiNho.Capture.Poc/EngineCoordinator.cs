@@ -74,6 +74,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private readonly object _pipelineLock = new();
     private Timer? _cleanupTimer;
     private Timer? _pttDiagTimer;
+    private Timer? _poolTrimTimer;
     private CancellationTokenSource? _pipelineCts;
     private Task? _pipelineTask;
     private readonly PipelineWatchdog _watchdog = new();
@@ -95,6 +96,10 @@ public sealed partial class EngineCoordinator : IDisposable
     // um frame bom (ou o retorno do alt-tab) zera o flag. Timeouts consecutivos
     // (stall real do WGC/DWM) contam normalmente.
     private bool _pendingTimeoutDrop;
+
+    // ServerGC experiment: cumulative GC pause (ms) at the previous [RAM] tick,
+    // so each tick logs the delta (+ms) of time spent paused in GC.
+    private long _lastGcPauseTotalMs;
 
     // Recursos compartilhados (performance)
     private ID3D11Device? _sharedDevice;

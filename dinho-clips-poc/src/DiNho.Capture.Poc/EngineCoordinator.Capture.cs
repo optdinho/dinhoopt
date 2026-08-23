@@ -261,9 +261,24 @@ public sealed partial class EngineCoordinator
                 _pttDiagTimer = new Timer(_ =>
                 {
                     var mixer = _audioMixer;
-                    if (mixer != null)
+                    // Guard de null: em testes/embeddings sem HotkeyManager, _ptt é null —
+                    // exceção não tratada aqui crasha o processo inteiro (threadpool timer).
+                    if (mixer != null && _ptt != null)
                         Log.D("PTT", $"pttKeys=[{string.Join(",", _config.Config.PushToTalkKeys)}] mode={_config.Config.PttMode} mic={mixer.MicEnabled} active={_ptt.MicActive}");
                 }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+
+                // Timer periódico de trim do VideoPacketPool: a cada 30s reduz
+                // o idle para 64MB (1/4 de 256MB) — evita que o working set
+                // fique preso no pico histórico mesmo com o buffer estabilizado.
+                _poolTrimTimer = new Timer(_ =>
+                {
+                    try
+                    {
+                        var limit = VideoPacketPool.MaxIdleBytes / 4;
+                        VideoPacketPool.TrimIdleBytes(limit);
+                    }
+                    catch { /* fail-closed: trim é best-effort */ }
+                }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
                 Log.I("EngineCoordinator", "=== StartCapture CONCLUIDO ===");
             }
@@ -383,6 +398,9 @@ public sealed partial class EngineCoordinator
 
             _pttDiagTimer?.Dispose();
             _pttDiagTimer = null;
+
+            _poolTrimTimer?.Dispose();
+            _poolTrimTimer = null;
 
             _encoder?.Dispose();
             _encoder = null;
@@ -601,6 +619,14 @@ public sealed partial class EngineCoordinator
         return (lohBytes() / MB, gen2Bytes() / MB, gen01Bytes() / MB, committedBytes() / MB, pinnedBytes() / MB);
     }
 
+    // ServerGC experiment: cumulative GC pause time (since process start), in ms.
+    // The [RAM] tick logs total + per-tick delta so field logs can compare
+    // pause behavior between Workstation GC baseline and ServerGC builds.
+    internal static long ReadGcPauseMs(Func<TimeSpan> getTotalPause)
+    {
+        return (long)getTotalPause().TotalMilliseconds;
+    }
+
     private void ReportDrop(string reason)
     {
         _consecutiveDrops++;
@@ -681,6 +707,7 @@ public sealed partial class EngineCoordinator
                 long gen01Mb = 0;
                 long committedMb = 0;
                 long pinnedMb = 0;
+                long gcPauseTotalMs = 0;
                 try
                 {
                     workingSetMb = Process.GetCurrentProcess().WorkingSet64 / (1024L * 1024L);
@@ -694,12 +721,15 @@ public sealed partial class EngineCoordinator
                         () => info.GenerationInfo[0].SizeAfterBytes + info.GenerationInfo[1].SizeAfterBytes,
                         () => info.TotalCommittedBytes,
                         () => info.PinnedObjectsCount);
+                    gcPauseTotalMs = ReadGcPauseMs(() => GC.GetTotalPauseDuration());
                 }
                 catch (Exception ex) { Log.D("RAM", $"working set sample failed: {ex.Message}"); }
                 var ringMb = (long)Math.Round(totalMb);
                 var poolIdleMb = VideoPacketPool.MaxIdleBytes / (1024L * 1024L);
                 var (nativeMb, retainedMb) = DeriveFootprint(workingSetMb, gcManagedMb, ringMb, poolIdleMb);
-                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB | native={nativeMb}MB | managedRetained={retainedMb}MB | loh={lohMb}MB | gen2={gen2Mb}MB | gen01={gen01Mb}MB | committed={committedMb}MB | pinned={pinnedMb}MB");
+                var gcPauseDeltaMs = Math.Max(0, gcPauseTotalMs - _lastGcPauseTotalMs);
+                _lastGcPauseTotalMs = gcPauseTotalMs;
+                Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB | native={nativeMb}MB | managedRetained={retainedMb}MB | loh={lohMb}MB | gen2={gen2Mb}MB | gen01={gen01Mb}MB | committed={committedMb}MB | pinned={pinnedMb}MB | gcPause={gcPauseTotalMs}ms (+{gcPauseDeltaMs}ms)");
             }
 
             try
@@ -834,6 +864,10 @@ public sealed partial class EngineCoordinator
                             {
                                 _gameBackgrounded = true;
                                 Log.I("Pipeline", "Jogo em background (alt-tab) — frames ausentes. Aguardando retorno...");
+                                // Libera páginas nativas/DWM do working set enquanto o jogo
+                                // está em background — evita que o proc retorne ao patamar
+                                // alto quando o jogo voltar ao foreground.
+                                WorkingSetTrimmer.Trim();
                             }
                             _starvationStart = default;
                             _watchdog.Reset();

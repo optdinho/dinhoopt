@@ -125,11 +125,15 @@ internal partial class FfmpegEncoder
         {
             using var p = new Process
             {
-                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-encoders", redirectOutput: true)
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-encoders", redirectOutput: true, redirectError: true)
             };
             p.Start();
-            var o = p.StandardOutput.ReadToEnd();
+            // Leitura concorrente — evita deadlock de pipe (-encoders enche o stdout).
+            var outTask = p.StandardOutput.ReadToEndAsync();
+            var errTask = p.StandardError.ReadToEndAsync();
             p.WaitForExit(2000);
+            var o = outTask.Result;
+            _ = errTask.Result;
             return o.Contains(enc, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }

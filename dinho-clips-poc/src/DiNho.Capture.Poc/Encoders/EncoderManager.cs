@@ -48,17 +48,30 @@ internal static class FfmpegPathResolver
                 {
                     Arguments = "-version",
                     RedirectStandardOutput = true,
+                    // Redireciona e drena ambos os pipes: sem leitor, o buffer do
+                    // pipe (4KB) pode encher e, com handle herdado do host de teste,
+                    // o output vaza para o console do vstest (crasha o testhost).
+                    RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     WorkingDirectory = Path.GetDirectoryName(candidate) ?? ""
                 };
                 using var p = Process.Start(probe);
-                if (p?.WaitForExit(2000) == true && p.ExitCode == 0)
+                if (p != null)
                 {
-                    _cachedPath = candidate;
-                    _cachedDir = Path.GetDirectoryName(candidate) ?? "";
-                    Log.D("FfmpegPathResolver", $"Found ffmpeg at: {candidate}");
-                    return candidate;
+                    var exited = p.WaitForExit(2000);
+                    if (exited)
+                    {
+                        var outLen = p.StandardOutput.ReadToEnd().Length;
+                        _ = p.StandardError.ReadToEnd();
+                        if (p.ExitCode == 0 && outLen > 0)
+                        {
+                            _cachedPath = candidate;
+                            _cachedDir = Path.GetDirectoryName(candidate) ?? "";
+                            Log.D("FfmpegPathResolver", $"Found ffmpeg at: {candidate}");
+                            return candidate;
+                        }
+                    }
                 }
             }
             catch { }
@@ -779,11 +792,16 @@ public sealed class EncoderManager : IDisposable
         {
             using var proc = new Process
             {
-                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-version", redirectOutput: true)
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-version", redirectOutput: true, redirectError: true)
             };
             proc.Start();
-            proc.StandardOutput.ReadToEnd();
+            // Leitura CONCORRENTE: -encoders/-version podem encher o pipe de stdout
+            // (4KB) antes de sair — ler um pipe até EOF antes do outro dá deadlock.
+            var encOutTask = proc.StandardOutput.ReadToEndAsync();
+            var encErrTask = proc.StandardError.ReadToEndAsync();
             proc.WaitForExit(2000);
+            _ = encOutTask.Result;
+            _ = encErrTask.Result;
             return proc.ExitCode == 0;
         }
         catch { return false; }
@@ -795,11 +813,15 @@ public sealed class EncoderManager : IDisposable
         {
             using var p = new Process
             {
-                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-encoders", redirectOutput: true)
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: "-encoders", redirectOutput: true, redirectError: true)
             };
             p.Start();
-            var o = p.StandardOutput.ReadToEnd();
+            // Leitura concorrente (ver CheckFfmpegAvailable) — evita deadlock de pipe.
+            var outTask = p.StandardOutput.ReadToEndAsync();
+            var errTask = p.StandardError.ReadToEndAsync();
             p.WaitForExit(2000);
+            var o = outTask.Result;
+            _ = errTask.Result;
             return o.Contains(enc, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }

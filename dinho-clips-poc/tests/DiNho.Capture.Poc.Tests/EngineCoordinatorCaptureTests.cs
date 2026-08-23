@@ -1715,6 +1715,19 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     }
 
     [Fact]
+    public void ReadGcPauseMs_ConvertsTimeSpanToMilliseconds()
+    {
+        Assert.Equal(1250L, EngineCoordinator.ReadGcPauseMs(() => TimeSpan.FromMilliseconds(1250)));
+        Assert.Equal(0L, EngineCoordinator.ReadGcPauseMs(() => TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void ReadGcPauseMs_TruncatesSubMillisecond()
+    {
+        Assert.Equal(42L, EngineCoordinator.ReadGcPauseMs(() => TimeSpan.FromTicks(TimeSpan.TicksPerMillisecond * 42 + 500)));
+    }
+
+    [Fact]
     public void EngineStatus_DroppedFrames_CanUpdate()
     {
         using var status = new EngineStatus();

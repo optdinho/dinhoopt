@@ -97,7 +97,11 @@ public sealed class ClipExporterIntegrationTests
                 }
             };
             gen.Start();
+            // Drena o stderr (banner + progresso do ffmpeg) — sem leitor, o pipe
+            // pode encher em encodes longos e bloquear o processo.
+            var genErr = gen.StandardError.ReadToEndAsync();
             gen.WaitForExit(15000);
+            _ = genErr.Result;
             if (gen.ExitCode != 0 || !File.Exists(tempRaw))
                 return [];
 
@@ -220,7 +224,11 @@ public sealed class ClipExporterIntegrationTests
                 }
             };
             proc.Start();
+            var toolOutTask = proc.StandardOutput.ReadToEndAsync();
+            var toolErrTask = proc.StandardError.ReadToEndAsync();
             proc.WaitForExit(2000);
+            _ = toolOutTask.Result;
+            _ = toolErrTask.Result;
             return proc.ExitCode == 0;
         }
         catch
@@ -606,12 +614,15 @@ public sealed class ClipExporterIntegrationTests
                 }
             };
             proc.Start();
-            var output = proc.StandardOutput.ReadToEnd();
+            var probeOutTask = proc.StandardOutput.ReadToEndAsync();
+            var probeErrTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(10000))
             {
                 proc.Kill();
                 return null;
             }
+            var output = probeOutTask.Result;
+            _ = probeErrTask.Result;
             return proc.ExitCode == 0 ? output.Trim() : null;
         }
         catch
