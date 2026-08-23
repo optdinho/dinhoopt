@@ -33,7 +33,7 @@ public sealed class ConfigManagerTests
     public void Default_EncoderPreset_IsP6()
     {
         var cfg = CreateClean();
-        Assert.Equal("p6", cfg.Config.EncoderPreset);
+        Assert.Equal("p5", cfg.Config.EncoderPreset);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class ConfigManagerTests
         try
         {
             var cfg = new ConfigManager(tempFile);
-            Assert.Equal("p6", cfg.Config.EncoderPreset);
+            Assert.Equal("p5", cfg.Config.EncoderPreset);
         }
         finally
         {

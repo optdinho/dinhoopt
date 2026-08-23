@@ -350,7 +350,7 @@ describe('clips-config-manager', () => {
       expect(config.bufsizeKbps).toBe(60000)
       expect(config.bframes).toBe(3)
       expect(config.lookahead).toBe(16)
-      expect(config.encoderPreset).toBe('p6')
+      expect(config.encoderPreset).toBe('p5')
       expect(config.codec).toBe('auto')
       expect(config.adapterIndex).toBe(-1)
       expect(config.micDeviceId).toBe('')

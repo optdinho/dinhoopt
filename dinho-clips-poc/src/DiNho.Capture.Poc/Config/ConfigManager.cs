@@ -65,7 +65,7 @@ public sealed class AppConfig
     public int BufsizeKbps { get; set; } = 60000;
     public int Bframes { get; set; } = 3;
     public int Lookahead { get; set; } = 16;
-    public string EncoderPreset { get; set; } = "p6";
+    public string EncoderPreset { get; set; } = "p5";
     public string Codec { get; set; } = "auto";
     /// <summary>GPU adapter index for multi-GPU systems (-1 = auto).</summary>
     public int AdapterIndex { get; set; } = -1;
