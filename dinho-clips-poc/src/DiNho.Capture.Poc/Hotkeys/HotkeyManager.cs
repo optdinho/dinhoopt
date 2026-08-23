@@ -32,7 +32,7 @@ public sealed class HotkeyManager : IDisposable
     private HHOOK _hookId = HHOOK.Null;
     private HHOOK _mouseHookId = HHOOK.Null;
     private Thread? _hookThread;
-    private bool _disposed;
+    private volatile bool _disposed;
     private readonly Lock _lock = new();
 
     public event Action<HotkeyPressedEventArgs>? OnHotkeyPressed;
@@ -94,8 +94,12 @@ public sealed class HotkeyManager : IDisposable
                     var moduleHandle = PInvoke.GetModuleHandle(pModuleName);
                     _hookId = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_KEYBOARD_LL, _hookDelegate, moduleHandle, 0);
                     Log.I("HotkeyManager", $"WH_KEYBOARD_LL hook: {(long)_hookId.Value:X} (0=falhou)");
+                    if (_hookId.IsNull)
+                        Log.W("HotkeyManager", "WH_KEYBOARD_LL FALHOU — hotkeys de teclado inativas (verifique privilégios/UIPI)");
                     _mouseHookId = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_MOUSE_LL, _mouseHookDelegate, moduleHandle, 0);
                     Log.I("HotkeyManager", $"WH_MOUSE_LL hook: {(long)_mouseHookId.Value:X} (0=falhou)");
+                    if (_mouseHookId.IsNull)
+                        Log.W("HotkeyManager", "WH_MOUSE_LL FALHOU — hotkeys de mouse inativas");
                 }
             }
 

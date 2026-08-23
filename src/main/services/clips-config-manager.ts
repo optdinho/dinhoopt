@@ -154,7 +154,13 @@ export function buildEngineConfig(): Record<string, unknown> {
 
 export function getDefaultOutputDir(): string {
   if (config.outputDirectory) return config.outputDirectory
-  return join(process.env.USERPROFILE || 'C:\\Users\\Administrator', 'Desktop', 'DiNhoClips')
+  const home =
+    process.env.USERPROFILE ||
+    (process.env.HOMEDRIVE && process.env.HOMEPATH
+      ? process.env.HOMEDRIVE + process.env.HOMEPATH
+      : undefined) ||
+    process.cwd()
+  return join(home, 'Desktop', 'DiNhoClips')
 }
 
 export function clipPathInOutputDir(inputPath: string): string | null {

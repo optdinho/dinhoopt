@@ -229,10 +229,23 @@ describe('clips-config-manager', () => {
       expect(getDefaultOutputDir()).toBe(join(mockUserProfile, 'Desktop', 'DiNhoClips'))
     })
 
-    it('falls back to hardcoded path when USERPROFILE is unset', () => {
+    it('falls back to HOMEDRIVE+HOMEPATH when USERPROFILE is unset', () => {
       delete process.env.USERPROFILE
+      process.env.HOMEDRIVE = 'D:'
+      process.env.HOMEPATH = '\\Users\\teste'
       config.outputDirectory = ''
-      expect(getDefaultOutputDir()).toBe(join('C:\\Users\\Administrator', 'Desktop', 'DiNhoClips'))
+      expect(getDefaultOutputDir()).toBe(join('D:\\Users\\teste', 'Desktop', 'DiNhoClips'))
+      delete process.env.HOMEDRIVE
+      delete process.env.HOMEPATH
+      process.env.USERPROFILE = mockUserProfile
+    })
+
+    it('falls back to cwd when no home env vars are set', () => {
+      delete process.env.USERPROFILE
+      delete process.env.HOMEDRIVE
+      delete process.env.HOMEPATH
+      config.outputDirectory = ''
+      expect(getDefaultOutputDir()).toBe(join(process.cwd(), 'Desktop', 'DiNhoClips'))
       process.env.USERPROFILE = mockUserProfile
     })
   })

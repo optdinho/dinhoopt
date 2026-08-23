@@ -198,7 +198,7 @@ describe('clips-config-store', () => {
     expect(callArg.autoCleanupEnabled).toBe(true)
     expect(callArg.autoCleanupThresholdGB).toBe(100)
     expect(callArg.adaptiveQuality).toBe(true)
-    expect(callArg.replayBufferMode).toBe('hybrid')
+    expect(callArg.replayBufferMode).toBe('ram')
   })
 
   it('mutation safety: modifying returned config does not affect subsequent loads', () => {
