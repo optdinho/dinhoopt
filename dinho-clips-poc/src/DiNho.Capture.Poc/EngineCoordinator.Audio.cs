@@ -41,8 +41,9 @@ public sealed partial class EngineCoordinator
         {
             if (cfg.UseExcludeMode && cfg.ExcludeProcessId > 0)
             {
-                Log.I("EngineCoordinator", $"Áudio: EXCLUDE mode (C++ DLL) — excluindo PID {cfg.ExcludeProcessId} (e filhos), capturando TODO o resto");
-                return new CppLoopbackSource(cfg.ExcludeProcessId, includeTree: false, sampleRate: sampleRate);
+                return CreateProcessLoopbackWithFallback(
+                    cfg.ExcludeProcessId, includeTree: false, sampleRate,
+                    $"EXCLUDE mode — excluindo PID {cfg.ExcludeProcessId} (e filhos), capturando TODO o resto");
             }
 
             var selectedPids = cfg.SelectedAudioSessions;
@@ -53,13 +54,14 @@ public sealed partial class EngineCoordinator
 
                 if (processes.Count > 0)
                 {
-                    Log.I("EngineCoordinator", $"Áudio: CppLoopbackSource INCLUDE para {processes.Count} processo(s)");
                     foreach (var (pid, name) in processes)
                         Log.I("EngineCoordinator", $"PID alvo {pid}: {name}");
 
                     var (targetPid, _) = processes[0];
                     _audioFallback = false;
-                    return new CppLoopbackSource(targetPid, includeTree: true, sampleRate: sampleRate);
+                    return CreateProcessLoopbackWithFallback(
+                        targetPid, includeTree: true, sampleRate,
+                        $"INCLUDE para {processes.Count} processo(s)");
                 }
 
                 Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
@@ -91,6 +93,39 @@ public sealed partial class EngineCoordinator
 
             return null;
         }
+    }
+
+    /// <summary>
+    /// Per-process loopback: NAudio 3 gerenciado primeiro (WasapiProcessLoopbackSource),
+    /// C++ DLL (CppLoopbackSource) como fallback — Win10 &lt; 2004 ou falha de ativação.
+    /// </summary>
+    private IAudioSource CreateProcessLoopbackWithFallback(int pid, bool includeTree, int sampleRate, string modeLabel)
+    {
+        try
+        {
+            var source = new WasapiProcessLoopbackSource(pid, includeTree, sampleRate);
+            try
+            {
+                // Start adiantado: valida a ativação WASAPI agora (BuildAsync roda aqui)
+                // para que falha caia no fallback da DLL. O Start() do AudioMixer vira no-op.
+                source.Start();
+                Log.I("EngineCoordinator", $"Áudio: {modeLabel} — NAudio 3 process loopback (PID {pid})");
+                return source;
+            }
+            catch
+            {
+                source.Dispose();
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.W("EngineCoordinator", $"NAudio 3 process loopback falhou (PID {pid}): {ex.Message} — caindo para C++ DLL");
+        }
+
+        Log.I("EngineCoordinator", $"Áudio: {modeLabel} — CppLoopbackSource (C++ DLL) PID {pid}");
+        _audioFallback = false;
+        return new CppLoopbackSource(pid, includeTree, sampleRate);
     }
 
     private IAudioSource? CreateMicSource(int sampleRate)
