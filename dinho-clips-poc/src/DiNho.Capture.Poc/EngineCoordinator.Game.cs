@@ -1622,6 +1622,32 @@ public sealed partial class EngineCoordinator
         "Coinbase", "coinbase", "CoinbaseWallet", "Binance", "binance", "Binance App",
         "Kraken", "kraken", "KuCoin", "kucoin", "OKX", "Bitfinex", "Gemini",
         "Crypto.com", "CryptoCom", "Ledger Live", "LedgerLive", "Trezor Suite", "TrezorSuite",
+        // === Expansao 2026-08: apps comuns ausentes ===
+        // Wallpapers / customizacao desktop
+        "WallpaperEngine", "wallpaper32", "wallpaper64",
+        "LivelyWallpaper", "Rainmeter", "Rainmeter.exe",
+        "StartAllBack", "StartAllBackCfg",
+        "TranslucentTB", "ExplorerPatcher",
+        // Cloud / sync adicionais
+        "iCloud", "iCloudServices", "iCloudDrive", "iCloudPhotos",
+        // Adobe Creative Cloud (background)
+        "Creative Cloud", "CreativeCloud", "CCXProcess",
+        "Adobe Desktop Service", "AdobeIPCBroker", "AdobeCollabSync",
+        // GPU vendor apps modernos
+        "NVIDIA App", "NVApp",
+        "IntelGraphicsSoftware", "IntelGraphicsControlPanel", "IGCC", "IGFXTrayModule",
+        "RadeonSoftware", "AMDSoftware", "AMDLink", "AMDInstallLauncher",
+        "RyzenMaster", "AMDRyzenMasterSDK",
+        // Launchers / clients
+        "RiotClientServices",
+        "GeForceNOW",
+        "Unity Hub", "UnityHub",
+        // Audio console vendors
+        "RtkAudUService64", "RtkAudioUniversalService", "RealtekAudioConsole",
+        // Navegadores novos / minoritarios
+        "zen", "zen-beta", "Thorium", "thorium",
+        // Utilidades de captura/print
+        "Flameshot", "Gyazo", "Monosnap",
     };
 
     private const uint WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
