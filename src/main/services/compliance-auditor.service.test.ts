@@ -1,4 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  applyComplianceSettings,
+  parseProbeOutput,
+  parseSeceditOutput,
+  revertComplianceSettings,
+  scanCompliance,
+  type ComplianceProbeData,
+} from './compliance-auditor.service'
 
 const mocks = vi.hoisted(() => ({
   execNativeUtf8: vi.fn(),
@@ -13,331 +21,348 @@ vi.mock('./logger.service', () => ({
   getLogger: () => mocks.logger,
 }))
 
-import { applyComplianceSettings, revertComplianceSettings, scanCompliance } from './compliance-auditor.service'
-
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
+function makeBlob(overrides: Partial<ComplianceProbeData> = {}): string {
+  return JSON.stringify({
+    secedit: {},
+    lsaClearText: null,
+    lsaNoLMHash: null,
+    smb1: null,
+    uacEnableLUA: null,
+    uacConsentPrompt: null,
+    guestEnabled: null,
+    auditSuccess: false,
+    wuauservStartType: null,
+    bitlockerStatus: null,
+    firewallEnabledCount: 0,
+    ...overrides,
+  } satisfies ComplianceProbeData)
+}
+
+function mockGather(overrides: Partial<ComplianceProbeData> = {}): void {
+  mocks.execNativeUtf8.mockResolvedValue({ stdout: makeBlob(overrides), stderr: '' })
+}
+
+function getCheck(result: Awaited<ReturnType<typeof scanCompliance>>, id: string) {
+  const c = result.checks.find((x) => x.id === id)
+  expect(c).toBeDefined()
+  return c!
+}
+
+const PASSWORD_IDS = [
+  'password-complexity',
+  'password-min-length',
+  'password-max-age',
+  'lockout-threshold',
+  'lockout-duration',
+]
+
 describe('scanCompliance', () => {
-  it('handles all checks failing gracefully', async () => {
+  it('gathers all probe data with a single process spawn', async () => {
+    mockGather()
+
+    await scanCompliance()
+
+    expect(mocks.execNativeUtf8).toHaveBeenCalledTimes(1)
+    const [cmd, args, opts] = mocks.execNativeUtf8.mock.calls[0]!
+    expect(cmd).toBe('powershell.exe')
+    expect(args).toContain('-NoProfile')
+    expect(args).toContain('-NonInteractive')
+    expect(opts).toMatchObject({ windowsHide: true })
+  })
+
+  it('marks every check as errored when the gather fails', async () => {
     mocks.execNativeUtf8.mockRejectedValue(new Error('command failed'))
 
     const result = await scanCompliance()
-    expect(result.total).toBeGreaterThan(0)
-    // clear-text-password: val=null → intVal=0 → compliant=true
-    // wuauserv-enabled: stdout='' → ''!=='disabled' → compliant=true
-    expect(result.compliant).toBeLessThanOrEqual(2)
-    expect(result.score).toBeLessThanOrEqual(20)
+
+    expect(result.total).toBe(15)
+    expect(result.compliant).toBe(0)
+    expect(result.score).toBe(0)
+    for (const c of result.checks) {
+      expect(c.compliant).toBe(false)
+      expect(c.value).toBe('Erro')
+    }
   })
 
-  it('reports progress via callback', async () => {
-    mocks.execNativeUtf8.mockRejectedValue(new Error('command failed'))
+  it('marks every check as errored when output cannot be parsed', async () => {
+    mocks.execNativeUtf8.mockResolvedValue({ stdout: 'garbage without json', stderr: '' })
+
+    const result = await scanCompliance()
+
+    expect(result.compliant).toBe(0)
+    expect(result.checks.every((c) => c.value === 'Erro')).toBe(true)
+  })
+
+  it('reports progress for gather phase and each check', async () => {
+    mockGather()
     const onProgress = vi.fn()
 
     await scanCompliance(onProgress)
 
-    expect(onProgress).toHaveBeenCalled()
     const calls = onProgress.mock.calls
-    expect(calls.length).toBeGreaterThanOrEqual(1)
-    expect(calls[0]![0]).toHaveProperty('total')
+    expect(calls.length).toBe(16)
+    expect(calls[0]![0]).toMatchObject({ current: 0, currentLabel: 'Coletando informações do sistema' })
+    expect(calls[calls.length - 1]![0]).toMatchObject({ current: 15, total: 15 })
   })
 
-  it('detects SMB1 as enabled when registry returns 1', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('SMB1')) {
-        return { stdout: '    SMB1    REG_DWORD    0x1', stderr: '' }
-      }
-      if (full.includes('reg.exe query')) {
-        throw new Error('key not found')
-      }
-      if (full.includes('cmd.exe') || full.includes('secedit.exe') || full.includes('powershell.exe')) {
-        throw new Error('command failed')
-      }
-      throw new Error('command failed')
-    })
-
-    const result = await scanCompliance()
-    const smb1 = result.checks.find((c) => c.id === 'smb1-disabled')
-    expect(smb1).toBeDefined()
-    expect(smb1!.compliant).toBe(false)
-    expect(smb1!.value).toBe('Ativado')
+  it('detects SMB1 as enabled', async () => {
+    mockGather({ smb1: 1 })
+    const smb1 = getCheck(await scanCompliance(), 'smb1-disabled')
+    expect(smb1.compliant).toBe(false)
+    expect(smb1.value).toBe('Ativado')
   })
 
-  it('detects SMB1 as disabled when registry returns 0', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('SMB1')) {
-        return { stdout: '    SMB1    REG_DWORD    0x0', stderr: '' }
-      }
-      if (full.includes('reg.exe query')) {
-        throw new Error('key not found')
-      }
-      throw new Error('command failed')
-    })
-
-    const result = await scanCompliance()
-    const smb1 = result.checks.find((c) => c.id === 'smb1-disabled')
-    expect(smb1).toBeDefined()
-    expect(smb1!.compliant).toBe(true)
-    expect(smb1!.value).toBe('Desativado')
+  it('detects SMB1 as disabled', async () => {
+    mockGather({ smb1: 0 })
+    const smb1 = getCheck(await scanCompliance(), 'smb1-disabled')
+    expect(smb1.compliant).toBe(true)
+    expect(smb1.value).toBe('Desativado')
   })
 
-  it('checks UAC via registry', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('EnableLUA')) {
-        return { stdout: '    EnableLUA    REG_DWORD    0x1', stderr: '' }
-      }
-      if (full.includes('reg.exe query')) {
-        throw new Error('key not found')
-      }
-      throw new Error('command failed')
-    })
-
-    const result = await scanCompliance()
-    const uac = result.checks.find((c) => c.id === 'uac-enabled')
-    expect(uac).toBeDefined()
-    expect(uac!.compliant).toBe(true)
-    expect(uac!.value).toBe('Ativado')
+  it('treats missing SMB1 value as non-compliant but reports Desativado', async () => {
+    mockGather({})
+    const smb1 = getCheck(await scanCompliance(), 'smb1-disabled')
+    expect(smb1.compliant).toBe(false)
+    expect(smb1.value).toBe('Desativado')
   })
 
-  it('checks firewall via PowerShell', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('Get-NetFirewallProfile')) {
-        return { stdout: '3', stderr: '' }
-      }
-      if (full.includes('reg.exe query')) {
-        throw new Error('key not found')
-      }
-      if (full.includes('cmd.exe') || full.includes('secedit.exe') || full.includes('powershell.exe')) {
-        throw new Error('command failed')
-      }
-      throw new Error('command failed')
-    })
+  it('checks UAC via gathered registry value', async () => {
+    mockGather({ uacEnableLUA: 1 })
+    const uac = getCheck(await scanCompliance(), 'uac-enabled')
+    expect(uac.compliant).toBe(true)
+    expect(uac.value).toBe('Ativado')
+  })
 
-    const result = await scanCompliance()
-    const fw = result.checks.find((c) => c.id === 'firewall-enabled')
-    expect(fw).toBeDefined()
-    expect(fw!.compliant).toBe(true)
+  it('counts enabled firewall profiles', async () => {
+    mockGather({ firewallEnabledCount: 3 })
+    const fw = getCheck(await scanCompliance(), 'firewall-enabled')
+    expect(fw.compliant).toBe(true)
+    expect(fw.value).toBe('3/3 perfis')
+  })
+
+  it('reports partial firewall coverage as non-compliant', async () => {
+    mockGather({ firewallEnabledCount: 2 })
+    const fw = getCheck(await scanCompliance(), 'firewall-enabled')
+    expect(fw.compliant).toBe(false)
+    expect(fw.value).toBe('2/3 perfis')
   })
 })
 
 describe('scanCompliance - password policies', () => {
-  it('all password policies compliant via secedit', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('echo %TEMP%')) return { stdout: 'C:\\TEMP\\\n', stderr: '' }
-      if (full.includes('secedit.exe /export')) return { stdout: '', stderr: '' }
-      if (full.includes('Get-Content')) {
-        return {
-          stdout: [
-            'PasswordComplexity=1',
-            'MinimumPasswordLength=8',
-            'MaximumPasswordAge=90',
-            'LockoutBadCount=3',
-            'LockoutDuration=15',
-          ].join('\n'),
-          stderr: '',
-        }
-      }
-      if (full.includes('/c del')) return { stdout: '', stderr: '' }
-      throw new Error('unexpected command')
+  it('all password policies compliant via secedit section', async () => {
+    mockGather({
+      secedit: {
+        PasswordComplexity: '1',
+        MinimumPasswordLength: '8',
+        MaximumPasswordAge: '90',
+        LockoutBadCount: '3',
+        LockoutDuration: '15',
+      },
     })
 
     const result = await scanCompliance()
-    const pwPolicy = [
-      'password-complexity',
-      'password-min-length',
-      'password-max-age',
-      'lockout-threshold',
-      'lockout-duration',
-    ]
-    for (const id of pwPolicy) {
-      expect(result.checks.find((c) => c.id === id)!.compliant).toBe(true)
+    for (const id of PASSWORD_IDS) {
+      expect(getCheck(result, id).compliant).toBe(true)
     }
-    expect(result.checks.find((c) => c.id === 'password-min-length')!.value).toBe('8')
-    expect(result.checks.find((c) => c.id === 'password-max-age')!.value).toBe('90 dias')
-    expect(result.checks.find((c) => c.id === 'lockout-threshold')!.value).toBe('3')
-    expect(result.checks.find((c) => c.id === 'lockout-duration')!.value).toBe('15 min')
+    expect(getCheck(result, 'password-min-length').value).toBe('8')
+    expect(getCheck(result, 'password-max-age').value).toBe('90 dias')
+    expect(getCheck(result, 'lockout-threshold').value).toBe('3')
+    expect(getCheck(result, 'lockout-duration').value).toBe('15 min')
   })
 
-  it('all password policies non-compliant via secedit', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('echo %TEMP%')) return { stdout: 'C:\\TEMP\\\n', stderr: '' }
-      if (full.includes('secedit.exe /export')) return { stdout: '', stderr: '' }
-      if (full.includes('Get-Content')) {
-        return {
-          stdout: [
-            'PasswordComplexity=0',
-            'MinimumPasswordLength=4',
-            'MaximumPasswordAge=180',
-            'LockoutBadCount=0',
-            'LockoutDuration=5',
-          ].join('\n'),
-          stderr: '',
-        }
-      }
-      if (full.includes('/c del')) return { stdout: '', stderr: '' }
-      throw new Error('unexpected command')
+  it('all password policies non-compliant via secedit section', async () => {
+    mockGather({
+      secedit: {
+        PasswordComplexity: '0',
+        MinimumPasswordLength: '4',
+        MaximumPasswordAge: '180',
+        LockoutBadCount: '0',
+        LockoutDuration: '5',
+      },
     })
 
     const result = await scanCompliance()
-    expect(result.checks.find((c) => c.id === 'password-complexity')!.compliant).toBe(false)
-    expect(result.checks.find((c) => c.id === 'password-min-length')!.compliant).toBe(false)
-    expect(result.checks.find((c) => c.id === 'password-max-age')!.compliant).toBe(false)
-    expect(result.checks.find((c) => c.id === 'lockout-threshold')!.compliant).toBe(false)
-    expect(result.checks.find((c) => c.id === 'lockout-duration')!.compliant).toBe(false)
+    for (const id of PASSWORD_IDS) {
+      expect(getCheck(result, id).compliant).toBe(false)
+    }
+    expect(getCheck(result, 'password-complexity').value).toBe('Desativado')
+  })
+
+  it('missing secedit keys preserve legacy NaN value formatting', async () => {
+    mockGather({ secedit: {} })
+
+    const result = await scanCompliance()
+    for (const id of PASSWORD_IDS) {
+      expect(getCheck(result, id).compliant).toBe(false)
+    }
+    expect(getCheck(result, 'password-min-length').value).toBe('NaN')
+    expect(getCheck(result, 'password-max-age').value).toBe('NaN dias')
+    expect(getCheck(result, 'lockout-threshold').value).toBe('NaN')
+    expect(getCheck(result, 'lockout-duration').value).toBe('NaN min')
   })
 })
 
 describe('scanCompliance - guest account', () => {
-  it('convidado user disabled (compliant)', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('"Convidado"')) return { stdout: 'False', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const g = result.checks.find((c) => c.id === 'guest-account-disabled')!
+  it('guest disabled is compliant', async () => {
+    mockGather({ guestEnabled: false })
+    const g = getCheck(await scanCompliance(), 'guest-account-disabled')
     expect(g.compliant).toBe(true)
     expect(g.value).toBe('Desativada')
   })
 
-  it('convidado user enabled (non-compliant)', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('"Convidado"')) return { stdout: 'true\n', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const g = result.checks.find((c) => c.id === 'guest-account-disabled')!
+  it('guest enabled is non-compliant', async () => {
+    mockGather({ guestEnabled: true })
+    const g = getCheck(await scanCompliance(), 'guest-account-disabled')
     expect(g.compliant).toBe(false)
     expect(g.value).toBe('Ativada')
   })
 
-  it('guest fallback disabled (compliant)', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('"Convidado"')) return { stdout: '', stderr: '' }
-      if (full.includes('"Guest"')) return { stdout: 'False', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const g = result.checks.find((c) => c.id === 'guest-account-disabled')!
+  it('missing guest info falls back to compliant Desativada', async () => {
+    mockGather({ guestEnabled: null })
+    const g = getCheck(await scanCompliance(), 'guest-account-disabled')
     expect(g.compliant).toBe(true)
     expect(g.value).toBe('Desativada')
-  })
-
-  it('guest fallback enabled (non-compliant)', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('"Convidado"')) return { stdout: '', stderr: '' }
-      if (full.includes('"Guest"')) return { stdout: 'true\n', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const g = result.checks.find((c) => c.id === 'guest-account-disabled')!
-    expect(g.compliant).toBe(false)
-    expect(g.value).toBe('Ativada')
   })
 })
 
 describe('scanCompliance - audit & bitlocker', () => {
   it('audit policy enabled', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('auditpol /get')) return { stdout: 'Success', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    expect(result.checks.find((c) => c.id === 'audit-policy')!.compliant).toBe(true)
-    expect(result.checks.find((c) => c.id === 'audit-policy')!.value).toBe('Ativada')
+    mockGather({ auditSuccess: true })
+    const a = getCheck(await scanCompliance(), 'audit-policy')
+    expect(a.compliant).toBe(true)
+    expect(a.value).toBe('Ativada')
+  })
+
+  it('audit policy disabled when probe failed', async () => {
+    mockGather({ auditSuccess: false })
+    const a = getCheck(await scanCompliance(), 'audit-policy')
+    expect(a.compliant).toBe(false)
+    expect(a.value).toBe('Desativada')
   })
 
   it('bitlocker system drive encrypted', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('Get-BitLockerVolume')) return { stdout: '1', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    expect(result.checks.find((c) => c.id === 'bitlocker-system')!.compliant).toBe(true)
-    expect(result.checks.find((c) => c.id === 'bitlocker-system')!.value).toBe('Ativado')
+    mockGather({ bitlockerStatus: 1 })
+    const b = getCheck(await scanCompliance(), 'bitlocker-system')
+    expect(b.compliant).toBe(true)
+    expect(b.value).toBe('Ativado')
+  })
+
+  it('bitlocker missing probe is non-compliant', async () => {
+    mockGather({ bitlockerStatus: null })
+    const b = getCheck(await scanCompliance(), 'bitlocker-system')
+    expect(b.compliant).toBe(false)
+    expect(b.value).toBe('Desativado')
   })
 })
 
-describe('scanCompliance - registry-based checks', () => {
-  it('uac admin prompt at level 2', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('ConsentPromptBehaviorAdmin')) {
-        return { stdout: '    ConsentPromptBehaviorAdmin    REG_DWORD    0x2', stderr: '' }
-      }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const uac = result.checks.find((c) => c.id === 'uac-admin-prompt')!
-    expect(uac.compliant).toBe(true)
-    expect(uac.value).toBe('Nível 2')
-  })
-
-  it('lm hash disabled (compliant)', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('NoLMHash')) {
-        return { stdout: '    NoLMHash    REG_DWORD    0x1', stderr: '' }
-      }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const lm = result.checks.find((c) => c.id === 'lm-hash')!
-    expect(lm.compliant).toBe(true)
-    expect(lm.value).toBe('Desativado')
-  })
-
-  it('clear text password enabled (non-compliant)', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('ClearTextPassword')) {
-        return { stdout: '    ClearTextPassword    REG_DWORD    0x1', stderr: '' }
-      }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const ctp = result.checks.find((c) => c.id === 'clear-text-password')!
+describe('scanCompliance - LSA & update checks', () => {
+  it('clear text password enabled is non-compliant', async () => {
+    mockGather({ lsaClearText: 1 })
+    const ctp = getCheck(await scanCompliance(), 'clear-text-password')
     expect(ctp.compliant).toBe(false)
     expect(ctp.value).toBe('Ativado')
   })
 
-  it('wuauserv service disabled', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (cmd: string, args: string[]) => {
-      const full = `${cmd} ${args.join(' ')}`
-      if (full.includes('wuauserv')) return { stdout: 'Disabled', stderr: '' }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const wu = result.checks.find((c) => c.id === 'wuauserv-enabled')!
+  it('clear text password absent is compliant', async () => {
+    mockGather({ lsaClearText: null })
+    const ctp = getCheck(await scanCompliance(), 'clear-text-password')
+    expect(ctp.compliant).toBe(true)
+    expect(ctp.value).toBe('Desativado')
+  })
+
+  it('lm hash disabled is compliant', async () => {
+    mockGather({ lsaNoLMHash: 1 })
+    const lm = getCheck(await scanCompliance(), 'lm-hash')
+    expect(lm.compliant).toBe(true)
+    expect(lm.value).toBe('Desativado')
+  })
+
+  it('lm hash absent is non-compliant', async () => {
+    mockGather({ lsaNoLMHash: null })
+    const lm = getCheck(await scanCompliance(), 'lm-hash')
+    expect(lm.compliant).toBe(false)
+    expect(lm.value).toBe('Ativado')
+  })
+
+  it('wuauserv disabled is non-compliant preserving case', async () => {
+    mockGather({ wuauservStartType: 'Disabled' })
+    const wu = getCheck(await scanCompliance(), 'wuauserv-enabled')
     expect(wu.compliant).toBe(false)
     expect(wu.value).toBe('Disabled')
   })
+
+  it('wuauserv manual is compliant', async () => {
+    mockGather({ wuauservStartType: 'Manual' })
+    const wu = getCheck(await scanCompliance(), 'wuauserv-enabled')
+    expect(wu.compliant).toBe(true)
+    expect(wu.value).toBe('Manual')
+  })
+
+  it('wuauserv unknown is compliant Desconhecido', async () => {
+    mockGather({ wuauservStartType: null })
+    const wu = getCheck(await scanCompliance(), 'wuauserv-enabled')
+    expect(wu.compliant).toBe(true)
+    expect(wu.value).toBe('Desconhecido')
+  })
+
+  it('uac admin prompt at level 2 is compliant', async () => {
+    mockGather({ uacConsentPrompt: 2 })
+    const up = getCheck(await scanCompliance(), 'uac-admin-prompt')
+    expect(up.compliant).toBe(true)
+    expect(up.value).toBe('Nível 2')
+  })
+
+  it('uac admin prompt unknown shows Desconhecido', async () => {
+    mockGather({ uacConsentPrompt: null })
+    const up = getCheck(await scanCompliance(), 'uac-admin-prompt')
+    expect(up.compliant).toBe(false)
+    expect(up.value).toBe('Desconhecido')
+  })
 })
 
-describe('scanCompliance - regQuery edge cases', () => {
-  it('returns null when value not found in output', async () => {
-    mocks.execNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
-      const full = args.join(' ')
-      if (full.includes('ClearTextPassword')) {
-        return { stdout: '    SomeOtherValue    REG_DWORD    0x1', stderr: '' }
-      }
-      throw new Error('unexpected command')
-    })
-    const result = await scanCompliance()
-    const ctp = result.checks.find((c) => c.id === 'clear-text-password')!
-    expect(ctp.compliant).toBe(true)
+describe('parseSeceditOutput', () => {
+  it('parses key=value pairs', () => {
+    const parsed = parseSeceditOutput('PasswordComplexity=1\nMinimumPasswordLength=8\n')
+    expect(parsed).toEqual({ PasswordComplexity: '1', MinimumPasswordLength: '8' })
+  })
+
+  it('strips surrounding quotes from values', () => {
+    const parsed = parseSeceditOutput('MACHINE\\Key="Value"\n')
+    expect(parsed['MACHINE\\Key']).toBe('Value')
+  })
+
+  it('ignores lines without equals sign', () => {
+    const parsed = parseSeceditOutput('[Version]\nsignature="$CHICAGO$"\nPasswordComplexity=1\n')
+    expect(parsed).toEqual({ PasswordComplexity: '1' })
+  })
+
+  it('trims whitespace around keys and values', () => {
+    const parsed = parseSeceditOutput('  Key  =  42  \n')
+    expect(parsed.Key).toBe('42')
+  })
+})
+
+describe('parseProbeOutput', () => {
+  it('returns parsed object for clean json', () => {
+    const parsed = parseProbeOutput('{"smb1":1}')
+    expect(parsed).toEqual({ smb1: 1 })
+  })
+
+  it('extracts json embedded after preamble text', () => {
+    const parsed = parseProbeOutput('some warning noise\n{"smb1":0,"guestEnabled":false}')
+    expect(parsed).toEqual({ smb1: 0, guestEnabled: false })
+  })
+
+  it('returns null when no braces present', () => {
+    expect(parseProbeOutput('no json here')).toBeNull()
+  })
+
+  it('returns null for malformed json between braces', () => {
+    expect(parseProbeOutput('{not valid json}')).toBeNull()
   })
 })
 

@@ -1,6 +1,35 @@
 import type { ComplianceApplyResult, ComplianceCheck, ComplianceScanProgress, ComplianceState } from '@shared/types'
 import { execNativeUtf8 } from './exec-utf8'
 
+/**
+ * Snapshot coletado por UMA única invocação do PowerShell (probe).
+ * Todas as checagens de leitura avaliam este objeto em memória — sem spawns por check.
+ */
+export type RegProbeValue = string | number | null
+
+/**
+ * Snapshot coletado por UMA única invocação do PowerShell (probe).
+ * Todas as checagens de leitura avaliam este objeto em memória — sem spawns por check.
+ */
+export interface ComplianceProbeData {
+  secedit: Record<string, string>
+  lsaClearText: RegProbeValue
+  lsaNoLMHash: RegProbeValue
+  smb1: RegProbeValue
+  uacEnableLUA: RegProbeValue
+  uacConsentPrompt: RegProbeValue
+  guestEnabled: boolean | string | null
+  auditSuccess: boolean
+  wuauservStartType: string | null
+  bitlockerStatus: RegProbeValue
+  firewallEnabledCount: number
+}
+
+function regValueToInt(v: RegProbeValue | undefined): number {
+  if (v == null) return Number.NaN
+  return Number.parseInt(String(v), 16)
+}
+
 interface CheckDef {
   id: string
   category: ComplianceCheck['category']
@@ -9,26 +38,9 @@ interface CheckDef {
   description: string
   expected: string
   requiresAdmin: boolean
-  check: () => Promise<{ compliant: boolean; value: string }>
+  evaluate: (data: ComplianceProbeData) => { compliant: boolean; value: string }
   apply?: () => Promise<void>
   revert?: () => Promise<void>
-}
-
-async function regQuery(path: string, value: string): Promise<string | null> {
-  try {
-    const { stdout } = await execNativeUtf8('reg.exe', ['query', path, '/v', value, '/reg:64'], {
-      timeout: 5000,
-      windowsHide: true,
-    })
-    const lines = stdout.split('\n').filter((l) => l.trim().length > 0)
-    for (const line of lines) {
-      const match = line.match(new RegExp(`\\s+${value}\\s+REG_\\w+\\s+(.+)$`, 'i'))
-      if (match) return match[1]!.trim()
-    }
-    return null
-  } catch {
-    return null
-  }
 }
 
 async function regSetDword(path: string, value: string, data: number): Promise<void> {
@@ -39,41 +51,58 @@ async function regSetDword(path: string, value: string, data: number): Promise<v
   })
 }
 
-async function seceditQuery(): Promise<Record<string, string>> {
-  try {
-    const tmpDir = await execNativeUtf8('cmd.exe', ['/c', 'echo', '%TEMP%'], { timeout: 3000, windowsHide: true })
-    const tmpPath = `${tmpDir.stdout.trim()}\\dinho-secedit-${Date.now()}.inf`
-    await execNativeUtf8('secedit.exe', ['/export', '/cfg', tmpPath, '/quiet'], { timeout: 15000, windowsHide: true })
-    const { stdout } = await execNativeUtf8(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `Get-Content '${tmpPath}' -Encoding Unicode | Where-Object { $_ -notmatch '^[\\s;]' }`,
-      ],
-      { timeout: 10000, windowsHide: true },
-    )
-    const vals: Record<string, string> = {}
-    for (const line of stdout.split('\n')) {
-      const eqIdx = line.indexOf('=')
-      if (eqIdx > 0) {
-        const k = line.slice(0, eqIdx).trim()
-        const v = line
-          .slice(eqIdx + 1)
-          .trim()
-          .replace(/^"|"$/g, '')
-        vals[k] = v
-      }
+const SECEDIT_META_KEYS = new Set(['signature', 'revision'])
+
+export function parseSeceditOutput(stdout: string): Record<string, string> {
+  const vals: Record<string, string> = {}
+  for (const line of stdout.split('\n')) {
+    const eqIdx = line.indexOf('=')
+    if (eqIdx > 0) {
+      const k = line.slice(0, eqIdx).trim()
+      if (SECEDIT_META_KEYS.has(k.toLowerCase())) continue
+      const v = line
+        .slice(eqIdx + 1)
+        .trim()
+        .replace(/^"|"$/g, '')
+      vals[k] = v
     }
-    await execNativeUtf8('cmd.exe', ['/c', 'del', '/f', '/q', tmpPath], { timeout: 3000, windowsHide: true }).catch(
-      () => {},
-    )
-    return vals
+  }
+  return vals
+}
+
+export function parseProbeOutput(stdout: string): ComplianceProbeData | null {
+  const start = stdout.indexOf('{')
+  if (start < 0) return null
+  const end = stdout.lastIndexOf('}')
+  if (end <= start) return null
+  try {
+    const parsed: unknown = JSON.parse(stdout.slice(start, end + 1))
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return parsed as ComplianceProbeData
   } catch {
-    return {}
+    return null
   }
 }
+
+const PROBE_TIMEOUT_MS = 60_000
+
+const PROBE_SCRIPT = [
+  "$ErrorActionPreference='SilentlyContinue'",
+  "$tmp=Join-Path $env:TEMP ('dinho-sec-' + $PID + '.inf')",
+  'secedit /export /cfg $tmp /quiet | Out-Null',
+  '$sec=@{}',
+  "if(Test-Path $tmp){ Get-Content $tmp | ForEach-Object { if($_ -match '=' -and $_ -notmatch '^\\s*[;\\[]'){ $i=$_.IndexOf('='); $k=$_.Substring(0,$i).Trim(); $sec[$k]=$_.Substring($i+1).Trim().Trim('\"') } }; Remove-Item $tmp -Force }",
+  "$rg={ param($p,$v) try{ '0x{0:x}' -f [long](Get-ItemPropertyValue -Path $p -Name $v -ErrorAction Stop) }catch{ $null } }",
+  "$lsap='HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa'",
+  "$sysp='HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System'",
+  "$guest=''",
+  "foreach($g in @('Convidado','Guest')){ $u=Get-LocalUser -Name $g -ErrorAction SilentlyContinue; if($u -and $null -ne $u.Enabled){ $guest=[string]$u.Enabled; break } }",
+  "$audit=$false; try{ $audit=([string](auditpol /get /subcategory:'Logon' 2>$null)).ToLower().Contains('success') }catch{}",
+  '$wua=$null; try{ $wua=[string](Get-Service -Name wuauserv -ErrorAction Stop).StartType }catch{}',
+  '$bl=$null; try{ $bl=[string](Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).ProtectionStatus }catch{}',
+  '$fw=0; try{ $fw=@(Get-NetFirewallProfile | Where-Object { $_.Enabled }).Count }catch{}',
+  "[pscustomobject]@{ secedit=$sec; lsaClearText=(& $rg $lsap 'ClearTextPassword'); lsaNoLMHash=(& $rg $lsap 'NoLMHash'); smb1=(& $rg 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters' 'SMB1'); uacEnableLUA=(& $rg $sysp 'EnableLUA'); uacConsentPrompt=(& $rg $sysp 'ConsentPromptBehaviorAdmin'); guestEnabled=$guest; auditSuccess=$audit; wuauservStartType=$wua; bitlockerStatus=$bl; firewallEnabledCount=$fw } | ConvertTo-Json -Depth 3 -Compress",
+].join('; ')
 
 const CHECKS: CheckDef[] = [
   // ── Password & Account Policy ──
@@ -85,9 +114,8 @@ const CHECKS: CheckDef[] = [
     description: 'A política de senhas deve exigir caracteres maiúsculos, minúsculos, números e especiais',
     expected: 'Ativado',
     requiresAdmin: false,
-    check: async () => {
-      const sec = await seceditQuery()
-      const val = sec.PasswordComplexity!
+    evaluate: (d) => {
+      const val = d.secedit?.PasswordComplexity
       return { compliant: val === '1', value: val === '1' ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
@@ -113,9 +141,8 @@ const CHECKS: CheckDef[] = [
     description: 'A política de senhas deve exigir no mínimo 8 caracteres',
     expected: '≥ 8',
     requiresAdmin: false,
-    check: async () => {
-      const sec = await seceditQuery()
-      const val = Number.parseInt(sec.MinimumPasswordLength!, 10)
+    evaluate: (d) => {
+      const val = Number.parseInt(d.secedit?.MinimumPasswordLength ?? '', 10)
       return { compliant: val >= 8, value: String(val) }
     },
     apply: async () => {
@@ -139,9 +166,8 @@ const CHECKS: CheckDef[] = [
     description: 'Senhas devem expirar após no máximo 90 dias',
     expected: '≤ 90',
     requiresAdmin: false,
-    check: async () => {
-      const sec = await seceditQuery()
-      const val = Number.parseInt(sec.MaximumPasswordAge!, 10)
+    evaluate: (d) => {
+      const val = Number.parseInt(d.secedit?.MaximumPasswordAge ?? '', 10)
       return { compliant: val <= 90, value: `${val} dias` }
     },
     apply: async () => {
@@ -165,9 +191,8 @@ const CHECKS: CheckDef[] = [
     description: 'A conta deve bloquear após no máximo 5 tentativas inválidas',
     expected: '≤ 5',
     requiresAdmin: false,
-    check: async () => {
-      const sec = await seceditQuery()
-      const val = Number.parseInt(sec.LockoutBadCount!, 10)
+    evaluate: (d) => {
+      const val = Number.parseInt(d.secedit?.LockoutBadCount ?? '', 10)
       return { compliant: val > 0 && val <= 5, value: String(val) }
     },
     apply: async () => {
@@ -191,9 +216,8 @@ const CHECKS: CheckDef[] = [
     description: 'A conta deve permanecer bloqueada por pelo menos 15 minutos',
     expected: '≥ 15',
     requiresAdmin: false,
-    check: async () => {
-      const sec = await seceditQuery()
-      const val = Number.parseInt(sec.LockoutDuration!, 10)
+    evaluate: (d) => {
+      const val = Number.parseInt(d.secedit?.LockoutDuration ?? '', 10)
       return { compliant: val >= 15, value: `${val} min` }
     },
     apply: async () => {
@@ -217,9 +241,8 @@ const CHECKS: CheckDef[] = [
     description: 'O Windows não deve armazenar senhas com criptografia reversível',
     expected: 'Desativado',
     requiresAdmin: true,
-    check: async () => {
-      const val = await regQuery('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', 'ClearTextPassword')
-      const intVal = val != null ? Number.parseInt(val, 16) : 0
+    evaluate: (d) => {
+      const intVal = d.lsaClearText == null ? 0 : regValueToInt(d.lsaClearText)
       return { compliant: intVal === 0, value: intVal === 1 ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
@@ -237,9 +260,8 @@ const CHECKS: CheckDef[] = [
     description: 'O Windows não deve armazenar hashes LM (fracos e vulneráveis)',
     expected: 'Desativado',
     requiresAdmin: true,
-    check: async () => {
-      const val = await regQuery('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', 'NoLMHash')
-      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+    evaluate: (d) => {
+      const intVal = regValueToInt(d.lsaNoLMHash)
       return { compliant: intVal === 1, value: intVal === 1 ? 'Desativado' : 'Ativado' }
     },
     apply: async () => {
@@ -257,23 +279,12 @@ const CHECKS: CheckDef[] = [
     description: 'A conta de convidado deve estar desativada por segurança',
     expected: 'Desativada',
     requiresAdmin: false,
-    check: async () => {
-      const { stdout } = await execNativeUtf8(
-        'powershell.exe',
-        ['-NoProfile', '-Command', '(Get-LocalUser -Name "Convidado" -ErrorAction SilentlyContinue).Enabled'],
-        { timeout: 5000, windowsHide: true },
-      ).catch(() => ({ stdout: '' }))
-      if (!stdout.trim()) {
-        const { stdout: en } = await execNativeUtf8(
-          'powershell.exe',
-          ['-NoProfile', '-Command', '(Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue).Enabled'],
-          { timeout: 5000, windowsHide: true },
-        )
-        return { compliant: en.trim().toLowerCase() !== 'true', value: en.trim() === 'true' ? 'Ativada' : 'Desativada' }
-      }
+    evaluate: (d) => {
+      const g = d.guestEnabled
+      const enabled = typeof g === 'boolean' ? g : g != null && String(g).trim().toLowerCase() === 'true'
       return {
-        compliant: stdout.trim().toLowerCase() !== 'true',
-        value: stdout.trim() === 'true' ? 'Ativada' : 'Desativada',
+        compliant: !enabled,
+        value: enabled ? 'Ativada' : 'Desativada',
       }
     },
     apply: async () => {
@@ -304,16 +315,9 @@ const CHECKS: CheckDef[] = [
     description: 'O Windows deve auditar eventos de segurança (logon, conta, objeto)',
     expected: 'Ativada',
     requiresAdmin: true,
-    check: async () => {
-      const { stdout } = await execNativeUtf8(
-        'powershell.exe',
-        ['-NoProfile', '-Command', 'auditpol /get /category:"Logon/Logoff" /r'],
-        { timeout: 5000, windowsHide: true },
-      ).catch(() => ({ stdout: '' }))
-      return {
-        compliant: stdout.toLowerCase().includes('success'),
-        value: stdout.toLowerCase().includes('success') ? 'Ativada' : 'Desativada',
-      }
+    evaluate: (d) => {
+      const ok = d.auditSuccess === true
+      return { compliant: ok, value: ok ? 'Ativada' : 'Desativada' }
     },
     apply: async () => {
       await execNativeUtf8(
@@ -339,9 +343,8 @@ const CHECKS: CheckDef[] = [
     description: 'O protocolo SMBv1 é vulnerável a WannaCry e EternalBlue',
     expected: 'Desativado',
     requiresAdmin: true,
-    check: async () => {
-      const val = await regQuery('HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters', 'SMB1')
-      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+    evaluate: (d) => {
+      const intVal = regValueToInt(d.smb1)
       return { compliant: intVal === 0, value: intVal === 1 ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
@@ -360,13 +363,9 @@ const CHECKS: CheckDef[] = [
     description: 'O serviço de atualização automática deve estar habilitado',
     expected: 'Ativo',
     requiresAdmin: true,
-    check: async () => {
-      const { stdout } = await execNativeUtf8(
-        'powershell.exe',
-        ['-NoProfile', '-Command', '(Get-Service -Name wuauserv -ErrorAction SilentlyContinue).StartType'],
-        { timeout: 5000, windowsHide: true },
-      ).catch(() => ({ stdout: '' }))
-      return { compliant: stdout.trim().toLowerCase() !== 'disabled', value: stdout.trim() || 'Desconhecido' }
+    evaluate: (d) => {
+      const st = (d.wuauservStartType ?? '').trim()
+      return { compliant: st.toLowerCase() !== 'disabled', value: st || 'Desconhecido' }
     },
     apply: async () => {
       await execNativeUtf8(
@@ -392,17 +391,9 @@ const CHECKS: CheckDef[] = [
     description: 'A unidade do sistema deve estar criptografada com BitLocker',
     expected: 'Ativado',
     requiresAdmin: false,
-    check: async () => {
-      const { stdout } = await execNativeUtf8(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-Command',
-          '(Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).ProtectionStatus',
-        ],
-        { timeout: 5000, windowsHide: true },
-      ).catch(() => ({ stdout: '' }))
-      return { compliant: stdout.trim() === '1', value: stdout.trim() === '1' ? 'Ativado' : 'Desativado' }
+    evaluate: (d) => {
+      const on = String(d.bitlockerStatus ?? '') === '1'
+      return { compliant: on, value: on ? 'Ativado' : 'Desativado' }
     },
   },
   // ── Firewall ──
@@ -414,13 +405,8 @@ const CHECKS: CheckDef[] = [
     description: 'O firewall deve estar ativo em todos os perfis de rede',
     expected: 'Ativo',
     requiresAdmin: false,
-    check: async () => {
-      const { stdout } = await execNativeUtf8(
-        'powershell.exe',
-        ['-NoProfile', '-Command', '@(Get-NetFirewallProfile | Where-Object { $_.Enabled -eq $true }).Count'],
-        { timeout: 5000, windowsHide: true },
-      ).catch(() => ({ stdout: '0' }))
-      return { compliant: stdout.trim() === '3', value: `${stdout.trim()}/3 perfis` }
+    evaluate: (d) => {
+      return { compliant: d.firewallEnabledCount === 3, value: `${d.firewallEnabledCount}/3 perfis` }
     },
   },
   // ── UAC ──
@@ -432,9 +418,8 @@ const CHECKS: CheckDef[] = [
     description: 'O Controle de Conta de Usuário (UAC) deve estar ativo',
     expected: 'Ativado',
     requiresAdmin: true,
-    check: async () => {
-      const val = await regQuery('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System', 'EnableLUA')
-      const intVal = val != null ? Number.parseInt(val, 16) : undefined
+    evaluate: (d) => {
+      const intVal = regValueToInt(d.uacEnableLUA)
       return { compliant: intVal === 1, value: intVal === 1 ? 'Ativado' : 'Desativado' }
     },
     apply: async () => {
@@ -452,13 +437,9 @@ const CHECKS: CheckDef[] = [
     description: 'O UAC deve solicitar consentimento ao elevar privilégios (nível 2)',
     expected: 'Nível 2',
     requiresAdmin: true,
-    check: async () => {
-      const val = await regQuery(
-        'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System',
-        'ConsentPromptBehaviorAdmin',
-      )
-      const intVal = val != null ? Number.parseInt(val, 16) : undefined
-      return { compliant: intVal === 2, value: intVal != null ? `Nível ${intVal}` : 'Desconhecido' }
+    evaluate: (d) => {
+      const intVal = regValueToInt(d.uacConsentPrompt)
+      return { compliant: intVal === 2, value: Number.isNaN(intVal) ? 'Desconhecido' : `Nível ${intVal}` }
     },
     apply: async () => {
       await regSetDword(
@@ -481,18 +462,43 @@ export async function scanCompliance(onProgress?: (data: ComplianceScanProgress)
   const checks: ComplianceCheck[] = []
   let compliantCount = 0
 
+  onProgress?.({
+    current: 0,
+    total: CHECKS.length,
+    currentLabel: 'Coletando informações do sistema',
+    category: 'password',
+  })
+
+  let stdout = ''
+  try {
+    stdout = (
+      await execNativeUtf8('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PROBE_SCRIPT], {
+        timeout: PROBE_TIMEOUT_MS,
+        windowsHide: true,
+      })
+    ).stdout
+  } catch {
+    stdout = ''
+  }
+
+  const parsed = parseProbeOutput(stdout)
+  const data =
+    parsed == null ? null : { ...parsed, secedit: Array.isArray(parsed.secedit) ? {} : (parsed.secedit ?? {}) }
+
   for (let i = 0; i < CHECKS.length; i++) {
     const def = CHECKS[i]!
     onProgress?.({ current: i + 1, total: CHECKS.length, currentLabel: def.label, category: def.category })
 
     let compliant = false
     let value = 'Erro'
-    try {
-      const result = await def.check()
-      compliant = result.compliant
-      value = result.value
-    } catch {
-      compliant = false
+    if (data) {
+      try {
+        const result = def.evaluate(data)
+        compliant = result.compliant
+        value = result.value
+      } catch {
+        compliant = false
+      }
     }
 
     if (compliant) compliantCount++
