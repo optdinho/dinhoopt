@@ -7,10 +7,10 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     reporters: ['verbose'],
-    pool: 'threads',
+    pool: 'forks',
     setupFiles: ['src/test-setup.ts'],
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: 'v8',
       reporter: ['text-summary', 'html', 'lcov'],
       include: ['src/**'],

@@ -48,18 +48,13 @@ const baseConn = {
   processName: 'chrome.exe',
 }
 
-function netstatLine(
-  local: string,
-  remote: string,
-  state: string,
-  pid: number | string,
-  proto = 'TCP',
-): string {
+function netstatLine(local: string, remote: string, state: string, pid: number | string, proto = 'TCP'): string {
   const statePart = state ? ` ${state.padEnd(16)}` : ''
   return `  ${proto.padEnd(6)}${local.padEnd(23)}${remote.padEnd(23)}${statePart} ${pid}`
 }
 
-const NETSTAT_HEADER = '\nActive Connections\n\n  Proto  Local Address          Foreign Address        State           PID'
+const NETSTAT_HEADER =
+  '\nActive Connections\n\n  Proto  Local Address          Foreign Address        State           PID'
 
 function tasklistRow(name: string, pid: number | string, mem = '12,345 K'): string {
   return `"${name}","${pid}","Console","1","${mem}"`

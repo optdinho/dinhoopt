@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   applyComplianceSettings,
+  type ComplianceProbeData,
   parseProbeOutput,
   parseSeceditOutput,
   revertComplianceSettings,
   scanCompliance,
-  type ComplianceProbeData,
 } from './compliance-auditor.service'
 
 const mocks = vi.hoisted(() => ({

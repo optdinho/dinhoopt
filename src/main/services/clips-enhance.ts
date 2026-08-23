@@ -83,24 +83,19 @@ export interface VideoResolution {
  */
 export function probeVideoResolution(ffmpegPath: string, filePath: string): Promise<VideoResolution | null> {
   return new Promise((resolve) => {
-    execFile(
-      ffmpegPath,
-      ['-hide_banner', '-i', filePath],
-      { timeout: 15_000 },
-      (err, _stdout, stderr) => {
-        if (err && !stderr) {
-          resolve(null)
-          return
-        }
-        const match = /Stream #\d+:\d+(?:\(\w+\))?: Video: .*?(\d{2,5})x(\d{2,5})/.exec(String(stderr ?? ''))
-        if (!match) {
-          resolve(null)
-          return
-        }
-        const w = Number(match[1])
-        const h = Number(match[2])
-        resolve(w > 0 && h > 0 ? { w, h } : null)
-      },
-    )
+    execFile(ffmpegPath, ['-hide_banner', '-i', filePath], { timeout: 15_000 }, (err, _stdout, stderr) => {
+      if (err && !stderr) {
+        resolve(null)
+        return
+      }
+      const match = /Stream #\d+:\d+(?:\(\w+\))?: Video: .*?(\d{2,5})x(\d{2,5})/.exec(String(stderr ?? ''))
+      if (!match) {
+        resolve(null)
+        return
+      }
+      const w = Number(match[1])
+      const h = Number(match[2])
+      resolve(w > 0 && h > 0 ? { w, h } : null)
+    })
   })
 }
