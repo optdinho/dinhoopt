@@ -180,7 +180,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _winrtDevice,
             pixelFormat,
-            numberOfBuffers: 10,
+            numberOfBuffers: 5,
             _captureItem.Size);
 
         _session = _framePool.CreateCaptureSession(_captureItem);
@@ -188,7 +188,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         // Win11 24H2+ session settings — fail silently on older Windows
         ConfigureSession3();
 
-        _texturePool = new TexturePool(_device, poolSize: 3);
+        _texturePool = new TexturePool(_device, poolSize: 2);
 
         // NOTA: FrameArrived NÃO é registrado aqui — precisa ser na pump thread.
         // StartCapture() também não é chamado aqui — será via StartFramePump().
