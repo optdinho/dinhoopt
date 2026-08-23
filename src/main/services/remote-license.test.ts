@@ -209,6 +209,48 @@ describe('remote-license', () => {
       expect(result.valid).toBe(false)
       expect(result.reason).toBe('Licença inválida')
     })
+
+    it('serves fresh valid cache without consulting the network', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      const cache = { valid: true, type: 'lifetime', expires_at: null, timestamp: Date.now() }
+      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify(cache), 'utf-8')
+      // Servidor acessível e respondendo inválido — cache fresco deve vencer sem rede
+      mockNet.setResponse({ valid: false, reason: 'bloqueado' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+      expect(result.type).toBe('lifetime')
+    })
+
+    it('consults the network when fresh cache says invalid', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      const cache = { valid: false, reason: 'x', timestamp: Date.now() }
+      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify(cache), 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'subscription', expires_at: '2026-12-31' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+      expect(result.type).toBe('subscription')
+    })
+
+    it('revalidates in background and refreshes the cache', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      const cache = { valid: true, type: 'lifetime', expires_at: null, timestamp: Date.now() - 1000 }
+      const cachePath = path.join(testRoot, '.license-cache.json')
+      fs.writeFileSync(cachePath, JSON.stringify(cache), 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+
+      await vi.waitFor(
+        () => {
+          const refreshed = JSON.parse(fs.readFileSync(cachePath, 'utf-8'))
+          expect(refreshed.timestamp).toBeGreaterThan(cache.timestamp)
+        },
+        { timeout: 5000 },
+      )
+    })
   })
 
   // ── activateLicense ───────────────────────────────────────────────

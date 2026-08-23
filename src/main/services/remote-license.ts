@@ -203,6 +203,19 @@ export function isE2EBypassEnabled(): boolean {
   }
 }
 
+let revalidationInFlight = false
+
+function scheduleBackgroundRevalidation(key: string): void {
+  if (revalidationInFlight) return
+  revalidationInFlight = true
+  void generateHwid()
+    .then((hwid) => validateLicense(key, hwid))
+    .catch(() => {})
+    .finally(() => {
+      revalidationInFlight = false
+    })
+}
+
 export async function checkLicense(): Promise<RemoteLicenseResult> {
   if (isE2EBypassEnabled()) {
     return { valid: true, type: 'test' }
@@ -211,6 +224,15 @@ export async function checkLicense(): Promise<RemoteLicenseResult> {
   const userData = app.getPath('userData')
   const key = readSavedKey(join(userData, 'remote-license.key'))
   if (!key) return { valid: false, reason: 'Nenhuma licença encontrada' }
+  const cached = readCache()
+  if (cached && Date.now() - cached.timestamp < CACHE_VALIDITY_MS && cached.valid) {
+    scheduleBackgroundRevalidation(key)
+    return {
+      valid: true,
+      ...(cached.type ? { type: cached.type } : {}),
+      ...(cached.expires_at !== undefined ? { expires_at: cached.expires_at } : {}),
+    }
+  }
   const hwid = await generateHwid()
   const result = await validateLicense(key, hwid)
   if (!result.valid && result.reason === 'Sem conexao com o servidor') {
