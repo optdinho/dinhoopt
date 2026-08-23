@@ -185,11 +185,11 @@ describe('attachRendererDiagnostics', () => {
     expect(mocks.logInfo).toHaveBeenCalledWith('RendererDiagnostics', 'Renderer responsive again')
   })
 
-  it('logs renderer console errors (level 3)', () => {
+  it('logs renderer console errors', () => {
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]
-    handler({}, 3, 'Something went wrong', 42, 'http://example.com/app.js')
+    handler({ level: 'error', message: 'Something went wrong', lineNumber: 42, sourceId: 'http://example.com/app.js' })
 
     expect(mocks.logError).toHaveBeenCalledWith(
       'RendererDiagnostics',
@@ -197,11 +197,11 @@ describe('attachRendererDiagnostics', () => {
     )
   })
 
-  it('logs renderer console warnings (level 2)', () => {
+  it('logs renderer console warnings', () => {
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]
-    handler({}, 2, 'Deprecation warning', 10, 'http://example.com/app.js')
+    handler({ level: 'warning', message: 'Deprecation warning', lineNumber: 10, sourceId: 'http://example.com/app.js' })
 
     expect(mocks.logError).toHaveBeenCalledWith(
       'RendererDiagnostics',
@@ -209,11 +209,21 @@ describe('attachRendererDiagnostics', () => {
     )
   })
 
-  it('ignores console-message with level < 2', () => {
+  it('includes source location in console-message log', () => {
     attachRendererDiagnostics(createMockWin() as any)
 
     const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]
-    handler({}, 1, 'Info message', 5, 'http://example.com/app.js')
+    handler({ level: 'error', message: 'Boom', lineNumber: 7, sourceId: 'app.js' })
+
+    expect(mocks.logError).toHaveBeenCalledWith('RendererDiagnostics', expect.stringContaining('(app.js:7)'))
+  })
+
+  it('ignores console-message with info/debug levels', () => {
+    attachRendererDiagnostics(createMockWin() as any)
+
+    const handler = mocks.webContentsOn.mock.calls.find((c: string[]) => c[0] === 'console-message')?.[1]
+    handler({ level: 'info', message: 'Info message', lineNumber: 5, sourceId: 'http://example.com/app.js' })
+    handler({ level: 'debug', message: 'Debug message', lineNumber: 6, sourceId: 'http://example.com/app.js' })
 
     expect(mocks.logError).not.toHaveBeenCalled()
   })

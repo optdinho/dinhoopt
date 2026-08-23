@@ -342,7 +342,7 @@ describe('getVideoDuration', () => {
     await getVideoDuration('/my/clip.mp4')
     expect(vi.mocked(execFile)).toHaveBeenCalledWith(
       'ffmpeg',
-      ['-i', '/my/clip.mp4', '-f', 'null', '-'],
+      ['-i', '/my/clip.mp4'],
       expect.objectContaining({ encoding: 'utf-8', timeout: 5000, windowsHide: true }),
       expect.any(Function),
     )

@@ -362,8 +362,9 @@ public sealed class ReplayBuffer : IDisposable
         List<EncodedPacket>? diskAudio = null;
         if (spill != null)
         {
-            // Pacotes lidos do spill pertencem a ESTA chamada (o spill já os
-            // removeu do disco). A decisão de ownership acontece no merge.
+            // Leitura NÃO destrutiva: os dados permanecem no spill até
+            // TrimOldest/Clear/Dispose. Os pacotes retornados são objetos novos
+            // desta chamada; o merge decide quais entram na janela ou são liberados.
             List<EncodedPacket>? diskPkts;
             try
             {

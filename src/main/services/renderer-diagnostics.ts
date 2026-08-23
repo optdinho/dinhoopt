@@ -59,11 +59,14 @@ export function attachRendererDiagnostics(win: BrowserWindow): void {
     getLogger().info('RendererDiagnostics', 'Renderer responsive again')
   })
 
-  // Forward renderer console warnings/errors to the main log. Level: 0=debug,
-  // 1=info, 2=warning, 3=error. We only capture 2+ to avoid drowning the log.
-  wc.on('console-message', (_event, level, message, line, sourceId) => {
-    if (level < 2) return
-    const label = level === 3 ? 'error' : 'warn'
-    getLogger().error('RendererDiagnostics', `Renderer console.${label}: ${message} (${sourceId}:${line})`)
+  // Forward renderer console warnings/errors to the main log. We only capture
+  // warning/error to avoid drowning the log.
+  wc.on('console-message', (details) => {
+    if (details.level !== 'error' && details.level !== 'warning') return
+    const label = details.level === 'error' ? 'error' : 'warn'
+    getLogger().error(
+      'RendererDiagnostics',
+      `Renderer console.${label}: ${details.message} (${details.sourceId}:${details.lineNumber})`,
+    )
   })
 }

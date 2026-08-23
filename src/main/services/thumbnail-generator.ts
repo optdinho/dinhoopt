@@ -75,22 +75,24 @@ export async function generateThumbnail(outputDir: string, clipName: string): Pr
   try {
     let seekSec = DEFAULT_SEEK_SEC
 
+    let stderr = ''
     try {
-      const { stderr } = await execFileAsync(ffmpeg, ['-i', videoPath, '-f', 'null', '-'], {
+      await execFileAsync(ffmpeg, ['-i', videoPath], {
         timeout: 10_000,
         encoding: 'utf-8',
       })
-      const match = stderr.match(/Duration: (\d{2}):(\d{2}):(\d{2})\.(\d+)/)
-      if (match) {
-        const h = Number.parseInt(match[1]!, 10)
-        const m = Number.parseInt(match[2]!, 10)
-        const s = Number.parseInt(match[3]!, 10)
-        const cs = Number.parseInt(match[4]!.padEnd(3, '0'), 10)
-        const dur = h * 3600 + m * 60 + s + cs / 1000
-        if (dur > 0) seekSec = Math.min(dur * 0.25, 60)
-      }
-    } catch {
-      /* ffmpeg probe failed, use default seek */
+    } catch (err) {
+      // header-only probe exits non-zero; stderr with stream info arrives on the error
+      stderr = String((err as { stderr?: string }).stderr ?? '')
+    }
+    const match = stderr.match(/Duration: (\d{2}):(\d{2}):(\d{2})\.(\d+)/)
+    if (match) {
+      const h = Number.parseInt(match[1]!, 10)
+      const m = Number.parseInt(match[2]!, 10)
+      const s = Number.parseInt(match[3]!, 10)
+      const cs = Number.parseInt(match[4]!.padEnd(3, '0'), 10)
+      const dur = h * 3600 + m * 60 + s + cs / 1000
+      if (dur > 0) seekSec = Math.min(dur * 0.25, 60)
     }
 
     await execFileAsync(

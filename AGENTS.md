@@ -4595,3 +4595,30 @@ Correções delegadas via `cavecrew-builder` para fixes isolados (1-2 arquivos) 
 
 - Validar instalador novo em campo se houver mudança de runtime relevante.
 - (Opcional) Configurar `GH_TOKEN` para publicar releases no GitHub.
+
+## Session Summary (2026-08-23 — Investigação lookahead: lever confirmado, default 16 mantido)
+
+### Done
+
+- **Auditoria do lever `lookahead` concluída — SEM mudança de código**. Pergunta: o `lookahead` é real/wired e vale subir o default (16)?
+- **Cadeia verificada end-to-end**:
+  - Default `AppConfig.Lookahead = 16` (`ConfigManager.cs:67`), clampado [0,256] pelo `ValidateAndFix`.
+  - AdaptiveQuality OFF (`EngineCoordinator.Capture.cs:145-149`): `BuildSettings(Full, ..., config.Bframes, config.Lookahead)` → Full é passthrough → encoder recebe config direto.
+  - AdaptiveQuality ON (`EngineCoordinator.Capture.cs:108-115`): `new RamManager(..., config.Bframes, config.Lookahead)` → `_configuredLookahead`; ResolveProfile passa através em Full/Balanced, só LowMemory força 0 (`RamManager.cs`, testes :82-96/:99-113 confirmam passthrough).
+  - Ambos os call sites de `SetQualityParams` (`EngineCoordinator.Capture.cs:168-176` reinit inicial + `:1088-1096` reinit de watchdog/recover) passam `_activeProfile.Lookahead` → `FfmpegEncoder._lookahead` → `BuildEncoderTuneArgs` emite `-rc-lookahead {n}` quando >0.
+  - Bug antigo (perfil default `Lookahead=4` sombreando config do usuário) já corrigido — RamManager é recriado por sessão (:104-107).
+  - Probe de velocidade (`EncoderManager.BuildProbeArgs`) não usa lookahead — irrelevante para qualidade.
+- **Decisão do usuário: MANTER default 16** (rejeitou subir para 32 e adicionar controle na UI).
+
+### Key Decisions
+
+- **16 é default adequado para CQ+VBV**: no regime CQ-dominante com maxrate como cap de segurança, o papel do lookahead é absorver picos de bitrate no teto — janela de 267ms @60fps já faz isso bem; 32 dobraria latência (+267ms) e VRAM com ganho marginal (importante só quando maxrate frequentemente limita).
+
+### Next Steps
+
+- Nenhum pendente desta investigação. Se um dia maxrate passar a limitar com frequência (logs mostrando bitrate cravado no cap), revisitar aumento p/ 32.
+
+### Relevant Files Changed
+
+- (nenhum código alterado nesta sessão)
+- `AGENTS.md`: resumo de sessão

@@ -85,7 +85,7 @@ export function probeVideoResolution(ffmpegPath: string, filePath: string): Prom
   return new Promise((resolve) => {
     execFile(
       ffmpegPath,
-      ['-hide_banner', '-i', filePath, '-f', 'null', '-'],
+      ['-hide_banner', '-i', filePath],
       { timeout: 15_000 },
       (err, _stdout, stderr) => {
         if (err && !stderr) {

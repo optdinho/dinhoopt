@@ -56,8 +56,11 @@ function probeStderr(duration?: string): string {
 function successExecFile(duration?: string, onGen?: () => void): () => void {
   execFileMock.mockImplementation((_cmd, args, _options, cb) => {
     const callback = cb as (err: null, stdout: string, stderr: string) => void
-    if ((args as string[]).includes('-f')) {
-      callback(null, '', probeStderr(duration))
+    if ((args as string[])[0] === '-i') {
+      const err = Object.assign(new Error('header-only probe exits non-zero'), {
+        stderr: probeStderr(duration),
+      })
+      callback(err as never, '', '')
     } else {
       onGen?.()
       callback(null, '', '')

@@ -247,7 +247,7 @@ export async function getVideoDuration(filePath: string): Promise<number> {
     const stderr = await new Promise<string>((resolve, reject) => {
       execFile(
         getFfmpegPath(),
-        ['-i', filePath, '-f', 'null', '-'],
+        ['-i', filePath],
         {
           encoding: 'utf-8',
           timeout: 5000,
