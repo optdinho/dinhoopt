@@ -4622,3 +4622,34 @@ Correções delegadas via `cavecrew-builder` para fixes isolados (1-2 arquivos) 
 
 - (nenhum código alterado nesta sessão)
 - `AGENTS.md`: resumo de sessão
+
+## Session Summary (2026-08-23b — NAudio 2.3.0 -> 3.0.1: bump mecanico, zero mudancas de codigo)
+
+### Done
+
+- **NAudio 3.0.1 aplicado nos 2 csprojs** (DiNho.Capture.Poc.csproj, VadTest/VadTest.csproj):
+  - Projeto principal (net10.0-windows10.0.26100.0): build limpo — **0 Aviso(s), 0 Erro(s)**, ZERO mudancas de codigo. WaveOutEvent AINDA compila em 3.0.1 (renome nao necessario); WasapiCapture/WasapiLoopbackCapture sem warnings de obsolescencia (sem #pragma).
+  - Suite C# completa: **1298/1298 aprovados, 0 falhas** ("Execucao de Teste Anulada." = flakiness pre-existente do ConsoleLogger/vstest documentada).
+- **VadTest CS0234 corrigido via TFM**: meta-package NAudio 3.x e condicional a TFM — TFM plain 
+et10.0 so puxa NAudio.Core+Midi (sem NAudio.CoreAudioApi); TFM 
+et10.0-windows puxa o set completo (Asio/Core/Dmo/Midi/Wasapi/WinForms/WinMM). VadTest.csproj: 
+et10.0 -> 
+et10.0-windows; rebuild limpo 0 erros.
+- **Publish + stage + deploy**: dotnet publish -c Release --self-contained true -r win-x64 OK; 
+pm run copy-engine (296 files, ffmpeg 9.0 212MB); app fechado; DLLs copiadas para %LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\ — SHA256 instalado == staging == publish == 362B7199.... Gotcha: deploys antigos deixaram NAudio*.dll 2.3.0 stale no destino (Asio/Midi/WinForms/WinMM) — sincronizadas TODAS as 8 NAudio DLLs do staging; destino agora 100% 3.0.1.
+
+### Key Decisions
+
+- **Bump mecanico sem TDD RED**: nenhuma API usada pelo engine mudou de assinatura — a suite existente (1298 testes) e a verificacao.
+- **TFM windows sobre PackageReference extra no VadTest**: ferramenta de diagnostico Windows-only (COM interop loopback) — TFM correto expressa o requisito e restaura selecao de assets do meta-package.
+
+### Next Steps
+
+- Reiniciar o app instalado e validar em campo: captura com mic/loopback (WasapiMicSource/WasapiLoopbackSource) e som de notificacao (WaveOutEvent) sob NAudio 3.0.1.
+- (Opcional) RamManagerTests.ComputeHybridRamCap_* desatualizado (180s vs 120s) — pre-existente.
+
+### Relevant Files Changed
+
+- dinho-clips-poc/src/DiNho.Capture.Poc/DiNho.Capture.Poc.csproj: NAudio 2.3.0 -> 3.0.1
+- dinho-clips-poc/src/VadTest/VadTest.csproj: NAudio 2.3.0 -> 3.0.1 + TFM net10.0 -> net10.0-windows
+- AGENTS.md: resumo de sessao
