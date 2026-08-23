@@ -102,7 +102,7 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         SetField(coord, "_appliedGameAudioOnly", false);
         SetField(coord, "_appliedGameAudioPid", 0);
         SetField(coord, "_dinhoHwnds", new List<IntPtr>());
-        SetField(coord, "_pipelineLock", new object());
+        SetField(coord, "_pipelineLock", new System.Threading.Lock());
         SetField(coord, "_status", new EngineStatus());
         SetField(coord, "_buffer", new ReplayBuffer(TimeSpan.FromSeconds(30)));
         SetField(coord, "_gameDetector", new GameDetector());
@@ -124,7 +124,7 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         SetField(coord, "_deviceLost", false);
         SetField(coord, "_hasEverBeenHealthy", false);
         SetField(coord, "_starvationStart", default(DateTime));
-        SetField(coord, "_exportLock", new object());
+        SetField(coord, "_exportLock", new System.Threading.Lock());
         SetField(coord, "_exportInProgress", false);
         SetField(coord, "_ramManager", null);
         SetField(coord, "_loopbackSource", null);
@@ -136,7 +136,7 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         SetField(coord, "_cleanupTimer", null);
         SetField(coord, "_audioMixerGeneration", 0);
         SetField(coord, "_restartPending", false);
-        SetField(coord, "_restartLock", new object());
+        SetField(coord, "_restartLock", new System.Threading.Lock());
         SetField(coord, "_highResTimerEnabled", false);
         SetField(coord, "_mfStarted", false);
         SetField(coord, "_audioFallback", false);

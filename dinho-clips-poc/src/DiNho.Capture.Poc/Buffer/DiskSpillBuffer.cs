@@ -28,7 +28,7 @@ public sealed class DiskSpillBuffer : IDisposable
     private readonly string _dir;
     private readonly string _id;
     private readonly int _segmentBytes;
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly List<SpillEntry> _index = new();
     private FileStream? _activeStream;
     private int _activeSegment = -1;

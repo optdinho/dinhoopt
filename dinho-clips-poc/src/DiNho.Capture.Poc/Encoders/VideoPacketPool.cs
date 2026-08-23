@@ -25,7 +25,7 @@ public static class VideoPacketPool
     /// </summary>
     internal static long MaxIdleBytes = 256L * 1024 * 1024;
 
-    private static readonly object _sync = new();
+    private static readonly Lock _sync = new();
     private static readonly Stack<byte[]> _idle = new();
     private static long _idleBytes;
 

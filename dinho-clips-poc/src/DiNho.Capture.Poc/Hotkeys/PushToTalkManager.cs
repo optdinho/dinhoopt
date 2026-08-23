@@ -13,7 +13,7 @@ public sealed class PushToTalkManager : IDisposable
 {
     private readonly HotkeyManager _hotkeyManager;
     private readonly HashSet<int> _pttKeys = new();
-    private readonly object _pttLock = new();
+    private readonly Lock _pttLock = new();
     private bool _micActive;
     private PttMode _mode = PttMode.Hold;
 

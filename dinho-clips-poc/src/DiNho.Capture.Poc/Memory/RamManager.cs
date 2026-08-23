@@ -49,7 +49,7 @@ public sealed class RamManager : IDisposable
     private readonly int _configuredLookahead;
 
     private Timer? _watchdog;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _disposed;
     private CaptureProfile? _lastProfile;
     private bool _wasUnderPressure;

@@ -33,7 +33,7 @@ public sealed class HotkeyManager : IDisposable
     private HHOOK _mouseHookId = HHOOK.Null;
     private Thread? _hookThread;
     private bool _disposed;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public event Action<HotkeyPressedEventArgs>? OnHotkeyPressed;
     public event Action<int, bool>? OnRawKeyEvent;

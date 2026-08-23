@@ -27,7 +27,7 @@ public class GameDatabase
     private Dictionary<string, GameEntry> _byWindowClass = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, GameEntry> _byProcessName = new(StringComparer.OrdinalIgnoreCase);
     private volatile bool _loaded;
-    private readonly object _loadLock = new();
+    private readonly Lock _loadLock = new();
 
     private static readonly Lazy<GameDatabase> _instance = new(() => new GameDatabase());
     public static GameDatabase Instance => _instance.Value;

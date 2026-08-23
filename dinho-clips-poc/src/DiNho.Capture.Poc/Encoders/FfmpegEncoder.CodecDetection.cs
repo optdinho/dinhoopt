@@ -6,7 +6,7 @@ internal partial class FfmpegEncoder
 {
     private static readonly Dictionary<string, bool> _encoderCache = new();
     private static string? _bestCodecCache;
-    private static readonly object _cacheLock = new();
+    private static readonly Lock _cacheLock = new();
 
     private string DetectBestCodec()
     {

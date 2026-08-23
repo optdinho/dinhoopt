@@ -398,7 +398,7 @@ public sealed class EncoderManager : IDisposable
     /// Exceções são permitidas — degradam para "speed".</summary>
     internal static Func<string, int, int, int, string, double?> ProbeAmfSpeedProbe = ProbeAmfSpeed;
 
-    private static readonly object AmfPresetCacheLock = new();
+    private static readonly Lock AmfPresetCacheLock = new();
     private static Dictionary<string, string>? _amfPresetCache;
 
     /// <summary>Limpa o cache de preset AMF (usado nos testes entre cenários).</summary>

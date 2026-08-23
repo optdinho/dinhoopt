@@ -5,7 +5,7 @@ namespace DiNho.Capture.Poc.Logging;
 public sealed class ConsoleLogger : ILogger, IDisposable
 {
     private readonly TextWriter _writer;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly bool _writeTimestamps;
     private bool _disposed;
 

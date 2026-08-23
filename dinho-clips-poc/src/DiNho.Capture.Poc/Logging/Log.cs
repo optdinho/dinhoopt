@@ -3,7 +3,7 @@ namespace DiNho.Capture.Poc.Logging;
 public static class Log
 {
     private static ILogger? _instance;
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
 
     public static ILogger Instance
     {

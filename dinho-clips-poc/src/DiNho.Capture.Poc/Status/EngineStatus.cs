@@ -30,7 +30,7 @@ public sealed class EngineStatusSnapshot
 public sealed class EngineStatus : IDisposable
 {
     private EngineStatusSnapshot _current = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private Timer? _watchdogTimer;
     private DateTime _lastHeartbeat = DateTime.UtcNow;
 

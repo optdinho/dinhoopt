@@ -144,7 +144,7 @@ public sealed class ConfigManager : IDisposable
         "p1", "p2", "p3", "p4", "p5", "p6", "p7",
     };
 
-    private static readonly HashSet<string> ValidReplayBufferModes = new()
+    private static readonly HashSet<string> ValidReplayBufferModes = new(StringComparer.OrdinalIgnoreCase)
     {
         // Alinhado com o allowlist TS (clips.ipc.ts): "ram" (só RAM) e
         // "hybrid" (RAM 2min fixo + spill no disco). Qualquer outro valor
@@ -156,7 +156,7 @@ public sealed class ConfigManager : IDisposable
     {
         if (string.IsNullOrWhiteSpace(mode))
             return false;
-        return ValidReplayBufferModes.Contains(mode.ToLowerInvariant());
+        return ValidReplayBufferModes.Contains(mode);
     }
 
     public static bool IsValidEncoderPreset(string? preset)
@@ -169,7 +169,7 @@ public sealed class ConfigManager : IDisposable
     private readonly string _configDir;
     private readonly string _configPath;
     private readonly AppConfig _defaults = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public AppConfig Config { get; private set; }
 

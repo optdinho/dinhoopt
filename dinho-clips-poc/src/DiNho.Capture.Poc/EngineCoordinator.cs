@@ -70,7 +70,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private int _capturedGameProcessId;
     private volatile bool _captureActive;
     private volatile bool _exportInProgress;
-    private readonly object _exportLock = new();
+    private readonly Lock _exportLock = new();
     private readonly object _pipelineLock = new();
     private Timer? _cleanupTimer;
     private Timer? _pttDiagTimer;
@@ -145,7 +145,7 @@ public sealed partial class EngineCoordinator : IDisposable
 
     // Evita restart concorrente da pipeline (ex: GameAudioOnly + OnGameChanged simultâneos)
     private bool _restartPending;
-    private readonly object _restartLock = new();
+    private readonly Lock _restartLock = new();
 
     // DriftMonitor — acompanha continuamente a diferença entre PTS de vídeo e áudio
     // durante a captura, emitindo warning quando o drift acumulado excede limites perceptuais.

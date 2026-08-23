@@ -27,7 +27,7 @@ public sealed class AudioMixer : IDisposable
     // Filas internas — protegidas por _lock
     private readonly Queue<(AudioBuffer Buffer, TimeSpan Pts)> _loopbackQueue = new();
     private readonly Queue<(float[] Samples, int Offset, int Length, TimeSpan Pts)> _micQueue = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     // Configuração (thread-safe via propriedades)
     private volatile bool _micEnabled;

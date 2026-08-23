@@ -31,7 +31,7 @@ public sealed class FfmpegAacEncoder : IDisposable
     private int _totalAacFrames;
     private volatile int _droppedFrameCount;
     private volatile bool _flushing;
-    private readonly object _writeLock = new();
+    private readonly Lock _writeLock = new();
 
     // Timeout de escrita no stdin: warm-up (encoder ainda não produziu batches)
     // usa timeout generoso para o ffmpeg abrir; estado estável usa timeout estrito

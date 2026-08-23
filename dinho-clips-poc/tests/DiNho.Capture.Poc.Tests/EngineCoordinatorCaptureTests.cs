@@ -62,7 +62,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         SetField(coord, "_captureActive", false);
         SetField(coord, "_recording", false);
         SetField(coord, "_dinhoHwnds", new List<IntPtr>());
-        SetField(coord, "_pipelineLock", new object());
+        SetField(coord, "_pipelineLock", new Lock());
         SetField(coord, "_watchdog", new PipelineWatchdog());
         SetField(coord, "_buffer", CreateTestBuffer());
         SetField(coord, "_status", new EngineStatus());
@@ -101,8 +101,8 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         SetField(coord, "_cleanupTimer", null);
         SetField(coord, "_audioMixerGeneration", 0);
         SetField(coord, "_restartPending", false);
-        SetField(coord, "_restartLock", new object());
-        SetField(coord, "_exportLock", new object());
+        SetField(coord, "_restartLock", new System.Threading.Lock());
+        SetField(coord, "_exportLock", new System.Threading.Lock());
         SetField(coord, "_exportInProgress", false);
         SetField(coord, "_highResTimerEnabled", false);
         SetField(coord, "_mfStarted", false);

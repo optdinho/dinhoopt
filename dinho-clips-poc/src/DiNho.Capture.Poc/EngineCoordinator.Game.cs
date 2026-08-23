@@ -326,13 +326,12 @@ public sealed partial class EngineCoordinator
                 executablePath.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
             {
                 // Exceções: jogos conhecidos em Program Files
-                var lowerPath = executablePath.ToLowerInvariant();
-                if (lowerPath.Contains("\\steam\\steamapps\\common\\") ||
-                    lowerPath.Contains("\\epic games\\") ||
-                    lowerPath.Contains("\\ubisoft\\") ||
-                    lowerPath.Contains("\\battlenet\\") ||
-                    lowerPath.Contains("\\rockstar games\\") ||
-                    lowerPath.Contains("\\electronic arts\\"))
+                if (executablePath.Contains("\\steam\\steamapps\\common\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\epic games\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\ubisoft\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\battlenet\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\rockstar games\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\electronic arts\\", StringComparison.OrdinalIgnoreCase))
                     return false;
 
                 return true;
@@ -341,13 +340,12 @@ public sealed partial class EngineCoordinator
             if (programFilesX86 != null &&
                 executablePath.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase))
             {
-                var lowerPath = executablePath.ToLowerInvariant();
-                if (lowerPath.Contains("\\steam\\steamapps\\common\\") ||
-                    lowerPath.Contains("\\epic games\\") ||
-                    lowerPath.Contains("\\ubisoft\\") ||
-                    lowerPath.Contains("\\battlenet\\") ||
-                    lowerPath.Contains("\\rockstar games\\") ||
-                    lowerPath.Contains("\\electronic arts\\"))
+                if (executablePath.Contains("\\steam\\steamapps\\common\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\epic games\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\ubisoft\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\battlenet\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\rockstar games\\", StringComparison.OrdinalIgnoreCase) ||
+                    executablePath.Contains("\\electronic arts\\", StringComparison.OrdinalIgnoreCase))
                     return false;
 
                 return true;
