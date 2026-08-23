@@ -152,7 +152,6 @@ describe('clips-config-manager', () => {
     it('propagates replayBufferMode hybrid to the engine payload', () => {
       config.replayBufferMode = 'hybrid'
       expect(buildEngineConfig().replayBufferMode).toBe('hybrid')
-      config.replayBufferMode = 'ram'
     })
 
     it('uses config hotkeys when non-empty', () => {
@@ -351,7 +350,7 @@ describe('clips-config-manager', () => {
       expect(config.bufsizeKbps).toBe(60000)
       expect(config.bframes).toBe(3)
       expect(config.lookahead).toBe(16)
-      expect(config.encoderPreset).toBe('p4')
+      expect(config.encoderPreset).toBe('p6')
       expect(config.codec).toBe('auto')
       expect(config.adapterIndex).toBe(-1)
       expect(config.micDeviceId).toBe('')

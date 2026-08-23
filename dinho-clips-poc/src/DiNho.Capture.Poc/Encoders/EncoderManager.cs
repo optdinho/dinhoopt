@@ -607,6 +607,9 @@ public sealed class EncoderManager : IDisposable
 
     // ── AV1 capability gate ──────────────────────────────────────────
 
+    /// <summary>Seam para testes — troque para evitar probe real do ffmpeg (-encoders).</summary>
+    internal static Func<int, bool> Av1HwProbe = SupportsAv1Hardware;
+
     /// <summary>Check if a given GPU vendor supports AV1 hardware encoding.
     /// RTX 40+, RDNA3+, Arc Alchemist+.</summary>
     public static bool SupportsAv1Hardware(int vendorId)
@@ -656,24 +659,29 @@ public sealed class EncoderManager : IDisposable
 
     /// <summary>
     /// Build a cascading fallback chain for the given user codec preference.
-    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → D3D12VA → CPU veryfast.
+    /// Chain order: hardware native → reduced resolution (1/2, 1/4) → D3D12VA → CPU fast.
     /// Each entry includes the codec and optional resolution scale divisor.
     /// The scale divisor only takes effect when the user did NOT choose an explicit
     /// output resolution (native); a user-chosen target is the floor and is preserved.
     /// The D3D12VA step (F3) is hardware-agnostic and probe-gated — it's inserted
     /// between vendor HW and CPU when a GPU is present and no software codec was
     /// explicitly requested. Probe failure falls through to CPU.
+    /// For "auto" on an AV1-capable GPU, a second HW block for the vendor's AV1
+    /// encoder precedes the preferred-codec block (better quality at same bitrate);
+    /// both blocks are gated by real ffmpeg probes, so machines without AV1 HW
+    /// never receive AV1 steps.
     /// </summary>
     public static List<FallbackEntry> BuildFallbackChain(string userCodec, int vendorId)
     {
         var chain = new List<FallbackEntry>();
 
         // Determine the hardware codec for this vendor
-        var hwCodec = userCodec.ToLowerInvariant() switch
+        var requested = userCodec.ToLowerInvariant();
+        var hwCodec = requested switch
         {
             "h264" => GetPreferredCodec(vendorId),
             "hevc" => VendorHevcCodecs.TryGetValue(vendorId, out var h) ? h : "",
-            "av1" => SupportsAv1Hardware(vendorId) ?
+            "av1" => Av1HwProbe(vendorId) ?
                      (VendorAv1Codecs.TryGetValue(vendorId, out var a) ? a : "") : "",
             "libx264" => "",
             "libx265" => "",
@@ -681,27 +689,17 @@ public sealed class EncoderManager : IDisposable
             _ => "",
         };
 
-        // HW native at full resolution
-        if (!string.IsNullOrEmpty(hwCodec))
-            chain.Add(new FallbackEntry { Codec = hwCodec, Label = $"HW native ({hwCodec})" });
+        // Auto + AV1-capable GPU: AV1 HW block first (quality lever), then the
+        // preferred codec's block. Probe-gated — no AV1 HW means av1Primary stays null.
+        string? av1Primary = null;
+        if (requested == "auto" && Av1HwProbe(vendorId) &&
+            VendorAv1Codecs.TryGetValue(vendorId, out var av1Auto))
+        {
+            av1Primary = av1Auto;
+        }
 
-        // HW at half resolution (divisor 2)
-        if (!string.IsNullOrEmpty(hwCodec))
-            chain.Add(new FallbackEntry
-            {
-                Codec = hwCodec,
-                ScaleDivisor = 2,
-                Label = $"HW 1/2 ({hwCodec})",
-            });
-
-        // HW at quarter resolution (divisor 4)
-        if (!string.IsNullOrEmpty(hwCodec))
-            chain.Add(new FallbackEntry
-            {
-                Codec = hwCodec,
-                ScaleDivisor = 4,
-                Label = $"HW 1/4 ({hwCodec})",
-            });
+        AddHwBlock(chain, av1Primary);
+        AddHwBlock(chain, hwCodec);
 
         // D3D12VA fallback — hardware-agnostic (Windows 10+, qualquer vendor).
         // Usa a API D3D12 em vez dos SDKs de vendor (NVENC/AMF/QSV). Útil quando o
@@ -739,6 +737,18 @@ public sealed class EncoderManager : IDisposable
         });
 
         return chain;
+    }
+
+    /// <summary>
+    /// Append a 3-step hardware block (native → 1/2 → 1/4) for the given codec.
+    /// No-op when codec is null/empty (no HW available or software request).
+    /// </summary>
+    private static void AddHwBlock(List<FallbackEntry> chain, string? codec)
+    {
+        if (string.IsNullOrEmpty(codec)) return;
+        chain.Add(new FallbackEntry { Codec = codec, Label = $"HW native ({codec})" });
+        chain.Add(new FallbackEntry { Codec = codec, ScaleDivisor = 2, Label = $"HW 1/2 ({codec})" });
+        chain.Add(new FallbackEntry { Codec = codec, ScaleDivisor = 4, Label = $"HW 1/4 ({codec})" });
     }
 
     // ── Existing methods (kept for backward compatibility) ───────────

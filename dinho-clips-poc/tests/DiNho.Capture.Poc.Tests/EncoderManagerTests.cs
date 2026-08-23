@@ -136,6 +136,55 @@ public sealed class EncoderManagerTests
         Assert.DoesNotContain(chain, e => e.Codec.Contains("d3d12va"));
     }
 
+    // ── BuildFallbackChain — Alavanca 4: AV1-first para "auto" ──────
+
+    [Theory]
+    [InlineData(0x10DE, "av1_nvenc", "h264_nvenc")]
+    [InlineData(0x1002, "av1_amf", "h264_amf")]
+    [InlineData(0x8086, "av1_qsv", "h264_qsv")]
+    public void BuildFallbackChain_auto_Av1Capable_PutsAv1First(int vendorId, string av1Codec, string h264Codec)
+    {
+        var original = EncoderManager.Av1HwProbe;
+        EncoderManager.Av1HwProbe = _ => true;
+        try
+        {
+            var chain = EncoderManager.BuildFallbackChain("auto", vendorId);
+
+            Assert.Equal(av1Codec, chain[0].Codec);
+            Assert.Equal(1, chain[0].ScaleDivisor);
+
+            var av1Idx = chain.FindIndex(e => e.Codec == av1Codec);
+            var h264Idx = chain.FindIndex(e => e.Codec == h264Codec);
+            var cpuIdx = chain.FindIndex(e => e.Codec == "libx264");
+            Assert.True(h264Idx > av1Idx, "bloco h264 deve vir depois do bloco AV1");
+            Assert.True(cpuIdx > h264Idx, "CPU deve vir depois dos dois blocos HW");
+
+            // Ambos os blocos HW mantêm a escada completa de divisores
+            Assert.Contains(chain, e => e.Codec == av1Codec && e.ScaleDivisor == 2);
+            Assert.Contains(chain, e => e.Codec == av1Codec && e.ScaleDivisor == 4);
+            Assert.Contains(chain, e => e.Codec == h264Codec && e.ScaleDivisor == 2);
+            Assert.Contains(chain, e => e.Codec == h264Codec && e.ScaleDivisor == 4);
+        }
+        finally { EncoderManager.Av1HwProbe = original; }
+    }
+
+    [Fact]
+    public void BuildFallbackChain_auto_NoAv1HW_KeepsH264First()
+    {
+        var original = EncoderManager.Av1HwProbe;
+        EncoderManager.Av1HwProbe = _ => false;
+        try
+        {
+            var chain = EncoderManager.BuildFallbackChain("auto", 0x10DE);
+
+            Assert.Equal("h264_nvenc", chain[0].Codec);
+            Assert.DoesNotContain(chain, e => e.Codec.StartsWith("av1_"));
+            Assert.Equal("libx264", chain[^2].Codec);
+            Assert.Equal("libx264", chain[^1].Codec);
+        }
+        finally { EncoderManager.Av1HwProbe = original; }
+    }
+
     [Fact]
     public void ProbeEncoder_h264_d3d12va_DoesNotThrow()
     {

@@ -435,7 +435,7 @@ public sealed class EngineCoordinatorTests
         Assert.Equal(60000, cfg.BufsizeKbps);
         Assert.Equal(3, cfg.Bframes);
         Assert.Equal(16, cfg.Lookahead);
-        Assert.Equal("p4", cfg.EncoderPreset);
+        Assert.Equal("p6", cfg.EncoderPreset);
         Assert.Equal("auto", cfg.Codec);
         Assert.Equal(48000, cfg.AudioSampleRate);
         Assert.Equal(1.0f, cfg.MicVolume);
@@ -1300,7 +1300,7 @@ public sealed class EngineCoordinatorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(tempFile, """{"EncoderPreset": ""}""");
         var cfg = new ConfigManager(tempFile);
-        Assert.Equal("p4", cfg.Config.EncoderPreset);
+        Assert.Equal("p6", cfg.Config.EncoderPreset);
     }
 
     [Fact]

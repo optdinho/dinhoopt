@@ -65,7 +65,7 @@ public sealed class AppConfig
     public int BufsizeKbps { get; set; } = 60000;
     public int Bframes { get; set; } = 3;
     public int Lookahead { get; set; } = 16;
-    public string EncoderPreset { get; set; } = "p4";
+    public string EncoderPreset { get; set; } = "p6";
     public string Codec { get; set; } = "auto";
     /// <summary>GPU adapter index for multi-GPU systems (-1 = auto).</summary>
     public int AdapterIndex { get; set; } = -1;
@@ -79,7 +79,7 @@ public sealed class AppConfig
 
     // Forçar encoder software (útil para testes sem GPU / WARP)
     public bool ForceSoftware { get; set; }
-    public bool Multipass { get; set; } = false;
+    public bool Multipass { get; set; } = true;
 
     // RNNoise/anlmdn noise suppression on microphone
     [JsonPropertyName("noiseSuppression")]

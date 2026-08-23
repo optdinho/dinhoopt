@@ -19,6 +19,21 @@ public sealed class ConfigManagerTests
         Assert.Equal(1280, cfg.Config.Width);
         Assert.Equal(720, cfg.Config.Height);
         Assert.Equal(120, cfg.Config.ReplayTimeSeconds);
+        Assert.True(cfg.Config.Multipass);
+    }
+
+    [Fact]
+    public void Default_Multipass_IsTrue()
+    {
+        var cfg = CreateClean();
+        Assert.True(cfg.Config.Multipass);
+    }
+
+    [Fact]
+    public void Default_EncoderPreset_IsP6()
+    {
+        var cfg = CreateClean();
+        Assert.Equal("p6", cfg.Config.EncoderPreset);
     }
 
     [Fact]
@@ -75,7 +90,7 @@ public sealed class ConfigManagerTests
         try
         {
             var cfg = new ConfigManager(tempFile);
-            Assert.Equal("p4", cfg.Config.EncoderPreset);
+            Assert.Equal("p6", cfg.Config.EncoderPreset);
         }
         finally
         {

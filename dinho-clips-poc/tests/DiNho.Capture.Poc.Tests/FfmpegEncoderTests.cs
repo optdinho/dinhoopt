@@ -661,6 +661,29 @@ public sealed class FfmpegEncoderTests
         Assert.Equal("", FfmpegEncoder.BuildWeightedPredArg(false));
     }
 
+    // ─── Multipass (NVENC only) ──────────────────────────────────────────
+
+    [Theory]
+    [InlineData("h264_nvenc")]
+    [InlineData("hevc_nvenc")]
+    [InlineData("av1_nvenc")]
+    public void BuildEncoderTuneArgs_NvencMultipassTrue_EmitsFullRes(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 16, "p5", "speed", multipass: true);
+        Assert.Contains("-multipass fullres", args);
+        Assert.DoesNotContain("-multipass disabled", args);
+    }
+
+    [Theory]
+    [InlineData("h264_nvenc")]
+    [InlineData("hevc_nvenc")]
+    [InlineData("av1_nvenc")]
+    public void BuildEncoderTuneArgs_NvencMultipassFalse_EmitsDisabled(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 16, "p5", "speed", multipass: false);
+        Assert.Contains("-multipass disabled", args);
+    }
+
     // ─── BuildEncoderTuneArgs ───────────────────────────────────────────
 
     [Theory]
@@ -686,6 +709,31 @@ public sealed class FfmpegEncoderTests
         Assert.DoesNotContain("-preset veryfast", args);
         Assert.DoesNotContain("-profile:v high", args);
         Assert.Contains("-quality speed", args);
+    }
+
+    [Theory]
+    [InlineData("libx264")]
+    [InlineData("libx265")]
+    public void BuildEncoderTuneArgs_CpuFallback_UsesFastPreset(string codec)
+    {
+        // Alavanca 6: preset de CPU sobe de veryfast para fast (melhora retenção de
+        // detalhe em movimento; realtime ainda folgado em máquinas modernas).
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-preset fast ", args);
+        Assert.DoesNotContain("veryfast", args);
+        Assert.Contains("-bf 0", args);
+        Assert.Contains("-crf", args);
+        Assert.DoesNotContain("zerolatency", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_UnknownCodec_DefaultBranchUsesFastPreset()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("mpeg2video", 22, 40000, 80000, 2, 32, "p4");
+        Assert.Contains("-preset fast ", args);
+        Assert.DoesNotContain("veryfast", args);
+        Assert.Contains("-bf 0", args);
+        Assert.Contains("-profile:v high", args);
     }
 
     [Fact]

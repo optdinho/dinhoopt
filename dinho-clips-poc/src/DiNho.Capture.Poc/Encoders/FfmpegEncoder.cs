@@ -201,7 +201,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     internal static string BuildEncoderTuneArgs(string codec, double cq, int maxrateKbps, int bufsizeKbps,
         int bframes, int lookahead, string nvencPreset, string amfPreset = "speed", bool multipass = false)
     {
-        // Fallback de CPU (libx264/libx265): CRF+VBV com preset veryfast. Sem -tune zerolatency
+        // Fallback de CPU (libx264/libx265): CRF+VBV com preset fast. Sem -tune zerolatency
         // (bframes=0 garante ordem de saída = ordem de entrada p/ o PTS do pipeline) e sem
         // -threads 1 (usa todos os cores). CABAC/High profile recupera ~15% de eficiência.
         var cpuCq = Math.Clamp(cq, 1, 51);
@@ -209,8 +209,8 @@ internal sealed partial class FfmpegEncoder : IEncoder
         var amfPresetNorm = NormalizeAmfPreset(amfPreset);
         return codec switch
         {
-            "libx264" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
-            "libx265" => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
+            "libx264" => $"-preset fast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high",
+            "libx265" => $"-preset fast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint=60:min-keyint=60",
             "h264_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v high -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass {(multipass ? "fullres" : "disabled")}{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "hevc_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -profile:v main10 -bf {bframes} -b_ref_mode middle -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass {(multipass ? "fullres" : "disabled")}{BuildWeightedPredArg(bframes == 0)} -nonref_p 1 -g 120 -keyint_min 120",
             "av1_nvenc" => $"-preset {nvencPreset} -tune hq -rc vbr -b:v 0 -cq {cq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf {bframes} -rc-lookahead {lookahead} -spatial-aq 1 -aq-strength 8 -temporal-aq 1 -multipass {(multipass ? "fullres" : "disabled")} -nonref_p 1 -g 120 -keyint_min 120",
@@ -236,7 +236,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "h264_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
             "hevc_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
             "av1_d3d12va" => $"-rc 1 -qp {Math.Clamp(cq, 0, 52)} -bf 0 -g 120",
-            _ => $"-preset veryfast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high"
+            _ => $"-preset fast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high"
         };
     }
 
