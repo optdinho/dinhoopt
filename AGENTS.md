@@ -4697,3 +4697,11 @@ pm run copy-engine (296 files, ffmpeg 9.0 212MB); app fechado; DLLs copiadas par
 
 - Proximo `npm run package`: valida fuses + compression maximum + electronLanguages (instalador menor); nota one-way do cookieEncryption
 - Experimento opcional ServerGC com medicao drops/pausas durante save
+
+### Package validation (2026-08-23b, mesmo dia)
+
+- `npm run package` OK: instalador (226.0MB) + portable (225.7MB) assinados, blockmap gerado
+- **Fuses confirmados no binario** (`npx @electron/fuses read`): RunAsNode/NODE_OPTIONS/nodeCliInspect/GrantFileProtocolExtraPrivileges Disabled; CookieEncryption/AsarIntegrity/OnlyLoadAppFromAsar Enabled
+- **electronLanguages funcionou**: locales ~40 -> 4 (en-US, es, es-419, pt-BR)
+- compression maximum: tamanho quase igual (ffmpeg.exe 212MB domina e nao comprime mais) — ganho real ficou nos locales strip
+- Smoke engine empacotado: `DiNho.Capture.Poc.exe --encoders` EXIT=0; DLL hash win-unpacked == staging == instalado (`3CFF7496`)
