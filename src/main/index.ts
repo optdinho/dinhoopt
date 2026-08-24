@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, normalize as pathNormalize } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import dotenv from 'dotenv'
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, screen, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron'
 
 // Carrega .env apenas em dev — em produção as env vars vêm do CI/CD
 if (!app.isPackaged) {
@@ -29,10 +30,21 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 // over http://localhost) and packaged (file://). The `file://` scheme itself is
 // blocked by Chromium when the page is loaded from an http origin, which is why
 // a dedicated handler that streams the file is required.
+// Scheme do renderer empacotado: origem http-like pro CSP 'self'.
+const APP_RENDERER_SCHEME = 'app'
+const APP_RENDERER_HOST = 'bundle'
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: CLIP_VIDEO_SCHEME,
     privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, bypassCSP: true },
+  },
+  {
+    // Servidor do renderer empacotado. Com asar desligado (resources/app/),
+    // file:// bloqueia module scripts por CORS (origin null). Scheme próprio
+    // dá origem http-like e o CSP 'self' continua válido.
+    scheme: APP_RENDERER_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
 ])
 
@@ -43,6 +55,7 @@ import { runDaemon } from './daemon'
 import { t } from './i18n'
 import { registerCleanerIpc } from './ipc'
 import { CLIP_VIDEO_SCHEME, handleClipVideoRequest } from './ipc/clip-video-protocol'
+
 import { stopEngineProcess } from './ipc/clips-engine-connection'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
 import { initAuditLog } from './services/audit-log'
@@ -462,7 +475,24 @@ function initGui(): void {
     if (process.env.ELECTRON_RENDERER_URL) {
       mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
     } else {
-      mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+      // Renderer servido via app:// (resources/app desempacotado).
+      // Raiz do scheme = <install>/resources/app/out/renderer/
+      const rendererRoot = join(__dirname, '../renderer')
+      protocol.handle(APP_RENDERER_SCHEME, (request) => {
+        try {
+          const { pathname } = new URL(request.url)
+          const rel = decodeURIComponent(pathname).replace(/^\/+/, '')
+          const base = pathNormalize(join(rendererRoot, rel === '' ? 'index.html' : rel))
+          if (!base.startsWith(rendererRoot)) {
+            return new Response('forbidden', { status: 403 })
+          }
+          return net.fetch(pathToFileURL(base).toString())
+        } catch (err) {
+          getLogger().error('app', `app:// handler failed: ${(err as Error).message}`)
+          return new Response('not found', { status: 404 })
+        }
+      })
+      mainWindow.loadURL(`${APP_RENDERER_SCHEME}://${APP_RENDERER_HOST}/index.html`)
     }
   }
 
