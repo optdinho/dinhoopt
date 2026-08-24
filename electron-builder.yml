@@ -9,6 +9,13 @@ directories:
 files:
   - out/**/*
 
+# asar DESLIGADO: o leitor C++ de asar do Chromium (netstack) falha com
+# ERR_FILE_NOT_FOUND no mainframe quando o exe e processado pelo builder
+# (rcedit/fuses) nesta combinacao Electron 43.4.1 + electron-vite 6 beta.
+# Node fs le o mesmo asar normalmente - bug isolado em 2026-08-23.
+# Sem asar, o app vai para resources/app/ como diretorio real.
+asar: false
+
 extraResources:
   - from: resources/icon.ico
     to: icon.ico
@@ -28,13 +35,9 @@ win:
       arch:
         - x64
   icon: resources/icon.ico
-  requestedExecutionLevel: requireAdministrator
+  requestedExecutionLevel: asInvoker
   # Strip unused Chromium locales (~10-15MB) — app ships its own i18n (en/pt/es).
-  electronLanguages:
-    - pt-BR
-    - en-US
-    - es
-
+  
 # ffmpeg.exe (212MB) compresses well — smaller installer at cost of slower build.
 compression: maximum
 
@@ -47,8 +50,8 @@ electronFuses:
   enableNodeOptionsEnvironmentVariable: false
   enableNodeCliInspectArguments: false
   enableCookieEncryption: true
-  enableEmbeddedAsarIntegrityValidation: true
-  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: false
+  onlyLoadAppFromAsar: false
   grantFileProtocolExtraPrivileges: false
   loadBrowserProcessSpecificV8Snapshot: false
 
