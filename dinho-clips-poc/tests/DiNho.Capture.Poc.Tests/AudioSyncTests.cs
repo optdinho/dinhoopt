@@ -307,8 +307,32 @@ public sealed class AudioSyncTests
     {
         Assert.Equal(TimeSpan.Zero, ClipExporter.AlignAudioToVideoPts([], new List<EncodedPacket>()));
         var audio = new List<EncodedPacket> { Pkt(MediaType.Audio, 0, 21) };
-        Assert.Equal(TimeSpan.Zero, ClipExporter.AlignAudioToVideoPts(audio, []));
-    }
+Assert.Equal(TimeSpan.Zero, ClipExporter.AlignAudioToVideoPts(audio, []));
+        }
+
+        [Fact]
+        public void AlignAudioToVideoPts_RateScaling_ScalesInbetweenToVideoSpan()
+        {
+            var video = new List<EncodedPacket>
+            {
+                Pkt(MediaType.Video, 0, 500),
+                Pkt(MediaType.Video, 500, 500),
+                Pkt(MediaType.Video, 1000, 500),
+            };
+            var audio = new List<EncodedPacket>
+            {
+                Pkt(MediaType.Audio, 0, 600),
+                Pkt(MediaType.Audio, 600, 600),
+            };
+
+            ClipExporter.AlignAudioToVideoPts(audio, video);
+
+            Assert.Equal(0, (audio[^1].Pts + audio[^1].Duration - (video[^1].Pts + video[^1].Duration)).TotalMilliseconds, 1);
+            Assert.Equal(750, audio[1].Pts.TotalMilliseconds, 1);
+            Assert.Equal(750, audio[1].Duration.TotalMilliseconds, 1);
+            Assert.Equal(0, audio[0].Pts.TotalMilliseconds, 1);
+            Assert.Equal(500, video[1].Pts.TotalMilliseconds, 1);
+        }
 
     // ════════════════════════════════════════════════════════════
     //  ClonePackets — export não corrompe o anel vivo do buffer

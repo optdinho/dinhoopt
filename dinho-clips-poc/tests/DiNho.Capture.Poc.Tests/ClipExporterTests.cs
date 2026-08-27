@@ -577,6 +577,36 @@ public sealed class ClipExporterTests
     }
 
     [Fact]
+    public void ReTimestampToContiguous_RateScalesAudioToVideoSpan()
+    {
+        var video = new List<EncodedPacket>
+        {
+            MakePacket(0, 1_666_666),
+            MakePacket(48_333_334, 1_666_666),
+            MakePacket(100_000_000, 1_666_666),
+            MakePacket(148_333_334, 1_666_666),
+        };
+        var audio = new List<EncodedPacket>
+        {
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false),
+            new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(11), TimeSpan.FromMilliseconds(21), false),
+        };
+        var intervals = new List<(TimeSpan, TimeSpan)>
+        {
+            // dur=5s, output=0s
+            (TimeSpan.Zero, TimeSpan.FromSeconds(5)),
+            // dur=5s, output=5s
+            (TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)),
+        };
+
+        ClipExporter.ReTimestampToContiguous(video, audio, intervals);
+
+        // Audio starts after a 1s silence gap; its span must be rate-scaled to match the video span.
+        Assert.Equal(0.0, video[0].Pts.TotalSeconds, 3);
+        Assert.Equal((video[^1].Pts + video[^1].Duration).TotalSeconds, (audio[^1].Pts + audio[^1].Duration).TotalSeconds, 3);
+    }
+
+    [Fact]
     public void ReTimestampToContiguous_TwoGaps_ClosesBoth()
     {
         var video = new List<EncodedPacket>
