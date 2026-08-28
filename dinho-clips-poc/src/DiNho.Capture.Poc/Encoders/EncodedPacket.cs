@@ -11,7 +11,7 @@ public sealed class EncodedPacket
     public float[]? PcmSamples { get; private set; }
     public MediaType Type { get; }
     public TimeSpan Pts { get; internal set; }
-    public TimeSpan Duration { get; }
+    public TimeSpan Duration { get; internal set; }
     public bool IsKeyFrame { get; }
     public int Width { get; }
     public int Height { get; }

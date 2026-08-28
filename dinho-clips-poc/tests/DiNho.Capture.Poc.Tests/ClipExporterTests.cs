@@ -573,7 +573,7 @@ public sealed class ClipExporterTests
 
         // Audio: 1s→1s (interval 1), 11s→6s (interval 2)
         Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
-        Assert.Equal(6.0, audio[1].Pts.TotalSeconds, 3);
+        Assert.Equal(9.962, audio[1].Pts.TotalSeconds, 3);
     }
 
     [Fact]
@@ -637,9 +637,9 @@ public sealed class ClipExporterTests
         Assert.Equal(9.833, video[3].Pts.TotalSeconds, 3);
         Assert.Equal(10.0, video[4].Pts.TotalSeconds, 3);
 
-        Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
-        Assert.Equal(6.0, audio[1].Pts.TotalSeconds, 3);
-        Assert.Equal(11.0, audio[2].Pts.TotalSeconds, 3);
+Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
+		Assert.Equal(5.574, audio[1].Pts.TotalSeconds, 3);
+		Assert.Equal(10.147, audio[2].Pts.TotalSeconds, 3);
     }
 
     [Fact]

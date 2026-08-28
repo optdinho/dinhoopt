@@ -114,8 +114,31 @@ public sealed partial class ClipExporter
         var vNow = videoPackets[^1].Pts + videoPackets[^1].Duration;
         var shift = aNow - vNow;
 
-        if (Math.Abs(shift.TotalSeconds) <= 2.0)
-            return TimeSpan.Zero;
+if (shift > TimeSpan.Zero && shift.TotalSeconds <= 2.0)
+                return TimeSpan.Zero;
+
+        // Quando o span remapeado do áudio é mais CURTO que o do vídeo, o áudio não
+        // cobre o fim do vídeo — re-dimensionar (rate-scale) para esticar o áudio até
+        // o fim do vídeo, preservando o início. Quando o áudio é mais longo ou igual,
+        // aplica apenas o shift uniforme.
+        if (shift.TotalSeconds < 0.0 && aNow > TimeSpan.Zero)
+        {
+            var audioStart = audioPackets[0].Pts;
+            var audioSpan = aNow - audioStart;
+            if (audioSpan > TimeSpan.Zero)
+            {
+                var videoSpan = vNow - audioStart;
+                double factor = videoSpan.TotalSeconds / audioSpan.TotalSeconds;
+                for (int i = 0; i < audioPackets.Count; i++)
+                {
+                    var rel = (audioPackets[i].Pts - audioStart).TotalSeconds * factor;
+                    audioPackets[i].Pts = audioStart + TimeSpan.FromSeconds(rel);
+                    audioPackets[i].Duration = TimeSpan.FromSeconds(
+                        audioPackets[i].Duration.TotalSeconds * factor);
+                }
+                return shift;
+            }
+        }
 
         for (int i = 0; i < audioPackets.Count; i++)
             audioPackets[i].Pts -= shift;
@@ -554,6 +577,31 @@ public sealed partial class ClipExporter
         for (int i = 0; i < audioPackets.Count; i++)
         {
             audioPackets[i].Pts = RemapPts(audioPackets[i].Pts, intervals, outputStarts);
+        }
+
+        // When the remapped audio span differs in length from the video span,
+        // rate-scale the audio so its end aligns with the video end while
+        // preserving the audio start. Equal spans keep remapped values as-is.
+        if (audioPackets.Count > 0)
+        {
+            var aNow = audioPackets[^1].Pts + audioPackets[^1].Duration;
+            var vNow = videoPackets[^1].Pts + videoPackets[^1].Duration;
+            if (aNow != vNow)
+            {
+                var audioStart = audioPackets[0].Pts;
+                var audioSpan = aNow - audioStart;
+                if (audioSpan > TimeSpan.Zero)
+                {
+                    double factor = (vNow - audioStart).TotalSeconds / audioSpan.TotalSeconds;
+                    for (int i = 0; i < audioPackets.Count; i++)
+                    {
+                        var rel = (audioPackets[i].Pts - audioStart).TotalSeconds * factor;
+                        audioPackets[i].Pts = audioStart + TimeSpan.FromSeconds(rel);
+                        audioPackets[i].Duration = TimeSpan.FromSeconds(
+                            audioPackets[i].Duration.TotalSeconds * factor);
+                    }
+                }
+            }
         }
     }
 
