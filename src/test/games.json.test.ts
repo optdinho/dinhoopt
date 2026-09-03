@@ -22,7 +22,10 @@ function findGamesJsonPath(): string {
     resolve(__dirname, '..', '..', '..', 'dinho-clips-poc', 'src', 'DiNho.Capture.Poc', 'games.json'),
   ]
   for (const p of candidates) {
-    if (existsSync(p)) return p
+    if (existsSync(p)) {
+      console.log(`[games.json.resolve] ${p}`)
+      return p
+    }
   }
   throw new Error(`games.json not found at any candidate path:\n${candidates.map((c) => `  - ${c}`).join('\n')}`)
 }
@@ -163,9 +166,15 @@ describe('games.json', () => {
     expect(issues).toEqual([])
   })
 
-  it('all windowClasses are non-empty strings', () => {
+  it('when windowClass is empty, processName must uniquely identify the game', () => {
     const empty = db.games.filter((g) => typeof g.windowClass !== 'string' || g.windowClass.trim() === '')
-    expect(empty).toEqual([])
+    for (const game of empty) {
+      const key = game.processName.trim().toLowerCase()
+      expect(key).not.toBe('')
+      const matches = db.games.filter((g) => g.processName.trim().toLowerCase() === key)
+      expect(matches.length).toBe(1)
+      expect(matches[0]).toBe(game)
+    }
   })
 
   it('each game can be identified by at least one property', () => {

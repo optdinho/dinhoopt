@@ -27,7 +27,7 @@
     <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
 
     <!-- CsWin32 source generator — auto-generated P/Invoke bindings -->
-    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.298">
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.333">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

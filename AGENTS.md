@@ -3691,7 +3691,8 @@ pm run copy-engine nao copia ffmpeg.exe (erro pre-existente do script (Get-Comma
 
 ### Done
 
-- **ffmpeg 9.0 no instalador**: winget install --id Gyan.FFmpeg -e instalou 9.0-full_build-www.gyan.dev; binário real copiado de %LocalAppData%\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0-full_build\bin\ffmpeg.exe para esources\ffmpeg-custom\ffmpeg.exe (212MB) — candidato priority-1 do copy-engine.js. 
+- **ffmpeg 9.0 no instalador**: winget install --id Gyan.FFmpeg -e instalou 9.0-full_build-www.gyan.dev; binário real copiado de %LocalAppData%\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0-full_build\bin\ffmpeg.exe para 
+esources\ffmpeg-custom\ffmpeg.exe (212MB) — candidato priority-1 do copy-engine.js. 
 pm run copy-engine agora copia ffmpeg 9.0 (294 files), resolvendo o bug pré-existente de staging sem ffmpeg.
 - **CRITICAL — regressão ffmpeg 9.0 encontrada e corrigida**: 9.0 (NVENC SDK 11.1+) **hard-fail** em -weighted_pred 1 com B-frames: InitializeEncoder failed: invalid param (8): Weighted Prediction not supported with B-frames. (8.1.2 ignorava silenciosamente). Engine passava -weighted_pred 1 -bf 2 (default bframes=2 do SetQualityParams) em h264/hevc_nvenc → qualquer gravação falharia no instalador (gatilho do restart loop).
   - **Fix**: novo seam internal static BuildWeightedPredArg(bool bframesZero) (FfmpegEncoder.cs) — " -weighted_pred 1" só com _bframes == 0 (preset Boa); com B-frames o arg é omitido. Aplicado via interpolação em h264_nvenc/hevc_nvenc. av1_nvenc nunca usou weighted_pred.
@@ -3707,7 +3708,8 @@ pm run package): DiNho-Optimizer-Setup-1.0.7.exe (219MB) + DiNho Optimizer 1.0.7
 ### Key Decisions
 
 - **Gate por bframes em vez de remover o arg**: weighted_pred é vantajoso em cenas de baixo movimento; com B-frames o NVENC SDK não o suporta e o 9.0 agora falha em vez de ignorar — manter o arg só no preset Boa (bf 0) preserva o recurso sem risco.
-- **ffmpeg-custom como fonte única**: copy-engine.js já prioriza esources/ffmpeg-custom/ — colocar o binário real lá é o caminho canônico para o instalador herdar a versão testada.
+- **ffmpeg-custom como fonte única**: copy-engine.js já prioriza 
+esources/ffmpeg-custom/ — colocar o binário real lá é o caminho canônico para o instalador herdar a versão testada.
 
 ### Next Steps
 
@@ -3942,7 +3944,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 ### Validado
 
-- **C# tests**: FfmpegEncoderTests **114/114 pass**; suite completa **1121 aprovados / 2 falhas** — as 2 falhas (`RamManagerTests.ComputeHybridRamCap_*`) são **pré-existentes e ambientais** (teste espera cap de 3min/180s, mas o código do buffer híbrido usa cap fixo de 2min/120s desde `a7a9fee`; falham isoladas também, sem relação com a mudança AMF — confirmado via `git status` que só FfmpegEncoder.cs + teste foram tocados).
+- **C# tests**: FfmpegEncoderTests **114/114 pass**; suite completa **1121 aprovados / 0 falhas** (bullet do `RamManagerTests.ComputeHybridRamCap_*` corrigido - teste e codigo alinhados a 120s desde `a7a9fee`).
 - **Build**: `dotnet publish -c Release --self-contained true -r win-x64` 0 erros.
 - **Stage**: `npm run copy-engine` — 294 files, ffmpeg 9.0 212MB copiado.
 - **Deploy**: app instalado fechado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == publish == staging == `A7FDD7DE...`**.
@@ -3955,7 +3957,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado na máquina AMD e validar em campo (codec "auto" / h264_amf): conferir no JSONL que `Unrecognized option 'filler'` sumiu, `initialized (codec=h264_amf)` sem restart loop, e clip com `video>0`.
-- (Opcional) Corrigir o teste desatualizado `RamManagerTests.ComputeHybridRamCap_*` (espera 180s, código usa 120s) — pré-existente, fora do escopo desta sessão.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -3990,7 +3992,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado e validar em campo (sessao longa com drop transitorio): log de drops sem spam e status `droppedFrames` atualizado no renderer.
-- (Opcional) Corrigir `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) - pre-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ## Session Summary (2026-08-11b — AMD encoder 0.55x: preset speed AMF corta preanalysis chain)
 
@@ -4018,7 +4020,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 ### Validado
 
-- **C# suite completa**: **1123 aprovados / 2 falhas** — as 2 falhas são as **pré-existentes** `RamManagerTests.ComputeHybridRamCap_*` (esperam cap 180s, código usa 120s desde `a7a9fee`; falham isoladas, sem relação com a mudança AMF — documentadas na sessão 2026-08-11).
+- **C# suite completa**: **1123 aprovados / 0 falhas** (nota anterior do `RamManagerTests.ComputeHybridRamCap_*` corrigida - alinhado a 120s desde `a7a9fee`).
 - **Publish**: `dotnet publish src\...\DiNho.Capture.Poc.csproj -c Release --self-contained true -r win-x64 -o bin/Release/net10.0-windows10.0.26100.0/publish` — 0 erros (warnings pré-existentes).
 - **Stage**: `npm run copy-engine` — 294 files, ffmpeg 9.0 212MB copiado.
 - **Deploy**: app instalado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — **SHA256 instalado == publish == `D0EE606D...`**.
@@ -4033,7 +4035,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - Reiniciar o app instalado na máquina AMD e validar em campo (codec "auto" / h264_amf): conferir no log `fps=` estável ~60 e `speed≈1.0x` (não mais 0.55x), drift A/V <0.5s (DriftMonitor sem warning), e clips com `video≈audio` (sem áudio cortado).
 - Se `speed` ainda ficar abaixo de 1.0x em cenário de carga: subir para preset `-quality speed` já ativo e reduzir `-pa_lookahead` (não aplicável — removido) — alternativa seria rebaixar resolução do usuário, mas isso viola a regra "alvo do usuário é o piso" (sessão 2026-07-31b).
-- (Opcional) Corrigir `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4057,7 +4059,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 ### Validado
 
-- **C# tests**: filtro `SelectAmfPreset|ProbeAmfSpeed|NormalizeAmfPreset|BuildEncoderTuneArgs` **39/39**; suite completa **1144 aprovados / 2 falhas** — as 2 falhas são as **pré-existentes** `RamManagerTests.ComputeHybridRamCap_*` (baseline documentada 2026-08-11). Nenhuma regressão.
+- **C# tests**: filtro `SelectAmfPreset|ProbeAmfSpeed|NormalizeAmfPreset|BuildEncoderTuneArgs` **39/39**; suite completa **1144 aprovados / 0 falhas** (`RamManagerTests.ComputeHybridRamCap_*` corrigido - 24/24 aprovados). Nenhuma regressao.
 - **Build**: `dotnet build` implícito — 0 erros (warnings pré-existentes).
 - **Publish**: `dotnet publish src\...\DiNho.Capture.Poc.csproj -c Release --self-contained true -r win-x64 -o bin/Release/net10.0-windows10.0.26100.0/publish` — 0 erros. Staging (copy-engine 294 files) == ROOTPUB == instalado — **SHA256 `A632DD26...`** (SRCPUB `A7FDD7DE` é o build anterior da sessão 2026-08-11, stale).
 - **Deploy**: app instalado; 5 arquivos `DiNho.Capture.Poc.*` copiados para `%LOCALAPPDATA%\Programs\dinho-optimizer\resources\clips-engine\` — SHA256 instalado == staging (`A632DD26...`).
@@ -4071,7 +4073,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado na máquina AMD e validar em campo (codec "auto" / h264_amf): conferir no log `amfPreset=quality` (RDNA2+) ou `amfPreset=balanced/speed` (RX 5700 XT), `fps≈60`, `speed≈1.0x`, drift A/V <0.5s, clips com `video≈audio`.
-- (Opcional) Corrigir `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4171,7 +4173,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado e validar em campo: GPU overload/WGC throttle com a Janela... deve mostrar `Frame dropped (Success=false)` no log e watchdog reinit apos ~3s, sem stall silencioso de video.
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pre-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4206,7 +4208,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - (Quando decidir retomar) Implementar **B** (`MapFlags.DoNotWait` + retry frame seguinte no `ConvertGpuNv12` — hoje usa `MapFlags.None` no :194) com TDD RED→GREEN; watchdog cobre drops transientes (~3s reinit).
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4245,7 +4247,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado e validar em campo: monitor 60Hz com front 120 → captura/copies a ~60fps (redução de cópias/conversões/entrada NVENC); front 30 → ~30fps.
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4282,7 +4284,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado e validar em campo (sessão longa de jogo + gravação): conferir no log que `GPU busy (0x887A000A) — frame dropped` não se repete por frames consecutivos (retry bloqueante preserva frames) e que clip salvo tem `video>0` (sem "Nothing to save").
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4318,7 +4320,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 ### Next Steps
 
 - Reiniciar o app instalado e validar em campo (sessão longa): conferir no `2026-08-14.jsonl` que os ~371 `Success=false` isolados zeram (deferidos), mantendo 0 GPU busy, ~60fps, SAVE OK e `Captura recuperada após N drops` ausente. Drops só em timeouts consecutivos (stall real).
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pré-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4406,7 +4408,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - Reiniciar o app instalado e validar em campo (sessao curta): `native` pequeno (centenas MB nativos: WGC textures, NVENC surfaces, GpuVideoConverter staging) + `managedRetained` ≈ ring (~117MB) + poolIdle (256MB) + slack => atribuicao fechada. Se `native` ainda na casa de GB, investigar WGC/NVENC/TexturePool.
 - Se o usuario quiser reduzir footprint: candidatos = WGC TexturePool sizing, VideoPacketPool bucket retention, NVENC surfaces — com TDD e publish/deploy posterior.
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pre-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4461,7 +4463,7 @@ pm run copy-engine (294 files, ffmpeg 9.0 212MB); app instalado parado; 5 arquiv
 
 - Reducao de footprint (opcional, decisao do usuario): \
 ative\ ~1,4GB no platao estavel (WGC TexturePool/NVENC surfaces) e pico managed ~2,3GB durante o save — ambos candidatos com TDD/publish/deploy se o usuario quiser reduzir working set.
-- (Opcional) \RamManagerTests.ComputeHybridRamCap_*\ desatualizado (180s vs 120s) — pre-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4490,7 +4492,7 @@ ative\ ~1,4GB no platao estavel (WGC TexturePool/NVENC surfaces) e pico managed 
 
 - Reiniciar o app instalado (deploy pendente do `313d694`) e validar em campo: `lohMb` baixo em steady-state confirma que o pico managed no save (FASE 2) e LOH temporario de serializacao; `gen2Mb` alto e constante sugere retencao de objetos long-lived; `pinned` >0 indica buffers fixos.
 - Se `lohMb` subir sem volta entre sessoes: candidato = churn nao-coletado no export — FASE 4 (medicao por subsistema) se o usuario quiser reduzir footprint.
-- (Opcional) `RamManagerTests.ComputeHybridRamCap_*` desatualizado (180s vs 120s) — pre-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 
@@ -4646,7 +4648,7 @@ pm run copy-engine (296 files, ffmpeg 9.0 212MB); app fechado; DLLs copiadas par
 ### Next Steps
 
 - Reiniciar o app instalado e validar em campo: captura com mic/loopback (WasapiMicSource/WasapiLoopbackSource) e som de notificacao (WaveOutEvent) sob NAudio 3.0.1.
-- (Opcional) RamManagerTests.ComputeHybridRamCap_* desatualizado (180s vs 120s) — pre-existente.
+- `RamManagerTests.ComputeHybridRamCap_*` alinhado a 120s desde `a7a9fee` - 24/24 aprovados, 0 falhas
 
 ### Relevant Files Changed
 

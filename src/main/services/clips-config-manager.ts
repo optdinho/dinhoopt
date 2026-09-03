@@ -156,9 +156,7 @@ export function getDefaultOutputDir(): string {
   if (config.outputDirectory) return config.outputDirectory
   const home =
     process.env.USERPROFILE ||
-    (process.env.HOMEDRIVE && process.env.HOMEPATH
-      ? process.env.HOMEDRIVE + process.env.HOMEPATH
-      : undefined) ||
+    (process.env.HOMEDRIVE && process.env.HOMEPATH ? process.env.HOMEDRIVE + process.env.HOMEPATH : undefined) ||
     process.cwd()
   return join(home, 'Desktop', 'DiNhoClips')
 }

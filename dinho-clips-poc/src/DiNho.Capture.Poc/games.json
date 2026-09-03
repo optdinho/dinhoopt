@@ -150,8 +150,7 @@
       "windowClass": "Valve001",
       "displayName": "Team Fortress 2",
       "aliases": [
-        "TF2",
-        "Team Fortress 2"
+        "TF2"
       ],
       "backends": [
         "wgc",
@@ -923,7 +922,7 @@
     {
       "processName": "aces",
       "windowClass": "WarThunderWindowClass",
-      "displayName": "War Thunder",
+      "displayName": "War Thunder (Default)",
       "aliases": [
         "War Thunder",
         "WT"
@@ -2298,9 +2297,8 @@
     {
       "processName": "SkyrimSE",
       "windowClass": "SkyrimSEWindow",
-      "displayName": "The Elder Scrolls V: Skyrim",
+      "displayName": "The Elder Scrolls V: Skyrim (Special Edition)",
       "aliases": [
-        "Skyrim",
         "Skyrim SE"
       ],
       "backends": [
@@ -3226,7 +3224,7 @@
       "processName": "SplitFiction",
       "windowClass": "UnrealWindow",
       "displayName": "Split Fiction",
-      "aliases": [],
+      "aliases": ["SplitFiction"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3248,7 +3246,7 @@
       "processName": "OblivionRemastered",
       "windowClass": "UnrealWindow",
       "displayName": "Oblivion Remastered",
-      "aliases": [],
+      "aliases": ["OblivionRemastered"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3306,7 +3304,7 @@
       "processName": "Avowed",
       "windowClass": "UnrealWindow",
       "displayName": "Avowed",
-      "aliases": [],
+      "aliases": ["Avowed"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3328,7 +3326,7 @@
       "processName": "ManorLords",
       "windowClass": "UnrealWindow",
       "displayName": "Manor Lords",
-      "aliases": [],
+      "aliases": ["ManorLords"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3348,7 +3346,7 @@
     },
     {
       "processName": "PathOfExile2",
-      "windowClass": "",
+      "windowClass": "POEWindowClass",
       "displayName": "Path of Exile 2",
       "aliases": [
         "PoE2"
@@ -3362,7 +3360,7 @@
       "processName": "DeltaForce",
       "windowClass": "UnrealWindow",
       "displayName": "Delta Force",
-      "aliases": [],
+      "aliases": ["DeltaForce"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3372,7 +3370,7 @@
       "processName": "ArcRaiders",
       "windowClass": "UnrealWindow",
       "displayName": "ARC Raiders",
-      "aliases": [],
+      "aliases": ["ArcRaiders"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3394,7 +3392,7 @@
       "processName": "OnceHuman",
       "windowClass": "",
       "displayName": "Once Human",
-      "aliases": [],
+      "aliases": ["OnceHuman"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3428,7 +3426,7 @@
       "processName": "PEAK",
       "windowClass": "UnityWndClass",
       "displayName": "PEAK",
-      "aliases": [],
+      "aliases": ["PEAK"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3450,7 +3448,7 @@
       "processName": "OuterWorlds2",
       "windowClass": "UnrealWindow",
       "displayName": "The Outer Worlds 2",
-      "aliases": [],
+      "aliases": ["OuterWorlds2"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3473,7 +3471,7 @@
       "processName": "StellarBlade",
       "windowClass": "UnrealWindow",
       "displayName": "Stellar Blade",
-      "aliases": [],
+      "aliases": ["StellarBlade"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3483,7 +3481,7 @@
       "processName": "RiseOfRonin",
       "windowClass": "Katana Engine",
       "displayName": "Rise of the Ronin",
-      "aliases": [],
+      "aliases": ["RiseOfRonin"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3517,7 +3515,7 @@
       "processName": "NBA2K26",
       "windowClass": "",
       "displayName": "NBA 2K26",
-      "aliases": [],
+      "aliases": ["NBA 2K26"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3527,7 +3525,7 @@
       "processName": "NBA2K25",
       "windowClass": "",
       "displayName": "NBA 2K25",
-      "aliases": [],
+      "aliases": ["NBA 2K25"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3537,7 +3535,7 @@
       "processName": "WWE2K25",
       "windowClass": "",
       "displayName": "WWE 2K25",
-      "aliases": [],
+      "aliases": ["WWE 2K25"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3546,10 +3544,8 @@
     {
       "processName": "hl2_win64",
       "windowClass": "Valve001",
-      "displayName": "Team Fortress 2",
-      "aliases": [
-        "tf2"
-      ],
+      "displayName": "Team Fortress 2 (Windows)",
+      "aliases": ["Team Fortress"],
       "backends": [
         "wgc",
         "dxgi",
@@ -3573,7 +3569,7 @@
       "processName": "Gears5",
       "windowClass": "UnrealWindow",
       "displayName": "Gears 5",
-      "aliases": [],
+      "aliases": ["Gears5"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3595,7 +3591,7 @@
       "processName": "F124",
       "windowClass": "",
       "displayName": "F1 24",
-      "aliases": [],
+      "aliases": ["F1 24"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3605,7 +3601,7 @@
       "processName": "F125",
       "windowClass": "",
       "displayName": "F1 25",
-      "aliases": [],
+      "aliases": ["F1 25"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3616,7 +3612,6 @@
       "windowClass": "",
       "displayName": "The Elder Scrolls Online",
       "aliases": [
-        "eso",
         "ESO"
       ],
       "backends": [
@@ -3628,7 +3623,7 @@
       "processName": "LostArk",
       "windowClass": "",
       "displayName": "Lost Ark",
-      "aliases": [],
+      "aliases": ["Lost Ark"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3673,7 +3668,7 @@
     {
       "processName": "warthunder",
       "windowClass": "CryEngine",
-      "displayName": "War Thunder",
+      "displayName": "War Thunder (Legacy)",
       "aliases": [
         "WarThunder"
       ],
@@ -3722,7 +3717,7 @@
       "processName": "LastEpoch",
       "windowClass": "UnityWndClass",
       "displayName": "Last Epoch",
-      "aliases": [],
+      "aliases": ["LastEpoch"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3744,7 +3739,7 @@
       "processName": "BF2042",
       "windowClass": "Frostbite",
       "displayName": "Battlefield 2042",
-      "aliases": [],
+      "aliases": ["BF2042"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3839,7 +3834,7 @@
       "processName": "Fallout3",
       "windowClass": "Gamebryo",
       "displayName": "Fallout 3",
-      "aliases": [],
+      "aliases": ["Fallout3"],
       "backends": [
         "wgc",
         "dxgi"
@@ -3860,7 +3855,7 @@
     {
       "processName": "Skyrim",
       "windowClass": "Creation Engine",
-      "displayName": "The Elder Scrolls V: Skyrim",
+      "displayName": "The Elder Scrolls V: Skyrim (Legendary Edition)",
       "aliases": [
         "TES5",
         "SkyrimLE"
@@ -3874,7 +3869,7 @@
       "processName": "Deathloop",
       "windowClass": "Void",
       "displayName": "DEATHLOOP",
-      "aliases": [],
+      "aliases": ["Deathloop"],
       "backends": [
         "wgc",
         "dxgi"
