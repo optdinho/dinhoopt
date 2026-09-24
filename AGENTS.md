@@ -81,7 +81,7 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-09-17)
 
-**Stack (versões atuais):** Electron 44.4.1 · Vite 8.3.0 · Biome 2.5.14 · Vitest 5.0.1 · TypeScript 7.0.2 · React 19.3.0 · NAudio 3.1.0 · ffmpeg 9.0.1 · electron-vite 6.0.0-beta.1 (intencional, beta mais novo que o 5.0.0 estável) · framer-motion 13.4.0 · lucide-react 1.46.0 · react-router-dom 7.18.4 · systeminformation 5.33.11 · jsdom 30.1.0 · Microsoft.NET.Test.Sdk 18.10.1
+**Stack (versões atuais):** Electron 44.4.5 · Vite 8.3.1 · Biome 2.5.14 · Vitest 5.0.1 · TypeScript 7.0.2 · React 19.3.0 · NAudio 3.1.0 · ffmpeg 9.0.1 · electron-vite 6.0.0-beta.1 (intencional, beta mais novo que o 5.0.0 estável) · framer-motion 13.4.3 · lucide-react 1.48.0 · react-router-dom 7.18.4 · systeminformation 5.33.13 · jsdom 30.1.1 · dotenv 18.0.3 · Microsoft.NET.Test.Sdk 18.10.1 · CsWin32 0.3.335
 
 **Testes/Qualidade:**
 - TS: ~6900 testes, 229 arquivos, 0 falhas — cobertura Stmts 93.7% / Branches 85.3% / Functions 93.7% / Lines 94.9%
@@ -99,6 +99,9 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 **Rejeitado pelo usuário — não reabrir sem novo pedido explícito:**
 AI auto-clipping (detecção de eventos), clip por comando de voz, gravação de sessão completa + bookmarks, compilação automática de highlights, compartilhamento/links instantâneos, cloud storage, app mobile, **Multi-Track Audio (Item 5)**.
+
+**Verificação periódica (pendência externa — vitest.explorer #824/#825):**
+VS Code 1.139.0 (Electron V8 15.0, formato de serialização v16) quebra o painel Testing do vitest.explorer 1.52.0: o worker roda nosso Node v24 (V8 13.6, lê só até v15) e o RPC `getFiles` usa `v8.serialize` → worker morre → `[birpc] rpc is closed, cannot call "getFiles"`. **Não é bug do repo** (CLI `npm test`/`test:watch` funciona normalmente; protocolo validado em harness). Fix aguardando merge/publicação em `vitest-dev/vscode` PR #826 (fallback para JSON RPC). **Checar periodicamente:** ao publicar novo release da extensão → atualizar vitest.explorer e validar que o Testing view lista os 245 arquivos; quando resolvido, remover este bloco.
 
 ## Histórico Detalhado de Sessões
 
