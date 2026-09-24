@@ -1151,17 +1151,40 @@ public sealed partial class EngineCoordinator
     }
 
     /// <summary>
-    /// Loga o resumo da janela corrente do feed (média wait/copy/convert/total e fps).
+    /// Loga o resumo da janela corrente do feed (média wait/copy/convert/total e fps) com o
+    /// diagnóstico do encoder (codec ativo, escala do fallback e backlog de saída speed/lag).
     /// Chamado no bloco de status (~30 frames): a janela do FeedTelemetry decide o cadence.
     /// </summary>
     private void LogFeedSummary()
     {
         if (!_feed.TryTakeSummary(Stopwatch.GetTimestamp(), out var s))
             return;
-        Log.I("FeedTelemetry",
-            $"fps={s.FeedFps:F1} good={s.GoodFrames} fail={s.FailFrames} enqNull={s.EncodeNulls} | " +
-            $"wait={s.WaitMs:F1}ms copy={s.CopyMs:F1}ms convert={s.ConvertMs:F1}ms total={s.TotalMs:F1}ms | " +
-            $"queue={s.QueueDepthAvg:F1} avg / {s.QueueDepthMax} max");
+
+        string codec = "?";
+        int scaleDivisor = 1;
+        double speedX = 0;
+        double outputLag = 0;
+        if (_encoder is FfmpegEncoder ff)
+        {
+            codec = ff.CurrentCodec;
+            scaleDivisor = ff.ScaleDivisor;
+            (speedX, outputLag) = ff.LastProgress;
+        }
+
+        Log.I("FeedTelemetry", FeedLogLine.Build(s, codec, scaleDivisor, speedX, outputLag));
+        MaybeDegradeEncoderForCapacity();
+    }
+
+    /// <summary>
+    /// Guard proativo de capacidade: degrada a escala do encoder (1/1 → 1/2 → 1/4, mesmo
+    /// codec) quando o ffmpeg está sustentadamente atrás do realtime (speed &lt; 1x e lag de
+    /// saída crescendo), em vez de esperar o restart por crash. Chamado no mesmo cadence do
+    /// FeedTelemetry (~2Hz) — o cooldown interno (60s) e o threshold de lag decidem sozinhos.
+    /// </summary>
+    private void MaybeDegradeEncoderForCapacity()
+    {
+        if (_encoder is FfmpegEncoder ff)
+            ff.TryDegradeScaleForCapacity();
     }
 
     /// <summary>

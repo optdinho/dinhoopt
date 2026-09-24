@@ -545,7 +545,10 @@ internal sealed partial class FfmpegEncoder : IEncoder
                     var line = stderrStream.ReadLine();
                     if (line == null) break;
                     if (line.Length > 0)
+                    {
+                        RecordFfmpegProgress(line);
                         Log.D("ffmpeg", line);
+                    }
                 }
             }
             catch (OperationCanceledException) { }
@@ -815,29 +818,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _restartAttempts++;
         _restartsInWindow++;
         Log.W("FfmpegEncoder", $"restarting ffmpeg (attempt {_restartAttempts}, window={_restartsInWindow}/{MaxRestartsInWindow}, cause={_processFailedCause ?? "unknown"}, gpuFails={_gpuConvertFails})");
-        StopFfmpeg();
-        ResetState();
-
-        try
-        {
-            StartFfmpeg();
-            _readerCts = new CancellationTokenSource();
-            _readerThread = new Thread(() => ReaderLoop(_readerCts.Token))
-            {
-                IsBackground = true,
-                Name = "FfmpegReader"
-            };
-            _readerThread.Start();
-            _processFailed = false;
-            _lastRestartTicks = Stopwatch.GetTimestamp();
-            Log.I("FfmpegEncoder", "restart OK");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.E("FfmpegEncoder", $"restart failed: {ex.Message}");
-            return false;
-        }
+        return RestartFfmpegProcess();
     }
 
     private void StopFfmpeg()
