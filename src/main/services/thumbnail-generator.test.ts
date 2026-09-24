@@ -35,6 +35,8 @@ import {
   getThumbnailDataUrl,
   hasFfmpeg,
   readThumbnailDataUrl,
+  resetThumbnailFailureCache,
+  setThumbnailFailureTtlForTest,
 } from './thumbnail-generator'
 
 const execFileMock = vi.mocked(execFile)
@@ -89,6 +91,8 @@ describe('thumbnail-generator', () => {
     copyFileSyncMock.mockReset()
     resolveFfmpegMock.mockReset()
     resolveFfmpegMock.mockReturnValue(null)
+    resetThumbnailFailureCache()
+    setThumbnailFailureTtlForTest(30_000)
   })
 
   describe('hasFfmpeg', () => {
@@ -275,6 +279,55 @@ describe('thumbnail-generator', () => {
       const url = await getThumbnailDataUrl('C:\\DiNhoClips', 'test.mp4')
       expect(url).toBe(`data:image/jpeg;base64,${Buffer.from('jpegdata').toString('base64')}`)
       expect(execFileMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('thumbnail failure cache', () => {
+    beforeEach(() => {
+      resolveFfmpegMock.mockReturnValue(FFMPEG_EXE)
+      statSyncMock.mockReturnValue({ size: 100 } as Stats)
+      existsSyncMock.mockImplementation((p: unknown) => p === VIDEO_PATH)
+    })
+
+    it('does not re-run ffmpeg for a clip that failed within the retry window', async () => {
+      await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
+      expect(execFileMock).toHaveBeenCalledTimes(2)
+
+      const probeCalls = execFileMock.mock.calls.length
+      await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
+      expect(execFileMock).toHaveBeenCalledTimes(probeCalls)
+    })
+
+    it('retries generation after the retry window expires', async () => {
+      setThumbnailFailureTtlForTest(50)
+      await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
+      expect(execFileMock).toHaveBeenCalledTimes(2)
+
+      await new Promise((resolve) => setTimeout(resolve, 80))
+
+      await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
+      expect(execFileMock).toHaveBeenCalledTimes(4)
+    })
+
+    it('still copies the engine thumb within the retry window', async () => {
+      await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
+      const callsAfterFailure = execFileMock.mock.calls.length
+
+      let thumbExists = false
+      existsSyncMock.mockImplementation((p: unknown) => {
+        if (p === VIDEO_PATH) return true
+        if (p === ENGINE_THUMB) return true
+        if (p === THUMB_PATH) return thumbExists
+        return false
+      })
+      copyFileSyncMock.mockImplementation(() => {
+        thumbExists = true
+      })
+
+      const result = await generateThumbnail('C:\\DiNhoClips', 'test.mp4')
+      expect(result).toBe(THUMB_PATH)
+      expect(copyFileSyncMock).toHaveBeenCalledWith(ENGINE_THUMB, THUMB_PATH)
+      expect(execFileMock).toHaveBeenCalledTimes(callsAfterFailure)
     })
   })
 

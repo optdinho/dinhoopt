@@ -4,7 +4,7 @@ import type { ClipInfo, ClipsConfig, ClipsEngineStatus } from '@shared/types'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useClipsState } from './useClipsState'
+import { setThumbRetryMsForTest, useClipsState } from './useClipsState'
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
@@ -131,6 +131,7 @@ beforeEach(() => {
   localStorage.clear()
   captured.deps = null
   for (const key of Object.keys(listeners)) delete listeners[key as keyof typeof listeners]
+  setThumbRetryMsForTest(30_000)
 })
 
 describe('useClipsState', () => {
@@ -370,6 +371,55 @@ describe('useClipsState', () => {
       await tick()
     })
     expect(result.current.thumbnails).toEqual({})
+  })
+
+  it('does not re-request a failed thumbnail on immediate refresh', async () => {
+    const dinho = makeDinho({
+      clipsList: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve([makeClip({ name: 'a.mp4' }), makeClip({ name: 'b.mp4' })])),
+      clipsGetThumbnail: vi.fn().mockResolvedValue(null),
+    })
+    const { result } = renderHook(() => useClipsState())
+
+    await waitFor(() => expect(result.current.clipsLoaded).toBe(true))
+    await act(async () => {
+      await tick()
+    })
+    expect(dinho.clipsGetThumbnail).toHaveBeenCalledTimes(2)
+
+    act(() => listeners.clipSaved?.())
+
+    await waitFor(() => expect(dinho.clipsList).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      await tick()
+    })
+    expect(dinho.clipsGetThumbnail).toHaveBeenCalledTimes(2)
+    expect(result.current.thumbnails).toEqual({})
+  })
+
+  it('retries a failed thumbnail after the cooldown elapses', async () => {
+    setThumbRetryMsForTest(50)
+    const dinho = makeDinho({
+      clipsList: vi.fn().mockImplementation(() => Promise.resolve([makeClip({ name: 'a.mp4' })])),
+      clipsGetThumbnail: vi.fn().mockResolvedValue(null),
+    })
+    const { result } = renderHook(() => useClipsState())
+
+    await waitFor(() => expect(result.current.clipsLoaded).toBe(true))
+    await act(async () => {
+      await tick()
+    })
+    expect(dinho.clipsGetThumbnail).toHaveBeenCalledTimes(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    act(() => listeners.durationsReady?.())
+    await waitFor(() => expect(dinho.clipsList).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      await tick()
+    })
+    expect(dinho.clipsGetThumbnail).toHaveBeenCalledTimes(2)
   })
 
   it('stops loading thumbnail batches after unmount', async () => {

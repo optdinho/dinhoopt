@@ -7,6 +7,13 @@ import { QUALITY_PRESETS, type QualityPresetKey } from './clips-quality-presets'
 import type { FilterTab } from './clips-utils'
 import { formatClipsDate, formatClipsSeconds, formatClipsSize, useClipsActions } from './useClipsActions'
 
+const DEFAULT_THUMB_RETRY_MS = 30_000
+let thumbRetryMs = DEFAULT_THUMB_RETRY_MS
+
+export function setThumbRetryMsForTest(ms: number): void {
+  thumbRetryMs = ms
+}
+
 export interface ClipsState {
   status: ClipsEngineStatus
   statusLoaded: boolean
@@ -249,6 +256,7 @@ export function useClipsState(): ClipsState {
   // Refresh clips when engine starts running (output directory may have changed)
   const prevRunning = useRef(status.running)
   const lastRamLevelRef = useRef<string | undefined>('normal')
+  const failedThumbsRef = useRef<Map<string, number>>(new Map())
   useEffect(() => {
     if (status.running && !prevRunning.current) {
       refreshClips()
@@ -270,11 +278,18 @@ export function useClipsState(): ClipsState {
   }, [statusLoaded, gpuList.length])
 
   const loadThumbnail = useCallback(async (clipName: string) => {
+    const failedAt = failedThumbsRef.current.get(clipName)
+    if (failedAt !== undefined && Date.now() - failedAt < thumbRetryMs) return
     try {
       const dataUrl = await window.dinho?.clipsGetThumbnail(clipName)
-      if (dataUrl) setThumbnails((prev) => ({ ...prev, [clipName]: dataUrl }))
+      if (dataUrl) {
+        failedThumbsRef.current.delete(clipName)
+        setThumbnails((prev) => ({ ...prev, [clipName]: dataUrl }))
+      } else {
+        failedThumbsRef.current.set(clipName, Date.now())
+      }
     } catch {
-      /* ignore */
+      failedThumbsRef.current.set(clipName, Date.now())
     }
   }, [])
 

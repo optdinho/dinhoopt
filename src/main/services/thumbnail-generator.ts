@@ -22,6 +22,18 @@ const THUMB_DIR = '.thumbnails'
 const THUMB_WIDTH = 320
 const DEFAULT_SEEK_SEC = 5
 const FFMPEG_TIMEOUT = 30_000
+const DEFAULT_FAILURE_TTL_MS = 30_000
+
+let failureTtlMs = DEFAULT_FAILURE_TTL_MS
+const failureCache = new Map<string, number>()
+
+export function resetThumbnailFailureCache(): void {
+  failureCache.clear()
+}
+
+export function setThumbnailFailureTtlForTest(ms: number): void {
+  failureTtlMs = ms
+}
 
 export async function hasFfmpeg(): Promise<boolean> {
   return resolveFfmpegOrNull() !== null
@@ -72,6 +84,10 @@ export async function generateThumbnail(outputDir: string, clipName: string): Pr
 
   if (!ffmpeg) return null
 
+  const cacheKey = `${outputDir}\u0000${clipName}`
+  const failedAt = failureCache.get(cacheKey)
+  if (failedAt !== undefined && Date.now() - failedAt < failureTtlMs) return null
+
   try {
     let seekSec = DEFAULT_SEEK_SEC
 
@@ -114,9 +130,14 @@ export async function generateThumbnail(outputDir: string, clipName: string): Pr
       { timeout: FFMPEG_TIMEOUT, encoding: 'utf-8' },
     )
 
-    if (existsSync(thumbPath) && statSync(thumbPath).size > 0) return thumbPath
+    if (existsSync(thumbPath) && statSync(thumbPath).size > 0) {
+      failureCache.delete(cacheKey)
+      return thumbPath
+    }
+    failureCache.set(cacheKey, Date.now())
     return null
   } catch (err) {
+    failureCache.set(cacheKey, Date.now())
     getLogger().warning('thumbnail', `Failed to generate thumbnail for ${clipName}: ${err}`)
     return null
   }
