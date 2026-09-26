@@ -112,12 +112,26 @@ if (dataDirFlag) {
   }
 }
 
-// ─── AppUserModelId ──────────────────────────────────────────
-// Must match the shortcut/installer appId so Windows groups notifications
-// and toasts correctly (scheduler uses Notification).
-if (process.platform === 'win32') {
-  app.setAppUserModelId('com.dinhooptimizer.win32')
-}
+// ─── AppUserModelId — NÃO definir ────────────────────────────
+// NÃO chame app.setAppUserModelId() neste app.
+//
+// Medido empiricamente (2026-09-25): com um AUMID explícito o Windows ignora o
+// ícone da janela (WM_SETICON) e resolve o ícone do botão da taskbar pelo
+// ATALHO registrado com aquele AUMID. Se a resolução falha, o botão cai no
+// ícone da CLASSE da janela — que no Electron é o electron.exe. Resultado: o
+// app abria com o ícone padrão do Electron, mesmo com a janela corretamente
+// configurada (WM_GETICON devolvia o logo do DiNho, dist 4.9 vs 56.5 do
+// Electron). Sem AUMID, o Windows usa o WM_SETICON e o ícone sai correto.
+//
+// Testar AUMID + atalho carimbado (ProgramData e por usuário, ícone correto,
+// explorer reiniciado) NÃO resolveu: o ícone continuava sendo o do Electron.
+// Bug conhecido: electron/electron#2429.
+//
+// Consequência aceita: os toasts do Windows passam a ser atribuídos ao
+// executável (DiNho Optimizer.exe, com o logo correto) em vez de um AUMID
+// explícito — visualmente melhor que a identidade "Electron" do AUMID quebrado.
+// O instalador continua carimbando o AUMID nos atalhos (comportamento padrão
+// do electron-builder), o que é inofensivo: o processo não reivindica o AUMID.
 
 // ─── CLI / Daemon mode ───────────────────────────────────────
 // If --cli is passed, run headless and exit — no GUI, no tray.
@@ -408,6 +422,17 @@ function initGui(): void {
         nodeIntegration: false,
       },
     })
+    // Ícone da taskbar no Windows: vem do WM_SETICON desta janela (ver o bloco
+    // AppUserModelId no topo do arquivo — NÃO definir AUMID aqui, sob pena de o
+    // Windows descartar este ícone e usar o da classe = electron.exe).
+    // Re-aplicado no ready-to-show/show porque o Chromium às vezes descarta o
+    // WM_SETICON emitido antes de a janela existir de fato (electron#27322).
+    const assertTaskbarIcon = (): void => {
+      if (process.platform !== 'win32' || icon.isEmpty()) return
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.setIcon(icon)
+    }
+    assertTaskbarIcon()
     // abre em tela cheia
     mainWindow.maximize()
 
@@ -417,6 +442,7 @@ function initGui(): void {
     attachRendererDiagnostics(mainWindow)
 
     mainWindow.on('ready-to-show', () => {
+      assertTaskbarIcon()
       // If launched at startup with minimize-to-tray, stay hidden
       if (isStartupLaunch && settings.minimizeToTray) {
         // Don't show — just sit in tray
@@ -424,6 +450,10 @@ function initGui(): void {
         mainWindow?.show()
       }
     })
+
+    // Re-apply on every show (restore from tray, second-instance, activate): o
+    // WM_SETICON emitido antes de a janela existir é descartado pelo Chromium.
+    mainWindow.on('show', assertTaskbarIcon)
 
     // Intercept close to minimize to tray if enabled
     mainWindow.on('close', (e) => {
