@@ -11,15 +11,21 @@ using DiNho.Capture.Poc.Watchdog;
 
 namespace DiNho.Capture.Poc.Tests;
 
+// Mesma razão de EngineCoordinatorGameTests: OnGameChanged pode subir um encoder real e uma
+// thread FrameWriter que devolvem buffer NV12 ao VideoPacketPool global depois do teste.
+[Collection("VideoPacketPool")]
 public sealed class EngineCoordinatorDisposeTests : IDisposable
 {
     private static readonly Type CoordinatorType = typeof(EngineCoordinator);
     private readonly List<ConfigManager> _disposables = new();
+    private readonly List<EngineCoordinator> _coords = new();
 
-    private static EngineCoordinator CreateUninitialized()
+    private EngineCoordinator CreateUninitialized()
     {
-        return (EngineCoordinator)System.Runtime.CompilerServices.RuntimeHelpers
+        var coord = (EngineCoordinator)System.Runtime.CompilerServices.RuntimeHelpers
             .GetUninitializedObject(typeof(EngineCoordinator));
+        _coords.Add(coord);
+        return coord;
     }
 
     private static void SetField(EngineCoordinator coord, string name, object? value)
@@ -76,6 +82,16 @@ public sealed class EngineCoordinatorDisposeTests : IDisposable
 
     public void Dispose()
     {
+        // Derruba a captura que OnGameChanged tenha iniciado: sem isso, o FrameWriter
+        // sobrevive ao teste e devolve buffer NV12 ao VideoPacketPool global.
+        var stop = CoordinatorType.GetMethod(
+            "StopCapture", BindingFlags.Instance | BindingFlags.NonPublic);
+        foreach (var coord in _coords)
+        {
+            try { stop?.Invoke(coord, new object?[] { true, false }); } catch { }
+        }
+        _coords.Clear();
+
         foreach (var d in _disposables)
             d.Dispose();
     }

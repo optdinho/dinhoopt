@@ -10,10 +10,17 @@ using DiNho.Capture.Poc.Sync;
 
 namespace DiNho.Capture.Poc.Tests;
 
+// OnGameChanged pode chamar StartCapture DE VERDADE (D3D11 + ffmpeg disponíveis nesta
+// máquina), o que sobe um FfmpegEncoder e uma thread FrameWriter que devolvem buffers NV12
+// de 720p (1.382.400 bytes) ao VideoPacketPool — um estático GLOBAL. Sem esta coleção, essa
+// thread continua viva durante os testes da coleção "VideoPacketPool" e empurra ~1,4 MB por
+// frame no meio das asserções deles (TrimIdleBytes/PostSaveTrim viam dados estranhos).
+[Collection("VideoPacketPool")]
 public sealed class EngineCoordinatorGameTests : IDisposable
 {
     private static readonly Type CoordinatorType = typeof(EngineCoordinator);
     private readonly List<ConfigManager> _disposables = new();
+    private readonly List<EngineCoordinator> _coords = new();
 
     private static object? InvokeStatic(string name, params object?[] args)
     {
@@ -30,10 +37,15 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         return (T?)InvokeStatic(name, args);
     }
 
-    private static EngineCoordinator CreateUninitialized()
+    private EngineCoordinator CreateUninitialized()
     {
-        return (EngineCoordinator)System.Runtime.CompilerServices.RuntimeHelpers
+        var coord = (EngineCoordinator)System.Runtime.CompilerServices.RuntimeHelpers
             .GetUninitializedObject(typeof(EngineCoordinator));
+        // Registra para o Dispose derrubar a captura: OnGameChanged sobe um encoder real
+        // (e a thread do FrameWriter) que, sem isso, sobrevive ao teste e continua
+        // devolvendo buffer NV12 ao pool global.
+        _coords.Add(coord);
+        return coord;
     }
 
     private static void SetField(EngineCoordinator coord, string name, object? value)
@@ -154,6 +166,18 @@ public sealed class EngineCoordinatorGameTests : IDisposable
 
     public void Dispose()
     {
+        // Derruba QUALQUER captura que tenha sobrado, mesmo com _captureActive == false:
+        // o encoder (e o FrameWriter) sobem antes de a captura virar "ativa", e o writer
+        // continuaria devolvendo buffer NV12 ao pool global — corrompendo os testes de
+        // VideoPacketPool que rodam depois nesta coleção. Idempotente e sem exceções.
+        var stop = CoordinatorType.GetMethod(
+            "StopCapture", BindingFlags.Instance | BindingFlags.NonPublic);
+        foreach (var coord in _coords)
+        {
+            try { stop?.Invoke(coord, new object?[] { true, false }); } catch { }
+        }
+        _coords.Clear();
+
         foreach (var d in _disposables)
         {
             try { d.Dispose(); } catch { }

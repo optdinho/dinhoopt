@@ -15,6 +15,22 @@ using Windows.Win32.Foundation;
 
 namespace DiNho.Capture.Poc;
 
+/// <summary>
+/// Veredito do A/B de <c>-profile:v</c> no HEVC (Item 9). Fixado ANTES de medir: main10 só fica
+/// se ganhar bytes sem custo de fps relevante, senão sai. O ponto de <see cref="Unmeasured"/>
+/// existir é que ele é um estado de primeira classe — sem ele, "não medi" seria reportado como
+/// "não compensa", que é uma conclusão que o número não sustenta.
+/// </summary>
+internal enum HevcProfileVerdict
+{
+    /// <summary>Nenhum dos dois lados mediu (ffmpeg ausente, encoder recusou a chain).</summary>
+    Unmeasured,
+    /// <summary>main10 passa nos dois lados do critério: fica em produção.</summary>
+    KeepMain10,
+    /// <summary>main10 reprova o critério: sai de produção.</summary>
+    RemoveMain10,
+}
+
 internal static class ProgramBenchmark
 {
     private const int FramesBenchmark = 300;
@@ -54,6 +70,76 @@ internal static class ProgramBenchmark
     /// (cq18/lookahead16/multipass fullres) — o número medido é o throughput que o pipeline teria.
     /// Diagnóstico do drift A/V: av1_nvenc p5 sustentava só ~46fps (0.76x) → vídeo atrasava.
     /// </summary>
+    /// <summary>
+    /// Resumo de um probe de presets NVENC, separando as DUAS perguntas que o relatório
+    /// confidia: o preset mais rápido (argmax) e o preset de melhor qualidade que sustenta o
+    /// alvo (primeiro sustaining na escada p7→p1). O relatório antigo anunciava a segunda e
+    /// imprimia a primeira, e essa inversão já gerou uma leitura errada de plano.
+    /// </summary>
+    internal readonly record struct NvencProbeSummary(
+        string? FastestPreset, double? FastestFps,
+        string? BestQualitySustaining, double? BestQualitySustainingFps,
+        double SustainThresholdFps, bool AnyMeasured)
+    {
+        internal string ToReportLine(int targetFps)
+        {
+            if (!AnyMeasured) return "  → nenhum preset medido (ffmpeg indisponível?)";
+            var fastest = FastestPreset is null
+                ? "nenhum"
+                : $"{FastestPreset} ({FastestFps:0.00} fps)";
+            // Sem nada que sustente: só essa linha, e ela já é o alerta. A versão anterior
+            // usava "{0:F0}" sem string.Format — o CLI imprimia o placeholder literal no
+            // aviso de que nenhum preset aguenta o alvo, e o teste passava porque só
+            // checava o prefixo.
+            var best = BestQualitySustaining is null
+                ? $"NENHUM sustenta (abaixo de {SustainThresholdFps:F0}fps) — GPU não dá conta do alvo"
+                : $"{BestQualitySustaining} ({BestQualitySustainingFps:0.00} fps)";
+            return $"  → mais rápido: {fastest} | melhor qualidade que sustenta ≥{SustainThresholdFps:F0}fps: {best}";
+        }
+    }
+
+    /// <summary>
+    /// Escada de presets NVENC em ordem de qualidade: p7 (best quality) → p1 (lowest quality),
+    /// conforme <c>ffmpeg -h encoder=h264_nvenc</c>. O probe do CLI percorre nessa ordem.
+    /// </summary>
+    internal static readonly string[] NvencPresetLadder = { "p7", "p6", "p5", "p4", "p3", "p2", "p1" };
+
+    /// <summary>
+    /// Seam puro do resumo do probe (sem I/O, sem ffmpeg) para ser testado. Sustenta o alvo
+    /// quando o preset mede ≥ 85% do fps — o mesmo corte do
+    /// <see cref="EncoderManager.SelectNvencPreset"/>, para o CLI e a produção nunca discordarem
+    /// do que é "sustentável".
+    /// </summary>
+    internal static NvencProbeSummary SummarizeNvencProbe(
+        IReadOnlyDictionary<string, double?> measured, int targetFps)
+    {
+        var threshold = targetFps * 0.85;
+
+        string? fastestPreset = null;
+        double? fastestFps = null;
+        foreach (var (preset, fps) in measured)
+        {
+            if (fps is null) continue;
+            if (fastestFps is null || fps > fastestFps)
+            {
+                fastestFps = fps;
+                fastestPreset = preset;
+            }
+        }
+
+        // Escada p7→p1 = melhor→pior qualidade: a PRIMEIRA que sustenta é a melhor possível.
+        string? best = null;
+        double? bestFps = null;
+        foreach (var preset in NvencPresetLadder)
+        {
+            if (!measured.TryGetValue(preset, out var fps) || fps is null) continue;
+            if (fps >= threshold) { best = preset; bestFps = fps; break; }
+        }
+
+        return new NvencProbeSummary(
+            fastestPreset, fastestFps, best, bestFps, threshold, fastestPreset is not null);
+    }
+
     internal static void ProbeNvencPresets(string widthArg, string heightArg, string fpsArg)
     {
         int.TryParse(widthArg, out var w);
@@ -76,24 +162,420 @@ internal static class ProgramBenchmark
                 continue;
             }
             Console.WriteLine($"-- {codec} --");
-            double? best = null;
-            string? bestPreset = null;
-            foreach (var preset in new[] { "p7", "p6", "p5", "p4", "p3", "p2", "p1" })
+            // Duas perguntas DISTINTAS, e confundi-las gera leitura errada da tabela:
+            //
+            //   1. "qual preset é o mais rápido?" → o argmax do fps medido. Serve para ver o
+            //      custo máximo de preset, mas é Ruído quando tudo está muito acima do alvo
+            //      (medido: o argmax saltou entre p1/p2/p6 em runs repetidos a 1080p60).
+            //
+            //   2. "qual o preset de MELHOR QUALIDADE que ainda sustenta o alvo?" → primeira
+            //      sustaining na escada p7→p1. p7 é "slowest (best quality)" no NVENC e p1 é
+            //      "fastest (lowest quality)" (ffmpeg -h encoder=h264_nvenc), então p7→p1 é
+            //      da melhor para a pior qualidade. É a escada que ResolveEffectiveNvencPreset
+            //      usa em produção.
+            //
+            // O relatório antigo dizia "melhor preset que sustenta >=51fps" e imprimia o
+            // argmax — ou seja, anunciava a pergunta 2 e respondia a pergunta 1.
+            var measured = new Dictionary<string, double?>();
+            foreach (var preset in NvencPresetLadder)
             {
                 double? achieved;
                 try { achieved = EncoderManager.ProbeNvencSpeed(codec, width, height, targetFps, preset); }
                 catch { achieved = null; }
                 string ok = achieved.HasValue && achieved >= targetFps * 0.85 ? "  ✓ sustenta" : "";
                 Console.WriteLine($"    {preset}: {(achieved.HasValue ? $"{achieved.Value:0.00} fps" : "falhou")}{ok}");
-                if (achieved.HasValue && (!best.HasValue || achieved > best))
-                {
-                    best = achieved;
-                    bestPreset = preset;
-                }
+                measured[preset] = achieved;
             }
-            Console.WriteLine($"  → melhor preset que sustenta ≥{targetFps * 0.85:F0}fps: {bestPreset} ({best:0.00})");
+            var summary = SummarizeNvencProbe(measured, targetFps);
+            Console.WriteLine(summary.ToReportLine(targetFps));
             Console.WriteLine();
         }
+    }
+
+    /// <summary>
+    /// CLI --probe-vbv: mede throughput e bitrate efetivo de cada candidato de -bufsize (VBV)
+    /// na cadeia de tune REAL de produção. Existe para responder com NÚMERO, não com palpite,
+    /// a pergunta "o bufsizeFolgado (2 x maxrate) do front é o motivo dos arquivos inchados?".
+    ///
+    /// <para>RESULTADO MEDIDO (RTX 5050, driver 32.0.16.1714, ffmpeg 9.0.1 Gyan full,
+    /// 2026-09-25, cq 16 / 1920x1080@60 / maxrate 65000): <b>o -bufsize não tem efeito</b>.
+    /// h264_nvenc devolveu 3019 KiB byte-idêntico com 130000/64000/48000/32000 K; bitrate
+    /// efetivo 16,5 Mbps contra teto de 65 Mbps. hevc_nvenc e av1_nvenc idem. Com
+    /// <c>-rc vbr -b:v 0</c> o VBV só é consultado quando o -maxrate é atingido, e as chains
+    /// atuais nunca chegam lá. A linha "VBV APERTA" só aparece com maxrate apertado.</para>
+    ///
+    /// <para>Uso: --probe-vbv [W H FPS CQ MAXRATE BUFSIZES(com vírgula)]  (default 1920 1080 60 18 55000)</para>
+    /// </summary>
+    internal static void ProbeVbv(
+        string widthArg, string heightArg, string fpsArg, string cqArg, string maxrateArg, string candidatesArg)
+    {
+        int.TryParse(widthArg, out var w);
+        int.TryParse(heightArg, out var h);
+        int.TryParse(fpsArg, out var fps);
+        int.TryParse(cqArg, out var cq);
+        int.TryParse(maxrateArg, out var mr);
+        int width = w > 0 ? w : 1920;
+        int height = h > 0 ? h : 1080;
+        int targetFps = fps > 0 ? fps : 60;
+        int targetCq = cq > 0 ? cq : 18;
+        int maxrateKbps = mr > 0 ? mr : 55000;
+        var configuredBufsize = maxrateKbps * 2;
+
+        var candidates = (candidatesArg ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var v) ? v : 0)
+            .Where(v => v > 0)
+            .ToList();
+        if (candidates.Count == 0) candidates = [configuredBufsize, 64000, 48000, 32000];
+        if (!candidates.Contains(configuredBufsize)) candidates.Insert(0, configuredBufsize);
+
+        Console.WriteLine("=== VBV Probe (-bufsize) ===");
+        Console.WriteLine($"Resolução: {width}x{height}@{targetFps}fps | cq={targetCq} | maxrate={maxrateKbps}K");
+        Console.WriteLine($"bufsize cru do front (2 x maxrate) = {configuredBufsize}K");
+        Console.WriteLine($"alvo médio AMF (-b:v) = {FfmpegEncoder.ComputeAmfTargetKbps(maxrateKbps)}K");
+        Console.WriteLine();
+
+        foreach (var codec in new[] { "h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_amf", "hevc_amf", "av1_amf" })
+        {
+            if (!EncoderManager.CheckFfmpegEncoder(codec)) continue;
+
+            Console.WriteLine($"-- {codec} --");
+            double? baselineFps = null;
+            double? baselineRate = null;
+            var codecIndisponivel = false;
+            foreach (var vbv in candidates)
+            {
+                if (codecIndisponivel) break;
+                var r = EncoderManager.RunVbvProbe(codec, width, height, targetFps, targetCq, maxrateKbps, configuredBufsize, vbv);
+                if (r is null)
+                {
+                    // Sem GPU para este codec (ex.: h264_amf numa máquina NVIDIA) o ffmpeg
+                    // sai != 0 em TODOS os candidatos. Testar os outros só multiplica o
+                    // kill-guard por 4 — aborta o codec aqui, mas imprime o stderr do ffmpeg
+                    // pra distinguir "sem GPU" de "VBV inválido".
+                    var saida = new List<string>();
+                    var retry = EncoderManager.RunVbvProbe(
+                        codec, width, height, targetFps, targetCq, maxrateKbps,
+                        configuredBufsize, vbv, onStderr: saida.Add);
+                    if (retry is null)
+                    {
+                        Console.WriteLine("    sem GPU/driver (ou VBV inválido) — abortado");
+                        foreach (var l in saida) Console.WriteLine($"      ffmpeg: {l}");
+                        codecIndisponivel = true;
+                        break;
+                    }
+                    r = retry;
+                }
+                baselineFps ??= r.AchievedFps;
+                baselineRate ??= r.BitrateKbps;
+                var dFps = baselineFps > 0 ? (r.AchievedFps / baselineFps - 1) * 100 : 0;
+                var dRate = baselineRate > 0 ? (r.BitrateKbps / baselineRate.Value - 1) * 100 : 0;
+                // Format com ';' precisa sair do hole de interpolação (o ';' fecha a seção).
+                var dFpsTxt = $"{dFps:+0;-0;0}%";
+                var dRateTxt = $"{dRate:+0;-0;0}%";
+                // headroom negativo = o encoder passou do -maxrate, ou seja, o VBV apertou.
+                var headroomTxt = r.VbvBinds
+                    ? $"VBV APERTA (-{-r.HeadroomToMaxrateKbps:0} K)"
+                    : $"folga p/ teto {r.HeadroomToMaxrateKbps:0} K";
+                Console.WriteLine(
+                    $"    {vbv,7} K: {r.AchievedFps,7:0.00} fps ({dFpsTxt,7}) | " +
+                    $"{r.BitrateKbps,8:0.0} Kbps ({dRateTxt,7}) | {r.OutputBytes / 1024,6} KiB | {headroomTxt}");
+            }
+            Console.WriteLine();
+        }
+    }
+
+    /// <summary>
+    /// CLI --probe-amf-usage: mede throughput e bitrate efetivo de cada <c>-usage</c> da AMF
+    /// (ffmpeg 9) na cadeia de tune REAL de produção, com CQ e bitrate idênticos em todos os
+    /// candidatos — o probe isola o usage. É o que decide, com NÚMERO, se o default de
+    /// <c>AmfUsage</c> deve sair de <c>transcoding</c> (PCVBR, VBV 20 Mbit,
+    /// LOWLATENCY_MODE=false ⇒ ≥3 frames antes de qualquer output) para <c>ultralowlatency</c>
+    /// (LCVBR, VBV 735 kbit, output no 1º frame — o usage que a doc da AMD indica para video
+    /// game streaming) ou <c>webcam</c> (PCVBR, VBV 2 Mbit).
+    ///
+    /// <para><b>Precisa rodar em máquina com GPU AMD.</b> Sem AMF todos os candidatos devolvem
+    /// null e o probe diz "sem encoder AMF disponível" — resposta honesta, e não um chute.</para>
+    ///
+    /// <para>Uso: --probe-amf-usage [W H FPS CQ MAXRATE CODEC USAGES(com vírgula)]
+    /// (default 1920 1080 60 18 55000 h264_amf, todos os seis)</para>
+    /// </summary>
+    internal static void ProbeAmfUsage(
+        string widthArg, string heightArg, string fpsArg, string cqArg, string maxrateArg,
+        string codecArg, string candidatesArg)
+    {
+        int.TryParse(widthArg, out var w);
+        int.TryParse(heightArg, out var h);
+        int.TryParse(fpsArg, out var fps);
+        int.TryParse(cqArg, out var cq);
+        int.TryParse(maxrateArg, out var mr);
+        int width = w > 0 ? w : 1920;
+        int height = h > 0 ? h : 1080;
+        int targetFps = fps > 0 ? fps : 60;
+        int targetCq = cq > 0 ? cq : 18;
+        int maxrateKbps = mr > 0 ? mr : 55000;
+        var bufsizeKbps = maxrateKbps * 2;
+
+        var codec = (codecArg ?? "").Trim();
+        if (codec.Length == 0) codec = "h264_amf";
+        if (!EncoderManager.IsAmfCodec(codec))
+        {
+            Console.WriteLine($"ERRO: '{codec}' não é um codec AMF. Use h264_amf/hevc_amf/av1_amf.");
+            return;
+        }
+
+        var allUsages = new[]
+        {
+            "transcoding", "ultralowlatency", "lowlatency",
+            "webcam", "high_quality", "lowlatency_high_quality",
+        };
+        var candidates = (candidatesArg ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => FfmpegEncoder.NormalizeAmfUsage(s))
+            .Distinct()
+            .ToList();
+        if (candidates.Count == 0) candidates = allUsages.ToList();
+        // transcoding é a referência (é o que a produção usa hoje): entra sempre na 1ª linha.
+        candidates.Remove("transcoding");
+        candidates.Insert(0, "transcoding");
+
+        Console.WriteLine("=== AMF -usage Probe ===");
+        Console.WriteLine($"Resolução: {width}x{height}@{targetFps}fps | cq={targetCq} (inalterado) | maxrate={maxrateKbps}K | bufsize={bufsizeKbps}K");
+        Console.WriteLine($"Codec: {codec} | alvo médio -b:v = {FfmpegEncoder.ComputeAmfTargetKbps(maxrateKbps)}K");
+        Console.WriteLine($"Referência: transcoding (= o que a produção usa hoje; delta em % relativo a ela)");
+        Console.WriteLine();
+
+        if (!EncoderManager.CheckFfmpegEncoder(codec))
+        {
+            Console.WriteLine($"'{codec}' indisponível neste ffmpeg/hardware. Rode numa máquina com GPU AMD.");
+            return;
+        }
+
+        double? baselineFps = null;
+        double? baselineRate = null;
+        long baselineBytes = 0;
+        var algumMedido = false;
+        foreach (var usage in candidates)
+        {
+            var r = EncoderManager.RunAmfUsageProbe(
+                codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, usage);
+            if (r is null)
+            {
+                // usage rejeitado pelo encoder (ou GPU ocupada): o stderr real só aparece se
+                // pedir um retry com callback — 1 retry, não 6, pra não custar 6x o kill-guard.
+                var saida = new List<string>();
+                var retry = EncoderManager.RunAmfUsageProbe(
+                    codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, usage,
+                    onStderr: saida.Add);
+                if (retry is null)
+                {
+                    Console.WriteLine($"    {usage,-24}: RECUSADO pelo encoder");
+                    foreach (var l in saida) Console.WriteLine($"      ffmpeg: {l}");
+                    // Se a PRIMEIRA referência (transcoding) foi recusada, não há device AMF
+                    // funcional — todos os outros usages vão falhar igual. Testar os 5
+                    // restantes só multiplica o custo, então aborta o codec aqui.
+                    if (usage == "transcoding")
+                    {
+                        Console.WriteLine($"    '{codec}' sem device AMF utilizável — demais usages abortados.");
+                        break;
+                    }
+                    continue;
+                }
+                r = retry;
+            }
+            algumMedido = true;
+            baselineFps ??= r.AchievedFps;
+            baselineRate ??= r.BitrateKbps;
+            baselineBytes = Math.Max(baselineBytes, r.OutputBytes);
+            var dFps = baselineFps > 0 ? (r.AchievedFps / baselineFps - 1) * 100 : 0;
+            var dRate = baselineRate > 0 ? (r.BitrateKbps / baselineRate.Value - 1) * 100 : 0;
+            // Format com ';' precisa sair do hole de interpolação (o ';' fecha a seção).
+            var dFpsTxt = $"{dFps:+0;-0;0}%";
+            var dRateTxt = $"{dRate:+0;-0;0}%";
+            var dBytes = baselineBytes > 0 ? (r.OutputBytes / (double)baselineBytes - 1) * 100 : 0;
+            var dBytesTxt = $"{dBytes:+0;-0;0}%";
+            var headroomTxt = r.VbvBinds
+                ? $"VBV APERTA (-{-r.HeadroomToMaxrateKbps:0} K)"
+                : $"folga p/ teto {r.HeadroomToMaxrateKbps:0} K";
+            Console.WriteLine(
+                $"    {usage,-24}: {r.AchievedFps,7:0.00} fps ({dFpsTxt,7}) | " +
+                $"{r.BitrateKbps,8:0.0} Kbps ({dRateTxt,7}) | {r.OutputBytes / 1024,6} KiB ({dBytesTxt,6}) | {headroomTxt}");
+        }
+        Console.WriteLine();
+        if (!algumMedido)
+            Console.WriteLine("Nenhum candidate medido — sem GPU AMF funcional aqui (resposta honesta, sem chute).");
+        else
+            Console.WriteLine("Leitura: fps maior = mais folga p/ 60fps; Kbps menor = arquivo menor no MESMO cq.");
+    }
+
+    /// <summary>
+    /// Veredito do A/B de <c>-profile:v</c> no HEVC (Item 9). Fixado ANTES de medir: main10 só
+    /// fica se ganhar bytes sem custo de fps relevante, senão sai. O ponto do enum é que
+    /// <see cref="Unmeasured"/> é um estado de primeira classe — sem ele, "não medi" seria
+    /// reportado como "não compensa", que é uma conclusão que o número não sustenta.
+    /// </summary>
+    /// <summary>Resumo do probe de profile HEVC: os dois lados medidos, os dois deltas e o
+    /// veredito contra o critério. Os deltas são negativo = main10 é melhor (menos bytes, mais
+    /// fps), que é a convenção das duas pontas do relatório.</summary>
+    internal readonly record struct HevcProfileProbeSummary(
+        double? MainFps, double? Main10Fps, double? MainBytes, double? Main10Bytes,
+        double? FpsDeltaPct, double? ByteDeltaPct, HevcProfileVerdict Verdict)
+    {
+        internal string ToReportLine()
+        {
+            if (Verdict == HevcProfileVerdict.Unmeasured)
+                return "  → nada medido (ffmpeg indisponível ou encoder recusou a chain) — sem veredito";
+
+            var byteTxt = $"bytes {ByteDeltaPct:+0.0;-0.0;0}%";
+            var fpsTxt = $"fps {FpsDeltaPct:+0.0;-0.0;0}%";
+            var acao = Verdict == HevcProfileVerdict.KeepMain10
+                ? "MANTER main10"
+                : $"REMOVER main10 (não passa dos {HevcProfileMinByteGainPct:0}% de byte sem perder {HevcProfileMaxFpsLossPct:0}% de fps)";
+            return $"  → main10 vs main: {byteTxt} | {fpsTxt} ⇒ {acao}";
+        }
+    }
+
+    /// <summary>Critério do Item 9, fixado no plano antes da medição. main10 só continua se
+    /// ganhar pelo menos <see cref="HevcProfileMinByteGainPct"/>% de bytes no mesmo CQ
+    /// (<b>E</b> — os dois lados) sem perder <see cref="HevcProfileMaxFpsLossPct"/>% de fps.
+    /// O teste <c>Criterion_ThresholdsAreTheOnesFixededInThePlan</c> amarra estes números ao
+    /// plano, para ninguém afrouxar o critério depois de ver o resultado.</summary>
+    internal const double HevcProfileMinByteGainPct = 5.0;
+    internal const double HevcProfileMaxFpsLossPct = 5.0;
+
+    /// <summary>Seam puro do resumo (sem I/O, sem ffmpeg) do A/B de profile HEVC.
+    /// Argumentos são <c>(fps, bytes)</c> de cada lado, ou null quando o encoder recusou/ausente.</summary>
+    internal static HevcProfileProbeSummary SummarizeHevcProfileProbe(
+        (double Fps, double Bytes)? main, (double Fps, double Bytes)? main10)
+    {
+        if (main is null || main10 is null)
+        {
+            return new HevcProfileProbeSummary(
+                main?.Fps, main10?.Fps, main?.Bytes, main10?.Bytes,
+                null, null, HevcProfileVerdict.Unmeasured);
+        }
+
+        // Delta relativo ao main (a referência é o 8-bit, que é o que a entrada realmente é).
+        // Negativo = main10 melhor.
+        var fpsDelta = (main10.Value.Fps / main.Value.Fps - 1) * 100;
+        var byteDelta = (main10.Value.Bytes / main.Value.Bytes - 1) * 100;
+
+        // "≥5% menos bytes" ⇒ byteDelta <= -5. "<5% de fps" ⇒ fpsDelta > -5 (estritamente).
+        var bytesOk = byteDelta <= -HevcProfileMinByteGainPct;
+        var fpsOk = fpsDelta > -HevcProfileMaxFpsLossPct;
+        var verdict = bytesOk && fpsOk ? HevcProfileVerdict.KeepMain10 : HevcProfileVerdict.RemoveMain10;
+
+        return new HevcProfileProbeSummary(
+            main.Value.Fps, main10.Value.Fps, main.Value.Bytes, main10.Value.Bytes,
+            Math.Round(fpsDelta, 1), Math.Round(byteDelta, 1), verdict);
+    }
+
+    /// <summary>
+    /// CLI --probe-hevc-profile: A/B de <c>-profile:v</c> no HEVC (Item 9), com o MESMO CQ e
+    /// bitrate nos dois lados — o probe isola só o profile. Responde, com número, a pergunta que
+    /// a flag hardcoded na production não respondia: <c>main10</c> compensa com entrada NV12
+    /// 8-bit, ou é um upconvert pago à toa?
+    ///
+    /// <para><b>Contexto que decide a leitura:</b> a entrada da captura é
+    /// <c>-f rawvideo -pix_fmt nv12</c> (FfmpegEncoder.cs:627), ou seja <b>8 bits</b>.
+    /// <c>main10</c> só faria sentido com sinal de 10 bits (P010), que o pipeline não produz.
+    ///
+    /// <para><b>RESULTADO MEDIDO (RTX 5050, ffmpeg 9.0.1, 2026-09-26, cq 18 /
+    /// 1920x1080@60 / maxrate 55000): o main10 foi REMOVIDO da production.</b> main e main10
+    /// dão 25141,5 Kbps / 4603 KiB idênticos, e o diff byte a byte dos dois arquivos são
+    /// <b>4 bytes</b> — o <c>general_profile_idc</c> do VPS NAL (0x21 Main vs 0x22 Main10), com
+    /// os outros 4.134.825 bit-idênticos. O NVENC não converte 8→10: a flag só mentia no
+    /// header, e o clip saía rotulado como Main 10 cheio de amostras de 8 bits. Reproduzido em
+    /// runs repetidos (bytes 0%, fps −1,2%/−1,3% = ruído).</para>
+    ///
+    /// <para>Critério FIXADO antes de medir (e travado em teste): main10 só voltaria com ≥5%
+    /// menos bytes no mesmo CQ <b>E</b> perder &lt;5% de fps. Reprovar qualquer um dos dois ⇒
+    /// não usar. O veredito sai pelo <see cref="SummarizeHevcProfileProbe"/>, não por leitura do
+    /// operador. O probe continua existindo para o dia em que a captura virar P010 de verdade —
+    /// aí a hipótese volta a ter o que ganhar e precisa ser rechecada.</para>
+    ///
+    /// <para>Uso: --probe-hevc-profile [W H FPS CQ MAXRATE CODEC PROFILES(com vírgula)]
+    /// (default 1920 1080 60 18 55000 hevc_nvenc, main/main10)</para>
+    /// </summary>
+    internal static void ProbeHevcProfile(
+        string widthArg, string heightArg, string fpsArg, string cqArg, string maxrateArg,
+        string codecArg, string candidatesArg)
+    {
+        int.TryParse(widthArg, out var w);
+        int.TryParse(heightArg, out var h);
+        int.TryParse(fpsArg, out var fps);
+        int.TryParse(cqArg, out var cq);
+        int.TryParse(maxrateArg, out var mr);
+        int width = w > 0 ? w : 1920;
+        int height = h > 0 ? h : 1080;
+        int targetFps = fps > 0 ? fps : 60;
+        int targetCq = cq > 0 ? cq : 18;
+        int maxrateKbps = mr > 0 ? mr : 55000;
+        int bufsizeKbps = maxrateKbps * 2;
+
+        var codec = (codecArg ?? "").Trim();
+        if (codec.Length == 0) codec = "hevc_nvenc";
+
+        var candidates = (candidatesArg ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.Trim().ToLowerInvariant())
+            .Where(s => s.Length > 0)
+            .Distinct()
+            .ToList();
+        if (candidates.Count == 0) candidates = ["main", "main10"];
+        // "main" é a referência: é o perfil que casa com a entrada de 8 bits que a captura
+        // produz. Entra sempre na 1ª linha, como transcoding no probe de AMF.
+        candidates.Remove("main");
+        candidates.Insert(0, "main");
+
+        Console.WriteLine("=== HEVC -profile:v Probe (Item 9) ===");
+        Console.WriteLine($"Resolução: {width}x{height}@{targetFps}fps | cq={targetCq} (inalterado) | maxrate={maxrateKbps}K | bufsize={bufsizeKbps}K");
+        Console.WriteLine($"Codec: {codec} | entrada do pipeline = rawvideo NV12 8-bit");
+        Console.WriteLine($"Produção hoje: -profile:v main (o main10 foi REMOVIDO no Item 9 — só reescrevia a tag do header)");
+        Console.WriteLine($"Referência: main (8-bit, casa com a entrada) | delta em % relativo a ela");
+        Console.WriteLine($"Critério: main10 só fica com ≥{ProgramBenchmark.HevcProfileMinByteGainPct:0}% menos bytes E <{ProgramBenchmark.HevcProfileMaxFpsLossPct:0}% de fps");
+        Console.WriteLine();
+
+        if (!EncoderManager.CheckFfmpegEncoder(codec))
+        {
+            Console.WriteLine($"'{codec}' indisponível neste ffmpeg/hardware.");
+            Console.WriteLine(SummarizeHevcProfileProbe(null, null).ToReportLine());
+            return;
+        }
+
+        (double Fps, double Bytes)? main = null;
+        (double Fps, double Bytes)? main10 = null;
+
+        foreach (var profile in candidates)
+        {
+            var r = EncoderManager.RunHevcProfileProbe(
+                codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, profile);
+            if (r is null)
+            {
+                // 1 retry só pra capturar o stderr — distinguir "encoder recusou" de "sem GPU".
+                var saida = new List<string>();
+                var retry = EncoderManager.RunHevcProfileProbe(
+                    codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, profile,
+                    onStderr: saida.Add);
+                if (retry is null)
+                {
+                    Console.WriteLine($"    {profile,-10}: RECUSADO pelo encoder");
+                    foreach (var l in saida) Console.WriteLine($"      ffmpeg: {l}");
+                    continue;
+                }
+                r = retry;
+            }
+
+            var linha = (r.AchievedFps, (double)r.OutputBytes);
+            if (profile == "main") main = linha;
+            else if (profile == "main10") main10 = linha;
+            Console.WriteLine(
+                $"    {profile,-10}: {r.AchievedFps,7:0.00} fps | {r.BitrateKbps,8:0.0} Kbps | " +
+                $"{r.OutputBytes / 1024,6} KiB");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(SummarizeHevcProfileProbe(main, main10).ToReportLine());
     }
 
     internal static void ShowHelp()
@@ -109,6 +591,9 @@ internal static class ProgramBenchmark
         Console.WriteLine("  DiNho.Capture.Poc --duration <seg>    Tempo limite de gravação (ex.: --duration 300)");
         Console.WriteLine("  DiNho.Capture.Poc --encoders          Lista e testa encoders disponíveis (ffmpeg)");
         Console.WriteLine("  DiNho.Capture.Poc --probe-nvenc [W H FPS]  Mede achievedFps real de cada preset NVENC");
+        Console.WriteLine("  DiNho.Capture.Poc --probe-vbv [W H FPS CQ MAXRATE BUFSIZES]  Mede bitrate/fps por -bufsize");
+        Console.WriteLine("  DiNho.Capture.Poc --probe-amf-usage [W H FPS CQ MAXRATE CODEC USAGES]  Mede fps/bitrate por -usage da AMF (precisa de GPU AMD)");
+        Console.WriteLine("  DiNho.Capture.Poc --probe-hevc-profile [W H FPS CQ MAXRATE CODEC PROFILES]  A/B main vs main10 (entrada NV12 8-bit)");
         Console.WriteLine("  DiNho.Capture.Poc --help              Mostra esta ajuda");
         Console.WriteLine();
         Console.WriteLine("Hotkeys (padrão):");

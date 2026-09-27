@@ -3,6 +3,7 @@ using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Tests;
 
+[Collection("FfmpegCodecCache")]
 public sealed class EncoderManagerTests
 {
     // ── ProbeEncoder ─────────────────────────────────────────────────
@@ -1152,6 +1153,229 @@ public sealed class EncoderManagerTests
             EncoderManager.AmdAdapterCountProbe = oldAdapter;
             EncoderManager.ProbeAmfSavProbe = oldProbe;
             EncoderManager.ResetAmfSavCache();
+        }
+    }
+
+    // ─── ResolveEffectiveNvencPreset (Item 5: o dead code entra em produção) ──
+    //
+    // A escada SelectNvencPreset estava IMPLEMENTADA e testada, mas nenhum call site de
+    // produção: os 4 presets de qualidade do front mandavam encoderPreset:'p5' hardcoded e
+    // NÃO existe UI para mudar o campo (só o plumbing de config o referencia). Ou seja, o
+    // p5 nunca foi escolha de ninguém — era uma constante.
+    //
+    // medido no --probe-nvenc (RTX 5050, 1080p60, GOP 60): p7 sustenta 287-315 fps contra o
+    // alvo de 60. Como p7 é "slowest (best quality)" no NVENC (confirmado no
+    // ffmpeg -h encoder=h264_nvenc: p1=fastest/lowest quality ... p7=slowest/best quality),
+    // deixar p5 fixo estava DEIXANDO QUALIDADE NA MESA no mesmo CQ. O CQ não muda: a escada
+    // só troca o preset.
+    //
+    // A regra que estes testes travam: p5 (e null/vazio) = "não especificado" → roda a
+    // seleção adaptativa; qualquer OUTRO preset = escolha explícita do usuário → respeita e
+    // não paga o probe.
+
+    [Fact]
+    public void ResolveEffectiveNvencPreset_LegacyDefaultOnNvenc_RunsAdaptiveSelection()
+    {
+        EncoderManager.ResetNvencPresetCache();
+        var probed = new List<string>();
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (codec, w, h, fps, preset) =>
+            {
+                probed.Add(preset);
+                return fps * 0.9; // p7 sustenta
+            };
+            Assert.Equal("p7", EncoderManager.ResolveEffectiveNvencPreset("p5", "av1_nvenc", 1920, 1080, 60));
+            Assert.Equal("p7", Assert.Single(probed));
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
+        }
+    }
+
+    [Fact]
+    public void ResolveEffectiveNvencPreset_FrontHardcodedP5_IsTreatedAsUnspecified()
+    {
+        // Trava o TRATAMENTO do literal 'p5' no lado C#: p5 = "não especificado" tem de
+        // acionar a seleção adaptativa, e qualquer outro preset é override do usuário.
+        //
+        // NÃO amarra o literal do front. A versão anterior deste comentário afirmava que
+        // "se alguém mudar esse literal, este teste quebra", e é falso: o "p5" aqui é um
+        // literal local, então mudar `clips-quality-presets.ts` não affecta nada. A trava do
+        // valor real que o front manda é `clips-quality-presets.test.ts`, do lado TS. Repetir
+        // o número nos dois lados não amarra a fronteira — é o que a lição do Item 6 (o
+        // InlineData(1600,900) em C# sem espelhar a verdade do TS) já mostrou.
+        foreach (var frontPreset in new[] { "p5" })
+        {
+            EncoderManager.ResetNvencPresetCache();
+            var probeCalls = 0;
+            var old = EncoderManager.ProbeNvencSpeedProbe;
+            try
+            {
+                EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => { probeCalls++; return f * 0.9; };
+                var chosen = EncoderManager.ResolveEffectiveNvencPreset(frontPreset, "h264_nvenc", 1920, 1080, 60);
+                Assert.True(probeCalls > 0, "o p5 do front tem de acionar a seleção adaptativa");
+                Assert.NotEqual("p5", chosen);
+            }
+            finally
+            {
+                EncoderManager.ProbeNvencSpeedProbe = old;
+                EncoderManager.ResetNvencPresetCache();
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("p1")]
+    [InlineData("p2")]
+    [InlineData("p3")]
+    [InlineData("p4")]
+    [InlineData("p6")]
+    [InlineData("p7")]
+    public void ResolveEffectiveNvencPreset_ExplicitUserChoice_IsRespected_WithoutProbing(string configured)
+    {
+        // Escolha explícita do usuário = override. Não pode rodar probe: seria um custo de
+        // ~1s no start por um preset que ninguém pediu trocar.
+        EncoderManager.ResetNvencPresetCache();
+        var probeCalls = 0;
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => { probeCalls++; return f * 0.9; };
+            Assert.Equal(configured,
+                EncoderManager.ResolveEffectiveNvencPreset(configured, "av1_nvenc", 1920, 1080, 60));
+            Assert.Equal(0, probeCalls);
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
+        }
+    }
+
+    [Theory]
+    [InlineData("h264_amf")]
+    [InlineData("av1_amf")]
+    [InlineData("h264_qsv")]
+    [InlineData("libx264")]
+    [InlineData("")]
+    public void ResolveEffectiveNvencPreset_NonNvencCodec_PassesThrough_WithoutProbing(string codec)
+    {
+        // O campo encoderPreset só tem efeito nas chains NVENC. AMF usa amfPreset, QSV não
+        // tem preset, e libx264 usa -preset fast. Rodar probe aqui seria waste de ~1s.
+        EncoderManager.ResetNvencPresetCache();
+        var probeCalls = 0;
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => { probeCalls++; return f * 0.9; };
+            Assert.Equal("p5", EncoderManager.ResolveEffectiveNvencPreset("p5", codec, 1920, 1080, 60));
+            Assert.Equal(0, probeCalls);
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
+        }
+    }
+
+    [Theory]
+    [InlineData(0, 1080, 60)]
+    [InlineData(1920, 0, 60)]
+    [InlineData(1920, 1080, 0)]
+    [InlineData(-1, -1, -1)]
+    public void ResolveEffectiveNvencPreset_InvalidDims_FallsBackToConfigured_WithoutProbing(
+        int width, int height, int fps)
+    {
+        // Dimensão 0 = "native"/desconhecido. Medir throughput com 0x1080@0 não faz sentido
+        // (o probe geraria frame de tamanho inválido) — e o ffmpeg poderia travar. Degrada
+        // para o valor configurado em vez de arriscar.
+        EncoderManager.ResetNvencPresetCache();
+        var probeCalls = 0;
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => { probeCalls++; return f * 0.9; };
+            Assert.Equal("p5", EncoderManager.ResolveEffectiveNvencPreset("p5", "av1_nvenc", width, height, fps));
+            Assert.Equal(0, probeCalls);
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("p9")]
+    [InlineData("lixo")]
+    public void ResolveEffectiveNvencPreset_UnspecifiedOrInvalid_TreatedAsUnspecified(string? configured)
+    {
+        // null/vazio/branco = não especificado → seleção adaptativa (mesmo tratamento do p5).
+        // "p9"/"lixo" não é preset NVENC válido: cair no adaptativo é melhor que emitir
+        // "-preset p9" e deixar o ffmpeg abortar o encoder.
+        EncoderManager.ResetNvencPresetCache();
+        var probeCalls = 0;
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => { probeCalls++; return f * 0.9; };
+            var chosen = EncoderManager.ResolveEffectiveNvencPreset(configured, "av1_nvenc", 1920, 1080, 60);
+            Assert.Equal(1, probeCalls);
+            Assert.Equal("p7", chosen);
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
+        }
+    }
+
+    [Fact]
+    public void ResolveEffectiveNvencPreset_ProbeDegradesToFastestPreset()
+    {
+        // GPU que não sustenta nem p1: a escada cai até p1 (fastest/lowest quality no NVENC)
+        // e devolve p1 com rollback zero. Cobre o pior caso: o fallback não pode ser "lixo".
+        EncoderManager.ResetNvencPresetCache();
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => f * 0.2; // nada sustenta
+            Assert.Equal("p1", EncoderManager.ResolveEffectiveNvencPreset("p5", "av1_nvenc", 3840, 2160, 60));
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
+        }
+    }
+
+    [Fact]
+    public void ResolveEffectiveNvencPreset_SecondCallUsesCache_ProbesOnce()
+    {
+        // O probe é um ffmpeg de verdade (~1s). Duas capturas na mesma sessão com a mesma
+        // combinação codec|res|fps não podem pagar o probe duas vezes.
+        EncoderManager.ResetNvencPresetCache();
+        var probeCalls = 0;
+        var old = EncoderManager.ProbeNvencSpeedProbe;
+        try
+        {
+            EncoderManager.ProbeNvencSpeedProbe = (c, w, h, f, p) => { probeCalls++; return f * 0.9; };
+            var a = EncoderManager.ResolveEffectiveNvencPreset("p5", "av1_nvenc", 1920, 1080, 60);
+            var b = EncoderManager.ResolveEffectiveNvencPreset("p5", "av1_nvenc", 1920, 1080, 60);
+            Assert.Equal(a, b);
+            Assert.Equal(1, probeCalls);
+        }
+        finally
+        {
+            EncoderManager.ProbeNvencSpeedProbe = old;
+            EncoderManager.ResetNvencPresetCache();
         }
     }
 

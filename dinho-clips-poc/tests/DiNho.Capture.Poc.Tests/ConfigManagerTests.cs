@@ -80,6 +80,89 @@ public sealed class ConfigManagerTests
         Assert.Equal(expected, ConfigManager.IsValidEncoderPreset(preset));
     }
 
+    [Theory]
+    [InlineData("transcoding", true)]
+    [InlineData("ultralowlatency", true)]
+    [InlineData("lowlatency", true)]
+    [InlineData("webcam", true)]
+    [InlineData("high_quality", true)]
+    [InlineData("lowlatency_high_quality", true)]
+    [InlineData("WEBCAM", true)]        // case-insensitive
+    [InlineData("  webcam  ", true)]    // trim
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData(null, false)]
+    [InlineData("game_streaming", false)]   // nome do enum C, não a string do ffmpeg
+    [InlineData("low_latency", false)]      // grafia do header C
+    [InlineData("webcam; shutdown /s", false)]
+    public void IsValidAmfUsage_Validates(string? usage, bool expected)
+    {
+        Assert.Equal(expected, ConfigManager.IsValidAmfUsage(usage));
+    }
+
+    [Fact]
+    public void Default_AmfUsageIsUnset_SoTheFfmpegDefaultIsPreserved()
+    {
+        // 6.11 Item 3: o default é NÃO CONFIGURADO (string vazia), e isso é uma correção.
+        // A versão anterior fixava "transcoding" com a justificativa de que era "o default
+        // histórico do ffmpeg" — o binário embarcado (9.0.1) discorda:
+        //   ffmpeg -h encoder=h264_amf → -usage <int> (from -1 to 5) (default -1)
+        // -1 = não definido pelo app. Emitir "transcoding" onde o ffmpeg não emitia nada é
+        // uma MUDANÇA de comportamento no caminho AMD, e ela foi feita às cegas: trocar
+        // RC/lookahead/ENFORCE_HRD sem medir em hardware AMD. Vazio = byte-idêntico ao que
+        // a chain emitia antes do Item 3. A opção fica exposta para a decisão medida.
+        var tempDir = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            using var cm = new ConfigManager(Path.Combine(tempDir, "config.json"));
+            Assert.Equal("", cm.Config.AmfUsage);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Load_InvalidAmfUsage_FallsBackToUnset_NotToAGuessedValue()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempFile = Path.Combine(tempDir, "config.json");
+        // Valor de enum C: cairia em "-usage game_streaming" e mataria o encoder AMF.
+        File.WriteAllText(tempFile, "{\"AmfUsage\":\"game_streaming\"}");
+        try
+        {
+            using var cm = new ConfigManager(tempFile);
+            // Chutar um valor seria inventar modo de RC em hardware que não temos. O
+            // fallback é "não configurado", que é o estado anterior ao Item 3.
+            Assert.Equal("", cm.Config.AmfUsage);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Load_ValidAmfUsage_IsPreservedAndNormalized()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempFile = Path.Combine(tempDir, "config.json");
+        File.WriteAllText(tempFile, "{\"AmfUsage\":\"  Webcam  \"}");
+        try
+        {
+            using var cm = new ConfigManager(tempFile);
+            Assert.Equal("webcam", cm.Config.AmfUsage);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
     [Fact]
     public void Load_InvalidEncoderPreset_FallsBackToDefault()
     {

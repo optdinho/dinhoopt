@@ -283,12 +283,19 @@ public sealed partial class EngineCoordinator
     private EngineStatusMessage GetStatusMessage()
     {
         var s = _status.Current;
+        // O codec e' lido do encoder VIVO, nao do snapshot: a cascata de fallback
+        // (FfmpegEncoder) e o capacity guard trocam _codec in-place, sem passar pelo
+        // _status.Update, entao o valor publicado ficaria obsoleto justo no cenario em que o
+        // encoder trocou de hardware. O Item 8 tira daqui o codec com que o editor re-encoda
+        // trim/merge, então um valor velho faria o editor usar o encoder errado.
+        var liveCodec = (_encoder as IEncoder)?.Codec;
         return new EngineStatusMessage
         {
             Value = new EngineStatusValue
             {
                 CaptureBackend = s.CaptureBackend,
                 Encoder = s.Encoder,
+                Codec = string.IsNullOrWhiteSpace(liveCodec) ? s.Codec : liveCodec!,
                 DiskSpaceOk = CheckDiskSpace(),
                 LastCrashRecovered = s.LastCrashRecovered,
                 Game = _gameDetector.CurrentGame.IsValid && !NonGameProcesses.Contains(_gameDetector.CurrentGame.ProcessName) ? _gameDetector.CurrentGame.ToString() : null,

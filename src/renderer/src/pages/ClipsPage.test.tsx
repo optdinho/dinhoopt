@@ -659,4 +659,60 @@ describe('ClipsPage', () => {
     screen.getByText('replayCustom').click()
     expect(mockSetConfig).toHaveBeenCalledWith({ replayTimeSeconds: 150 })
   })
+
+  describe('grade de presets de qualidade (item 6)', () => {
+    it('oferece cinco degraus, incluindo leve-60 em 900p', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('presetBoa')
+      expect(screen.getByText('presetMuitoAlta')).toBeTruthy()
+      expect(screen.getByText('presetAlta')).toBeTruthy()
+      expect(screen.getByText('presetBoa')).toBeTruthy()
+      expect(screen.getByText('presetLeve60')).toBeTruthy()
+      expect(screen.getByText('presetPerformance')).toBeTruthy()
+    })
+
+    it('cada botão descreve o preset que ele realmente aplica (rótulo derivado, não digitado)', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('presetBoa')
+      // Se alguém trocar a resolução de um preset sem mexer no texto, esta trava quebra.
+      expect(screen.getByText('CQ 16 · 1080p')).toBeTruthy()
+      expect(screen.getByText('CQ 18 · 1080p')).toBeTruthy()
+      expect(screen.getByText('CQ 20 · 720p')).toBeTruthy()
+      expect(screen.getByText('CQ 20 · 900p')).toBeTruthy()
+      expect(screen.getByText('CQ 22 · 720p30')).toBeTruthy()
+    })
+
+    it('aplicar leve-60 manda 1600x900 com o CQ 20 do preset', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('presetLeve60')
+      screen.getByText('presetLeve60').click()
+      await waitFor(() => {
+        const call = mockSetConfig.mock.calls.at(-1)?.[0] as Record<string, unknown>
+        expect(call.width).toBe(1600)
+        expect(call.height).toBe(900)
+        expect(call.cq).toBe(20)
+        expect(call.fps).toBe(60)
+      })
+    })
+
+    it('o seletor de resolução tem 900p', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('resolution')
+      expect(screen.getByText('900p')).toBeTruthy()
+    })
+
+    it('escolher 900p no seletor manda 1600x900', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('900p')
+      screen.getByText('900p').click()
+      await waitFor(() => {
+        expect(mockSetConfig).toHaveBeenCalledWith({ width: 1600, height: 900 })
+      })
+    })
+  })
 })

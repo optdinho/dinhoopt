@@ -1,0 +1,38 @@
+{
+  "encoders": [
+    "aac",
+    "mjpeg",
+    "libx264",
+    "libx265",
+    "libsvtav1",
+    "h264_nvenc",
+    "hevc_nvenc",
+    "av1_nvenc",
+    "h264_qsv",
+    "hevc_qsv",
+    "av1_qsv",
+    "h264_amf",
+    "hevc_amf",
+    "av1_amf",
+    "h264_d3d12va",
+    "hevc_d3d12va",
+    "av1_d3d12va"
+  ],
+  "decoders": ["aac", "av1", "h264", "hevc", "pcm_f32le", "rawvideo"],
+  "muxers": ["adts", "f32le", "h264", "hevc", "image2", "ivf", "matroska", "mp4"],
+  "demuxers": ["aac", "concat", "f32le", "mov", "rawvideo"],
+  "filters": [
+    "afftdn",
+    "anlmdn",
+    "arnndn",
+    "cas",
+    "crop",
+    "format",
+    "frc_amf",
+    "hwupload",
+    "scale",
+    "sr_amf"
+  ],
+  "bsfs": ["aac_adtstoasc", "h264_mp4toannexb", "hevc_mp4toannexb"],
+  "protocols": ["file", "pipe"]
+}

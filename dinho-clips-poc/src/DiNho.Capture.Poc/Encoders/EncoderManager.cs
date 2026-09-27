@@ -556,6 +556,294 @@ public sealed class EncoderManager : IDisposable
         }
     }
 
+    // ── Probe de VBV (Item 2) ─────────────────────────────────────────
+
+    /// <summary>Resultado medido de UM candidato de encode numa cadeia real: throughput,
+    /// bitrate efetivo e tamanho do output. É a MEDIDA (nunca uma constante chutada) que
+    /// fixou a conclusão do Item 2 — <c>-bufsize</c> não tem efeito mensurável nessas
+    /// chains, porque o bitrate fica ~48 Mbps abaixo do teto <c>-maxrate</c> e o VBV
+    /// nunca aperta. O mesmo runner serve ao probe de <c>-usage</c> da AMF (Item 3):
+    /// <see cref="Variant"/> é o rótulo do que variou (ex.: "bufsize=32000", "usage=webcam").
+    ///
+    /// <para><see cref="BitrateKbps"/> é calculado contra a duração NOMINAL do vídeo
+    /// (frameCount / fps), não contra o tempo de wall-clock. Medir contra o wall-clock dá
+    /// número sem sentido: os frames são empurrados pelo pipe mais rápido que o encoder
+    /// consome, então 90 frames podem entrar em 0,77s e sair "30 Gbps" quando o bitrate
+    /// real do arquivo é 15 Mbps. O que importa para VBV é bits/segundo de VÍDEO.</para>
+    /// <para><see cref="HeadroomToMaxrateKbps"/> é a folga entre o bitrate medido e o teto
+    /// <c>-maxrate</c>: se for grande, o VBV não está apertando e o número do bufsize é
+    /// irrelevante para este preset (o teto que limita é o maxrate).</para></summary>
+    internal sealed record EncodeProbeResult(
+        string Codec,
+        string Variant,
+        double AchievedFps,
+        double BitrateKbps,
+        int OutputBytes,
+        int FrameCount,
+        double MaxrateKbps)
+    {
+        public double HeadroomToMaxrateKbps => MaxrateKbps - BitrateKbps;
+        public bool VbvBinds => HeadroomToMaxrateKbps < 0;
+    }
+
+    /// <summary>Probe genérico: encode dummy NV12 com uma cadeia de tune qualquer, medindo
+    /// achievedFps, bitrate efetivo (bytes de saída) e se o ffmpeg aceitou a cadeia. O
+    /// <c>tuneArgs</c> é montado pelo CHAMADOR (vem de BuildEncoderTuneArgs, a mesma função
+    /// da produção) e é a única coisa que varia entre candidatos.
+    ///
+    /// <para>Roda <paramref name="frameCount"/> frames (default 90 = 1,5s @60fps, o bastante
+    /// para o IDR + GOP inteiro aparecerem na média). Devolve null quando o ffmpeg rejeita a
+    /// cadeia (exit != 0) — por exemplo, se o VBV fica abaixo do mínimo do encoder ou se o
+    /// hardware não suporta o codec/usage pedido.</para>
+    ///
+    /// <para><b>Três armadilhas já corrigidas aqui (reusáveis por qualquer probe futuro):</b>
+    /// (1) o drain de stdout precisa subir ANTES do write no stdin, senão o buffer de 64 KB
+    /// do pipe estoura, o ffmpeg bloqueia em stdout, para de ler stdin e o write entra em
+    /// deadlock — o sintoma é <c>ExitCode != 0</c> falso, que parece "candidato rejeitado";
+    /// (2) <c>-c:v</c> é obrigatório, porque BuildEncoderTuneArgs devolve só a parte de TUNE
+    /// (no StartFfmpeg o <c>-c:v</c> fica fora) e sem ele o ffmpeg assume o codec default do
+    /// muxer e morre em "invalid preset 'p5'"; (3) o bitrate tem que ser medido contra a
+    /// duração NOMINAL (frameCount / fps) e não contra o wall-clock.</para>
+    ///
+    /// <para><b>(4) O drain de stdout/stderr precisa tolerar o pipe fechando:</b> no caminho de
+    /// timeout o runner faz <c>Kill(entireProcessTree)</c>, o <c>Read</c> pendurado lança, a task
+    /// fica faulted e o <c>Task.WaitAll</c> lança <see cref="AggregateException"/> — que o
+    /// <c>catch</c> externo engolia como <c>null</c>, ou seja, "o encoder recusou a chain". Perder
+    /// a medição <i>e</i> o motivo (o <c>onStderr</c> nunca era chamado) é pior do que reportar o
+    /// timeout. Ver <c>EncoderProbeDrainTests</c>.</para></summary>
+    internal static void DrainStreamToEnd(Stream stream, Action<int> onBytes)
+    {
+        var buf = new byte[64 * 1024];
+        try
+        {
+            int n;
+            while ((n = stream.Read(buf, 0, buf.Length)) > 0) onBytes(n);
+        }
+        catch (IOException) { /* pipe fechado pelo kill */ }
+        catch (ObjectDisposedException) { /* process disposed antes da task */ }
+    }
+
+    internal static EncodeProbeResult? RunEncodeProbe(
+        string codec, int width, int height, int fps, string tuneArgs,
+        double maxrateKbps, string variant, int frameCount = 90,
+        Action<string>? onStderr = null)
+    {
+        // GetRawFormatForCodec dá "av1"/"hevc"/"h264"; o muxer de AV1 é ivf (o resto usa o
+        // raw do próprio codec). Mesmo mapeamento de RunNvencThroughputProbe.
+        var rawFmt = FfmpegEncoder.GetRawFormatForCodec(codec);
+        var outputFmt = rawFmt == "av1" ? "ivf" : rawFmt;
+        // -c:v é obrigatório aqui: BuildEncoderTuneArgs devolve só a parte de TUNE, o -c:v
+        // fica no StartFfmpeg em produção. Sem ele o ffmpeg assume o codec default do muxer
+        // (libx264 p/ h264) e morre em "invalid preset 'p5'".
+        var args = $"-y -loglevel error -f rawvideo -pix_fmt nv12 -s {width}x{height} " +
+                   $"-r {fps} -i pipe:0 -colorspace bt709 -color_primaries bt709 -color_trc bt709 " +
+                   $"-c:v {codec} {tuneArgs} -frames:v {frameCount} -f {outputFmt} pipe:1";
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: args, redirectInput: true, redirectOutput: true, redirectError: true)
+            };
+            process.Start();
+            try { process.PriorityClass = ProcessPriorityClass.Idle; } catch { }
+
+            var frameSize = width * height * 3 / 2; // NV12
+
+            // Conteúdo de ALTA ENTROPIA é obrigatório: com cor chapada o encoder produz
+            // ~5 KiB por GOP e TODOS os candidatos dão o mesmo resultado (medido: 110000K vs
+            // 32000K → mesmo bitrate). Ruído determinístico (LCG com semente fixa) para o
+            // probe ser reprodutível entre execuções. Um frame de ruído é gerado uma vez e
+            // reusado, com variação por frame — mantém o custo linear em vez de 3 MiB de
+            // RNG/frame.
+            //
+            // ⚠️ ESTA FONTE NÃO REPRESENTA UM JOGO, e ela já produziu DUAS conclusões
+            // generalizadas que a remedição com args de produção refutou (2026-09-26).
+            // O frame é gerado UMA vez e o sal XOR cobre só os 4096 primeiros bytes da
+            // luminância: em 720p isso é 0,44% do frame, em 1080p 0,11%. Ou seja, ~99,6% de
+            // cada frame é byte-idêntico ao anterior → o encoder gasta quase tudo em delta de
+            // P-frame e a taxa vira uma fração da que o mesmo encoder gasta em conteúdo real.
+            // O comentário original daqui dizia que o ruído "força o RC a pedir bits, que é
+            // exatamente a condição em que o tamanho do VBV muda o resultado" — isso é FALSO
+            // na prática, e foi o que|Publication Item 2 (o bufsize parecer não ter efeito
+            // medido num probe cujo conteúdo é quase estático) e o número de "48,5 Mbps de
+            // folga" saíram daqui.
+            // Remedição com a chain de produção (bframes 0, lookahead 4, -g 60, p7, 720p60,
+            // 300 frames, 5 fontes) mostrou o comportamento real do -maxrate:
+            //  •Ele LIMITA quando a demanda do conteúdo é MENOR que o teto: mandelbrot cq16
+            //    max20 => 21.099 kbps, max40 => 33.168 (+57%), max100 => 33.253 (+0,3%).
+            //  •Ele NÃO IMPÕE teto quando a demanda é MAIOR: life cq16 max20 => 71.252 kbps
+            //    = 356% do teto; max40 => 71.488 (+0,3%).
+            //  •O bufsize é irrelevante mesmo: life cq16 max20 com buf400 (10x) => 71.102 (−0,2%).
+            //  •E o CQ também perde autoridade nesse regime: life cq16 => 71.252 vs cq28 =>
+            //    72.269 (1,7%).
+            // Modelo: o VBV impõe teto de RAJADA; a taxa média é imposta pela ENTROPIA do
+            // conteúdo, com um piso que nem CQ 28 baixa. Para medir "o que o VBV faz num
+            // jogo", este probe precisaria de conteúdo com variação de frame inteiro
+            // (ex.: -f lavfi life=.../mandelbrot=...) em vez de ruído reusado — mudar isso é
+            // decisão de escopo, então aqui fica a ressalva, não a troca.
+            var noise = new byte[frameSize];
+            var rng = 2463534242u; // semente fixa: probe reprodutível entre execuções
+            for (int p = 0; p < noise.Length; p++)
+            {
+                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                noise[p] = (byte)(rng >> 24);
+            }
+            var lumaEnd = width * height; // U/V meio menosBIT — o resto do ruído é cinza-ish
+            for (int p = lumaEnd; p < noise.Length; p += 2) noise[p] = 128;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            // O drain de stdout precisa ANTES do write no stdin: com 90 frames o output passa
+            // do buffer do pipe (64KB), o ffmpeg bloqueia escrevendo em stdout, para de ler stdin,
+            // e o write no stdin entra em deadlock → ExitCode != 0 → "rejeitado" falso.
+            // Mesma razão pela qual RunNvencThroughputProbe drena em background.
+            long outputBytes = 0;
+            var drainTask = Task.Run(() => DrainStreamToEnd(process.StandardOutput.BaseStream, n => outputBytes += n));
+            var stderrLines = new List<string>();
+            var stderrTask = Task.Run(() =>
+            {
+                try
+                {
+                    string? line;
+                    while ((line = process.StandardError.ReadLine()) != null)
+                    {
+                        lock (stderrLines) { if (stderrLines.Count < 8) stderrLines.Add(line); }
+                    }
+                }
+                catch (IOException) { /* pipe fechado pelo kill */ }
+                catch (ObjectDisposedException) { /* process disposed antes da task */ }
+            });
+
+            try
+            {
+                var stdin = process.StandardInput.BaseStream;
+                var frame = new byte[frameSize];
+                for (int i = 0; i < frameCount; i++)
+                {
+                    System.Buffer.BlockCopy(noise, 0, frame, 0, frameSize);
+                    // Varia o topo da luminância por frame: mantém alta entropia e evita que o
+                    // encoder produza frames idênticos (o que faria o output -> 0 e o VBV ocioso).
+                    var salt = (byte)(i * 37);
+                    for (int p = 0; p < 4096 && p < lumaEnd; p++) frame[p] ^= salt;
+                    stdin.Write(frame, 0, frameSize);
+                }
+                stdin.Close();
+            }
+            catch { /* encoder rejeitou input → exit code trata */ }
+
+            if (!process.WaitForExit(30000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                process.WaitForExit(3000);
+            }
+            // Guarda no WaitAll alem da guarda no drain: mesmo com as tasks protegidas, uma
+            // falha nao pode virar "chain rejeitada" (null) - seria uma medicao valida perdida.
+            try { Task.WaitAll(new[] { drainTask, stderrTask }, 5000); }
+            catch (AggregateException) { /* drain morreu junto com o processo */ }
+            sw.Stop();
+
+            if (process.ExitCode != 0)
+            {
+                if (onStderr != null)
+                {
+                    lock (stderrLines)
+                    {
+                        foreach (var l in stderrLines) onStderr(l);
+                    }
+                }
+                return null;
+            }
+
+            var seconds = Math.Max(0.001, sw.Elapsed.TotalSeconds);
+            var achievedFps = Math.Round(frameCount / seconds, 2);
+            // Bitrate = bits / duração NOMINAL do vídeo (frameCount / fps). Ver o record:
+            // medir contra o wall-clock superestima em ~2x porque o pipe enche mais rápido
+            // que o encoder consome.
+            var nominalSeconds = Math.Max(0.001, frameCount / (double)Math.Max(1, fps));
+            var bitrateKbps = Math.Round(outputBytes * 8.0 / nominalSeconds / 1000.0, 1);
+            return new EncodeProbeResult(codec, variant, achievedFps, bitrateKbps, (int)outputBytes, frameCount, maxrateKbps);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Probe de VBV (Item 2): mesmo runner genérico, variando só o <c>-bufsize</c>.
+    /// Conclusão já medida em RTX 5050 / ffmpeg 9.0.1 / cq 16 / 1080p60 / maxrate 65000:
+    /// 130000, 64000, 48000 e 32000 K dão output BYTE-IDÊNTICO (3019 KiB) e ~16,5 Mbps
+    /// contra teto de 65 Mbps. Ver o doc de <see cref="EncodeProbeResult"/>. Reabre com
+    /// <c>--probe-vbv</c>.
+    ///
+    /// <para><b>Ressalva honesta sobre a chain (achado 2026-09-26):</b> estes probes usam
+    /// <c>bframes: 2, lookahead: 16</c>, e a <b>produção</b> força <c>bframes = 0</c> em todos
+    /// os níveis de RAM (<c>RamManager.BuildSettings</c>) com lookahead default 4. Ou seja, a
+    /// chain do probe <b>não é</b> a de produção — a mesma divergência que produziu o erro do
+    /// <c>main10</c> (Item 9) e do <c>-rc vbr_peak</c> (Item 8). A conclusão do Item 2
+    /// ("o VBV nunca aperta") foi obtida nessa chain e vale para ela; para fechar o Item 0
+    /// (CQ 16/18 na faixa LowMemory com teto de 20 Mbit) o número tem de ser remedido com os
+    /// args de produção — é exatamente o regime em que o VBV poderia passar a mandar.</para>
+    /// </summary>
+    internal static EncodeProbeResult? RunVbvProbe(
+        string codec, int width, int height, int fps, int cq,
+        int maxrateKbps, int configuredBufsizeKbps, int vbvKbps, int frameCount = 90,
+        Action<string>? onStderr = null)
+    {
+        var tuneArgs = FfmpegEncoder.BuildEncoderTuneArgs(
+            codec, cq, maxrateKbps, configuredBufsizeKbps, 2, 16, "p5",
+            amfPreset: "speed", multipass: true, vbvOverrideKbps: vbvKbps);
+        return RunEncodeProbe(codec, width, height, fps, tuneArgs, maxrateKbps,
+            $"bufsize={vbvKbps}", frameCount, onStderr);
+    }
+
+    /// <summary>Probe de <c>-usage</c> da AMF (Item 3): mede cada usage do ffmpeg 9 na cadeia
+    /// de tune REAL de produção, com o mesmo CQ e o mesmo bitrate — o probe isola o usage.
+    ///
+    /// <para><b>Por que o probe é necessário e não um chute:</b> a doc da AMD diz que o usage
+    /// seleciona o conjunto completo de parâmetros (RC, VBV, LOWLATENCY_MODE, PRE_ANALYSIS,
+    /// MOTION_ESTIMATION, filler), mas as chains aqui já sobrescrevem a maior parte com
+    /// opções explícitas. O que sobra — latência de pipeline, filler e pré-análise — só é
+    /// observável no hardware AMD, e o número decide se o default muda de
+    /// <c>transcoding</c> (PCVBR, VBV 20 Mbit, LOWLATENCY_MODE=false, ≥3 frames de latência)
+    /// para <c>ultralowlatency</c> (LCVBR, VBV 735 kbit, output no 1º frame — o usage
+    /// documentado para video game streaming) ou <c>webcam</c> (PCVBR, VBV 2 Mbit).
+    ///
+    /// <para>Roda em máquina com GPU AMD. Numa máquina sem AMF TODOS os candidatos devolvem
+    /// null e o probe imprime "sem encoder AMF disponível" — que é a resposta honesta, não
+    /// um número inventado.</para></summary>
+    internal static EncodeProbeResult? RunAmfUsageProbe(
+        string codec, int width, int height, int fps, int cq,
+        int maxrateKbps, int bufsizeKbps, string amfUsage, int frameCount = 90,
+        Action<string>? onStderr = null)
+    {
+        var tuneArgs = FfmpegEncoder.BuildEncoderTuneArgs(
+            codec, cq, maxrateKbps, bufsizeKbps, 0, 16, "p5",
+            amfPreset: "speed", multipass: true, amfUsage: amfUsage);
+        return RunEncodeProbe(codec, width, height, fps, tuneArgs, maxrateKbps,
+            $"usage={FfmpegEncoder.NormalizeAmfUsage(amfUsage)}", frameCount, onStderr);
+    }
+
+    /// <summary>Probe de <c>-profile:v</c> do HEVC (Item 9): A/B entre o perfil de 8 bits
+    /// (<c>main</c>) e o de 10 bits (<c>main10</c>), com o MESMO CQ, mesmo bitrate e mesma
+    /// cadeia de tune — o probe isola só o profile. Existe porque <c>hevc_nvenc</c> pede
+    /// <c>main10</c> em produção enquanto a entrada do pipeline é NV12 8-bit: um bitstream de
+    /// 10 bits gerado de um sinal de 8 não tem de onde ganhar qualidade, e o upconvert custa.
+    ///
+    /// <para><b>A premissa do plano estava invertida:</b> o plano tratava "adotar main10" como
+    /// o trabalho do item, mas main10 já está em produção incondicional. O item mede se o que já
+    /// está lá se paga — e a resposta possível é remover.</para></summary>
+    internal static EncodeProbeResult? RunHevcProfileProbe(
+        string codec, int width, int height, int fps, int cq,
+        int maxrateKbps, int bufsizeKbps, string profile, int frameCount = 90,
+        Action<string>? onStderr = null)
+    {
+        var tuneArgs = FfmpegEncoder.BuildEncoderTuneArgs(
+            codec, cq, maxrateKbps, bufsizeKbps, 0, 16, "p5",
+            multipass: true, profileOverride: profile);
+        return RunEncodeProbe(codec, width, height, fps, tuneArgs, maxrateKbps,
+            $"profile={profile}", frameCount, onStderr);
+    }
+
     // ── NVENC preset adaptativo ─────────────────────────────────────
 
     /// <summary>Delegado de probe trocável nos testes. Retorna achievedFps (double?) do encode
@@ -574,6 +862,70 @@ public sealed class EncoderManager : IDisposable
 
     internal static bool IsNvencCodec(string codec) =>
         codec is "h264_nvenc" or "hevc_nvenc" or "av1_nvenc";
+
+    /// <summary>
+    /// Valor que os 4 presets de qualidade do front mandavam hardcoded
+    /// (clips-quality-presets.ts) e que o ConfigManager usa como default.
+    ///
+    /// Item 5: NÃO existe UI para mudar encoderPreset — só o plumbing de config o referencia.
+    /// Então o p5 nunca foi escolha de ninguém, era uma constante. O seam
+    /// ResolveEffectiveNvencPreset trata este valor como "não especificado" para poder rodar
+    /// a seleção adaptativa; qualquer OUTRO valor (p1-p4, p6, p7) é escolha explícita e vira
+    /// override. Se alguém criar a UI, é preciso remover o p5 daqui para a escolha do usuário
+    /// passar a valer.
+    /// </summary>
+    internal const string LegacyDefaultNvencPreset = "p5";
+
+    private static readonly string[] ValidNvencPresets =
+        { "p1", "p2", "p3", "p4", "p5", "p6", "p7" };
+
+    /// <summary>
+    /// Decide o preset NVENC efetivo (Item 5). Antes esta decisão não existia: o front mandava
+    /// p5 fixo e a escada SelectNvencPreset (que já existia, com 7 testes) nunca era chamada.
+    ///
+    /// O que muda com isso, medido em <c>--probe-nvenc</c> (RTX 5050, 1080p60, GOP 60):
+    /// p7 sustenta 287-315 fps contra o alvo de 60. No NVENC p7 é <b>slowest (best quality)</b>
+    /// e p1 é <b>fastest (lowest quality)</b> (confirmado no <c>ffmpeg -h encoder=h264_nvenc</c>),
+    /// então o p5 fixo estava deixando qualidade na mesa sem gastar throughput. <b>O CQ não muda</b>
+    /// — a escada só troca o preset, e a lista de CQs do usuário (16/18/20/22) fica intacta.
+    ///
+    /// Regras (travadas por testes em EncoderManagerTests):
+    ///   - codec não-NVENC → devolve o configurado sem sondar (encoderPreset só vale p/ NVENC);
+    ///   - preset explícito do usuário → respeitado, sem probe (nada de ~1s no start);
+    ///   - p5 legacy / null / vazio / inválido + dims válidas → seleção adaptativa;
+    ///   - dims 0 ou negativas → devolve o configurado (medir 0x1080@0 não faz sentido e o
+    ///     ffmpeg do probe pode travar).
+    /// </summary>
+    internal static string ResolveEffectiveNvencPreset(
+        string? configured, string? codec, int width, int height, int fps)
+    {
+        var configuredPreset = NormalizeNvencPreset(configured);
+
+        // Só NVENC tem o conceito de preset p1..p7. AMF usa amfPreset, QSV não tem preset e
+        // libx264 usa -preset fast (nome diferente: "fast", não "pN").
+        if (!IsNvencCodec(codec ?? "")) return configuredPreset;
+
+        // Escolha explícita do usuário: respeita e NÃO paga o probe.
+        var isExplicitChoice = !string.IsNullOrWhiteSpace(configured)
+            && configuredPreset != LegacyDefaultNvencPreset
+            && configuredPreset == configured?.Trim().ToLowerInvariant();
+        if (isExplicitChoice) return configuredPreset;
+
+        // Dimensão desconhecida ("native"): o probe geraria frame de tamanho inválido.
+        if (width <= 0 || height <= 0 || fps <= 0) return configuredPreset;
+
+        return SelectNvencPreset(codec!, width, height, fps);
+    }
+
+    /// <summary>Normaliza o preset NVENT do config. Inválido/vazio → o legacy default (p5),
+    /// que o ResolveEffectiveNvencPreset interpreta como "não especificado". Nunca devolve
+    /// lixo: "-preset lixo" derrubaria o encoder inteiro com "Unrecognized option".</summary>
+    internal static string NormalizeNvencPreset(string? preset)
+    {
+        if (string.IsNullOrWhiteSpace(preset)) return LegacyDefaultNvencPreset;
+        var p = preset.Trim().ToLowerInvariant();
+        return Array.IndexOf(ValidNvencPresets, p) >= 0 ? p : LegacyDefaultNvencPreset;
+    }
 
     /// <summary>Seleciona o preset NVENC por máquina: tenta p7 (melhor qualidade), degrada até p1
     /// (mais rápido) quando o encode real não sustenta ≥85% do fps alvo na resolução da captura.
@@ -615,7 +967,16 @@ public sealed class EncoderManager : IDisposable
     /// throughput real que o pipeline teria, não um cenário idealizado. O STEADY-STATE é medido com
     /// warmup antes (frames de aquecimento amortizam spawn + init da sessão NVENC + primeira pass do
     /// multipass) e janela cronometrada depois — um probe de 5 frames mede só startup (~0.6s) e dá
-    /// ~7fps em TODO preset (ruído), inutilizável para comparar p1..p7.</summary>
+    /// ~7fps em TODO preset (ruído), inutilizável para comparar p1..p7.
+    ///
+    /// <para><b>Ressalva de metodologia (2026-09-26):</b> o probe fixa <c>cq=18</c>,
+    /// <c>maxrate=55000</c> e <c>lookahead=16</c>, e o conteúdo é o ruído reusado descrito em
+    /// <see cref="RunEncodeProbe"/>. O pipeline de produção usa o CQ escolhido pelo usuário
+    /// (16/18/20/22) e <c>lookahead=4</c>. Ou seja, o número é uma comparação entre presets
+    /// <i>entre si</i> — que é para que a escada serve, e nesse uso relativo a chain não muda
+    /// a ordem — e NÃO uma previsão de fps do preset na sessão do usuário. Nada aqui altera
+    /// o CQ configurado: os probes são diagnósticos e o invariante do CQ do usuário é
+    /// intocado.</para></summary>
     internal static double? ProbeNvencSpeed(string codec, int width, int height, int fps, string preset)
         => RunNvencThroughputProbe(codec, width, height, fps, preset, extraArgs: "");
 
@@ -663,17 +1024,12 @@ public sealed class EncoderManager : IDisposable
 
             // Drain de stdout/stderr em background — sem isso o pipe (64KB) enche, o ffmpeg bloqueia
             // o stdin e o writer pendura (deadlock).
-            var drainTask = Task.Run(() =>
-            {
-                var buf = new byte[64 * 1024];
-                int n;
-                try { while ((n = process.StandardOutput.BaseStream.Read(buf, 0, buf.Length)) > 0) { } }
-                catch { /* pipe fechado pelo kill */ }
-            });
+            var drainTask = Task.Run(() => DrainStreamToEnd(process.StandardOutput.BaseStream, _ => { }));
             var stderrTask = Task.Run(() =>
             {
                 try { while (process.StandardError.ReadLine() != null) { } }
-                catch { /* pipe fechado pelo kill */ }
+                catch (IOException) { /* pipe fechado pelo kill */ }
+                catch (ObjectDisposedException) { /* process disposed antes da task */ }
             });
 
             // Writer em background: escreve frames o mais rápido que o ffmpeg consome; o bloqueio do

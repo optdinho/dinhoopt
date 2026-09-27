@@ -16,15 +16,28 @@ using DiNho.Capture.Poc.Watchdog;
 
 namespace DiNho.Capture.Poc.Tests;
 
+// Esta classe sobe captura REAL (D3D11 + ffmpeg) em alguns testes, o que cria um
+// FrameWriter em background devolvendo buffers NV12 ao VideoPacketPool — um estático
+// GLOBAL. Sem esta coleção, ela roda em paralelo com a coleção "VideoPacketPool" e o
+// Return de um teste aterrissa no meio das asserções do outro. A coleção já tem
+// DisableParallelization, então as duas ficam sequenciais.
+[Collection("VideoPacketPool")]
 public sealed class EngineCoordinatorCaptureTests : IDisposable
 {
     private static readonly Type CoordinatorType = typeof(EngineCoordinator);
     private readonly List<ConfigManager> _disposables = new();
+    private readonly List<EngineCoordinator> _coords = new();
 
-    private static EngineCoordinator CreateUninitialized()
+    private EngineCoordinator CreateUninitialized()
     {
-        return (EngineCoordinator)System.Runtime.CompilerServices.RuntimeHelpers
+        var coord = (EngineCoordinator)System.Runtime.CompilerServices.RuntimeHelpers
             .GetUninitializedObject(typeof(EngineCoordinator));
+        // Registra para o Dispose derrubar a captura: sem isso, um teste que sobe
+        // D3D11+ffmpeg de verdade deixa um FrameWriter vivo devolvendo buffer ao
+        // VideoPacketPool global DEPOIS de o teste acabar, e o próximo teste da
+        // coleção ("VideoPacketPool") le esse estado.
+        _coords.Add(coord);
+        return coord;
     }
 
     private static void SetField(EngineCoordinator coord, string name, object? value)
@@ -141,6 +154,19 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
 
     public void Dispose()
     {
+        // Derruba QUALQUER captura que tenha sobrado, mesmo com _captureActive == false:
+        // o encoder (e o FrameWriter) podem ter subido antes de a captura virar "ativa",
+        // e o writer continuaria devolvendo buffer NV12 ao pool global — corrompendo os
+        // testes de VideoPacketPool que rodam depois nesta coleção. Idempotente e sem
+        // exceções: é teardown de teste.
+        var stop = CoordinatorType.GetMethod(
+            "StopCapture", BindingFlags.Instance | BindingFlags.NonPublic);
+        foreach (var coord in _coords)
+        {
+            try { stop?.Invoke(coord, new object?[] { true, false }); } catch { }
+        }
+        _coords.Clear();
+
         foreach (var d in _disposables)
         {
             try { d.Dispose(); } catch { }
@@ -877,6 +903,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     [InlineData(640, 480)]
     [InlineData(854, 480)]
     [InlineData(1280, 720)]
+    [InlineData(1600, 900)]
     [InlineData(1920, 1080)]
     public void AppConfig_WidthHeight_StandardResolutions(int w, int h)
     {
@@ -1890,6 +1917,30 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.Equal("", status.Current.CalibrationTier);
         status.Update(s => s.CalibrationTier = "Strong");
         Assert.Equal("Strong", status.Current.CalibrationTier);
+    }
+
+    [Fact]
+    public void EngineStatus_Codec_CanUpdate()
+    {
+        using var status = new EngineStatus();
+        Assert.Equal("", status.Current.Codec);
+        status.Update(s => s.Codec = "h264_nvenc");
+        Assert.Equal("h264_nvenc", status.Current.Codec);
+    }
+
+    /// <summary>
+    /// O snapshot do Update é o que o TS lê; se o Codec não for copiado para ele, o editor
+    /// de clipes volta a receber "" e cai em libx264 sem nenhum sinal visível.
+    /// </summary>
+    [Fact]
+    public void EngineStatus_Codec_SurvivesTheSnapshotCopy()
+    {
+        using var status = new EngineStatus();
+        EngineStatusSnapshot? seen = null;
+        status.OnStatusUpdate += s => seen = s;
+        status.Update(s => s.Codec = "hevc_amf");
+        Assert.NotNull(seen);
+        Assert.Equal("hevc_amf", seen!.Codec);
     }
 
     private sealed class RecordingLogger : ILogger

@@ -93,15 +93,30 @@ internal sealed partial class FfmpegEncoder
         if (now - _lastCapacityDegradeTicks < CapacityDegradeCooldownSec * Stopwatch.Frequency)
             return false;
 
+        // Com o piso absoluto (Item 1) os divisores convergem: em 1080p 1/2 e 1/4 dao os
+        // mesmos 1280x720, e abaixo do piso nenhum degrau muda a resolucao. Reiniciar o
+        // ffmpeg nesse caso descartaria o backlog de output e o estado de PTS sem mudar os
+        // argumentos, entao o degrau util e' ignorado. Ver CapacityStepChangesResolution.
+        if (!CapacityStepChangesResolution(
+                _width, _height, _outputWidth, _outputHeight, _scaleDivisor, next.ScaleDivisor, _stretchToFit))
+            return false;
+
         var oldCodec = _codec;
         int oldDivisor = _scaleDivisor;
         _currentFallbackIndex = _fallbackChain.IndexOf(next);
         _codec = next.Codec;
         _scaleDivisor = next.ScaleDivisor;
         _lastCapacityDegradeTicks = now;
+        // Item 1: o log precisa dizer a resolução REAL, não só o rótulo do divisor. Com o
+        // piso absoluto 1280×720, "1/2" sobre 1080p produz 720p (não 540p) e "1/4" também
+        // produz 720p — antes desta correção o log dizia 1/2 enquanto o ffmpeg recebia
+        // -s 1920x1080, que é exatamente a mentira que escondeu o no-op do divisor.
+        var after = ResolveOutput(_width, _height, 0, 0, _outputWidth, _outputHeight,
+            _scaleDivisor, _stretchToFit);
         Logging.Log.W("FfmpegEncoder",
             $"capacity guard: encoder atrás do realtime (speed={speedX:F2}x lag={outputLag:F0}s" +
-            $") — degradando escala 1/{oldDivisor} → 1/{next.ScaleDivisor} ({oldCodec} → {next.Label})");
+            $") — divisor 1/{oldDivisor} → 1/{next.ScaleDivisor} ({oldCodec} → {next.Label}), " +
+            $"resolução real {after.EncodedW}x{after.EncodedH}");
 
         if (_restartOverrideForCapacity != null)
             return _restartOverrideForCapacity();

@@ -34,7 +34,6 @@ public sealed class RamManager : IDisposable
     private const int MinReplaySec = 30;
     private const int ReplayStepSeconds = 30;
     private const int MinHeight = 720;
-    private const int MaxCq = 26;
 
     private const double PressureThreshold = 0.85;
     private const double CriticalThreshold = 0.93;
@@ -129,6 +128,19 @@ public sealed class RamManager : IDisposable
         return (ramCap, ramCapBytes);
     }
 
+    /// <summary>
+    /// Perfil de captura derivado do budget de RAM.
+    ///
+    /// <para><b>O CQ configurado é sagrado em todos os níveis.</b> Até 6.11 este
+    /// método fazia <c>Math.Max(configuredCq, 24)</c> em Balanced e
+    /// <c>Math.Max(configuredCq, 26)</c> em LowMemory, o que tornava os presets de
+    /// CQ 16 e 18 indistinguíveis em máquina com budget &lt;512MB — o usuário não
+    /// conseguia escolher a qualidade que tinha selecionado. A proteção de RAM é
+    /// feita por <c>maxrateKbps</c>, <c>bufsizeKbps</c>, <c>encodeW/H</c> e
+    /// <c>replaySec</c>, todos abaixo. CQ não entra nessa conta: CQ determina taxa
+    /// de compressão por quadro, não tamanho de buffer. A validação de faixa do CQ
+    /// (0..51) fica em <c>ConfigManager</c>.</para>
+    /// </summary>
     public static CaptureProfile BuildSettings(
         RamProfileLevel level,
         int captureWidth,
@@ -145,7 +157,7 @@ public sealed class RamManager : IDisposable
         switch (level)
         {
             case RamProfileLevel.LowMemory:
-                cq = Math.Min(Math.Max(configuredCq, 26), MaxCq);
+                cq = configuredCq;
                 maxrateKbps = Math.Min(configuredMaxrateKbps, 20000);
                 bufsizeKbps = Math.Min(configuredBufsizeKbps, 40000);
                 bframes = 0;
@@ -156,7 +168,7 @@ public sealed class RamManager : IDisposable
                 maxBufferBytes = 128 * 1024 * 1024;
                 break;
             case RamProfileLevel.Balanced:
-                cq = Math.Min(Math.Max(configuredCq, 24), MaxCq);
+                cq = configuredCq;
                 maxrateKbps = Math.Min(configuredMaxrateKbps, 35000);
                 bufsizeKbps = Math.Min(configuredBufsizeKbps, 70000);
                 bframes = 0;  // Always 0 — EmitPacket() assumes strict FIFO PTS

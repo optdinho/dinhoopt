@@ -37,6 +37,7 @@ export {
   getEnginePid,
   isEngineCapturing,
   isEngineRunning,
+  readEngineStatus,
   setEngineCapturing,
   startEngine,
   stopEngineProcess,
@@ -378,6 +379,7 @@ export function getCurrentStatus(): ClipsEngineStatus {
   const droppedFrames = e.droppedFrames || undefined
   const gpuBusyDrops = e.gpuBusyDrops || undefined
   const calibrationTier = e.calibrationTier || undefined
+  const codec = e.codec || undefined
   const micLevel = e.micLevel
   const watchdogOk = e.watchdogOk
   const memoryMB = e.memoryMB
@@ -405,6 +407,7 @@ export function getCurrentStatus(): ClipsEngineStatus {
     ...(droppedFrames ? { droppedFrames } : {}),
     ...(gpuBusyDrops ? { gpuBusyDrops } : {}),
     ...(calibrationTier ? { calibrationTier } : {}),
+    ...(codec ? { codec } : {}),
     ...(micLevel != null ? { micLevel } : {}),
     ...(watchdogOk != null ? { watchdogOk } : {}),
     ...(memoryMB != null ? { memoryMB } : {}),

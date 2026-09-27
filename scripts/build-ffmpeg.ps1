@@ -1,10 +1,33 @@
-# build-ffmpeg.ps1 — Build minimal ffmpeg for DiNho Clips Engine
-# Requires: MSYS2 with mingw-w64-x86_64-toolchain + nasm + x264 + x265 + ffnvcodec-headers
+﻿# build-ffmpeg.ps1 — Build minimal ffmpeg for DiNho Clips Engine
 # Output: resources/ffmpeg-custom/ffmpeg.exe (~20-30MB)
 #
-# Install dependencies:
+# The set of ffmpeg components enabled here is generated from
+# scripts/ffmpeg-requirements.json, which is the single source of truth derived
+# from what the C# engine and the TS main process actually pass to ffmpeg.
+# After the build, verify-ffmpeg.js fails the build if the produced binary is
+# missing any of them — a silently reduced ffmpeg is how a session ends up
+# falling back to libx264 with no visible error.
+#
+# Requires: MSYS2 + mingw-w64 toolchain. The package names below were VERIFIED against
+# packages.msys2.org, using the Build Dependencies / Dependencies of MSYS2's own
+# mingw-w64-x86_64-ffmpeg (9.0.2) as the reference list, because that is the exact set
+# its PKGBUILD links:
 #   pacman -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-nasm \
-#     mingw-w64-x86_64-x264 mingw-w64-x86_64-x265 mingw-w64-x86_64-ffnvcodec-headers
+#     mingw-w64-x86_64-pkgconf mingw-w64-x86_64-autotools mingw-w64-x86_64-cc \
+#     mingw-w64-x86_64-dlfcn mingw-w64-x86_64-x264 mingw-w64-x86_64-x265 \
+#     mingw-w64-x86_64-ffnvcodec-headers mingw-w64-x86_64-libvpl \
+#     mingw-w64-x86_64-svt-av1 mingw-w64-x86_64-amf-headers
+#
+# Names that are easy to get wrong (all three were wrong or unknown before this check):
+#   - oneVPL/QSV is mingw-w64-x86_64-libvpl (2.17.0). It *replaces* the older
+#     mingw-w64-x86_64-onevpl; there is no package named "libmfx" any more.
+#   - SVT-AV1 is mingw-w64-x86_64-svt-av1 — with a hyphen. "svtav1" finds nothing.
+#   - AMF is mingw-w64-x86_64-amf-headers (1.5.2) and it ships **headers only**
+#     (/mingw64/include/AMF/...), no amfcofw64 import lib. MSYS2's ffmpeg lists it as a
+#     build dep and has no amf runtime dep, so mirroring that is the supported path; if
+#     configure complains about amfcofw64, the AMF SDK has to be added by hand.
+# If one is missing, configure fails loudly instead of quietly shipping a binary
+# without that encoder family.
 
 param(
     [string]$Version = "9.0.1",
@@ -20,6 +43,36 @@ Write-Host "=== DiNho FFmpeg Custom Build ===" -ForegroundColor Cyan
 Write-Host "Version: $Version"
 Write-Host "Output:  $OutputDir"
 Write-Host ""
+
+# --- Step 0: preflight do toolchain ---
+# Sem isto a falha só apareceria lá no fim, dentro do configure do MSYS2, e a mensagem
+# seria do ffmpeg — não do pré-requisito que faltou.
+$msys2Root = if ($env:MSYS2_ROOT) { $env:MSYS2_ROOT } else { $MSYS2 }
+$BASH = Join-Path $msys2Root "usr\bin\bash.exe"
+$PACMAN = Join-Path $msys2Root "usr\bin\pacman.exe"
+
+if (-not (Test-Path $BASH) -or -not (Test-Path $PACMAN)) {
+    Write-Host "[0/6] MSYS2 nao encontrado em $msys2Root" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Instale o MSYS2 e os pacotes de build antes de rodar este script:" -ForegroundColor Yellow
+    Write-Host "  1) winget install MSYS2.MSYS2" -ForegroundColor Yellow
+    Write-Host "  2) Abrir o 'MSYS2 MinGW x64' e rodar:" -ForegroundColor Yellow
+    $pkgs = @(
+        "mingw-w64-x86_64-toolchain", "mingw-w64-x86_64-nasm", "mingw-w64-x86_64-pkgconf",
+        "mingw-w64-x86_64-autotools", "mingw-w64-x86_64-cc", "mingw-w64-x86_64-dlfcn",
+        "mingw-w64-x86_64-x264", "mingw-w64-x86_64-x265", "mingw-w64-x86_64-ffnvcodec-headers",
+        "mingw-w64-x86_64-libvpl", "mingw-w64-x86_64-svt-av1", "mingw-w64-x86_64-amf-headers"
+    )
+    Write-Host "     pacman -S --noconfirm" -ForegroundColor Yellow
+    for ($i = 0; $i -lt $pkgs.Count; $i += 3) {
+        $chunk = ($pkgs[$i..([Math]::Min($i + 2, $pkgs.Count - 1))] -join " ")
+        $suffix = if ($i + 3 -lt $pkgs.Count) { " \" } else { "" }
+        Write-Host "       $chunk$suffix" -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "Se o MSYS2 estiver em outro caminho, defina MSYS2_ROOT antes de chamar." -ForegroundColor Yellow
+    exit 1
+}
 
 # --- Step 1: Download ffmpeg source ---
 $BUILD_DIR = "$env:TEMP\ffmpeg-build"
@@ -45,6 +98,17 @@ Write-Host "[2/6] Generating build script..." -ForegroundColor Yellow
 
 $srcMsys = ($srcDir -replace '\\','/')
 $outMsys = ($OutputDir -replace '\\','/')
+
+$manifestPath = Join-Path $PSScriptRoot 'ffmpeg-requirements.json'
+$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+
+$encoders  = ($manifest.encoders -join ',')
+$decoders  = ($manifest.decoders -join ',')
+$muxers    = (($manifest.muxers -join ',') + ',concat,av1')
+$demuxers  = (($manifest.demuxers -join ',') + ',lavfi,image2,h264,hevc,av1')
+$filters   = ($manifest.filters -join ',')
+$bsfs      = ($manifest.bsfs -join ',')
+$protocols = ($manifest.protocols -join ',')
 
 $buildScript = @"
 #!/bin/bash
@@ -81,14 +145,17 @@ echo "=== Configuring ==="
   --disable-shared \
   --enable-libx264 \
   --enable-libx265 \
-  --enable-ffnvcodec \
-  --enable-encoder=h264_nvenc,hevc_nvenc,av1_nvenc,libx264,libx265,aac \
-  --enable-decoder=h264,hevc,av1,aac \
-  --enable-muxer=mp4,matroska,image2,adts,concat,h264,hevc,av1 \
-  --enable-demuxer=matroska,aac,concat,rawvideo,f32le,lavfi,h264,hevc,av1 \
-  --enable-filter=anlmdn,afftdn,scale,crop \
-  --enable-bsf=h264_mp4toannexb,aac_adtstoasc \
-  --enable-protocol=pipe \
+  --enable-nvenc \
+  --enable-libvpl \
+  --enable-amf \
+  --enable-libsvtav1 \
+  --enable-encoder=$encoders \
+  --enable-decoder=$decoders \
+  --enable-muxer=$muxers \
+  --enable-demuxer=$demuxers \
+  --enable-filter=$filters \
+  --enable-bsf=$bsfs \
+  --enable-protocol=$protocols \
   --enable-small \
   --pkg-config-flags=--static
 
@@ -126,7 +193,14 @@ echo ""
 echo "=== Done ==="
 "@
 
-$msysScriptPath = "C:\msys64\tmp\ffmpeg-build.sh"
+# O preflight (step 0) honra MSYS2_ROOT, mas estes dois paths eram C:\msys64 hardcoded: com
+# o MSYS2 instalado em outro lugar o script de build era gravado num tmp que o bash não
+# executaria ("/tmp/ffmpeg-build.sh" aponta para $MSYS2_ROOT/tmp, não para C:\msys64\tmp), e
+# as DLLs eram procuradas num diretório inexistente — o build só não quebrava em máquinas
+# com MSYS2 no caminho padrão, que é onde ninguém testaria.
+$msysTmp = Join-Path $msys2Root "tmp"
+if (-not (Test-Path $msysTmp)) { New-Item -ItemType Directory -Path $msysTmp -Force | Out-Null }
+$msysScriptPath = Join-Path $msysTmp "ffmpeg-build.sh"
 [System.IO.File]::WriteAllText($msysScriptPath, $buildScript, [System.Text.UTF8Encoding]::new($false))
 
 # --- Step 4: Build ---
@@ -157,7 +231,7 @@ if ($proc.ExitCode -ne 0) {
 
 # --- Step 5: Copy DLLs ---
 Write-Host "[5/6] Copying runtime DLLs..." -ForegroundColor Yellow
-$msysBin = "$MSYS2\mingw64\bin"
+$msysBin = Join-Path $msys2Root "mingw64\bin"
 
 # Find DLLs that ffmpeg.exe depends on (from MSYS2)
 $neededDlls = @(
@@ -185,10 +259,19 @@ foreach ($dll in $neededDlls) {
     }
 }
 
-# --- Step 6: Verify + Test ---
-Write-Host "[6/6] Verifying..." -ForegroundColor Yellow
+# --- Step 6: Verify ---
+Write-Host "[6/6] Verifying requirement gate..." -ForegroundColor Yellow
 $ffmpegPath = "$OutputDir\ffmpeg.exe"
 if (-not (Test-Path $ffmpegPath)) { throw "ffmpeg.exe not found at $ffmpegPath" }
+
+& $ffmpegPath -version 2>&1 | Select-Object -First 3 | ForEach-Object { Write-Host "  $_" }
+
+Write-Host ""
+$verifier = Join-Path $PSScriptRoot 'verify-ffmpeg.js'
+& node $verifier --ffmpeg $ffmpegPath --manifest $manifestPath
+if ($LASTEXITCODE -ne 0) {
+    throw "ffmpeg requirement gate FAILED (exit $LASTEXITCODE) — the build is missing components the engine needs. Do not ship it."
+}
 
 $ffmpegSize = [math]::Round((Get-Item $ffmpegPath).Length / 1MB, 1)
 $totalSize = [math]::Round((Get-ChildItem $OutputDir -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
@@ -198,11 +281,3 @@ Write-Host "  ffmpeg.exe: $ffmpegSize MB"
 Write-Host "  Total (with DLLs): $totalSize MB (was 231 MB)"
 Write-Host "  Saved: $([math]::Round(231 - $totalSize, 0)) MB ($([math]::Round((231 - $totalSize) / 231 * 100))%)"
 Write-Host "  Path: $OutputDir"
-
-# --- Step 6: Test ---
-Write-Host "[6/6] Testing ffmpeg..." -ForegroundColor Yellow
-& $ffmpegPath -version 2>&1 | Select-Object -First 3 | ForEach-Object { Write-Host "  $_" }
-
-Write-Host ""
-Write-Host "Encoders:" -ForegroundColor Cyan
-& $ffmpegPath -encoders 2>&1 | Select-String "h264_nvenc|hevc_nvenc|av1_nvenc|libx264|libx265|aac" | ForEach-Object { Write-Host "  $_" }

@@ -1,6 +1,7 @@
 using DiNho.Capture.Poc.Encoders;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -464,8 +465,55 @@ public sealed class FfmpegEncoderTests
     public void ComputeScaleTarget_FallbackDivisor_DoesNotReduceBelowUserOutput()
     {
         // Cascading fallback 1/2 + user 720p num capture 1920×1080 → mantém 1280×720.
-        // O alvo explícito do usuário é o piso — fallback troca encoder, nunca a resolução.
+        // O usuário em 720p está exatamente no piso absoluto, então não há degradação.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 2);
+        Assert.NotNull(result);
+        Assert.Equal((1280, 720), result!.Value);
+    }
+
+    // ── 6.11 Item 1: guard de capacidade com piso ABSOLUTO 1280×720 ────────
+    // A cascata de fallback (HW 1/2 → HW 1/4 → CPU 1/2) promete reduzir a resolução para
+    // segurar o fps, mas o divisor era neutralizado sempre que o coordinator mandava uma
+    // resolução explícita (> 0) — os passos "1/2" e "1/4" eram só rótulo no log. Agora o
+    // divisor APLICA sempre, mas o resultado nunca cai abaixo do piso absoluto 1280×720.
+    // Piso = 1280×720 (o mesmo cap que o perfil RAM LowMemory já usa, então é consistente).
+
+    [Theory]
+    [InlineData(2, 1280, 720)]   // 1/2 de 1080p = 960×540 → cai no piso
+    [InlineData(4, 1280, 720)]   // 1/4 = 480×270 → o piso absorve o degrau extra
+    public void ComputeScaleTarget_FallbackDivisor_AppliesDownToAbsoluteFloor(int divisor, int expW, int expH)
+    {
+        // Usuário em 1080p (acima do piso) + divisor → degrada até o piso, nunca abaixo.
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1920, 1080, divisor);
+        Assert.NotNull(result);
+        Assert.Equal((expW, expH), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_FallbackDivisor_UsesUserOutputWhenBelowFloor()
+    {
+        // Usuário em 960×540 (abaixo do piso) + 1/2 → o alvo do usuário vence; o piso
+        // absoluto não pode degradar um alvo que já está abaixo dele.
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 960, 540, 2);
+        Assert.NotNull(result);
+        Assert.Equal((960, 540), result!.Value);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_SubFloorCapture_IsNotReducedBelowItsOwnSize()
+    {
+        // Captura 960×540 (abaixo do piso): o piso não pode virar upscale, então o piso
+        // efetivo é o próprio tamanho da captura e o divisor 1/2 não tem para onde ir.
+        var result = FfmpegEncoder.ComputeScaleTarget(960, 540, 0, 0, 2);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ComputeScaleTarget_1440pUser_FallsToFloor()
+    {
+        // Usuário em 1440p + 1/2 → 1280×720 (o 1/2 daria 1280×720 exato; o clamp ao piso
+        // garante que nem 1/4 passa abaixo).
+        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1440, 2560, 1440, 2);
         Assert.NotNull(result);
         Assert.Equal((1280, 720), result!.Value);
     }
@@ -473,18 +521,21 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void ComputeScaleTarget_FallbackDivisor_AppliesWhenNative()
     {
-        // Sem resolução explícita do usuário (nativo) + fallback 1/2 → reduz para 960×540.
+        // Sem resolução explícita do usuário (nativo, outputW<=0) + fallback 1/2.
+        // Com o piso absoluto o 1/2 (960×540) sobe ao piso 1280×720.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 0, 0, 2);
         Assert.NotNull(result);
-        Assert.Equal((960, 540), result!.Value);
+        Assert.Equal((1280, 720), result!.Value);
     }
 
     [Fact]
-    public void ComputeScaleTarget_FallbackOnly_Downscales()
+    public void ComputeScaleTarget_FallbackOnly_StillHonorsFloor()
     {
+        // Nativo + 1/4 (480×270) → o piso absoluto segura em 1280×720. O degrau 1/4 é
+        // absorvido pelo piso: ele existe para re-tentar, mas não produz 480×270.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 0, 0, 4);
         Assert.NotNull(result);
-        Assert.Equal((480, 270), result!.Value);
+        Assert.Equal((1280, 720), result!.Value);
     }
 
     [Fact]
@@ -597,17 +648,33 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void ResolveOutput_NoCrop_FallbackDivisor_DownscaleInNv12()
     {
-        // Nativo + fallback 1/2 → 960×540 na NV12 (conversão), sem scale no vf.
+        // Nativo + fallback 1/2 → o piso absoluto segura em 1280×720 na NV12 (conversão),
+        // sem scale no vf. Sem o piso seria 960×540.
         var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 0, 0, 2);
-        Assert.Equal((960, 540), (r.EncodedW, r.EncodedH));
-        Assert.Equal((960, 540), (r.Nv12W, r.Nv12H));
+        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));
+        Assert.Null(r.ScaleW);
+    }
+
+    [Fact]
+    public void ResolveOutput_NoCrop_User1080p_FallbackDropsToAbsoluteFloor()
+    {
+        // 6.11 Item 1: este é o caso que estava QUEBRADO em produção. O coordinator sempre
+        // manda resolução explícita, e a condição antiga (outputW <= 0) anulava o divisor —
+        // então o passo "HW 1/2" da cascata caía em NV12 1920×1080 enquanto o log dizia 1/2.
+        // Com o piso absoluto o passo degrada de fato, e nunca abaixo de 720p.
+        var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 1920, 1080, 2);
+        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));
         Assert.Null(r.ScaleW);
     }
 
     [Fact]
     public void ResolveOutput_NoCrop_User720p_FallbackKeepsUserFloor()
     {
-        // User 720p é o piso — fallback 1/2 NÃO degrada a resolução escolhida (OBS philosophy).
+        // 6.11 Item 1: user 720p está exatamente no piso absoluto, então o fallback 1/2 não
+        // tem para onde reduzir. (Antes isso era garantido por ser "decisão do usuário";
+        // agora é garantido por já estar no piso.)
         var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 1280, 720, 2);
         Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
         Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));
@@ -779,9 +846,98 @@ public sealed class FfmpegEncoderTests
             Assert.DoesNotContain("-qp_i ", args);
             Assert.DoesNotContain("-qp_p ", args);
             Assert.Contains("-bf 0", args);
-            Assert.Contains("-g 120", args);
+            // GOP 60 desde o Item 4 (era 120 = 2 s de rollback no corte; agora 1 s).
+            Assert.Contains("-g 60", args);
+            Assert.DoesNotContain("-g 120", args);
             Assert.Contains("-filler_data 0", args);
             Assert.Contains("-enforce_hrd 0", args);
+        }
+    }
+
+    // ── Item 4: GOP 60 (rollback do corte 2s → 1s) ────────────────────────────
+    //
+    // Sem B-frames (item 7), um corte só pode começar num I-frame. Com -g 120 a 60fps o
+    // GOP é de 2 s, então o corte recua até 2 s do pedido — o usuário vê "o clip começa
+    // antes do que devia". Com -g 60 o rollback cai pela metade e o custo é irrelevante:
+    // dobrar a frequência de I-frame só acrescenta 1 bit de flag por frame mais o
+    // predictor intra de 1 frame a cada 60, e o --probe-vbv mediu ~48,5 Mbps de folga
+    // contra o teto de -maxrate, então sobra orçamento.
+    //
+    // Este teste cobre TODOS os codecs: NVENC, QSV, AMF, D3D12VA e os 2 de CPU. Alguns
+    // já vinham em 60 (QSV usava -g 60; libx265 usava keyint=60 no x265-params) — o
+    // teste existe para travar essa uniformidade e pegar qualquer codec novo que volte
+    // a 120 (ou que nem declare GOP, como o libx264 fazia: x264 default é keyint=250,
+    // pior que 120).
+    [Theory]
+    [InlineData("h264_nvenc")]
+    [InlineData("hevc_nvenc")]
+    [InlineData("av1_nvenc")]
+    [InlineData("h264_qsv")]
+    [InlineData("hevc_qsv")]
+    [InlineData("av1_qsv")]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    [InlineData("av1_amf")]
+    [InlineData("h264_d3d12va")]
+    [InlineData("hevc_d3d12va")]
+    [InlineData("av1_d3d12va")]
+    [InlineData("libx264")]
+    [InlineData("libx265")]
+    public void BuildEncoderTuneArgs_AllCodecs_UseGop60(string codec)
+        {
+            var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
+
+            // Nenhum codec pode declarar GOP de 2 s (nem o x265, que esconde o keyint em -x265-params).
+            Assert.DoesNotContain("-g 120", args);
+            Assert.DoesNotContain("-g 250", args);
+            Assert.DoesNotContain("keyint=120", args);
+            Assert.DoesNotContain("keyint_min=120", args);
+
+            // Todos declaram GOP de 1 s, e o valor é conferido EXATO — a versão anterior
+            // aceitava `args.Contains("-g 60") || args.Contains("keyint=60")`, que passaria
+            // igual se só metade das chains usasse {Gop} e as outras continuassem no literal
+            // 60. Agora cada ocorrência é contada e o valor comparado (mesma lição do
+            // `-profile:v main` do Item 9: Contains de prefixo é trava decorativa).
+            var declarados = DeclaredGopValues(args);
+            Assert.True(declarados.Length > 0, $"chain de {codec} não declara GOP nenhum: {args}");
+            Assert.All(declarados, v => Assert.Equal(FfmpegEncoder.Gop.ToString(), v));
+        }
+
+    /// <summary>Todos os valores de GOP declarados na chain: <c>-g N</c>, <c>keyint=N</c> e
+    /// <c>min-keyint=N</c>. Extrair por regex (e não por <c>Contains</c>) é o que impede a
+    /// trava decorativa: <c>Contains("-g 60")</c> também casa com <c>-g 600</c>, e
+    /// <c>Contains("main")</c> com <c>main10</c>.</summary>
+    private static string[] DeclaredGopValues(string args) =>
+        System.Text.RegularExpressions.Regex.Matches(args, @"(?<!min-)-g (\d+)")
+            .Select(m => m.Groups[1].Value)
+            .Concat(System.Text.RegularExpressions.Regex.Matches(args, @"(?<!min-)keyint=(\d+)")
+                .Select(m => m.Groups[1].Value))
+            .Concat(System.Text.RegularExpressions.Regex.Matches(args, @"min-keyint=(\d+)")
+                .Select(m => m.Groups[1].Value))
+            .ToArray();
+
+    // O GOP é o que limita o rollback do corte, então ele não pode depender do preset/cq:
+    // 60 frames @60fps = 1 s sempre, com qualquer preset e qualquer CQ.
+    [Fact]
+    public void BuildEncoderTuneArgs_Gop60_IsIndependentOfPresetAndCq()
+    {
+        foreach (var codec in new[] { "h264_nvenc", "av1_amf", "libx264" })
+        {
+            foreach (var preset in new[] { "p1", "p5", "p7", "speed", "quality" })
+            {
+                foreach (var cq in new[] { 16.0, 20.0, 22.0 })
+                {
+                    var args = FfmpegEncoder.BuildEncoderTuneArgs(
+                        codec, cq, 40000, 80000, 2, 32, preset);
+                    // Valor EXATO, pela mesma razão do teste acima: a forma anterior
+                    // (`Contains("-g 60") || Contains("keyint=60")`) passaria com metade das
+                    // chains no literal e a outra metade em {Gop}, e ainda passaria com
+                    // "-g 600".
+                    var declarados = DeclaredGopValues(args);
+                    Assert.True(declarados.Length > 0, $"{codec} não declara GOP: {args}");
+                    Assert.All(declarados, v => Assert.Equal(FfmpegEncoder.Gop.ToString(), v));
+                }
+            }
         }
     }
 
@@ -890,13 +1046,17 @@ public sealed class FfmpegEncoderTests
     [InlineData("av1_amf")]
     [InlineData("h264_amf")]
     [InlineData("hevc_amf")]
-    public void BuildEncoderTuneArgs_AmfCodecs_UsesGop2Seconds(string codec)
+    public void BuildEncoderTuneArgs_AmfCodecs_UseGop60(string codec)
     {
-        // GOP 120 = keyframe/2s @60fps — padrão de gravação AMF (GPUOpen), OBS e NVENC. Menos
-        // I-frames (~10% mais compressão) com seek/trim ainda em intervalos de 2s.
+        // Este teste fixava "-g 120" como se fosse um BENEFÍCIO ("~10% mais compressão com
+        // seek em intervalos de 2s"). O Item 4 trocou a premissa: sem B-frames, GOP 120
+        // significava que TODO corte recuava até 2 s para o I-frame anterior — sintoma que o
+        // usuário percebia. A economia de bitrate era de ~<1% (o --probe-vbv mediu 48,5 Mbps
+        // de folga contra o teto de -maxrate), então trocar 2 s de erro visível por <1% de
+        // arquivo é ganho líquido. O nome foi trocado junto: "UsesGop2Seconds" agora mentiria.
         var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
-        Assert.Contains("-g 120", args);
-        Assert.DoesNotContain("-g 60", args);
+        Assert.Contains("-g 60", args);
+        Assert.DoesNotContain("-g 120", args);
     }
 
     [Theory]
@@ -907,6 +1067,8 @@ public sealed class FfmpegEncoderTests
     {
         // vbr_peak: -b:v é o alvo médio e -maxrate/-bufsize o teto VBV — o CQP puro (sem alvo)
         // estourou ~180 Mbps na RX 5700 XT (cq 18) → VCN + spill 10x, clip de 94s ≈ 930 MB.
+        // 6.11 Item 2: mediu-se que o -bufsize não tem efeito nessas chains (ver
+        // BuildEncoderTuneArgs_KeepsConfiguredBufsizeForEveryCodec) — o front manda, e é o que vai.
         var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 22, 40000, 80000, 2, 32, "p4");
         Assert.Contains("-b:v 14400K", args);
         Assert.Contains("-maxrate 40000K", args);
@@ -1526,5 +1688,410 @@ public sealed class FfmpegEncoderTests
                 () => throw BusyMapException(),
                 () => throw new InvalidOperationException("device removed"),
                 out _));
+    }
+
+    // ── 6.11 Item 2: VBV (bufsize) — medido, e a medição disse NÃO MEXER ───────
+    // Hipótese original do plano: bufsize = 2 x maxrate (130 Mbit no preset muito-alta) dá
+    // ~5,5s de folga, o encoder nunca paga por pico de quadro, e daí viriam os arquivos
+    // inchados / ~79 Mbps médios.
+    //
+    // MEDIÇÃO (--probe-vbv, RTX 5050, driver 32.0.16.1714, ffmpeg 9.0.1 Gyan full,
+    // 2026-09-25, cq 16 / 1920x1080@60 / maxrate 65000): a hipótese é FALSA p/ as chains
+    // atuais. h264_nvenc devolveu 3019 KiB byte-idêntico com bufsize 130000, 64000, 48000 e
+    // 32000 K — bitrate efetivo 16,5 Mbps contra teto de 65 Mbps (48,5 Mbps de folga), então
+    // o VBV nunca aperta. hevc_nvenc e av1_nvenc idem. Com -rc vbr -b:v 0 o NVENC só consulta
+    // o VBV ao atingir o -maxrate, e a chain nunca chega lá. A referência de "~180 Mbps" que
+    // motivou a hipótese vinha do CQP PURO, que a chain não usa mais (hoje é vbr_peak + -b:v).
+    //
+    // Consequência: o bufsize configurado é preservado em todos os codecs. Os testes abaixo
+    // travam esse comportamento para ninguém "otimizar" o VBV sem medir de novo.
+
+    [Theory]
+    [InlineData("h264_nvenc", 65000, 130000)]
+    [InlineData("hevc_nvenc", 65000, 130000)]
+    [InlineData("av1_nvenc", 65000, 130000)]
+    [InlineData("h264_amf", 65000, 130000)]
+    [InlineData("hevc_amf", 55000, 110000)]
+    [InlineData("av1_amf", 40000, 80000)]
+    [InlineData("h264_qsv", 40000, 80000)]
+    [InlineData("hevc_qsv", 40000, 80000)]
+    [InlineData("av1_qsv", 40000, 80000)]
+    [InlineData("libx264", 30000, 60000)]
+    [InlineData("libx265", 30000, 60000)]
+    public void BuildEncoderTuneArgs_KeepsConfiguredBufsizeForEveryCodec(
+        string codec, int maxrateKbps, int bufsizeKbps)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 18, maxrateKbps, bufsizeKbps, 2, 16, "p5");
+
+        Assert.Contains($"-bufsize {bufsizeKbps}K", args);
+    }
+
+    // Seam de probe: só o --probe-vbv força candidatos, nunca a produção.
+    [Theory]
+    [InlineData(32000)]
+    [InlineData(48000)]
+    public void BuildEncoderTuneArgs_HonorsVbvOverrideForProbeOnly(int vbvOverride)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "h264_nvenc", 18, 65000, 130000, 2, 16, "p5", vbvOverrideKbps: vbvOverride);
+
+        Assert.Contains($"-bufsize {vbvOverride}K", args);
+        Assert.DoesNotContain("-bufsize 130000K", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_VbvOverrideMatchingConfiguredIsNoop()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "h264_nvenc", 18, 65000, 130000, 2, 16, "p5", vbvOverrideKbps: 130000);
+
+        Assert.Contains("-bufsize 130000K", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_AllCodecsEmitAtMostOneBufsize()
+    {
+        string[] codecs = [
+            "libx264", "libx265",
+            "h264_nvenc", "hevc_nvenc", "av1_nvenc",
+            "h264_amf", "hevc_amf", "av1_amf",
+            "h264_qsv", "hevc_qsv", "av1_qsv",
+            "h264_d3d12va", "hevc_d3d12va", "av1_d3d12va",
+        ];
+
+        foreach (var codec in codecs)
+        {
+            var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 20, 40000, 80000, 2, 16, "p5");
+            var count = System.Text.RegularExpressions.Regex.Matches(args, @"-bufsize ").Count;
+            Assert.True(count <= 1, $"{codec} emitiu {count} x -bufsize");
+        }
+    }
+
+    // ── Item 9: main10 em hevc_nvenc × entrada NV12 8-bit ──────────────────
+    //
+    //hevc_nvenc pede -profile:v main10 (FfmpegEncoder.cs:315) e a entrada do
+    // pipeline é -f rawvideo -pix_fmt nv12 (FfmpegEncoder.cs:627) = 8 bits. Bitstream de
+    // 10 bits gerado de um sinal de 8 bits não ganha qualidade de lugar nenhum, só custa o
+    // upconvert. Estes testes fixam o FATO (main10 está em produção, incondicional) e o seam
+    // que o --probe-hevc-profile precisa para A/B sem tocar na produção.
+
+    [Fact]
+    public void BuildEncoderTuneArgs_HevcNvenc_EmitsMain_NotMain10()
+    {
+        // MEDIDO (--probe-hevc-profile, RTX 5050, ffmpeg 9.0.1, 2026-09-26, cq 18 /
+        // 1920x1080@60 / maxrate 55000): a chain de produção com `-profile:v main10` produz
+        // um arquivo que difere do `-profile:v main` em EXATAMENTE 4 BYTES — o general_profile_idc
+        // no VPS NAL (0x21 Main vs 0x22 Main10). Os outros 4.134.825 bytes são bit-idênticos.
+        // Ou seja: o NVENC NÃO converte 8→10 bit; a flag só reescreve a tag do header, e o
+        // stream sai ROTULADO como Main 10 contendo amostras de 8 bits. Byte 0% (critério era
+        // ≥5%), fps -1,2% (ruído). Removido.
+        //
+        // Este teste ANTIGO fixava `main10` — ele caracterizava o estado que a medição refutou.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("hevc_nvenc", 18, 55000, 110000, 0, 16, "p5");
+
+        Assert.Contains("-profile:v main", args);
+        Assert.DoesNotContain("main10", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_HevcNvenc_Main10_StillAvailableThroughProbeSeam()
+    {
+        // O override continua existindo de propósito: se algum dia a captura virar P010 de
+        // verdade, main10 volta a ter o que ganhar e o A/B precisa existir para provar isso.
+        // Remover a flag sem remover o seam apagaria a forma de checar a hipótese.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "hevc_nvenc", 18, 55000, 110000, 0, 16, "p5", profileOverride: "main10");
+
+        Assert.Contains("-profile:v main10", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_HevcNvenc_ProfileOverride_ReplacesMain_ForProbeOnly()
+    {
+        // O probe precisa medir `main` contra main10 na MESMA chain, e para isso a produção
+        // precisa de um override. Sem ele o A/B seria impossível sem editar a produção entre
+        // uma medição e outra.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "hevc_nvenc", 18, 55000, 110000, 0, 16, "p5", profileOverride: "main10");
+
+        Assert.Contains("-profile:v main10", args);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(args, @"-profile:v \S+"));
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_HevcNvenc_ProfileOverrideMain_IsNoop()
+    {
+        // main explícito tem que ser byte-idêntico ao default — senão o "controle" do A/B
+        // difere do tratamento e o delta medido é de outra chain.
+        var withOverride = FfmpegEncoder.BuildEncoderTuneArgs(
+            "hevc_nvenc", 18, 55000, 110000, 0, 16, "p5", profileOverride: "main");
+        var semOverride = FfmpegEncoder.BuildEncoderTuneArgs(
+            "hevc_nvenc", 18, 55000, 110000, 0, 16, "p5");
+
+        Assert.Equal(semOverride, withOverride);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_ProfileOverride_DoesNotTouchOtherCodecs()
+    {
+        // O override é do probe do HEVC. Se vazasse para h264_nvenc, o A/B do profile mediria
+        // duas variáveis ao mesmo tempo (profile E codec) e o número não diria nada.
+        foreach (var codec in new[] { "h264_nvenc", "av1_nvenc", "libx264", "hevc_amf" })
+        {
+            var semOverride = FfmpegEncoder.BuildEncoderTuneArgs(codec, 18, 55000, 110000, 0, 16, "p5");
+            var comOverride = FfmpegEncoder.BuildEncoderTuneArgs(
+                codec, 18, 55000, 110000, 0, 16, "p5", profileOverride: "main10");
+
+            Assert.Equal(semOverride, comOverride);
+        }
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_ProfileOverride_NeverEmitsTwoProfiles()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "hevc_nvenc", 18, 55000, 110000, 0, 16, "p5", profileOverride: "main");
+
+        // main10 é prefixo textual de "main": contar por substring daria 2 e esconderia o bug.
+        var matches = System.Text.RegularExpressions.Regex.Matches(args, @"-profile:v \S+");
+        Assert.Single(matches);
+        Assert.Equal("-profile:v main", matches[0].Value);
+    }
+
+    [Fact]
+    public void ComputeAmfTargetKbps_MatchesDocumentedCurve()
+    {
+        Assert.Equal(23400, FfmpegEncoder.ComputeAmfTargetKbps(65000));
+        Assert.Equal(19800, FfmpegEncoder.ComputeAmfTargetKbps(55000));
+        Assert.Equal(6000, FfmpegEncoder.ComputeAmfTargetKbps(100));   // piso
+        Assert.Equal(50000, FfmpegEncoder.ComputeAmfTargetKbps(999999)); // teto
+    }
+
+    // ── 6.11 Item 3: -usage da AMF ──────────────────────────────────────────
+    // Sem -usage o ffmpeg usa AMF_VIDEO_USAGE_TRANSCODING, cujo LOWLATENCY_MODE=false
+    // significa "precisa de >=3 frames antes de qualquer output" e cujo VBV default é
+    // 20 Mbit. Captura de jogo é o caso de baixa latência: a doc da AMD lista
+    // VIDEO_GAME_STREAMING como o usage de "video game streaming". Ver NormalizeAmfUsage.
+
+    [Theory]
+    [InlineData("transcoding")]
+    [InlineData("ultralowlatency")]
+    [InlineData("lowlatency")]
+    [InlineData("webcam")]
+    [InlineData("high_quality")]
+    [InlineData("lowlatency_high_quality")]
+    [InlineData("WEBCAM")]          // case-insensitive
+    [InlineData("  lowlatency  ")]  // trim
+    public void NormalizeAmfUsage_AcceptsFfmpeg9UsageNames(string usage)
+    {
+        Assert.Equal(usage.Trim().ToLowerInvariant(), FfmpegEncoder.NormalizeAmfUsage(usage));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("game_streaming")]  // não existe no ffmpeg 9
+    [InlineData("low_latency")]     // grafia do header C, não do switch do ffmpeg
+    [InlineData("lulz")]
+    public void NormalizeAmfUsage_UnknownOrUnset_Means_DoNotEmit(string? usage)
+    {
+        // Vazio = "não configurado" = a chain NÃO emite -usage. A versão anterior devolvia
+        // "transcoding" aqui, com a justificativa de que era o default do ffmpeg; o binário
+        // embarcado reporta (default -1), ou seja, o ffmpeg não emitia nada. Chutar um
+        // valor aqui é mudar RC/lookahead da captura AMD às cegas, sem hardware para medir.
+        Assert.Equal("", FfmpegEncoder.NormalizeAmfUsage(usage));
+    }
+
+    /// <summary>
+    /// O contrato de não-mudança: sem usage configurado, os args da chain AMF têm de ser
+    /// <b>idênticos</b> aos de antes do Item 3 — sem <c>-usage</c> e com o <c>-rc vbr_peak</c>
+    /// que a chain já emitia. É este teste, e não o default do config, que garante que o
+    /// Item 3 não mexe no comportamento AMD.
+    /// </summary>
+    [Theory]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    [InlineData("av1_amf")]
+    public void BuildEncoderTuneArgs_AmfUnsetUsage_OmitsUsage_AndKeepsThePreItem3Rc(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            codec, 18, 55000, 110000, 0, 16, "p5", amfUsage: "");
+
+        Assert.DoesNotContain("-usage", args);
+        Assert.Contains("-rc vbr_peak", args);
+    }
+
+    [Fact]
+    public void NormalizeAmfRc_UnsetUsage_StaysVbrPeak()
+    {
+        Assert.Equal("vbr_peak", FfmpegEncoder.NormalizeAmfRc(""));
+    }
+
+    /// <summary>
+    /// O default da API precisa ser "não configurado", não <c>transcoding</c> — este é o
+    /// teste que o <c>AmfUnsetUsage_OmitsUsage</c> acima NÃO cobre. Todos os testes do Item 3
+    /// passam <c>amfUsage:</c> por argumento explícito, então nenhum deles tocava o valor
+    /// padrão do parâmetro nem o inicializador do campo: a suíte ficava verde com
+    /// <c>transcoding</c> hardcoded nos dois, e qualquer call site novo que omitisse o
+    /// argumento receberia <c>-usage transcoding</c> em silêncio. Mesma classe de erro do
+    /// <c>main10</c> (Item 9) e do <c>-rc vbr_peak</c> (Item 8): opção que não falha e faz o
+    /// usuário acreditar que escolheu. O binário real responde <c>-usage (default -1)</c>,
+    /// ou seja "não definido pelo app" — não <c>transcoding</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    [InlineData("av1_amf")]
+    public void BuildEncoderTuneArgs_AmfUsageOmitted_OmitsUsage_NotTranscoding(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 18, 55000, 110000, 0, 16, "p5");
+
+        Assert.DoesNotContain("-usage", args);
+        Assert.Contains("-rc vbr_peak", args);
+    }
+
+    /// <summary>
+    /// O mesmo contrato no caminho de produção: um encoder recém-construído, antes de
+    /// qualquer <c>SetQualityParams</c>, não pode já sair com <c>transcoding</c> no
+    /// <c>-usage</c>. É o inicializador de <c>_amfUsage</c> que segura esse default.
+    /// <para><b>Precisa do construtor real:</b> <c>RuntimeHelpers.GetUninitializedObject</c>
+    /// <b>não roda inicializadores de campo</b>, então deixaria <c>_amfUsage</c> em <c>null</c>
+    /// e o teste passaria com o bug presente — falso verde. O ctor sem hardware só aloca o
+    /// channel, não toca D3D nem ffmpeg.</para>
+    /// </summary>
+    [Fact]
+    public void FreshEncoder_AmfUsageIsUnset_BeforeAnySetQualityParams()
+    {
+        using var encoder = new FfmpegEncoder(useHardware: false);
+
+        var args = encoder.BuildTuneArgsForTest("h264_amf");
+
+        Assert.DoesNotContain("-usage", args);
+    }
+
+    /// <summary>
+    /// E <c>SetQualityParams</c> sem <c>amfUsage</c> (<c>null</c> = "não informado") não pode
+    ///introduzir o <c>transcoding</c> que acabamos de remover do default: o valor continua o
+    /// que já era, e o que já era é "não configurado".
+    /// </summary>
+    [Fact]
+    public void SetQualityParams_WithoutAmfUsage_DoesNotIntroduceTranscoding()
+    {
+        using var encoder = new FfmpegEncoder(useHardware: false);
+        encoder.SetQualityParams(18, 55000, 110000, 0, 4, "p5", codec: "h264_amf", amfUsage: null);
+
+        var args = encoder.BuildTuneArgsForTest("h264_amf");
+
+        Assert.DoesNotContain("-usage", args);
+    }
+
+    // O par usage/rc canônico da AMF: LCVBR é o default de ultralowlatency/lowlatency,
+    // PCVBR (vbr_peak) o dos demais.
+    [Theory]
+    [InlineData("transcoding", "vbr_peak")]
+    [InlineData("webcam", "vbr_peak")]
+    [InlineData("high_quality", "vbr_peak")]
+    [InlineData("lowlatency_high_quality", "vbr_peak")]
+    [InlineData("ultralowlatency", "vbr_latency")]
+    [InlineData("lowlatency", "vbr_latency")]
+    public void NormalizeAmfRc_DerivesRateControlFromUsage(string usage, string expectedRc)
+    {
+        Assert.Equal(expectedRc, FfmpegEncoder.NormalizeAmfRc(usage));
+    }
+
+    [Theory]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    [InlineData("av1_amf")]
+    public void BuildEncoderTuneArgs_AmfCodecs_EmitUsageAndRc(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            codec, 18, 55000, 110000, 0, 16, "p5", amfUsage: "webcam");
+
+        Assert.Contains("-usage webcam", args);
+        Assert.Contains("-rc vbr_peak", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_AmfUsageUltralowlatencySwitchesToVbrLatency()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "h264_amf", 18, 55000, 110000, 0, 16, "p5", amfUsage: "ultralowlatency");
+
+        Assert.Contains("-usage ultralowlatency", args);
+        Assert.Contains("-rc vbr_latency", args);
+        Assert.DoesNotContain("-rc vbr_peak", args);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_InvalidAmfUsage_DoesNotGuessAValue()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            "h264_amf", 18, 55000, 110000, 0, 16, "p5", amfUsage: "game_streaming");
+
+        Assert.DoesNotContain("-usage", args);
+        Assert.Contains("-rc vbr_peak", args);
+    }
+
+    // -usage é exclusivo da AMF: nenhum outro codec pode receber a opção.
+    [Theory]
+    [InlineData("h264_nvenc")]
+    [InlineData("hevc_nvenc")]
+    [InlineData("av1_nvenc")]
+    [InlineData("h264_qsv")]
+    [InlineData("libx264")]
+    [InlineData("h264_d3d12va")]
+    public void BuildEncoderTuneArgs_NonAmfCodecsNeverGetUsage(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(
+            codec, 18, 55000, 110000, 0, 16, "p5", amfUsage: "webcam");
+
+        Assert.DoesNotContain("-usage", args);
+    }
+
+    // ── libsvtav1: preset só numérico, e sem -profile:v high ──────────────────────────
+    //
+    // O `_ =>` de BuildEncoderTuneArgs (fallback de CPU) emite os args do x264 para qualquer
+    // codec não listado, e `libsvtav1` não era listado. Como o engine cai nele de verdade
+    // (EncoderManager.cs:282-283, "av1" => ?? "libsvtav1" para GPU sem AV1 hw), a captura
+    // passava dois args que o SVT-AV1 recusa. Medido no binário embarcado (ffmpeg 9.0.1):
+    //   -preset fast        → "Undefined constant or missing '(' in 'fast'" → exit -22
+    //   -profile:v high     → "Profile 1 requires 4:4:4 color format"        → exit -22
+    //   -preset 8, sem profile → exit 0
+    // É a mesma classe do `-rc vbr_peak` (Item 8) e do `main10` (Item 9): nome de uma família
+    // usado em outra, e a falha é no primeiro uso real, não no CI.
+    [Theory]
+    [InlineData("libsvtav1")] // SVT-AV1: `-preset <int> (from -2 to 13)`, sem constantes nomeadas
+    public void BuildEncoderTuneArgs_EncodersWithNumericOnlyPreset_EmitNumericPreset(string codec)
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs(codec, 18, 40000, 80000, 0, 4, "p5");
+
+        var match = Regex.Match(args, @"-preset\s+(\S+)");
+        Assert.True(match.Success, $"nenhum -preset nos args de {codec}: {args}");
+        Assert.Matches(@"^-?\d+$", match.Groups[1].Value);
+    }
+
+    [Fact]
+    public void BuildEncoderTuneArgs_Libsvtav1_DoesNotEmitTheH264Profile()
+    {
+        // No AV1 o ffmpeg traduz "high" para o profile 1, que exige 4:4:4 — e a entrada da
+        // captura é NV12 4:2:0, então o encoder não abre. O x264 é que usa "high" de verdade.
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("libsvtav1", 18, 40000, 80000, 0, 4, "p5");
+
+        Assert.DoesNotContain("-profile:v high", args);
+    }
+
+    /// <summary>
+    /// O GOP tem de ser o mesmo nas chains de software, senão o trim por keyframe (Item 4)
+    /// volta a ter rollback de 2 s justamente no codec de CPU.
+    /// </summary>
+    [Fact]
+    public void BuildEncoderTuneArgs_Libsvtav1_UsesTheProjectGop()
+    {
+        var args = FfmpegEncoder.BuildEncoderTuneArgs("libsvtav1", 18, 40000, 80000, 0, 4, "p5");
+
+        Assert.Contains($"-g {FfmpegEncoder.Gop}", args);
+        Assert.Contains($"-keyint_min {FfmpegEncoder.Gop}", args);
     }
 }

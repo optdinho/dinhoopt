@@ -28,6 +28,7 @@ let _engineCapturing = false
 let _engineStartTime = 0
 let _engineCaptureBackend = ''
 let _engineEncoder = ''
+let _engineCodec = ''
 let _engineReplayBufferBytes = 0
 let _engineEstimatedRamMB = 0
 let _engineDiskSpaceOk = true
@@ -62,6 +63,7 @@ function statusUpdater(src: Record<string, unknown>): void {
   if (typeof src.replayTimeSeconds === 'number') C.engineReplayTimeSeconds = src.replayTimeSeconds
   if (typeof src.captureBackend === 'string') _engineCaptureBackend = src.captureBackend
   if (typeof src.encoder === 'string') _engineEncoder = src.encoder
+  if (typeof src.codec === 'string') _engineCodec = src.codec
   if (typeof src.estimatedRamMB === 'number') _engineEstimatedRamMB = src.estimatedRamMB
   if (typeof src.diskSpaceOk === 'boolean') _engineDiskSpaceOk = src.diskSpaceOk
   if (typeof src.game === 'string') _engineCurrentGame = src.game
@@ -128,6 +130,7 @@ export function readEngineStatus(): {
   startTime: number
   captureBackend: string
   encoder: string
+  codec: string
   replayBufferBytes: number
   estimatedRamMB: number
   diskSpaceOk: boolean
@@ -151,6 +154,7 @@ export function readEngineStatus(): {
     startTime: _engineStartTime,
     captureBackend: _engineCaptureBackend,
     encoder: _engineEncoder,
+    codec: _engineCodec,
     replayBufferBytes: _engineReplayBufferBytes,
     estimatedRamMB: _engineEstimatedRamMB,
     diskSpaceOk: _engineDiskSpaceOk,
@@ -323,7 +327,15 @@ export async function startEngine(): Promise<{ success: boolean; error?: string 
 
 export function stopEngineProcess(): void {
   const proc = _engineProcess
-  if (!proc) return
+  if (!proc) {
+    // Idempotência: sem processo para matar, o estado ainda precisa cair. O early-return
+    // antigo deixava o `_engineCodec` para trás justamente neste caminho (engine já morto,
+    // stop chamado de novo), que é o caso comum depois que o processo cai sozinho.
+    _engineRunning = false
+    _engineCapturing = false
+    _engineCodec = ''
+    return
+  }
   try {
     if (isPipeConnected()) {
       sendPipeCommand('stopEngine').catch(() => {})
@@ -347,6 +359,11 @@ export function stopEngineProcess(): void {
     _engineRunning = false
     _engineCapturing = false
     _engineProcess = null
+    // O codec é estado do engine, não um cache: com o processo morto ele não descreve mais
+    // nada, e o contrato de `ClipsEngineStatus.codec` promete "ausente = o engine não rodou
+    // ainda ou parou". O Item 8 usa esse campo para escolher o encoder do trim/merge, então
+    // deixar o valor antigo mandava o editor para o caminho de hardware com o engine parado.
+    _engineCodec = ''
   }
 }
 

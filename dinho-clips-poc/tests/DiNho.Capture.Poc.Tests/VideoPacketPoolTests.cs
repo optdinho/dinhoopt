@@ -102,13 +102,19 @@ public sealed class VideoPacketPoolTests : IDisposable
     [Fact]
     public void Return_TooSmallForRent_IsDropped()
     {
-        // Array pequeno no pool não serve para um Rent maior — é descartado
-        // e um novo é alocado.
-        var small = VideoPacketPool.Rent(100);
+        // Array pequeno no pool não serve para um Rent maior — é descartado e um novo é alocado.
+        //
+        // O array de 100 bytes é montado DIRETO, não via Rent: o pool é um estático global e
+        // uma thread de captura vazada pode devolver um buffer grande entre o reset do
+        // construtor e o corpo do teste. Se o "small" viesse de Rent(100), o pool o
+        // devolveria (comprimento >= 100), o Return o recolocaria, e o Rent(10KB) abaixo o
+        // reutilizaria — legitimamente, sem bug nenhum. O teste falharia por estado herdado.
+        var small = new byte[100];
         VideoPacketPool.Return(small);
 
         var big = VideoPacketPool.Rent(10 * 1024);
         Assert.NotSame(small, big);
+        Assert.True(big.Length >= 10 * 1024);
         VideoPacketPool.Return(big);
     }
 

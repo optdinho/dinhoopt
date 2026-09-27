@@ -10,3 +10,11 @@ insert_final_newline = true
 
 [*.md]
 trim_trailing_whitespace = false
+
+# `npm run build:ffmpeg` roda `powershell` (Windows PowerShell 5.1), que decodifica .ps1
+# sem BOM como ANSI (Windows-1252). Sem o BOM, os acentos e travessões do script viram
+# bytes que fecham a string na linha errada e o script nem chega a rodar: o comando
+# documentado morria com "Token 'the' inesperado" em vez de chegar ao preflight. O pwsh 7
+# não reproduz isso, então só de checar a sintaxe no pwsh dá falso OK.
+[*.ps1]
+charset = utf-8-bom

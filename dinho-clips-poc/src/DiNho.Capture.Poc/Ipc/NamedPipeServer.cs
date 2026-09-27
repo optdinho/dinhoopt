@@ -91,6 +91,13 @@ public sealed class EngineStatusValue
     [JsonPropertyName("encoder")]
     public string Encoder { get; set; } = "NONE";
 
+    /// <summary>
+    /// Codec de ffmpeg em uso. O renderer precisa dele para re-encodar o clipe no editor
+    /// (trim/merge) com a mesma família de hardware em vez de fixar libx264.
+    /// </summary>
+    [JsonPropertyName("codec")]
+    public string Codec { get; set; } = "";
+
     [JsonPropertyName("diskSpaceOk")]
     public bool DiskSpaceOk { get; set; } = true;
 

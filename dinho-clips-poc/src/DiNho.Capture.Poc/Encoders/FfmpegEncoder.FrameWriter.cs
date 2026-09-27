@@ -40,6 +40,14 @@ internal sealed partial class FfmpegEncoder
         private readonly Stack<Frame> _framePool = new();
         private bool _stop;
         private volatile bool _abort;
+        /// <summary>
+        /// Stop() já retornou. A partir daqui a thread do writer não pode mais devolver
+        /// frames ao VideoPacketPool (estático global): se ela está viva, é porque o join
+        /// estourou e o frame em voo é órfão — o buffer vai para o GC em vez de entrar no
+        /// pool de outro dono. Ver Stop().
+        /// </summary>
+        private volatile bool _orphaned;
+        private int _threadStarted;
         private int _droppedOverflow;
         private readonly Thread _thread;
 
@@ -62,7 +70,6 @@ internal sealed partial class FfmpegEncoder
             _onWriteFailed = onWriteFailed ?? throw new ArgumentNullException(nameof(onWriteFailed));
             _maxQueued = Math.Max(1, maxQueued);
             _thread = new Thread(Loop) { IsBackground = true, Name = "FfmpegInput" };
-            _thread.Start();
         }
 
         /// <summary>Frames atualmente enfileirados (aguardando escrita).</summary>
@@ -73,6 +80,13 @@ internal sealed partial class FfmpegEncoder
                 lock (_sync) return _queue.Count;
             }
         }
+
+        /// <summary>
+        /// A thread do writer ainda está viva? Exposto para os testes distinguirem "o join
+        /// estourou" de "o join succeeded" — é a diferença entre o frame em voo virar
+        /// órfão (suprimido) ou ser devolvido ao pool normalmente.
+        /// </summary>
+        internal bool IsAliveForTest => _thread.IsAlive;
 
         /// <summary>Frames sacrificados por drop-oldest (fila cheia).</summary>
         internal int DroppedOverflow => Volatile.Read(ref _droppedOverflow);
@@ -88,6 +102,8 @@ internal sealed partial class FfmpegEncoder
             lock (_sync)
             {
                 if (_stop) return false;
+
+                EnsureThreadStarted();
 
                 if (_queue.Count >= _maxQueued)
                 {
@@ -113,6 +129,10 @@ internal sealed partial class FfmpegEncoder
         /// </summary>
         internal void Stop(bool abort, int joinMs)
         {
+            // Sobe a thread mesmo sem frame na fila: Stop() pode ser chamado num writer
+            // que nunca enfileirou nada, e o join abaixo precisa de uma thread viva para
+            // ser significativo (e o loop de qualquer forma sairia em Monitor.Wait).
+            EnsureThreadStarted();
             lock (_sync)
             {
                 _abort = abort;
@@ -121,6 +141,14 @@ internal sealed partial class FfmpegEncoder
             }
             if (_thread.IsAlive && Thread.CurrentThread != _thread)
                 _thread.Join(joinMs);
+            // O join PODE estourar: a thread fica presa no write em voo, e o timeout do
+            // write de warm-up (StdinWriteWarmupTimeoutMs = 10s) é ordens de grandeza maior
+            // que o join do FfmpegEncoder.Dispose (1s). A partir daqui o owner já saiu — se a
+            // thread voltar a tocar o pool depois deste ponto, o Return tardio entra num pool
+            // estático GLOBAL que outro dono já pode estar usando (na suíte, isso quebrava
+            // VideoPacketPoolTests com "NotSame: values are the same instance").
+            // Sinaliza: o frame em voo da thread vira órfão e vai para o GC.
+            _orphaned = true;
             lock (_sync)
             {
                 while (_queue.Count > 0)
@@ -129,6 +157,12 @@ internal sealed partial class FfmpegEncoder
         }
 
         public void Dispose() => Stop(abort: true, joinMs: 0);
+
+        private void EnsureThreadStarted()
+        {
+            if (Interlocked.Exchange(ref _threadStarted, 1) == 0)
+                _thread.Start();
+        }
 
         private void Loop()
         {
@@ -147,7 +181,7 @@ internal sealed partial class FfmpegEncoder
                 // Abort: descarta sem escrever (o pipe foi/está sendo morto).
                 if (_abort)
                 {
-                    ReturnFrame(frame);
+                    ReleaseFrameFromWriter(frame);
                     continue;
                 }
 
@@ -186,8 +220,25 @@ internal sealed partial class FfmpegEncoder
                             break;
                     }
                 }
-                ReturnFrame(frame);
+                ReleaseFrameFromWriter(frame);
             }
+        }
+
+        /// <summary>
+        /// Devolve o frame que a THREAD do writer terminou de processar — mas só se
+        /// <see cref="Stop"/> ainda não tiver retornado. Se já retornou, a thread sobreviveu
+        /// ao join (escrita em voo presa) e este buffer é órfão: devolvê-lo ao
+        /// <see cref="VideoPacketPool"/> contaminaria um pool estático global cujo dono já
+        /// saiu. O buffer é apenas descartado para o GC.
+        /// </summary>
+        private void ReleaseFrameFromWriter(Frame frame)
+        {
+            if (_orphaned)
+            {
+                frame.Data = null;
+                return;
+            }
+            ReturnFrame(frame);
         }
 
         private void ReturnFrame(Frame frame)

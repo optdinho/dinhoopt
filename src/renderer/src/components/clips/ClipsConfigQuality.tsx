@@ -1,6 +1,6 @@
 import { ChevronDown, Gauge, Sparkles } from 'lucide-react'
 import { useState } from 'react'
-import { QUALITY_PRESETS, type QualityPresetKey } from './clips-quality-presets'
+import { presetSubLabel, QUALITY_PRESETS, type QualityPresetKey, RESOLUTION_HEIGHT } from './clips-quality-presets'
 import { SegmentedControl, TogglePill } from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
@@ -110,19 +110,15 @@ export function QualitySection({
   return (
     <div className="space-y-3">
       {/* Quick Preset */}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         {(
           [
-            { id: 'muito-alta', label: t('presetMuitoAlta'), sub: 'CQ 16 \u00b7 1080p', icon: '\u25cf\u25cf\u25cf' },
-            { id: 'alta', label: t('presetAlta'), sub: 'CQ 18 \u00b7 1080p', icon: '\u25cf\u25cf\u25cb' },
-            { id: 'boa', label: t('presetBoa'), sub: 'CQ 20 \u00b7 720p', icon: '\u25cf\u25cb\u25cb' },
-            {
-              id: 'performance',
-              label: t('presetPerformance'),
-              sub: 'CQ 22 \u00b7 720p30',
-              icon: '\u25cb\u25cb\u25cb',
-            },
-          ] as Array<{ id: QualityPresetKey; label: string; sub: string; icon: string }>
+            { id: 'muito-alta', label: t('presetMuitoAlta'), icon: '●●●' },
+            { id: 'alta', label: t('presetAlta'), icon: '●●○' },
+            { id: 'boa', label: t('presetBoa'), icon: '●○○' },
+            { id: 'leve-60', label: t('presetLeve60'), icon: '●●○' },
+            { id: 'performance', label: t('presetPerformance'), icon: '○○○' },
+          ] as Array<{ id: QualityPresetKey; label: string; icon: string }>
         ).map((p) => {
           const preset = QUALITY_PRESETS[p.id]
           const active = config.cq === preset.cq && config.maxrateKbps === preset.maxrateKbps
@@ -156,7 +152,7 @@ export function QualitySection({
                 className="mt-0.5 text-[8px] font-medium"
                 style={{ color: active ? 'rgba(255,255,255,0.7)' : 'var(--text-dim)', opacity: active ? 1 : 0.7 }}
               >
-                {p.sub}
+                {presetSubLabel(preset)}
               </div>
             </button>
           )
@@ -234,12 +230,13 @@ export function QualitySection({
             options={[
               { value: '854', label: '480p' },
               { value: '1280', label: '720p' },
+              { value: '1600', label: '900p' },
               { value: '1920', label: '1080p' },
             ]}
-            value={String(config.width) as '854' | '1280' | '1920'}
+            value={String(config.width) as '854' | '1280' | '1600' | '1920'}
             onChange={(v) => {
               const w = Number(v)
-              handleConfigUpdate({ width: w, height: w === 854 ? 480 : w === 1280 ? 720 : 1080 })
+              handleConfigUpdate({ width: w, height: RESOLUTION_HEIGHT[w] ?? 720 })
             }}
           />
         </div>

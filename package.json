@@ -12,6 +12,7 @@
     "publish": "npm run copy-engine && electron-vite build && electron-builder --win --publish always",
     "copy-engine": "node scripts/copy-engine.js",
     "build:ffmpeg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-ffmpeg.ps1",
+    "verify:ffmpeg": "node scripts/verify-ffmpeg.js --ffmpeg resources/clips-engine-staging/ffmpeg.exe",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",

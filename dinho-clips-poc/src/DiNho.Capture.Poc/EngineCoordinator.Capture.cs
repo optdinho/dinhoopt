@@ -281,6 +281,16 @@ public sealed partial class EngineCoordinator
 
                 // Encoder (NVENC/AMF/QSV/software) — usa o perfil já resolvido
                 Log.I("EngineCoordinator", $"EncoderPreset config: '{_config.Config.EncoderPreset}' Cq={_activeProfile.Cq} Maxrate={_activeProfile.MaxrateKbps}kbps Bframes={_activeProfile.Bframes} Lookahead={_activeProfile.Lookahead}");
+                // Item 5: o front mandava encoderPreset fixo (p5) e NÃO existe UI para mudar o
+                // campo, então esse valor nunca foi escolha de ninguém — era uma constante.
+                // NOTA (2026-09-26): a escada adaptativa NÃO roda aqui. O coordinator
+                // entregava o p5 para o encoder antes de o codec existir (o front manda
+                // codec='auto' e quem decide é DetectBestCodec, lá dentro do Initialize), e
+                // com codec auto o ResolveCodec devolvia null ⇒ o p5 legado passava direto,
+                // sem sondar nada. A resolução da escada foi movida para
+                // FfmpegEncoder.ResolveAdaptivePresetsAfterCodecDetection(), logo depois da
+                // detecção e com as dimensões de SAÍDA. Aqui só repassamos a configuração.
+                // O CQ NÃO é tocado em nenhum dos dois caminhos.
                 _encoder?.Dispose();
                 _encoder = null;
                 _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
@@ -294,8 +304,9 @@ public sealed partial class EngineCoordinator
                         lookahead: _activeProfile.Lookahead,
                         preset: _config.Config.EncoderPreset,
                         codec: _config.Config.Codec,
-                        multipass: _config.Config.Multipass);
-                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead} multipass={_config.Config.Multipass}");
+                        multipass: _config.Config.Multipass,
+                        amfUsage: _config.Config.AmfUsage);
+                    Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead} multipass={_config.Config.Multipass} amfUsage={_config.Config.AmfUsage}");
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
                 fe.SetStretchToFit(_config.Config.StretchToFit);
                 }
@@ -304,6 +315,7 @@ public sealed partial class EngineCoordinator
                 {
                     s.Recording = true;
                     s.Encoder = _encoder.GetType().Name.Replace("Encoder", "");
+                    s.Codec = _encoder.Codec ?? "";
                     s.ActivePipelines = 1;
                     s.CalibrationTier = calibrationTier;
                 });
@@ -1301,6 +1313,11 @@ public sealed partial class EngineCoordinator
             SelectCaptureSource();
 
             // Reinicia o encoder (ffmpeg pode ter travado ou atrasado)
+            // Item 5: a escada de preset NVENC roda dentro do encoder, DEPOIS da deteccao do
+            // codec (FfmpegEncoder.ResolveAdaptivePresetsAfterCodecDetection). Aqui o codec
+            // configurado e sempre "auto", que nao e um codec NVENC - resolver a escada neste
+            // ponto nunca rodava. O probe e cacheado por codec|res|fps, entao o restart paga
+            // no maximo uma vez por sessao.
             _encoder?.Dispose();
             _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
             if (_encoder is FfmpegEncoder fe)
@@ -1312,12 +1329,19 @@ public sealed partial class EngineCoordinator
                     bframes: _activeProfile.Bframes,
                     lookahead: _activeProfile.Lookahead,
                     preset: _config.Config.EncoderPreset,
-                    codec: _config.Config.Codec,
-                    multipass: _config.Config.Multipass);
+                        codec: _config.Config.Codec,
+                        multipass: _config.Config.Multipass,
+                        amfUsage: _config.Config.AmfUsage);
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
             }
             _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
-            _status.Update(s => s.Encoder = _encoder.GetType().Name.Replace("Encoder", ""));
+            // O restart pode trocar o codec (a escada do item 5 roda de novo), então o status
+            // precisa ser reescrito junto — senão o editor re-encodaria com o codec antigo.
+            _status.Update(s =>
+            {
+                s.Encoder = _encoder.GetType().Name.Replace("Encoder", "");
+                s.Codec = _encoder.Codec ?? "";
+            });
 
             if (_capture != null)
             {

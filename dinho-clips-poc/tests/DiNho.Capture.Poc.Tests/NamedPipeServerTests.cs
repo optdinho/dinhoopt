@@ -223,7 +223,8 @@ public sealed class NamedPipeServerTests
                 ReplayBufferAudioPackets = 18000,
                 ReplayBufferAudioBytes = 36870912,
                 OutputDirectory = "C:\\Users\\test\\DiNhoClips",
-                CalibrationTier = "Medium"
+                CalibrationTier = "Medium",
+                Codec = "h264_nvenc"
             }
         };
 
@@ -244,6 +245,9 @@ public sealed class NamedPipeServerTests
         Assert.Equal(1024, dataElement.GetProperty("memoryMB").GetInt32());
         Assert.Equal(536870912, dataElement.GetProperty("replayBufferBytes").GetInt64());
         Assert.Equal("Medium", dataElement.GetProperty("calibrationTier").GetString());
+        // O codec viaja no status porque o renderer precisa dele para escolher o encoder do
+        // trim/merge. Sem esta linha no JSON, o editor cai em libx264 sem erro nenhum.
+        Assert.Equal("h264_nvenc", dataElement.GetProperty("codec").GetString());
     }
 
     // ── EngineStatusValue defaults ──────────────────────────────────
@@ -253,6 +257,7 @@ public sealed class NamedPipeServerTests
     [InlineData(nameof(EngineStatusValue.Encoder), "NONE")]
     [InlineData(nameof(EngineStatusValue.OutputDirectory), "")]
     [InlineData(nameof(EngineStatusValue.CalibrationTier), "")]
+    [InlineData(nameof(EngineStatusValue.Codec), "")]
     public void EngineStatusValue_DefaultStringFields(string propName, string expected)
     {
         var val = new EngineStatusValue();

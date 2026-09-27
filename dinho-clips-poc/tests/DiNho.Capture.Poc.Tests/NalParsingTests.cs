@@ -3,6 +3,10 @@ using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Tests;
 
+// Os testes de ProcessIvfFrames/EmitPacket alocam do VideoPacketPool estatico global via
+// VideoPacketPool.Rent — sem esta Collection, esta classe corre em paralelo com as outras
+// que tocam o mesmo pool (mesma lição do incidente de flakiness de 2026-09-26).
+[Collection("VideoPacketPool")]
 public sealed class NalParsingTests
 {
     // ── Reflection helpers ──────────────────────────────────────────

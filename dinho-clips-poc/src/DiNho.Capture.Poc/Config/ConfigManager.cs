@@ -83,6 +83,14 @@ public sealed class AppConfig
     public bool ForceSoftware { get; set; }
     public bool Multipass { get; set; } = true;
 
+    // 6.11 Item 3: -usage da AMF. Vazio (default) = NÃO CONFIGURADO, e a chain não emite a
+    // opção, preservando o default do ffmpeg (`-usage <int> ... (default -1)`, medido no
+    // binário 9.0.1). Preencher muda RC/lookahead/ENFORCE_HRD da captura AMD, então só
+    // depois de medir com --probe-amf-usage em hardware real. Só afeta AMF;
+    // QSV/NVENC/d3d12va ignoram. Ver FfmpegEncoder.NormalizeAmfUsage.
+    [JsonPropertyName("amfUsage")]
+    public string AmfUsage { get; set; } = "";
+
     // RNNoise/anlmdn noise suppression on microphone
     [JsonPropertyName("noiseSuppression")]
     public bool NoiseSuppressionEnabled { get; set; } = false;
@@ -146,6 +154,16 @@ public sealed class ConfigManager : IDisposable
         "p1", "p2", "p3", "p4", "p5", "p6", "p7",
     };
 
+    private static readonly HashSet<string> ValidAmfUsages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Alinhado com FfmpegEncoder.NormalizeAmfUsage: os seis usage names aceitos pelo
+        // switch de h264_amf/hevc_amf/av1_amf no ffmpeg 9. "game_streaming" NÃO entra —
+        // é o nome do enum C (AMF_VIDEO_USAGE_VIDEO_GAME_STREAMING), não a string do ffmpeg,
+        // e mandá-lo derrubaria o encoder → restart loop.
+        "transcoding", "ultralowlatency", "lowlatency",
+        "webcam", "high_quality", "lowlatency_high_quality",
+    };
+
     private static readonly HashSet<string> ValidReplayBufferModes = new(StringComparer.OrdinalIgnoreCase)
     {
         // Alinhado com o allowlist TS (clips.ipc.ts): "ram" (só RAM),
@@ -166,6 +184,13 @@ public sealed class ConfigManager : IDisposable
         if (string.IsNullOrWhiteSpace(preset))
             return false;
         return ValidEncoderPresets.Contains(preset.ToLowerInvariant());
+    }
+
+    public static bool IsValidAmfUsage(string? usage)
+    {
+        if (string.IsNullOrWhiteSpace(usage))
+            return false;
+        return ValidAmfUsages.Contains(usage.Trim());
     }
 
     private readonly string _configDir;
@@ -310,6 +335,13 @@ public sealed class ConfigManager : IDisposable
             config.ReplayBufferMode = _defaults.ReplayBufferMode;
         else
             config.ReplayBufferMode = config.ReplayBufferMode.ToLowerInvariant();
+
+        // 6.11 Item 3: sem validação, config.json com lixo aqui viraria "-usage lixo" →
+        // encoder AMF morre → restart loop. Mesma defesa do EncoderPreset.
+        if (string.IsNullOrWhiteSpace(config.AmfUsage) || !IsValidAmfUsage(config.AmfUsage))
+            config.AmfUsage = _defaults.AmfUsage;
+        else
+            config.AmfUsage = config.AmfUsage.Trim().ToLowerInvariant();
 
         if (config.MicVolume < 0f || config.MicVolume > 4f)
             config.MicVolume = _defaults.MicVolume;

@@ -277,6 +277,128 @@ public class FfmpegEncoderFrameWriterTests
         Assert.False(w.TryEnqueue(Data(1), Pts(1)));
     }
 
+    // REGRESSÃO: Stop com join curto NÃO garante que a thread morreu. Ela fica presa no
+    // write em voo (o warm-up do 1º frame tem timeout de 10s — StdinWriteWarmupTimeoutMs —
+    // muito maior que o join de 1s do FfmpegEncoder.Dispose) e, quando o write finalmente
+    // falha, executa ReturnFrame DEPOIS do Stop ter retornado.
+    //
+    // O VideoPacketPool é um estático GLOBAL: esse Return tardio entra no pool
+    // depois do teardown e corrompe qualquer coisa que leia o pool no meio (a suíte
+    // VideoPacketPoolTests roda em paralelo e falhava ~1 run em 4 com exatamente este
+    // sintoma: Assert.NotSame() values are the same instance).
+    //
+    // Não dá para "consertar" bloqueando o Dispose por 10s. O contrato certo é: quando o
+    // join estoura, o frame em voo vira órfão e é deixado para o GC — nunca devolvido ao
+    // pool, porque o owner já saiu e ninguém mais rastreia aquele buffer.
+    [Fact]
+    public void FrameWriter_StopJoinTimesOut_OrphanedInFlightFrame_IsNotReturnedToPool()
+    {
+        VideoPacketPool.MaxIdleBytes = 256L * 1024 * 1024;
+        VideoPacketPool.ResetForTest();
+        try
+        {
+            // Tamanho ÚNICO: nenhum buffer de captura real (NV12 1080p = 3.110.400 bytes)
+            // tem esse comprimento, então qualquer array 4093 que sair do pool É o órfão.
+            // Isso torna o teste hermético mesmo com outra writer devolvendo buffer no pool
+            // global durante a janela — não dependemos de IdleBytes == 0.
+            const int orphanLen = 4093;
+            var orphan = new byte[orphanLen];
+            var gate = new GatedStream();
+            var w = new FfmpegEncoder.FrameWriter(
+                () => gate,
+                // Timeout de write folgado: o GatedStream segura a 1ª escrita, então o join
+                // curto de 50ms estoura com a thread VIVA — é o caso do warm-up de 10s em produção.
+                () => 60_000,
+                _ => { },
+                (_, _) => { });
+
+            Assert.True(w.TryEnqueue(orphan, Pts(1)));
+            gate.WaitWriteStarted();
+            Assert.True(w.IsAliveForTest, "writer thread should be in the in-flight write");
+
+            // Join curto estoura: o owner (FfmpegEncoder.Dispose) segue e acha que a writer morreu.
+            w.Stop(abort: true, joinMs: 50);
+            Assert.True(w.IsAliveForTest, "join should have timed out with the thread still in the write");
+
+            // O write enfim completa (o ffmpeg abriu o encoder / o pipe destravou). A thread
+            // acorda e tentaria devolver o frame ao pool — mas o Stop já retornou, então o
+            // buffer é órfão e vai para o GC. Sem a supressão, o órfão reapareceria no pool
+            // DEPOIS do teardown: exatamente o vazamento que corrompia VideoPacketPoolTests.
+            gate.ReleaseNext();
+            Assert.True(WaitForThreadExit(w, 5000), "writer thread should exit after the write completes");
+
+            Assert.DoesNotContain(DrainPoolAll(), a => a.Length == orphanLen && ReferenceEquals(a, orphan));
+        }
+        finally
+        {
+            VideoPacketPool.ResetForTest();
+        }
+    }
+
+    // Esvazia o pool e devolve tudo o que saiu. Precisa existir porque o VideoPacketPool é um
+    // estático global e outras writers podem devolver buffer durante o teste — um assert sobre
+    // o contador IdleBytes seria frágil, mas a IDENTIDADE de um array de tamanho único é segura.
+    //
+    // Rent(1) pega o topo do stack e é o único jeito de drenar TUDO: pedir um comprimento
+    // específico faz o Rent descartar os maiores, que aí nunca chegam ao chamador.
+    private static List<byte[]> DrainPoolAll()
+    {
+        var all = new List<byte[]>();
+        var guard = 0;
+        while (VideoPacketPool.IdleBytes > 0 && guard++ < 5000)
+            all.Add(VideoPacketPool.Rent(1));
+        return all;
+    }
+
+    // Contrapartida do teste acima: quando o join SUCEDE, o drain de Stop continua
+    // devolvendo os frames ao pool. Se o flag de "órfão" fosse global, este teste
+    // passaria a vazar buffer de verdade em produção — regressão pior que a que corrigimos.
+    [Fact]
+    public void FrameWriter_StopJoinSucceeds_QueuedFrames_StillReturnedToPool()
+    {
+        VideoPacketPool.MaxIdleBytes = 256L * 1024 * 1024;
+        VideoPacketPool.ResetForTest();
+        try
+        {
+            // 3 tamanhos ÚNICOS e distintos: dá para provar por identidade que os 3 frames
+            // voltaram ao pool, sem depender do contador global IdleBytes.
+            var frames = new[] { new byte[2051], new byte[2053], new byte[2059] };
+            var gate = new GatedStream();
+            var w = new FfmpegEncoder.FrameWriter(
+                () => gate, () => 2000, _ => { }, (_, _) => { });
+
+            // O 1º fica em voo (GatedStream segura a escrita), os 2 seguintes ficam na fila.
+            for (int i = 0; i < frames.Length; i++)
+                Assert.True(w.TryEnqueue(frames[i], Pts(i)));
+
+            gate.WaitWriteStarted();
+            gate.ReleaseNext();
+
+            w.Stop(abort: true, joinMs: 5000);
+
+            // Join ok ⇒ a thread terminou, os 3 frames voltaram ao pool normalmente.
+            Assert.False(w.IsAliveForTest, "writer thread should be dead after a successful join");
+            var returned = DrainPoolAll();
+            foreach (var f in frames)
+                Assert.Contains(f, returned);
+        }
+        finally
+        {
+            VideoPacketPool.ResetForTest();
+        }
+    }
+
+    // Helper: espera a thread do writer sair (ou o timeout estourar). Existe porque o join
+    // pode estourar por design — para testar a supressão do órfão, o teste precisa que a
+    // thread termine sozinha depois, sem depender de outro Stop.
+    private static bool WaitForThreadExit(FfmpegEncoder.FrameWriter w, int timeoutMs)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (w.IsAliveForTest && Environment.TickCount64 < deadline)
+            Thread.Sleep(5);
+        return !w.IsAliveForTest;
+    }
+
     // Flush (Stop sem abort) deve DRAINAR a fila — frames enfileirados ainda são escritos.
     [Fact]
     public void FrameWriter_StopWithoutAbort_WritesQueuedFramesBeforeExit()

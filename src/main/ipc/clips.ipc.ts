@@ -21,6 +21,7 @@ import {
   normalizeFps,
   persistClipsConfig,
 } from '../services/clips-config-manager'
+import { buildReEncodeArgs, resolveTrimCodec } from '../services/clips-encode-args'
 import {
   AMD_VENDOR_ID,
   appendSharpnessFilter,
@@ -41,6 +42,7 @@ import {
   isEngineRunning,
   isPipeConnected,
   readClipsFromDisk,
+  readEngineStatus,
   sendPipeCommand,
   sendPipeCommandLongRunning,
   sendWithFallback,
@@ -612,20 +614,6 @@ export function registerClipsIpc(): void {
       const baseName = basename(safePath, '.mp4')
       const outPath = join(outDir, `${baseName} DiNho Clipe ${Date.now()}.mp4`)
       const copyArgs = ['-c', 'copy']
-      const reEncodeArgs = [
-        '-c:v',
-        'libx264',
-        '-preset',
-        'veryfast',
-        '-crf',
-        String(C.cq),
-        '-maxrate',
-        `${C.maxrateKbps}K`,
-        '-bufsize',
-        `${C.bufsizeKbps}K`,
-        '-c:a',
-        'copy',
-      ]
       const enhanceOption = parseEnhanceOption(enhance)
       let enhanceVf: string | null = null
       if (enhanceOption !== 'none') {
@@ -647,6 +635,15 @@ export function registerClipsIpc(): void {
         getLogger().warning('clips', 'TrimClip sharpness ignored: sharpening requires re-encode')
       }
       const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
+      // Item 8: re-encodar com o codec que o engine detectou, não com libx264 fixo. Quem tem
+      // GPU parava de gastar CPU editando um clipe que tinha saído do encoder de hardware.
+      const trimCodec = resolveTrimCodec(readEngineStatus().codec)
+      const reEncodeArgs = buildReEncodeArgs({
+        codec: trimCodec,
+        cq: C.cq,
+        maxrateKbps: C.maxrateKbps,
+        bufsizeKbps: C.bufsizeKbps,
+      })
       return new Promise((resolve) => {
         const seekArgs = reEncode
           ? [
@@ -731,24 +728,17 @@ export function registerClipsIpc(): void {
       }
       const sharpnessVal = normalizeSharpness(sharpness)
       const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
+      // Item 8: mesma regra do trim — o merge com filtro re-encodava em libx264 fixo.
+      const mergeCodec = resolveTrimCodec(readEngineStatus().codec)
       const streamArgs =
         vfChain !== null
-          ? [
-              '-c:v',
-              'libx264',
-              '-preset',
-              'veryfast',
-              '-crf',
-              String(C.cq),
-              '-maxrate',
-              `${C.maxrateKbps}K`,
-              '-bufsize',
-              `${C.bufsizeKbps}K`,
-              '-vf',
+          ? buildReEncodeArgs({
+              codec: mergeCodec,
+              cq: C.cq,
+              maxrateKbps: C.maxrateKbps,
+              bufsizeKbps: C.bufsizeKbps,
               vfChain,
-              '-c:a',
-              'copy',
-            ]
+            })
           : ['-c', 'copy']
       try {
         const lines = safePaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`)

@@ -138,6 +138,7 @@
   "presetMuitoAlta": "Very High",
   "presetAlta": "High",
   "presetBoa": "Good",
+  "presetLeve60": "Light 60",
   "presetPerformance": "Performance",
   "codecAuto": "Auto",
   "gpuLabel": "GPU",

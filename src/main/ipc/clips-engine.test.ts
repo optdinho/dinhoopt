@@ -81,6 +81,7 @@ import {
   readEngineStatus,
   registerGetCurrentStatus,
   startEngine,
+  stopEngineProcess,
 } from './clips-engine'
 
 const ORIG_ENV = { ...process.env }
@@ -168,6 +169,26 @@ describe('statusUpdater via initEnginePipeIntegration', () => {
 
   it('exposes the engine running flag to the pipe layer', () => {
     expect(h.onEngineRunningCb!()).toBe(false)
+  })
+
+  it('forgets the codec when the engine stops, so the editor falls back to software', () => {
+    // O contrato de `ClipsEngineStatus.codec` diz: "Ausente = o engine não rodou ainda ou
+    // parou, e o editor de clipes cai em software". O statusUpdater zera o `currentGame` no
+    // null/undefined (teste acima) por exatamente esse motivo, mas o `stopEngineProcess`
+    // limpava `_engineRunning`/`_engineCapturing`/`_engineProcess` e **deixava o
+    // `_engineCodec`**: o status continuava anunciando um codec de um engine que já morreu.
+    //
+    // O Item 8 usa esse campo para decidir o encoder do trim/merge, então o valor velho
+    // mandava o editor para o caminho de hardware (nvenc/amf) com o engine parado — que
+    // funciona na maior parte das máquinas e falha na primeira em que o HW não bate com o
+    // que foi detectado antes (driver trocado, GPU desativada, engine caiu e voltou como
+    // software). O fallback em `libx264` é o comportamento anterior e o seguro.
+    h.statusCb!({ codec: 'h264_nvenc' })
+    expect(readEngineStatus().codec).toBe('h264_nvenc')
+
+    stopEngineProcess()
+
+    expect(readEngineStatus().codec).toBe('')
   })
 })
 

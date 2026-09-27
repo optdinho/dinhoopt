@@ -148,11 +148,18 @@ public sealed partial class ClipExporter : IDisposable
                             int trimIdx = videoPackets.FindIndex(p => p.Pts + p.Duration > target);
                             if (trimIdx > 0)
                             {
-                                int lastKey = videoPackets.FindLastIndex(trimIdx, p => p.IsKeyFrame);
-                                if (lastKey >= 0 && lastKey < trimIdx)
+                                // Item 4: o corte só pode começar num I-frame, então recua até
+                                // o último keyframe antes do alvo. Com GOP 60 (1 s @60fps) o
+                                // teto caiu de 2 s para 1 s. Loga o rollback REAL em ms: sem
+                                // esse número o usuário só percebe o sintoma ("o clip começa
+                                // antes do que pedi") e a próxima sessão de debug não tem dado.
+                                var roll = ResolveKeyframeRollback(videoPackets, trimIdx, target);
+                                if (roll.Rollback > TimeSpan.Zero)
                                 {
-                                    Log.I("PTS", $"TrimVideoStart: rolling back from {trimIdx} to {lastKey} (keyframe at {videoPackets[lastKey].Pts.TotalSeconds:F3}s)");
-                                    trimIdx = lastKey;
+                                    Log.I("PTS", $"TrimVideoStart: rolling back to keyframe at {roll.KeyframePts.TotalSeconds:F3}s "
+                                        + $"({roll.Rollback.TotalMilliseconds:F0}ms antes do alvo, "
+                                        + $"frame {trimIdx} → {roll.TrimIndex}, GOP {FfmpegEncoder.Gop})");
+                                    trimIdx = roll.TrimIndex;
                                 }
                                 Log.I("PTS", $"TrimVideoStart: {trimIdx}/{videoPackets.Count} frames ({videoPackets[0].Pts.TotalSeconds:F3}s → {videoPackets[trimIdx].Pts.TotalSeconds:F3}s) because audio starts at {target.TotalSeconds:F3}s");
                                 videoPackets = videoPackets.GetRange(trimIdx, videoPackets.Count - trimIdx);
@@ -419,6 +426,46 @@ public sealed partial class ClipExporter : IDisposable
         if (videoPackets.Count == 0 || audioPackets.Count == 0) return TimeSpan.Zero;
         var offset = audioPackets[0].Pts - ComputeMinPts(videoPackets);
         return offset > TimeSpan.Zero ? offset : TimeSpan.Zero;
+    }
+
+    /// <summary>
+    /// Resultado do rollback de I-frame: de qual índice o clip passa a começar, o PTS real
+    /// daquele keyframe e quanto recuou em relação ao alvo pedido. Os três juntos são o que
+    /// o log reporta (Item 4) — sem o Rollback o usuário só vê o sintoma, sem dado.
+    /// </summary>
+    internal readonly record struct KeyframeRollback(int TrimIndex, TimeSpan KeyframePts, TimeSpan Rollback);
+
+    /// <summary>
+    /// Resolve o ponto de início real do clip: sem B-frames (item 7) um corte só pode
+    /// começar num I-frame, então recua de <paramref name="trimIdx"/> até o último keyframe
+    /// ANTES dele. Extraído como seam puro (sem I/O, sem log) para ser testado — a versão
+    /// inline só era alcançável por um export de verdade, ou seja, nunca em teste unitário.
+    ///
+    /// Invariantes garantidas aqui:
+    ///   - nunca avança o corte (TrimIndex &lt;= trimIdx) — avançar cortaria o início do clipe;
+    ///   - nunca fica negativo (um -1 viraria GetRange com índice negativo);
+    ///   - sem keyframe anterior, mantém o trimIdx pedido em vez de inventar um ponto.
+    /// O teto do rollback é o GOP (1 s a 60 fps depois do Item 4, era 2 s), travado por
+    /// ClipExporterKeyframeRollbackTests.
+    /// </summary>
+    internal static KeyframeRollback ResolveKeyframeRollback(
+        List<EncodedPacket> videoPackets, int trimIdx, TimeSpan target)
+    {
+        if (videoPackets.Count == 0)
+            return new KeyframeRollback(0, TimeSpan.Zero, TimeSpan.Zero);
+
+        // FindLastIndex conta do início até trimIdx INCLUSIVE: o próprio trimIdx pode ser
+        // keyframe (alvo já alinhado) e nesse caso lastKey == trimIdx → rollback zero.
+        int lastKey = videoPackets.FindLastIndex(trimIdx, p => p.IsKeyFrame);
+        if (lastKey < 0 || lastKey >= trimIdx)
+            return new KeyframeRollback(trimIdx, TimeSpan.Zero, TimeSpan.Zero);
+
+        var keyframePts = videoPackets[lastKey].Pts;
+        // Rollback medido contra o PTS do ALVO (o que o usuário pediu), não contra o PTS
+        // do trim original: é o número que responde "quanto antes do que pedi o clip começa".
+        var rollback = target - keyframePts;
+        if (rollback < TimeSpan.Zero) rollback = TimeSpan.Zero;
+        return new KeyframeRollback(lastKey, keyframePts, rollback);
     }
 
     internal static bool IsAdts(EncodedPacket pkt) =>

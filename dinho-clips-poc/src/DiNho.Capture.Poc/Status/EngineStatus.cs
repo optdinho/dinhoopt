@@ -29,6 +29,14 @@ public sealed class EngineStatusSnapshot
 
     /// <summary>Perfil calibrado da máquina ("Weak"/"Medium"/"Strong"); "" = não aplicado.</summary>
     public string CalibrationTier { get; set; } = "";
+
+    /// <summary>
+    /// Codec de ffmpeg efetivamente em uso ("h264_nvenc", "hevc_amf", "libx264"...); "" = nenhum.
+    /// Diferente de <see cref="Encoder"/>, que é o nome do tipo .NET ("Ffmpeg") e não diz
+    /// nada sobre qual encoder está rodando. O editor de clipes (trim/merge) precisa do codec
+    /// para re-encodar com a mesma família de hardware em vez de cair em libx264.
+    /// </summary>
+    public string Codec { get; set; } = "";
 }
 
 public sealed class EngineStatus : IDisposable
@@ -92,6 +100,7 @@ public sealed class EngineStatus : IDisposable
                 OutputDirectory = _current.OutputDirectory,
                 DroppedFrames = _current.DroppedFrames,
                 CalibrationTier = _current.CalibrationTier,
+                Codec = _current.Codec,
             };
             OnStatusUpdate?.Invoke(snapshot);
             Heartbeat();

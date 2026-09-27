@@ -103,6 +103,30 @@ try {
   console.log('  WARN: could not copy ffmpeg — engine will fail if ffmpeg is unavailable')
 }
 
+// Gate the binary that is about to be shipped. The ffmpeg copy above degrades
+// silently (custom > PATH > warn), so a stripped-down ffmpeg would reach the
+// installer and the engine would quietly fall back to libx264 at runtime.
+const verifierPath = join(__dirname, 'verify-ffmpeg.js')
+const stagedFfmpeg = join(stagingDir, 'ffmpeg.exe')
+try {
+  execFileSync(process.execPath, [verifierPath, '--ffmpeg', stagedFfmpeg], { stdio: 'inherit' })
+} catch {
+  // O binário reprovado já está dentro do staging neste ponto. O throw interrompe o
+  // package, mas o arquivo ficava lá até o próximo run (que só o apaga em copy-engine.js:50),
+  // e qualquer coisa que empacote o staging sem passar por este script — um passo
+  // incremental, um zip manual — levaria um ffmpeg reprovado. O engine não funciona sem
+  // ffmpeg mesmo, então remover aqui não esconde nada: só não deixa resto não verificado.
+  try {
+    rmSync(stagedFfmpeg, { force: true })
+  } catch {
+    /* best effort: the throw below is what fails the build */
+  }
+  throw new Error(
+    `ffmpeg requirement gate failed for ${stagedFfmpeg} — refusing to stage an engine that cannot ` +
+      'decode/encode what the Clips engine needs. Fix the ffmpeg build or remove resources/ffmpeg-custom.',
+  )
+}
+
 // Copy VC++ runtime DLLs (needed by ApplicationLoopback.dll — the C++ loopback
 // capture is dynamically linked against MSVC CRT, not self-contained).
 // Sources are the redist-installed copies under System32 (same machine that

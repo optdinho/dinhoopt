@@ -116,7 +116,7 @@ public sealed class RamManagerTests : IDisposable
         var p = RamManager.BuildSettings(
             RamProfileLevel.Balanced, 2560, 1440, 20, 300, 50000, 100000, 2, 4);
 
-        Assert.Equal(24, p.Cq);
+        Assert.Equal(20, p.Cq);
         Assert.Equal(35000, p.MaxrateKbps);
         Assert.Equal(70000, p.BufsizeKbps);
         Assert.Equal(0, p.Bframes); // forced 0 for NVENC PTS FIFO safety
@@ -143,7 +143,7 @@ public sealed class RamManagerTests : IDisposable
         var p = RamManager.BuildSettings(
             RamProfileLevel.LowMemory, 1920, 1080, 18, 300, 50000, 100000, 2, 4);
 
-        Assert.Equal(26, p.Cq);
+        Assert.Equal(18, p.Cq);
         Assert.Equal(20000, p.MaxrateKbps);
         Assert.Equal(40000, p.BufsizeKbps);
         Assert.Equal(0, p.Bframes);
@@ -169,7 +169,49 @@ public sealed class RamManagerTests : IDisposable
         var p = RamManager.BuildSettings(
             RamProfileLevel.LowMemory, 1920, 1080, 30, 300, 50000, 100000, 2, 4);
 
-        Assert.Equal(26, p.Cq);
+        Assert.Equal(30, p.Cq);
+    }
+
+    // ── 6.11: o CQ escolhido pelo usuário é sagrado em TODOS os perfis de RAM ──
+    // Antes: LowMemory forçava CQ 26 e Balanced piso 24 via Math.Max(configuredCq, N),
+    // o que tornava os presets de CQ 16/18/18 indistinguíveis em máquina com <512MB
+    // de budget. A proteção de RAM é feita por maxrateKbps/bufsizeKbps/encodeW/H,
+    // não pelo CQ — CQ determina taxa de compressão, não tamanho de buffer.
+
+    [Theory]
+    [InlineData(RamProfileLevel.LowMemory, 16)]
+    [InlineData(RamProfileLevel.LowMemory, 18)]
+    [InlineData(RamProfileLevel.LowMemory, 20)]
+    [InlineData(RamProfileLevel.LowMemory, 22)]
+    [InlineData(RamProfileLevel.Balanced, 16)]
+    [InlineData(RamProfileLevel.Balanced, 18)]
+    [InlineData(RamProfileLevel.Balanced, 20)]
+    [InlineData(RamProfileLevel.Balanced, 22)]
+    [InlineData(RamProfileLevel.Full, 16)]
+    [InlineData(RamProfileLevel.Full, 18)]
+    [InlineData(RamProfileLevel.Full, 20)]
+    [InlineData(RamProfileLevel.Full, 22)]
+    public void BuildSettings_PreservesConfiguredCqAtEveryRamLevel(RamProfileLevel level, int configuredCq)
+    {
+        var p = RamManager.BuildSettings(
+            level, 1920, 1080, configuredCq, 300, 50000, 100000, 2, 4);
+
+        Assert.Equal(configuredCq, p.Cq);
+    }
+
+    [Fact]
+    public void BuildSettings_PreservesFullCqRange()
+    {
+        foreach (var cq in new[] { 0, 1, 16, 22, 30, 40, 51 })
+        {
+            var p = RamManager.BuildSettings(
+                RamProfileLevel.LowMemory, 1920, 1080, cq, 300, 50000, 100000, 2, 4);
+            Assert.Equal(cq, p.Cq);
+
+            p = RamManager.BuildSettings(
+                RamProfileLevel.Balanced, 1920, 1080, cq, 300, 50000, 100000, 2, 4);
+            Assert.Equal(cq, p.Cq);
+        }
     }
 
     [Fact]

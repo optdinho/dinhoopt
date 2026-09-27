@@ -40,6 +40,44 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--probe-vbv")
+        {
+            ProgramBenchmark.ProbeVbv(
+                args.Length > 1 ? args[1] : "1920",
+                args.Length > 2 ? args[2] : "1080",
+                args.Length > 3 ? args[3] : "60",
+                args.Length > 4 ? args[4] : "18",
+                args.Length > 5 ? args[5] : "55000",
+                args.Length > 6 ? args[6] : "");
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--probe-amf-usage")
+        {
+            ProgramBenchmark.ProbeAmfUsage(
+                args.Length > 1 ? args[1] : "1920",
+                args.Length > 2 ? args[2] : "1080",
+                args.Length > 3 ? args[3] : "60",
+                args.Length > 4 ? args[4] : "18",
+                args.Length > 5 ? args[5] : "55000",
+                args.Length > 6 ? args[6] : "h264_amf",
+                args.Length > 7 ? args[7] : "");
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--probe-hevc-profile")
+        {
+            ProgramBenchmark.ProbeHevcProfile(
+                args.Length > 1 ? args[1] : "1920",
+                args.Length > 2 ? args[2] : "1080",
+                args.Length > 3 ? args[3] : "60",
+                args.Length > 4 ? args[4] : "18",
+                args.Length > 5 ? args[5] : "55000",
+                args.Length > 6 ? args[6] : "hevc_nvenc",
+                args.Length > 7 ? args[7] : "");
+            return;
+        }
+
         if (args.Length > 0 && (args[0] == "--bench" || args[0] == "--bench-json"))
         {
             await ProgramBenchmark.RunBenchmarkAsync(_benchJson);

@@ -51,6 +51,11 @@ export interface ClipsEngineStatus {
   gpuBusyDrops?: number
   /** Perfil calibrado da máquina aplicado na última captura (Weak/Medium/Strong) */
   calibrationTier?: string
+  /**
+   * Codec de ffmpeg em uso ("h264_nvenc", "hevc_amf", "libx264"...). Ausente = o engine não
+   * rodou ainda ou parou, e o editor de clipes cai em software.
+   */
+  codec?: string
 }
 
 export interface ClipInfo {
