@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -6,6 +7,7 @@ using Vortice.DXGI;
 using Vortice.MediaFoundation;
 using DiNho.Capture.Poc.Bench;
 using DiNho.Capture.Poc.Capture;
+using DiNho.Capture.Poc.Config;
 using DiNho.Capture.Poc.Sync;
 using DiNho.Capture.Poc.Buffer;
 using DiNho.Capture.Poc.Encoders;
@@ -300,6 +302,54 @@ internal static class ProgramBenchmark
     /// <para>Uso: --probe-amf-usage [W H FPS CQ MAXRATE CODEC USAGES(com vírgula)]
     /// (default 1920 1080 60 18 55000 h264_amf, todos os seis)</para>
     /// </summary>
+    /// <summary>Token de linha de comando que pede a referência: o default de produção, que
+    /// depois do Item 3 é <b>não passar <c>-usage</c> nenhum</b>.</summary>
+    internal const string AmfDefaultUsageToken = "default";
+
+    /// <summary>Todos os <c>-usage</c> que o encoder aceita, com a referência (vazio) primeiro.</summary>
+    private static readonly string[] AmfAllUsages =
+    {
+        "", "transcoding", "ultralowlatency", "lowlatency",
+        "webcam", "high_quality", "lowlatency_high_quality",
+    };
+
+    /// <summary>Como a referência aparece na tabela. String vazia = sem <c>-usage</c>, e imprimir a
+    /// coluna sem nome seria um bug de leitura: o usuário não saberia o que a 1ª linha significa.</summary>
+    internal static string AmfUsageLabel(string usage)
+        => usage.Length == 0 ? "(default, sem -usage)" : usage;
+
+    /// <summary>Seam puro (sem ffmpeg, sem I/O) da lista de candidates do <c>--probe-amf-usage</c>.
+    /// A referência — a string vazia — entra sempre na 1ª linha: o critério de promote do Item 3 foi
+    /// fixado contra "o default em uso", e o default em uso é o vazio (medir contra
+    /// <c>transcoding</c> responderia uma pergunta diferente, e um <c>-usage</c> pode ganhar contra
+    /// <c>transcoding</c> e perder contra o vazio).
+    ///
+    /// O descarte de token inválido não é cosmético: <see cref="FfmpegEncoder.NormalizeAmfUsage"/>
+    /// devolve <c>""</c> tanto para entrada inválida quanto para a vazia, então sem o filtro um
+    /// token de lixo viraria a referência em silêncio — o probe mediria "sem -usage" e rotularia a
+    /// linha com outro nome.</summary>
+    internal static IReadOnlyList<string> ResolveAmfProbeCandidates(string? candidatesArg)
+    {
+        var tokens = (candidatesArg ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s =>
+            {
+                var t = s.Trim().ToLowerInvariant();
+                if (t == AmfDefaultUsageToken) return "";
+                var normalized = FfmpegEncoder.NormalizeAmfUsage(t);
+                return normalized.Length == 0 ? null : normalized; // null = inválido, descarta
+            })
+            .Where(t => t is not null)
+            .Select(t => t!)
+            .Distinct()
+            .ToList();
+
+        if (tokens.Count == 0) tokens = AmfAllUsages.ToList();
+        tokens.Remove(""); // a referência entra sempre na 1ª linha, uma vez só
+        tokens.Insert(0, "");
+        return tokens;
+    }
+
     internal static void ProbeAmfUsage(
         string widthArg, string heightArg, string fpsArg, string cqArg, string maxrateArg,
         string codecArg, string candidatesArg)
@@ -324,25 +374,12 @@ internal static class ProgramBenchmark
             return;
         }
 
-        var allUsages = new[]
-        {
-            "transcoding", "ultralowlatency", "lowlatency",
-            "webcam", "high_quality", "lowlatency_high_quality",
-        };
-        var candidates = (candidatesArg ?? "")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => FfmpegEncoder.NormalizeAmfUsage(s))
-            .Distinct()
-            .ToList();
-        if (candidates.Count == 0) candidates = allUsages.ToList();
-        // transcoding é a referência (é o que a produção usa hoje): entra sempre na 1ª linha.
-        candidates.Remove("transcoding");
-        candidates.Insert(0, "transcoding");
+        var candidates = ResolveAmfProbeCandidates(candidatesArg);
 
         Console.WriteLine("=== AMF -usage Probe ===");
         Console.WriteLine($"Resolução: {width}x{height}@{targetFps}fps | cq={targetCq} (inalterado) | maxrate={maxrateKbps}K | bufsize={bufsizeKbps}K");
         Console.WriteLine($"Codec: {codec} | alvo médio -b:v = {FfmpegEncoder.ComputeAmfTargetKbps(maxrateKbps)}K");
-        Console.WriteLine($"Referência: transcoding (= o que a produção usa hoje; delta em % relativo a ela)");
+        Console.WriteLine($"Referência: {AmfUsageLabel("")} — é o default de produção (não emitimos -usage); delta em % relativo a ela");
         Console.WriteLine();
 
         if (!EncoderManager.CheckFfmpegEncoder(codec))
@@ -369,12 +406,12 @@ internal static class ProgramBenchmark
                     onStderr: saida.Add);
                 if (retry is null)
                 {
-                    Console.WriteLine($"    {usage,-24}: RECUSADO pelo encoder");
+                    Console.WriteLine($"    {AmfUsageLabel(usage),-24}: RECUSADO pelo encoder");
                     foreach (var l in saida) Console.WriteLine($"      ffmpeg: {l}");
-                    // Se a PRIMEIRA referência (transcoding) foi recusada, não há device AMF
-                    // funcional — todos os outros usages vão falhar igual. Testar os 5
+                    // Se a PRIMEIRA referência (o default de produção, sem -usage) foi recusada, não há
+                    // device AMF funcional — todos os outros usages vão falhar igual. Testar os 5
                     // restantes só multiplica o custo, então aborta o codec aqui.
-                    if (usage == "transcoding")
+                    if (usage.Length == 0)
                     {
                         Console.WriteLine($"    '{codec}' sem device AMF utilizável — demais usages abortados.");
                         break;
@@ -398,7 +435,7 @@ internal static class ProgramBenchmark
                 ? $"VBV APERTA (-{-r.HeadroomToMaxrateKbps:0} K)"
                 : $"folga p/ teto {r.HeadroomToMaxrateKbps:0} K";
             Console.WriteLine(
-                $"    {usage,-24}: {r.AchievedFps,7:0.00} fps ({dFpsTxt,7}) | " +
+                $"    {AmfUsageLabel(usage),-24}: {r.AchievedFps,7:0.00} fps ({dFpsTxt,7}) | " +
                 $"{r.BitrateKbps,8:0.0} Kbps ({dRateTxt,7}) | {r.OutputBytes / 1024,6} KiB ({dBytesTxt,6}) | {headroomTxt}");
         }
         Console.WriteLine();
@@ -578,6 +615,61 @@ internal static class ProgramBenchmark
         Console.WriteLine(SummarizeHevcProfileProbe(main, main10).ToReportLine());
     }
 
+    /// <summary>
+    /// CLI do <c>--audit-amd</c>. Todos os parâmetros são opcionais e o default vem da
+    /// <b>config real do usuário</b> (<see cref="ConfigManager.Config"/>), não de constantes
+    /// duplicadas: o que precisa ser auditado é o que ele está gravando agora, e um default
+    /// hardcoded (720p/CQ20/30000) mediria uma configuração que talvez nem seja a dele —
+    /// veredito sobre a máquina errada é a forma mais cara de erro num tool de diagnóstico.
+    /// </summary>
+    internal static void RunAmdAudit(
+        string? widthArg, string? heightArg, string? fpsArg, string? cqArg, string? maxrateArg, string? bufArg, string? framesArg,
+        string? codecArg = null)
+    {
+        var cfg = ReadLiveConfig();
+        var req = new AmdAuditRequest(
+            Pick(widthArg, cfg.Width),
+            Pick(heightArg, cfg.Height),
+            Pick(fpsArg, cfg.Fps),
+            Pick(cqArg, cfg.Cq),
+            Pick(maxrateArg, cfg.MaxrateKbps),
+            Pick(bufArg, cfg.BufsizeKbps),
+            Pick(framesArg, AmdAudit.DefaultFrames));
+        req = req with { Frames = Math.Clamp(req.Frames, 30, 600) };
+
+        // Codec explícito: deixa o audit rodar em máquina sem AMF (útil para NVIDIA/QSV, e
+        // é o que permite exercitar o caminho inteiro antes de chegar no hardware AMD).
+        var subject = string.IsNullOrWhiteSpace(codecArg) ? null : codecArg.Trim();
+        if (subject != null) Console.WriteLine($"Medindo a familia {subject} (override).");
+
+        Console.WriteLine("Iniciando audit AMD. Pode levar alguns minutos (cada encode roda de verdade)...");
+        Console.WriteLine();
+        // Imprime em tempo real: dozens de encodes sem nenhuma saída fazem o tool parecer
+        // travado, e a pessoa não tem como saber se ainda está trabalhando.
+        var report = AmdAudit.Run(req, subject, msg => Console.WriteLine("  [" + DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "] " + msg));
+        Console.WriteLine();
+        Console.WriteLine(AmdAuditReportWriter.Format(report));
+    }
+
+    private static int Pick(string? arg, int fallback) =>
+        int.TryParse(arg, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) && v > 0 ? v : fallback;
+
+    /// <summary>Lê a config real; se ela não existir, cai nos defaults sem quebrar o audit
+    /// (um tool de diagnóstico que não roda por falta de config é inútil na hora do
+    /// problema).</summary>
+    private static AppConfig ReadLiveConfig()
+    {
+        try
+        {
+            using var cm = new ConfigManager();
+            return cm.Config;
+        }
+        catch
+        {
+            return new AppConfig();
+        }
+    }
+
     internal static void ShowHelp()
     {
         Console.WriteLine("DiNho Clips Engine v1.0.0");
@@ -591,6 +683,9 @@ internal static class ProgramBenchmark
         Console.WriteLine("  DiNho.Capture.Poc --duration <seg>    Tempo limite de gravação (ex.: --duration 300)");
         Console.WriteLine("  DiNho.Capture.Poc --encoders          Lista e testa encoders disponíveis (ffmpeg)");
         Console.WriteLine("  DiNho.Capture.Poc --probe-nvenc [W H FPS]  Mede achievedFps real de cada preset NVENC");
+        Console.WriteLine("  DiNho.Capture.Poc --audit-amd [W H FPS CQ MAXRATE BUFSIZE FRAMES [CODEC]]");
+        Console.WriteLine("      Audit da stack AMF. Default: config real do usuario. CODEC fixa a familia medida");
+        Console.WriteLine("      (ex.: h264_nvenc) para rodar o audit inteiro em maquina sem AMF.");
         Console.WriteLine("  DiNho.Capture.Poc --probe-vbv [W H FPS CQ MAXRATE BUFSIZES]  Mede bitrate/fps por -bufsize");
         Console.WriteLine("  DiNho.Capture.Poc --probe-amf-usage [W H FPS CQ MAXRATE CODEC USAGES]  Mede fps/bitrate por -usage da AMF (precisa de GPU AMD)");
         Console.WriteLine("  DiNho.Capture.Poc --probe-hevc-profile [W H FPS CQ MAXRATE CODEC PROFILES]  A/B main vs main10 (entrada NV12 8-bit)");

@@ -551,12 +551,22 @@ public sealed partial class EngineCoordinator
 
     private readonly List<IntPtr> _dinhoHwnds = new();
     private int _wdaRetryCount;
+    private Task? _wdaRetryTask;
 
     // Seams p/ teste determinístico do retry (P4).
     internal static int WdaRetryDelayMs = 2000;
     internal static Func<int, List<IntPtr>>? EnumerateDinhoHwndsProbe = null;
     internal static Func<IntPtr, bool>? WdaExcludeProbe = null;
     internal static Action<IntPtr>? WdaRestoreProbe = null;
+
+    /// <summary>
+    /// Retry do WDA ainda pendente, para o teardown dos testes aguardar.
+    /// O corpo do retry roda inteiro sob lock (_dinhoHwnds), entao o teardown ja
+    /// era serializado por ele; isto torna a espera explicita em vez de
+    /// dependente dessa ordem de lock. Nao e a causa da falha intermitente de
+    /// AllExclusionsFail — ver o comentário em ResetWdaSeams.
+    /// </summary>
+    internal Task WdaRetryTask => _wdaRetryTask ?? Task.CompletedTask;
 
     /// <summary>
     /// Finds DnHo windows by Electron PID and sets WDA_EXCLUDEFROMCAPTURE.
@@ -628,7 +638,7 @@ public sealed partial class EngineCoordinator
             _wdaRetryCount = 1;
         }
         Log.W("EngineCoordinator", "WDA: excluding failed — scheduling one retry to hide DnHo window(s)");
-        _ = Task.Run(async () =>
+        _wdaRetryTask = Task.Run(async () =>
         {
             await Task.Delay(WdaRetryDelayMs);
             lock (_dinhoHwnds)

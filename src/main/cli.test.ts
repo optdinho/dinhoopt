@@ -58,25 +58,16 @@ vi.mock('./services/scan-cache', () => ({
   getCachedItem: getCachedItemMock,
 }))
 
-let mockBetterSqlite3Error: Error | null = null
-
-vi.mock('better-sqlite3', () => {
-  if (mockBetterSqlite3Error) {
-    const err = mockBetterSqlite3Error
-    err.message = `factory-throw:${err.message}`
-    throw err
-  }
-  return {
-    // biome-ignore lint/complexity/useArrowFunction: constructor mock — arrow functions are not constructible (vitest 4.x)
-    default: vi.fn(function () {
-      return {
-        pragma: vi.fn().mockReturnValue('wal'),
-        exec: vi.fn(),
-        close: vi.fn(),
-      }
-    }),
-  }
-})
+vi.mock('better-sqlite3', () => ({
+  // biome-ignore lint/complexity/useArrowFunction: constructor mock — arrow functions are not constructible (vitest 4.x)
+  default: vi.fn(function () {
+    return {
+      pragma: vi.fn().mockReturnValue('wal'),
+      exec: vi.fn(),
+      close: vi.fn(),
+    }
+  }),
+}))
 
 vi.mock('node:fs', () => ({
   existsSync: existsSyncMock,
@@ -324,7 +315,6 @@ vi.mock('./ipc/malware-scanner.ipc', () => ({
 
 beforeEach(() => {
   appExitMock = vi.fn()
-  mockBetterSqlite3Error = null
   vi.resetModules()
 })
 
@@ -3788,12 +3778,17 @@ describe('legacy scan functions', () => {
       expect(result.filesDeleted).toBe(1)
     })
 
-    // Skipped because vi.mock factory is cached after first import;
-    // changing mockBetterSqlite3Error doesn't re-trigger the factory.
-    // This path (import('better-sqlite3') failing) is tested implicitly
-    // by 'handles Database constructor errors' above (same catch block).
-    it.skip('handles better-sqlite3 not available', async () => {
-      mockBetterSqlite3Error = new Error('module not found')
+    // Needs doUnmock + doMock, not just the hoisted vi.mock above: the
+    // file-scope registration wins over doMock, and its factory is evaluated
+    // once and cached, so a test that wants the import to fail gets back the
+    // already-resolved good mock. doUnmock drops that registration so the
+    // throwing factory below is the one that runs.
+    it('handles better-sqlite3 not available', async () => {
+      vi.doUnmock('better-sqlite3')
+      vi.doMock('better-sqlite3', () => {
+        throw new Error('module not found')
+      })
+      vi.resetModules()
       const { cleanDatabasesCli } = await import('./cli/commands/legacy')
       const result = await cleanDatabasesCli(['db1'])
       expect(result.filesDeleted).toBe(0)

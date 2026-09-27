@@ -78,6 +78,20 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--audit-amd")
+        {
+            ProgramBenchmark.RunAmdAudit(
+                args.Length > 1 ? args[1] : null,
+                args.Length > 2 ? args[2] : null,
+                args.Length > 3 ? args[3] : null,
+                args.Length > 4 ? args[4] : null,
+                args.Length > 5 ? args[5] : null,
+                args.Length > 6 ? args[6] : null,
+                args.Length > 7 ? args[7] : null,
+                args.Length > 8 ? args[8] : null);
+            return;
+        }
+
         if (args.Length > 0 && (args[0] == "--bench" || args[0] == "--bench-json"))
         {
             await ProgramBenchmark.RunBenchmarkAsync(_benchJson);

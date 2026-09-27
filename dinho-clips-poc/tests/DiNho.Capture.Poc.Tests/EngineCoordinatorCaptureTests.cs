@@ -349,7 +349,8 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         try
         {
             EngineCoordinator.WdaRetryDelayMs = 20;
-            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => calls++ == 0
+            // calls e escrito pela thread do retry e lido aqui: interlocked
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => Interlocked.Increment(ref calls) == 1
                 ? new List<IntPtr>()
                 : new List<IntPtr> { hwnd };
             EngineCoordinator.WdaExcludeProbe = _ => true;
@@ -360,7 +361,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
 
             Assert.True(SpinWait.SpinUntil(() =>
                 GetField<List<IntPtr>>(coord, "_dinhoHwnds")!.Count > 0, 2000));
-            Assert.Equal(2, calls);
+            Assert.Equal(2, Volatile.Read(ref calls));
             Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
             Assert.Equal(hwnd, GetField<List<IntPtr>>(coord, "_dinhoHwnds")![0]);
         }
@@ -382,15 +383,15 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         try
         {
             EngineCoordinator.WdaRetryDelayMs = 20;
-            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { calls++; return new List<IntPtr>(); };
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { Interlocked.Increment(ref calls); return new List<IntPtr>(); };
 
             var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
                 BindingFlags.Instance | BindingFlags.NonPublic)!;
             method.Invoke(coord, null);
 
-            Assert.True(SpinWait.SpinUntil(() => calls >= 2, 2000));
+            Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref calls) >= 2, 2000));
             Thread.Sleep(80);
-            Assert.Equal(2, calls);
+            Assert.Equal(2, Volatile.Read(ref calls));
             Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
         }
         finally
@@ -414,7 +415,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
             EngineCoordinator.WdaRetryDelayMs = 20;
             EngineCoordinator.EnumerateDinhoHwndsProbe = _ =>
             {
-                calls++;
+                Interlocked.Increment(ref calls);
                 return new List<IntPtr> { hwnd };
             };
             EngineCoordinator.WdaExcludeProbe = _ => false;
@@ -423,7 +424,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
                 BindingFlags.Instance | BindingFlags.NonPublic)!;
             method.Invoke(coord, null);
 
-            Assert.True(SpinWait.SpinUntil(() => calls >= 2 && GetField<List<IntPtr>>(coord, "_dinhoHwnds")!.Count == 1, 2000));
+            Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref calls) >= 2 && GetField<List<IntPtr>>(coord, "_dinhoHwnds")!.Count == 1, 2000));
             Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
             Assert.Single(GetField<List<IntPtr>>(coord, "_dinhoHwnds")!);
         }
@@ -448,8 +449,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
             EngineCoordinator.WdaRetryDelayMs = 20;
             EngineCoordinator.EnumerateDinhoHwndsProbe = _ =>
             {
-                calls++;
-                if (calls == 1) throw new InvalidOperationException("boom");
+                if (Interlocked.Increment(ref calls) == 1) throw new InvalidOperationException("boom");
                 return new List<IntPtr> { hwnd };
             };
             EngineCoordinator.WdaExcludeProbe = _ => true;
@@ -458,7 +458,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
                 BindingFlags.Instance | BindingFlags.NonPublic)!;
             method.Invoke(coord, null);
 
-            Assert.True(SpinWait.SpinUntil(() => calls >= 2 && GetField<List<IntPtr>>(coord, "_dinhoHwnds")!.Count == 1, 2000));
+            Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref calls) >= 2 && GetField<List<IntPtr>>(coord, "_dinhoHwnds")!.Count == 1, 2000));
             Assert.Equal(1, GetField<int>(coord, "_wdaRetryCount"));
             Assert.Single(GetField<List<IntPtr>>(coord, "_dinhoHwnds")!);
         }
@@ -481,14 +481,14 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         try
         {
             EngineCoordinator.WdaRetryDelayMs = 20;
-            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { calls++; return new List<IntPtr> { hwnd }; };
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { Interlocked.Increment(ref calls); return new List<IntPtr> { hwnd }; };
             EngineCoordinator.WdaExcludeProbe = _ => true;
 
             var method = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
                 BindingFlags.Instance | BindingFlags.NonPublic)!;
             method.Invoke(coord, null);
 
-            Assert.Equal(1, calls);
+            Assert.Equal(1, Volatile.Read(ref calls));
             Assert.Equal(0, GetField<int>(coord, "_wdaRetryCount"));
             Assert.Single(GetField<List<IntPtr>>(coord, "_dinhoHwnds")!);
         }
@@ -510,7 +510,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         try
         {
             EngineCoordinator.WdaRetryDelayMs = 20;
-            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { calls++; return new List<IntPtr>(); };
+            EngineCoordinator.EnumerateDinhoHwndsProbe = _ => { Interlocked.Increment(ref calls); return new List<IntPtr>(); };
 
             var excludeMethod = CoordinatorType.GetMethod("ExcludeDinhoWindowFromCapture",
                 BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -522,7 +522,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
             restoreMethod.Invoke(coord, null);
 
             Thread.Sleep(80);
-            Assert.Equal(1, calls);
+            Assert.Equal(1, Volatile.Read(ref calls));
             Assert.Equal(0, GetField<int>(coord, "_wdaRetryCount"));
         }
         finally
@@ -533,9 +533,23 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
 
     private static void ResetWdaSeams(EngineCoordinator coord)
     {
+        // O retry do WDA e fire-and-forget, entao o teardown espera a task
+        // pendente em vez de depender da ordem do lock. NAO e a causa da falha
+        // intermitente de AllExclusionsFail: o corpo do retry roda inteiro sob
+        // lock (_dinhoHwnds), entao o teardown ja era serializado — a mutacao
+        // (tirar a espera) passava. E robustez explicita, nao conserto de
+        // causa provada.
+        //
+        // O que ERA um defeito provado sao os contadores `calls` desta regiao:
+        // o probe roda na thread do retry e o teste lia `calls` de outra thread
+        // sem volatile nem interlocked (ex.: Assert.Equal(2, calls) logo apos o
+        // SpinWait ver a lista), o que pode ler um valor obsoleto. Agora sao
+        // Interlocked.Increment no probe e Volatile.Read no teste.
+        try { coord.WdaRetryTask.GetAwaiter().GetResult(); } catch { }
         EngineCoordinator.EnumerateDinhoHwndsProbe = null;
         EngineCoordinator.WdaExcludeProbe = null;
         EngineCoordinator.WdaRestoreProbe = null;
+        EngineCoordinator.WdaRetryDelayMs = 2000;
         var restore = CoordinatorType.GetMethod("RestoreDinhoWindowCapture",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
         try { restore.Invoke(coord, null); } catch { }
