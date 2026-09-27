@@ -43,17 +43,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-vi.mock('framer-motion', () => ({
-  motion: new Proxy(
-    {},
-    {
-      get:
-        () =>
-        ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    },
-  ) as any,
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-}))
+vi.mock('framer-motion', async () => (await import('../../../test-motion-mock')).motionMock)
 
 vi.mock('lucide-react', () => {
   const Icon = ({ children, ...props }: { children?: React.ReactNode }) => <div {...props}>{children}</div>

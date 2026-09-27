@@ -130,7 +130,7 @@ describe('ClipEditorModal', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('disables improve quality until re-encode or sharpness is selected', () => {
+  it('disables improve quality until re-encode or sharpness is selected', async () => {
     renderModal()
 
     const improve = screen.getByRole('button', { name: /improveQuality/ }) as HTMLButtonElement
@@ -145,6 +145,10 @@ describe('ClipEditorModal', () => {
     const sharpness = document.querySelector('input[type="range"]') as HTMLInputElement
     fireEvent.change(sharpness, { target: { value: '0.5' } })
     expect(improve.disabled).toBe(false)
+
+    // The modal's mount effects settle after these sync assertions; drain
+    // them inside act so their setState calls are not act() warnings.
+    await act(async () => {})
   })
 
   it('defaults the re-encode toggle to off', () => {

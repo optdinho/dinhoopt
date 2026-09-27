@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetStatus = vi.fn()
@@ -21,17 +21,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-vi.mock('framer-motion', () => ({
-  motion: new Proxy(
-    {},
-    {
-      get:
-        () =>
-        ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    },
-  ) as any,
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-}))
+vi.mock('framer-motion', async () => (await import('../../../test-motion-mock')).motionMock)
 
 vi.mock('lucide-react', () => {
   const Icon = ({ children, ...props }: { children?: React.ReactNode }) => <div {...props}>{children}</div>
@@ -141,7 +131,7 @@ describe('ClipsPage', () => {
 
   const showSettings = () => {
     const btn = screen.getByTitle('showSettings')
-    btn.click()
+    fireEvent.click(btn)
   }
 
   it('renders page header and engine status section', async () => {
@@ -220,10 +210,16 @@ describe('ClipsPage', () => {
     expect(mockList).toHaveBeenCalled()
   })
 
-  it('handles missing window.dinho gracefully', () => {
+  it('handles missing window.dinho gracefully', async () => {
     const savedDinho = window.dinho
     delete (window as any).dinho
     expect(() => render(<ClipsPage />)).not.toThrow()
+    // Mount effects still run with window.dinho undefined; drain them inside
+    // act (macrotask hop, since act only flushes microtasks) so the resulting
+    // setState calls are not act() warnings.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
     ;(window as any).dinho = savedDinho
   })
 
@@ -266,7 +262,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     expect(await screen.findByText('recordingQuality')).toBeTruthy()
-    screen.getByText('pushToTalk').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('pushToTalk'))
+    })
     expect(await screen.findByText('pttOff')).toBeTruthy()
     expect(screen.getByText('pttHold')).toBeTruthy()
     expect(screen.getByText('pttToggle')).toBeTruthy()
@@ -276,9 +274,11 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('pushToTalk').click()
+    fireEvent.click(screen.getByText('pushToTalk'))
     await screen.findByText('pttHold')
-    screen.getByText('pttHold').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('pttHold'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ pushToTalk: 'hold' })
   })
 
@@ -287,7 +287,9 @@ describe('ClipsPage', () => {
     showSettings()
     await screen.findByText('recordingQuality')
     const gdToggle = screen.getAllByText('gameDetection')[1]!.parentElement!.querySelector('button')!
-    gdToggle.click()
+    await act(async () => {
+      fireEvent.click(gdToggle)
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ gameDetection: true })
   })
 
@@ -303,7 +305,9 @@ describe('ClipsPage', () => {
     showSettings()
     await screen.findByText('recordingQuality')
     const alToggle = screen.getByText('audioLoopback')
-    alToggle.click()
+    await act(async () => {
+      fireEvent.click(alToggle)
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ audioLoopback: true, gameAudioOnly: false })
   })
 
@@ -335,11 +339,13 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('audioLoopback').click()
+    fireEvent.click(screen.getByText('audioLoopback'))
     await waitFor(() => expect(mockSetConfig).toHaveBeenCalledWith({ audioLoopback: true, gameAudioOnly: false }))
     await waitFor(() => expect(mockGetConfig).toHaveBeenCalledTimes(2))
     mockSetConfig.mockClear()
-    screen.getByText('audioLoopback').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('audioLoopback'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ audioLoopback: false, gameAudioOnly: true })
   })
 
@@ -371,13 +377,15 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByTestId('gameAudioOnly-toggle').click()
+    fireEvent.click(screen.getByTestId('gameAudioOnly-toggle'))
     await waitFor(() =>
       expect(mockSetConfig).toHaveBeenCalledWith({ gameAudioOnly: true, micEnabled: true, audioLoopback: false }),
     )
     await waitFor(() => expect(mockGetConfig).toHaveBeenCalledTimes(2))
     mockSetConfig.mockClear()
-    screen.getByTestId('gameAudioOnly-toggle').click()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('gameAudioOnly-toggle'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ gameAudioOnly: false, audioLoopback: true })
   })
 
@@ -389,9 +397,13 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('audioSessions').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('audioSessions'))
+    })
     expect(await screen.findByText('Spotify')).toBeTruthy()
-    screen.getByTestId('audio-session-2233').click()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('audio-session-2233'))
+    })
     expect(mockSetConfig).toHaveBeenLastCalledWith({ selectedAudioSessions: [2233] })
   })
 
@@ -404,7 +416,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('audioSessions').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('audioSessions'))
+    })
     expect(await screen.findByText('Spotify')).toBeTruthy()
     expect(screen.getByText('audioSessionsHint')).toBeTruthy()
     expect(screen.queryByText('requiredSession')).toBeNull()
@@ -420,10 +434,14 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('audioSessions').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('audioSessions'))
+    })
     expect(await screen.findByText('Discord')).toBeTruthy()
     expect(screen.getByText('sessionRemove')).toBeTruthy()
-    screen.getByTestId('audio-session-7788').click()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('audio-session-7788'))
+    })
     expect(mockSetConfig).toHaveBeenLastCalledWith({ selectedAudioSessions: [7788] })
   })
 
@@ -435,9 +453,13 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('audioSessions').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('audioSessions'))
+    })
     expect(await screen.findByText('Spotify')).toBeTruthy()
-    screen.getByTestId('audio-session-2233').click()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('audio-session-2233'))
+    })
     expect(mockSetConfig).toHaveBeenLastCalledWith({ selectedAudioSessions: [] })
   })
 
@@ -473,7 +495,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('hotkeys').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('hotkeys'))
+    })
     expect(await screen.findByText('actionPushToTalkLabel')).toBeTruthy()
   })
 
@@ -491,7 +515,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('presetAlta').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('presetAlta'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ cq: 18, maxrateKbps: 55000 }))
   })
 
@@ -499,7 +525,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('presetPerformance').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('presetPerformance'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith(
       expect.objectContaining({ cq: 22, maxrateKbps: 12000, width: 1280, height: 720, fps: 30 }),
     )
@@ -512,7 +540,9 @@ describe('ClipsPage', () => {
     expect(screen.getByText('replayBufferModeRam')).toBeTruthy()
     expect(screen.getByText('replayBufferModeHybrid')).toBeTruthy()
     expect(screen.getByText('replayBufferModeDisk')).toBeTruthy()
-    screen.getByText('replayBufferModeDisk').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('replayBufferModeDisk'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ replayBufferMode: 'disk' }))
   })
 
@@ -598,7 +628,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('replayCustom').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('replayCustom'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ replayTimeSeconds: 150 })
   })
 
@@ -627,7 +659,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('replayPreset30s').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('replayPreset30s'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ replayTimeSeconds: 30 })
   })
 
@@ -656,7 +690,9 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    screen.getByText('replayCustom').click()
+    await act(async () => {
+      fireEvent.click(screen.getByText('replayCustom'))
+    })
     expect(mockSetConfig).toHaveBeenCalledWith({ replayTimeSeconds: 150 })
   })
 
@@ -688,7 +724,7 @@ describe('ClipsPage', () => {
       render(<ClipsPage />)
       showSettings()
       await screen.findByText('presetLeve60')
-      screen.getByText('presetLeve60').click()
+      fireEvent.click(screen.getByText('presetLeve60'))
       await waitFor(() => {
         const call = mockSetConfig.mock.calls.at(-1)?.[0] as Record<string, unknown>
         expect(call.width).toBe(1600)
@@ -709,7 +745,7 @@ describe('ClipsPage', () => {
       render(<ClipsPage />)
       showSettings()
       await screen.findByText('900p')
-      screen.getByText('900p').click()
+      fireEvent.click(screen.getByText('900p'))
       await waitFor(() => {
         expect(mockSetConfig).toHaveBeenCalledWith({ width: 1600, height: 900 })
       })

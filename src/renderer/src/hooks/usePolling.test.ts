@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePolling } from './usePolling'
 
@@ -17,7 +17,7 @@ describe('usePolling', () => {
     const fetcher = vi.fn().mockResolvedValue('hello')
     const { result } = renderHook(() => usePolling(fetcher, 1000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.data).toBe('hello')
     })
     expect(result.current.error).toBe(false)
@@ -28,7 +28,7 @@ describe('usePolling', () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('fail'))
     const { result } = renderHook(() => usePolling(fetcher, 1000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.error).toBe(true)
     })
     expect(result.current.loading).toBe(false)
@@ -38,7 +38,7 @@ describe('usePolling', () => {
     const fetcher = vi.fn().mockResolvedValue('data')
     renderHook(() => usePolling(fetcher, 1000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(fetcher).toHaveBeenCalledTimes(1)
     })
 
@@ -53,7 +53,7 @@ describe('usePolling', () => {
     const fetcher = vi.fn().mockResolvedValue('data')
     renderHook(() => usePolling(fetcher, 1000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(fetcher).toHaveBeenCalledTimes(1)
     })
 
@@ -74,12 +74,16 @@ describe('usePolling', () => {
     const fetcher = vi.fn().mockResolvedValue('data')
     const { result } = renderHook(() => usePolling(fetcher, 10000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.data).toBe('data')
     })
     expect(fetcher).toHaveBeenCalledTimes(1)
 
-    await act(() => result.current.refresh())
+    // Async act: refresh() resolves the fetch in a microtask chain, and a sync
+    // act() would close its scope before the resulting setState calls.
+    await act(async () => {
+      result.current.refresh()
+    })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
@@ -87,7 +91,7 @@ describe('usePolling', () => {
     const fetcher = vi.fn().mockResolvedValue('data')
     const { unmount } = renderHook(() => usePolling(fetcher, 1000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(fetcher).toHaveBeenCalledTimes(1)
     })
 
@@ -107,7 +111,7 @@ describe('usePolling', () => {
     )
     const { result, unmount } = renderHook(() => usePolling(fetcher, 10000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(fetcher).toHaveBeenCalledTimes(1)
     })
 
@@ -115,7 +119,7 @@ describe('usePolling', () => {
 
     deferredResolve('data')
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.data).toBeUndefined()
     })
     expect(result.current.error).toBe(false)
@@ -132,7 +136,7 @@ describe('usePolling', () => {
     )
     const { result, unmount } = renderHook(() => usePolling(fetcher, 10000))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(fetcher).toHaveBeenCalledTimes(1)
     })
 
@@ -140,7 +144,7 @@ describe('usePolling', () => {
 
     deferredReject(new Error('fail'))
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.error).toBe(false)
     })
     expect(result.current.data).toBeUndefined()

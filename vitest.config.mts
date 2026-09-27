@@ -20,6 +20,7 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/test-setup.ts',
         'src/test-utils.ts',
+        'src/test-motion-mock.tsx',
         'src/renderer/src/**/*.tsx',
         'src/renderer/src/src.d.ts',
         'src/shared/i18n/**',

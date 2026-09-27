@@ -1,6 +1,6 @@
 import type { PlatformInfo } from '@shared/types'
 // @vitest-environment jsdom
-import { renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlatformContext, usePlatform, usePlatformLoader } from './usePlatform'
@@ -48,10 +48,15 @@ describe('usePlatformLoader', () => {
     } as unknown as Window['dinho']
   })
 
-  it('returns default info initially before promise resolves', () => {
+  it('returns default info initially before promise resolves', async () => {
     const { result } = renderHook(() => usePlatformLoader())
 
+    // Asserted synchronously, while platformInfo() is still pending.
     expect(result.current).toEqual(defaultInfo)
+
+    // Then let the promise settle inside act, so its setState is not an
+    // act() warning. The value is intentionally not re-asserted.
+    await act(async () => {})
   })
 
   it('calls platformInfo on mount and updates info', async () => {
@@ -77,7 +82,7 @@ describe('usePlatformLoader', () => {
 
     const { result } = renderHook(() => usePlatformLoader())
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current).toEqual(customInfo)
     })
   })
