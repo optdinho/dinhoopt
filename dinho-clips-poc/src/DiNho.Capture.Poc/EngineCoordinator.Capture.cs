@@ -195,9 +195,29 @@ public sealed partial class EngineCoordinator
                     return;
                 }
 
+                // Incidente 2026-09-28: a janela do Medal (alvo de captura errado)
+                // reporta 1920x240 no item, com a textura WGC REAL em 1920x40 —
+                // altura < floor. O Math.Max(_, 240) MASCARAVA a degradação e o
+                // encoder inicializava com o tamanho errado, quebrando o DIM
+                // MISMATCH do convert GPU p/ NV12 → CPU fallback → drops em cadeia.
+                // Uma fonte degenerada é inválida: aborta o start em vez de mentir
+                // sobre a resolução.
+                if (IsDegenerateCaptureSize(_capture.Width, _capture.Height))
+                {
+                    Log.E("EngineCoordinator", $"Fonte de captura degenerada ({_capture.Width}x{_capture.Height}) — abortando StartCapture");
+                    _capture = null;
+                    _wgcPump = null;
+                    _encoder?.Dispose();
+                    _encoder = null;
+                    _sharedDevice?.Dispose();
+                    _sharedDevice = null;
+                    _captureActive = false;
+                    return;
+                }
+
                 // Inicializa dimensões reais da captura
-                _captureWidth = Math.Max(_capture.Width, 320);
-                _captureHeight = Math.Max(_capture.Height, 240);
+                _captureWidth = _capture.Width;
+                _captureHeight = _capture.Height;
 
                 // Calibração por capacidade da máquina (defaults calibrados p/ PCs fracos)
                 // roda ANTES do RamManager — que continua ajustando em runtime por cima.
@@ -696,6 +716,15 @@ public sealed partial class EngineCoordinator
     internal static bool ShouldLogRecovery(int consecutiveDrops)
         => consecutiveDrops >= 5;
 
+    // Incidente 2026-09-28: janela do Medal reportou 1920x240 no item com textura
+    // WGC real 1920x40. O antigo Math.Max(h, 240) mascarava a degradação e o encoder
+    // inicializava com DIM errado. Uma fonte degenerada (sub-piso em QUALQUER eixo)
+    // é inválida — StartCapture aborta em vez de mentir sobre a resolução.
+    internal const int MinCaptureWidth = 320;
+    internal const int MinCaptureHeight = 240;
+    internal static bool IsDegenerateCaptureSize(int width, int height)
+        => width < MinCaptureWidth || height < MinCaptureHeight;
+
     // Timeout do WaitOne na captura — deve ser >= intervalo do cap do WGC
     // (ComputeCapIntervalTicks = 10_000_000 / fps). Truncar (1000 / fps) deixava
     // o timeout 0,33-0,67ms menor que o intervalo -> drop espúrio por corrida de
@@ -991,10 +1020,18 @@ public sealed partial class EngineCoordinator
                     // (WGC/DXGI/hybrid), não só WGC per-window.
                     bool fgIsNonGame = IsForegroundNonGame();
 
-                    if ((_capture is WgcCaptureSource && _captureTargetGame.IsValid &&
+                    // Incidente 2026-09-28: com o alvo = janela do Medal (não-jogo),
+                    // a queda de frames era lida como "usuário alt-tabou e vai voltar"
+                    // e o watchdog era resetado para sempre → 175 drops em ~70s.
+                    // Suppressão de alt-tab só é legítima se o ALVO é um jogo conhecido;
+                    // senão a queda é pipeline preso no alvo errado e precisa reiniciar.
+                    bool targetIsKnownGame = IsKnownGameTarget(_captureTargetGame);
+
+                    if ((_capture is WgcCaptureSource && targetIsKnownGame &&
                         IsTargetProcessAlive() &&
                         !IsTargetGameForeground())
-                        || fgIsNonGame)
+                        || (fgIsNonGame && !_captureTargetGame.IsValid)
+                        || (fgIsNonGame && targetIsKnownGame))
                     {
                         _bgDropCount++;
                         if (_bgDropCount >= BG_DEBOUNCE_DROPS)

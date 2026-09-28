@@ -73,10 +73,18 @@ public sealed partial class EngineCoordinator
 
         // Jogo atual em foreground
         var current = _gameDetector.CurrentGame;
-        if (current.IsValid)
+        // Um foreground não-jogo (Medal, PickerHost, explorer...) NÃO pode virar
+        // alvo de captura — o incidente 2026-09-28: o GameAudioOnly restart do
+        // Medal preso estava reiniciando com CurrentGame=Medal como alvo, e a
+        // janela do Medal (item 1920x240, textura real 1920x40) levava o encoder
+        // ao DIM MISMATCH → CPU fallback → encode error → 175 drops em ~70s.
+        if (current.IsValid && !IsKnownNonGame(current))
             return current;
 
-        // Fallback: último jogo válido detectado (ex: Electron roubou o foco)
+        // Fallback: último jogo válido detectado (ex: Electron roubou o foco).
+        // OnGameChanged só grava _lastDetectedGame quando o nome NÃO está em
+        // NonGameProcesses (linha 437-438); com o Fix 1 (Medal no set por nome)
+        // o foreground não-jogo do incidente nunca mais o contamina.
         if (_lastDetectedGame.IsValid)
         {
             var fallback = ResolveProcessByName(_lastDetectedGame.ProcessName);
@@ -87,8 +95,35 @@ public sealed partial class EngineCoordinator
             }
         }
 
-        return current;
+        // Nada disponível: devolve o foreground apenas se for um jogo de verdade.
+        // Um foreground não-jogo (Medal) devolve INVALID — nunca vira alvo de captura.
+        return current.IsValid && !IsKnownNonGame(current) ? current : new GameInfo();
     }
+
+    /// <summary>
+    /// True se o <see cref="GameInfo"/> é conhecidamente NÃO um jogo:
+    /// processo em <see cref="NonGameProcesses"/>, classe de janela do sistema,
+    /// ou executável em diretório do sistema. Um não-jogo nunca pode virar alvo
+    /// de captura (incidente 2026-09-28: Medal preso em GameAudioOnly restart).
+    /// </summary>
+    private static bool IsKnownNonGame(GameInfo game)
+    {
+        if (!game.IsValid)
+            return false;
+        return NonGameProcesses.Contains(game.ProcessName)
+            || IsSystemWindowClass(game.WindowClass)
+            || IsSystemExecutablePath(game.ExecutablePath);
+    }
+
+    /// <summary>
+    /// True se o <see cref="GameInfo"/> é um alvo de captura LEGÍTIMO: um jogo
+    /// conhecido de verdade, não um foreground não-jogo (Medal, explorer...).
+    /// Gate do branch alt-tab do PipelineLoop — se o ALVO é um não-jogo, a queda
+    /// de frames NÃO é "usuário alt-tabou e vai voltar", é pipeline preso no alvo
+    /// errado, e o watchdog tem que poder reiniciar (incidente 2026-09-28).
+    /// </summary>
+    internal static bool IsKnownGameTarget(GameInfo game)
+        => game.IsValid && !string.IsNullOrEmpty(game.ProcessName) && !IsKnownNonGame(game);
 
     // ---------------------------------------------------------------------------
     // Alive-check por PID via OpenProcess (Opção A — fix do falso-negativo FiveM).
@@ -1077,7 +1112,8 @@ public sealed partial class EngineCoordinator
         "OBS Studio", "obs64", "obs32", "obs",
         "Lightstream", "XSplit", "xsplit",
         "StreamElements", "StreamElements OBS.Live",
-        "Medal.tv", "MedalEncoder",
+        "Medal.tv", "MedalEncoder", "Medal",
+        "MedalService", "MedalUpdater", "MedalCLI", "NewMedal",
         "Plarium Play", "PlariumPlay",
         "Nvidia ShadowPlay", "nvcontainer",
         "GeForce Experience", "GeForceExperience",

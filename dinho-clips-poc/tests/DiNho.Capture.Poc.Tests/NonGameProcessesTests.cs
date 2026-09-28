@@ -157,6 +157,26 @@ public sealed class NonGameProcessesTests
     }
 
     [Fact]
+    public void NonGameProcesses_ContainsMedalCaptureProcesses()
+    {
+        // Medal (Medal.tv) é um clipper over-the-top de captura de tela, NUNCA um jogo.
+        // Incidente 2026-09-28: o processo real 'Medal' (PID=18164) não estava no set
+        // (só o "Medal.tv"/"MedalEncoder" window-title, nunca o nome do processo), então
+        // OnGameChanged o tratou como jogo, o GameAudioOnly restart trocou o alvo de
+        // captura para a janela do Medal e o pipeline ficou 175 drops / ~70s morto.
+        var field = typeof(EngineCoordinator).GetField("NonGameProcesses",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        var set = field.GetValue(null) as HashSet<string>;
+        Assert.NotNull(set);
+
+        Assert.Contains("Medal", set);
+        Assert.Contains("Medal.tv", set);
+        Assert.Contains("MedalEncoder", set);
+    }
+
+    [Fact]
     public void IsSystemWindowClass_ReturnsTrueForKnownClasses()
     {
         var method = typeof(EngineCoordinator).GetMethod("IsSystemWindowClass",
@@ -332,5 +352,78 @@ public sealed class NonGameProcessesTests
         Assert.DoesNotContain("valorant", set);
         Assert.DoesNotContain("GTA5", set);
         Assert.DoesNotContain("Minecraft", set);
+    }
+
+    [Fact]
+    public void IsKnownGameTarget_ValidKnownGame_ReturnsTrue()
+    {
+        var method = typeof(EngineCoordinator).GetMethod("IsKnownGameTarget",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var game = new GameInfo(
+            "FiveM", @"C:\FiveM\FiveM.exe", "GTA V", "grcWindow",
+            DiNho.Capture.Poc.GameDetection.DisplayMode.FullscreenExclusive,
+            1234, new IntPtr(0xABCD));
+
+        var result = (bool)method!.Invoke(null, [game])!;
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsKnownGameTarget_MedalTarget_ReturnsFalse()
+    {
+        // Incidente 2026-09-28: o alvo de captura virou a janela do Medal (não-jogo).
+        // Se IsKnownGameTarget() é false, o branch alt-tab do PipelineLoop NÃO pode
+        // suprimir o watchdog — senão a queda de frames do medal vira "alt-tab" e o
+        // pipeline fica morto para sempre (175 drops em ~70s).
+        var method = typeof(EngineCoordinator).GetMethod("IsKnownGameTarget",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var medal = new GameInfo(
+            "Medal", @"C:\Users\Test\AppData\Local\Medal\Medal.exe", "Medal", "",
+            DiNho.Capture.Poc.GameDetection.DisplayMode.Windowed,
+            18164, new IntPtr(0x9999));
+
+        var result = (bool)method!.Invoke(null, [medal])!;
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsKnownGameTarget_SystemLayer_ReturnsFalse()
+    {
+        var method = typeof(EngineCoordinator).GetMethod("IsKnownGameTarget",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+
+        // PickerHost (sobreposição do Windows) nunca pode ser alvo de captura.
+        var picker = new GameInfo(
+            "PickerHost", $@"{windowsDir}\System32\PickerHost.exe", "", "PickerHostWindow",
+            DiNho.Capture.Poc.GameDetection.DisplayMode.Windowed,
+            5678, new IntPtr(0x7777));
+        var shell = new GameInfo(
+            "explorer", $@"{windowsDir}\explorer.exe", "", "Shell_TrayWnd",
+            DiNho.Capture.Poc.GameDetection.DisplayMode.Windowed,
+            9999, new IntPtr(0x0001));
+
+        Assert.False((bool)method!.Invoke(null, [picker])!);
+        Assert.False((bool)method!.Invoke(null, [shell])!);
+    }
+
+    [Fact]
+    public void IsKnownGameTarget_InvalidOrEmpty_ReturnsFalse()
+    {
+        var method = typeof(EngineCoordinator).GetMethod("IsKnownGameTarget",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        // Alvo inválido (captura de desktop) não é "jogo conhecido"; o branch alt-tab
+        // de desktop continua usando a cláusula fgIsNonGame isoladamente.
+        Assert.False((bool)method!.Invoke(null, [new GameInfo()])!);
+        Assert.False((bool)method!.Invoke(null, [new GameInfo(
+            "", "", "", "", DiNho.Capture.Poc.GameDetection.DisplayMode.Unknown, 0, IntPtr.Zero)])!);
     }
 }

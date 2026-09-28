@@ -782,6 +782,97 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         Assert.IsType<GameInfo>(result);
     }
 
+    [Fact]
+    public void ResolveTargetGame_CurrentGameNonGame_DoesNotReturnNonGame()
+    {
+        var coord = CreateWithConfig();
+        var baseName = Environment.ProcessPath is not null
+            ? Path.GetFileNameWithoutExtension(Environment.ProcessPath)
+            : "testhost";
+        var lastGame = new GameInfo(
+            processName: baseName,
+            executablePath: "",
+            windowTitle: "",
+            windowClass: "",
+            displayMode: DisplayMode.Unknown,
+            processId: Environment.ProcessId,
+            hwnd: new IntPtr(0x1234));
+        SetField(coord, "_lastDetectedGame", lastGame);
+
+        // GameDetector.CurrentGame = Medal (non-game) — ResolveTargetGame tem que
+        // PULAR o foreground não-jogo e cair no fallback _lastDetectedGame.
+        var detector = GetField<GameDetector>(coord, "_gameDetector")!;
+        var field = typeof(GameDetector).GetField("_currentGame",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        field.SetValue(detector, new GameInfo(
+            processName: "Medal",
+            executablePath: @"C:\Users\Test\AppData\Local\Medal\Medal.exe",
+            windowTitle: "Medal",
+            windowClass: "",
+            displayMode: DisplayMode.Windowed,
+            processId: 18164,
+            hwnd: new IntPtr(0x9999)));
+
+        var result = InvokeResolveTargetGame(coord);
+        Assert.NotEqual("Medal", result.ProcessName);
+        Assert.Equal(baseName, result.ProcessName);
+    }
+
+    [Fact]
+    public void ResolveTargetGame_CurrentGameSystemExecutable_DoesNotReturnIt()
+    {
+        var coord = CreateWithConfig();
+        var baseName = Environment.ProcessPath is not null
+            ? Path.GetFileNameWithoutExtension(Environment.ProcessPath)
+            : "testhost";
+        var lastGame = new GameInfo(
+            processName: baseName,
+            executablePath: "",
+            windowTitle: "",
+            windowClass: "",
+            displayMode: DisplayMode.Unknown,
+            processId: Environment.ProcessId,
+            hwnd: new IntPtr(0x1234));
+        SetField(coord, "_lastDetectedGame", lastGame);
+
+        var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var detector = GetField<GameDetector>(coord, "_gameDetector")!;
+        var field = typeof(GameDetector).GetField("_currentGame",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        field.SetValue(detector, new GameInfo(
+            processName: "PickerHost",
+            executablePath: Path.Combine(windowsDir, "System32", "PickerHost.exe"),
+            windowTitle: "",
+            windowClass: "PickerHostWindow",
+            displayMode: DisplayMode.Windowed,
+            processId: 5678,
+            hwnd: new IntPtr(0x7777)));
+
+        var result = InvokeResolveTargetGame(coord);
+        Assert.NotEqual("PickerHost", result.ProcessName);
+        Assert.Equal(baseName, result.ProcessName);
+    }
+
+    [Fact]
+    public void ResolveTargetGame_CurrentGameNonGame_NoLastDetected_ReturnsInvalid()
+    {
+        var coord = CreateWithConfig();
+        var detector = GetField<GameDetector>(coord, "_gameDetector")!;
+        var field = typeof(GameDetector).GetField("_currentGame",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        field.SetValue(detector, new GameInfo(
+            processName: "Medal",
+            executablePath: @"C:\Users\Test\AppData\Local\Medal\Medal.exe",
+            windowTitle: "Medal",
+            windowClass: "",
+            displayMode: DisplayMode.Windowed,
+            processId: 18164,
+            hwnd: new IntPtr(0x9999)));
+
+        var result = InvokeResolveTargetGame(coord);
+        Assert.False(result.IsValid);
+    }
+
     #endregion
 
     #region OnGameChanged
