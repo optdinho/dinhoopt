@@ -30,6 +30,7 @@
     "format",
     "frc_amf",
     "hwupload",
+    "libvmaf",
     "scale",
     "sr_amf"
   ],

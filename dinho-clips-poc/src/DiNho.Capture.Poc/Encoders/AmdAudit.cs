@@ -4,6 +4,20 @@ using System.Text;
 
 namespace DiNho.Capture.Poc.Encoders;
 
+/// <summary>De onde um probe tira os frames — e, o que de fato interessa, o que o
+/// <b>cronômetro</b> dele está incluindo por acidente.</summary>
+internal enum AmdSourceMode
+{
+    /// <summary><c>-f lavfi -i &lt;grafo&gt;</c>: a fonte é <b>gerada dentro</b> do processo
+    /// cronometrado. Legítimo para quem mede bytes/VMAF e não throughput.</summary>
+    LavfiRealtime,
+
+    /// <summary>Arquivo y4m materializado <b>uma vez</b>, fora do relógio de cada braço.
+    /// Obrigatório para qualquer probe que publique fps — ver
+    /// <c>AmdSourceIsolationTests</c> para a medição que prova por quê.</summary>
+    PreMaterialized,
+}
+
 /// <summary>Parâmetros que o audit valida. Vem da <c>AppConfig</c> real, não de constantes
 /// duplicadas: o que o usuário está gravando agora é o que precisa ser auditado.</summary>
 internal sealed record AmdAuditRequest(int Width, int Height, int Fps, int Cq, int MaxrateKbps, int BufsizeKbps, int Frames)
@@ -130,6 +144,160 @@ internal static class AmdAudit
     internal static string RateSource(int w, int h, int fps) =>
         $"life=size={w}x{h}:rate={fps},format=yuv420p";
 
+    // ---------------- isolamento da fonte do cronômetro ----------------
+
+    /// <summary>Argumentos de entrada da fonte, no modo pedido. É uma função separada de
+    /// <see cref="BuildVmafArgs"/> e de <see cref="Encode"/> porque os dois precisam da
+    /// <b>mesma</b> fonte: se o encode lê o arquivo e o VMAF regenera pela lavfi, o VMAF
+    /// passa a comparar contra pixels que o encoder nunca viu — e a qualidade vira fiction.</summary>
+    internal static string[] SourceInputArgs(string spec, AmdSourceMode mode) => mode switch
+    {
+        AmdSourceMode.LavfiRealtime => ["-f", "lavfi", "-i", spec],
+        AmdSourceMode.PreMaterialized => ["-i", Quote(spec)],
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "modo de fonte desconhecido"),
+    };
+
+    /// <summary>Throughput da materialização, em fps de conteúdo. É o número que
+    /// <b>explica</b> por que o modo lavfi não serve para medir encoder, e por isso o probe
+    /// o imprime.</summary>
+    ///
+    /// <para>Denominador é a duração <b>nominal</b> (frames/fps), não o wall-clock — o mesmo
+    /// critério de <see cref="Nominal"/>. Os dois divisores têm guarda explícita porque 0 é
+    /// alcançável de verdade: fps <= 0 numa config malformada, e um relógio de parede parado
+    /// numa máquina sob carga (que é exatamente a máquina que interessa medir).</para>
+    internal static double SourceCost(int frames, int fps, double elapsedSeconds)
+    {
+        var nominal = fps > 0 ? frames / (double)fps : 0;
+        if (nominal <= 0 || elapsedSeconds <= 0) return 0;
+        return frames / elapsedSeconds;
+    }
+
+    /// <summary>Grava a fonte lavfi em y4m e devolve o tempo que isso custou. Roda
+    /// <b>uma vez</b> por probe, fora do cronômetro de cada braço.
+    ///
+    /// <para><b>Por que y4m e não um container de vídeo.</b> y4m é YUV cru com o frame rate e
+    /// o pixel format no cabeçalho: a demux é praticamente um memcpy (GB/s), que é ~0,3 ms/frame
+    /// em 1080p contra os ~23 ms do mandelbrot. Um mp4 exigiria um encoder a mais no caminho e
+    /// o VMAF perderia a referência bit-exata.</para>
+    ///
+    /// <para><b>Por que o VMAF continua comparável com o audit.</b> A referência passa a ser o
+    /// mesmo arquivo de pixels que o encoder recebeu. Não é a segunda geração independente da
+    /// lavfi — é exatamente o mesmo conteúdo, que é o que a comparação exige.</para>
+    ///
+    /// <para>Devolve <c>false</c> em vez de lançar: quem chama decide se aborta, e o probe
+    /// <b>não</b> pode cair de volta na lavfi (ver o comentário do chamador).</para>
+    internal static bool MaterializeSource(
+        string lavfiSpec, int frames, int fps, string y4mPath, out double elapsedSeconds, out string error)
+    {
+        var args = new List<string>
+        {
+            "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", lavfiSpec,
+            "-frames:v", frames.ToString(CultureInfo.InvariantCulture),
+            "-pix_fmt", "yuv420p",
+            // O nome do muxer é yuv4mpegPIPE, não yuv4mpeg - confirmado no binário
+            // embarcado (`ffmpeg -muxers` lista `E yuv4mpegpipe`), onde `-f yuv4mpeg`
+            // morre com "Requested output format 'yuv4mpeg' is not known" (exit -22). É a
+            // mesma classe de erro do `-rc vbr_peak` do Item 8: o argv "parece" certo e
+            // só o binário real diz que não é. Nenhum teste de forma pega isso.
+            "-f", "yuv4mpegpipe",
+            Quote(y4mPath),
+        };
+
+        elapsedSeconds = 0;
+        error = "";
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var psi = FfmpegPathResolver.CreateFfmpegStartInfo(
+                Join(args), redirectInput: false, redirectOutput: false, redirectError: true);
+            using var p = Process.Start(psi)!;
+            var drain = Task.Run(() =>
+            {
+                try { return p.StandardError.ReadToEnd(); }
+                catch (IOException) { return ""; }
+                catch (ObjectDisposedException) { return ""; }
+            });
+            if (!p.WaitForExit(TimeoutMs))
+            {
+                try { p.Kill(true); } catch { }
+                error = "timeout materializando a fonte";
+                return false;
+            }
+            sw.Stop();
+            try { drain.Wait(2000); } catch { }
+            elapsedSeconds = sw.Elapsed.TotalSeconds;
+
+            if (p.ExitCode != 0)
+            {
+                string text;
+                try { text = drain.Result; } catch (AggregateException) { text = ""; }
+                error = $"ffmpeg saiu {p.ExitCode} ao materializar a fonte: {LastLine(text)}";
+                return false;
+            }
+            // Sem o -frames:v o y4m sai com 1 frame e todo braço mede 1/120 do conteúdo -
+            // e o VMAF compararia um frame contra o arquivo inteiro. Arquivo vazio aqui é
+            // falha silenciosa, então é checado.
+            try
+            {
+                if (!File.Exists(y4mPath) || new FileInfo(y4mPath).Length < 1024)
+                {
+                    error = "fonte materializada saiu vazia";
+                    return false;
+                }
+            }
+            catch (Exception ex) { error = ex.GetType().Name; return false; }
+            return true;
+        }
+        catch (Exception ex) { error = ex.GetType().Name; return false; }
+    }
+
+    private static string LastLine(string text)
+    {
+        var t = text.Trim();
+        if (t.Length == 0) return "";
+        var i = t.LastIndexOfAny(['\r', '\n']);
+        return i < 0 ? t : t[(i + 1)..].Trim();
+    }
+
+    /// <summary>Fonte de medicao do audit, ja materializada em disco (ou nao).</summary>
+    internal readonly record struct AmdAuditSource(string Spec, string Path, AmdSourceMode Mode, double MaterializeSeconds)
+    {
+        internal bool Materialized => Mode == AmdSourceMode.PreMaterialized;
+    }
+
+    /// <summary>Materializa a fonte do audit UMA VEZ por conteudo e devolve o caminho do
+    /// arquivo, para que o cronometro de cada encode meca o encoder e nao a CPU gerando a
+    /// fonte.
+    ///
+    /// <para><b>Por que o audit era todo contaminado.</b> <c>Encode</c> e <c>MeasureVmaf</c>
+    /// aceitam <see cref="AmdSourceMode"/> com default <c>LavfiRealtime</c>, e nenhum dos 16
+    /// call sites do audit o passava. Medindo direto da lavfi, o tempo includia a geracao de
+    /// <c>life</c>/<c>mandelbrot</c>: 44,3 fps de fonte contra 230 fps do encoder na mesma
+    /// maquina, ou seja o FPS de saida era o TETO DA FONTE, nao o do encoder. Medido na
+    /// RX 5700 XT: o S4 reportava 42,4-43,0 fps e reprovava o alvo de 60 fps, e o probe CQP
+    /// com a mesma config reportava 230,0 fps. Bytes e VMAF concordavam exatamente entre os
+    /// dois (5,26 MiB e VMAF 77,39 nos dois) - o materializar nao muda o conteudo, so o
+    /// relogio. Era por isso que os dois artefatos nao se conciliavam.</para>
+    ///
+    /// <para><b>Por que degrada em vez de abortar.</b> Sem espaco em disco, o audit inteiro
+    /// seria jogado fora - inclusive o S1, que e a resposta principal ("qual encoder
+    /// funciona aqui"). Entao a falha vira um AVISO explicito no relatorio, e nao um numero
+    /// silenciosamente errado: quem ler sabe que a coluna de FPS nao vale. O oposto - cair
+    /// na lavfi sem avisar - e o que produziu o falso negativo do S4.</para></summary>
+    internal static AmdAuditSource PrepareSource(
+        string dir, string spec, int frames, int fps, string tag, Action<string>? step = null)
+    {
+        var path = Path.Combine(dir, $"fonte-{tag}.y4m");
+        if (MaterializeSource(spec, frames, fps, path, out var seconds, out var error) && File.Exists(path))
+        {
+            step?.Invoke($"Fonte '{tag}' materializada 1x em {seconds:0.0}s: {spec}");
+            return new AmdAuditSource(spec, path, AmdSourceMode.PreMaterialized, seconds);
+        }
+
+        step?.Invoke($"AVISO: fonte '{tag}' NAO materializada ({error}). Os FPS deste relatorio vao medir a geracao da fonte, nao o encoder.");
+        return new AmdAuditSource(spec, spec, AmdSourceMode.LavfiRealtime, 0);
+    }
     internal static AmdAuditReport Run(AmdAuditRequest req) => Run(req, null);
 
     /// <param name="progress">Recebe uma linha por seção concluída. O audit leva minutos
@@ -169,6 +337,18 @@ internal static class AmdAudit
         var notes = new List<string>();
         var listed = ListedEncoders();
 
+        // ---------- fontes materializadas (1x cada) ----------
+        // Duas, nao uma: S1/S2 medem TAXA (life, entropia maxima) e S3/S4/S6 medem QUALIDADE
+        // (mandelbrot). Sao conteudos diferentes, logo dois arquivos. Custo: 2x o frame em
+        // disco (1080p x 120 frames yuv420p = 373 MB cada), pago uma vez por corrida.
+        var fonteTaxa = PrepareSource(dir, RateSource(req.Width, req.Height, req.Fps), req.Frames, req.Fps, "taxa", Step);
+        var fonteQualidade = PrepareSource(dir, QualitySource(req.Width, req.Height, req.Fps), req.Frames, req.Fps, "qualidade", Step);
+        if (!fonteTaxa.Materialized || !fonteQualidade.Materialized)
+        {
+            notes.Add("AVISO: fonte NAO materializada - as colunas de FPS deste relatorio medem a geracao da fonte e NAO o encoder; nao podem virar decisao.");
+            notes.Add("Bytes e VMAF continuam validos: o conteudo e o mesmo, so o relogio muda.");
+        }
+
         // ---------- S1: matriz de encoders ----------
         var matrix = new List<AmdEncodeOutcome>();
         foreach (var codec in Codecs)
@@ -188,7 +368,7 @@ internal static class AmdAudit
 
             var tune = ProductionTune(codec, req, 0, "speed");
             var path = Path.Combine(dir, $"s1-{codec}.{RawExt(codec)}");
-            var o = Encode(codec, req, tune, RateSource(req.Width, req.Height, req.Fps), req.Frames, path, extraInput: null);
+            var o = Encode(codec, req, tune, fonteTaxa.Path, req.Frames, path, extraInput: null, fonteTaxa.Mode);
             matrix.Add(o with { Listed = true });
         }
 
@@ -223,24 +403,27 @@ internal static class AmdAudit
             // para medir (ver TryFixAmfBitrate) e a escada inteira é inútil.
             if (!TryFixAmfBitrate(tune, kbps, out tune)) break;
             var path = Path.Combine(dir, $"s2-bv-{kbps}.{RawExt(subject)}");
-            bitrateLadder.Add(Encode(subject, req, tune, RateSource(req.Width, req.Height, req.Fps), req.Frames, path, null) with { RequestedKbps = kbps });
+            bitrateLadder.Add(Encode(subject, req, tune, fonteTaxa.Path, req.Frames, path, null, fonteTaxa.Mode) with { RequestedKbps = kbps });
         }
 
         Step("S2a: escada de bitrate concluida");
 
         // ---------- S2b: escada de -quality ----------
-        var qualityLadder = new List<AmdEncodeOutcome>();
-        foreach (var q in new[] { "speed", "balanced", "quality", "high_quality" })
+        // O `Label` de cada rung é carimbado pelo seam com o NOME do preset: `Encode` só
+        // conhece o codec, e a seção que varia o preset com o codec fixo é exatamente a que
+        // sairia com quatro linhas idênticas.
+        var qualityLadder = AmdAudit.BuildQualityLadder(q =>
         {
             var tune = ProductionTune(subject, req, 0, q);
             var path = Path.Combine(dir, $"s2-q-{q}.{RawExt(subject)}");
-            qualityLadder.Add(Encode(subject, req, tune, RateSource(req.Width, req.Height, req.Fps), req.Frames, path, null));
-        }
+            return Encode(subject, req, tune, fonteTaxa.Path, req.Frames, path, null, fonteTaxa.Mode);
+        });
 
         Step("S2b: escada de -quality concluida");
 
         // ---------- S3: calibracao do 0.36 com VMAF ----------
-        var src = QualitySource(req.Width, req.Height, req.Fps);
+        var src = fonteQualidade.Path;
+        var srcMode = fonteQualidade.Mode;
         var amfCurve = new List<AmdVmafPoint>();
         foreach (var kbps in new[] { target, target * 2, target * 3 })
         {
@@ -263,9 +446,9 @@ internal static class AmdAudit
             }
 
             var path = Path.Combine(dir, $"s3-amf-{kbps}.{RawExt(subject)}");
-            var o = Encode(subject, req, tune, src, req.Frames, path, null);
+            var o = Encode(subject, req, tune, src, req.Frames, path, null, srcMode);
             if (o.State != AmdProbeState.Works) continue;
-            var vmaf = MeasureVmaf(src, path, req.Frames);
+            var vmaf = MeasureVmaf(src, path, req.Frames, srcMode);
             if (vmaf > 0) amfCurve.Add(new AmdVmafPoint($"{kbps / 1000.0:0.0} Mbps", kbps, vmaf, o.OutputBytes));
         }
 
@@ -276,9 +459,9 @@ internal static class AmdAudit
         {
             var tune = FfmpegEncoder.BuildEncoderTuneArgs("libx264", crf, req.MaxrateKbps, req.BufsizeKbps, 0, 4, "p4");
             var path = Path.Combine(dir, $"s3-x264-crf{crf}.h264");
-            var o = Encode("libx264", req, tune, src, req.Frames, path, null);
+            var o = Encode("libx264", req, tune, src, req.Frames, path, null, srcMode);
             if (o.State != AmdProbeState.Works) continue;
-            var vmaf = MeasureVmaf(src, path, req.Frames);
+            var vmaf = MeasureVmaf(src, path, req.Frames, srcMode);
             if (vmaf > 0) x264Sweep.Add(new AmdVmafPoint($"crf{crf}", 0, vmaf, o.OutputBytes));
         }
 
@@ -300,7 +483,7 @@ internal static class AmdAudit
 
         var productionTune = ProductionTune(subject, req, 0, "speed");
         var productionPath = Path.Combine(dir, $"s3-producao.{RawExt(subject)}");
-        var production = Encode(subject, req, productionTune, src, req.Frames, productionPath, null);
+        var production = Encode(subject, req, productionTune, src, req.Frames, productionPath, null, srcMode);
         var calibration = AmdAuditVerdicts.JudgeCalibration(production, amfCurve, x264Sweep, targetVmaf, req.MaxrateKbps);
 
         Step("S3: veredito de calibracao calculado");
@@ -311,28 +494,28 @@ internal static class AmdAudit
         {
             var tune = ProductionTune(subject, req, 0, q);
             var path = Path.Combine(dir, $"s4-fps-{q}.{RawExt(subject)}");
-            var o = Encode(subject, req, tune, src, req.Frames, path, null);
+            var o = Encode(subject, req, tune, src, req.Frames, path, null, srcMode);
             qualityFps.Add(new AmdLadderPoint(q, o.Fps, o.State == AmdProbeState.Works));
         }
 
         var chosen = EncoderManager.SelectAmfPreset(subject, req.Width, req.Height, req.Fps);
         var ladderVerdict = AmdAuditVerdicts.JudgeLadder(qualityFps, chosen, req.Fps, 0.85);
-        var pa = TryProbeAmfExtra(subject, req, " -preanalysis true -pa_lookahead_buffer_depth 40 -pa_taq_mode 2");
-        var sav = TryProbeAmfExtra(subject, req, " -smart_access_video 1");
+        var pa = TryProbeAmfExtra(subject, req, " -preanalysis true -pa_lookahead_buffer_depth 40 -pa_taq_mode 2", src, srcMode);
+        var sav = TryProbeAmfExtra(subject, req, " -smart_access_video 1", src, srcMode);
 
         Step("S4: escada de preset medida; escolhendo com a logica de producao");
 
         // ---------- S6: custo em bytes de GOP 60 e b-frames na AMF ----------
         var gopBaseline = Path.Combine(dir, "s6-gop60." + RawExt(subject));
         var gopVariant = Path.Combine(dir, "s6-gop120." + RawExt(subject));
-        var g60 = Encode(subject, req, ProductionTune(subject, req, 0, "speed"), src, req.Frames, gopBaseline, null);
-        var g120 = Encode(subject, req, ReplaceGop(ProductionTune(subject, req, 0, "speed"), 120), src, req.Frames, gopVariant, null);
+        var g60 = Encode(subject, req, ProductionTune(subject, req, 0, "speed"), src, req.Frames, gopBaseline, null, srcMode);
+        var g120 = Encode(subject, req, ReplaceGop(ProductionTune(subject, req, 0, "speed"), 120), src, req.Frames, gopVariant, null, srcMode);
         var gopCost = AmdAuditVerdicts.JudgeByteCost(g60.OutputBytes, g120.OutputBytes, 2.0);
 
         var bfBaseline = Path.Combine(dir, "s6-bf0." + RawExt(subject));
         var bfVariant = Path.Combine(dir, "s6-bf2." + RawExt(subject));
-        var b0 = Encode(subject, req, ProductionTune(subject, req, 0, "speed"), src, req.Frames, bfBaseline, null);
-        var b2 = Encode(subject, req, ReplaceBframes(ProductionTune(subject, req, 2, "speed")), src, req.Frames, bfVariant, null);
+        var b0 = Encode(subject, req, ProductionTune(subject, req, 0, "speed"), src, req.Frames, bfBaseline, null, srcMode);
+        var b2 = Encode(subject, req, ReplaceBframes(ProductionTune(subject, req, 2, "speed")), src, req.Frames, bfVariant, null, srcMode);
         var bframeCost = AmdAuditVerdicts.JudgeByteCost(b0.OutputBytes, b2.OutputBytes, 2.0);
 
         Step("S6: custos de GOP e b-frames medidos");
@@ -404,8 +587,14 @@ internal static class AmdAudit
     /// é o de uma medição por sessão — e é o que torna o número comparável com o que a
     /// captura fará. Eles exigem dimensões reais: passar <c>0x0@0</c> faz o probe não ter o
     /// que medir.</para>
+    ///
+    /// <para><b>internal desde o <c>--probe-amf-cqp</c></b>: o A/B do CQP precisa da chain de
+    /// produção <b>exata</b> (mesmo preset adaptativo, mesmo lookahead, mesmo multipass) como
+    /// uma das pontas, e reconstruir a string no runner criaria uma segunda cópia que
+    /// diverge em silêncio — o mesmo motivo de <c>amfTargetFor</c> chamar
+    /// <c>ComputeAmfTargetKbps</c> em vez de replicar o 0,36.</para>
     /// </summary>
-    private static string ProductionTune(string codec, AmdAuditRequest req, int bframes, string? amfPreset = null)
+    internal static string ProductionTune(string codec, AmdAuditRequest req, int bframes, string? amfPreset = null)
     {
         var isAmf = EncoderManager.IsAmfCodec(codec);
         var resolvedPreset = amfPreset
@@ -449,8 +638,94 @@ internal static class AmdAudit
         return true;
     }
 
+    /// <summary>
+    /// Reescreve a chain AMF de produção (<c>-rc vbr_peak -b:v {maxrate*0,36}</c>) no modo
+    /// CQP, para o A/B do <c>--probe-amf-cqp</c>: <c>-rc cqp -qp_i {cq} -qp_p {cq}</c>,
+    /// <b>tirando o alvo de taxa e preservando o teto VBV e o AQ</b>.
+    ///
+    /// <para><b>Por que preservar <c>-maxrate</c>/<c>-bufsize</c> e não fazer CQP puro.</b>
+    /// A cadeia de produção registra (<c>FfmpegEncoder.cs:321-325</c>) que <b>CQP puro já
+    /// estourou ~180 Mbps na RX 5700 XT</b>, com spill ~10x e clip de 94 s ≈ 930 MB. Refazer
+    /// isso aqui não mediria nada de novo: o probe repetiria um estouro conhecido e o
+    /// chamaria de "CQP não serve na AMF". O que nunca foi medido é CQP <i>com o teto que o
+    /// front já manda</i>, e é essa a pergunta do A/B. Teto igual nas duas pontas também
+    /// mantém a variável isolada: muda o RC, nada mais.</para>
+    ///
+    /// <para><b>Por que <c>-b:v</c> sai em vez de virar 0.</b> Alvo de taxa e QP brigam: o
+    /// QP é sobreposto pelo alvo (issue obs-ffmpeg #12994, citada na própria cadeia), que é
+    /// exatamente o motivo de a produção não emitir QP. Um A/B entre "taxa" e "QP" que
+    /// mantém a taxa nos dois lados não é um A/B de RC.</para>
+    ///
+    /// <para><b>Nome, e não índice.</b> O <c>-rc cqp</c> é o <b>nome</b> do modo, e o ffmpeg
+    /// valida nome de RC — o que o <c>-rc 1</c> do D3D12VA não faz (aceita em silêncio, e
+    /// ninguém sabe se 1 é CQP). Se este nome deixar de existir, o probe morre alto em vez
+    /// de medir em modo errado.</para>
+    ///
+    /// <para>Devolve <c>false</c> sem <c>-rc</c> ou sem <c>-b:v</c>: nesses casos devolver a
+    /// string intacta mediria as mesmas duas chains e publicaria um A/B que não aconteceu.</para>
+    /// </summary>
+    /// <summary>Os quatro presets de <c>-quality</c> que o S2b mede, na ordem do
+    /// <c>ffmpeg -h encoder=h264_amf</c> (rápido → Caro). Os <b>nomes</b> são os mesmos nos
+    /// três AMF; os <b>índices</b> não (medido: <c>speed</c> = 1 no h264, 10 no hevc, 100 no
+    /// av1) — por isso a lista é de nomes e a cadeia nunca emite número. Ver
+    /// <c>AmfNumericIndexDivergenceTests</c>.</summary>
+    internal static readonly IReadOnlyList<string> QualityPresets = new[] { "speed", "balanced", "quality", "high_quality" };
+
+    /// <summary>Monta a escada do S2b e carimba cada rung com o <b>nome do preset</b>.
+    ///
+    /// <para><b>Por que um seam e não a lista inline no <c>Run</c>.</b> O <c>Label</c> do
+    /// <see cref="AmdEncodeOutcome"/> é preenchido por <c>Encode</c> com o <b>codec</b>, e o
+    /// S2b é justamente a seção que varia o preset com o codec fixo. A tabela imprimia
+    /// <c>o =&gt; o.Label</c>, então as quatro linhas saíam <b>"h264_amf" quatro vezes</b> —
+    /// lidas como quatro encodes do mesmo preset, quando são <c>speed</c>, <c>balanced</c>,
+    /// <c>quality</c> e <c>high_quality</c>. A tabela não conseguia responder a pergunta que
+    /// o S2b faz ("o -quality tem autoridade?"), porque a coluna que varia era constante.
+    ///
+    /// <para><b>Por que o teste do report writer não pegaria.</b> Ele recebe as linhas já
+    /// prontas: com quatro labels iguais, imprimir quatro linhas iguais é o comportamento
+    /// <i>correto</i> da impressora. O defeito está em como as linhas são construídas, e isso
+    /// só aparece perto do <c>Encode</c> real. Passando o encode por um delegate, o teste
+    /// exercita a carimbagem sem ffmpeg — e <b>cai se o <c>with { Label = ... }c> for
+    /// removido</b>, que é a mutação que reproduz o bug.</para>
+    ///
+    /// <para>Mesma forma do <c>TryMakeAmfCqpTune</c>: transformar, não adicionar parâmetro
+    /// de produção.</para></summary>
+    internal static IReadOnlyList<AmdEncodeOutcome> BuildQualityLadder(
+        Func<string, AmdEncodeOutcome> runOne, IReadOnlyList<string>? presets = null)
+    {
+        var lista = presets ?? QualityPresets;
+        var ladder = new List<AmdEncodeOutcome>(lista.Count);
+        foreach (var preset in lista)
+            ladder.Add(runOne(preset) with { Label = preset });
+        return ladder;
+    }
+
+    internal static bool TryMakeAmfCqpTune(string tune, int cq, out string patched)
+    {
+        patched = tune;
+        var parts = tune.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        var rcIdx = parts.FindIndex(p => p == "-rc");
+        if (rcIdx < 0 || rcIdx + 1 >= parts.Count) return false;
+
+        var bvIdx = parts.FindIndex(p => p == "-b:v");
+        if (bvIdx < 0 || bvIdx + 1 >= parts.Count) return false;
+
+        var qp = cq.ToString(CultureInfo.InvariantCulture);
+        // O -rc é ajustado ANTES do RemoveRange: remover "-b:v <valor>" desloca os índices
+        // seguintes em 2, e ajustar depois escreveria no lugar errado.
+        parts[rcIdx + 1] = "cqp";
+        parts.RemoveRange(bvIdx, 2);
+        // Reaproveitado o lugar do alvo de taxa, para o relatório mostrar um diff curto.
+        parts.InsertRange(bvIdx, new[] { "-qp_i", qp, "-qp_p", qp });
+
+        patched = string.Join(' ', parts);
+        return true;
+    }
+
     private static string ReplaceGop(string tune, int gop)
     {
+
         var parts = tune.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
         var i = parts.FindIndex(p => p == "-g");
         if (i >= 0 && i + 1 < parts.Count) parts[i + 1] = gop.ToString(CultureInfo.InvariantCulture);
@@ -465,7 +740,7 @@ internal static class AmdAudit
         return string.Join(' ', parts);
     }
 
-    private static string RawExt(string codec) =>
+    internal static string RawExt(string codec) =>
         FfmpegEncoder.GetRawFormatForCodec(codec) == "av1" ? "ivf" : FfmpegEncoder.GetRawFormatForCodec(codec);
 
     internal static HashSet<string> ListedEncoders()
@@ -509,13 +784,11 @@ internal static class AmdAudit
     /// <summary>Roda um encode real e devolve o resultado cru. Nunca lança: um probe que
     /// falha é um dado do relatório, não uma exceção que derruba o audit inteiro.</summary>
     internal static AmdEncodeOutcome Encode(
-        string codec, AmdAuditRequest req, string tune, string source, int frames, string outPath, string? extraInput)
+        string codec, AmdAuditRequest req, string tune, string source, int frames, string outPath, string? extraInput,
+        AmdSourceMode sourceMode)
     {
-        var args = new List<string>
-        {
-            "-y", "-loglevel", "error",
-            "-f", "lavfi", "-i", source,
-        };
+        var args = new List<string> { "-y", "-loglevel", "error" };
+        args.AddRange(SourceInputArgs(source, sourceMode));
         if (extraInput != null) { args.Add("-f"); args.Add("lavfi"); args.Add("-i"); args.Add(extraInput); }
         args.Add("-c:v"); args.Add(codec);
         foreach (var a in tune.Split(' ', StringSplitOptions.RemoveEmptyEntries)) args.Add(a);
@@ -606,23 +879,31 @@ internal static class AmdAudit
     /// o <c>eof_action=endall</c> impede o framesync de <b>repetir o último frame</b> de um
     /// arquivo curto: sem ele, um encode que entregou 112 de 120 frames ainda produzia uma
     /// pontuação válida, escondendo o arquivo truncado.</para></summary>
-    internal static string[] BuildVmafArgs(string source, string distortedPath, int frames) =>
-    [
-        "-hide_banner",
-        // #0 = main = o que foi codificado (o distorcido).
-        "-i", Quote(distortedPath),
-        // #1 = reference = a origem íntegra.
-        "-f", "lavfi", "-i", source,
-        "-frames:v", frames.ToString(CultureInfo.InvariantCulture),
-        "-lavfi", "libvmaf=model=version=vmaf_v0.6.1:eof_action=endall",
-        "-f", "null", "-",
-    ];
+    internal static string[] BuildVmafArgs(string source, string distortedPath, int frames,
+        AmdSourceMode sourceMode)
+    {
+        var args = new List<string>
+        {
+            "-hide_banner",
+            // #0 = main = o que foi codificado (o distorcido).
+            "-i", Quote(distortedPath),
+        };
+        // #1 = reference = a origem íntegra, pela MESMA fonte que o encoder recebeu.
+        args.AddRange(SourceInputArgs(source, sourceMode));
+        args.AddRange([
+            "-frames:v", frames.ToString(CultureInfo.InvariantCulture),
+            "-lavfi", "libvmaf=model=version=vmaf_v0.6.1:eof_action=endall",
+            "-f", "null", "-",
+        ]);
+        return [.. args];
+    }
 
-    internal static double MeasureVmaf(string source, string distortedPath, int frames)
+    internal static double MeasureVmaf(string source, string distortedPath, int frames,
+        AmdSourceMode sourceMode)
     {
         try
         {
-            var args = new List<string>(BuildVmafArgs(source, distortedPath, frames));
+            var args = new List<string>(BuildVmafArgs(source, distortedPath, frames, sourceMode));
             var psi = FfmpegPathResolver.CreateFfmpegStartInfo(
                 Join(args), redirectInput: false, redirectOutput: false, redirectError: true);
             using var p = Process.Start(psi)!;
@@ -656,12 +937,12 @@ internal static class AmdAudit
         catch { return 0; }
     }
 
-    private static bool? TryProbeAmfExtra(string codec, AmdAuditRequest req, string extra)
+    private static bool? TryProbeAmfExtra(string codec, AmdAuditRequest req, string extra, string source, AmdSourceMode sourceMode)
     {
         var dir = Path.Combine(Path.GetTempPath(), "dinho-amd-audit");
         var tune = ProductionTune(codec, req, 0, "speed") + extra;
         var path = Path.Combine(dir, $"s4-extra-{extra.GetHashCode():X}.{RawExt(codec)}");
-        var o = Encode(codec, req, tune, QualitySource(req.Width, req.Height, req.Fps), req.Frames, path, null);
+        var o = Encode(codec, req, tune, source, req.Frames, path, null, sourceMode);
 
         // Recusa é <c>false</c>, não <c>null</c>. Devolver null (desconhecido) para os três
         // casos punha na coluna "sem dados" um resultado que foi medido: a diferença entre

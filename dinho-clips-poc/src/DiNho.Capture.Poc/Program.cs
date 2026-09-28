@@ -1,4 +1,6 @@
 using DiNho.Capture.Poc.Logging;
+using DiNho.Capture.Poc.Encoders;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Windows.Win32;
@@ -10,6 +12,18 @@ internal static class Program
     private static bool _forceSoftware;
     private static bool _benchJson;
     private static int _durationSeconds;
+
+    /// <summary>Argumento posicional como inteiro, com fallback quando ausente, vazio ou
+    /// inválido. <b>Inválido cai no fallback em vez de estourar</b>: um probe de diagnóstico
+    /// que morre com <c>FormatException</c> porque alguém digitou <c>--probe-amf-cqp 1920
+    /// 1080 sessenta</c> não mede nada e não diz por quê — e o sintoma (nenhum relatório)
+    /// parece hardware, não digitação.</summary>
+    private static int Pick(string[] args, int index, int fallback) =>
+        index < args.Length
+        && int.TryParse(args[index], NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
+        && v > 0
+            ? v
+            : fallback;
 
     private static async Task Main(string[] args)
     {
@@ -52,6 +66,34 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--probe-amf-cqp")
+        {
+            // A/B entre a chain AMF de produção (vbr_peak + 0,36) e CQP com o mesmo teto VBV.
+            // Sem override, usa a AppConfig real — o veredito só vale para a config que o
+            // usuário está gravando, e um CQ diferente muda a resposta.
+            var cfg = ProgramBenchmark.ReadLiveConfigOrDefault();
+            var cqpBase = new AmdCqpProbeOptions(
+                Pick(args, 1, cfg.Width), Pick(args, 2, cfg.Height), Pick(args, 3, cfg.Fps),
+                Pick(args, 4, cfg.Cq), Pick(args, 5, cfg.MaxrateKbps), Pick(args, 6, cfg.BufsizeKbps),
+                Math.Clamp(Pick(args, 7, AmdAudit.DefaultFrames), 30, 600),
+                args.Length > 8 && !string.IsNullOrWhiteSpace(args[8]) ? args[8].Trim() : "h264_amf");
+
+            // A lista de QP é o 9º argumento. Erro duro e nomeando o token: uma lista mal
+            // digitada caindo na escada default faria o probe publicar um veredito legítimo
+            // sobre uma escada que ninguém pediu — a mesma classe do "--ffmpeg sem valor"
+            // do verify-ffmpeg.js.
+            var qpsArg = args.Length > 9 ? args[9] : "";
+            if (!AmdCqpProbe.TryNormalizeQps(qpsArg, cqpBase.Cq, out var qps, out var qpsErro))
+            {
+                Console.Error.WriteLine($"ERRO: lista de QP inválida — {qpsErro}");
+                Console.Error.WriteLine("       uso: --probe-amf-cqp [W H FPS CQ MAXRATE BUFSIZE FRAMES [CODEC [QPS|auto]]]");
+                return;
+            }
+
+            AmdCqpProbe.Run(cqpBase with { Qps = qps }, msg => Console.WriteLine("  [" + DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "] " + msg));
+            return;
+        }
+
         if (args.Length > 0 && args[0] == "--probe-amf-usage")
         {
             ProgramBenchmark.ProbeAmfUsage(
@@ -61,7 +103,60 @@ internal static class Program
                 args.Length > 4 ? args[4] : "18",
                 args.Length > 5 ? args[5] : "55000",
                 args.Length > 6 ? args[6] : "h264_amf",
-                args.Length > 7 ? args[7] : "");
+                args.Length > 7 ? args[7] : "",
+                args.Length > 8 ? args[8] : "3");
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--probe-amd-sweep")
+        {
+            // Grade usage x QP. Sem override, usa a AppConfig real: o veredito so vale para a
+            // config que o usuario esta gravando.
+            var cfg = ProgramBenchmark.ReadLiveConfigOrDefault();
+            var baseOpts = new AmdSweepOptions(
+                Pick(args, 1, cfg.Width), Pick(args, 2, cfg.Height), Pick(args, 3, cfg.Fps),
+                Pick(args, 4, cfg.Cq), Pick(args, 5, cfg.MaxrateKbps), Pick(args, 6, cfg.BufsizeKbps),
+                Math.Clamp(Pick(args, 7, AmdAudit.DefaultFrames), 30, 600),
+                args.Length > 8 && !string.IsNullOrWhiteSpace(args[8]) ? args[8].Trim() : "h264_amf",
+                // Default curado, nao a lista inteira: `webcam` e `lowlatency_high_quality` nao
+                // sao candidatos plausiveis para captura de jogo, e cada usage a mais sao 8
+                // encodes + 8 VMAF. `USAGES=` abre a lista toda.
+                Array.Empty<string>(), Array.Empty<int>(), 3, 3);
+
+            var usageArg = args.Length > 9 ? args[9] : "";
+            if (!AmdSweepProbe.TryNormalizeUsages(usageArg, out var usages, out var usageErro))
+            {
+                Console.Error.WriteLine($"ERRO: {usageErro}");
+                return;
+            }
+            if (usages.Length == 0)
+            {
+                // Default curado, nao a lista inteira: `webcam` e `lowlatency_high_quality` nao
+                // sao candidatos plausiveis para captura de jogo, e cada usage a mais sao 8
+                // encodes + 8 VMAF. `USAGES=` abre a lista toda.
+                usages = new[] { "", "transcoding", "ultralowlatency", "lowlatency", "high_quality" };
+            }
+
+            // Vazio = "auto", e nao a escada curta. A escada base {cq-2..cq+4} mede o cqp so
+            // onde ele NAO tem chance - foi assim que a primeira rodada mediu 43,7 a 67,7 Mbps
+            // contra os 22,1 da producao e Said "cqp nao compensa" sem chegar no lado barato da
+            // curva. Num probe que existe para achar o lado barato, a escada curta repetiria o
+            // erro que o "auto" do probe 7 ja conserta.
+            var qpArg = args.Length > 10 && args[10].Trim().Length > 0 ? args[10].Trim() : "auto";
+            if (!AmdCqpProbe.TryNormalizeQps(qpArg, baseOpts.Cq, out var sweepQps, out var qpErro))
+            {
+                Console.Error.WriteLine($"ERRO: lista de QP invalida - {qpErro}");
+                Console.Error.WriteLine("       uso: --probe-amd-sweep [W H FPS CQ MAXRATE BUFSIZE FRAMES [CODEC [USAGES [QPS [FINALISTAS [VOLTAS]]]]]]");
+                return;
+            }
+
+            AmdSweepProbe.Run(baseOpts with
+            {
+                Usages = usages,
+                Qps = AmdSweepProbe.ResolveQps(sweepQps, baseOpts.Cq),
+                Finalists = Math.Clamp(Pick(args, 11, 3), 1, 32),
+                Rounds = Math.Clamp(Pick(args, 12, 3), 1, 9),
+            }, msg => Console.WriteLine("  [" + DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "] " + msg));
             return;
         }
 

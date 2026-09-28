@@ -427,8 +427,23 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// <summary>Normaliza o preset AMF para um dos quatro valores válidos do ffmpeg 9
     /// (high_quality/quality/balanced/speed). Case-insensitive com trim; inválido, vazio ou null →
     /// "speed" (preset default mais seguro — RDNA1 sustenta ~1.0x mesmo em resolução alta).
-    /// Verificado no ffmpeg 9.0.1 real: high_quality existe nos 3 codecs AMF (h264_amf=3,
-    /// hevc_amf=15, av1_amf=0).</summary>
+    ///
+    /// <para><b>Por que NOME e nunca o índice (medido no binário embarcado, ffmpeg 9.0.1,
+    /// <c>-h encoder=&lt;codec&gt;</c>).</b> Os três AMF aceitam os mesmos <b>nomes</b>, mas os
+    /// <b>índices divergem em cada encoder</b>:
+    /// <code>
+    /// -quality  h264_amf: balanced=0 speed=1    quality=2 high_quality=3
+    ///           hevc_amf: quality=0  balanced=5  speed=10 high_quality=15
+    ///           av1_amf:  high_quality=0 quality=30 balanced=70 speed=100
+    /// </code>
+    /// Nenhum preset tem o mesmo índice nos três. Como índice numérico <b>não é validado</b>
+    /// (o nvenc aceitou <c>-rc 999</c> em silêncio), um atalho compartilhado trocaria o preset
+    /// de toda a família AMF sem erro nenhum — e o S2b do <c>--audit-amd</c> mediu que o preset
+    /// <b>não muda os bytes</b>, só a <b>velocidade</b> (1,8× entre high_quality e speed): o
+    /// arquivo sairia normal e só a GPU ficaria mais lenta. O mesmo vale para <c>-rc</c>, onde
+    /// <c>vbr_latency</c> é 3 no h264 e 1 no hevc/av1 — o índice do <c>cbr</c> no h264. Nomes
+    /// são validados pelo ffmpeg (sumiu da tabela = <c>Unrecognized option</c>, alto e visível).
+    /// Trava em <c>AmfNumericIndexDivergenceTests</c>.</para></summary>
     internal static string NormalizeAmfPreset(string? preset)
     {
         if (string.IsNullOrWhiteSpace(preset)) return "speed";

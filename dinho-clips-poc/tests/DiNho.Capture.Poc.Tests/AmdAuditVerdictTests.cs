@@ -548,7 +548,7 @@ public class AmdAuditVmafArgsTests
     [Fact]
     public void EntradaZeroEDoArquivoCodificado_EEntradaUmEDaReferencia()
     {
-        var args = AmdAudit.BuildVmafArgs("mandelbrot=size=64x64:rate=30", @"C:\tmp\out.h264", 30);
+        var args = AmdAudit.BuildVmafArgs("mandelbrot=size=64x64:rate=30", @"C:\tmp\out.h264", 30, AmdSourceMode.LavfiRealtime);
 
         // #0 (main = distorcido) = o arquivo codificado; #1 (reference) = a fonte íntegra.
         // A primeira versão do audit invertia exatamente aqui.
@@ -567,7 +567,7 @@ public class AmdAuditVmafArgsTests
     [Fact]
     public void SemFramesV_NumeroInfinitoDeReferenciaFariaOEncodeNuncaTerminar()
     {
-        var args = AmdAudit.BuildVmafArgs("mandelbrot=size=64x64:rate=30", @"C:\tmp\out.h264", 90);
+        var args = AmdAudit.BuildVmafArgs("mandelbrot=size=64x64:rate=30", @"C:\tmp\out.h264", 90, AmdSourceMode.LavfiRealtime);
 
         Assert.Equal("90", args[IndexOfValue(args, "-frames:v")]);
     }
@@ -578,7 +578,7 @@ public class AmdAuditVmafArgsTests
     [Fact]
     public void EofActionEndall_ImpedeQueArquivoCurtoRepitaUltimoFrame()
     {
-        var args = AmdAudit.BuildVmafArgs("mandelbrot=size=64x64:rate=30", @"C:\tmp\out.h264", 30);
+        var args = AmdAudit.BuildVmafArgs("mandelbrot=size=64x64:rate=30", @"C:\tmp\out.h264", 30, AmdSourceMode.LavfiRealtime);
 
         var filter = args[Array.IndexOf(args, "-lavfi") + 1];
         Assert.Contains("eof_action=endall", filter);

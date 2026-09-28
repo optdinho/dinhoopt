@@ -36,6 +36,28 @@ public static class AmdAuditCriteria
     public const double ProductionFactor = 0.36;
 }
 
+/// <summary>
+/// Critérios do A/B <c>CQP vs 0,36</c> (<c>--probe-amf-cqp</c>), <b>travados em teste antes
+/// de medir</b>.
+///
+/// <para>Existe pela mesma razão do <c>main10</c> (Item 9): o caso perigoso é decidir a
+/// promoção com o número já na mão, porque aí o critério vira função do resultado. O
+/// "<c>&gt;= 5% de bytes no mesmo VMAF</c>" foi fixado pelo usuário antes da medição, e
+/// estes dois campos são onde esse texto vira código — o relatório não pode citar um número
+/// diferente do que o judge usou.</para>
+/// </summary>
+public static class AmdCqpCriteria
+{
+    /// <summary>Economia mínima de bytes para promover o CQP. Positivo: o veredito mede
+    /// <c>(cqp - producao) / producao × 100</c>, então a vitória é <c>&lt;= -5</c>.</summary>
+    public const double MinByteWinPct = 5.0;
+
+    /// <summary>Perda máxima de fps tolerada na troca. Mesmo 5% por simetria com a economia:
+    /// um preset 20% mais lento com 6% menos bytes troca qualidade por teto de gravação, e
+    /// essa é decisão do usuário, não do probe.</summary>
+    public const double MaxFpsLossPct = 5.0;
+}
+
 /// <summary>Por que uma calibração ficou <see cref="AmdCalibrationState.Unmeasured"/>.
 ///
 /// <para>Existe porque a primeira versão deduzia a causa de um número: se houvesse algum
@@ -248,6 +270,79 @@ public readonly record struct AmdLadderVerdict(
 /// <summary>Veredito de custo em bytes (GOP 60, b-frames).</summary>
 public readonly record struct AmdByteCostVerdict(double CostPct, bool IsNegligible, string Verdict);
 
+/// <summary>Veredito do A/B entre a chain AMF de produção e a cadeia CQP.</summary>
+public enum AmdCqpState
+{
+    /// <summary>Nada utilizável foi medido em uma das pontas. <b>Nunca</b> promove: é o estado
+    /// que impede o relatório de recomendar uma troca a partir de um probe que não rodou.</summary>
+    Unmeasured,
+
+    /// <summary>O melhor CQP medido ficou <b>abaixo</b> do VMAF da produção. Não é "CQP é
+    /// pior em bytes" — as duas pontas não estão na mesma qualidade, e comparar bytes entre
+    /// elas produz uma economia que não existe. <see cref="AmdCqpVerdict.BestCqpVmaf"/>
+    /// existe para o relatório dizer quantos pontos faltaram.</summary>
+    CannotMatch,
+
+    /// <summary>Atende as duas pernas: >= 5% menos bytes no VMAF da produção ou mais, sem
+    /// perder mais de 5% de fps.</summary>
+    Promotes,
+
+    /// <summary>Medido, comparável, e não ganhou o bastante (ou o preço em fps não foi
+    /// aceito). É este o resultado que mantém a produção como está.</summary>
+    KeepsProduction,
+}
+
+/// <summary>Ponto de uma curva do A/B CQP: um encode medido, com a qualidade e o custo que
+/// importam para a comparação.</summary>
+/// <param name="Label">Identidade do rung, para o relatório citar ("qp18", "0.36").</param>
+/// <param name="Vmaf">VMAF contra a fonte. <b>0 = não medido</b>, e o judge descarta o
+/// ponto: ver <c>JudgeAmfCqp</c>.</param>
+/// <param name="Bytes">Tamanho do arquivo. <b>0 = não medido</b>, mesma regra.</param>
+/// <param name="Fps">Quadros por segundo efetivos. <b>0 = não medido</b>, e aí o critério de
+/// fps não é avaliado (ver <see cref="AmdCqpVerdict.FpsMeasured"/>).</param>
+public readonly record struct AmdCqpPoint(string Label, double Vmaf, long Bytes, double Fps);
+
+/// <summary>Veredito do A/B CQP, com os números que o relatório precisa imprimir.
+///
+/// <para><see cref="ByteDeltaPct"/> é negativo quando o CQP economiza. A âncora é
+/// <b>sempre</b> o VMAF da produção: sem isso a comparação vira "CQP no mesmo QP contra 0,36
+/// no mesmo maxrate", que são qualidades diferentes, e o ponto mais barato da curva CQP
+/// vence por ser pior.</para>
+/// </summary>
+public readonly record struct AmdCqpVerdict(
+    AmdCqpState State,
+    double AnchorVmaf,
+    double BestCqpVmaf,
+    long ProductionBytes,
+    long CqpBytes,
+    double ByteDeltaPct,
+    double ProductionFps,
+    double CqpFps)
+{
+    /// <summary>Rung CQP escolhido (o mais barato que <i>atinge</i> a âncora). Nulo quando
+    /// nada foi comparável.</summary>
+    public string? ChosenCqpLabel { get; init; }
+
+    /// <summary>Os dois lados tiveram fps medido? Enquanto falso, o relatório não pode
+    /// dizer que o CQP "não custou desempenho" — só que a pergunta não foi respondida.</summary>
+    public bool FpsMeasured => ProductionFps > 0 && CqpFps > 0;
+
+    /// <summary>Delta de fps em %, negativo = CQP mais lento. 0 quando não medido, com
+    /// <see cref="FpsMeasured"/> falso para não ser lido como "empate".</summary>
+    public double FpsDeltaPct => FpsMeasured ? (CqpFps - ProductionFps) * 100.0 / ProductionFps : 0;
+
+    /// <summary>O CQP economiza pelo menos <see cref="AmdCqpCriteria.MinByteWinPct"/>?
+    /// Em <see cref="AmdCqpState.Unmeasured"/> os bytes são 0 e o delta é 0, então isto é
+    /// falso por construção — o estado enumérico e o número concordam.</summary>
+    public bool ByteWin => ByteDeltaPct <= -AmdCqpCriteria.MinByteWinPct;
+
+    /// <summary>A perda de fps cabe no orçamento. Fps não medido <b>não</b> reprova: travar
+    /// aqui deixaria um encode que perdeu a medição de fps vetar uma economia de bytes real.
+    /// A lacuna fica explícita em <see cref="FpsMeasured"/>.</summary>
+    public bool FpsAcceptable => !FpsMeasured || FpsDeltaPct >= -AmdCqpCriteria.MaxFpsLossPct;
+}
+
+
 /// <summary>
 /// Regras de decisão do <c>--audit-amd</c>. Funções puras de propósito: a máquina AMD não
 /// existe aqui, então a única parte do audit que dá para testar é a regra que vai ler o
@@ -446,6 +541,83 @@ public static AmdProbeState JudgeEncoderState(AmdEncodeOutcome o)
         var negligible = Math.Abs(pct) < negligiblePct;
         return new AmdByteCostVerdict(Math.Round(pct, 2), negligible, negligible ? "negligible" : "material");
     }
+
+    /// <summary>
+    /// A/B da chain AMF: <c>CQP</c> contra o <c>0,36</c> de produção, no VMAF da produção.
+    ///
+    /// <para><b>A regra, em uma frase:</b> entre os pontos CQP que <i>alcançam ou superam</i>
+    /// o VMAF da produção, vence o mais barato; e o CQP só é promovido se esse ponto custar
+    /// pelo menos <see cref="AmdCqpCriteria.MinByteWinPct"/> menos bytes sem perder mais de
+    /// <see cref="AmdCqpCriteria.MaxFpsLossPct"/> de fps.</para>
+    ///
+    /// <para><b>Por que "alcançam" e não "o QP do usuário".</b> A primeira versão deste judge
+    /// comparava o ponto CQP do QP do usuário contra a produção, e o resultado teria sido uma
+    /// economia de 43% que era na verdade <b>5,4 pontos de VMAF mais ruim</b> — a família que
+    /// perde em qualidade vence a conta de bytes. É a mesma classe de erro do <c>main10</c>
+    /// (Item 9) e do <c>-rc vbr_peak</c> (Item 8): o número sai bonito e significa o
+    /// contrário do que a frase diz. Por isso a curva CQP é medidas em mais de um QP: sem
+    /// isso não existe ponto para casar com a qualidade da produção.</para>
+    ///
+    /// <para><b>Por que a referência é o encode de produção, não o melhor degrau da
+    /// varredura.</b> A varredura de bitrate existe para descrever a curva do encoder; o que
+    /// o CQP substituiria é o rung que a captura usa hoje. Comparar contra o melhor degrau
+    /// seria exigir mais do que a troca real exige, e o veredito poderia reprovar uma
+    /// economia de 20%.</para>
+    ///
+    /// <para><b>Ponto não medido é descartado, nunca comparado.</b> VMAF 0 ou bytes 0 tiram o
+    /// rung da curva. Tratá-los como número produziria as duas conclusões erradas que o
+    /// projeto já pagou: VMAF 0 lido como "qualidade 0" faria o CQP parecer altíssimo e
+    /// promover; e "sem bytes" divideria por zero.</para>
+    /// </summary>
+    public static AmdCqpVerdict JudgeAmfCqp(AmdCqpPoint production, IReadOnlyList<AmdCqpPoint> cqp)
+    {
+        if (!usable(production))
+        {
+            return new AmdCqpVerdict(AmdCqpState.Unmeasured, 0, 0, 0, 0, 0, 0, 0);
+        }
+
+        var usableCqp = (cqp ?? Array.Empty<AmdCqpPoint>()).Where(usable).ToList();
+        if (usableCqp.Count == 0)
+        {
+            return new AmdCqpVerdict(AmdCqpState.Unmeasured, production.Vmaf, 0, production.Bytes, 0, 0, production.Fps, 0);
+        }
+
+        var bestCqpVmaf = usableCqp.Max(p => p.Vmaf);
+
+        // "Alcança" é >= (e não >): um empate de VMAF com menos bytes é a vitória mais limpa
+        // possível, e tratar o empate como falha faria o judge procurar um rung mais caro.
+        var reaching = usableCqp.Where(p => p.Vmaf >= production.Vmaf).ToList();
+        if (reaching.Count == 0)
+        {
+            return new AmdCqpVerdict(
+                AmdCqpState.CannotMatch, production.Vmaf, bestCqpVmaf, production.Bytes, 0, 0, production.Fps, 0);
+        }
+
+        // Mais barato entre os que alcançam. OrderBy é estável, então dois pontos com os
+        // mesmos bytes escolhem o primeiro da curva — e o empate exato é indistinguível
+        // pelos dados, então não vale cravar preferência.
+        var chosen = reaching.OrderBy(p => p.Bytes).First();
+
+        var deltaPct = production.Bytes > 0
+            ? (chosen.Bytes - production.Bytes) * 100.0 / production.Bytes
+            : 0;
+
+        var verdict = new AmdCqpVerdict(
+            AmdCqpState.KeepsProduction, production.Vmaf, bestCqpVmaf, production.Bytes, chosen.Bytes,
+            Math.Round(deltaPct, 2), production.Fps, chosen.Fps)
+        {
+            ChosenCqpLabel = chosen.Label,
+        };
+
+        return verdict.ByteWin && verdict.FpsAcceptable
+            ? verdict with { State = AmdCqpState.Promotes }
+            : verdict;
+    }
+
+    /// <summary>Um ponto só entra na comparação com VMAF e bytes medidos. Fps 0 <b>não</b>
+    /// descarta: falta de fps é lacuna do critério de desempenho, não do encode (e o
+    /// veredito expõe isso em <see cref="AmdCqpVerdict.FpsMeasured"/>).</summary>
+    private static bool usable(AmdCqpPoint p) => p.Vmaf > 0 && p.Bytes > 0;
 
     /// <summary>Alvo médio que a produção realmente manda para a AMF.
     ///

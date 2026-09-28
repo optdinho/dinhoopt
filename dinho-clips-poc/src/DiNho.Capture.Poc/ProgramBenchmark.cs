@@ -318,6 +318,236 @@ internal static class ProgramBenchmark
     internal static string AmfUsageLabel(string usage)
         => usage.Length == 0 ? "(default, sem -usage)" : usage;
 
+    /// <summary>
+    /// A linha da tabela do <c>--probe-amf-usage</c>, como função pura.
+    ///
+    /// <para>Existiu porque o <c>--probe-amf-usage</c> é a única leitura que já roda na máquina
+    /// AMD, e o <see cref="AmfCqpVerdictTests"/> provou que a frase de um relatório é
+    /// testável sem GPU — o que vale para a linha inteira, não só para a frase de veredito.</para>
+    ///
+    /// <para><b>Referência única para as três colunas de delta.</b> A primeira versão calculava
+    /// o delta de bytes com <c>Math.Max</c> acumulado dentro do laço de impressão, enquanto fps
+    /// e kbps eram first-wins: o denominador de KiB crescia a cada linha. No
+    /// <c>RESULT-AMF-USAGE.txt</c> real isso imprimiu <c>+0%</c> para um usage que era
+    /// <b>1,5% maior</b> que a referência, e <c>−2%/−4%</c> de economia para dois usages que
+    /// eram <b>iguais ou menores</b>. Ver <c>AmfUsageReportDeltaTests</c>.</para>
+    /// </summary>
+    internal static class AmfUsageReport
+    {
+        /// <summary>As três bases de delta, fixadas numa só linha da tabela (o default de produção).
+        ///
+        /// <para><b>FpsSamples/FpsSpreadPct são o piso de ruído.</b> Com uma volta só não existe
+        /// dispersão, e <see cref="NoiseMeasured"/> falso faz o relatório dizer "ruído não
+        /// medido" em vez de imprimir um delta com precisão que a medição não tem. Ver
+        /// <see cref="AmfUsageRepeat"/>.</para></summary>
+        internal sealed record AmfUsageReference(double Fps, double Kbps, long Bytes)
+        {
+            /// <summary>Dispersão do fps da referência entre as voltas, em %.</summary>
+            public double FpsSpreadPct { get; init; }
+
+            /// <summary>Quantas voltas entraram na mediana.</summary>
+            public int FpsSamples { get; init; }
+
+            /// <summary>Dá para comparar um delta contra o ruído? Exige 2+ voltas e dispersão
+            /// não-nula: uma lista de amostras todas iguais é ruído zero <i>medido</i>, o que é
+            /// legítimo — mas precisa de N para ser crível como zero e não como falta de
+            /// amostra.</summary>
+            public bool NoiseMeasured => FpsSamples >= 2;
+        }
+
+        /// <summary>Primeira linha medida vence; a partir dela a referência é fixa. <b>Nunca a
+        /// maior</b> — do contrário o delta se anula sozinho quando a linha corrente é a maior,
+        /// que foi exatamente o defeito lido no <c>RESULT-AMF-USAGE.txt</c> real.</summary>
+        internal static AmfUsageReference Reference(EncoderManager.EncodeProbeResult primeira)
+            => new(primeira.AchievedFps, primeira.BitrateKbps, primeira.OutputBytes) { FpsSamples = 1 };
+
+        /// <summary>Referência das <b>várias voltas</b>: a mediana, não a primeira nem a maior.
+        ///
+        /// <para>É aqui que o drift deixa de contaminar os deltas. Medida uma vez, a referência
+        /// carregava a variação daquela volta para todos os braços — foi o que fez o mesmo
+        /// probe reportar +0/+5/+6% às 19h e +11/+12/+15% às 20h. Medida em toda volta e
+        /// reduzida por mediana, o pico e a vala de uma volta ficam de fora.</para></summary>
+        internal static AmfUsageReference Reference(IReadOnlyList<EncoderManager.EncodeProbeResult> voltas)
+        {
+            var list = (voltas ?? Array.Empty<EncoderManager.EncodeProbeResult>()).Where(v => v is not null).ToList();
+            if (list.Count == 0) return new AmfUsageReference(0, 0, 0);
+
+            var fps = list.Select(v => v.AchievedFps).ToList();
+            return new AmfUsageReference(
+                AmfUsageRepeat.Median(fps),
+                AmfUsageRepeat.Median(list.Select(v => v.BitrateKbps).ToList()),
+                (long)Math.Round(AmfUsageRepeat.Median(list.Select(v => (double)v.OutputBytes).ToList())))
+            {
+                FpsSpreadPct = AmfUsageRepeat.SpreadPct(fps),
+                FpsSamples = fps.Count(a => a > 0),
+            };
+        }
+
+
+        /// <summary>Se a referência já foi fixada por uma linha anterior, ela permanece: uma linha
+        /// maior que venha depois não pode redefinir a base do que já foi impresso.</summary>
+        internal static AmfUsageReference Reference(EncoderManager.EncodeProbeResult linha, AmfUsageReference? jaFixada)
+            => jaFixada ?? Reference(linha);
+
+        /// <summary>Delta de bytes contra a referência, ou <c>"-"</c> quando não há base.
+        /// Publicar "0%" sem referência seria um empate que ninguém mediu.</summary>
+        internal static string ByteDeltaText(long bytes, long baselineBytes)
+            => baselineBytes > 0
+                ? $"{((double)bytes / baselineBytes - 1) * 100:+0;-0;0}%"
+                : "-";
+
+        /// <param name="usage">String crua do candidate. <b>Não</b> usar
+        /// <c>EncoderManager.EncodeProbeResult.Variant</c>: ele é <c>"usage=&lt;normalizado&gt;"</c> e no
+        /// default vira <c>"usage="</c>, sem nome nenhum para o usuário.</param>
+        internal static string FormatRow(string usage, IReadOnlyList<EncoderManager.EncodeProbeResult> voltas, AmfUsageReference referencia)
+        {
+            var r = Medido(voltas);
+            // Format com ';' precisa sair do hole de interpolação (o ';' fecha a seção).
+            // <b>1 casa decimal no fps, e não 0:</b> é a coluna que decide o promote, e o
+            // pior caso real fica a 0,30 ponto do corte — arredondado, "+10,4%" vira "+10%",
+            // que é indistinguível de reprovado. Com 0 casas o leitor não consegue auditar o
+            // veredito, e um veredito que ninguém consegue checar é o defeito original de novo.
+            var dFps = referencia.Fps > 0 ? $"{(r.AchievedFps / referencia.Fps - 1) * 100:+0.0;-0.0;0.0}%" : "-";
+            var dRate = referencia.Kbps > 0 ? $"{(r.BitrateKbps / referencia.Kbps - 1) * 100:+0;-0;0}%" : "-";
+            var dBytes = ByteDeltaText(r.OutputBytes, referencia.Bytes);
+            var headroom = r.VbvBinds
+                ? $"VBV APERTA ({-r.HeadroomToMaxrateKbps:0} K acima do teto)"
+                : $"folga p/ teto {r.HeadroomToMaxrateKbps:0} K";
+            // A coluna de quantas voltas entraram não é enfeite: é o que diz ao leitor se um
+            // "+6%" veio de 1 amostra ou de 3, e o piso de ruído abaixo do delta é quem dá
+            // sentido a esse número.
+            var n = voltas?.Count(v => v is not null && v.AchievedFps > 0) ?? 0;
+            var amostra = n > 1 ? $" [n={n}, {AmfUsageRepeat.FmtPct(AmfUsageRepeat.SpreadPct(voltas!.Select(v => v.AchievedFps).ToList()))}% de dispersão]" : "";
+            return $"    {AmfUsageLabel(usage),-24}: {r.AchievedFps,7:0.00} fps ({dFps,7}) | " +
+                   $"{r.BitrateKbps,8:0.0} Kbps ({dRate,7}) | {r.OutputBytes / 1024,6} KiB ({dBytes,6}) | {headroom}{amostra}";
+        }
+
+        /// <summary>Uma volta só. Atalho para a implementação de N voltas, que é quem a
+        /// produção usa; existe para as regressões de formatação (bytes, headroom) poderem
+        /// fixar uma linha medida sem ter que simular 3 voltas.</summary>
+        internal static string FormatRow(string usage, EncoderManager.EncodeProbeResult r, AmfUsageReference referencia)
+            => FormatRow(usage, new[] { r }, referencia);
+
+        /// <summary>Reduz as voltas a uma linha: mediana de fps/kbps/bytes. Uma volta só
+        /// devolve a própria linha, então o caminho de 1 volta é idêntico ao antigo — nenhum
+        /// relatório já publicado muda de formato por causa da repetição.</summary>
+        private static EncoderManager.EncodeProbeResult Medido(IReadOnlyList<EncoderManager.EncodeProbeResult> voltas)
+        {
+            var list = (voltas ?? Array.Empty<EncoderManager.EncodeProbeResult>()).Where(v => v is not null).ToList();
+            if (list.Count == 0) return new EncoderManager.EncodeProbeResult("?", "?", 0, 0, 0, 0, 0);
+            if (list.Count == 1) return list[0];
+
+            var any = list[0];
+            // VbvBinds e HeadroomToMaxrateKbps são DERIVADOS de (MaxrateKbps - BitrateKbps),
+            // e o MaxrateKbps é o mesmo em todas as voltas (mesma chain). Passar a mediana do
+            // bitrate e o maxrate do primeiro braço faz a mediana da folga sair de graça — e
+            // evitar reconstruir o flag de "VBV apertou" por voto é o que impede a mediana de
+            // discordar da própria linha que a gerou.
+            return new EncoderManager.EncodeProbeResult(
+                any.Codec, any.Variant,
+                AmfUsageRepeat.Median(list.Select(v => v.AchievedFps).ToList()),
+                AmfUsageRepeat.Median(list.Select(v => v.BitrateKbps).ToList()),
+                (int)Math.Round(AmfUsageRepeat.Median(list.Select(v => (double)v.OutputBytes).ToList())),
+                any.FrameCount,
+                any.MaxrateKbps);
+        }
+    }
+    /// <summary>
+    /// Repetição, mediana e <b>piso de ruído</b> do <c>--probe-amf-usage</c>.
+    ///
+    /// <para><b>O defeito que isto corrige, medido.</b> Duas execuções do mesmo probe, mesmo
+    /// PC, ~1 h de intervalo: a referência (default, sem <c>-usage</c>) foi de <b>351,99</b>
+    /// para <b>336,40</b> fps (−4,4%), enquanto os braços foram de 368–374 para 371–386
+    /// (~+3%). Como a referência era medida <b>uma única vez</b> e todo delta é relativo a
+    /// ela, os deltas pularam de +0/+5/+6% para <b>+11/+12/+15%</b> — o mesmo número, com o
+    /// veredito invertido. Repetir as execuções <b>não</b> conserta isso: o viés fica, só
+    /// encolhe. O que neutraliza o drift é medir a referência <b>em toda volta</b>, usar a
+    /// <b>mediana</b>, e publicar a <b>dispersão dela</b> para o leitor saber que +6% está
+    /// dentro do próprio ruído.</para>
+    ///
+    /// <para><b>Por que isso importa mais do que parece.</b> O critério de promote é 10% e o
+    /// ruído observado no delta é ±7 pontos. Um "+6%" e um "+15%" saíam visualmente
+    /// idênticos a um "+600%", que seria um sinal claro. Não é erro de aritmética: é um
+    /// número sem erro aparente que a pessoa usa para trocar a chain de produção.</para>
+    /// </summary>
+    internal static class AmfUsageRepeat
+    {
+        /// <summary>Corte de promote do Item 3, por fps.</summary>
+        internal const double PromotePct = 10.0;
+
+        /// <summary>Teto de voltas. Acima disso o custo é de minutos do usuário sem ganho de
+        /// confiança proporcional: a mediana de 5 já é estável para um effect size de ~10%.</summary>
+        internal const int MaxRounds = 9;
+
+        /// <summary>Formata um percentage no relatório, na <b>cultura corrente</b> — e não
+        /// invariant como o <c>AmdCqpProbe.Fmt</c>. A tabela já é da cultura corrente em todos
+        /// os outros campos (fps, Kbps, KiB, os três deltas), então um campo invariant aqui
+        /// apareceria com "." no meio de uma linha cheia de "," — pior que qualquer das duas
+        /// escolhas, porque o leitor não sabe qual dos dois formatos está olhando.</summary>
+        internal static string FmtPct(double v, string fmt = "0.0")
+            => v.ToString(fmt, CultureInfo.CurrentCulture);
+
+        /// <summary>Mediana. Par = média dos dois do meio; ímpar = o do meio. Lista vazia
+        /// devolve 0 e quem chama precisa checar — 0 aqui significa "sem amostra", e o
+        /// relatório não pode imprimir "0 fps" como se fosse medição.</summary>
+        internal static double Median(IReadOnlyList<double> amostras)
+        {
+            if (amostras is null || amostras.Count == 0) return 0;
+            var s = amostras.Where(a => a > 0).OrderBy(a => a).ToList();
+            if (s.Count == 0) return 0;
+            var mid = s.Count / 2;
+            return s.Count % 2 == 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2.0;
+        }
+
+        /// <summary>Dispersão relativa da amostra, em % da mediana: <b>o piso de ruído</b>.
+        /// Com menos de 2 amostras devolve 0, e quem chama precisa dizer "não medido" em vez
+        /// de publicar "ruído 0%" — que seria a afirmação falsa que o defeito Original produzia
+        /// (um delta com precisão que a medição não tinha).</summary>
+        internal static double SpreadPct(IReadOnlyList<double> amostras)
+        {
+            if (amostras is null || amostras.Count < 2) return 0;
+            var s = amostras.Where(a => a > 0).ToList();
+            if (s.Count < 2) return 0;
+            var med = Median(s);
+            return med <= 0 ? 0 : (s.Max() - s.Min()) * 100.0 / med;
+        }
+
+        /// <summary>Piso de ruído do delta entre dois braços: o <b>pior</b> dos dois, não só o da
+        /// referência. O delta é a diferença entre duas medições independentes, então quem
+        /// domina a incerteza é o braço que mais treme. Nos dados reais isso decide o caso
+        /// <c>transcoding</c>: ele treme 5,99% contra os 4,53% da referência, e o delta de
+        /// +5,79% cai para dentro do ruído — deixa de ser promovível.</summary>
+        internal static double NoiseFloor(double refNoisePct, double candidatoNoisePct)
+            => Math.Max(refNoisePct, candidatoNoisePct);
+
+        /// <summary>Voltas mínimas para promover. Um veredito que depende do 3º decimal de uma
+        /// mediana de 2 amostras tem aparência de decisão sem medição atrás — o pior caso real
+        /// é <c>ultralowlatency</c> a +10,30%, 0,30 acima da barra. Esta trava só pode
+        /// <b>impedir</b> um promote, nunca conceder um.</summary>
+        internal const int MinRoundsForPromote = 3;
+
+        /// <summary>O delta supera o corte <b>e</b> o ruído, com o ruído medido e amostra
+        /// suficiente? Promover com N=1 é ler ruído: não há como distinguir "+15% de verdade" de
+        /// "+15% porque a referência foi rápida". A saída honesta é não promover.</summary>
+        internal static bool Promote(double deltaPct, double noisePct, bool noiseMeasured = true, int samples = MinRoundsForPromote)
+            => noiseMeasured
+               && samples >= MinRoundsForPromote
+               && deltaPct >= PromotePct
+               && deltaPct > noisePct;
+
+        /// <summary>Como o delta é apresentado. O número continua impresso — escondê-lo seria
+        /// pior — mas vem marcado quando não é distinguível de zero. A ambiguidade é
+        /// simétrica: "−4%" com ruído de ±5% não é lentidão, é nada.</summary>
+        internal static string DeltaText(double deltaPct, double noisePct, double promotePct, bool noiseMeasured)
+        {
+            var d = $"{deltaPct:+0;-0;0}%";
+            if (!noiseMeasured) return $"{d} (1 execucao: ruido nao medido)";
+            return Math.Abs(deltaPct) <= noisePct
+                ? $"{d} (dentro do ruido {noisePct:0.#}%)"
+                : d;
+        }
+    }
+
     /// <summary>Seam puro (sem ffmpeg, sem I/O) da lista de candidates do <c>--probe-amf-usage</c>.
     /// A referência — a string vazia — entra sempre na 1ª linha: o critério de promote do Item 3 foi
     /// fixado contra "o default em uso", e o default em uso é o vazio (medir contra
@@ -352,13 +582,16 @@ internal static class ProgramBenchmark
 
     internal static void ProbeAmfUsage(
         string widthArg, string heightArg, string fpsArg, string cqArg, string maxrateArg,
-        string codecArg, string candidatesArg)
+        string codecArg, string candidatesArg, string? repeatArg = null)
     {
         int.TryParse(widthArg, out var w);
         int.TryParse(heightArg, out var h);
         int.TryParse(fpsArg, out var fps);
         int.TryParse(cqArg, out var cq);
         int.TryParse(maxrateArg, out var mr);
+        int.TryParse(repeatArg, out var repeatN);
+        var voltas = Math.Clamp(repeatN <= 0 ? 3 : repeatN, 1, AmfUsageRepeat.MaxRounds);
+
         int width = w > 0 ? w : 1920;
         int height = h > 0 ? h : 1080;
         int targetFps = fps > 0 ? fps : 60;
@@ -380,7 +613,7 @@ internal static class ProgramBenchmark
         Console.WriteLine($"Resolução: {width}x{height}@{targetFps}fps | cq={targetCq} (inalterado) | maxrate={maxrateKbps}K | bufsize={bufsizeKbps}K");
         Console.WriteLine($"Codec: {codec} | alvo médio -b:v = {FfmpegEncoder.ComputeAmfTargetKbps(maxrateKbps)}K");
         Console.WriteLine($"Referência: {AmfUsageLabel("")} — é o default de produção (não emitimos -usage); delta em % relativo a ela");
-        Console.WriteLine();
+        Console.WriteLine($"Voltas: {voltas} (mediana por braço; a referência é medida em TODAS as voltas — é a dispersão dela que vira o piso de ruído)");
 
         if (!EncoderManager.CheckFfmpegEncoder(codec))
         {
@@ -388,61 +621,125 @@ internal static class ProgramBenchmark
             return;
         }
 
-        double? baselineFps = null;
-        double? baselineRate = null;
-        long baselineBytes = 0;
+        // Uma volta por braço. A referência é medida em toda volta de propósito: é a
+        // repetição DELA que mede o drift, e sem essa repetição o delta de cada braço
+        // carrega o tremor de uma única medição. Ver AmfUsageRepeat.
+        var porUsage = new Dictionary<string, List<EncoderManager.EncodeProbeResult>>();
         var algumMedido = false;
-        foreach (var usage in candidates)
+        for (var volta = 1; volta <= voltas; volta++)
         {
-            var r = EncoderManager.RunAmfUsageProbe(
-                codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, usage);
-            if (r is null)
+            if (voltas > 1) Console.WriteLine($"  --- volta {volta}/{voltas} ---");
+            foreach (var usage in candidates)
             {
-                // usage rejeitado pelo encoder (ou GPU ocupada): o stderr real só aparece se
-                // pedir um retry com callback — 1 retry, não 6, pra não custar 6x o kill-guard.
-                var saida = new List<string>();
-                var retry = EncoderManager.RunAmfUsageProbe(
-                    codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, usage,
-                    onStderr: saida.Add);
-                if (retry is null)
+                var r = MeasureAmfUsageOnce(codec, width, height, targetFps, targetCq, maxrateKbps, bufsizeKbps, usage);
+                if (r is null)
                 {
-                    Console.WriteLine($"    {AmfUsageLabel(usage),-24}: RECUSADO pelo encoder");
-                    foreach (var l in saida) Console.WriteLine($"      ffmpeg: {l}");
-                    // Se a PRIMEIRA referência (o default de produção, sem -usage) foi recusada, não há
-                    // device AMF funcional — todos os outros usages vão falhar igual. Testar os 5
-                    // restantes só multiplica o custo, então aborta o codec aqui.
                     if (usage.Length == 0)
                     {
+                        // Se a PRIMEIRA referência (o default de produção, sem -usage) foi
+                        // recusada, não há device AMF funcional — todos os outros usages vão
+                        // falhar igual, e repetir as voltas só multiplica o custo.
                         Console.WriteLine($"    '{codec}' sem device AMF utilizável — demais usages abortados.");
                         break;
                     }
+                    Console.WriteLine($"    {AmfUsageLabel(usage),-24}: RECUSADO pelo encoder");
                     continue;
                 }
-                r = retry;
+
+                if (!porUsage.TryGetValue(usage, out var lista)) porUsage[usage] = lista = new List<EncoderManager.EncodeProbeResult>();
+                lista.Add(r);
+                algumMedido = true;
             }
-            algumMedido = true;
-            baselineFps ??= r.AchievedFps;
-            baselineRate ??= r.BitrateKbps;
-            baselineBytes = Math.Max(baselineBytes, r.OutputBytes);
-            var dFps = baselineFps > 0 ? (r.AchievedFps / baselineFps - 1) * 100 : 0;
-            var dRate = baselineRate > 0 ? (r.BitrateKbps / baselineRate.Value - 1) * 100 : 0;
-            // Format com ';' precisa sair do hole de interpolação (o ';' fecha a seção).
-            var dFpsTxt = $"{dFps:+0;-0;0}%";
-            var dRateTxt = $"{dRate:+0;-0;0}%";
-            var dBytes = baselineBytes > 0 ? (r.OutputBytes / (double)baselineBytes - 1) * 100 : 0;
-            var dBytesTxt = $"{dBytes:+0;-0;0}%";
-            var headroomTxt = r.VbvBinds
-                ? $"VBV APERTA (-{-r.HeadroomToMaxrateKbps:0} K)"
-                : $"folga p/ teto {r.HeadroomToMaxrateKbps:0} K";
-            Console.WriteLine(
-                $"    {AmfUsageLabel(usage),-24}: {r.AchievedFps,7:0.00} fps ({dFpsTxt,7}) | " +
-                $"{r.BitrateKbps,8:0.0} Kbps ({dRateTxt,7}) | {r.OutputBytes / 1024,6} KiB ({dBytesTxt,6}) | {headroomTxt}");
+            if (algumMedido && !porUsage.ContainsKey("")) break;
         }
-        Console.WriteLine();
+
         if (!algumMedido)
+        {
+            Console.WriteLine();
             Console.WriteLine("Nenhum candidate medido — sem GPU AMF funcional aqui (resposta honesta, sem chute).");
+            return;
+        }
+
+        // A referência sai de TODAS as voltas dela, por mediana. Nem a primeira (carrega o
+        // tremor daquela volta) nem a maior (denominador que se auto-anula — o defeito do
+        // Math.Max que o RESULT-AMF-USAGE.txt real expôs).
+        var refSamples = porUsage.TryGetValue("", out var refList)
+            ? (IReadOnlyList<EncoderManager.EncodeProbeResult>)refList
+            : Array.Empty<EncoderManager.EncodeProbeResult>();
+        var referencia = AmfUsageReport.Reference(refSamples);
+
+        Console.WriteLine();
+        foreach (var usage in candidates)
+        {
+            if (!porUsage.TryGetValue(usage, out var samples) || samples.Count == 0) continue;
+            Console.WriteLine(AmfUsageReport.FormatRow(usage, samples, referencia));
+        }
+
+        Console.WriteLine();
+        PrintAmfUsageNoise(referencia, porUsage, candidates);
+    }
+
+    /// <summary>Uma medição de um braço, com 1 retry só (o retry com callback custa o
+    /// kill-guard inteiro, então 1, não 6). Devolve null quando o encoder recusou.</summary>
+    private static EncoderManager.EncodeProbeResult? MeasureAmfUsageOnce(
+        string codec, int width, int height, int fps, int cq, int maxrateKbps, int bufsizeKbps, string usage)
+    {
+        var r = EncoderManager.RunAmfUsageProbe(codec, width, height, fps, cq, maxrateKbps, bufsizeKbps, usage);
+        if (r is not null) return r;
+
+        var saida = new List<string>();
+        r = EncoderManager.RunAmfUsageProbe(codec, width, height, fps, cq, maxrateKbps, bufsizeKbps, usage, onStderr: saida.Add);
+        if (r is null)
+        {
+            // O stderr só é capturado no retry; na 1ª tentativa ele não aparece, e uma recusa
+            // sem motivo é exatamente o que fez o D3D12VA parecer "faixa inválida" quando era
+            // falha de feed de frames.
+            foreach (var l in saida) Console.WriteLine($"      ffmpeg: {l}");
+        }
+        return r;
+    }
+
+    /// <summary>Fecha o relatório: o piso de ruído e o que ele engole. Sem esta seção, um
+    /// "+6%" e um "+600%" têm o mesmo formato, e a pessoa não tem como saber que o primeiro
+    /// está dentro do próprio ruído da máquina.</summary>
+    private static void PrintAmfUsageNoise(
+        AmfUsageReport.AmfUsageReference referencia,
+        Dictionary<string, List<EncoderManager.EncodeProbeResult>> porUsage,
+        IReadOnlyList<string> candidates)
+    {
+        var refSamples = referencia.FpsSamples;
+        var refNoise = referencia.FpsSpreadPct;
+
+        if (refSamples < AmfUsageRepeat.MinRoundsForPromote)
+        {
+            Console.WriteLine($"Piso de ruído: NÃO CONFIÁVEL ({refSamples} execução(ões); o promote exige " +
+                              $"{AmfUsageRepeat.MinRoundsForPromote}). Os deltas acima não decidem nada.");
+        }
         else
-            Console.WriteLine("Leitura: fps maior = mais folga p/ 60fps; Kbps menor = arquivo menor no MESMO cq.");
+        {
+            Console.WriteLine($"Piso de ruído da referência: {AmfUsageRepeat.FmtPct(refNoise)} em {refSamples} execuções " +
+                              $"(fps {AmfUsageRepeat.FmtPct(referencia.Fps, "0.00")}). Deltas com |delta| <= isso são indistinguíveis de zero.");
+        }
+
+        foreach (var usage in candidates)
+        {
+            if (usage.Length == 0) continue;
+            if (!porUsage.TryGetValue(usage, out var samples) || samples.Count == 0) continue;
+
+            var fps = samples.Select(v => v.AchievedFps).ToList();
+            var n = fps.Count(a => a > 0);
+            var deltaPct = referencia.Fps > 0 ? (AmfUsageRepeat.Median(fps) / referencia.Fps - 1) * 100.0 : 0;
+            // O piso é o pior dos dois braços, e a amostra é a MENOR das duas: promover exige
+            // que os dois lados tenham medido o bastante.
+            var piso = AmfUsageRepeat.NoiseFloor(refNoise, AmfUsageRepeat.SpreadPct(fps));
+            var amostras = Math.Min(n, refSamples);
+            var acima = AmfUsageRepeat.Promote(deltaPct, piso, refSamples >= AmfUsageRepeat.MinRoundsForPromote, amostras);
+            var marker = acima ? "  <- supera o corte E o ruído" : "";
+            Console.WriteLine($"  {AmfUsageLabel(usage),-24}: {AmfUsageRepeat.DeltaText(deltaPct, piso, AmfUsageRepeat.PromotePct, refSamples >= 2)}" +
+                              $" [piso {AmfUsageRepeat.FmtPct(piso)}, n={amostras}]{marker}");
+        }
+
+        Console.WriteLine("Leitura: fps maior = mais folga p/ 60fps; Kbps menor = arquivo menor no MESMO cq.");
     }
 
     /// <summary>
@@ -626,7 +923,7 @@ internal static class ProgramBenchmark
         string? widthArg, string? heightArg, string? fpsArg, string? cqArg, string? maxrateArg, string? bufArg, string? framesArg,
         string? codecArg = null)
     {
-        var cfg = ReadLiveConfig();
+        var cfg = ReadLiveConfigOrDefault();
         var req = new AmdAuditRequest(
             Pick(widthArg, cfg.Width),
             Pick(heightArg, cfg.Height),
@@ -657,7 +954,7 @@ internal static class ProgramBenchmark
     /// <summary>Lê a config real; se ela não existir, cai nos defaults sem quebrar o audit
     /// (um tool de diagnóstico que não roda por falta de config é inútil na hora do
     /// problema).</summary>
-    private static AppConfig ReadLiveConfig()
+    internal static AppConfig ReadLiveConfigOrDefault()
     {
         try
         {
@@ -686,8 +983,22 @@ internal static class ProgramBenchmark
         Console.WriteLine("  DiNho.Capture.Poc --audit-amd [W H FPS CQ MAXRATE BUFSIZE FRAMES [CODEC]]");
         Console.WriteLine("      Audit da stack AMF. Default: config real do usuario. CODEC fixa a familia medida");
         Console.WriteLine("      (ex.: h264_nvenc) para rodar o audit inteiro em maquina sem AMF.");
+        Console.WriteLine("  DiNho.Capture.Poc --probe-amf-cqp [W H FPS CQ MAXRATE BUFSIZE FRAMES [CODEC [QPS]]]]");
+        Console.WriteLine("      A/B da chain AMF real: vbr_peak + b:v (maxrate*0.36) vs cqp nos QPs indicados");
+        Console.WriteLine("      (padrao: cq-2,cq,cq+2,cq+4). Criterio travado: promove com >=5% de bytes no");
+        Console.WriteLine("      VMAF da producao ou acima e <=5% de fps. QPS = lista 0..51 ou 'auto', que sobe");
+        Console.WriteLine("      de 2 em 2 ate cruzar os bytes da producao. Default: config real (precisa de GPU AMD).");
         Console.WriteLine("  DiNho.Capture.Poc --probe-vbv [W H FPS CQ MAXRATE BUFSIZES]  Mede bitrate/fps por -bufsize");
-        Console.WriteLine("  DiNho.Capture.Poc --probe-amf-usage [W H FPS CQ MAXRATE CODEC USAGES]  Mede fps/bitrate por -usage da AMF (precisa de GPU AMD)");
+        Console.WriteLine("  DiNho.Capture.Poc --probe-amf-usage [W H FPS CQ MAXRATE CODEC USAGES [REPETIÇÕES]]");
+        Console.WriteLine("      Mede fps/bitrate por -usage da AMF (precisa de GPU AMD). Repeticoes (padrao 3) medem a");
+        Console.WriteLine("      referencia em TODAS as voltas; a mediana dela vira o piso de ruido do veredito.");
+        Console.WriteLine("  DiNho.Capture.Poc --probe-amd-sweep [W H FPS CQ MAXRATE BUFSIZE FRAMES [CODEC [USAGES [QPS [FINALISTAS [VOLTAS]]]]]]");
+        Console.WriteLine("      Grade usage x QP do AMF: procura o melhor custo/desempenho sem perder qualidade");
+        Console.WriteLine("      contra a cadeia de producao (precisa de GPU AMD). USAGES = lista separada por virgula");
+        Console.WriteLine("      (default: default,transcoding,ultralowlatency,lowlatency,high_quality); QPS = lista");
+        Console.WriteLine("      0..51 ou 'auto' (mesma escada do --probe-amf-cqp). Faz 1 volta por celula e so");
+        Console.WriteLine("      repete a frente de Pareto. Devolve DOIS picks: menor byte e maior fps, cada um");
+        Console.WriteLine("      com o VMAF >= producao. VOLTAS=1 desliga o pick de desempenho (piso de 3).");
         Console.WriteLine("  DiNho.Capture.Poc --probe-hevc-profile [W H FPS CQ MAXRATE CODEC PROFILES]  A/B main vs main10 (entrada NV12 8-bit)");
         Console.WriteLine("  DiNho.Capture.Poc --help              Mostra esta ajuda");
         Console.WriteLine();
