@@ -426,4 +426,115 @@ public sealed class NonGameProcessesTests
         Assert.False((bool)method!.Invoke(null, [new GameInfo(
             "", "", "", "", DiNho.Capture.Poc.GameDetection.DisplayMode.Unknown, 0, IntPtr.Zero)])!);
     }
+
+    #region ResolveStatusGameString — o jogo detectado PERSISTE em alt-tab
+
+    // O status publica o jogo de captura mesmo quando o foreground vira não-jogo
+    // (usuário alt-tabou). Pedido do usuário 2026-09-29: "a informação do game
+    // detectado deve persistir no front mesmo em alt-tab".
+
+    private static string? InvokeResolveStatusGameString(object foreground, object? captureTarget)
+    {
+        var method = typeof(EngineCoordinator).GetMethod("ResolveStatusGameString",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        return (string?)method!.Invoke(null, [foreground, captureTarget]);
+    }
+
+    private static GameInfo MakeGame(string processName)
+        => new(
+            processName: processName,
+            executablePath: @"C:\Games\" + processName + ".exe",
+            windowTitle: processName,
+            windowClass: "grcWindow",
+            displayMode: DiNho.Capture.Poc.GameDetection.DisplayMode.FullscreenExclusive,
+            processId: 4242,
+            hwnd: new IntPtr(0xABCD));
+
+    private static GameInfo MakeNonGame(string processName)
+        => new(
+            processName: processName,
+            executablePath: @"C:\Windows\" + processName + ".exe",
+            windowTitle: processName,
+            windowClass: "",
+            displayMode: DiNho.Capture.Poc.GameDetection.DisplayMode.Windowed,
+            processId: 4243,
+            hwnd: new IntPtr(0xABCE));
+
+    [Fact]
+    public void ResolveStatusGameString_CaptureActive_NonGameForeground_PersistsTarget()
+    {
+        // Alt-tab para o navegador com captura ativa do FiveM: o FRONT deve
+        // continuar mostrando o jogo que está sendo gravado, não "explorer".
+        var target = MakeGame("FiveM");
+        var foreground = MakeNonGame("chrome");
+
+        var result = InvokeResolveStatusGameString(foreground, target);
+
+        Assert.NotNull(result);
+        Assert.Contains("FiveM", result);
+        Assert.DoesNotContain("chrome", result);
+    }
+
+    [Fact]
+    public void ResolveStatusGameString_CaptureActive_GameForeground_UsesForeground()
+    {
+        // Foreground ainda é o próprio jogo — publica ele (sem captura x alvo divergindo).
+        var target = MakeGame("FiveM");
+        var foreground = MakeGame("FiveM");
+
+        var result = InvokeResolveStatusGameString(foreground, target);
+
+        Assert.NotNull(result);
+        Assert.Contains("FiveM", result);
+    }
+
+    [Fact]
+    public void ResolveStatusGameString_NoCapture_GameForeground_ReturnsForeground()
+    {
+        // Sem captura ativa, comportamento antigo: publica o foreground quando é jogo.
+        var foreground = MakeGame("Cyberpunk");
+
+        var result = InvokeResolveStatusGameString(foreground, null);
+
+        Assert.NotNull(result);
+        Assert.Contains("Cyberpunk", result);
+    }
+
+    [Fact]
+    public void ResolveStatusGameString_NoCapture_NonGameForeground_ReturnsNull()
+    {
+        // Sem captura ativa e foreground não-jogo: nada a publicar (comportamento antigo).
+        var foreground = MakeNonGame("explorer");
+
+        var result = InvokeResolveStatusGameString(foreground, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ResolveStatusGameString_CaptureActive_InvalidTarget_NonGameForeground_ReturnsNull()
+    {
+        // Captura iniciada para desktop (alvo inválido): não há jogo para persistir.
+        var foreground = MakeNonGame("notepad");
+
+        var result = InvokeResolveStatusGameString(foreground, new GameInfo());
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ResolveStatusGameString_CaptureActive_SystemWindowNonGameForeground_ReturnsNull()
+    {
+        // Foreground é janela do sistema (taskbar) e não há captura de jogo.
+        var foreground = new GameInfo(
+            "explorer", @"C:\Windows\explorer.exe", "", "Shell_TrayWnd",
+            DiNho.Capture.Poc.GameDetection.DisplayMode.Windowed, 5, new IntPtr(0x7777));
+
+        var result = InvokeResolveStatusGameString(foreground, null);
+
+        Assert.Null(result);
+    }
+
+    #endregion ResolveStatusGameString
 }

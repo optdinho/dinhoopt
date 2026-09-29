@@ -298,7 +298,7 @@ public sealed partial class EngineCoordinator
                 Codec = string.IsNullOrWhiteSpace(liveCodec) ? s.Codec : liveCodec!,
                 DiskSpaceOk = CheckDiskSpace(),
                 LastCrashRecovered = s.LastCrashRecovered,
-                Game = _gameDetector.CurrentGame.IsValid && !NonGameProcesses.Contains(_gameDetector.CurrentGame.ProcessName) ? _gameDetector.CurrentGame.ToString() : null,
+                Game = ResolveStatusGameString(_gameDetector.CurrentGame, _captureTargetGame),
                 Recording = _recording,
                 UptimeSeconds = (long)_clock.Now.TotalSeconds,
                 AudioFallback = _audioFallback,

@@ -125,6 +125,22 @@ public sealed partial class EngineCoordinator
     internal static bool IsKnownGameTarget(GameInfo game)
         => game.IsValid && !string.IsNullOrEmpty(game.ProcessName) && !IsKnownNonGame(game);
 
+    /// <summary>
+    /// Decide qual jogo o status publica no front. Quando a captura está ativa
+    /// com um alvo legítimo, o ALVO vence o foreground: o usuário alt-tabou para
+    /// uma janela não-jogo, mas o clipe continua sendo do jogo, então o front
+    /// deve continuar mostrando o jogo (pedido do usuário — "persistir em alt-tab").
+    /// Sem captura (ou com alvo não-jogo), cai no foreground (comportamento antigo).
+    /// </summary>
+    internal static string? ResolveStatusGameString(GameInfo foreground, GameInfo? captureTarget)
+    {
+        if (captureTarget is { IsValid: true } && IsKnownGameTarget(captureTarget))
+            return captureTarget.ToString();
+        if (foreground.IsValid && !NonGameProcesses.Contains(foreground.ProcessName))
+            return foreground.ToString();
+        return null;
+    }
+
     // ---------------------------------------------------------------------------
     // Alive-check por PID via OpenProcess (Opção A — fix do falso-negativo FiveM).
     // O nome do processo do FiveM inclui o build number (FiveM_b3258_GTAProcess),
@@ -449,7 +465,7 @@ public sealed partial class EngineCoordinator
 
         _status.Update(s =>
         {
-            s.Game = game.IsValid && !NonGameProcesses.Contains(game.ProcessName) ? game.ToString() : null;
+            s.Game = ResolveStatusGameString(game, _captureTargetGame);
         });
 
         // GameAudioOnly: quando um jogo REAL muda durante gravação, atualiza filtro de áudio
