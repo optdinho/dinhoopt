@@ -196,6 +196,35 @@ public sealed partial class EngineCoordinator
     private long _audioMediaElapsedTicks;
     private long _audioFirstPacketPtsTicks = -1;
 
+    // Auto-recovery do encoder AAC (2026-09-29): as primeiras AacRapidAttempts tentativas
+    // são IMEDIATAS (stall acabou de acontecer, encoder novo só precisa de aquecimento);
+    // depois o recovery não desiste — vira retry throttled a cada AacRecoveryRetryInterval.
+    // Sem o throttled retry, um wedge transitório de ~2-5s (GPU overload / device busy) que
+    // mata o ffmpeg AAC silenciava a captura pelo RESTANTE da sessão: 3 tentativas rodavam
+    // todas dentro do stall, falhavam, e o anel de áudio nunca mais recebia pacotes.
+    internal const int AacRapidAttempts = 3;
+    internal static readonly TimeSpan AacRecoveryRetryInterval = TimeSpan.FromSeconds(30);
+    private long _lastAacRecoveryAttemptTicks; // TimeSpan.Ticks via Interlocked
+
+    private TimeSpan SinceLastAacRecoveryAttempt
+    {
+        get
+        {
+            var last = Interlocked.Read(ref _lastAacRecoveryAttemptTicks);
+            return last == 0 ? TimeSpan.MaxValue : _clock.Now - new TimeSpan(last);
+        }
+    }
+
+    /// <summary>
+    /// Decide se uma nova tentativa de recriar o encoder AAC deve acontecer. As
+    /// primeiras <see cref="AacRapidAttempts"/> são imediatas; depois, apenas se o tempo
+    /// desde a última tentativa já cubriu <paramref name="retryInterval"/> — taxa máxima
+    /// de 1 spawn/intervalo (restart-loop quando a causa persiste) e NUNCA abandono
+    /// permanente (o bug de 2026-09-29).
+    /// </summary>
+    internal static bool ShouldAttemptAacRecovery(int attempts, TimeSpan sinceLastAttempt, TimeSpan retryInterval) =>
+        attempts < AacRapidAttempts || sinceLastAttempt >= retryInterval;
+
     internal static double ComputeAnchorGapMs(long firstPacketPtsTicks, long mediaElapsedTicks, TimeSpan currentAnchor)
     {
         var expected = TimeSpan.FromTicks(firstPacketPtsTicks + mediaElapsedTicks);
@@ -239,27 +268,44 @@ public sealed partial class EngineCoordinator
             }
             else
             {
-                // Auto-recovery: se o encoder morreu, tenta recriar (max 3 vezes por sessão)
-                if (_aacEncoderRecoveryAttempts < 3)
+                // Auto-recovery com backoff (2026-09-29): as AacRapidAttempts primeiras
+                // tentativas são imediatas; depois o recovery NÃO desiste — retry throttled
+                // a cada AacRecoveryRetryInterval. Sem isso, um stall transitório (~2-5s,
+                // GPU overload/device busy) que mata o ffmpeg AAC silenciava o áudio pelo
+                // resto da sessão (incidente real: anel de áudio congelado por 3+ horas).
+                if (ShouldAttemptAacRecovery(_aacEncoderRecoveryAttempts, SinceLastAacRecoveryAttempt, AacRecoveryRetryInterval))
                 {
                     _aacEncoderRecoveryAttempts++;
-                    Log.E("AudioDiag", $"encoder UNHEALTHY — auto-recovery attempt {_aacEncoderRecoveryAttempts}/3");
+                    Interlocked.Exchange(ref _lastAacRecoveryAttemptTicks, _clock.Now.Ticks);
+                    bool recovered = false;
+                    Log.E("AudioDiag", $"encoder UNHEALTHY — auto-recovery attempt {_aacEncoderRecoveryAttempts}" +
+                        $"{(_aacEncoderRecoveryAttempts <= AacRapidAttempts ? $"/{AacRapidAttempts}" : $" (throttled, a cada {AacRecoveryRetryInterval.TotalSeconds:F0}s)")}");
                     try
                     {
                         _aacEncoder?.Dispose();
                         _aacEncoder = new FfmpegAacEncoder();
                         _aacEncoder.Initialize(_audioSampleRate, 2, 192000);
                         _aacEncoder.EncodeAudio(packet.PcmSamples);
-                        Log.I("AudioDiag", $"AAC encoder recriado com sucesso (PID={_aacEncoder.TotalAacFrames})");
+                        recovered = _aacEncoder.IsHealthy;
+                        if (recovered)
+                        {
+                            _aacEncoderRecoveryAttempts = 0;
+                            Interlocked.Exchange(ref _lastAacRecoveryAttemptTicks, 0);
+                            Log.I("AudioDiag", $"AAC encoder recriado com sucesso (PID={_aacEncoder.TotalAacFrames}) — áudio restaurado");
+                        }
                     }
                     catch (Exception ex)
                     {
                         Log.E("AudioDiag", $"Falha ao recriar encoder: {ex.Message}");
                     }
+                    if (!recovered && _audioPacketCount % 5000 == 0)
+                        Log.W("AudioDiag", $"packet #{_audioPacketCount}: encoder UNHEALTHY — próxima tentativa em até " +
+                            $"{AacRecoveryRetryInterval.TotalSeconds:F0}s (attempt {_aacEncoderRecoveryAttempts})");
                 }
                 else if (_audioPacketCount % 5000 == 0)
                 {
-                    Log.W("AudioDiag", $"packet #{_audioPacketCount}: encoder UNHEALTHY — recovery esgotado ({_aacEncoderRecoveryAttempts} tentativas)");
+                    Log.W("AudioDiag", $"packet #{_audioPacketCount}: encoder UNHEALTHY — recovery aguardando janela de " +
+                        $"{AacRecoveryRetryInterval.TotalSeconds:F0}s (attempt {_aacEncoderRecoveryAttempts})");
                 }
             }
         }
