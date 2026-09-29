@@ -61,7 +61,12 @@ publish:
   provider: github
   owner: optdinho
   repo: dinhoopt
-  private: true
+  # public: false (omitido) — optdinho/dinhoopt é repo PÚBLICO (verificado via
+  # API: private=false em 2026-09-29). Com `private: true` o electron-updater
+  # tentaria authenticate com GH_TOKEN no feed .atom, e em producao esse token
+  # nao existe (index.ts so carrega o .env quando !app.isPackaged), quebrando
+  # o auto-update. Repo publico = feed anonimo, sem token.
+  private: false
 
 # better-sqlite3 v13 loads its prebuilt from prebuilds/win32-x64.node via N-API
 # (no compilation needed) — skip @electron/rebuild, which would require Python+MSVC.
