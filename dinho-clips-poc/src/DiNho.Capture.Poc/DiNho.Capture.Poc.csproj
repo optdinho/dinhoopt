@@ -9,6 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Platforms>x64</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Ícone do app embutido no exe: sem isto o Windows mostra o ícone padrão de exe.
+         Mesmo ícone do app (resources/icon.ico), copiado para junto do projeto. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
 
     <!-- Necessário para usar a projeção do Windows.Graphics.Capture via CsWinRT -->
     <UseWinUI>false</UseWinUI>
