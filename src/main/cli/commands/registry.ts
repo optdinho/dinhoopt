@@ -1,10 +1,10 @@
+import { fixRegistryEntries, scanRegistry } from '../../ipc/registry-cleaner.ipc'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage, cliVerbose, log, showProgress } from '../utils'
 
 export async function handleRegistry(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { scanRegistry, fixRegistryEntries } = await import('../../ipc/registry-cleaner.ipc')
 
   if (sub === 'scan') {
     cliLog(ctx, 'Scanning registry...')

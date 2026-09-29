@@ -1,11 +1,11 @@
 import type { DiskNode } from '@shared/types'
+import { analyzeDisk, getDrives, getFileTypes } from '../../ipc/disk-analyzer.ipc'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage, formatBytes } from '../utils'
 
 export async function handleDisk(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { getDrives, analyzeDisk, getFileTypes } = await import('../../ipc/disk-analyzer.ipc')
 
   if (sub === 'drives') {
     const drives = await getDrives()

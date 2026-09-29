@@ -1,10 +1,10 @@
+import { clearHistory, getHistory } from '../../services/history-store'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage, formatBytes } from '../utils'
 
 export async function handleHistory(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { getHistory, clearHistory } = await import('../../services/history-store')
 
   if (sub === 'list') {
     const history = getHistory()

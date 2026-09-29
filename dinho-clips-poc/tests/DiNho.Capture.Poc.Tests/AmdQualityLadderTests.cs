@@ -124,12 +124,15 @@ public class AmdQualityLadderTests
     // ------------------------------------------------------ a lista default vem do binário
 
     [Fact]
-    public void QualityPresets_OsQuatroNomesDoFfmpegNaOrdemDoHelp()
+    public void QualityPresets_OsQuatroNomesDoFfmpegDoMaisRapidoAoMaisCaro()
     {
-        // `ffmpeg -h encoder=h264_amf` (9.0.1, binário embarcado) lista balanced, speed,
-        // quality, high_quality. A ordem aqui é rápido → caro, que é a ordem em que a
-        // escada deve ser lida. Os ÍNDICES são outro assunto (divergem por encoder) e não
-        // entram aqui de propósito — ver AmfNumericIndexDivergenceTests.
+        // `ffmpeg -h full` (9.0.2, binário embarcado) lista balanced, speed, quality,
+        // high_quality para h264_amf. O NOME antigo deste teste dizia "na ordem do help", e não
+        // é a ordem do help (que começa em balanced): aqui é rápido → caro, que é a ordem em que
+        // a escada deve ser lida. O `-h encoder=h264_amf` não serve como fonte — ele só
+        // resume a opção como `-quality <int> (from -1 to 3)`, sem os nomes.
+        // Os ÍNDICES são outro assunto (divergem por encoder) e não entram aqui de propósito —
+        // ver AmfNumericIndexDivergenceTests.
         Assert.Equal(new[] { "speed", "balanced", "quality", "high_quality" }, AmdAudit.QualityPresets);
     }
 

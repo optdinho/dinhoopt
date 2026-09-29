@@ -1,12 +1,10 @@
+import { deleteStartupItem, getBootTrace, listStartupItems, toggleStartupItem } from '../../ipc/startup-manager.ipc'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliNotFound, cliOut, cliUsage } from '../utils'
 
 export async function handleStartup(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { listStartupItems, toggleStartupItem, deleteStartupItem, getBootTrace } = await import(
-    '../../ipc/startup-manager.ipc'
-  )
 
   if (sub === 'list') {
     const items = await listStartupItems()

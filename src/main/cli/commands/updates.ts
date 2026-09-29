@@ -1,10 +1,10 @@
+import { checkForUpdates, runUpdates } from '../../services/software-updater'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage } from '../utils'
 
 export async function handleUpdates(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { checkForUpdates, runUpdates } = await import('../../services/software-updater')
 
   if (sub === 'check') {
     cliLog(ctx, 'Checking for software updates...')

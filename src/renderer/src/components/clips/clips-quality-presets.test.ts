@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { presetSubLabel, QUALITY_PRESETS, type QualityPresetKey, RESOLUTION_HEIGHT } from './clips-quality-presets'
+import en from '../../locales/en/clips.json'
+import es from '../../locales/es/clips.json'
+import pt from '../../locales/pt/clips.json'
+import {
+  PRESET_DOTS,
+  PRESET_LABEL_KEYS,
+  PRESET_LEVEL,
+  PRESET_ORDER,
+  presetSubLabel,
+  QUALITY_PRESETS,
+  type QualityPresetKey,
+  RESOLUTION_HEIGHT,
+} from './clips-quality-presets'
 
 const KEYS = Object.keys(QUALITY_PRESETS) as QualityPresetKey[]
 
@@ -78,6 +90,97 @@ describe('QUALITY_PRESETS', () => {
     for (const key of KEYS) {
       expect(QUALITY_PRESETS[key].encoderPreset).toBe('p5')
     }
+  })
+})
+
+describe('PRESET_ORDER', () => {
+  it('cobre todos os presets, sem repetir nem omitir', () => {
+    expect([...PRESET_ORDER].sort()).toEqual([...KEYS].sort())
+  })
+
+  it('começa no mais caro e termina no mais barato', () => {
+    // A ordem é uma escada de custo decrescente: o botão da esquerda nunca pode ser o
+    // mais barato, que é como o olho lê a linha.
+    expect(PRESET_ORDER[0]).toBe('muito-alta')
+    expect(PRESET_ORDER.at(-1)).toBe('performance')
+  })
+
+  it('nunca sobe de qualidade ao longo da linha', () => {
+    // Métrica única de "custa mais": CQ mais baixo é mais caro, mais pixels no mesmo CQ
+    // é mais caro, e mais frames por segundo é mais caro (é trabalho de encoder por
+    // segundo). A lista precisa ser estritamente decrescente — não basta não subir, um
+    // empate entre vizinhos seria um degrau que o olho não distingue.
+    const custo = (key: QualityPresetKey) => {
+      const p = QUALITY_PRESETS[key]
+      return ((51 - (p.cq as number)) * (p.width as number) * (p.height as number) * (p.fps as number)) / 51
+    }
+    const custos = PRESET_ORDER.map(custo)
+    expect(custos).toEqual([...custos].sort((a, b) => b - a))
+    expect(new Set(custos).size).toBe(custos.length)
+  })
+})
+
+describe('PRESET_LEVEL', () => {
+  it('é estritamente decrescente na ordem de exibição (a escada de pontos distingue todos)', () => {
+    const niveis = PRESET_ORDER.map((key) => PRESET_LEVEL[key])
+    expect(niveis).toEqual([...niveis].sort((a, b) => b - a))
+    expect(new Set(niveis).size).toBe(niveis.length)
+  })
+
+  it('cabe na quantidade de pontos desenhados', () => {
+    for (const key of KEYS) {
+      expect(PRESET_LEVEL[key]).toBeGreaterThanOrEqual(0)
+      expect(PRESET_LEVEL[key]).toBeLessThanOrEqual(PRESET_DOTS)
+    }
+  })
+
+  it('desenha pontos suficientes para os 5 presets não se confundirem', () => {
+    // 5 presets com N pontos e níveis 0..N-1 exige N >= 4. Com 3, dois presets cairiam
+    // no mesmo nível e a escada pararia de informar.
+    expect(PRESET_DOTS).toBeGreaterThanOrEqual(KEYS.length - 1)
+  })
+})
+
+describe('PRESET_LABEL_KEYS', () => {
+  it('dá um nome i18n distinto para cada preset (a grade não pode repetir rótulo)', () => {
+    const nomes = Object.values(PRESET_LABEL_KEYS)
+    expect(new Set(nomes).size).toBe(KEYS.length)
+  })
+
+  it.each([
+    ['pt', pt],
+    ['en', en],
+    ['es', es],
+  ])('toda chave existe no locale %s (i18n devolve a chave crua quando falta)', (_idioma, locale) => {
+    const texto = locale as Record<string, string>
+    for (const key of KEYS) {
+      const chave = PRESET_LABEL_KEYS[key]
+      expect(texto[chave], `chave ${chave} ausente ou vazia em ${_idioma}`).toBeTruthy()
+    }
+  })
+
+  it('o nome exibido segue a ordem da grade (Deus → Alta → Boa → Leve → Batata)', () => {
+    expect(PRESET_ORDER.map((key) => pt[PRESET_LABEL_KEYS[key] as keyof typeof pt])).toEqual([
+      'Deus',
+      'Alta',
+      'Boa',
+      'Leve',
+      'Batata',
+    ])
+  })
+
+  it('cada nome continua descrevendo o preset que ele rotula (o id interno não é o nome)', () => {
+    // Os ids são 'boa' (720p) e 'leve-60' (900p) desde antes do rename: o nome na tela
+    // veio depois, então é aqui que se trava que Deus=1080p, Boa=900p, Leve=720p.
+    const alturaPorNome = (nome: string) => {
+      const key = PRESET_ORDER.find((k) => pt[PRESET_LABEL_KEYS[k] as keyof typeof pt] === nome)
+      return QUALITY_PRESETS[key as QualityPresetKey].height
+    }
+    expect(alturaPorNome('Deus')).toBe(1080)
+    expect(alturaPorNome('Alta')).toBe(1080)
+    expect(alturaPorNome('Boa')).toBe(900)
+    expect(alturaPorNome('Leve')).toBe(720)
+    expect(alturaPorNome('Batata')).toBe(720)
   })
 })
 

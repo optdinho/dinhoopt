@@ -1,10 +1,10 @@
 import { app } from 'electron'
+import { collectMetrics, formatPrometheus } from '../../services/metrics'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, log } from '../utils'
 
 export async function handleMetrics(_args: string[], ctx: CliContext): Promise<number | undefined> {
-  const { collectMetrics, formatPrometheus } = await import('../../services/metrics')
   const metrics = await collectMetrics()
 
   if (ctx.json) {
@@ -17,7 +17,6 @@ export async function handleMetrics(_args: string[], ctx: CliContext): Promise<n
 
 export async function handleMetricsServer(args: string[], ctx: CliContext): Promise<void> {
   const http = await import('node:http')
-  const { collectMetrics, formatPrometheus } = await import('../../services/metrics')
 
   const portIdx = args.indexOf('--port')
   const port = portIdx !== -1 ? Number.parseInt(args[portIdx + 1]!, 10) || 9100 : 9100

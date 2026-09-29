@@ -9,8 +9,10 @@ namespace DiNho.Capture.Poc.Tests;
 /// numéricos</b> que o ffmpeg esconde atrás desses nomes são <b>diferentes em cada
 /// encoder</b>.
 ///
-/// <para><b>Medido no binário embarcado real</b> (ffmpeg 9.0.1,
-/// <c>ffmpeg -h encoder=&lt;codec&gt;</c>, sem precisar de GPU AMD):
+/// <para><b>Medido no binário embarcado real</b> (ffmpeg 9.0.2,
+/// <c>ffmpeg -h full</c>, sem precisar de GPU AMD). O comando importa: <c>-h encoder=&lt;codec&gt;</c>
+/// <b>não</b> serve aqui — ele só resume a opção como <c>-quality &lt;int&gt; (from -1 to 3)</c>, sem os
+/// nomes nem os números. Quem rodou o comando errado via "nenhuma lista" e não "divergência".
 /// <code>
 /// -quality  h264_amf: balanced=0 speed=1    quality=2 high_quality=3
 ///           hevc_amf: quality=0  balanced=5  speed=10 high_quality=15
@@ -18,6 +20,9 @@ namespace DiNho.Capture.Poc.Tests;
 /// -rc       h264_amf: cqp=0 cbr=1 vbr_peak=2 vbr_latency=3 qvbr=4 hqvbr=5 hqcbr=6
 ///           hevc_amf: cqp=0 cbr=3 vbr_peak=2 vbr_latency=1 qvbr=4 hqvbr=5 hqcbr=6
 ///           av1_amf:  cqp=0     cbr=3 vbr_peak=2 vbr_latency=1 qvbr=4 hqvbr=5 hqcbr=6
+/// -usage    h264_amf: transcoding=0 ultralowlatency=1 lowlatency=2 webcam=3 ...
+///           hevc_amf: transcoding=0 ultralowlatency=1 lowlatency=2 webcam=3 ...
+///           av1_amf:  transcoding=0 ultralowlatency=2 lowlatency=1 webcam=3 ...  &lt;-- TROCA
 /// </code></para>
 ///
 /// <para><b>Por que isto precisa de trava.</b> É a <b>mesma armadilha do <c>-rc 1</c> do
@@ -87,6 +92,31 @@ public class AmfNumericIndexDivergenceTests
             },
         };
 
+    /// <summary><c>-usage</c> também diverge, e em <c>av1_amf</c> a divergência é uma
+    /// <b>troca</b>: <c>ultralowlatency</c> e <c>lowlatency</c> trocam de índice. Medido no
+    /// mesmo binário (ffmpeg 9.0.2, <c>-h full</c>). Sem esta tabela a classe se chamaria
+    /// "divergência numérica" documentando só <c>-quality</c> e <c>-rc</c>, que é exatamente
+    /// o tipo de lacuna que faz alguém "otimizar" nome por índice achando que é uniforme.</summary>
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> UsageIndex =
+        new Dictionary<string, IReadOnlyDictionary<string, int>>
+        {
+            ["h264_amf"] = new Dictionary<string, int>
+            {
+                ["transcoding"] = 0, ["ultralowlatency"] = 1, ["lowlatency"] = 2,
+                ["webcam"] = 3, ["high_quality"] = 4, ["lowlatency_high_quality"] = 5
+            },
+            ["hevc_amf"] = new Dictionary<string, int>
+            {
+                ["transcoding"] = 0, ["ultralowlatency"] = 1, ["lowlatency"] = 2,
+                ["webcam"] = 3, ["high_quality"] = 4, ["lowlatency_high_quality"] = 5
+            },
+            ["av1_amf"] = new Dictionary<string, int>
+            {
+                ["transcoding"] = 0, ["ultralowlatency"] = 2, ["lowlatency"] = 1,
+                ["webcam"] = 3, ["high_quality"] = 4, ["lowlatency_high_quality"] = 5
+            },
+        };
+
     private static string Chain(string codec, string preset = "speed", string usage = "") =>
         FfmpegEncoder.BuildEncoderTuneArgs(
             codec, 18, 55_000, 110_000, 0, 0, "p4", amfPreset: preset, amfUsage: usage);
@@ -140,6 +170,42 @@ public class AmfNumericIndexDivergenceTests
             Assert.False(int.TryParse(v, out _), $"{codec} emitiu -quality {v} (índice numérico) em vez do nome");
             Assert.Contains(v!, QualityIndex[codec].Keys);
         }
+    }
+
+    [Theory]
+    [InlineData("h264_amf")]
+    [InlineData("hevc_amf")]
+    [InlineData("av1_amf")]
+    public void Chain_NuncaEmiteUsageNumerico(string codec)
+    {
+        // Mesma armadilha de `-quality` e `-rc`, no campo que o Item 3 introduziu: o `-usage`
+        // também é `<int>` e o índice NÃO é validado. E aqui a divergência é pior que "índice
+        // diferente": em av1_amf `ultralowlatency` e `lowlatency` TROCAM de índice, então um
+        // atalho numérico compartilhado entregaria o modo de uso oposto ao pedido — sem erro,
+        // sem warning, só um encoder mais lento. Nada na suíte cobria o `-usage` por nome.
+        foreach (var usage in Usages)
+        {
+            var v = OptValue(Chain(codec, usage: usage), "usage");
+            Assert.NotNull(v);
+            Assert.False(int.TryParse(v, out _), $"{codec} com usage '{usage}' emitiu -usage {v} (índice numérico) em vez do nome");
+            Assert.Contains(v!, UsageIndex[codec].Keys);
+        }
+    }
+
+    /// <summary>Caracterização: a troca <c>ultralowlatency</c>/<c>lowlatency</c> do
+    /// <c>av1_amf</c> é medida, não deduzida. Existe para a tabela <c>UsageIndex</c> não ser
+    /// "corrigida" para uniforme por quem supõe que a família AMF é homogênea — a suíte
+    /// inteira do projeto depende dessa suposição estar errada.</summary>
+    [Fact]
+    public void Av1Amf_TrocaOsIndicesDeUltralowlatencyELowlatency()
+    {
+        Assert.Equal(1, UsageIndex["h264_amf"]["ultralowlatency"]);
+        Assert.Equal(2, UsageIndex["h264_amf"]["lowlatency"]);
+        Assert.Equal(1, UsageIndex["hevc_amf"]["ultralowlatency"]);
+        Assert.Equal(2, UsageIndex["hevc_amf"]["lowlatency"]);
+        // av1_amf inverte: é o único ponto da tabela onde um nome tem índice MENOR que o vizinho.
+        Assert.Equal(2, UsageIndex["av1_amf"]["ultralowlatency"]);
+        Assert.Equal(1, UsageIndex["av1_amf"]["lowlatency"]);
     }
 
     [Theory]

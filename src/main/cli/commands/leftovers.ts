@@ -1,11 +1,11 @@
 import { cleanItems } from '../../services/file-utils'
+import { scanForLeftovers } from '../../services/uninstall-leftovers'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage, formatBytes } from '../utils'
 
 export async function handleLeftovers(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { scanForLeftovers } = await import('../../services/uninstall-leftovers')
 
   if (sub === 'scan' || sub === 'clean') {
     cliLog(ctx, 'Scanning for uninstall leftovers...')

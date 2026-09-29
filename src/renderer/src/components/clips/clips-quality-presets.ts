@@ -1,5 +1,12 @@
 import type { ClipsConfig } from '@shared/types'
 
+/**
+ * Identidade interna de cada perfil de tuning. NÃO é o nome que o usuário lê: o nome
+ * exibido vive no i18n (`presetDeus`, `presetAlta`, `presetBoa`, `presetLeve`,
+ * `presetBatata`) e a ordem na tela vem de `PRESET_ORDER`. Manter os dois separados é
+ * proposital — renomear o id para casar com o rótulo quebraria os testes que explicam
+ * de onde cada número saiu (ex.: por que 'leve-60' tem maxrate 62500).
+ */
 export type QualityPresetKey = 'muito-alta' | 'alta' | 'boa' | 'leve-60' | 'performance'
 
 /**
@@ -73,6 +80,46 @@ export const QUALITY_PRESETS: Record<QualityPresetKey, Partial<ClipsConfig>> = {
     height: 720,
     fps: 30,
   },
+}
+
+/**
+ * Ordem de exibição da grade, do melhor para o mais barato: Deus, Alta, Boa, Leve,
+ * Batata. Fica aqui (e não no componente) porque é dado de UI que o componente
+ * consome, e assim a ordem tem trava de regressão em teste em vez de viver solta
+ * dentro de um `.map`.
+ */
+export const PRESET_ORDER = ['muito-alta', 'alta', 'leve-60', 'boa', 'performance'] as const
+
+/**
+ * Chave de i18n do nome exibido de cada preset. Vive aqui porque o nome é parte do
+ * contrato da grade: `i18n` devolve a própria chave quando ela não existe, então um
+ * nome faltando apareceria cru na tela ("presetDeus") sem erro nenhum — daí o teste que
+ * confere a chave contra os JSONs de locale.
+ */
+export const PRESET_LABEL_KEYS: Record<QualityPresetKey, string> = {
+  'muito-alta': 'presetDeus',
+  alta: 'presetAlta',
+  'leve-60': 'presetBoa',
+  boa: 'presetLeve',
+  performance: 'presetBatata',
+}
+
+/**
+ * Quantos pontinhos a escada usa. 4 em vez de 3 porque são 5 presets: com 3 pontos dois
+ * presets quaisquer iam repetir a mesma contagem e a escada deixaria de distinguir.
+ */
+export const PRESET_DOTS = 4
+
+/**
+ * Nível da escada de pontos por preset, na ordem de exibição. Estritamente decrescente
+ * para que nenhum par vizinho mostre a mesma quantidade de pontos.
+ */
+export const PRESET_LEVEL: Record<QualityPresetKey, number> = {
+  'muito-alta': 4,
+  alta: 3,
+  'leve-60': 2,
+  boa: 1,
+  performance: 0,
 }
 
 /**

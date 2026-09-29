@@ -1,10 +1,10 @@
+import { applyPrivacySettings, scanPrivacy } from '../../ipc/privacy-shield.ipc'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage } from '../utils'
 
 export async function handlePrivacy(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { scanPrivacy, applyPrivacySettings } = await import('../../ipc/privacy-shield.ipc')
 
   if (sub === 'scan') {
     cliLog(ctx, 'Scanning privacy settings...')

@@ -575,48 +575,203 @@ public sealed class FfmpegEncoderTests
         Assert.Equal((1152, 720), result!.Value);
     }
 
-    [Fact]
-    public void ComputeScaleTarget_StretchToFit_21by9Source_Fills16by9Box()
+    // ─── ComputeScaleTarget: o aspect da captura é SEMPRE preservado ──
+    //
+    // Até 2026-09-29 a opção "Remover bordas pretas" pulava esta preservação e *esticava*
+    // (21:9 preenchia 1920×1080, imagem ~1,35× achatada). Ela passou a recortar antes, no
+    // crop (ComputeLetterboxCrop), então não existe mais caminho que distorça. Os 4 testes
+    // que fixavam o stretch foram reescritos: codificavam a distorção.
+
+    [Theory]
+    [InlineData(3440, 1440, 1920, 804)]   // 21:9 → limita pela largura
+    [InlineData(2560, 1600, 1728, 1080)] // 16:10 → limita pela altura
+    [InlineData(3840, 1600, 1920, 800)]   // 12:5 → limita pela largura
+    public void ComputeScaleTarget_SemprePreservaAspectDaCaptura(int srcW, int srcH, int expW, int expH)
     {
-        // "Remover bordas pretas": captura 3440×1440 (21:9) + preset 1920×1080 (16:9)
-        // → preenche o box inteiro (1920×1080, esticado) em vez de 1920×804.
-        var result = FfmpegEncoder.ComputeScaleTarget(3440, 1440, 1920, 1080, 1, stretchToFit: true);
-        Assert.NotNull(result);
-        Assert.Equal((1920, 1080), result!.Value);
+        var result = FfmpegEncoder.ComputeScaleTarget(srcW, srcH, 1920, 1080, 1);
+        Assert.Equal((expW, expH), result!.Value);
     }
 
     [Fact]
-    public void ComputeScaleTarget_StretchToFit_16by10Source_Fills16by9Box()
+    public void ComputeScaleTarget_Native_ReturnsNull()
     {
-        // Captura 2560×1600 (16:10) + preset 1920×1080 (16:9) → 1920×1080 (esticado).
-        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 1920, 1080, 1, stretchToFit: true);
-        Assert.NotNull(result);
-        Assert.Equal((1920, 1080), result!.Value);
+        Assert.Null(FfmpegEncoder.ComputeScaleTarget(2560, 1600, 0, 0, 1));
     }
 
     [Fact]
-    public void ComputeScaleTarget_StretchToFit_16by9Source_Unchanged()
+    public void ComputeScaleTarget_EscalaQuandoAspectoCoincide()
     {
-        // Fonte já é 16:9 → stretch não muda nada (mesmo result de sempre).
-        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 1, stretchToFit: true);
-        Assert.NotNull(result);
+        // 16:9 → 16:9: não há barra para cortar, o scale puro faz o serviço.
+        var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 1);
         Assert.Equal((1280, 720), result!.Value);
     }
 
+    // ─── ComputeLetterboxCrop ("Remover bordas pretas" = RECORTA, não estica) ──
+    //
+    // A opção se chama "remover bordas pretas" mas até 2026-09-29 ela pulava a preservação
+    // de aspect (esticava/distorcia) e o caminho de crop era código morto — SetCropRect não
+    // tinha call site. Estas aritméticas fixam o comportamento que o NOME promete: cortar as
+    // barras da Captura, preservando a proporção. Geométrico (só dims, sem ler pixel), então
+    // custo zero no caminho de captura: o crop vira filtro ffmpeg depois da NV12.
+
     [Fact]
-    public void ComputeScaleTarget_StretchToFit_Native_ReturnsNull()
+    public void ComputeLetterboxCrop_FonteEMesmoAspecto_DoNaoCorta()
     {
-        // Sem resolução explícita (nativo) → stretch é no-op (0×0 vira a entrada).
-        var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 0, 0, 1, stretchToFit: true);
-        Assert.Null(result);
+        // 16:9 → 16:9: não há barra para remover. Este é o caso real do usuário
+        // (captura 1920×1080, todos os presets 16:9) — a opção precisa ser no-op.
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(1920, 1080, 1920, 1080);
+        Assert.Null(crop);
     }
 
     [Fact]
-    public void ComputeScaleTarget_StretchToFit_StillNeverUpscales()
+    public void ComputeLetterboxCrop_16por10Para16por9_CortaTopoEBase()
     {
-        // "Remover bordas pretas" NÃO habilita upscale — captura menor que o alvo permanece.
-        var result = FfmpegEncoder.ComputeScaleTarget(1280, 720, 1920, 1080, 1, stretchToFit: true);
-        Assert.Null(result);
+        // Janela 16:10 rodando jogo 16:9 = letterbox. Mantém a largura inteira
+        // (1920×1200 → 1920×1080) e centraliza: y = (1200−1080)/2 = 60.
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(1920, 1200, 1920, 1080);
+        Assert.NotNull(crop);
+        Assert.Equal((0, 60, 1920, 1080), crop!.Value);
+    }
+
+    [Fact]
+    public void ComputeLetterboxCrop_21por9Para16por9_CortaLaterais()
+    {
+        // 3440×1440 (21:9) → 16:9 = pillarbox. Mantém a altura inteira e aperta a largura
+        // para 1440×16/9 = 2560, centralizando: x = (3440−2560)/2 = 440.
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(3440, 1440, 1920, 1080);
+        Assert.NotNull(crop);
+        Assert.Equal((440, 0, 2560, 1440), crop!.Value);
+    }
+
+    [Fact]
+    public void ComputeLetterboxCrop_PreservaProporcaoDoAlvo_EmVezDeEsticar()
+    {
+        // A trava do que a opção NÃO faz mais: o retângulo tem exatamente a proporção do alvo.
+        // Com o stretch antigo, 2560×1600 preenchia 1920×1080 (imagem 1,5× achatada).
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(2560, 1600, 1920, 1080);
+        Assert.NotNull(crop);
+        var (_, _, w, h) = crop!.Value;
+        Assert.Equal(1920.0 / 1080.0, (double)w / h, 3);
+    }
+
+    [Fact]
+    public void ComputeLetterboxCrop_AlvoNativo_NaoCorta()
+    {
+        // Sem preset (0×0) o alvo É a própria entrada → nada a cortar.
+        Assert.Null(FfmpegEncoder.ComputeLetterboxCrop(2560, 1600, 0, 0));
+    }
+
+    [Theory]
+    [InlineData(1921, 1200)] // largura ímpar, barra vertical real
+    [InlineData(4000, 1443)] // altura ímpar: round(1443×16/9)=2565 cai em ímpar
+    [InlineData(1367, 1201)]
+    public void ComputeLetterboxCrop_DimsPares_Sempre(int srcW, int srcH)
+    {
+        // NV12 exige dims pares; ímpar deixaria o ffmpeg recusar o rawvideo.
+        // (Um 1921×1081 daria null de propósito — diferença de 0,0009 fica no epsilon,
+        //  e cortar 1px de uma imagem sem barra seria pior que não cortar.)
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(srcW, srcH, 1920, 1080);
+        Assert.NotNull(crop);
+        var c = crop!.Value;
+        Assert.Equal(0, c.W % 2);
+        Assert.Equal(0, c.H % 2);
+        Assert.Equal(0, c.X % 2);
+        Assert.Equal(0, c.Y % 2);
+    }
+
+    [Fact]
+    public void ComputeLetterboxCrop_RetanguloNuncaSomeDoFrame()
+    {
+        // o crop precisa caber dentro da captura (x+w ≤ srcW, y+h ≤ srcH) — um arredondamento
+        // para cima aqui daria filtro crop inválido e o encoder morreria no primeiro frame.
+        foreach (var (srcW, srcH, tgtW, tgtH) in new[]
+                 {
+                     (3440, 1440, 1920, 1080), (1920, 1200, 1920, 1080),
+                     (2560, 1600, 1920, 1080), (2560, 1080, 1920, 1080),
+                     (1366, 768, 1920, 1080), (3840, 1600, 1920, 1080),
+                 })
+        {
+            var crop = FfmpegEncoder.ComputeLetterboxCrop(srcW, srcH, tgtW, tgtH);
+            if (crop is not { } c) continue;
+            Assert.True(c.X >= 0 && c.Y >= 0, $"origem negativa em {srcW}x{srcH}");
+            Assert.True(c.W <= srcW && c.H <= srcH, $"retângulo maior que a fonte em {srcW}x{srcH}");
+            Assert.True(c.X + c.W <= srcW && c.Y + c.H <= srcH, $"retângulo estoura a fonte em {srcW}x{srcH}");
+        }
+    }
+
+    [Fact]
+    public void ComputeLetterboxCrop_DiferencaMinima_IgnoraParaNaoCortarPorRuido()
+    {
+        // 1920×1080 vs alvo 1919×1079: diferença de 1px não é barra, é arredondamento.
+        // Cortar aqui tiraria 1px de imagem por nada (e o alvo preservaria o aspecto de novo).
+        Assert.Null(FfmpegEncoder.ComputeLetterboxCrop(1920, 1080, 1919, 1079));
+    }
+
+    // ─── ResolveEffectiveCrop + BuildCropScaleFilters: o filtro existe DE VERDADE ──
+
+    [Fact]
+    public void ResolveEffectiveCrop_Desligado_NaoCorta()
+    {
+        Assert.Null(FfmpegEncoder.ResolveEffectiveCrop(false, 0, 0, 0, 0, 1920, 1200, 1920, 1080));
+    }
+
+    [Fact]
+    public void ResolveEffectiveCrop_LigadoComBarra_CortaGeometricamente()
+    {
+        var crop = FfmpegEncoder.ResolveEffectiveCrop(true, 0, 0, 0, 0, 1920, 1200, 1920, 1080);
+        Assert.Equal((0, 60, 1920, 1080), crop!.Value);
+    }
+
+    [Fact]
+    public void ResolveEffectiveCrop_Regressao_Captura16por9NaoGeraCrop()
+    {
+        // O caso real do usuário: 1920×1080 num preset 16:9. Com a opção LIGADA não pode
+        // aparecer crop — senão o "remover bordas pretas" comeria 1px de imagem à toa.
+        Assert.Null(FfmpegEncoder.ResolveEffectiveCrop(true, 0, 0, 0, 0, 1920, 1080, 1920, 1080));
+    }
+
+    [Fact]
+    public void ResolveEffectiveCrop_CropExplicito_TemPrecedencia()
+    {
+        // SetCropRect manual é o seam público e sempre vale: o geométrico não pode sobrescrever.
+        var crop = FfmpegEncoder.ResolveEffectiveCrop(true, 10, 20, 800, 450, 1920, 1200, 1920, 1080);
+        Assert.Equal((10, 20, 800, 450), crop!.Value);
+    }
+
+    [Fact]
+    public void BuildCropScaleFilters_ComBarra_EmiteCropNoVf()
+    {
+        // A trava que faltava na versão anterior: a aritmética existir não basta — o filtro
+        // `crop=` precisa aparecer na cadeia, senão a opção é no-op de novo.
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(1920, 1200, 1920, 1080);
+        var filters = FfmpegEncoder.BuildCropScaleFilters(1920, 1200, crop, 1920, 1080, 1, out _);
+        Assert.Equal("crop=1920:1080:0:60", filters[0]);
+    }
+
+    [Fact]
+    public void BuildCropScaleFilters_SemBarra_NaoEmiteCrop()
+    {
+        var filters = FfmpegEncoder.BuildCropScaleFilters(1920, 1080, null, 1280, 720, 1, out _);
+        Assert.DoesNotContain(filters, f => f.StartsWith("crop=", StringComparison.Ordinal));
+        // Sem crop o scale vai na conversão (NV12 já sai no alvo) — logo não há scale no vf.
+        Assert.DoesNotContain(filters, f => f.StartsWith("scale=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BuildCropScaleFilters_CropComScale_NaoUpscale()
+    {
+        // Com crop o base do scale é o frame cortado: 3440×1440 → crop 2560×1440, preset
+        // 1920×1080 ⇒ scale 1920×1080. O divisor de capacidade entra sobre o recorte.
+        var crop = FfmpegEncoder.ComputeLetterboxCrop(3440, 1440, 1920, 1080);
+        var filters = FfmpegEncoder.BuildCropScaleFilters(3440, 1440, crop, 1920, 1080, 1, out var r);
+        Assert.Equal("crop=2560:1440:440:0", filters[0]);
+        Assert.Equal("scale=1920:1080", filters[1]);
+        // Com crop a NV12 continua no tamanho CHEIO da captura (o recorte é filtro do ffmpeg,
+        // então a conversão não muda) e o que o encoder recebe é o pós-crop escalado.
+        Assert.Equal(3440, r.Nv12W);
+        Assert.Equal(1440, r.Nv12H);
+        Assert.Equal(1920, r.EncodedW);
+        Assert.Equal(1080, r.EncodedH);
     }
 
     // ─── ResolveOutput (O1 — onde o downscale acontece: conversão vs vf) ─
@@ -2055,7 +2210,7 @@ public sealed class FfmpegEncoderTests
     // O `_ =>` de BuildEncoderTuneArgs (fallback de CPU) emite os args do x264 para qualquer
     // codec não listado, e `libsvtav1` não era listado. Como o engine cai nele de verdade
     // (EncoderManager.cs:282-283, "av1" => ?? "libsvtav1" para GPU sem AV1 hw), a captura
-    // passava dois args que o SVT-AV1 recusa. Medido no binário embarcado (ffmpeg 9.0.1):
+    // passava dois args que o SVT-AV1 recusa. Medido no binário embarcado (ffmpeg 9.0.2):
     //   -preset fast        → "Undefined constant or missing '(' in 'fast'" → exit -22
     //   -profile:v high     → "Profile 1 requires 4:4:4 color format"        → exit -22
     //   -preset 8, sem profile → exit 0

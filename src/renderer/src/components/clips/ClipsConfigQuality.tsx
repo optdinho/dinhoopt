@@ -1,6 +1,14 @@
 import { ChevronDown, Gauge, Sparkles } from 'lucide-react'
 import { useState } from 'react'
-import { presetSubLabel, QUALITY_PRESETS, type QualityPresetKey, RESOLUTION_HEIGHT } from './clips-quality-presets'
+import {
+  PRESET_DOTS,
+  PRESET_LABEL_KEYS,
+  PRESET_LEVEL,
+  PRESET_ORDER,
+  presetSubLabel,
+  QUALITY_PRESETS,
+  RESOLUTION_HEIGHT,
+} from './clips-quality-presets'
 import { SegmentedControl, TogglePill } from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
@@ -34,6 +42,9 @@ export function TipBadge({
     </span>
   )
 }
+
+/** A escada de pontos é uma lista fixa, então a chave React é o id do ponto, não o índice. */
+const DOT_IDS = Array.from({ length: PRESET_DOTS }, (_, i) => `dot-${i}`)
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -110,24 +121,17 @@ export function QualitySection({
   return (
     <div className="space-y-3">
       {/* Quick Preset */}
-      <div className="grid grid-cols-5 gap-1.5">
-        {(
-          [
-            { id: 'muito-alta', label: t('presetMuitoAlta'), icon: '●●●' },
-            { id: 'alta', label: t('presetAlta'), icon: '●●○' },
-            { id: 'boa', label: t('presetBoa'), icon: '●○○' },
-            { id: 'leve-60', label: t('presetLeve60'), icon: '●●○' },
-            { id: 'performance', label: t('presetPerformance'), icon: '○○○' },
-          ] as Array<{ id: QualityPresetKey; label: string; icon: string }>
-        ).map((p) => {
-          const preset = QUALITY_PRESETS[p.id]
+      <div className="grid grid-cols-5 gap-1">
+        {PRESET_ORDER.map((id) => {
+          const preset = QUALITY_PRESETS[id]
           const active = config.cq === preset.cq && config.maxrateKbps === preset.maxrateKbps
+          const level = PRESET_LEVEL[id]
           return (
             <button
-              key={p.id}
+              key={id}
               type="button"
               onClick={() => handleConfigUpdate(preset)}
-              className="relative overflow-hidden rounded-xl border px-2 py-2 transition-all duration-150"
+              className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-all duration-150 hover:border-[rgba(139,92,246,0.45)]"
               style={{
                 background: active
                   ? 'linear-gradient(160deg, rgba(139,92,246,0.22), rgba(139,92,246,0.06))'
@@ -136,24 +140,29 @@ export function QualitySection({
                 boxShadow: active ? '0 4px 16px rgba(139,92,246,0.15)' : 'none',
               }}
             >
-              <div
-                className="mb-1 text-[9px] tracking-[0.08em]"
-                style={{ color: active ? 'var(--accent)' : 'var(--text-dim)', opacity: active ? 1 : 0.6 }}
-              >
-                {p.icon}
-              </div>
-              <div
-                className="text-[11px] font-semibold leading-tight"
+              <span className="flex items-center gap-[3px]" aria-hidden="true">
+                {DOT_IDS.map((dotId, i) => (
+                  <span
+                    key={dotId}
+                    className="h-[3px] w-[3px] rounded-full transition-colors duration-150"
+                    style={{
+                      background: i < level ? (active ? '#a78bfa' : 'var(--text-secondary)') : 'rgba(113,113,122,0.25)',
+                    }}
+                  />
+                ))}
+              </span>
+              <span
+                className="max-w-full truncate text-[11px] leading-none font-semibold"
                 style={{ color: active ? '#fff' : 'var(--text-primary)' }}
               >
-                {p.label}
-              </div>
-              <div
-                className="mt-0.5 text-[8px] font-medium"
+                {t(PRESET_LABEL_KEYS[id])}
+              </span>
+              <span
+                className="max-w-full truncate text-[7px] leading-none font-medium tracking-tight"
                 style={{ color: active ? 'rgba(255,255,255,0.7)' : 'var(--text-dim)', opacity: active ? 1 : 0.7 }}
               >
                 {presetSubLabel(preset)}
-              </div>
+              </span>
             </button>
           )
         })}

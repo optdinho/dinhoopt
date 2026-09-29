@@ -22,7 +22,10 @@ internal static class FeedLogLine
         return string.Concat(
             $"fps={summary.FeedFps.ToString("F1", i)} good={summary.GoodFrames} fail={summary.FailFrames} enqNull={summary.EncodeNulls} | ",
             $"wait={summary.WaitMs.ToString("F1", i)}ms copy={summary.CopyMs.ToString("F1", i)}ms ",
-            $"convert={summary.ConvertMs.ToString("F1", i)}ms total={summary.TotalMs.ToString("F1", i)}ms | ",
+            $"convert={summary.ConvertMs.ToString("F1", i)}ms total={summary.TotalMs.ToString("F1", i)}ms ",
+            $"clean={summary.CleanFrames}/{summary.GoodFrames} totalAll={summary.TotalMsAll.ToString("F1", i)}ms ",
+            $"pace=delay {summary.PacingDelayMs.ToString("F1", i)}ms + spin {summary.PacingSpinMs.ToString("F1", i)}ms ",
+            $"iters={summary.PacingCount} | ",
             $"queue={summary.QueueDepthAvg.ToString("F1", i)} avg / {summary.QueueDepthMax} max | ",
             $"codec={codec} scale={scale} speed={speedX.ToString("F2", i)}x lag={outputLagSeconds.ToString("F0", i)}s");
     }

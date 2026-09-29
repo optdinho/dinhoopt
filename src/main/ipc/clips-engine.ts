@@ -19,6 +19,48 @@ import {
 const ENGINE_EXE = 'DiNho.Capture.Poc.exe'
 const ENGINE_GRACE_PERIOD = 5_000
 
+// ─── Engine log severity routing ─────────────────────────────
+
+export type EngineLogLevel = 'debug' | 'info' | 'warning' | 'error'
+
+const ENGINE_LEVEL_PREFIX: Record<EngineLogLevel, string> = {
+  debug: '[ENGINE:DBG]',
+  info: '[ENGINE]',
+  warning: '[ENGINE:WARN]',
+  error: '[ENGINE:ERR]',
+}
+
+// O engine C# escreve TODOS os níveis em stderr: `ConsoleLogger` usa `Console.Error` como
+// writer padrão (ConsoleLogger.cs:16) e codifica o nível no próprio texto
+// ("HH:mm:ss.fff [Info   ] [Fonte] msg"). O código anterior prefixava stderr inteiro como
+// [ENGINE:ERR] e logava tudo como `warning` — então uma linha [Info] chegava ao log do app
+// como erro, o canal de erro virava ruído e o log de produção mostrou exatamente isso
+// ("[ENGINE:ERR] ... [Info   ] [HotkeyManager] ...").
+//
+// Não trocamos o lado C#: ele segue a convenção "dados em stdout, logs em stderr", que é o
+// que permite ler a saída dos probes (`--probe-*`) sem filtrar log no meio. O nível já vem
+// na linha, então basta honrá-lo aqui.
+const ENGINE_LINE_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\s*\]/
+
+export function classifyEngineLines(
+  chunk: string,
+  fallback: EngineLogLevel,
+): Array<{ level: EngineLogLevel; text: string }> {
+  return chunk
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const matched = ENGINE_LINE_RE.exec(line)?.[1]?.toLowerCase() as EngineLogLevel | undefined
+      const level = matched && matched in ENGINE_LEVEL_PREFIX ? matched : fallback
+      return { level, text: line }
+    })
+}
+
+export function engineLogPrefix(level: EngineLogLevel): string {
+  return ENGINE_LEVEL_PREFIX[level]
+}
+
 // ─── Engine state ─────────────────────────────────────────────
 
 let _engineProcess: ChildProcess | null = null
@@ -235,17 +277,18 @@ export async function startEngine(): Promise<{ success: boolean; error?: string 
     _engineStartTime = Date.now()
 
     const logStdout = (data: Buffer) => {
-      const text = data.toString('utf-8').trim()
-      if (text) {
-        getLogger().info('clips-engine', text)
-        process.stdout.write(`[ENGINE] ${text}\n`)
+      for (const line of classifyEngineLines(data.toString('utf-8'), 'info')) {
+        getLogger()[line.level]('clips-engine', line.text)
+        process.stdout.write(`${engineLogPrefix(line.level)} ${line.text}\n`)
       }
     }
     const logStderr = (data: Buffer) => {
-      const text = data.toString('utf-8').trim()
-      if (text) {
-        getLogger().warning('clips-engine', text)
-        process.stdout.write(`[ENGINE:ERR] ${text}\n`)
+      // Fallback 'error' (e não 'info') para linha sem nível parseável: stderr é o canal de
+      // erro por convenção do engine, e rebaixar esconderia erro real. É também onde cai um
+      // fragmento partido pelo pipe — comportamento anterior, não uma regressão.
+      for (const line of classifyEngineLines(data.toString('utf-8'), 'error')) {
+        getLogger()[line.level]('clips-engine', line.text)
+        process.stdout.write(`${engineLogPrefix(line.level)} ${line.text}\n`)
       }
     }
 

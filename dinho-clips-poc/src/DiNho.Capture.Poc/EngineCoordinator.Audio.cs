@@ -37,9 +37,35 @@ public sealed partial class EngineCoordinator
         return mixer;
     }
 
+    /// <summary>Fonte de áudio efetivamente escolhida: isolar um processo, ou capturing geral.</summary>
+    internal enum AudioCaptureKind
+    {
+        /// <summary>Loopback do sistema inteiro (WasapiLoopbackSource).</summary>
+        FullLoopback,
+        /// <summary>Loopback por processo (NAudio gerenciado ou a C++ DLL).</summary>
+        PerProcess,
+    }
+
+    /// <summary>O usuário pediu para isolar áudio (um app, ou excluir um processo)?</summary>
+    internal static bool IsIsolationRequested(bool useExcludeMode, int excludeProcessId, int selectedSessionCount)
+        => (useExcludeMode && excludeProcessId > 0) || selectedSessionCount > 0;
+
+    /// <summary>
+    /// O aviso "Áudio do Sistema Inteiro" acende só quando a fonte real é loopback
+    /// COMPLETO <b>e</b> havia isolamento pedido. Loopback completo como modo escolhido
+    /// ("capturar áudio do sistema") não é degradação e não deve assustar o usuário.
+    /// </summary>
+    internal static bool ShouldWarnFullSystemAudio(AudioCaptureKind kind, bool isolationRequested)
+        => kind == AudioCaptureKind.FullLoopback && isolationRequested;
+
     private IAudioSource? CreateLoopbackSource(int sampleRate)
     {
         var cfg = _config.Config;
+        bool isolationRequested = IsIsolationRequested(
+            cfg.UseExcludeMode, cfg.ExcludeProcessId, cfg.SelectedAudioSessions.Count);
+        // Fonte real = loopback completo ⇒ só se o pedido era isolar isso vira degradação.
+        void ApplyKind(AudioCaptureKind kind) =>
+            _audioFallback = ShouldWarnFullSystemAudio(kind, isolationRequested);
         try
         {
             if (cfg.UseExcludeMode && cfg.ExcludeProcessId > 0)
@@ -61,17 +87,24 @@ public sealed partial class EngineCoordinator
                         Log.I("EngineCoordinator", $"PID alvo {pid}: {name}");
 
                     var (targetPid, _) = processes[0];
-                    _audioFallback = false;
                     return CreateProcessLoopbackWithFallback(
                         targetPid, includeTree: true, sampleRate,
                         $"INCLUDE para {processes.Count} processo(s)");
                 }
 
-                Log.I("EngineCoordinator", "Nenhum PID selecionado está vivo — usando loopback completo");
+                // Degradação COM Isolamento pedido: o jogo reiniciou com outro PID (ou
+                // fechou) e o filtro não casa mais. Antes isto caía em loopback completo
+                // e só Log.I — o status bar nunca acendia, e o usuário gravava Discord,
+                // Spotify e notificações sem nenhum aviso.
+                ApplyKind(AudioCaptureKind.FullLoopback);
+                Log.W("EngineCoordinator",
+                    "Nenhum PID selecionado está vivo — DEGRADAÇÃO: gravando o áudio do sistema inteiro. " +
+                    "O aviso 'Áudio do Sistema Inteiro' deve aparecer no status bar.");
             }
             else
             {
                 Log.I("EngineCoordinator", "Áudio: captura completa (loopback) — NENHUM filtro ativo");
+                ApplyKind(AudioCaptureKind.FullLoopback);
             }
 
             return new WasapiLoopbackSource(sampleRate);
@@ -86,6 +119,7 @@ public sealed partial class EngineCoordinator
                 try
                 {
                     Log.I("EngineCoordinator", "Tentando fallback para WasapiLoopbackSource...");
+                    ApplyKind(AudioCaptureKind.FullLoopback);
                     return new WasapiLoopbackSource(sampleRate);
                 }
                 catch (Exception ex2)
@@ -101,6 +135,8 @@ public sealed partial class EngineCoordinator
     /// <summary>
     /// Per-process loopback: NAudio 3 gerenciado primeiro (WasapiProcessLoopbackSource),
     /// C++ DLL (CppLoopbackSource) como fallback — Win10 &lt; 2004 ou falha de ativação.
+    /// Ambos os caminhos ISOLAM um processo, então aqui o aviso de degradação é sempre
+    /// desligado — inclusive para limpar um `true` deixado por uma gravação anterior.
     /// </summary>
     private IAudioSource CreateProcessLoopbackWithFallback(int pid, bool includeTree, int sampleRate, string modeLabel)
     {
@@ -113,6 +149,7 @@ public sealed partial class EngineCoordinator
                 // para que falha caia no fallback da DLL. O Start() do AudioMixer vira no-op.
                 source.Start();
                 Log.I("EngineCoordinator", $"Áudio: {modeLabel} — NAudio 3 process loopback (PID {pid})");
+                _audioFallback = ShouldWarnFullSystemAudio(AudioCaptureKind.PerProcess, isolationRequested: true);
                 return source;
             }
             catch
@@ -127,7 +164,7 @@ public sealed partial class EngineCoordinator
         }
 
         Log.I("EngineCoordinator", $"Áudio: {modeLabel} — CppLoopbackSource (C++ DLL) PID {pid}");
-        _audioFallback = false;
+        _audioFallback = ShouldWarnFullSystemAudio(AudioCaptureKind.PerProcess, isolationRequested: true);
         return new CppLoopbackSource(pid, includeTree, sampleRate);
     }
 

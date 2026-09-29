@@ -1,33 +1,20 @@
-import { readdir } from 'node:fs/promises'
 import { app } from 'electron'
 import { CleanerType } from '../../../../shared/enums'
 import type { CleanResult, ScanResult } from '../../../../shared/types'
 import { getPlatform } from '../../../platform'
+import { psUtf8 } from '../../../services/exec-utf8'
 import { cleanItems } from '../../../services/file-utils'
 import { getCachedItem } from '../../../services/scan-cache'
 import type { CliContext } from '../../types'
 import { ExitCode } from '../../types'
 import { cliLog, cliVerbose, formatBytes, log, showProgress } from '../../utils'
-
-export async function getChromiumProfiles(basePath: string): Promise<string[]> {
-  const profiles = ['Default']
-  try {
-    const entries = await readdir(basePath, { withFileTypes: true })
-    for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('Profile ')) profiles.push(entry.name)
-    }
-  } catch {
-    /* skip */
-  }
-  return profiles
-}
+import { scanApp, scanBrowserCli, scanDatabaseCli, scanGaming, scanRecycleBin, scanSystem } from './scans'
 
 export async function cleanRecycleBin(sizeBytes = 0): Promise<CleanResult> {
   const { execFile } = await import('node:child_process')
   const { promisify } = await import('node:util')
   const execFileAsync = promisify(execFile)
   try {
-    const { psUtf8 } = await import('../../../services/exec-utf8')
     const cleanScript =
       '$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | ForEach-Object { Remove-Item $_.Path -Recurse -Force -ErrorAction SilentlyContinue }; Clear-RecycleBin -Force -Confirm:$false -ErrorAction SilentlyContinue'
     await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(cleanScript)], {
@@ -118,8 +105,6 @@ export async function cleanDatabasesCli(itemIds: string[]): Promise<CleanResult>
 }
 
 export async function runLegacyScanClean(categories: string[], doClean: boolean, ctx: CliContext): Promise<number> {
-  const { scanSystem, scanBrowserCli, scanApp, scanGaming, scanRecycleBin, scanDatabaseCli } = await import('./scans')
-
   const scannerMap: Record<string, () => Promise<ScanResult[]>> = {
     system: scanSystem,
     browser: scanBrowserCli,

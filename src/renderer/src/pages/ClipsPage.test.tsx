@@ -505,10 +505,10 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     expect(await screen.findByText('recordingQuality')).toBeTruthy()
-    expect(screen.getByText('presetMuitoAlta')).toBeTruthy()
+    expect(screen.getByText('presetDeus')).toBeTruthy()
     expect(screen.getByText('presetAlta')).toBeTruthy()
-    expect(screen.getByText('presetBoa')).toBeTruthy()
-    expect(screen.getByText('presetPerformance')).toBeTruthy()
+    expect(screen.getByText('presetLeve')).toBeTruthy()
+    expect(screen.getByText('presetBatata')).toBeTruthy()
   })
 
   it('calls setConfig when quality preset is clicked', async () => {
@@ -526,7 +526,7 @@ describe('ClipsPage', () => {
     showSettings()
     await screen.findByText('recordingQuality')
     await act(async () => {
-      fireEvent.click(screen.getByText('presetPerformance'))
+      fireEvent.click(screen.getByText('presetBatata'))
     })
     expect(mockSetConfig).toHaveBeenCalledWith(
       expect.objectContaining({ cq: 22, maxrateKbps: 12000, width: 1280, height: 720, fps: 30 }),
@@ -697,15 +697,35 @@ describe('ClipsPage', () => {
   })
 
   describe('grade de presets de qualidade (item 6)', () => {
-    it('oferece cinco degraus, incluindo leve-60 em 900p', async () => {
+    it('oferece cinco degraus, incluindo 900p entre Boa e Leve', async () => {
       render(<ClipsPage />)
       showSettings()
       await screen.findByText('presetBoa')
-      expect(screen.getByText('presetMuitoAlta')).toBeTruthy()
+      expect(screen.getByText('presetDeus')).toBeTruthy()
       expect(screen.getByText('presetAlta')).toBeTruthy()
       expect(screen.getByText('presetBoa')).toBeTruthy()
-      expect(screen.getByText('presetLeve60')).toBeTruthy()
-      expect(screen.getByText('presetPerformance')).toBeTruthy()
+      expect(screen.getByText('presetLeve')).toBeTruthy()
+      expect(screen.getByText('presetBatata')).toBeTruthy()
+    })
+
+    it('mostra os presets na ordem Deus, Alta, Boa, Leve, Batata', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('presetBoa')
+      // A ordem é escada de custo decrescente; se alguém reordenar o array sem querer,
+      // o botão mais caro passa a vir depois do mais barato. O textContent carrega nome +
+      // rótulo derivado, então a comparação inclui os dois.
+      const botoes = screen
+        .getAllByRole('button')
+        .map((b) => b.textContent ?? '')
+        .filter((t) => t.startsWith('preset'))
+      expect(botoes).toEqual([
+        'presetDeusCQ 16 · 1080p',
+        'presetAltaCQ 18 · 1080p',
+        'presetBoaCQ 20 · 900p',
+        'presetLeveCQ 20 · 720p',
+        'presetBatataCQ 22 · 720p30',
+      ])
     })
 
     it('cada botão descreve o preset que ele realmente aplica (rótulo derivado, não digitado)', async () => {
@@ -720,11 +740,22 @@ describe('ClipsPage', () => {
       expect(screen.getByText('CQ 22 · 720p30')).toBeTruthy()
     })
 
-    it('aplicar leve-60 manda 1600x900 com o CQ 20 do preset', async () => {
+    it('o rótulo derivado fica embaixo do nome do degrau certo', async () => {
       render(<ClipsPage />)
       showSettings()
-      await screen.findByText('presetLeve60')
-      fireEvent.click(screen.getByText('presetLeve60'))
+      await screen.findByText('presetBoa')
+      const botao = screen.getByText('presetBoa').closest('button')
+      // Boa é o degrau de 900p; Leve é o de 720p. Os nomes foram trocados depois que os
+      // ids nasceram, então o par nome/resolução é o que precisa estar travado.
+      expect(botao?.textContent).toBe('presetBoaCQ 20 · 900p')
+      expect(screen.getByText('presetLeve').closest('button')?.textContent).toBe('presetLeveCQ 20 · 720p')
+    })
+
+    it('aplicar o degrau de 900p manda 1600x900 com o CQ 20 do preset', async () => {
+      render(<ClipsPage />)
+      showSettings()
+      await screen.findByText('presetBoa')
+      fireEvent.click(screen.getByText('presetBoa'))
       await waitFor(() => {
         const call = mockSetConfig.mock.calls.at(-1)?.[0] as Record<string, unknown>
         expect(call.width).toBe(1600)

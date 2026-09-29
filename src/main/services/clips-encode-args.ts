@@ -18,7 +18,7 @@ const D3D12VA_ENCODERS = new Set(['h264_d3d12va', 'hevc_d3d12va', 'av1_d3d12va']
 
 /**
  * Como pedir "rápido" em cada encoder de software. A flag **não é a mesma**, e isso foi
- * medido no binário embarcado (ffmpeg 9.0.1), não de memória:
+ * medido no binário embarcado (ffmpeg 9.0.2), não de memória:
  *
  * | encoder   | flag da velocidade                 | `-preset veryfast`                    |
  * |-----------|------------------------------------|---------------------------------------|
@@ -143,7 +143,7 @@ export function buildReEncodeArgs(p: ReEncodeParams): string[] {
     // passa a ser o alvo, não o teto.
     //
     // O valor do -rc tem de ser o NOME aceito por aquele encoder, nunca o índice nem o nome de
-    // outra família: o -rc do nvenc só tem constqp|vbr|cbr (ffmpeg 9.0.1, binário embarcado) e
+    // outra família: o -rc do nvenc só tem constqp|vbr|cbr (ffmpeg 9.0.2, binário embarcado) e
     // recusou `vbr_peak` com "Unable to parse rc option value vbr_peak" — `vbr_peak` é
     // constante de AMF/D3D12VA. Pior: índice numérico não é validado (o nvenc aceitou
     // `-rc 999` em silêncio), então errar o número só apareceria como CQ sem efeito.

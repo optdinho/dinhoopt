@@ -1,10 +1,10 @@
+import { flushSettings, getSettings, setSettings } from '../../services/settings-store'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, log } from '../utils'
 
 export async function handleConfig(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { getSettings, setSettings, flushSettings } = await import('../../services/settings-store')
 
   if (sub === 'get') {
     const key = args[1]

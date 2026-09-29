@@ -105,7 +105,7 @@ public sealed class ConfigManagerTests
     {
         // 6.11 Item 3: o default é NÃO CONFIGURADO (string vazia), e isso é uma correção.
         // A versão anterior fixava "transcoding" com a justificativa de que era "o default
-        // histórico do ffmpeg" — o binário embarcado (9.0.1) discorda:
+        // histórico do ffmpeg" — o binário embarcado (9.0.2) discorda:
         //   ffmpeg -h encoder=h264_amf → -usage <int> (from -1 to 5) (default -1)
         // -1 = não definido pelo app. Emitir "transcoding" onde o ffmpeg não emitia nada é
         // uma MUDANÇA de comportamento no caminho AMD, e ela foi feita às cegas: trocar
@@ -156,6 +156,35 @@ public sealed class ConfigManagerTests
         {
             using var cm = new ConfigManager(tempFile);
             Assert.Equal("webcam", cm.Config.AmfUsage);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Load_LegacyAmfUsageTranscoding_MigratesToUnset()
+    {
+        // Regressão de 2026-09-29: o Item 3 reverteu o default de AmfUsage para "" (não
+        // configurado), mas a reversão só mudou o CÓDIGO. Toda instalação que rodou a
+        // versão anterior tem "transcoding" gravado em config.json pelo antigo default, e
+        // IsValidAmfUsage o aceita (é um nome legítimo), então a guarda de linha ~341 o
+        // preservava. O log de produção mostrou "amfUsage=transcoding" numa build já
+        // corrigida — a reversão era morta no primeiro uso, sem erro e sem warning.
+        //
+        // É indistinguível de escolha do usuário porque NÃO EXISTE UI para o campo
+        // (nenhuma ocorrência de amfUsage em src/): a única forma de o valor chegar no
+        // config é o default antigo ter escrito. Logo, tratar "transcoding" como não
+        // configurado restaura a decisão documentada em vez de chutar um RC novo.
+        var tempDir = Path.Combine(Path.GetTempPath(), "DiNhoTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempFile = Path.Combine(tempDir, "config.json");
+        File.WriteAllText(tempFile, "{\"AmfUsage\":\"transcoding\"}");
+        try
+        {
+            using var cm = new ConfigManager(tempFile);
+            Assert.Equal("", cm.Config.AmfUsage);
         }
         finally
         {

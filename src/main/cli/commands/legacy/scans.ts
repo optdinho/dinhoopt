@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { CleanerType } from '../../../../shared/enums'
 import type { ScanResult } from '../../../../shared/types'
 import { getPlatform } from '../../../platform'
+import { psUtf8 } from '../../../services/exec-utf8'
 import {
   resolveChildSubdirs,
   scanDirectoriesAsItems,
@@ -12,7 +13,7 @@ import {
   scanMultipleDirectories,
 } from '../../../services/file-utils'
 import { cacheItems } from '../../../services/scan-cache'
-import { getChromiumProfiles } from './cleanup'
+import { getChromiumProfiles } from './chromium-profiles'
 
 export async function scanSystem(): Promise<ScanResult[]> {
   const results: ScanResult[] = []
@@ -234,7 +235,6 @@ export async function scanRecycleBin(): Promise<ScanResult[]> {
   const { promisify } = await import('node:util')
   const execFileAsync = promisify(execFile)
   try {
-    const { psUtf8 } = await import('../../../services/exec-utf8')
     const rbScript = `$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = $items.Count; $size = ($items | Measure-Object -Property Size -Sum).Sum; Write-Output "$count|$size"`
     const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(rbScript)], {
       timeout: 60_000,

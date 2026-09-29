@@ -81,11 +81,20 @@ describe('audit-log', () => {
     })
 
     it('swallows append errors (best effort)', () => {
-      initAuditLog()
-      mocks.appendFileSync.mockImplementation(() => {
-        throw new Error('EACCES')
-      })
-      expect(() => logAudit('clean', 'registry')).not.toThrow()
+      // O console.error é intencional em produção (falha de audit precisa ser visível), e
+      // sem o spy ele vira o único bloco de stderr da suíte. Espiar também strengthen a
+      // asserção: o teste só verificava que não lançava, não que a falha era reportada.
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        initAuditLog()
+        mocks.appendFileSync.mockImplementation(() => {
+          throw new Error('EACCES')
+        })
+        expect(() => logAudit('clean', 'registry')).not.toThrow()
+        expect(consoleError).toHaveBeenCalledWith('Audit log write failed:', expect.any(Error))
+      } finally {
+        consoleError.mockRestore()
+      }
     })
   })
 })

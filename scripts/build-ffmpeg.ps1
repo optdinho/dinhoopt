@@ -30,7 +30,7 @@
 # without that encoder family.
 
 param(
-    [string]$Version = "9.0.1",
+    [string]$Version = "9.0.2",
     [string]$OutputDir = "$PSScriptRoot\..\resources\ffmpeg-custom",
     [switch]$Clean
 )

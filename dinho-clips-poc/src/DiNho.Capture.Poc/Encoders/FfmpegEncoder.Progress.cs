@@ -98,7 +98,7 @@ internal sealed partial class FfmpegEncoder
         // ffmpeg nesse caso descartaria o backlog de output e o estado de PTS sem mudar os
         // argumentos, entao o degrau util e' ignorado. Ver CapacityStepChangesResolution.
         if (!CapacityStepChangesResolution(
-                _width, _height, _outputWidth, _outputHeight, _scaleDivisor, next.ScaleDivisor, _stretchToFit))
+                _width, _height, _outputWidth, _outputHeight, _scaleDivisor, next.ScaleDivisor))
             return false;
 
         var oldCodec = _codec;
@@ -111,8 +111,13 @@ internal sealed partial class FfmpegEncoder
         // piso absoluto 1280×720, "1/2" sobre 1080p produz 720p (não 540p) e "1/4" também
         // produz 720p — antes desta correção o log dizia 1/2 enquanto o ffmpeg recebia
         // -s 1920x1080, que é exatamente a mentira que escondeu o no-op do divisor.
-        var after = ResolveOutput(_width, _height, 0, 0, _outputWidth, _outputHeight,
-            _scaleDivisor, _stretchToFit);
+        // O crop efetivo entra aqui: sem ele o log reportaria a resolução do frame CHEIO
+        // enquanto o ffmpeg recebe o frame já recortado — a mesma mentira que o divisor
+        // de capacidade produzia (Item 1).
+        var effCrop = ResolveEffectiveCrop(_removeBlackBars, _cropX, _cropY, _cropW, _cropH,
+            _width, _height, _outputWidth, _outputHeight);
+        var after = ResolveOutput(_width, _height, effCrop?.W ?? 0, effCrop?.H ?? 0,
+            _outputWidth, _outputHeight, _scaleDivisor);
         Logging.Log.W("FfmpegEncoder",
             $"capacity guard: encoder atrás do realtime (speed={speedX:F2}x lag={outputLag:F0}s" +
             $") — divisor 1/{oldDivisor} → 1/{next.ScaleDivisor} ({oldCodec} → {next.Label}), " +

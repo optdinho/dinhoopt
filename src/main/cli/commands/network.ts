@@ -1,10 +1,10 @@
+import { cleanNetworkItems, scanNetwork } from '../../ipc/network-cleanup.ipc'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage } from '../utils'
 
 export async function handleNetwork(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { scanNetwork, cleanNetworkItems } = await import('../../ipc/network-cleanup.ipc')
 
   if (sub === 'scan') {
     cliLog(ctx, 'Scanning network...')

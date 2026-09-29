@@ -40,7 +40,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     // acontece dentro do ffmpeg via -vf "scale=..." antes do encoder.
     private int _outputWidth;
     private int _outputHeight;
-    private bool _stretchToFit;
+    private bool _removeBlackBars;
 
     private GpuVideoConverter? _gpuConverter;
     private ID3D11Texture2D? _nv12Staging;
@@ -118,7 +118,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
     internal const int Gop = 60;
 
     /// <summary>Preset do SVT-AV1 (fallback de AV1 em CPU). A escala é <b>numérica</b>, de 0 a
-    /// 13 - o ffmpeg 9.0.1 recusa nome com "Undefined constant or missing '(' in 'fast'"
+    /// 13 - o ffmpeg 9.0.2 recusa nome com "Undefined constant or missing '(' in 'fast'"
     /// (exit -22). Medido no binário embarcado, testesrc2, 300 frames, args reais de
     /// produção (CQ 20, GOP 60, bf 0), Xeon E5-2690 v3 12c/24t:
     /// <list type="bullet">
@@ -214,13 +214,14 @@ internal sealed partial class FfmpegEncoder : IEncoder
     }
 
     /// <summary>
-    /// "Remover bordas pretas": quando true, o scale preenche o box alvo inteiro
-    /// (deixa de preservar o aspect da captura — leve distorção). Sempre desliga
-    /// o box-fit, mas o "nunca upscale" continua valendo.
+    /// "Remover bordas pretas": quando true, recorta a parte da captura que é barra até
+    /// sobra só o conteúdo, na proporção do alvo (ComputeLetterboxCrop). Não estica nem
+    /// distorce — a proporção da imagem é preservada. Sem efeito quando a captura já tem
+    /// a proporção do alvo (ex.: 1920×1080 num preset 16:9), que é o caso comum.
     /// </summary>
-    public void SetStretchToFit(bool stretchToFit)
+    public void SetRemoveBlackBars(bool removeBlackBars)
     {
-        _stretchToFit = stretchToFit;
+        _removeBlackBars = removeBlackBars;
     }
 
     /// <summary>Gate do NVENC weighted_pred: ffmpeg 9.0 (SDK 11.1+) rejeita weighted_pred quando
@@ -371,7 +372,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             "libx264" => $"-preset fast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -profile:v high -g {Gop} -keyint_min {Gop}",
             "libx265" => $"-preset fast -crf {cpuCq} -maxrate {maxrateKbps}K -bufsize {bufsizeKbps}K -bf 0 -x265-params no-open-gop=1:keyint={Gop}:min-keyint={Gop}",
             // SVT-AV1 (fallback de AV1 em CPU — EncoderManager.cs:282-283). Dois args do ramo
-            // do x264 NÃO podem ser herdados aqui, medido no binário embarcado (ffmpeg 9.0.1):
+            // do x264 NÃO podem ser herdados aqui, medido no binário embarcado (ffmpeg 9.0.2):
             //   -preset <nome>  → o SVT só aceita int: "Undefined constant or missing '(' in
             //                      'fast'" → exit -22. A escala é 0..13 (7..9 = rápido);
             //                      8 é o equivalente do "fast" do x264 e foi testado.
@@ -428,9 +429,10 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// (high_quality/quality/balanced/speed). Case-insensitive com trim; inválido, vazio ou null →
     /// "speed" (preset default mais seguro — RDNA1 sustenta ~1.0x mesmo em resolução alta).
     ///
-    /// <para><b>Por que NOME e nunca o índice (medido no binário embarcado, ffmpeg 9.0.1,
-    /// <c>-h encoder=&lt;codec&gt;</c>).</b> Os três AMF aceitam os mesmos <b>nomes</b>, mas os
-    /// <b>índices divergem em cada encoder</b>:
+    /// <para><b>Por que NOME e nunca o índice (medido no binário embarcado, ffmpeg 9.0.2,
+    /// <c>-h full</c> — e não <c>-h encoder=&lt;codec&gt;</c>, que só resume a opção como
+    /// <c>-quality &lt;int&gt; (from -1 to 3)</c> e esconde a tabela de nomes/índices).</b> Os três AMF
+    /// aceitam os mesmos <b>nomes</b>, mas os <b>índices divergem em cada encoder</b>:
     /// <code>
     /// -quality  h264_amf: balanced=0 speed=1    quality=2 high_quality=3
     ///           hevc_amf: quality=0  balanced=5  speed=10 high_quality=15
@@ -523,15 +525,112 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// no-op; agora ele precisa saber quando o degrau é real.</para>
     /// </summary>
     internal static bool CapacityStepChangesResolution(
-        int inputW, int inputH, int outW, int outH, int oldDivisor, int newDivisor, bool stretchToFit = false)
+        int inputW, int inputH, int outW, int outH, int oldDivisor, int newDivisor)
     {
-        var before = ResolveOutput(inputW, inputH, 0, 0, outW, outH, oldDivisor, stretchToFit);
-        var after = ResolveOutput(inputW, inputH, 0, 0, outW, outH, newDivisor, stretchToFit);
+        var before = ResolveOutput(inputW, inputH, 0, 0, outW, outH, oldDivisor);
+        var after = ResolveOutput(inputW, inputH, 0, 0, outW, outH, newDivisor);
         return after.EncodedW != before.EncodedW || after.EncodedH != before.EncodedH;
     }
 
+    /// <summary>Tolerância de proporção para considerar duas razões "iguais". Mesma usada em
+    /// ComputeScaleTarget, para que crop e scale não discordem do que é diferença real.</summary>
+    internal const double AspectEpsilon = 0.01;
+
+    /// <summary>Piso do retângulo de conteúdo útil. Abaixo disso não vale cortar: um crop de
+    /// 180px de altura derruba a qualidade e o ffmpeg rejecta rawvideo fora de 320×240.</summary>
+    internal const int MinCropWidth = 320;
+    internal const int MinCropHeight = 240;
+
+    /// <summary>
+    /// "Remover bordas pretas": retângulo do conteúdo útil quando a captura tem proporção
+    /// diferente da do alvo. Fonte mais larga que o alvo → corta laterais (pillarbox);
+    /// fonte mais alta → corta topo/base (letterbox). Sempre centralizado.
+    ///
+    /// É GEOMÉTRICO — decide só por dims, sem ler pixel. Custo zero no caminho de captura
+    /// (o retângulo vira filtro <c>crop</c> do ffmpeg depois da conversão NV12, e a NV12
+    /// continua saindo no tamanho cheio da captura). A alternativa por luminância seria mais
+    /// precisa em fonte que não é letterbox, mas custa leitura de pixel por frame e pode
+    /// piscar quando a cena escurece; o desvio de 1px do arredondamento é invisível.
+    ///
+    /// Devolve null quando não há barra a remover — inclusive quando a captura JÁ tem a
+    /// proporção do alvo, que é o caso comum (16:9 num preset 16:9).
+    /// </summary>
+    internal static (int X, int Y, int W, int H)? ComputeLetterboxCrop(int srcW, int srcH, int targetW, int targetH)
+    {
+        if (srcW <= 0 || srcH <= 0)
+            return null;
+        int tW = targetW > 0 ? targetW : srcW;
+        int tH = targetH > 0 ? targetH : srcH;
+        if (tW <= 0 || tH <= 0)
+            return null;
+
+        double srcAr = (double)srcW / srcH;
+        double tgtAr = (double)tW / tH;
+        if (Math.Abs(srcAr - tgtAr) <= AspectEpsilon)
+            return null;
+
+        int cropW = srcW, cropH = srcH;
+        if (srcAr > tgtAr)
+            cropW = (int)Math.Round(srcH * tgtAr); // pillarbox: aperta a largura
+        else
+            cropH = (int)Math.Round(srcW / tgtAr); // letterbox: aperta a altura
+
+        // NV12 exige dims pares. Centralizar arredondando para BAIXO garante origem par
+        // (alinhamento de croma) sem estourar o frame — arredondar para cima estouraria.
+        cropW = Math.Min(cropW, srcW) & ~1;
+        cropH = Math.Min(cropH, srcH) & ~1;
+        if (cropW < MinCropWidth || cropH < MinCropHeight)
+            return null;
+        if (cropW == srcW && cropH == srcH)
+            return null;
+
+        int x = ((srcW - cropW) / 2) & ~1;
+        int y = ((srcH - cropH) / 2) & ~1;
+        return (x, y, cropW, cropH);
+    }
+
+    /// <summary>
+    /// Retângulo de crop efetivo. Precedência: crop explícito (SetCropRect) sempre vale;
+    /// senão, se "remover bordas pretas" está ligado, deriva a geometria; senão, sem crop.
+    /// </summary>
+    internal static (int X, int Y, int W, int H)? ResolveEffectiveCrop(
+        bool removeBlackBars, int explicitX, int explicitY, int explicitW, int explicitH,
+        int srcW, int srcH, int targetW, int targetH)
+    {
+        if (explicitW > 0 && explicitH > 0)
+            return (explicitX, explicitY, explicitW, explicitH);
+        if (!removeBlackBars)
+            return null;
+        return ComputeLetterboxCrop(srcW, srcH, targetW, targetH);
+    }
+
+    /// <summary>
+    /// Monta a parte crop+scale da cadeia -vf. Sem crop o downscale acontece na conversão
+    /// (a NV12 já sai no alvo e o ffmpeg recebe rawvideo direto via -s), logo não há scale
+    /// no filtro; com crop o scale é relativo ao frame já recortado.
+    /// </summary>
+    internal static List<string> BuildCropScaleFilters(
+        int srcW, int srcH, (int X, int Y, int W, int H)? crop,
+        int outputW, int outputH, int scaleDivisor, out EncoderOutputResolve resolve)
+    {
+        int cw = crop?.W ?? 0, ch = crop?.H ?? 0;
+        bool hasCrop = cw > 0 && ch > 0;
+        var filters = new List<string>();
+        if (hasCrop)
+        {
+            cw = Math.Max(cw, MinCropWidth);
+            ch = Math.Max(ch, MinCropHeight);
+            filters.Add($"crop={cw}:{ch}:{crop!.Value.X}:{crop.Value.Y}");
+        }
+        resolve = ResolveOutput(srcW, srcH, hasCrop ? cw : 0, hasCrop ? ch : 0,
+            outputW, outputH, scaleDivisor);
+        if (resolve.ScaleW.HasValue && resolve.ScaleH.HasValue)
+            filters.Add($"scale={resolve.ScaleW}:{resolve.ScaleH}");
+        return filters;
+    }
+
     internal static (int Width, int Height)? ComputeScaleTarget(
-        int inputW, int inputH, int outputW, int outputH, int scaleDivisor, bool stretchToFit = false)
+        int inputW, int inputH, int outputW, int outputH, int scaleDivisor)
     {
         int outW = outputW > 0 ? outputW : inputW;
         int outH = outputH > 0 ? outputH : inputH;
@@ -547,11 +646,11 @@ internal sealed partial class FfmpegEncoder : IEncoder
         // Nunca faz upscale — limita à resolução de entrada (mesma regra do EngineCoordinator)
         outW = Math.Min(outW, inputW);
         outH = Math.Min(outH, inputH);
-        // "Remover bordas pretas" (stretchToFit): pula a preservação de aspect — o scale
-        // preenche o box alvo inteiro (leve distorção). Upscale continua bloqueado acima.
-        // Sem stretch, preserva o aspect ratio da captura quando o alvo do usuário tem
-        // proporção distinta (ex.: 16:10/21:9 + preset 16:9) — ajusta dentro do box sem esticar.
-        if (!stretchToFit && outW > 0 && outH > 0)
+        // Sem crop, preserva o aspect ratio da captura quando o alvo do usuário tem
+        // proporção distinta (ex.: 16:10/21:9 + preset 16:9) — ajusta dentro do box sem
+        // esticar. A opção "remover bordas pretas" não desliga isto: ela age ANTES, no
+        // crop, então a proporção que chega aqui já é a do alvo.
+        if (outW > 0 && outH > 0)
         {
             double inAr = (double)inputW / inputH;
             double outAr = (double)outW / outH;
@@ -587,12 +686,12 @@ internal sealed partial class FfmpegEncoder : IEncoder
     /// </summary>
     internal static EncoderOutputResolve ResolveOutput(
         int inputW, int inputH, int cropW, int cropH,
-        int outputW, int outputH, int scaleDivisor, bool stretchToFit = false)
+        int outputW, int outputH, int scaleDivisor)
     {
         bool hasCrop = cropW > 0 && cropH > 0;
-        int baseW = hasCrop ? Math.Max(cropW, 320) : inputW;
-        int baseH = hasCrop ? Math.Max(cropH, 240) : inputH;
-        var scaleTarget = ComputeScaleTarget(baseW, baseH, outputW, outputH, scaleDivisor, stretchToFit);
+        int baseW = hasCrop ? Math.Max(cropW, MinCropWidth) : inputW;
+        int baseH = hasCrop ? Math.Max(cropH, MinCropHeight) : inputH;
+        var scaleTarget = ComputeScaleTarget(baseW, baseH, outputW, outputH, scaleDivisor);
         int encodedW = scaleTarget?.Width ?? baseW;
         int encodedH = scaleTarget?.Height ?? baseH;
         if (hasCrop)
@@ -614,7 +713,7 @@ internal sealed partial class FfmpegEncoder : IEncoder
             _nvencPreset = preset;
         _multipass = multipass;
         // null = NÃO INFORMADO, mantém o valor atual — que já nasce "" (não configurado) e,
-        // medido no binário (ffmpeg 9.0.1, -h encoder=h264_amf), a seção usage responde
+        // medido no binário (ffmpeg 9.0.2, -h encoder=h264_amf), a seção usage responde
         // "(default -1)", ou seja não existe default implícito. Só muda se o front mandar
         // valor explícito; a normalização garante que nunca sai garbage no -usage.
         // Este parâmetro ficou com default "transcoding" até 2026-09-26 e o campo _amfUsage
@@ -737,37 +836,24 @@ internal sealed partial class FfmpegEncoder : IEncoder
            2s de rollback visível em todo corte. Medido: custo em bytes ~0% (h264 +0,29%,
            hevc +0,84%, av1 -0,52%) — a troca antiga de "~10% menos bits" não se confirmou. */
         var tune = BuildEncoderTuneArgs(_codec!, _cq, _maxrateKbps, _bufsizeKbps, _bframes, _lookahead, _nvencPreset, _amfPreset, _multipass, _amfPreanalysis, _amfSav, amfUsage: _amfUsage);
-        int cw = _cropW, ch = _cropH;
-        bool hasCrop = cw > 0 && ch > 0;
-        if (hasCrop)
-        {
-            cw = Math.Max(cw, 320);
-            ch = Math.Max(ch, 240);
-            Log.I("FfmpegEncoder", $"crop={cw}:{ch}:{_cropX}:{_cropY} src={_width}x{_height}");
-        }
+        // Crop efetivo: explícito > "remover bordas pretas" (geométrico) > nenhum. O
+        // geométrico é derivado das dims, então a cadeia é determinística entre restarts
+        // e não custa leitura de pixel por frame.
+        var crop = ResolveEffectiveCrop(_removeBlackBars, _cropX, _cropY, _cropW, _cropH,
+            _width, _height, _outputWidth, _outputHeight);
+        if (crop is { } c0)
+            Log.I("FfmpegEncoder", $"crop={c0.W}:{c0.H}:{c0.X}:{c0.Y} src={_width}x{_height} ({(c0.W == _width && c0.H == _height ? "explícito" : "borda preta")})");
 
-        // Build -vf filter chain: optional crop + optional scale (user output resolution + cascading fallback)
-        // O scale é relativo à resolução PÓS-crop — se um crop estiver ativo, o "nunca upscale"
-        // e o divisor do fallback aplicam-se ao frame cortado, não ao frame cheio.
-        var vfParts = new List<string>();
-        if (hasCrop)
-            vfParts.Add($"crop={cw}:{ch}:{_cropX}:{_cropY}");
-
-        // O1: sem crop, o downscale acontece na conversão (GPU VideoProcessorBlt ou CPU
-        // DownscaleBgra) — a NV12 já sai em Nv12W×Nv12H e o ffmpeg recebe rawvideo direto
-        // na resolução final via -s, sem filtro scale. Com crop (código morto hoje), a NV12
-        // sai nas dims da captura e o scale fica no vf sobre o frame cortado.
-        var resolve = ResolveOutput(_width, _height, hasCrop ? cw : 0, hasCrop ? ch : 0,
-            _outputWidth, _outputHeight, _scaleDivisor, _stretchToFit);
+        var vfParts = BuildCropScaleFilters(_width, _height, crop, _outputWidth, _outputHeight,
+            _scaleDivisor, out var resolve);
         _encodedW = resolve.EncodedW;
         _encodedH = resolve.EncodedH;
         _nv12W = resolve.Nv12W;
         _nv12H = resolve.Nv12H;
         if (resolve.ScaleW.HasValue && resolve.ScaleH.HasValue)
         {
-            vfParts.Add($"scale={resolve.ScaleW}:{resolve.ScaleH}");
-            int baseW = hasCrop ? cw : _width;
-            int baseH = hasCrop ? ch : _height;
+            int baseW = crop?.W ?? _width;
+            int baseH = crop?.H ?? _height;
             Log.I("FfmpegEncoder", $"output scale: {baseW}x{baseH} → {resolve.ScaleW}:{resolve.ScaleH} (user={( _outputWidth > 0 ? $"{_outputWidth}x{_outputHeight}" : "native" )}, fallback=1/{_scaleDivisor})");
         }
         // D3D12VA só aceita frames no pixel format d3d12 — hwupload sobe o frame NV12

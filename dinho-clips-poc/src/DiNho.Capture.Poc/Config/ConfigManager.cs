@@ -85,7 +85,7 @@ public sealed class AppConfig
 
     // 6.11 Item 3: -usage da AMF. Vazio (default) = NÃO CONFIGURADO, e a chain não emite a
     // opção, preservando o default do ffmpeg (`-usage <int> ... (default -1)`, medido no
-    // binário 9.0.1). Preencher muda RC/lookahead/ENFORCE_HRD da captura AMD, então só
+    // binário 9.0.2). Preencher muda RC/lookahead/ENFORCE_HRD da captura AMD, então só
     // depois de medir com --probe-amf-usage em hardware real. Só afeta AMF;
     // QSV/NVENC/d3d12va ignoram. Ver FfmpegEncoder.NormalizeAmfUsage.
     [JsonPropertyName("amfUsage")]
@@ -163,6 +163,16 @@ public sealed class ConfigManager : IDisposable
         "transcoding", "ultralowlatency", "lowlatency",
         "webcam", "high_quality", "lowlatency_high_quality",
     };
+
+    /// <summary>Default do <c>AmfUsage</c> antes da correção de 2026-09-26 (Item 3), quando a
+    /// chain emitia <c>-usage transcoding</c> em vez de não emitir nada. Continua sendo um
+    /// <b>nome válido</b> para o ffmpeg, então a validação sozinha não o distingue de uma
+    /// escolha deliberada — ver a migração em <see cref="Load"/>.</summary>
+    private const string LegacyAmfUsageDefault = "transcoding";
+
+    private static bool IsLegacyAmfUsageDefault(string? usage) =>
+        !string.IsNullOrWhiteSpace(usage)
+        && usage.Trim().Equals(LegacyAmfUsageDefault, StringComparison.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> ValidReplayBufferModes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -338,7 +348,17 @@ public sealed class ConfigManager : IDisposable
 
         // 6.11 Item 3: sem validação, config.json com lixo aqui viraria "-usage lixo" →
         // encoder AMF morre → restart loop. Mesma defesa do EncoderPreset.
-        if (string.IsNullOrWhiteSpace(config.AmfUsage) || !IsValidAmfUsage(config.AmfUsage))
+        //
+        // "transcoding" é a MIGRAÇÃO, não um valor aceito: era o default antes da correção
+        // de 2026-09-26 (a chain passou a não emitir -usage). Reverter o default no código
+        // não alcança quem já gravou config.json, e o valor é um nome legítimo, então a
+        // validação o preservava — o log de produção mostrou amfUsage=transcoding numa build
+        // já corrigida, sem erro e sem warning. Como não há UI para o campo (nenhuma
+        // ocorrência de amfUsage no renderer), "transcoding" no disco só pode ter vindo do
+        // default antigo, então indistinguível de escolha do usuário não é: é migração.
+        if (string.IsNullOrWhiteSpace(config.AmfUsage)
+            || !IsValidAmfUsage(config.AmfUsage)
+            || IsLegacyAmfUsageDefault(config.AmfUsage))
             config.AmfUsage = _defaults.AmfUsage;
         else
             config.AmfUsage = config.AmfUsage.Trim().ToLowerInvariant();

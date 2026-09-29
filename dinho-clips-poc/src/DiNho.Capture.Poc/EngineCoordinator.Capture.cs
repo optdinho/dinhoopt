@@ -328,7 +328,7 @@ public sealed partial class EngineCoordinator
                         amfUsage: _config.Config.AmfUsage);
                     Log.I("EngineCoordinator", $"SetQualityParams aplicado: preset='{_config.Config.EncoderPreset}' cq={_activeProfile.Cq} maxrate={_activeProfile.MaxrateKbps} bufsize={_activeProfile.BufsizeKbps} bf={_activeProfile.Bframes} lookahead={_activeProfile.Lookahead} multipass={_config.Config.Multipass} amfUsage={_config.Config.AmfUsage}");
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
-                fe.SetStretchToFit(_config.Config.StretchToFit);
+                fe.SetRemoveBlackBars(_config.Config.StretchToFit);
                 }
                 _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
                 _status.Update(s =>
@@ -1171,6 +1171,7 @@ public sealed partial class EngineCoordinator
             var elapsedSinceCapture = Stopwatch.GetTimestamp() - beforeCapture;
             var elapsedUs = elapsedSinceCapture / freqPerUs;
             var remainingUs = frameIntervalUs - elapsedUs;
+            var delayStartTicks = Stopwatch.GetTimestamp();
             if (remainingUs > 500)
             {
                 var remainingMs = (int)(remainingUs / 1000);
@@ -1182,8 +1183,10 @@ public sealed partial class EngineCoordinator
                 spinTargetTicks = beforeCapture + frameIntervalUs * freqPerUs;
             }
 
+            var spinStartTicks = Stopwatch.GetTimestamp();
             while (Stopwatch.GetTimestamp() < spinTargetTicks && !ct.IsCancellationRequested)
                 Thread.SpinWait(8);
+            _feed.AddPacing(spinStartTicks - delayStartTicks, Stopwatch.GetTimestamp() - spinStartTicks);
         }
 
         var reason = ct.IsCancellationRequested ? "cancelamento" :

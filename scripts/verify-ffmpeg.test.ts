@@ -93,6 +93,7 @@ const FILTERS_GYAN_9_0_1 = [
   ' .. crop              V->V       Crop the input video.',
   ' .. format            V->V       Convert the input video to one of the specified pixel formats.',
   ' .. hwupload          V->V       Upload a normal frame to a hardware frame',
+  ' .. libvmaf           VV->V      Calculate the VMAF between two video streams.',
   ' .. scale             V->V       Scale the input video size and/or convert the image format.',
   ' .. sr_amf            V->V       AMF HQ video upscaling',
   ' .. frc_amf           V->V       AMF video Frame Rate Converter',

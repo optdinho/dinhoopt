@@ -4,6 +4,7 @@ import { IPC } from '@shared/channels'
 import type { DirectStorageStatus, GameModeAuditReport, GameModeConfig, GameModeProgress } from '@shared/types'
 import { ipcMain } from 'electron'
 import { loadClipsConfig } from '../../services/clips-config-store'
+import { execFileAsync } from '../../services/exec-utf8'
 import type { GameAutoEvent } from '../../services/game-detector'
 import {
   isDetectorRunning,
@@ -147,7 +148,6 @@ async function checkDirectStorage(): Promise<DirectStorageStatus> {
   let nvmeHealthy = true
   const nvmeDrives: DirectStorageStatus['nvmeDrives'] = []
   try {
-    const { execFileAsync } = await import('../../services/exec-utf8')
     const { stdout } = await execFileAsync(
       'powershell.exe',
       [

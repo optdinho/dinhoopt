@@ -61,7 +61,7 @@ describe('buildReEncodeArgs', () => {
     // -crf é x264-only; com nvenc ele é ignorado com warning, o que significa CQ sem efeito.
     expect(args).not.toContain('-crf')
     expect(args).toContain('-rc')
-    // Medido no binário embarcado (ffmpeg 9.0.1): o -rc do nvenc só aceita constqp|vbr|cbr.
+    // Medido no binário embarcado (ffmpeg 9.0.2): o -rc do nvenc só aceita constqp|vbr|cbr.
     // `vbr_peak` é constante de AMF/D3D12VA e o nvenc REJEITA com
     // "Unable to parse rc option value vbr_peak" — o trim morria no primeiro uso. Ver também
     // o teste do lado negativo abaixo.

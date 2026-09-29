@@ -138,6 +138,100 @@ public sealed class FeedTelemetryTests
         Assert.Equal(2, s.GoodFrames);
     }
 
+    // O summary precisa expor AS DUAS populações. O FeedFps usa GoodFrames (todos os
+    // frames) e o TotalMs usa só os limpos — logo `TotalMs × GoodFrames` NÃO recupera o
+    // trabalho real da janela sempre que há outlier, e o log deixa de fechar a conta.
+    // Foi exatamente o que deixou os ~11,7ms/frame sem destino no log de 2026-09-29.
+    [Fact]
+    public void Summary_ExpoeAsDuasPopulacoes_ParaFecharAConta()
+    {
+        var t = Create(5.0);
+        // 4 frames limpos de 20ms
+        for (int i = 0; i < 4; i++)
+            t.AddGoodFrame(1_000, 500, 4_000, 20_000);
+        // 1 outlier de 521ms (excluído da média por wait > 100ms)
+        t.AddGoodFrame(500_000, 500, 4_000, 521_000);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(5, s.GoodFrames);      // fps conta todos
+        Assert.Equal(4, s.CleanFrames);     // média usa só os limpos
+        Assert.Equal(20.0, s.TotalMs, 3);   // média limpa
+        // (4×20 + 521) / 5 = 120.2 → a média de TODOS os frames
+        Assert.Equal(120.2, s.TotalMsAll, 1);
+        // A conta fecha: 5 frames × 120.2ms = 601ms de trabalho real na janela.
+        // Com a média limpa daria 100ms — 501ms evaporados, invisíveis no log.
+        Assert.Equal(601.0, s.GoodFrames * s.TotalMsAll, 1);
+        Assert.Equal(1.0, s.FeedFps, 3);
+    }
+
+    // Sem outliers, as duas populações coincidem (caracterização: o campo novo não inventa
+    // número quando a janela inteira é saudável).
+    [Fact]
+    public void AllNormal_TotalMsAllCoincideComTotalMs()
+    {
+        var t = Create(5.0);
+        t.AddGoodFrame(1_000, 500, 4_000, 20_000);
+        t.AddGoodFrame(3_000, 500, 3_000, 30_000);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(2, s.CleanFrames);
+        Assert.Equal(25.0, s.TotalMs, 3);
+        Assert.Equal(25.0, s.TotalMsAll, 3);
+    }
+
+    // O bloco de pacing (Task.Delay + spin) é o único trecho do loop que NÃO está dentro
+    // de `total`. Sem medir os dois lados separadamente, a conta não fecha e não se sabe
+    // se o tempo perdido é o delay estourando ou o spin passando do alvo.
+    [Fact]
+    public void Summary_ExpoeDelayESpinDoPacing_ParaFecharAContaDoPeriodo()
+    {
+        var t = Create(5.0);
+        // 2 frames: 12ms de trabalho + 4ms de delay + 0.7ms de spin = 16.7ms (60fps)
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        t.AddPacing(4_000, 700);
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        t.AddPacing(4_000, 700);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(4.0, s.PacingDelayMs, 2);
+        Assert.Equal(0.7, s.PacingSpinMs, 2);
+        // A conta do período fecha: work + delay + spin = 16.7ms = 1/60fps
+        Assert.Equal(16.7, s.TotalMsAll + s.PacingDelayMs + s.PacingSpinMs, 2);
+    }
+
+    // Janela sem nenhum sample de pacing (ex.: loop ainda na fase de warmup) não quebra.
+    [Fact]
+    public void Summary_SemPacing_Zera()
+    {
+        var t = Create(5.0);
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(0.0, s.PacingDelayMs, 3);
+        Assert.Equal(0.0, s.PacingSpinMs, 3);
+    }
+
+    // O log não fecha sem saber quantas ITERAÇÕES o loop deu. O pacing é amostrado por
+    // iteração e o trabalho por frame bom; se as populações diferem, existe iteração
+    // queimada (frame não-bom: timeout diferido do WGC, textura nula) que o `good` não
+    // conta e que consome um ciclo de pacing inteiro.
+    [Fact]
+    public void Summary_ExpoeIteracoes_QueNaoViraramFrameBom()
+    {
+        var t = Create(5.0);
+        // 2 frames bons e 3 iterações perdidas (timeout diferido / textura nula).
+        // As 3 iterações pesadas pagam pacing mas não entram em AddGoodFrame.
+        for (int i = 0; i < 3; i++) t.AddPacing(4_000, 700);
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        t.AddPacing(4_000, 700);
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        t.AddPacing(4_000, 700);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(5, s.PacingCount);
+        Assert.Equal(2, s.GoodFrames);
+        Assert.Equal(3, s.PacingCount - s.GoodFrames);
+    }
+
     // Múltiplos outliers: só frames limpos contam na média.
     [Fact]
     public void MultipleOutliers_ExcludeAll()

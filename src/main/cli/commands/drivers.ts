@@ -1,12 +1,10 @@
+import { cleanDrivers, installDriverUpdates, scanDrivers, scanDriverUpdates } from '../../ipc/driver-manager.ipc'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage, log, showProgress } from '../utils'
 
 export async function handleDrivers(args: string[], ctx: CliContext): Promise<number | undefined> {
   const sub = args[0]
-  const { scanDrivers, cleanDrivers, scanDriverUpdates, installDriverUpdates } = await import(
-    '../../ipc/driver-manager.ipc'
-  )
 
   if (sub === 'scan') {
     cliLog(ctx, 'Scanning driver packages...')
