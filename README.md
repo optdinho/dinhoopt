@@ -46,7 +46,7 @@
 ## ⚡ Funcionalidades
 
 <details open>
-<summary><strong>🔒 Segurança</strong> — 15 módulos</summary>
+<summary><strong>🔒 Segurança</strong> — 14 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
@@ -59,7 +59,6 @@
 | **Linha do Tempo** | Correlação e timeline de eventos de segurança |
 | **Regras YARA Custom** | Importa e gerencia regras YARA personalizadas |
 | **Quarentena** | Gerenciamento completo com allowlist e restore |
-| **Fortificação do Sistema** | *Rota `/hardening` redireciona para o Escudo de Privacidade — sem implementação própria* |
 | **Scanner de Vulnerabilidades** | CVE scanner para software instalado |
 | **Escudo de Privacidade** | Bloqueia rastreadores, telemetria e coleta de dados |
 | **Auditoria de Firewall** | Audita e gerencia regras do Windows Defender Firewall |
@@ -80,7 +79,7 @@
 </details>
 
 <details open>
-<summary><strong>🧹 Limpeza & Manutenção</strong> — 22 módulos</summary>
+<summary><strong>🧹 Limpeza & Manutenção</strong> — 21 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
@@ -104,7 +103,6 @@
 | **Ajustes do Windows** | Personaliza desempenho e comportamento do Windows |
 | **Planos de Energia** | Cria, ativa e gerencia planos de energia |
 | **Tarefas Agendadas** | Agenda limpezas e manutenções automáticas |
-| ~~Pontos de Restauração~~ | ~~Cria e gerencia pontos de restauração do sistema~~ *(não implementado)* |
 | **Histórico** | Histórico completo de scans e limpezas realizadas |
 
 </details>
