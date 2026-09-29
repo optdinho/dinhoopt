@@ -575,7 +575,7 @@ describe('ClipsPage', () => {
     expect(screen.queryByText('calibrationActive')).toBeNull()
   })
 
-  it('shows dropped frames badge when drop counters are non-zero', async () => {
+  it('does not show a dropped frames badge even when drop counters are non-zero', async () => {
     mockGetStatus.mockResolvedValue({
       running: true,
       capturing: true,
@@ -586,21 +586,9 @@ describe('ClipsPage', () => {
       gpuBusyDrops: 3,
     })
     render(<ClipsPage />)
-    expect(await screen.findByText(/droppedFrames/)).toBeTruthy()
-    expect(screen.getByText('(GPU: 3)')).toBeTruthy()
-  })
-
-  it('does not show dropped frames badge when counters are zero', async () => {
-    mockGetStatus.mockResolvedValue({
-      running: true,
-      capturing: true,
-      uptime: 120,
-      fps: 30,
-      replayTimeSeconds: 120,
-    })
-    render(<ClipsPage />)
     expect(await screen.findByText('recording')).toBeTruthy()
     expect(screen.queryByText(/droppedFrames/)).toBeNull()
+    expect(screen.queryByText(/GPU: 3/)).toBeNull()
   })
 
   it('calls setConfig with 150 when selecting custom replay time from a preset', async () => {

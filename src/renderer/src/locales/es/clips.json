@@ -119,8 +119,6 @@
   "noiseSuppression": "Reducción de Ruido",
   "adaptiveQuality": "Calidad Adaptativa",
   "calibrationActive": "Calidad adaptativa — perfil calibrado de la máquina: {{tier}}",
-  "droppedFrames": "Fotogramas perdidos",
-  "droppedFramesTooltip": "Fotogramas descartados durante esta sesión de captura. 'GPU' indica descartes por codificador ocupado (gpuBusyDrops).",
   "stretchToFit": "Quitar barras negras",
   "stretchToFitTooltip": "Recorta las barras negras (letterbox/pillarbox) de la captura, dejando solo la imagen del juego en la proporción del cuadro de salida — sin distorcer. Solo tiene efecto cuando el juego se ejecuta en una proporción distinta a la del cuadro (p. ej. una ventana 16:10 con un juego 16:9).",
   "sharpness": "Nitidez",
