@@ -54,12 +54,12 @@
 | **Sandbox Comportamental** | Executa suspeitos em ambiente isolado e analisa comportamento |
 | **Scanner de Memória** | Escaneia memória de processos ativos por assinaturas de malware |
 | **Analisador PE** | Analisa arquivos PE (seções, imports, hashes) |
-| **Detector de Explorações** | Detecta explorações ativas (mimikatz, EternalBlue…) |
-| **Inteligência de Ameaças** | Consulta cruzada a VirusTotal, AbuseIPDB e outras fontes |
+| **Detector de Explorações** | Assinaturas de shellcode em memória (NOP sled, heap spray, ROP, egg hunter) |
+| **Inteligência de Ameaças** | Consulta cruzada a feeds do abuse.ch (SSL Blacklist, Malware Bazaar) e PhishTank |
 | **Linha do Tempo** | Correlação e timeline de eventos de segurança |
 | **Regras YARA Custom** | Importa e gerencia regras YARA personalizadas |
 | **Quarentena** | Gerenciamento completo com allowlist e restore |
-| **Fortificação do Sistema** | Reforça a segurança com políticas e configurações do Windows |
+| **Fortificação do Sistema** | *Rota `/hardening` redireciona para o Escudo de Privacidade — sem implementação própria* |
 | **Scanner de Vulnerabilidades** | CVE scanner para software instalado |
 | **Escudo de Privacidade** | Bloqueia rastreadores, telemetria e coleta de dados |
 | **Auditoria de Firewall** | Audita e gerencia regras do Windows Defender Firewall |
@@ -149,7 +149,7 @@
 | **Modo Daemon** | Execução em segundo plano na bandeja |
 | **Modo CLI** | Operação completa via linha de comando |
 | **Onboarding** | Configuração inicial guiada do usuário |
-| **Exportação de Relatórios** | Exporta resultados em PDF/CSV |
+| **Exportação de Relatórios** | Exporta resultados em CSV, JSON e TXT |
 
 </details>
 
