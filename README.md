@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-1.0.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.0-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-93%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-95.7%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 
@@ -30,14 +30,14 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_1.0.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.0-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
 | Componente | Tamanho |
 |------------|---------|
-| Instalador (NSIS) | ~219 MB |
-| Portable | ~219 MB |
+| Instalador (NSIS) | ~250 MB |
+| Portable | ~250 MB |
 
 > **⚠️ Requer:** Windows 10 (build 19041+) ou Windows 11, 4 GB RAM, 500 MB de espaço livre.
 
@@ -188,7 +188,7 @@
 ## 🛠️ Tecnologias
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Electron-43-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
+  <img src="https://img.shields.io/badge/Electron-44-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
   <img src="https://img.shields.io/badge/TypeScript-7-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
@@ -196,26 +196,26 @@
   <img src="https://img.shields.io/badge/Zustand-5-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand" />
   <img src="https://img.shields.io/badge/electron--vite-6-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-vite" />
   <img src="https://img.shields.io/badge/YARA--X-0.7-00ADD8?style=flat-square&logo=python&logoColor=white" alt="YARA-X" />
-  <img src="https://img.shields.io/badge/Vitest-4-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
+  <img src="https://img.shields.io/badge/Vitest-5-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
   <img src="https://img.shields.io/badge/Playwright-latest-45BA4B?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
   <img src="https://img.shields.io/badge/electron--builder-26-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-builder" />
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET" />
   <img src="https://img.shields.io/badge/ffmpeg-9.0-008000?style=flat-square&logo=ffmpeg&logoColor=white" alt="ffmpeg" />
   <img src="https://img.shields.io/badge/NVENC/AMF/QSV-HW%20Encoders-76B900?style=flat-square" alt="HW Encoders" />
   <img src="https://img.shields.io/badge/Windows.Graphics.Capture-WGC-0078D4?style=flat-square&logo=windows&logoColor=white" alt="WGC" />
-  <img src="https://img.shields.io/badge/NAudio-2.3-512BD4?style=flat-square" alt="NAudio" />
+  <img src="https://img.shields.io/badge/NAudio-3.1-512BD4?style=flat-square" alt="NAudio" />
 </p>
 
 | Categoria | Tecnologias |
 |-----------|-------------|
-| **Runtime** | Electron 43, Node.js 22+ |
+| **Runtime** | Electron 44, Node.js 24+ |
 | **Linguagem** | TypeScript 7 (strict mode) |
 | **Frontend** | React 19, Tailwind CSS 4, shadcn/ui, Recharts |
 | **Estado** | Zustand 5 |
 | **Build** | electron-vite 6, electron-builder (NSIS) |
-| **Testes** | Vitest 4, Playwright, Testing Library |
+| **Testes** | Vitest 5, Playwright, Testing Library |
 | **Segurança** | YARA-X 0.7 (bindings nativas), crypto (Node.js) |
-| **Banco de Dados** | better-sqlite3 (SQLite) |
+| **Banco de Dados** | better-sqlite3 v13 (SQLite) |
 | **Motor de Clips** | .NET 10 (C#), ffmpeg 9.0, NVENC/AMF/QSV, WGC, NAudio, RNNoise, Vortice (D3D11) |
 
 ### 🎬 Motor de Clips
@@ -247,7 +247,7 @@ O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, s
 │  │              Renderer (React 19)               │  │
 │  │  ┌─────────┐ ┌──────────┐ ┌────────────────┐  │  │
 │  │  │  Pages   │ │  Stores  │ │  Components    │  │  │
-│  │  │  (37)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
+│  │  │  (40)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
 │  │  └────┬────┘ └────┬─────┘ └───────┬────────┘  │  │
 │  │       │           │               │            │  │
 │  │  ┌────▼───────────▼───────────────▼────────┐  │  │
@@ -259,7 +259,7 @@ O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, s
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (237)               │      │
+│  │              IPC Handlers (~235)              │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -309,8 +309,8 @@ src/
 │   ├── index.ts                # Entry point + gerenciamento de janela
 │   ├── cli/                    # Modo linha de comando (headless)
 │   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # 237 handlers IPC (1 por módulo)
-│   ├── services/               # Lógica de negócio (61 serviços)
+│   ├── ipc/                    # ~235 handlers IPC (1 por módulo)
+│   ├── services/               # Lógica de negócio (117 serviços)
 │   ├── platform/               # Abstração de plataforma
 │   │   └── win32/              # Implementação Windows (registry, WMI, API)
 │   └── constants/              # Paths, safelists, configurações
@@ -318,9 +318,9 @@ src/
 ├── renderer/                   # Interface React
 │   └── src/
 │       ├── App.tsx             # Router + layout principal
-│       ├── pages/              # 37 páginas (uma por módulo funcional)
-│       ├── stores/             # Estado global (Zustand, 37 stores)
-│       ├── components/         # Componentes reutilizáveis (125)
+│       ├── pages/              # 40 rotas (uma por módulo funcional)
+│       ├── stores/             # Estado global (Zustand, 36 stores)
+│       ├── components/         # Componentes reutilizáveis (124)
 │       ├── hooks/              # Hooks customizados
 │       ├── lib/                # Utilitários e helpers
 │       └── locales/            # i18n (inglês, português, espanhol)
@@ -348,9 +348,9 @@ dinho-clips-poc/                # Motor de Clips (.NET 10, self-contained)
 
 ### Pré-requisitos
 
-- **Node.js** 22+ (LTS)
+- **Node.js** 24+ (LTS)
 - **npm** 10+
-- **Windows** com **Visual Studio Build Tools 2022**
+- **Windows** com **Visual Studio Build Tools 2022** (motor de Clips em .NET 10)
   ```bash
   npm install -g windows-build-tools
   ```
@@ -376,6 +376,7 @@ npm run dev
 | `npm run dev` | Inicia em modo desenvolvimento (hot reload) |
 | `npm run build` | Compila TypeScript + bundler |
 | `npm run package` | Gera instalador NSIS em `dist/` |
+| `npm run publish` | Empacota e publica a release no GitHub Releases |
 | `npm test` | Executa testes unitários e de integração |
 | `npm run test:coverage` | Executa testes com relatório de cobertura |
 | `npm run lint` | Verifica código com Biome |
@@ -399,7 +400,8 @@ npx playwright test
 ```
 
 ```
-📊 Cobertura atual: ~85%+ — 227 arquivos de teste, ~6.900 testes
+📊 Cobertura atual: 95,7% de linhas · 94,5% de funções · 86,5% de branches
+   248 arquivos de teste · 7.262 testes (Vitest) · 2.212 testes (C#, Release)
 ```
 
 ---
@@ -409,15 +411,18 @@ npx playwright test
 | Métrica | Valor |
 |---------|-------|
 | Módulos | 60+ |
-| Páginas | 37 |
-| Stores (Zustand) | 37 |
-| Componentes React | 125 |
-| Serviços | 61 |
-| Handlers IPC | 237 |
-| Arquivos de teste | 227 |
-| Testes | ~6.900 |
-| Cobertura | ~85%+ |
-| Linhas de código | ~106.000+ |
+| Rotas | 40 |
+| Stores (Zustand) | 36 |
+| Componentes React | 124 |
+| Serviços | 117 |
+| Handlers IPC | ~235 |
+| Arquivos de teste (TS) | 248 |
+| Testes (TS) | 7.262 |
+| Testes (C#) | 2.212 |
+| Cobertura de linhas | 95,7% |
+| Cobertura de branches | 86,5% |
+| Linhas de código (TS, sem testes) | ~87.000 |
+| Linhas de código (C#, sem testes) | ~27.000 |
 
 ---
 
