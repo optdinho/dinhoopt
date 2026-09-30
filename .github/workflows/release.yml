@@ -18,6 +18,20 @@ jobs:
 
       - run: npm ci
 
+      # ffmpeg.exe (217MB) não vive no git (ignorado, acima do limite de 100MB).
+      # O CI baixa do asset da release vazia 'assets' — criada apenas pra guardar
+      # o binário. O copy-engine.js faz o gate do binário antes de publicar.
+      - name: Download ffmpeg.exe from assets release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path resources/ffmpeg-custom -Force | Out-Null
+          $url = "https://github.com/optdinho/dinhoopt/releases/download/assets/ffmpeg.exe"
+          $out = "resources/ffmpeg-custom/ffmpeg.exe"
+          Invoke-WebRequest -Uri $url -OutFile $out -TimeoutSec 300
+          $size = (Get-Item $out).Length
+          if ($size -lt 100MB) { throw "ffmpeg.exe baixado parece incompleto: $size bytes" }
+          Write-Host "ffmpeg.exe pronto: $([math]::Round($size/1MB,1)) MB"
+
       - name: Create .env from secrets
         run: |
           echo "GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
