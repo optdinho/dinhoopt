@@ -287,6 +287,8 @@ export const IPC = {
   WINDOWS_TWEAKS_STATUS: 'windows-tweaks:status',
   WINDOWS_TWEAKS_SET_DNS: 'windows-tweaks:set-dns',
   WINDOWS_TWEAKS_GET_DNS: 'windows-tweaks:get-dns',
+  WINDOWS_TWEAKS_BENCHMARK_DNS: 'windows-tweaks:benchmark-dns',
+  WINDOWS_TWEAKS_CURRENT_DNS: 'windows-tweaks:current-dns',
   WINDOWS_TWEAKS_NETSH_TCP: 'windows-tweaks:netsh-tcp',
 
   // Gaming Timer Tweaks (HPET, tscsyncpolicy, disabledynamictick, autotuning)
@@ -326,6 +328,7 @@ export const IPC = {
   POWER_PLANS_ACTIVATE: 'power-plans:activate',
   POWER_PLANS_CREATE: 'power-plans:create',
   POWER_PLANS_DELETE: 'power-plans:delete',
+  POWER_PLANS_UNLOCK_ULTIMATE: 'power-plans:unlock-ultimate',
 
   // HOSTS Editor
   HOSTS_READ: 'hosts:read',
@@ -418,4 +421,5 @@ export const IPC = {
   CLIPS_PUBLISH_PROGRESS: 'clips:publish-progress',
   CLIPS_PUBLISH_CANCEL: 'clips:publish-cancel',
   CLIPS_OPEN_EXTERNAL: 'clips:open-external',
+  SHELL_OPEN_EXTERNAL: 'shell:open-external',
 } as const

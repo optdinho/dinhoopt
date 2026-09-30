@@ -1,4 +1,6 @@
 import type {
+  CurrentDns,
+  DnsBenchmarkResult,
   DnsPreset,
   GamingTimerStatus,
   WindowsTweakApplyProgress,
@@ -10,6 +12,9 @@ import { create } from 'zustand'
 interface WindowsTweaksStoreState {
   tweaks: WindowsTweakState[]
   dnsPresets: DnsPreset[]
+  dnsBenchmark: DnsBenchmarkResult[]
+  dnsBenchmarking: boolean
+  currentDns: CurrentDns
   selectedIds: Set<string>
   scanning: boolean
   applying: boolean
@@ -22,6 +27,8 @@ interface WindowsTweaksStoreState {
 
   load: () => Promise<void>
   loadDnsPresets: () => Promise<void>
+  benchmarkDns: () => Promise<void>
+  loadCurrentDns: () => Promise<void>
   apply: () => Promise<void>
   revert: () => Promise<void>
   toggle: (id: string) => void
@@ -44,13 +51,16 @@ const defaultProgress: WindowsTweakApplyProgress = { current: 0, total: 0, curre
 export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) => ({
   tweaks: [],
   dnsPresets: [],
+  dnsBenchmark: [],
+  dnsBenchmarking: false,
+  currentDns: { primary: null, secondary: null, source: 'none' } as CurrentDns,
   selectedIds: new Set(),
   scanning: false,
   applying: false,
   progress: null,
   lastResult: null,
   revertResult: null,
-  expandedCategories: new Set(['mouse', 'network', 'system', 'gaming']),
+  expandedCategories: new Set(),
   gamingTimer: null,
   gamingTimerLoading: false,
 
@@ -68,6 +78,28 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
     try {
       const dnsPresets = await window.dinho.windowsTweaksGetDnsPresets()
       set({ dnsPresets })
+    } catch {
+      /* ignore */
+    }
+  },
+
+  benchmarkDns: async () => {
+    if (get().dnsBenchmarking) return
+    set({ dnsBenchmarking: true })
+    try {
+      const results = await window.dinho.windowsTweaksBenchmarkDns()
+      set({ dnsBenchmark: results })
+    } catch {
+      set({ dnsBenchmark: [] })
+    } finally {
+      set({ dnsBenchmarking: false })
+    }
+  },
+
+  loadCurrentDns: async () => {
+    try {
+      const currentDns = await window.dinho.windowsTweaksCurrentDns()
+      set({ currentDns })
     } catch {
       /* ignore */
     }
@@ -140,7 +172,9 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
 
   setDns: async (primary, secondary) => {
     try {
-      return await window.dinho.windowsTweaksSetDns(primary, secondary)
+      const ok = await window.dinho.windowsTweaksSetDns(primary, secondary)
+      if (ok) await get().loadCurrentDns()
+      return ok
     } catch {
       return false
     }

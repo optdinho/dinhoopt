@@ -296,7 +296,7 @@ describe('registerWindowsTweaksIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 15 IPC handlers', () => {
+  it('registers all 17 IPC handlers', () => {
     registerWindowsTweaksIpc(() => null)
     const channels = mockHandle.mock.calls.map((c) => c[0])
     expect(channels).toContain('windows-tweaks:list')
@@ -305,6 +305,7 @@ describe('registerWindowsTweaksIpc', () => {
     expect(channels).toContain('windows-tweaks:status')
     expect(channels).toContain('windows-tweaks:get-dns')
     expect(channels).toContain('windows-tweaks:set-dns')
+    expect(channels).toContain('windows-tweaks:benchmark-dns')
     expect(channels).toContain('windows-tweaks:netsh-tcp')
     expect(channels).toContain('windows-tweaks:gaming-timer-get')
     expect(channels).toContain('windows-tweaks:gaming-timer-set')
@@ -312,9 +313,10 @@ describe('registerWindowsTweaksIpc', () => {
     expect(channels).toContain('windows-tweaks:gaming-autotuning')
     expect(channels).toContain('windows-tweaks:gaming-vbs-get')
     expect(channels).toContain('windows-tweaks:gaming-vbs-set')
+    expect(channels).toContain('windows-tweaks:current-dns')
     expect(channels).toContain('windows-tweaks:gaming-hags-get')
     expect(channels).toContain('windows-tweaks:gaming-hags-set')
-    expect(channels.length).toBe(15)
+    expect(channels.length).toBe(17)
   })
 })
 
@@ -332,6 +334,42 @@ describe('WINDOWS_TWEAKS_GET_DNS handler', () => {
     expect(result).toHaveLength(4)
     const presets = result as Array<{ name: string }>
     expect(presets[0]!.name).toBe('Cloudflare')
+  })
+})
+
+describe('WINDOWS_TWEAKS_CURRENT_DNS handler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns the DNS currently in use', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      callback(null, { stdout: 'PRIMARY=8.8.8.8\r\nSECONDARY=8.8.4.4\r\nDHCP=Disabled' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:current-dns')
+    expect(await handler()).toEqual({ primary: '8.8.8.8', secondary: '8.8.4.4', source: 'manual' })
+  })
+
+  it('marks DHCP-provided DNS', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      callback(null, { stdout: 'PRIMARY=192.168.1.1\r\nSECONDARY=\r\nDHCP=Enabled' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:current-dns')
+    expect(await handler()).toEqual({ primary: '192.168.1.1', secondary: null, source: 'dhcp' })
+  })
+
+  it('degrades to none instead of throwing when the probe fails', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      callback(new Error('boom'), '')
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:current-dns')
+    expect(await handler()).toEqual({ primary: null, secondary: null, source: 'none' })
   })
 })
 
@@ -369,8 +407,14 @@ describe('WINDOWS_TWEAKS_LIST handler', () => {
       if (cmdLine.includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
       } else if (cmdLine.includes('-query')) {
-        // Simulate Current AC Power Setting Index: 0x0 (pcie-aspm-off optimized value)
-        callback(null, { stdout: '...Current AC Power Setting Index: 0x0...OK...' })
+        // Saída real do powercfg em pt-BR (AC=0, que é o valor otimizado de pcie-aspm-off)
+        callback(null, {
+          stdout: [
+            '      Índice de Configurações Possíveis: 000',
+            '    Índice de Configurações de Correntes Alternadas Atuais: 0x00000000',
+            '    Índice de Configurações de Correntes Contínuas Atuais: 0x00000000',
+          ].join('\r\n'),
+        })
       } else {
         callback(null, { stdout: '' })
       }
@@ -745,7 +789,7 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
     expect(
       powercfgCalls.some((c) =>
         c.includes(
-          '-setacvalueindex 381b4222-f694-41f0-9685-ff5bb260df2f ee19f59b-bb67-4979-a67f-5f16dfc4bcae 0a717a8c-0a10-4e57-9b23-2b0ad0b32ec8 2',
+          '-setacvalueindex 381b4222-f694-41f0-9685-ff5bb260df2f 501a4d13-42af-4429-9fd1-a8218c268e20 ee12f906-d277-404b-b6da-e5fa1a576df5 2',
         ),
       ),
     ).toBe(true)

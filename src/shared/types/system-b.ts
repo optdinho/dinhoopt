@@ -266,6 +266,21 @@ export interface DnsPreset {
   secondary: string
 }
 
+export interface DnsBenchmarkResult {
+  server: string
+  ok: boolean
+  avgMs: number | null
+  bestMs: number | null
+  samples: number
+  error?: string
+}
+
+export interface CurrentDns {
+  primary: string | null
+  secondary: string | null
+  source: 'dhcp' | 'manual' | 'none'
+}
+
 export interface WindowsTweakApplyProgress {
   current: number
   total: number
@@ -290,6 +305,7 @@ export interface PowerPlanInfo {
   isHighPerformance: boolean
   isBalanced: boolean
   isPowerSaver: boolean
+  isUltimatePerformance: boolean
 }
 
 export interface PowerPlanActivateResult {
@@ -306,6 +322,13 @@ export interface PowerPlanCreateResult {
 export interface PowerPlanDeleteResult {
   success: boolean
   error?: string
+}
+
+export interface PowerPlanUnlockResult {
+  success: boolean
+  guid?: string
+  error?: string
+  alreadyExists?: boolean
 }
 
 // ─── HOSTS Editor ────────────────────────────────────────

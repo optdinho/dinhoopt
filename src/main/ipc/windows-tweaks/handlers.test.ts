@@ -417,7 +417,16 @@ describe('handlers.ts', () => {
     })
 
     it('applies pcie-aspm-off via powercfg path', async () => {
-      mockExecFileAsync.mockResolvedValue({ stdout: '', stderr: '' })
+      const SCHEME_GUID = '12345678-abcd-1234-abcd-123456789abc'
+      mockExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === 'powercfg' && args[0] === '/LIST') {
+          return Promise.resolve({ stdout: `Power Scheme GUID: ${SCHEME_GUID}  (High performance)`, stderr: '' })
+        }
+        if (cmd === 'powercfg' && args[0] === '/GETACTIVESCHEME') {
+          return Promise.resolve({ stdout: `Power Scheme GUID: ${SCHEME_GUID}`, stderr: '' })
+        }
+        return Promise.resolve({ stdout: '', stderr: '' })
+      })
 
       const { registerWindowsTweaksIpc } = await import('./handlers')
       registerWindowsTweaksIpc(vi.fn())
@@ -425,6 +434,11 @@ describe('handlers.ts', () => {
       const applyHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:apply')![1]
       const result = await applyHandler(null, ['pcie-aspm-off'])
       expect(result.succeeded).toBe(1)
+      const setCall = mockExecFileAsync.mock.calls.find((c) => c[0] === 'powercfg' && c[1][0] === '-setacvalueindex')
+      expect(setCall).toBeTruthy()
+      expect(setCall?.[1]).toContain('501a4d13-42af-4429-9fd1-a8218c268e20')
+      expect(setCall?.[1]).toContain('ee12f906-d277-404b-b6da-e5fa1a576df5')
+      expect(setCall?.[1]).toContain('0')
     })
 
     it('runs fsutil for ntfs-last-access-off', async () => {
@@ -763,6 +777,36 @@ describe('handlers.ts', () => {
         }
         if (cmd === 'powercfg' && args[0] === '-query') {
           return Promise.resolve({ stdout: '    Current AC Power Setting Index: 0x0', stderr: '' })
+        }
+        if (cmd === 'powercfg' && args[0] === '/LIST') {
+          return Promise.resolve({ stdout: VALID_GUID, stderr: '' })
+        }
+        return Promise.reject(new Error('no'))
+      })
+
+      const { registerWindowsTweaksIpc } = await import('./handlers')
+      registerWindowsTweaksIpc(vi.fn())
+
+      const listHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:list')![1]
+      const result = await listHandler()
+      const aspmTweak = result.find((s: WindowsTweakState) => s.tweak.id === 'pcie-aspm-off')
+      expect(aspmTweak?.applied).toBe(true)
+    })
+
+    it('returns true when powercfg reports the index in Portuguese', async () => {
+      mockExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === 'powercfg' && args[0] === '/GETACTIVESCHEME') {
+          return Promise.resolve({ stdout: `GUID do Esquema de Energia: ${VALID_GUID}`, stderr: '' })
+        }
+        if (cmd === 'powercfg' && args[0] === '-query') {
+          return Promise.resolve({
+            stdout: [
+              '    Índice de Configurações Possíveis: 000',
+              '    Índice de Configurações de Correntes Alternadas Atuais: 0x00000000',
+              '    Índice de Configurações de Correntes Contínuas Atuais: 0x00000064',
+            ].join('\r\n'),
+            stderr: '',
+          })
         }
         if (cmd === 'powercfg' && args[0] === '/LIST') {
           return Promise.resolve({ stdout: VALID_GUID, stderr: '' })

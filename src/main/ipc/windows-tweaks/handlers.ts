@@ -11,6 +11,7 @@ import { isAdmin } from '../../services/elevation'
 import { execFileAsync, psUtf8 } from '../../services/exec-utf8'
 import { getLogger } from '../../services/logger.service'
 import type { WindowGetter } from '../index'
+import { POWERCFG_SETTINGS, parsePowerCfgAcIndex } from './powercfg-settings'
 import { CONTEXT_MENU_TWEAKS, registerContextMenuTweaks } from './tweaks/context-menu'
 import { registerGamingTweaks } from './tweaks/gaming'
 import { NETWORK_TWEAKS, registerNetworkTweaks } from './tweaks/network'
@@ -45,43 +46,7 @@ async function runPsScript(script: string): Promise<string> {
   return String(stdout)
 }
 
-const POWERCFG_TWEAKS = new Set(['pcie-aspm-off', 'usb-selective-suspend-off', 'processor-min-max'])
-
-const POWERCFG_SETTINGS: Record<
-  string,
-  { subgroup: string; setting: string; applyValue: number; revertValue: number }[]
-> = {
-  'pcie-aspm-off': [
-    {
-      subgroup: 'ee19f59b-bb67-4979-a67f-5f16dfc4bcae',
-      setting: '0a717a8c-0a10-4e57-9b23-2b0ad0b32ec8',
-      applyValue: 0,
-      revertValue: 2,
-    },
-  ],
-  'usb-selective-suspend-off': [
-    {
-      subgroup: '2a737441-1930-4402-8d77-b2bebba308a3',
-      setting: '48e6b7a6-50f5-4782-a5d4-53bb8f07e226',
-      applyValue: 0,
-      revertValue: 1,
-    },
-  ],
-  'processor-min-max': [
-    {
-      subgroup: '54533251-82be-4824-96c1-47b60b740d00',
-      setting: '893dee8e-2bef-41e0-89c6-b55d0929964c',
-      applyValue: 100,
-      revertValue: 5,
-    },
-    {
-      subgroup: '54533251-82be-4824-96c1-47b60b740d00',
-      setting: 'bc5038f7-23e0-4960-96da-33abaf5935ec',
-      applyValue: 100,
-      revertValue: 100,
-    },
-  ],
-}
+const POWERCFG_TWEAKS = new Set(Object.keys(POWERCFG_SETTINGS))
 
 async function applyPowerCfgTweak(tweakId: string, action: 'apply' | 'revert'): Promise<void> {
   const settings = POWERCFG_SETTINGS[tweakId]
@@ -154,11 +119,15 @@ async function checkPowerCfgTweak(tweakId: string, expectedValue: number): Promi
       )
       return false
     }
-    const match = stdout.match(/Current AC Power Setting Index: 0x([0-9a-fA-F]+)/i)
-    if (!match) return false
-    const hex = match[1]
-    if (hex === undefined) return false
-    if (Number.parseInt(hex, 16) !== expectedValue) return false
+    const acIndex = parsePowerCfgAcIndex(stdout)
+    if (acIndex === null) {
+      getLogger().warning(
+        'windows-tweaks',
+        `checkPowerCfgTweak could not parse the index for scheme ${schemeGuid}, subgroup ${s.subgroup}, setting ${s.setting}`,
+      )
+      return false
+    }
+    if (acIndex !== expectedValue) return false
   }
   return true
 }

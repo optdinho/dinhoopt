@@ -13,11 +13,13 @@ import type {
   ContextMenuApplyRequest,
   ContextMenuApplyResult,
   ContextMenuScanResult,
+  CurrentDns,
   DiNhoSettings,
   DiskNode,
   DiskRepairProgress,
   DiskRepairResult,
   DiskSmartInfo,
+  DnsBenchmarkResult,
   DnsPreset,
   DriveInfo,
   DriverCleanResult,
@@ -76,6 +78,7 @@ import type {
   PowerPlanCreateResult,
   PowerPlanDeleteResult,
   PowerPlanInfo,
+  PowerPlanUnlockResult,
   PrivacyApplyResult,
   PrivacyScanProgress,
   PrivacyShieldState,
@@ -365,8 +368,12 @@ export const systemMethods = {
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_REVERT, ids),
   windowsTweaksStatus: (): Promise<WindowsTweakState[]> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_STATUS),
   windowsTweaksGetDnsPresets: (): Promise<DnsPreset[]> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GET_DNS),
+  windowsTweaksBenchmarkDns: (): Promise<DnsBenchmarkResult[]> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_BENCHMARK_DNS),
+  windowsTweaksCurrentDns: (): Promise<CurrentDns> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_CURRENT_DNS),
   windowsTweaksSetDns: (primary: string, secondary?: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_SET_DNS, primary, secondary),
+  openExternal: (url: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
   onWindowsTweaksApplyProgress: (callback: (data: WindowsTweakApplyProgress) => void) =>
     onEvent(IPC.WINDOWS_TWEAKS_APPLY_PROGRESS, callback),
   onWindowsTweaksRevertProgress: (callback: (data: WindowsTweakApplyProgress) => void) =>
@@ -445,6 +452,7 @@ export const systemMethods = {
     ipcRenderer.invoke(IPC.POWER_PLANS_ACTIVATE, guid),
   powerPlansCreate: (name: string): Promise<PowerPlanCreateResult> => ipcRenderer.invoke(IPC.POWER_PLANS_CREATE, name),
   powerPlansDelete: (guid: string): Promise<PowerPlanDeleteResult> => ipcRenderer.invoke(IPC.POWER_PLANS_DELETE, guid),
+  powerPlansUnlockUltimate: (): Promise<PowerPlanUnlockResult> => ipcRenderer.invoke(IPC.POWER_PLANS_UNLOCK_ULTIMATE),
 
   customRulesList: (): Promise<{ name: string; content: string; size: number; addedAt: Date }[]> =>
     ipcRenderer.invoke(IPC.MALWARE_CUSTOM_RULES_LIST),

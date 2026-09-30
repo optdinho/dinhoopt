@@ -62,6 +62,7 @@ import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
 import { registerRecycleBinIpc } from './recycle-bin.ipc'
 import { registerRegistryCleanerIpc } from './registry-cleaner.ipc'
 import { registerServiceManagerIpc } from './service-manager.ipc'
+import { registerShellIpc } from './shell.ipc'
 import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
 import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
 import { registerStartupManagerIpc } from './startup-manager.ipc'
@@ -116,6 +117,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerLicenseIpc()
   registerBenchmarkIpc(getWindow)
   registerPowerPlansIpc()
+  registerShellIpc()
   registerStopedServicesIpc()
   registerLoggerIpc()
   registerHostsEditorIpc(getWindow)

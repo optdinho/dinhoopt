@@ -571,6 +571,12 @@ describe('preload API bridge', () => {
         expect(mockIpc.invoke).toHaveBeenCalled()
       })
     }
+
+    it('powerPlansUnlockUltimate calls invoke with no arguments', async () => {
+      mockIpc.invoke.mockResolvedValueOnce(null)
+      await (api.powerPlansUnlockUltimate as () => Promise<unknown>)()
+      expect(mockIpc.invoke).toHaveBeenCalledWith(IPC.POWER_PLANS_UNLOCK_ULTIMATE)
+    })
   })
 
   describe('hosts', () => {
@@ -590,6 +596,8 @@ describe('preload API bridge', () => {
       'windowsTweaksRevert',
       'windowsTweaksStatus',
       'windowsTweaksGetDnsPresets',
+      'windowsTweaksBenchmarkDns',
+      'windowsTweaksCurrentDns',
       'windowsTweaksSetDns',
       'windowsTweaksNetshTcp',
     ]) {

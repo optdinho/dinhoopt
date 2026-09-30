@@ -142,7 +142,7 @@ export const MMCSS_ENERGY_TWEAKS: WindowsTweakDef[] = [
     category: 'energy',
     level: 'full',
     hive: 'HKEY_LOCAL_MACHINE',
-    path: 'SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\ee19f59b-bb67-4979-a67f-5f16dfc4bcae\\0a717a8c-0a10-4e57-9b23-2b0ad0b32ec8',
+    path: 'SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\501a4d13-42af-4429-9fd1-a8218c268e20\\ee12f906-d277-404b-b6da-e5fa1a576df5',
     key: 'Default',
     kind: 'DWord',
     defaultValue: 2,

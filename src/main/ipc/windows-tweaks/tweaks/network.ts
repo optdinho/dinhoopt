@@ -1,10 +1,12 @@
 import { IPC } from '@shared/channels'
-import type { DnsPreset, WindowsTweakDef } from '@shared/types'
+import type { CurrentDns, DnsBenchmarkResult, DnsPreset, WindowsTweakDef } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getPlatform } from '../../../platform'
+import { benchmarkResolvers, rankResults } from '../../../services/dns-benchmark'
 import { execFileAsync, psUtf8 } from '../../../services/exec-utf8'
 import { getLogger } from '../../../services/logger.service'
 import type { WindowGetter } from '../../index'
+import { CURRENT_DNS_SCRIPT, parseCurrentDns } from '../current-dns'
 
 export const DNS_PRESETS: DnsPreset[] = [
   { name: 'Cloudflare', primary: '1.1.1.1', secondary: '1.0.0.1' },
@@ -247,6 +249,34 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
   ipcMain.handle(IPC.WINDOWS_TWEAKS_GET_DNS, async () => {
     getLogger().info('windows-tweaks', 'DNS presets requested')
     return DNS_PRESETS
+  })
+
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_CURRENT_DNS, async (): Promise<CurrentDns> => {
+    try {
+      const { stdout } = await execFileAsync(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psUtf8(CURRENT_DNS_SCRIPT)],
+        { timeout: 20000, windowsHide: true },
+      )
+      return parseCurrentDns(String(stdout))
+    } catch (err) {
+      getLogger().warning('windows-tweaks', `Could not read current DNS: ${err}`)
+      return { primary: null, secondary: null, source: 'none' }
+    }
+  })
+
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_BENCHMARK_DNS, async (): Promise<DnsBenchmarkResult[]> => {
+    const targets = DNS_PRESETS.flatMap((p) => [p.primary, p.secondary])
+    getLogger().info('windows-tweaks', `Benchmarking ${targets.length} DNS resolvers`)
+    try {
+      const results = await benchmarkResolvers(targets, { samples: 3, timeoutMs: 2500 })
+      const ranked = rankResults(results)
+      getLogger().success('windows-tweaks', `DNS benchmark done, best: ${ranked[0]?.server ?? 'none'}`)
+      return ranked
+    } catch (err) {
+      getLogger().error('windows-tweaks', `DNS benchmark failed: ${err}`)
+      throw err
+    }
   })
 
   ipcMain.handle(IPC.WINDOWS_TWEAKS_SET_DNS, async (_event, primary: string, secondary?: string) => {

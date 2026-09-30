@@ -9,6 +9,8 @@ function mockKudu() {
     windowsTweaksApply: vi.fn(),
     windowsTweaksRevert: vi.fn(),
     windowsTweaksSetDns: vi.fn(),
+    windowsTweaksBenchmarkDns: vi.fn(),
+    windowsTweaksCurrentDns: vi.fn(),
     windowsTweaksNetshTcp: vi.fn(),
     onWindowsTweaksApplyProgress: vi.fn(() => vi.fn()),
     onWindowsTweaksRevertProgress: vi.fn(() => vi.fn()),
@@ -65,7 +67,9 @@ describe('windows-tweaks-store', () => {
       progress: null,
       lastResult: null,
       revertResult: null,
-      expandedCategories: new Set(['mouse', 'network', 'system', 'gaming']),
+      expandedCategories: new Set(),
+      dnsBenchmark: [],
+      dnsBenchmarking: false,
     })
   })
 
@@ -110,6 +114,60 @@ describe('windows-tweaks-store', () => {
     const kudu = mockKudu()
     kudu.windowsTweaksGetDnsPresets.mockRejectedValue(new Error('fail'))
     await useWindowsTweaksStore.getState().loadDnsPresets()
+  })
+
+  it('loadCurrentDns stores the DNS in use', async () => {
+    const kudu = mockKudu()
+    const current = { primary: '8.8.8.8', secondary: '8.8.4.4', source: 'manual' }
+    kudu.windowsTweaksCurrentDns.mockResolvedValue(current)
+    await useWindowsTweaksStore.getState().loadCurrentDns()
+    expect(useWindowsTweaksStore.getState().currentDns).toEqual(current)
+  })
+
+  it('loadCurrentDns keeps the previous value when the read fails', async () => {
+    const kudu = mockKudu()
+    const current = { primary: '1.1.1.1', secondary: null, source: 'dhcp' } as const
+    useWindowsTweaksStore.setState({ currentDns: current })
+    kudu.windowsTweaksCurrentDns.mockRejectedValue(new Error('fail'))
+    await useWindowsTweaksStore.getState().loadCurrentDns()
+    expect(useWindowsTweaksStore.getState().currentDns).toEqual(current)
+  })
+
+  it('benchmarkDns stores the measured latencies', async () => {
+    const kudu = mockKudu()
+    const results = [{ server: '1.1.1.1', ok: true, avgMs: 12, bestMs: 10, samples: 3 }]
+    kudu.windowsTweaksBenchmarkDns.mockResolvedValue(results)
+    await useWindowsTweaksStore.getState().benchmarkDns()
+    expect(useWindowsTweaksStore.getState().dnsBenchmark).toEqual(results)
+    expect(useWindowsTweaksStore.getState().dnsBenchmarking).toBe(false)
+  })
+
+  it('benchmarkDns clears the results when the measurement fails', async () => {
+    const kudu = mockKudu()
+    useWindowsTweaksStore.setState({
+      dnsBenchmark: [{ server: '1.1.1.1', ok: true, avgMs: 12, bestMs: 10, samples: 3 }],
+    })
+    kudu.windowsTweaksBenchmarkDns.mockRejectedValue(new Error('fail'))
+    await useWindowsTweaksStore.getState().benchmarkDns()
+    expect(useWindowsTweaksStore.getState().dnsBenchmark).toEqual([])
+    expect(useWindowsTweaksStore.getState().dnsBenchmarking).toBe(false)
+  })
+
+  it('benchmarkDns ignores a second concurrent run', async () => {
+    const kudu = mockKudu()
+    let resolve: (v: unknown) => void = () => undefined
+    kudu.windowsTweaksBenchmarkDns.mockReturnValue(
+      new Promise((r) => {
+        resolve = r
+      }),
+    )
+    useWindowsTweaksStore.setState({ dnsBenchmarking: true })
+    await useWindowsTweaksStore.getState().benchmarkDns()
+    expect(kudu.windowsTweaksBenchmarkDns).not.toHaveBeenCalled()
+    useWindowsTweaksStore.setState({ dnsBenchmarking: false })
+    const pending = useWindowsTweaksStore.getState().benchmarkDns()
+    resolve([])
+    await pending
   })
 
   it('apply does nothing when no selections', async () => {
@@ -192,11 +250,17 @@ describe('windows-tweaks-store', () => {
     expect(useWindowsTweaksStore.getState().selectedIds.size).toBe(0)
   })
 
+  it('starts with every category collapsed', () => {
+    useWindowsTweaksStore.setState({ expandedCategories: new Set() })
+    expect(useWindowsTweaksStore.getState().expandedCategories.size).toBe(0)
+  })
+
   it('toggleCategory toggles expanded categories', () => {
-    useWindowsTweaksStore.getState().toggleCategory('mouse')
-    expect(useWindowsTweaksStore.getState().expandedCategories.has('mouse')).toBe(false)
+    useWindowsTweaksStore.setState({ expandedCategories: new Set() })
     useWindowsTweaksStore.getState().toggleCategory('mouse')
     expect(useWindowsTweaksStore.getState().expandedCategories.has('mouse')).toBe(true)
+    useWindowsTweaksStore.getState().toggleCategory('mouse')
+    expect(useWindowsTweaksStore.getState().expandedCategories.has('mouse')).toBe(false)
   })
 
   it('setDns calls kudu and returns result', async () => {
@@ -244,5 +308,47 @@ describe('windows-tweaks-store', () => {
     const result = await useWindowsTweaksStore.getState().netshTcpRevert()
     expect(result.success).toBe(false)
     expect(result.error).toBeDefined()
+  })
+
+  it('setDns refreshes currentDns so the "Atual" badge does not go stale', async () => {
+    const kudu = mockKudu()
+    useWindowsTweaksStore.setState({ currentDns: { primary: null, secondary: null, source: 'none' } })
+    kudu.windowsTweaksSetDns.mockResolvedValue(true)
+    kudu.windowsTweaksCurrentDns.mockResolvedValue({
+      primary: '8.8.8.8',
+      secondary: '8.8.4.4',
+      source: 'dhcp',
+    })
+
+    const ok = await useWindowsTweaksStore.getState().setDns('8.8.8.8', '8.8.4.4')
+
+    expect(ok).toBe(true)
+    expect(kudu.windowsTweaksSetDns).toHaveBeenCalledWith('8.8.8.8', '8.8.4.4')
+    expect(kudu.windowsTweaksCurrentDns).toHaveBeenCalled()
+    expect(useWindowsTweaksStore.getState().currentDns).toEqual({
+      primary: '8.8.8.8',
+      secondary: '8.8.4.4',
+      source: 'dhcp',
+    })
+  })
+
+  it('setDns does not read currentDns back when the change failed', async () => {
+    const kudu = mockKudu()
+    kudu.windowsTweaksSetDns.mockResolvedValue(false)
+
+    const ok = await useWindowsTweaksStore.getState().setDns('1.1.1.1')
+
+    expect(ok).toBe(false)
+    expect(kudu.windowsTweaksCurrentDns).not.toHaveBeenCalled()
+  })
+
+  it('setDns still reports failure when the read-back throws', async () => {
+    const kudu = mockKudu()
+    kudu.windowsTweaksSetDns.mockResolvedValue(true)
+    kudu.windowsTweaksCurrentDns.mockRejectedValue(new Error('read failed'))
+
+    const ok = await useWindowsTweaksStore.getState().setDns('1.1.1.1')
+
+    expect(ok).toBe(true)
   })
 })
