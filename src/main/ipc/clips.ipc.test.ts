@@ -84,6 +84,13 @@ vi.mock('../services/clips-publish', () => ({
   uploadClipToGofile: mockUploadClipToGofile,
 }))
 
+const mockAmdCache = vi.hoisted(() => ({
+  loadAmdGpuCache: vi.fn(() => false),
+  rememberAmdDetection: vi.fn(),
+  resolveAmdAvailable: vi.fn((inMemory: boolean | null) => inMemory === true),
+}))
+vi.mock('../services/clips-amd-cache', () => mockAmdCache)
+
 const mockIsPipeConnected = vi.hoisted(() => vi.fn().mockReturnValue(false))
 const mockIsEngineRunning = vi.hoisted(() => vi.fn().mockReturnValue(false))
 const mockSendWithFallback = vi.hoisted(() => vi.fn().mockResolvedValue({ success: true }))
@@ -125,6 +132,9 @@ function resetEngineMocks(): void {
   mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'test', payload: {} })
   mockSetEngineCapturing.mockReset()
   mockInvalidateDurationCache.mockReset()
+  mockAmdCache.loadAmdGpuCache.mockReturnValue(false)
+  mockAmdCache.rememberAmdDetection.mockReset()
+  mockAmdCache.resolveAmdAvailable.mockImplementation((inMemory: boolean | null) => inMemory === true)
 }
 
 import type { NonSharedBuffer } from 'node:buffer'
@@ -1350,6 +1360,43 @@ describe('CLIPS_GET_GPUS', () => {
     const result = (await handler()) as Array<{ index: number; name: string; vendorId: number }>
     expect(result).toEqual([])
   })
+
+  it('persists the AMD detection so it survives a restart with the engine stopped', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'AMD Radeon RX 9070', vendorId: 0x1002 }],
+    })
+    const handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    expect(mockAmdCache.rememberAmdDetection).toHaveBeenCalledWith(true)
+  })
+
+  it('persists a negative detection when only NVIDIA GPUs are present', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({
+      cmd: 'getGpus',
+      payload: [{ index: 0, name: 'NVIDIA RTX 5050', vendorId: 4318 }],
+    })
+    const handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    expect(mockAmdCache.rememberAmdDetection).toHaveBeenCalledWith(false)
+  })
+
+  it('does not persist a detection when the pipe is not connected', async () => {
+    mockIsPipeConnected.mockReturnValue(false)
+    const handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    expect(mockAmdCache.rememberAmdDetection).not.toHaveBeenCalled()
+  })
+
+  it('does not persist a detection when the GPU payload is not an array', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendPipeCommand.mockResolvedValue({ cmd: 'getGpus', payload: { error: 'no gpus' } })
+    const handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_GPUS)()
+    expect(mockAmdCache.rememberAmdDetection).not.toHaveBeenCalled()
+  })
 })
 
 describe('CLIPS_GET_ENHANCE_SUPPORT', () => {
@@ -1377,6 +1424,21 @@ describe('CLIPS_GET_ENHANCE_SUPPORT', () => {
     const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_ENHANCE_SUPPORT)
     const result = (await handler()) as { amd: boolean }
     expect(result.amd).toBe(true)
+  })
+
+  it('returns amd=true from the persisted cache when the engine is not running', async () => {
+    mockAmdCache.resolveAmdAvailable.mockReturnValue(true)
+    mockIsPipeConnected.mockReturnValue(false)
+    const handlers = captureHandlers()
+    const result = (await getAsyncHandler(handlers, IPC.CLIPS_GET_ENHANCE_SUPPORT)()) as { amd: boolean }
+    expect(result.amd).toBe(true)
+  })
+
+  it('consults the cache resolver so enhance works without a live pipe', async () => {
+    mockAmdCache.resolveAmdAvailable.mockReturnValue(true)
+    const handlers = captureHandlers()
+    await getAsyncHandler(handlers, IPC.CLIPS_GET_ENHANCE_SUPPORT)()
+    expect(mockAmdCache.resolveAmdAvailable).toHaveBeenCalled()
   })
 
   it('returns amd=false when only NVIDIA GPUs are present', async () => {

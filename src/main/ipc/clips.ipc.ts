@@ -12,6 +12,7 @@ import type {
   MicDeviceInfo,
 } from '@shared/types'
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { rememberAmdDetection, resolveAmdAvailable } from '../services/clips-amd-cache'
 import {
   buildEngineConfig,
   config as C,
@@ -537,7 +538,11 @@ export function registerClipsIpc(): void {
         const gpus = (resp.payload as GpuInfo[]).filter(
           (gpu) => gpu && typeof gpu === 'object' && typeof gpu.vendorId === 'number' && gpu.vendorId !== 0x1414,
         )
-        _amdDetected = gpus.some((gpu) => gpu.vendorId === AMD_VENDOR_ID)
+        // Persist the result so enhancement stays available on later runs even
+        // when the engine is stopped (the pipe cannot answer while it is down).
+        const amdDetected = gpus.some((gpu) => gpu.vendorId === AMD_VENDOR_ID)
+        _amdDetected = amdDetected
+        rememberAmdDetection(amdDetected)
         return gpus
       }
       return []
@@ -547,7 +552,7 @@ export function registerClipsIpc(): void {
   })
 
   ipcMain.handle(IPC.CLIPS_GET_ENHANCE_SUPPORT, (): { amd: boolean } => ({
-    amd: _amdDetected === true,
+    amd: resolveAmdAvailable(_amdDetected),
   }))
 
   ipcMain.handle(IPC.CLIPS_SET_FAVORITE, async (_event, clipName: unknown, favorite: unknown): Promise<IpcResult> => {
@@ -619,7 +624,7 @@ export function registerClipsIpc(): void {
       if (enhanceOption !== 'none') {
         if (!reEncode) {
           getLogger().warning('clips', 'TrimClip enhance ignored: enhancement requires re-encode')
-        } else if (_amdDetected !== true) {
+        } else if (!resolveAmdAvailable(_amdDetected)) {
           getLogger().warning('clips', 'TrimClip enhance ignored: no AMD GPU detected')
         } else {
           const res = await probeVideoResolution(getFfmpegPath(), safePath)
@@ -715,7 +720,7 @@ export function registerClipsIpc(): void {
       const enhanceOption = parseEnhanceOption(enhance)
       let enhanceVf: string | null = null
       if (enhanceOption !== 'none') {
-        if (_amdDetected !== true) {
+        if (!resolveAmdAvailable(_amdDetected)) {
           getLogger().warning('clips', 'MergeClips enhance ignored: no AMD GPU detected')
         } else {
           const res = await probeVideoResolution(getFfmpegPath(), safePaths[0]!)
