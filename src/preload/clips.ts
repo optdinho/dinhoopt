@@ -2,6 +2,7 @@ import { IPC } from '@shared/channels'
 import { buildClipVideoUrl } from '@shared/clip-video-url'
 import type {
   AudioSessionInfo,
+  ClipEncodeProgressEvent,
   ClipInfo,
   ClipMergeResult,
   ClipsConfig,
@@ -53,6 +54,24 @@ export const clipsMethods = {
     ipcRenderer.invoke(IPC.CLIPS_TRIM_CLIP, clipPath, startSeconds, endSeconds, reEncode, enhance, sharpness),
   clipsMergeClips: (clipPaths: string[], enhance?: EnhanceOption, sharpness?: number): Promise<ClipMergeResult> =>
     ipcRenderer.invoke(IPC.CLIPS_MERGE_CLIPS, clipPaths, enhance, sharpness),
+  clipsTrimCancel: (clipPath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_TRIM_CANCEL, clipPath),
+  clipsMergeCancel: (clipPaths: string[]): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.CLIPS_MERGE_CANCEL, clipPaths),
+  clipsOnTrimProgress: (callback: (data: ClipEncodeProgressEvent) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: ClipEncodeProgressEvent) => callback(data)
+    ipcRenderer.on(IPC.CLIPS_TRIM_PROGRESS, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_TRIM_PROGRESS, handler)
+    }
+  },
+  clipsOnMergeProgress: (callback: (data: ClipEncodeProgressEvent) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: ClipEncodeProgressEvent) => callback(data)
+    ipcRenderer.on(IPC.CLIPS_MERGE_PROGRESS, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_MERGE_PROGRESS, handler)
+    }
+  },
   clipsPublish: (
     clipPath: string,
   ): Promise<{ success: boolean; data?: { link?: string }; error?: string; code?: string }> =>

@@ -4,6 +4,8 @@ import { Combine, Maximize, Minimize, Pause, Play, Scissors, Sparkles, X } from 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { EncodeProgressBar } from './EncodeProgressBar'
+import { useClipEncodeProgress } from './useClipEncodeProgress'
 
 const fmt = (s: number) => {
   const m = Math.floor(s / 60)
@@ -310,6 +312,7 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
   const [startSec, setStartSec] = useState(0)
   const [endSec, setEndSec] = useState(clip?.duration || 60)
   const [trimming, setTrimming] = useState(false)
+  const [merging, setMerging] = useState(false)
   const [reEncode, setReEncode] = useState(false)
   const [enhance, setEnhance] = useState<EnhanceOption>('none')
   const [enhanceSupported, setEnhanceSupported] = useState(false)
@@ -332,6 +335,8 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
   const lastTimeUpdateRef = useRef(0)
+  const encodeProgress = useClipEncodeProgress()
+  const [encodeCancelError, setEncodeCancelError] = useState<string | null>(null)
 
   // Auto-enter fullscreen when the editor is opened from a thumbnail click.
   // A layout effect keeps the click's transient user activation alive, which
@@ -489,6 +494,8 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
       return
     }
     setTrimming(true)
+    setEncodeCancelError(null)
+    encodeProgress.start({ kind: 'trim', clipPath: clip!.path })
     try {
       const result: ClipTrimResult = await window.dinho.clipsTrimClip(
         clip!.path,
@@ -501,14 +508,24 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
       if (result.success) {
         toast.success(t(successKey))
         if (mountedRef.current) onSave()
+      } else if (result.cancelled) {
+        toast.info(t('trimCancelled'))
       } else {
         toast.error(result.error || t('trimFailed'))
       }
     } catch {
       toast.error(t('trimFailed'))
     } finally {
-      if (mountedRef.current) setTrimming(false)
+      if (mountedRef.current) {
+        setTrimming(false)
+        encodeProgress.stop()
+      }
     }
+  }
+
+  const handleCancelEncode = async () => {
+    const result = await encodeProgress.cancel()
+    if (mountedRef.current) setEncodeCancelError(result?.success ? null : t('encodeCancelFailed'))
   }
 
   const handleTrim = () => runExport(qualityEnhancementSelected, 'trimSuccess')
@@ -520,16 +537,26 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
       toast.error(t('needTwoClips'))
       return
     }
+    setMerging(true)
+    setEncodeCancelError(null)
+    encodeProgress.start({ kind: 'merge', clipPaths: mergeClips })
     try {
       const result: ClipMergeResult = await window.dinho.clipsMergeClips(mergeClips, enhance, sharpness)
       if (result.success) {
         toast.success(t('mergeSuccess'))
         if (mountedRef.current) onSave()
+      } else if (result.cancelled) {
+        toast.info(t('mergeCancelled'))
       } else {
         toast.error(result.error || t('mergeFailed'))
       }
     } catch {
       toast.error(t('mergeFailed'))
+    } finally {
+      if (mountedRef.current) {
+        setMerging(false)
+        encodeProgress.stop()
+      }
     }
   }
 
@@ -829,6 +856,11 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
                     >
                       {trimming ? t('trimming') : `${t('applyTrim')} (${fmt(trimDuration)})`}
                     </button>
+                    <EncodeProgressBar
+                      progress={encodeProgress}
+                      onCancel={handleCancelEncode}
+                      cancelError={encodeCancelError ?? undefined}
+                    />
                   </div>
                 </>
               )}
@@ -876,12 +908,17 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
             <button
               type="button"
               onClick={handleMerge}
-              disabled={mergeClips.length < 2}
+              disabled={merging || mergeClips.length < 2}
               className="w-full rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
               style={{ background: 'var(--accent)', color: '#fff' }}
             >
-              {t('applyMerge')}
+              {merging ? t('merging') : t('applyMerge')}
             </button>
+            <EncodeProgressBar
+              progress={encodeProgress}
+              onCancel={handleCancelEncode}
+              cancelError={encodeCancelError ?? undefined}
+            />
           </div>
         )}
       </div>

@@ -284,6 +284,21 @@ export async function getVideoDuration(filePath: string): Promise<number> {
   }
 }
 
+/**
+ * Cached duration of a clip, in seconds, or 0 when unknown.
+ *
+ * Used as the denominator for merge progress. Deliberately synchronous and
+ * probe-free: the encode must not wait on N extra ffmpeg launches just to draw
+ * a bar, and by the time the user picks clips the cache is already warm because
+ * listing the clip directory populates it. A cold cache degrades to an
+ * indeterminate bar rather than delaying the job.
+ */
+export function getCachedDurationSeconds(filePath: string): number {
+  const entry = _durationCache.get(filePath)
+  if (!entry) return 0
+  return Number.isFinite(entry.duration) && entry.duration > 0 ? entry.duration : 0
+}
+
 export async function readClipsFromDisk(): Promise<ClipInfo[]> {
   const dir = getDefaultOutputDir()
   if (!_cacheDirty && _clipsCache && _lastReadDir === dir) return _clipsCache

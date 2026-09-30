@@ -63,6 +63,7 @@ import { initAuditLog } from './services/audit-log'
 import { relaunchElevated } from './services/auto-elevate'
 import { initAutoUpdater } from './services/auto-updater'
 import { initBackupManager } from './services/backup-manager'
+import { cancelAllClipJobs } from './services/clip-encode-job'
 import { isAdmin } from './services/elevation'
 import { execNativeUtf8, killAllChildren, psUtf8 } from './services/exec-utf8'
 import { getLogger } from './services/logger.service'
@@ -680,7 +681,9 @@ function initGui(): void {
     stopEngineProcess()
     stopPeriodicRuleChecks()
     getThreatIntelService().stopAutoUpdate()
-    // Kill any active child processes (reg.exe, cmd.exe, etc.) to prevent orphans
+    // Stop in-flight clip re-encodes first so the registry does not outlive the
+    // process, then sweep any other child (reg.exe, cmd.exe, etc.) to prevent orphans.
+    cancelAllClipJobs()
     killAllChildren()
   })
 } // end initGui

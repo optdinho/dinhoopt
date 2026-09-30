@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(),
@@ -140,12 +140,14 @@ function resetEngineMocks(): void {
 import type { NonSharedBuffer } from 'node:buffer'
 import type { ExecFileException, ExecFileOptions } from 'node:child_process'
 import { execFile, spawn } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
 import { access, stat as fsStat, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { IPC } from '@shared/channels'
 import type { AudioSessionInfo, ClipInfo, ClipMergeResult, ClipTrimResult, MicDeviceInfo } from '@shared/types'
 import { MAX_SHARPNESS } from '@shared/types'
-import { ipcMain, shell } from 'electron'
+import { BrowserWindow, ipcMain, shell } from 'electron'
+import { cancelAllClipJobs } from '../services/clip-encode-job'
 import { config as clipsConfig } from '../services/clips-config-manager'
 import { registerClipsIpc } from './clips.ipc'
 import { resetClipsCache, stopEngineProcess } from './clips-engine-connection'
@@ -174,7 +176,7 @@ describe('registerClipsIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 24 clip handlers', () => {
+  it('registers all 28 clip handlers', () => {
     const handlers = captureHandlers()
     const expectedChannels = [
       IPC.CLIPS_GET_STATUS,
@@ -198,7 +200,9 @@ describe('registerClipsIpc', () => {
       IPC.CLIPS_GET_GPUS,
       IPC.CLIPS_GET_ENHANCE_SUPPORT,
       IPC.CLIPS_TRIM_CLIP,
+      IPC.CLIPS_TRIM_CANCEL,
       IPC.CLIPS_MERGE_CLIPS,
+      IPC.CLIPS_MERGE_CANCEL,
       IPC.CLIPS_RENAME_CLIP,
       IPC.CLIPS_PUBLISH,
       IPC.CLIPS_PUBLISH_CANCEL,
@@ -207,7 +211,7 @@ describe('registerClipsIpc', () => {
     for (const ch of expectedChannels) {
       expect(handlers.has(ch)).toBe(true)
     }
-    expect(handlers.size).toBe(26)
+    expect(handlers.size).toBe(28)
   })
 })
 
@@ -2654,5 +2658,280 @@ describe('CLIPS_PUBLISH_CANCEL', () => {
     expect(cancel({}, 'C:\\clips\\clip.mp4')).toEqual({ success: true })
     expect(signal?.aborted).toBe(true)
     await inFlight
+  })
+})
+
+/** Minimal ChildProcess double that streams stderr, like a real ffmpeg. */
+function makeStreamingProc() {
+  const stderr = new EventEmitter()
+  const listeners = new Map<string, Array<(...a: never[]) => void>>()
+  const proc = {
+    stderr,
+    kill: vi.fn(),
+    on: vi.fn((event: string, cb: (...a: never[]) => void) => {
+      listeners.set(event, [...(listeners.get(event) ?? []), cb])
+      return proc
+    }),
+    fire: (event: string, ...args: unknown[]) => {
+      for (const cb of listeners.get(event) ?? []) (cb as (...a: unknown[]) => void)(...args)
+    },
+  }
+  return proc
+}
+
+/** Reads a `-progress` block off ffmpeg's stderr. */
+function progressChunk(outTimeSec: number, speed: number, done = false): Buffer {
+  return Buffer.from(
+    [
+      `out_time_us=${Math.round(outTimeSec * 1e6)}`,
+      `speed=${speed.toFixed(1)}x`,
+      `progress=${done ? 'end' : 'continue'}`,
+      '',
+    ].join('\n'),
+  )
+}
+
+describe('re-encode progress and cancellation', () => {
+  let send: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetEngineMocks()
+    // The job registry is module state; a test that leaves a job running would
+    // otherwise make the next one's cancel succeed against the wrong process.
+    cancelAllClipJobs()
+    // The cleanup path is `void unlink(x).catch(...)`, which needs a real
+    // promise; the shared double returns undefined by default.
+    vi.mocked(unlink).mockResolvedValue(undefined)
+    send = vi.fn()
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
+      { isDestroyed: () => false, webContents: { send } },
+    ] as unknown as ReturnType<typeof BrowserWindow.getAllWindows>)
+  })
+
+  afterEach(() => {
+    cancelAllClipJobs()
+  })
+
+  /**
+   * Starts a 0..10s re-encode and waits until ffmpeg is actually running.
+   * The handler awaits file checks before spawning, so the stderr listener is
+   * only attached a few microtasks after the call returns.
+   *
+   * `access`/`mkdir` are set here rather than relying on another test having
+   * done it: clearAllMocks() wipes calls but keeps implementations, so a shared
+   * default would make this helper pass in a full run and fail in isolation.
+   */
+  async function startTrim() {
+    vi.mocked(access).mockResolvedValue(undefined)
+    vi.mocked(mkdir).mockResolvedValue(undefined)
+    const proc = makeStreamingProc()
+    let done: ((e: Error | null, o: string, s: string) => void) | undefined
+    vi.mocked(execFile).mockImplementation((_c, _a, _o, cb) => {
+      done = cb as typeof done
+      return proc as never
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_TRIM_CLIP)
+    const promise = handler({}, 'clip.mp4', 0, 10, true, 'none', 0) as Promise<ClipTrimResult>
+    await vi.waitFor(() => expect(vi.mocked(execFile)).toHaveBeenCalled())
+    return { proc, finish: (err: Error | null) => done?.(err, '', ''), promise, handlers }
+  }
+
+  it('asks ffmpeg for the machine-readable progress stream', async () => {
+    const { finish } = await startTrim()
+    const args = vi.mocked(execFile).mock.calls[0]?.[1] as string[]
+    expect(args).toContain('-progress')
+    expect(args).toContain('pipe:2')
+    finish(null)
+  })
+
+  it('keeps -loglevel error so progress does not add log noise', async () => {
+    const { finish } = await startTrim()
+    const args = vi.mocked(execFile).mock.calls[0]?.[1] as string[]
+    expect(args[args.indexOf('-loglevel') + 1]).toBe('error')
+    finish(null)
+  })
+
+  it('pushes a reading to the renderer as ffmpeg reports progress', async () => {
+    const { proc, finish, promise } = await startTrim()
+    proc.stderr.emit('data', progressChunk(5, 2))
+
+    expect(send).toHaveBeenCalledWith(
+      IPC.CLIPS_TRIM_PROGRESS,
+      expect.objectContaining({
+        percent: 50,
+        outTimeSeconds: 5,
+        totalSeconds: 10,
+        etaSeconds: 2.5,
+        speed: 2,
+        done: false,
+      }),
+    )
+    finish(null)
+    await promise
+  })
+
+  it('always forwards the final reading so the bar can settle at 100', async () => {
+    const { proc, finish, promise } = await startTrim()
+    proc.stderr.emit('data', progressChunk(5, 2))
+    proc.stderr.emit('data', progressChunk(10, 2, true))
+    expect(send.mock.calls.at(-1)?.[1]).toMatchObject({ percent: 100, done: true, etaSeconds: 0 })
+    finish(null)
+    await promise
+  })
+
+  it('ignores stderr text that is not a progress block', async () => {
+    const { proc, finish, promise } = await startTrim()
+    proc.stderr.emit('data', Buffer.from('[libx264 @ 0] using SAR=1/1\nError: nope\n'))
+    expect(send).not.toHaveBeenCalled()
+    finish(null)
+    await promise
+  })
+
+  it('reassembles a progress block split across two chunks', async () => {
+    const { proc, finish, promise } = await startTrim()
+    const full = progressChunk(4, 2).toString('utf8')
+    const cut = Math.floor(full.length / 2)
+    proc.stderr.emit('data', Buffer.from(full.slice(0, cut)))
+    expect(send).not.toHaveBeenCalled()
+    proc.stderr.emit('data', Buffer.from(full.slice(cut)))
+    expect(send).toHaveBeenCalledWith(IPC.CLIPS_TRIM_PROGRESS, expect.objectContaining({ percent: 40 }))
+    finish(null)
+    await promise
+  })
+
+  it('deletes the partial output and reports a cancel, not a failure', async () => {
+    const { finish, promise, handlers } = await startTrim()
+    const cancel = handlers.get(IPC.CLIPS_TRIM_CANCEL)! as (_e: unknown, p: string) => { success: boolean }
+    expect(cancel({}, 'clip.mp4')).toEqual({ success: true })
+
+    // A killed ffmpeg reports an error; the user must not see a failure toast.
+    finish(new Error('killed'))
+    const result = await promise
+    expect(result).toEqual({ success: false, cancelled: true })
+    expect(unlink).toHaveBeenCalled()
+  })
+
+  it('kills the ffmpeg process when cancelling a trim', async () => {
+    const { proc, finish, promise, handlers } = await startTrim()
+    const cancel = handlers.get(IPC.CLIPS_TRIM_CANCEL)! as (_e: unknown, p: string) => { success: boolean }
+    expect(cancel({}, 'clip.mp4')).toEqual({ success: true })
+    expect(proc.kill).toHaveBeenCalled()
+    finish(new Error('killed'))
+    await promise
+  })
+
+  it('reports no re-encode in progress when cancelling an idle clip', () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    const handlers = captureHandlers()
+    const cancel = handlers.get(IPC.CLIPS_TRIM_CANCEL)! as (
+      _e: unknown,
+      p: string,
+    ) => { success: boolean; error?: string }
+    expect(cancel({}, 'clip.mp4')).toEqual({ success: false, error: 'No re-encode in progress' })
+  })
+
+  it('rejects a non-string cancel path', () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    const handlers = captureHandlers()
+    const cancel = handlers.get(IPC.CLIPS_TRIM_CANCEL)! as (
+      _e: unknown,
+      p: unknown,
+    ) => { success: boolean; error?: string }
+    expect(cancel({}, 42)).toEqual({ success: false, error: 'Invalid clip path' })
+  })
+
+  it('settles the trim only once when cancel and ffmpeg error race', async () => {
+    const { finish, promise, handlers } = await startTrim()
+    const cancel = handlers.get(IPC.CLIPS_TRIM_CANCEL)! as (_e: unknown, p: string) => { success: boolean }
+    cancel({}, 'clip.mp4')
+    finish(new Error('killed'))
+    finish(new Error('killed again'))
+    const result = await promise
+    expect(result).toEqual({ success: false, cancelled: true })
+  })
+
+  it('does not leak a job between two different clips', async () => {
+    const { finish, promise, handlers } = await startTrim()
+    const cancel = handlers.get(IPC.CLIPS_TRIM_CANCEL)! as (
+      _e: unknown,
+      p: string,
+    ) => { success: boolean; error?: string }
+    // A different clip has no job of its own.
+    expect(cancel({}, 'other.mp4')).toEqual({ success: false, error: 'No re-encode in progress' })
+    expect(cancel({}, 'clip.mp4')).toEqual({ success: true })
+    finish(new Error('killed'))
+    await promise
+  })
+
+  it('pushes merge progress on the merge channel and cancels it', async () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    vi.mocked(mkdir).mockResolvedValue(undefined)
+    const proc = makeStreamingProc()
+    let done: ((e: Error | null, o: string, s: string) => void) | undefined
+    vi.mocked(execFile).mockImplementation((_c, _a, _o, cb) => {
+      done = cb as typeof done
+      return proc as never
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const promise = handler({}, ['a.mp4', 'b.mp4']) as Promise<ClipMergeResult>
+    await vi.waitFor(() => expect(vi.mocked(execFile)).toHaveBeenCalled())
+
+    proc.stderr.emit('data', progressChunk(1, 1))
+    expect(send).toHaveBeenCalledWith(IPC.CLIPS_MERGE_PROGRESS, expect.objectContaining({ jobKey: expect.any(String) }))
+
+    const cancel = handlers.get(IPC.CLIPS_MERGE_CANCEL)! as (_e: unknown, p: string[]) => { success: boolean }
+    expect(cancel({}, ['a.mp4', 'b.mp4'])).toEqual({ success: true })
+    expect(proc.kill).toHaveBeenCalled()
+
+    done?.(new Error('killed'), '', '')
+    expect(await promise).toEqual({ success: false, cancelled: true })
+  })
+
+  it('keys a merge job independently of the selection order', async () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    vi.mocked(mkdir).mockResolvedValue(undefined)
+    const proc = makeStreamingProc()
+    let done: ((e: Error | null, o: string, s: string) => void) | undefined
+    vi.mocked(execFile).mockImplementation((_c, _a, _o, cb) => {
+      done = cb as typeof done
+      return proc as never
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const promise = handler({}, ['a.mp4', 'b.mp4']) as Promise<ClipMergeResult>
+    await vi.waitFor(() => expect(vi.mocked(execFile)).toHaveBeenCalled())
+
+    const cancel = handlers.get(IPC.CLIPS_MERGE_CANCEL)! as (_e: unknown, p: string[]) => { success: boolean }
+    expect(cancel({}, ['b.mp4', 'a.mp4'])).toEqual({ success: true })
+    done?.(new Error('killed'), '', '')
+    await promise
+  })
+
+  it('reports an indeterminate bar when the duration cache is cold', async () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    vi.mocked(mkdir).mockResolvedValue(undefined)
+    const proc = makeStreamingProc()
+    let done: ((e: Error | null, o: string, s: string) => void) | undefined
+    vi.mocked(execFile).mockImplementation((_c, _a, _o, cb) => {
+      done = cb as typeof done
+      return proc as never
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_MERGE_CLIPS)
+    const promise = handler({}, ['a.mp4', 'b.mp4']) as Promise<ClipMergeResult>
+    await vi.waitFor(() => expect(vi.mocked(execFile)).toHaveBeenCalled())
+
+    proc.stderr.emit('data', progressChunk(1, 1))
+    // No cached duration means no honest percentage; the UI shows a working
+    // state rather than a bar stuck at a made-up number.
+    expect(send).toHaveBeenCalledWith(
+      IPC.CLIPS_MERGE_PROGRESS,
+      expect.objectContaining({ totalSeconds: 0, percent: 0 }),
+    )
+    done?.(null, '', '')
+    await promise
   })
 })

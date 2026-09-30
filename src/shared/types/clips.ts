@@ -135,12 +135,16 @@ export interface ClipTrimResult {
   success: boolean
   path?: string
   error?: string
+  /** True when the user cancelled the operation instead of it failing. */
+  cancelled?: boolean
 }
 
 export interface ClipMergeResult {
   success: boolean
   path?: string
   error?: string
+  /** True when the user cancelled the operation instead of it failing. */
+  cancelled?: boolean
 }
 
 /** AMF enhancement applied during re-encode (AMD GPUs only). 'none' = no enhancement. */
@@ -157,3 +161,27 @@ export type EnhanceOption = 'none' | 'sr' | 'frc' | 'sr+frc'
  * stop here instead of exposing the full 0..1 range.
  */
 export const MAX_SHARPNESS = 0.9
+
+/**
+ * Progress of a running re-encode (clip trim or merge), pushed from the main
+ * process while ffmpeg works.
+ *
+ * `jobKey` identifies which job the reading belongs to - the source clip path
+ * for a trim, the joined source paths for a merge - so a stale reading from a
+ * finished or superseded job is never attributed to the current one.
+ */
+export interface ClipEncodeProgressEvent {
+  jobKey: string
+  /** Completion percentage, clamped to [0, 100]. */
+  percent: number
+  /** Output position reached so far, in seconds. */
+  outTimeSeconds: number
+  /** Total expected output duration, in seconds. */
+  totalSeconds: number
+  /** Estimated seconds remaining, or null while it cannot be computed. */
+  etaSeconds: number | null
+  /** ffmpeg's speed factor (e.g. 12.4 for "12.4x"), or null when unknown. */
+  speed: number | null
+  /** True once ffmpeg reported completion for the job. */
+  done: boolean
+}

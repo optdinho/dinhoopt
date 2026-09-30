@@ -1,5 +1,5 @@
 import { IPC } from '@shared/channels'
-import type { ClipsConfig, ClipsEngineStatus } from '@shared/types'
+import type { ClipEncodeProgressEvent, ClipsConfig, ClipsEngineStatus } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
@@ -55,7 +55,9 @@ describe('clipsMethods invoke wrappers', () => {
     { name: 'clipsGetRunningProcesses', args: [], channel: IPC.CLIPS_GET_RUNNING_PROCESSES },
     { name: 'clipsSetFavorite', args: ['clip.mp4', true], channel: IPC.CLIPS_SET_FAVORITE },
     { name: 'clipsTrimClip', args: ['clip.mp4', 10, 20, true, 'none', 0.5], channel: IPC.CLIPS_TRIM_CLIP },
+    { name: 'clipsTrimCancel', args: ['C:\\clips\\clip.mp4'], channel: IPC.CLIPS_TRIM_CANCEL },
     { name: 'clipsMergeClips', args: [['a.mp4', 'b.mp4'], 'none', 0.5], channel: IPC.CLIPS_MERGE_CLIPS },
+    { name: 'clipsMergeCancel', args: [['a.mp4', 'b.mp4']], channel: IPC.CLIPS_MERGE_CANCEL },
     { name: 'clipsPublish', args: ['C:\\clips\\clip.mp4'], channel: IPC.CLIPS_PUBLISH },
     { name: 'clipsPublishCancel', args: ['C:\\clips\\clip.mp4'], channel: IPC.CLIPS_PUBLISH_CANCEL },
     { name: 'clipsOpenExternal', args: ['https://dinho.dev/clip'], channel: IPC.CLIPS_OPEN_EXTERNAL },
@@ -172,4 +174,34 @@ describe('clipsMethods listener wrappers', () => {
     unsubscribe()
     expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_PUBLISH_PROGRESS, handler)
   })
+
+  const encodeProgressCases: Array<{ name: 'clipsOnTrimProgress' | 'clipsOnMergeProgress'; channel: string }> = [
+    { name: 'clipsOnTrimProgress', channel: IPC.CLIPS_TRIM_PROGRESS },
+    { name: 'clipsOnMergeProgress', channel: IPC.CLIPS_MERGE_PROGRESS },
+  ]
+
+  for (const { name, channel } of encodeProgressCases) {
+    it(`${name} forwards the whole progress event and can be unsubscribed`, () => {
+      const cb = vi.fn()
+      const unsubscribe = clipsMethods[name](cb)
+
+      expect(mockIpc.on).toHaveBeenCalledWith(channel, expect.any(Function))
+      const handler = mockIpc.on.mock.calls[0]?.[1] as (_event: unknown, data: ClipEncodeProgressEvent) => void
+      const event: ClipEncodeProgressEvent = {
+        jobKey: 'C:\\clips\\clip.mp4',
+        percent: 42.5,
+        outTimeSeconds: 8.5,
+        totalSeconds: 20,
+        etaSeconds: 11.5,
+        speed: 1.74,
+        done: false,
+      }
+
+      handler({}, event)
+      expect(cb).toHaveBeenCalledWith(event)
+
+      unsubscribe()
+      expect(mockIpc.removeListener).toHaveBeenCalledWith(channel, handler)
+    })
+  }
 })

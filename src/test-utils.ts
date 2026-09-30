@@ -114,6 +114,8 @@ export function mockKudu(): Record<string, Mock> {
     // Clips
     clipsPublish: vi.fn(() => Promise.resolve({ success: false })),
     clipsOpenExternal: vi.fn(() => Promise.resolve({ success: true })),
+    clipsTrimCancel: vi.fn(() => Promise.resolve({ success: true })),
+    clipsMergeCancel: vi.fn(() => Promise.resolve({ success: true })),
 
     // Settings
     settingsGet: vi.fn(),
@@ -162,6 +164,8 @@ export function mockKudu(): Record<string, Mock> {
     onComplianceProgress: vi.fn(() => vi.fn()),
     onVulnerabilityProgress: vi.fn(() => vi.fn()),
     clipsOnPublishProgress: vi.fn(() => vi.fn()),
+    clipsOnTrimProgress: vi.fn(() => vi.fn()),
+    clipsOnMergeProgress: vi.fn(() => vi.fn()),
   }
 
   if (typeof window === 'undefined') {

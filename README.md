@@ -399,7 +399,7 @@ npx playwright test
 
 ```
 📊 Cobertura atual: 95,7% de linhas · 94,5% de funções · 86,5% de branches
-   249 arquivos de teste · 7.293 testes (Vitest) · 2.212 testes (C#, Release)
+   252 arquivos de teste · 7.367 testes (Vitest) · 2.212 testes (C#, Release)
 ```
 
 ---
@@ -413,9 +413,9 @@ npx playwright test
 | Stores (Zustand) | 36 |
 | Componentes React | 124 |
 | Serviços | 117 |
-| Handlers IPC | ~235 |
-| Arquivos de teste (TS) | 248 |
-| Testes (TS) | 7.293 |
+| Handlers IPC | ~237 |
+| Arquivos de teste (TS) | 252 |
+| Testes (TS) | 7.367 |
 | Testes (C#) | 2.212 |
 | Cobertura de linhas | 95,7% |
 | Cobertura de branches | 86,5% |

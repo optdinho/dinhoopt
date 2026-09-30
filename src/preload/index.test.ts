@@ -739,7 +739,9 @@ describe('preload API bridge', () => {
       'clipsGetGpus',
       'clipsGetRunningProcesses',
       'clipsTrimClip',
+      'clipsTrimCancel',
       'clipsMergeClips',
+      'clipsMergeCancel',
     ]
     for (const m of methods) {
       it(`${m} calls invoke`, async () => {
@@ -748,6 +750,22 @@ describe('preload API bridge', () => {
         expect(mockIpc.invoke).toHaveBeenCalled()
       })
     }
+
+    it('clipsOnTrimProgress registers listener and returns unsubscribe', () => {
+      const cb = vi.fn()
+      const unsub = (api.clipsOnTrimProgress as (cb: (...args: unknown[]) => unknown) => () => void)(cb)
+      expect(mockIpc.on).toHaveBeenCalledWith(IPC.CLIPS_TRIM_PROGRESS, expect.any(Function))
+      unsub()
+      expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_TRIM_PROGRESS, expect.any(Function))
+    })
+
+    it('clipsOnMergeProgress registers listener and returns unsubscribe', () => {
+      const cb = vi.fn()
+      const unsub = (api.clipsOnMergeProgress as (cb: (...args: unknown[]) => unknown) => () => void)(cb)
+      expect(mockIpc.on).toHaveBeenCalledWith(IPC.CLIPS_MERGE_PROGRESS, expect.any(Function))
+      unsub()
+      expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_MERGE_PROGRESS, expect.any(Function))
+    })
 
     it('clipsOnEngineStatus registers listener and returns unsubscribe', () => {
       const cb = vi.fn()

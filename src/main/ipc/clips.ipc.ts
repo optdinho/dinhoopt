@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { IPC } from '@shared/channels'
 import type {
   AudioSessionInfo,
+  ClipEncodeProgressEvent,
   ClipInfo,
   ClipMergeResult,
   ClipTrimResult,
@@ -12,6 +13,14 @@ import type {
   MicDeviceInfo,
 } from '@shared/types'
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import {
+  cancelClipJob,
+  clearClipJob,
+  createProgressEmitter,
+  FFMPEG_PROGRESS_ARGS,
+  isClipJobCancelled,
+  registerClipJob,
+} from '../services/clip-encode-job'
 import { rememberAmdDetection, resolveAmdAvailable } from '../services/clips-amd-cache'
 import {
   buildEngineConfig,
@@ -37,6 +46,7 @@ import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
 import {
+  getCachedDurationSeconds,
   getCurrentStatus,
   invalidateClipsCache,
   invalidateDurationCache,
@@ -60,6 +70,23 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** Pushes a re-encode reading to every live window. */
+function sendClipProgress(channel: string, event: ClipEncodeProgressEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    win.webContents.send(channel, event)
+  }
+}
+
+/**
+ * Stable identity for a merge job, so the renderer can match readings to the
+ * job it started and cancel exactly that one. The order is normalised because
+ * the selection order carries no meaning for the key.
+ */
+function mergeJobKey(safePaths: string[]): string {
+  return [...safePaths].sort().join('|')
 }
 
 let _micDevicesCache: MicDeviceInfo[] | null = null
@@ -649,6 +676,8 @@ export function registerClipsIpc(): void {
         maxrateKbps: C.maxrateKbps,
         bufsizeKbps: C.bufsizeKbps,
       })
+      const totalSeconds = endSeconds - startSeconds
+      const jobKey = safePath
       return new Promise((resolve) => {
         const seekArgs = reEncode
           ? [
@@ -662,30 +691,65 @@ export function registerClipsIpc(): void {
               ...(vfChain ? ['-vf', vfChain] : []),
             ]
           : ['-ss', String(startSeconds), '-to', String(endSeconds), '-i', safePath, ...copyArgs]
-        const args = ['-y', '-loglevel', 'error', ...seekArgs, outPath]
-        const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
+        const args = ['-y', '-loglevel', 'error', ...FFMPEG_PROGRESS_ARGS, ...seekArgs, outPath]
+        // Settles the promise exactly once: ffmpeg reports a killed process as
+        // an error, and a user cancel must not surface as a failure.
+        let settled = false
+        const finish = (result: ClipTrimResult) => {
+          if (settled) return
+          settled = true
+          clearClipJob(jobKey)
+          resolve(result)
+        }
+        const emitter = createProgressEmitter(jobKey, totalSeconds, (event) => {
+          sendClipProgress(IPC.CLIPS_TRIM_PROGRESS, event)
+        })
+        const proc = execFile(getFfmpegPath(), args, { timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }, (err) => {
+          if (isClipJobCancelled(jobKey)) {
+            // A half-written file is worse than no file: it would show up in
+            // the grid as an unplayable clip.
+            void unlink(outPath).catch(() => {
+              /* ignore cleanup error */
+            })
+            getLogger().info('clips', 'TrimClip cancelled by user')
+            finish({ success: false, cancelled: true })
+            return
+          }
           if (err) {
             void unlink(outPath).catch(() => {
               /* ignore cleanup error */
             })
             getLogger().warning('clips', `TrimClip ffmpeg failed: ${err.message}`)
-            resolve({ success: false, error: err.message })
+            finish({ success: false, error: err.message })
           } else {
             invalidateClipsCache()
-            resolve({ success: true, path: outPath })
+            finish({ success: true, path: outPath })
           }
         })
+        registerClipJob(jobKey, proc)
+        // Undefined only in test doubles; execFile always pipes stderr in prod.
+        proc.stderr?.on('data', (chunk: Buffer) => emitter.push(chunk.toString('utf8')))
         trackChildProcess(proc)
         proc.on('error', (e) => {
           void unlink(outPath).catch(() => {
             /* ignore cleanup error */
           })
           getLogger().warning('clips', `TrimClip process error: ${e.message}`)
-          resolve({ success: false, error: e.message })
+          finish({ success: false, error: e.message })
         })
       })
     },
   )
+
+  ipcMain.handle(IPC.CLIPS_TRIM_CANCEL, (_event, clipPath: unknown): IpcResult => {
+    if (typeof clipPath !== 'string') return { success: false, error: 'Invalid clip path' }
+    const safePath = clipPathInOutputDir(clipPath)
+    if (!safePath || !cancelClipJob(safePath)) {
+      getLogger().warning('clips', 'Trim cancel failed: no re-encode in progress')
+      return { success: false, error: 'No re-encode in progress' }
+    }
+    return { success: true }
+  })
 
   ipcMain.handle(
     IPC.CLIPS_MERGE_CLIPS,
@@ -748,11 +812,17 @@ export function registerClipsIpc(): void {
       try {
         const lines = safePaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
         await writeFile(concatFile, lines.join('\n'), 'utf-8')
+        // The merged output is as long as the sum of its parts, which is the
+        // denominator the progress bar needs. Read from the warm duration cache
+        // so the encode never waits on extra ffmpeg probes.
+        const totalSeconds = safePaths.reduce((sum, p) => sum + getCachedDurationSeconds(p), 0)
+        const jobKey = mergeJobKey(safePaths)
         return await new Promise((resolve) => {
           const args = [
             '-y',
             '-loglevel',
             'error',
+            ...FFMPEG_PROGRESS_ARGS,
             '-f',
             'concat',
             '-safe',
@@ -762,19 +832,39 @@ export function registerClipsIpc(): void {
             ...streamArgs,
             outPath,
           ]
-          const proc = execFile(getFfmpegPath(), args, { timeout: 120_000 }, (err) => {
+          let settled = false
+          const finish = (result: ClipMergeResult) => {
+            if (settled) return
+            settled = true
+            clearClipJob(jobKey)
+            resolve(result)
+          }
+          const emitter = createProgressEmitter(jobKey, totalSeconds, (event) => {
+            sendClipProgress(IPC.CLIPS_MERGE_PROGRESS, event)
+          })
+          const proc = execFile(getFfmpegPath(), args, { timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }, (err) => {
             void unlink(concatFile).catch(() => {})
+            if (isClipJobCancelled(jobKey)) {
+              void unlink(outPath).catch(() => {
+                /* ignore cleanup error */
+              })
+              getLogger().info('clips', 'MergeClips cancelled by user')
+              finish({ success: false, cancelled: true })
+              return
+            }
             if (err) {
               void unlink(outPath).catch(() => {
                 /* ignore cleanup error */
               })
               getLogger().warning('clips', `MergeClips ffmpeg failed: ${err.message}`)
-              resolve({ success: false, error: err.message })
+              finish({ success: false, error: err.message })
             } else {
               invalidateClipsCache()
-              resolve({ success: true, path: outPath })
+              finish({ success: true, path: outPath })
             }
           })
+          registerClipJob(jobKey, proc)
+          proc.stderr?.on('data', (chunk: Buffer) => emitter.push(chunk.toString('utf8')))
           trackChildProcess(proc)
           proc.on('error', (e) => {
             void unlink(concatFile).catch(() => {})
@@ -782,7 +872,7 @@ export function registerClipsIpc(): void {
               /* ignore cleanup error */
             })
             getLogger().warning('clips', `MergeClips process error: ${e.message}`)
-            resolve({ success: false, error: e.message })
+            finish({ success: false, error: e.message })
           })
         })
       } catch (err) {
@@ -792,6 +882,24 @@ export function registerClipsIpc(): void {
       }
     },
   )
+
+  ipcMain.handle(IPC.CLIPS_MERGE_CANCEL, (_event, clipPaths: unknown): IpcResult => {
+    if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
+      return { success: false, error: 'At least 2 clips required' }
+    }
+    const safePaths: string[] = []
+    for (const p of clipPaths) {
+      if (typeof p !== 'string') return { success: false, error: 'Invalid clip path' }
+      const safe = clipPathInOutputDir(p)
+      if (!safe) return { success: false, error: 'Invalid clip path' }
+      safePaths.push(safe)
+    }
+    if (!cancelClipJob(mergeJobKey(safePaths))) {
+      getLogger().warning('clips', 'Merge cancel failed: no re-encode in progress')
+      return { success: false, error: 'No re-encode in progress' }
+    }
+    return { success: true }
+  })
 
   ipcMain.handle(IPC.CLIPS_OPEN_EXTERNAL, (_event, url: unknown): IpcResult => {
     if (typeof url !== 'string') {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ClipInfo, ClipTrimResult } from '@shared/types'
+import type { ClipEncodeProgressEvent, ClipInfo, ClipTrimResult } from '@shared/types'
 import { MAX_SHARPNESS } from '@shared/types'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,26 +14,61 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('lucide-react', () => {
   const Icon = ({ children, ...props }: { children?: React.ReactNode }) => <div {...props}>{children}</div>
-  const icons = ['Combine', 'Maximize', 'Minimize', 'Pause', 'Play', 'Scissors', 'Sparkles', 'X']
+  const icons = ['Combine', 'Loader2', 'Maximize', 'Minimize', 'Pause', 'Play', 'Scissors', 'Sparkles', 'X']
   const iconMap: Record<string, any> = {}
   for (const name of icons) iconMap[name] = Icon
   return iconMap
 })
 
 vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
 const mockGetEnhanceSupport = vi.fn()
 const mockGetVideoUrl = vi.fn()
 const mockTrim = vi.fn()
+const mockMerge = vi.fn()
+const mockTrimCancel = vi.fn()
+const mockMergeCancel = vi.fn()
+
+type ProgressListener = (e: ClipEncodeProgressEvent) => void
+const listeners: { trim: ProgressListener | undefined; merge: ProgressListener | undefined } = {
+  trim: undefined,
+  merge: undefined,
+}
 
 const makeDinho = () =>
   ({
     clipsGetEnhanceSupport: mockGetEnhanceSupport,
     clipsGetVideoUrl: mockGetVideoUrl,
     clipsTrimClip: mockTrim,
+    clipsMergeClips: mockMerge,
+    clipsTrimCancel: mockTrimCancel,
+    clipsMergeCancel: mockMergeCancel,
+    clipsOnTrimProgress: (cb: ProgressListener) => {
+      listeners.trim = cb
+      return () => {
+        listeners.trim = undefined
+      }
+    },
+    clipsOnMergeProgress: (cb: ProgressListener) => {
+      listeners.merge = cb
+      return () => {
+        listeners.merge = undefined
+      }
+    },
   }) as never
+
+const _progressEvent = (over: Partial<ClipEncodeProgressEvent> = {}): ClipEncodeProgressEvent => ({
+  jobKey: 'C:\\Clips\\a.mp4',
+  percent: 0,
+  outTimeSeconds: 0,
+  totalSeconds: 60,
+  etaSeconds: null,
+  speed: null,
+  done: false,
+  ...over,
+})
 
 const clip: ClipInfo = {
   name: 'a.mp4',
