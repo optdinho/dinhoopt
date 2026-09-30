@@ -2,7 +2,10 @@
   "name": "dinho-optimizer",
   "version": "2.0.1",
   "description": "DiNho Optimizer — Otimizador de sistema Windows",
-  "repository": "optdinho/optdinho",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/optdinho/dinhoopt.git"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -36,10 +39,7 @@
     "windows",
     "optimization"
   ],
-  "author": {
-    "name": "DiNho",
-    "email": "contato@dinhooptimizer.com"
-  },
+  "author": "DiNho <contato@dinhooptimizer.com>",
   "license": "Commercial",
   "devDependencies": {
     "@axe-core/react": "^4.13.0",
@@ -95,5 +95,13 @@
     "better-sqlite3@13.0.3": true,
     "esbuild@0.25.12": true,
     "electron-winstaller@5.4.0": true
-  }
+  },
+  "directories": {
+    "doc": "docs"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/optdinho/dinhoopt/issues"
+  },
+  "homepage": "https://github.com/optdinho/dinhoopt#readme"
 }
