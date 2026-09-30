@@ -399,7 +399,7 @@ npx playwright test
 
 ```
 📊 Cobertura atual: 95,7% de linhas · 94,5% de funções · 86,5% de branches
-   248 arquivos de teste · 7.268 testes (Vitest) · 2.212 testes (C#, Release)
+   249 arquivos de teste · 7.293 testes (Vitest) · 2.212 testes (C#, Release)
 ```
 
 ---
@@ -415,7 +415,7 @@ npx playwright test
 | Serviços | 117 |
 | Handlers IPC | ~235 |
 | Arquivos de teste (TS) | 248 |
-| Testes (TS) | 7.268 |
+| Testes (TS) | 7.293 |
 | Testes (C#) | 2.212 |
 | Cobertura de linhas | 95,7% |
 | Cobertura de branches | 86,5% |

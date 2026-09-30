@@ -145,3 +145,15 @@ export interface ClipMergeResult {
 
 /** AMF enhancement applied during re-encode (AMD GPUs only). 'none' = no enhancement. */
 export type EnhanceOption = 'none' | 'sr' | 'frc' | 'sr+frc'
+
+/**
+ * Ceiling for the `cas` sharpening strength exposed by the clip editor.
+ *
+ * ffmpeg accepts 0..1, but near 1 the filter stops being a sharpener and starts
+ * amplifying whatever it finds: high-frequency grain, chroma noise on flat color
+ * areas, and ringing along edges — the classic "deep frying" look. It also
+ * crushes dynamic range and distorts color transitions. 0.9 is the highest value
+ * that still reads as clean sharpening, so the slider and the IPC clamp both
+ * stop here instead of exposing the full 0..1 range.
+ */
+export const MAX_SHARPNESS = 0.9

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ClipInfo, ClipTrimResult } from '@shared/types'
+import { MAX_SHARPNESS } from '@shared/types'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ClipEditorModal } from './ClipEditorModal'
@@ -154,6 +155,28 @@ describe('ClipEditorModal', () => {
   it('defaults the re-encode toggle to off', () => {
     renderModal()
     expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('caps the sharpness slider at MAX_SHARPNESS instead of 1.0', () => {
+    renderModal()
+    const sharpness = document.querySelector('input[type="range"]') as HTMLInputElement
+    expect(sharpness.max).toBe(String(MAX_SHARPNESS))
+    expect(sharpness.max).not.toBe('1')
+  })
+
+  it('sends the ceiling value when the slider is pushed to its maximum', async () => {
+    mockTrim.mockResolvedValue({ success: true })
+    renderModal()
+
+    const sharpness = document.querySelector('input[type="range"]') as HTMLInputElement
+    fireEvent.change(sharpness, { target: { value: '1' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /applyTrim/ }))
+    await act(async () => {})
+
+    // Even if a stale/hostile value reaches the UI, the main-process clamp
+    // is the last line of defence; the UI must never offer 1.0.
+    expect(mockTrim).toHaveBeenCalledWith(clip.path, 0, 60, true, 'none', MAX_SHARPNESS)
   })
 
   it('improve quality forces a re-encode of the selected range', async () => {

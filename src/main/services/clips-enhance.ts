@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
-import type { EnhanceOption } from '@shared/types/clips'
+import { type EnhanceOption, MAX_SHARPNESS } from '@shared/types/clips'
+
+export { MAX_SHARPNESS }
 
 const ENHANCE_OPTIONS: readonly EnhanceOption[] = ['none', 'sr', 'frc', 'sr+frc']
 
@@ -45,20 +47,20 @@ export function buildAmfEnhanceVf(enhance: EnhanceOption, srcW: number, srcH: nu
 }
 
 /**
- * Normalizes a raw sharpness value (0..1) from IPC.
+ * Normalizes a raw sharpness value (0..MAX_SHARPNESS) from IPC.
  *
- * - finite number -> clamped to [0, 1]
+ * - finite number -> clamped to [0, MAX_SHARPNESS]
  * - anything else (undefined, string, NaN, Infinity, boolean) -> 0 (off)
  */
 export function normalizeSharpness(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(MAX_SHARPNESS, Math.max(0, value)) : 0
 }
 
 /**
  * Appends a `cas` (Contrast Adaptive Sharpening) filter to a `-vf` filter chain.
  *
  * - strength <= 0 or NaN -> the chain is returned unchanged (sharpening off)
- * - strength > 1          -> clamped to 1
+ * - strength > MAX_SHARPNESS -> clamped, to avoid the deep-frying artefacts
  * - strength is formatted with a decimal point (JS number toString is
  *   locale-independent), so ffmpeg always parses it correctly
  *
@@ -66,7 +68,7 @@ export function normalizeSharpness(value: unknown): number {
  */
 export function appendSharpnessFilter(chain: string | null, strength: number): string | null {
   if (!Number.isFinite(strength) || strength <= 0) return chain
-  const s = Math.min(1, strength)
+  const s = Math.min(MAX_SHARPNESS, strength)
   const cas = `cas=strength=${s}`
   return chain && chain.length > 0 ? `${chain},${cas}` : cas
 }

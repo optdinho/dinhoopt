@@ -4,6 +4,7 @@ import {
   AMD_VENDOR_ID,
   appendSharpnessFilter,
   buildAmfEnhanceVf,
+  MAX_SHARPNESS,
   normalizeSharpness,
   parseEnhanceOption,
   probeVideoResolution,
@@ -14,6 +15,13 @@ vi.mock('node:child_process', () => ({
 }))
 
 const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>
+
+describe('MAX_SHARPNESS', () => {
+  it('stays below 1 because cas at full strength deep-fries the image', () => {
+    expect(MAX_SHARPNESS).toBeLessThan(1)
+    expect(MAX_SHARPNESS).toBe(0.9)
+  })
+})
 
 describe('parseEnhanceOption', () => {
   it('returns the valid option as-is', () => {
@@ -61,14 +69,20 @@ describe('buildAmfEnhanceVf', () => {
 })
 
 describe('normalizeSharpness', () => {
-  it('clamps a valid number into [0, 1]', () => {
+  it('keeps a valid number inside [0, MAX_SHARPNESS]', () => {
     expect(normalizeSharpness(0.5)).toBe(0.5)
     expect(normalizeSharpness(0)).toBe(0)
-    expect(normalizeSharpness(1)).toBe(1)
+    expect(normalizeSharpness(0.9)).toBe(0.9)
   })
 
-  it('clamps values above 1 to 1 and below 0 to 0', () => {
-    expect(normalizeSharpness(2.5)).toBe(1)
+  it('clamps anything above MAX_SHARPNESS down to it', () => {
+    // cas strength=1 produces heavy grain/chroma noise and oversharpening
+    // artefacts (the "deep frying" effect), so the ceiling is deliberately < 1.
+    expect(normalizeSharpness(1)).toBe(MAX_SHARPNESS)
+    expect(normalizeSharpness(2.5)).toBe(MAX_SHARPNESS)
+  })
+
+  it('clamps negative values to 0', () => {
     expect(normalizeSharpness(-1)).toBe(0)
   })
 
@@ -94,8 +108,9 @@ describe('appendSharpnessFilter', () => {
     expect(appendSharpnessFilter(null, 0.4)).toBe('cas=strength=0.4')
   })
 
-  it('clamps strength above 1 to 1', () => {
-    expect(appendSharpnessFilter(null, 3)).toBe('cas=strength=1')
+  it('clamps strength above the ceiling down to it', () => {
+    expect(appendSharpnessFilter(null, 3)).toBe(`cas=strength=${MAX_SHARPNESS}`)
+    expect(appendSharpnessFilter(null, 1)).toBe(`cas=strength=${MAX_SHARPNESS}`)
   })
 
   it('returns the chain unchanged for strength 0 (off)', () => {

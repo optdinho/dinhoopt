@@ -144,6 +144,7 @@ import { existsSync } from 'node:fs'
 import { access, stat as fsStat, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { IPC } from '@shared/channels'
 import type { AudioSessionInfo, ClipInfo, ClipMergeResult, ClipTrimResult, MicDeviceInfo } from '@shared/types'
+import { MAX_SHARPNESS } from '@shared/types'
 import { ipcMain, shell } from 'electron'
 import { config as clipsConfig } from '../services/clips-config-manager'
 import { registerClipsIpc } from './clips.ipc'
@@ -1921,7 +1922,7 @@ describe('CLIPS_TRIM_CLIP', () => {
     expect(trimArgs.join(' ')).toContain('cas=strength=0.6')
   })
 
-  it('clamps sharpness above 1 to cas=strength=1', async () => {
+  it('clamps sharpness above the ceiling to cas=strength=0.9', async () => {
     vi.mocked(access).mockResolvedValue(undefined)
     vi.mocked(mkdir).mockResolvedValue(undefined)
     vi.mocked(execFile).mockImplementation(
@@ -1946,7 +1947,7 @@ describe('CLIPS_TRIM_CLIP', () => {
     const result = (await handler({}, 'clip.mp4', 10, 20, true, 'none', 2.5)) as ClipTrimResult
     expect(result.success).toBe(true)
     const trimArgs = vi.mocked(execFile).mock.calls.find((c) => (c[1] as string[]).includes('-ss'))?.[1] as string[]
-    expect(trimArgs.join(' ')).toContain('cas=strength=1')
+    expect(trimArgs.join(' ')).toContain(`cas=strength=${MAX_SHARPNESS}`)
   })
 
   it('ignores sharpness when re-encode is not enabled', async () => {

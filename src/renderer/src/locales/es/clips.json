@@ -122,7 +122,7 @@
   "stretchToFit": "Quitar barras negras",
   "stretchToFitTooltip": "Recorta las barras negras (letterbox/pillarbox) de la captura, dejando solo la imagen del juego en la proporción del cuadro de salida — sin distorcer. Solo tiene efecto cuando el juego se ejecuta en una proporción distinta a la del cuadro (p. ej. una ventana 16:10 con un juego 16:9).",
   "sharpness": "Nitidez",
-  "sharpnessTooltip": "Aplica nitidez adaptativa por contraste (ffmpeg cas) a la imagen grabada. 0 desactiva el filtro; valores más altos acentúan bordes, lo que puede hacer que capturas de bajo bitrate o ampliadas se vean más nítidas.",
+  "sharpnessTooltip": "Aplica nitidez adaptativa por contraste (ffmpeg cas) a la imagen grabada. 0 desactiva el filtro. Por encima de 0.5 el filtro empieza a amplificar grano y ruido cromatico, provocando un aspecto deep frying con contornos con halo, por eso el maximo es 0.9.",
   "sharpnessOff": "Desactivado",
   "replayBufferMode": "Buffer de reproducción",
   "replayBufferModeTooltip": "Controla dónde vive el buffer de reproducción. RAM: mantiene todo en memoria (ventana limitada). Híbrido: los últimos ~3 minutos de vídeo están en RAM, el resto va al disco (el audio siempre queda en memoria). Solo disco: prácticamente cero RAM — vídeo y audio van directo al disco; el guardado puede tardar más, pero el hardware (RAM/disco/CPU) se mantiene estable incluso en sesiones largas.",

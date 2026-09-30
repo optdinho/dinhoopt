@@ -122,7 +122,7 @@
   "stretchToFit": "Remove black bars",
   "stretchToFitTooltip": "Crops the black bars (letterbox/pillarbox) out of the capture, keeping only the game image at the output frame's aspect ratio — no distortion. Only has an effect when the game runs at a different aspect ratio than the frame (e.g. a 16:10 window with a 16:9 game).",
   "sharpness": "Sharpness",
-  "sharpnessTooltip": "Applies contrast adaptive sharpening (ffmpeg cas) to the recorded image. 0 disables the filter; higher values sharpen edges, which can help low-bitrate or upscaled captures look crisper.",
+  "sharpnessTooltip": "Applies contrast adaptive sharpening (ffmpeg cas) to the recorded image. 0 disables the filter. Values above 0.5 quickly start amplifying grain and chroma noise, causing a deep-fried look with ringing on edges, so the maximum is capped at 0.9.",
   "sharpnessOff": "Off",
   "replayBufferMode": "Replay buffer",
   "replayBufferModeTooltip": "Controls where the replay buffer lives. RAM: keeps everything in memory (limited window). Hybrid: ~3 min of video in RAM, the rest spills to disk (audio is always in memory). Disk only: virtually zero RAM — video and audio stream to disk; saving may take longer, but hardware (RAM/disk/CPU) stays stable even in long sessions.",

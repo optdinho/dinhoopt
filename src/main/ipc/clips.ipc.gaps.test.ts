@@ -42,7 +42,7 @@ const enhanceMock = vi.hoisted(() => ({
     return vf ? `${vf},cas=strength=${strength}` : `cas=strength=${strength}`
   }),
   buildAmfEnhanceVf: vi.fn(() => 'sr_amf'),
-  normalizeSharpness: vi.fn((v: unknown) => (typeof v === 'number' ? Math.min(1, Math.max(0, v)) : 0)),
+  normalizeSharpness: vi.fn((v: unknown) => (typeof v === 'number' ? Math.min(0.9, Math.max(0, v)) : 0)),
   parseEnhanceOption: vi.fn(() => 'none' as string),
   probeVideoResolution: vi.fn(async () => null as { w: number; h: number } | null),
 }))

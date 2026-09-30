@@ -1,4 +1,5 @@
 import type { ClipInfo, ClipMergeResult, ClipTrimResult, EnhanceOption } from '@shared/types'
+import { MAX_SHARPNESS } from '@shared/types'
 import { Combine, Maximize, Minimize, Pause, Play, Scissors, Sparkles, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -73,7 +74,7 @@ function SharpnessSlider({
       <input
         type="range"
         min={0}
-        max={1}
+        max={MAX_SHARPNESS}
         step={0.1}
         value={value}
         disabled={disabled}

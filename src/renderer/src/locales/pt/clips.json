@@ -122,7 +122,7 @@
   "stretchToFit": "Remover bordas pretas",
   "stretchToFitTooltip": "Recorta as barras pretas (letterbox/pillarbox) da captura, deixando só a imagem do jogo na proporção do quadro de saída — sem distorcer. Só tem efeito quando o jogo roda numa proporção diferente da do quadro (ex.: janela 16:10 com jogo 16:9).",
   "sharpness": "Nitidez",
-  "sharpnessTooltip": "Aplica nitidez adaptativa por contraste (ffmpeg cas) na imagem gravada. 0 desativa o filtro; valores mais altos acentuam bordas, o que pode deixar capturas de baixo bitrate ou upscaled mais nítidas.",
+  "sharpnessTooltip": "Aplica nitidez adaptativa por contraste (ffmpeg cas) na imagem gravada. 0 desativa o filtro. Acima de 0.5 o filtro passa a amplificar grain e ruido cromatico, deixando a imagem com aspecto de deep frying e contorno ringando, por isso o maximo e 0.9.",
   "sharpnessOff": "Desligado",
   "replayBufferMode": "Buffer de replay",
   "replayBufferModeTooltip": "Controla onde o replay buffer vive. RAM: guarda tudo em memória (janela limitada). Híbrido: últimos ~3 min de vídeo ficam em RAM, o restante vai pro disco (áudio sempre fica em memória). Só disco: praticamente zero RAM — vídeo e áudio vão direto pro disco; o salvamento pode demorar mais, mas o hardware (RAM/disco/CPU) fica estável mesmo em sessões longas.",
