@@ -403,6 +403,27 @@ describe('remote-license', () => {
       const result = await activateLicense('MY-KEY')
       expect(result.valid).toBe(true)
     })
+
+    // Regressao: o token de admin vivia hardcoded no fonte, que e repo
+    // publico. `validate` e rota publica, entao o app funciona sem token.
+    it('omits the token field entirely when none is configured', async () => {
+      fs.writeFileSync(path.join(testRoot, 'license-config.json'), JSON.stringify({ url: 'https://x.test' }), 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+
+      await activateLicense('MY-KEY')
+      const payload = JSON.parse(mockNet.getCapturedPayload())
+
+      expect('token' in payload).toBe(false)
+    })
+
+    it('never sends the legacy hardcoded admin token', async () => {
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+
+      await activateLicense('MY-KEY')
+      const payload = JSON.parse(mockNet.getCapturedPayload())
+
+      expect(JSON.stringify(payload)).not.toContain('DiNhoTOKEN0001')
+    })
   })
 
   // ── API response edge cases ──────────────────────────────────────

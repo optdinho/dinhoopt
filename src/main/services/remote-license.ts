@@ -5,14 +5,17 @@ import { app, net } from 'electron'
 import { getSecret } from './env-sanitize'
 import { generateHwid } from './hwid'
 import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './license-store'
-import { getLogger } from './logger.service'
 
 const NETWORK_TIMEOUT = 20_000
 const MAX_RETRIES = 2
 
 const FALLBACK_URL = 'https://crimson-wildflower-4de0.mirandaotabol.workers.dev'
-const FALLBACK_TOKEN = 'DiNhoTOKEN0001'
 
+// O app so usa a rota publica `validate`, que nao exige token de admin.
+// Nao ha nenhum fallback hardcoded de proposito: um token embutido no
+// binario e extraivel por qualquer pessoa que baixe o app, e o repo e
+// publico. O token, quando existir, vem do build (secret do CI) ou do
+// license-config.json do usuario.
 function getLicenseConfig(): { url: string; token: string } {
   const configPath = join(app.getPath('userData'), 'license-config.json')
   try {
@@ -24,11 +27,7 @@ function getLicenseConfig(): { url: string; token: string } {
     }
   } catch {}
   const url = process.env.LICENSE_API_URL || FALLBACK_URL
-  const token = getSecret('LICENSE_API_TOKEN') || FALLBACK_TOKEN
-  if (!getSecret('LICENSE_API_TOKEN')) {
-    getLogger().warning('license', 'Using hardcoded fallback token — set LICENSE_API_TOKEN env var for production')
-  }
-  return { url, token }
+  return { url, token: getSecret('LICENSE_API_TOKEN') || '' }
 }
 
 let initialized = false
@@ -45,7 +44,9 @@ function ensureInit(): void {
 
 async function callApi(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { url: apiUrl, token: apiToken } = getLicenseConfig()
-  const payload = JSON.stringify({ ...body, token: apiToken })
+  // So anexa token quando existe — `validate` e rota publica e rejects
+  // payload com token vazio em algumas implementacoes.
+  const payload = JSON.stringify(apiToken ? { ...body, token: apiToken } : body)
   let lastBodySnippet = ''
 
   async function fetchOnce(url: string): Promise<{ status: number; body: Buffer }> {
@@ -91,7 +92,7 @@ async function callApi(body: Record<string, unknown>): Promise<Record<string, un
         })
       })
       req.setHeader('Content-Type', 'application/json')
-      req.setHeader('Authorization', `Bearer ${apiToken}`)
+      if (apiToken) req.setHeader('Authorization', `Bearer ${apiToken}`)
       req.setHeader('Accept', 'application/json')
       req.write(payload)
       req.end()
