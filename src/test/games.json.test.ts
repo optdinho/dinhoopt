@@ -23,7 +23,6 @@ function findGamesJsonPath(): string {
   ]
   for (const p of candidates) {
     if (existsSync(p)) {
-      console.log(`[games.json.resolve] ${p}`)
       return p
     }
   }
