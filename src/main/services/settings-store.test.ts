@@ -61,6 +61,7 @@ const defaults: Record<string, unknown> = {
       secureDelete: false,
       closeBrowsersBeforeClean: false,
       protectRecycleBin: true,
+      keepBrowserCookies: true,
     },
     exclusions: [],
     ignoredSoftwareUpdates: [],
@@ -115,6 +116,14 @@ describe('settings-store', () => {
       expect(result.cleaner.skipRecentMinutes).toBe(60)
     })
 
+    it('keeps default keepBrowserCookies when cleaner partial omits it', () => {
+      const result = deepMerge(
+        { cleaner: { keepBrowserCookies: true } } as Record<string, unknown>,
+        { cleaner: { secureDelete: true } } as Record<string, unknown>,
+      )
+      expect((result.cleaner as Record<string, unknown>).keepBrowserCookies).toBe(true)
+    })
+
     it('replaces arrays instead of merging', () => {
       expect(deepMerge({ exclusions: ['a', 'b'] }, { exclusions: ['c'] })).toEqual({ exclusions: ['c'] })
     })
@@ -156,6 +165,7 @@ describe('settings-store', () => {
 
       expect(result.minimizeToTray).toBe(true)
       expect(result.language).toBe('en')
+      expect(result.cleaner.keepBrowserCookies).toBe(true)
     })
 
     it('returns defaults when store.load throws', () => {

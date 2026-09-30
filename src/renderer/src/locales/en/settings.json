@@ -49,6 +49,8 @@
   "secureDeleteDesc": "Overwrite files before deletion for sensitive data (slower)",
   "closeBrowsersLabel": "Close browsers before clean",
   "closeBrowsersDesc": "Automatically close browsers to unlock cache files",
+  "keepBrowserCookiesLabel": "Keep site cookies",
+  "keepBrowserCookiesDesc": "Don't delete saved site cookies so you don't have to log in again",
   "createRestorePointLabel": "Create restore point",
   "createRestorePointDesc": "Create a system restore point before cleaning (requires admin)",
   "skipRecentFilesLabel": "Skip recent files",

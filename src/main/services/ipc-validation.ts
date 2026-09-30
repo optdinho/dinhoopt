@@ -179,7 +179,12 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
   if ('cleaner' in obj && obj.cleaner !== undefined) {
     const c = obj.cleaner as Record<string, unknown>
     if (typeof c !== 'object' || c === null || Array.isArray(c)) return null
-    const allowedCleanerKeys = new Set(['skipRecentMinutes', 'secureDelete', 'closeBrowsersBeforeClean'])
+    const allowedCleanerKeys = new Set([
+      'skipRecentMinutes',
+      'secureDelete',
+      'closeBrowsersBeforeClean',
+      'keepBrowserCookies',
+    ])
     for (const key of Object.keys(c)) {
       if (!allowedCleanerKeys.has(key)) return null
     }
@@ -190,6 +195,7 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
       return null
     if ('secureDelete' in c && typeof c.secureDelete !== 'boolean') return null
     if ('closeBrowsersBeforeClean' in c && typeof c.closeBrowsersBeforeClean !== 'boolean') return null
+    if ('keepBrowserCookies' in c && typeof c.keepBrowserCookies !== 'boolean') return null
   }
 }
 

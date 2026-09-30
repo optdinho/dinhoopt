@@ -49,6 +49,8 @@
   "secureDeleteDesc": "Sobrescribir los archivos antes de eliminarlos para datos confidenciales (más lento)",
   "closeBrowsersLabel": "Cerrar navegadores antes de limpiar",
   "closeBrowsersDesc": "Cerrar automáticamente los navegadores para desbloquear los archivos de caché",
+  "keepBrowserCookiesLabel": "Conservar cookies de los sitios",
+  "keepBrowserCookiesDesc": "No eliminar las cookies guardadas de los sitios para no tener que iniciar sesión de nuevo",
   "createRestorePointLabel": "Crear punto de restauración",
   "createRestorePointDesc": "Crear un punto de restauración del sistema antes de limpiar (requiere permisos de administrador)",
   "skipRecentFilesLabel": "Omitir archivos recientes",

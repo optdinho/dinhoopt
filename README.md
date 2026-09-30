@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.0-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.7%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.0-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -84,7 +84,7 @@
 | Módulo | Descrição |
 |--------|-----------|
 | **Limpeza do Sistema** | Temp files, logs, crash dumps, prefetch, cache DNS |
-| **Limpeza de Navegadores** | Chrome, Edge, Firefox, Brave, Opera, Vivaldi e mais |
+| **Limpeza de Navegadores** | Chrome, Edge, Firefox, Brave, Opera, Vivaldi e mais — com proteção de cookies por padrão |
 | **Limpeza de Apps** | Discord, VS Code, Spotify, Teams, Zoom, Slack e dezenas |
 | **Limpeza de Jogos** | Steam, Epic Games, EA App, GOG — caches e shaders |
 | **Limpeza do Registro** | Entradas inválidas e órfãs com backup automático |
@@ -399,7 +399,7 @@ npx playwright test
 
 ```
 📊 Cobertura atual: 95,7% de linhas · 94,5% de funções · 86,5% de branches
-   248 arquivos de teste · 7.262 testes (Vitest) · 2.212 testes (C#, Release)
+   248 arquivos de teste · 7.268 testes (Vitest) · 2.212 testes (C#, Release)
 ```
 
 ---
@@ -415,7 +415,7 @@ npx playwright test
 | Serviços | 117 |
 | Handlers IPC | ~235 |
 | Arquivos de teste (TS) | 248 |
-| Testes (TS) | 7.262 |
+| Testes (TS) | 7.268 |
 | Testes (C#) | 2.212 |
 | Cobertura de linhas | 95,7% |
 | Cobertura de branches | 86,5% |

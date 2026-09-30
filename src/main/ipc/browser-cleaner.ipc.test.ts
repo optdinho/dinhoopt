@@ -187,6 +187,27 @@ describe('BROWSER_SCAN handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockBrowserPaths.mockReturnValue(makeBrowserPaths())
+    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: true } })
+  })
+
+  it('does not scan cookies when keepBrowserCookies is true', async () => {
+    mockStatSync.mockReturnValue({ size: 2048 })
+    mockExistsSync.mockReturnValue(true)
+    mockReaddir.mockResolvedValue([])
+    mockScanDirectory.mockResolvedValue({
+      category: 'browser',
+      subcategory: 'test',
+      items: [{ id: '1', path: '/test', size: 100 }],
+      totalSize: 100,
+      itemCount: 1,
+    })
+
+    registerBrowserCleanerIpc(() => mockWindow() as any)
+    const handler = getHandler('cleaner:browser:scan')
+    const results = (await handler()) as Array<{ subcategory: string }>
+
+    const cookieResults = results.filter((r) => r.subcategory === 'Cookies')
+    expect(cookieResults).toHaveLength(0)
   })
 
   it('returns empty results when no browser directories exist', async () => {
@@ -340,6 +361,7 @@ describe('BROWSER_SCAN handler', () => {
   })
 
   it('creates cookie scan items when statSync succeeds', async () => {
+    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
     const chromeBase = '/home/user/.config/google-chrome'
     mockStatSync.mockReturnValue({ size: 2048 })
     mockExistsSync.mockImplementation((p: string) => {
@@ -383,6 +405,7 @@ describe('BROWSER_SCAN handler', () => {
   })
 
   it('scans Firefox base for cookie files', async () => {
+    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
     const firefoxBase = '/home/user/.mozilla/firefox'
     mockBrowserPaths.mockReturnValue({
       ...makeBrowserPaths(),
@@ -440,6 +463,7 @@ describe('BROWSER_SCAN handler', () => {
   })
 
   it('scans Firefox fork cache and cookies', async () => {
+    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
     mockBrowserPaths.mockReturnValue({
       ...makeBrowserPaths(),
       librewolf: { cache: '/fake/lw-cache', base: '/fake/lw-base' },

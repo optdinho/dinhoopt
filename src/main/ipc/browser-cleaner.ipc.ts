@@ -61,6 +61,7 @@ function scanCookieFiles(
 export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BROWSER_SCAN, async (): Promise<ScanResult[]> => {
     getLogger().info('browser-cleaner', 'Starting browser scan...')
+    const keepBrowserCookies = getSettings().cleaner.keepBrowserCookies !== false
     const results: ScanResult[] = []
     const category = CleanerType.Browser
     const browserPaths = getPlatform().paths.browserPaths()
@@ -105,19 +106,21 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
               }
             }
           }
-          // Cookies
-          const profilePath = join(browser.base, profile)
-          const cookieItems = scanCookieFiles(profilePath, COOKIE_FILES, browser.label, profile, category)
-          if (cookieItems.length > 0) {
-            cacheItems(cookieItems)
-            results.push({
-              category,
-              subcategory: 'Cookies',
-              group: browser.label,
-              items: cookieItems,
-              totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
-              itemCount: cookieItems.length,
-            })
+          // Cookies (skipped when keepBrowserCookies is enabled)
+          if (!keepBrowserCookies) {
+            const profilePath = join(browser.base, profile)
+            const cookieItems = scanCookieFiles(profilePath, COOKIE_FILES, browser.label, profile, category)
+            if (cookieItems.length > 0) {
+              cacheItems(cookieItems)
+              results.push({
+                category,
+                subcategory: 'Cookies',
+                group: browser.label,
+                items: cookieItems,
+                totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
+                itemCount: cookieItems.length,
+              })
+            }
           }
         }
       } else {
@@ -138,18 +141,20 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
             }
           }
         }
-        // Cookies
-        const cookieItems = scanCookieFiles(browser.base, COOKIE_FILES, browser.label, 'Default', category)
-        if (cookieItems.length > 0) {
-          cacheItems(cookieItems)
-          results.push({
-            category,
-            subcategory: 'Cookies',
-            group: browser.label,
-            items: cookieItems,
-            totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
-            itemCount: cookieItems.length,
-          })
+        // Cookies (skipped when keepBrowserCookies is enabled)
+        if (!keepBrowserCookies) {
+          const cookieItems = scanCookieFiles(browser.base, COOKIE_FILES, browser.label, 'Default', category)
+          if (cookieItems.length > 0) {
+            cacheItems(cookieItems)
+            results.push({
+              category,
+              subcategory: 'Cookies',
+              group: browser.label,
+              items: cookieItems,
+              totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
+              itemCount: cookieItems.length,
+            })
+          }
         }
       }
     }
@@ -174,8 +179,8 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
         getLogger().warning('browser-cleaner', 'Skipped inaccessible Firefox cache')
       }
     }
-    // Firefox cookies (in base profiles dir, not cache dir)
-    if (browserPaths.firefox.base && existsSync(browserPaths.firefox.base)) {
+    // Firefox cookies (in base profiles dir, not cache dir) — skipped when keepBrowserCookies is enabled
+    if (!keepBrowserCookies && browserPaths.firefox.base && existsSync(browserPaths.firefox.base)) {
       try {
         const profileDirs = await readdir(browserPaths.firefox.base, { withFileTypes: true })
         for (const dir of profileDirs) {
@@ -230,8 +235,8 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
       } catch {
         getLogger().warning('browser-cleaner', `Skipped inaccessible ${fork.label} cache`)
       }
-      // Fork cookies
-      if (fork.base && existsSync(fork.base)) {
+      // Fork cookies (skipped when keepBrowserCookies is enabled)
+      if (!keepBrowserCookies && fork.base && existsSync(fork.base)) {
         try {
           const profileDirs = await readdir(fork.base, { withFileTypes: true })
           for (const dir of profileDirs) {

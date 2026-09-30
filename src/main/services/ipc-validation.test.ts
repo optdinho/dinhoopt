@@ -936,6 +936,16 @@ describe('validateSettingsPartial', () => {
     expect(validateSettingsPartial({ cleaner: { closeBrowsersBeforeClean: 'yes' } })).toBeNull()
   })
 
+  it('accepts boolean keepBrowserCookies', () => {
+    expect(validateSettingsPartial({ cleaner: { keepBrowserCookies: true } })).not.toBeNull()
+    expect(validateSettingsPartial({ cleaner: { keepBrowserCookies: false } })).not.toBeNull()
+  })
+
+  it('rejects cleaner with non-boolean keepBrowserCookies', () => {
+    expect(validateSettingsPartial({ cleaner: { keepBrowserCookies: 'yes' } })).toBeNull()
+    expect(validateSettingsPartial({ cleaner: { keepBrowserCookies: 1 } })).toBeNull()
+  })
+
   it('rejects overly long registryIgnoredTweak', () => {
     expect(validateSettingsPartial({ registryIgnoredTweaks: ['x'.repeat(1025)] })).toBeNull()
   })

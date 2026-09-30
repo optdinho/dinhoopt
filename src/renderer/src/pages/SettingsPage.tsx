@@ -191,6 +191,12 @@ export function SettingsPage() {
             onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })}
           />
         </Row>
+        <Row label={t('keepBrowserCookiesLabel')} desc={t('keepBrowserCookiesDesc')}>
+          <Toggle
+            checked={settings.cleaner.keepBrowserCookies}
+            onChange={(v) => save({ cleaner: { ...settings.cleaner, keepBrowserCookies: v } })}
+          />
+        </Row>
         <Row label={t('skipRecentFilesLabel')} desc={t('skipRecentFilesDesc')} last>
           <select
             value={settings.cleaner.skipRecentMinutes}
