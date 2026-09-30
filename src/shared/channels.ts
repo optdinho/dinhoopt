@@ -210,6 +210,11 @@ export const IPC = {
   SERVICE_APPLY: 'service:apply',
   SERVICE_PROGRESS: 'service:progress',
 
+  // STOPED (curated service control panel)
+  STOPED_SERVICES_STATUS: 'stoped:services:status',
+  STOPED_SERVICES_SET: 'stoped:services:set',
+  STOPED_SERVICES_SET_ALL: 'stoped:services:set-all',
+
   // WinSxS Cleanup
   WINSXS_ANALYZE: 'winsxs:analyze',
   WINSXS_CLEAN: 'winsxs:clean',

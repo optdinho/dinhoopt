@@ -72,6 +72,7 @@ const MODULES: Module[] = [
     busySelector: '[class*="border-t-cyan"]',
   },
   { route: '/memory', label: 'Memória', buttons: ['Atualizar'], capMs: 45_000 },
+  { route: '/stoped', label: 'STOPED', buttons: ['Atualizar'], capMs: 30_000 },
   { route: '/hosts-editor', label: 'Hosts', buttons: ['Ler Arquivo Hosts'], capMs: 30_000 },
   { route: '/startup', label: 'Inicializador', buttons: [], auto: true, capMs: 5_000 },
   { route: '/schedules', label: 'Agendador', buttons: [], auto: true, capMs: 5_000 },

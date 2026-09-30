@@ -39,6 +39,7 @@ const ROUTES = [
   '/benchmark',
   '/clips',
   '/memory',
+  '/stoped',
   '/performance',
   '/uninstaller',
   '/history',

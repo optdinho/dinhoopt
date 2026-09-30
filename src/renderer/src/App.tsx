@@ -69,6 +69,7 @@ const ClipsPage = lazy(() => import('./pages/ClipsPage').then((m) => ({ default:
 const MemoryOptimizerPage = lazy(() =>
   import('./pages/MemoryOptimizerPage').then((m) => ({ default: m.MemoryOptimizerPage })),
 )
+const StopedPage = lazy(() => import('./pages/StopedPage').then((m) => ({ default: m.StopedPage })))
 const PowerPlansPage = lazy(() => import('./pages/PowerPlansPage').then((m) => ({ default: m.PowerPlansPage })))
 const CompliancePage = lazy(() => import('./pages/CompliancePage').then((m) => ({ default: m.CompliancePage })))
 const VulnerabilityScannerPage = lazy(() =>
@@ -270,6 +271,7 @@ function AnimatedRoutes() {
         <Route path="/benchmark" element={wrap(<BenchmarkPage />)} />
         <Route path="/clips" element={wrap(<ClipsPage />)} />
         <Route path="/memory" element={wrap(<MemoryOptimizerPage />)} />
+        <Route path="/stoped" element={wrap(<StopedPage />)} />
         <Route path="/performance" element={wrap(<PerformanceMonitorPage />)} />
         <Route path="/uninstaller" element={wrap(<UninstallerPage />)} />
         <Route path="/history" element={wrap(<HistoryPage />)} />
@@ -319,6 +321,7 @@ const ROUTE_TITLES: Record<string, { key: string; ns?: string } | string> = {
   '/benchmark': { key: 'benchmark' },
   '/clips': { key: 'clips' },
   '/memory': { key: 'memoryOptimizer' },
+  '/stoped': { key: 'stopedServices' },
   '/performance': { key: 'performance' },
   '/uninstaller': { key: 'uninstaller' },
   '/history': { key: 'history' },

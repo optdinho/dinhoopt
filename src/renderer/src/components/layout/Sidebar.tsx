@@ -27,6 +27,7 @@ import {
   Package,
   PackageCheck,
   PackageMinus,
+  PowerOff,
   Rocket,
   Scan,
   Search,
@@ -127,6 +128,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Sliders, labelKey: 'windowsTweaks', path: '/windows-tweaks' },
       { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
+      { icon: PowerOff, labelKey: 'stopedServices', path: '/stoped' },
       { icon: Zap, labelKey: 'startup', path: '/startup' },
       { icon: Activity, labelKey: 'performance', path: '/performance' },
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },

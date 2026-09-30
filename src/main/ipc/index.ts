@@ -66,6 +66,7 @@ import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
 import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
 import { registerStartupManagerIpc } from './startup-manager.ipc'
 import { registerStartupSafetyIpc } from './startup-safety.ipc'
+import { registerStopedServicesIpc } from './stoped-services.ipc'
 import { registerSystemCleanerIpc } from './system-cleaner.ipc'
 import { registerUninstallLeftoversIpc } from './uninstall-leftovers.ipc'
 import { registerVulnerabilityScannerIpc } from './vulnerability-scanner.ipc'
@@ -115,6 +116,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerLicenseIpc()
   registerBenchmarkIpc(getWindow)
   registerPowerPlansIpc()
+  registerStopedServicesIpc()
   registerLoggerIpc()
   registerHostsEditorIpc(getWindow)
   registerWinSxSCleanerIpc(getWindow)

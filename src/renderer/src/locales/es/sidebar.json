@@ -42,6 +42,7 @@
   "windowsTweaks": "Ajustes de Windows",
   "benchmark": "Benchmark",
   "memoryOptimizer": "Optimizador de memoria",
+  "stopedServices": "STOPED",
   "diskAnalyzer": "Analizador de disco",
   "duplicateFinder": "Buscador de duplicados",
   "largeFileFinder": "Buscador de archivos grandes",

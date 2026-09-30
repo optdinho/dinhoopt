@@ -92,6 +92,8 @@ import type {
   StartupBootTrace,
   StartupItem,
   StartupSafetyResult,
+  StopedChangeResult,
+  StopedStatusResult,
   TrimDriveInfo,
   TrimProgress,
   TrimRunResult,
@@ -505,4 +507,10 @@ export const systemMethods = {
     filePath: string,
   ): Promise<import('../main/services/behavioral-sandbox.service').SandboxResult | null> =>
     ipcRenderer.invoke(IPC.MALWARE_SANDBOX_ANALYZE, filePath),
+
+  stopedServicesStatus: (): Promise<StopedStatusResult> => ipcRenderer.invoke(IPC.STOPED_SERVICES_STATUS),
+  stopedServicesSet: (id: string, enabled: boolean): Promise<StopedChangeResult> =>
+    ipcRenderer.invoke(IPC.STOPED_SERVICES_SET, id, enabled),
+  stopedServicesSetAll: (enabled: boolean): Promise<StopedChangeResult> =>
+    ipcRenderer.invoke(IPC.STOPED_SERVICES_SET_ALL, enabled),
 }
