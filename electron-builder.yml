@@ -67,6 +67,12 @@ publish:
   # nao existe (index.ts so carrega o .env quando !app.isPackaged), quebrando
   # o auto-update. Repo publico = feed anonimo, sem token.
   private: false
+  # O electron-builder 26 usa `options.draft === false ? "release" : "draft"`
+  # (electron-publish/out/gitHubPublisher.js:55), ou seja, SEM isto toda
+  # release nasce como rascunho invisivel para o publico. So o --publish always
+  # nao basta: e preciso declarar releaseType. Sem esta linha a 2.0.2 ficou
+  # presa em draft e o badge "Baixar" do README apontava para nada.
+  releaseType: release
 
 # better-sqlite3 v13 loads its prebuilt from prebuilds/win32-x64.node via N-API
 # (no compilation needed) — skip @electron/rebuild, which would require Python+MSVC.
