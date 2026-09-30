@@ -59,17 +59,6 @@ const makeDinho = () =>
     },
   }) as never
 
-const _progressEvent = (over: Partial<ClipEncodeProgressEvent> = {}): ClipEncodeProgressEvent => ({
-  jobKey: 'C:\\Clips\\a.mp4',
-  percent: 0,
-  outTimeSeconds: 0,
-  totalSeconds: 60,
-  etaSeconds: null,
-  speed: null,
-  done: false,
-  ...over,
-})
-
 const clip: ClipInfo = {
   name: 'a.mp4',
   path: 'C:\\Clips\\a.mp4',

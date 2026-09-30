@@ -234,6 +234,31 @@ O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, s
 | **Matroska/EBML + MP4** | Container intermediário com timestamps e mux final |
 | **Named pipes** | IPC engine ↔ Electron (status, comandos, clips salvos) |
 
+### 🎮 Detecção de jogos no Modo Jogo
+
+Com **Detecção Automática** ligada, o Modo Jogo ativa as otimizações quando um jogo é
+detectado e as reverte quando ele fecha. A detecção tem duas etapas, porque nenhuma
+ delas sozinha cobre tudo:
+
+1. **Por nome de processo** — polling de `tasklist` a cada 30 s contra a lista embutida
+   mais o catálogo `games.json` do motor de clips (452 jogos), incluindo aliases.
+2. **Por classe de janela (fallback)** — quando nenhum nome corresponde, uma sonda
+   Win32 (`EnumWindows` + `GetClassName`) enumera as janelas visíveis e compara a
+   classe de cada uma contra as 177 `windowClass` do catálogo (mais 7 entradas
+   fixas espelhadas do C#). É o que detecta jogos com nome versionado, como
+   `FiveM_b3258_GTAProcess.exe`, que nenhum catálogo de nomes consegue enumerar.
+
+A sonda é cara de propósito: iniciar o PowerShell já custa ~1,3 s (medido), e a
+enumeração completa leva ~1,8 s. Por isso ela **só roda quando algum processo novo
+apareceu desde o último polling** — nunca a cada 30 s. Também não depende do motor
+C# estar rodando, aborta junto com o detector, e qualquer falha dela (PowerShell
+bloqueado por política, `Add-Type` negado) devolve lista vazia sem quebrar a
+detecção por nome.
+
+Quando o jogo vem da classe de janela, o evento carrega também o nome amigável do
+catálogo (ex.: `FiveM (GTA V)`), usado no banner e como chave alternativa para o
+perfil de otimizações do jogo.
+
 ---
 
 ## 🏗️ Arquitetura

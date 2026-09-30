@@ -303,6 +303,38 @@ describe('game-mode-store - initGameModeStore', () => {
     })
   })
 
+  it('auto-detect event prefers the display name over the build-stamped process name', async () => {
+    mockSettingsGet.mockResolvedValue({})
+    mockGameModeStatus.mockResolvedValue({ active: false, activatedAt: null, pendingRestore: false })
+
+    initGameModeStore()
+
+    const handler = mockOnGameModeAutoEvent.mock.calls[0]![0]
+    handler({
+      type: 'game-detected',
+      processName: 'FiveM_b3258_GTAProcess.exe',
+      displayName: 'FiveM (GTA V)',
+    })
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().detectedGame).toBe('FiveM (GTA V)')
+    })
+  })
+
+  it('auto-detect event falls back to the process name with no display name', async () => {
+    mockSettingsGet.mockResolvedValue({})
+    mockGameModeStatus.mockResolvedValue({ active: false, activatedAt: null, pendingRestore: false })
+
+    initGameModeStore()
+
+    const handler = mockOnGameModeAutoEvent.mock.calls[0]![0]
+    handler({ type: 'game-detected', processName: 'cs2.exe', displayName: null })
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().detectedGame).toBe('cs2.exe')
+    })
+  })
+
   it('auto-detect event clears detectedGame on game-ended', async () => {
     mockSettingsGet.mockResolvedValue({})
     mockGameModeStatus.mockResolvedValue({ active: false, activatedAt: null, pendingRestore: false })

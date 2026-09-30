@@ -427,7 +427,11 @@ export const systemMethods = {
   gameModeStatus: (): Promise<GameModeStatus> => ipcRenderer.invoke(IPC.GAME_MODE_STATUS),
   onGameModeProgress: (callback: (data: GameModeProgress) => void) => onEvent(IPC.GAME_MODE_PROGRESS, callback),
   onGameModeAutoEvent: (
-    callback: (data: { type: 'game-detected' | 'game-exited'; processName: string | null }) => void,
+    callback: (data: {
+      type: 'game-detected' | 'game-exited'
+      processName: string | null
+      displayName?: string | null
+    }) => void,
   ) => onEvent(IPC.GAME_MODE_AUTO_EVENT, callback),
   gameModeRunAudit: (phase: GameModeAuditReport['phase']): Promise<GameModeAuditReport> =>
     ipcRenderer.invoke(IPC.GAME_MODE_RUN_AUDIT, phase),

@@ -67,7 +67,10 @@ const mockIsDetectorRunning = vi.fn()
 const mockStartGameDetector = vi.fn()
 const mockStopGameDetector = vi.fn()
 const mockSuppressCurrentGame = vi.fn()
-vi.mock('../services/game-detector', () => ({
+vi.mock('../services/game-detector', async (importOriginal) => ({
+  // `resolveGameProfile` is pure and decides which profile the handler applies,
+  // so keep the real implementation and only stub the stateful detector.
+  ...(await importOriginal<typeof import('../services/game-detector')>()),
   getDetectedGame: mockGetDetectedGame,
   isDetectorRunning: mockIsDetectorRunning,
   startGameDetector: mockStartGameDetector,
@@ -1529,6 +1532,73 @@ describe('initGameDetector', () => {
 
     // Should have activated with the profile's optimizations
     expect(fsWriteFileSync).toHaveBeenCalled()
+  })
+
+  it('onGameDetected activates a profile keyed by the window-class display name', async () => {
+    mockGetSettings.mockReturnValue({
+      gameMode: {
+        enabledOptimizations: ['mem-clear-standby'],
+        customProcessKillList: [] as string[],
+        autoDetect: true,
+        autoDeactivate: true,
+        customGameProcesses: [],
+        gameProfiles: {
+          'FiveM (GTA V)': { gameName: 'FiveM', enabledOptimizations: ['sys-power-plan'] },
+        },
+      },
+    })
+    setMockSnapshot(null)
+
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
+    const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
+    await callbacks.onGameDetected('FiveM_b3258_GTAProcess.exe', 'FiveM (GTA V)')
+
+    expect(fsWriteFileSync).toHaveBeenCalled()
+  })
+
+  it('onGameDetected falls back to the default config with no matching profile', async () => {
+    mockGetSettings.mockReturnValue({
+      gameMode: {
+        enabledOptimizations: ['mem-clear-standby'],
+        customProcessKillList: [] as string[],
+        autoDetect: true,
+        autoDeactivate: true,
+        customGameProcesses: [],
+        gameProfiles: {},
+      },
+    })
+    setMockSnapshot(null)
+
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), vi.fn())
+    const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
+    await callbacks.onGameDetected('FiveM_b3258_GTAProcess.exe', 'FiveM (GTA V)')
+
+    expect(fsWriteFileSync).toHaveBeenCalled()
+  })
+
+  it('sends the display name in the game-detected event', async () => {
+    setMockSnapshot(null)
+    mockGetSettings.mockReturnValue({
+      gameMode: {
+        enabledOptimizations: ['mem-clear-standby'],
+        customProcessKillList: [] as string[],
+        autoDetect: true,
+        autoDeactivate: true,
+        customGameProcesses: [],
+        gameProfiles: {},
+      },
+    })
+
+    const sendAutoEvent = vi.fn()
+    initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), sendAutoEvent)
+    const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
+    await callbacks.onGameDetected('FiveM_b3258_GTAProcess.exe', 'FiveM (GTA V)')
+
+    expect(sendAutoEvent).toHaveBeenCalledWith({
+      type: 'game-detected',
+      processName: 'FiveM_b3258_GTAProcess.exe',
+      displayName: 'FiveM (GTA V)',
+    })
   })
 
   it('onGameDetected does not activate when snapshot exists', async () => {

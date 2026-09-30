@@ -5,18 +5,25 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 
 const mocks = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
+  execTracked: vi.fn(),
+  psArgs: vi.fn((script: string) => ['-NoProfile', '-NonInteractive', '-Command', script]),
 }))
 
 vi.mock('./exec-utf8', () => ({
   execFileAsync: (...args: unknown[]) => mocks.execFileAsync(...args),
+  execTracked: (...args: unknown[]) => mocks.execTracked(...args),
+  psArgs: (...args: unknown[]) => mocks.psArgs(...(args as [string])),
 }))
 
 import {
   findGame,
+  findGameWithDisplay,
   getDetectedGame,
+  getWindowClassLookup,
   isDetectorRunning,
   loadGameDatabase,
   normalizeGameName,
+  resolveGameProfile,
   startGameDetector,
   stopGameDetector,
   suppressCurrentGame,
@@ -266,6 +273,138 @@ describe('game exited callback', () => {
   })
 })
 
+describe('window class probe', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mocks.execTracked.mockResolvedValue({ stdout: '', stderr: '' })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const fivemWindow = 'grcWindow\t18260\tFiveM_b3258_GTAProcess.exe\n'
+
+  it('detects a build-stamped game through the probe and reports its friendly name', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n"FiveM_b3258_GTAProcess.exe"\n', stderr: '' })
+    mocks.execTracked.mockResolvedValue({ stdout: fivemWindow, stderr: '' })
+    const onDetected = vi.fn()
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(onDetected).toHaveBeenCalledWith('FiveM_b3258_GTAProcess.exe', 'FiveM (GTA V)')
+  })
+
+  it('does not probe when a known game already matched by process name', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n', stderr: '' })
+
+    startGameDetector({ onGameDetected: vi.fn(), onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(mocks.execTracked).not.toHaveBeenCalled()
+  })
+
+  it('does not re-probe while the process set is unchanged', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+
+    startGameDetector({ onGameDetected: vi.fn(), onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(mocks.execTracked).toHaveBeenCalledTimes(1)
+  })
+
+  it('probes again after a process disappears and comes back', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n"a.exe"\n', stderr: '' })
+
+    startGameDetector({ onGameDetected: vi.fn(), onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+    await vi.advanceTimersByTimeAsync(30_000)
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n"a.exe"\n', stderr: '' })
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(mocks.execTracked).toHaveBeenCalledTimes(2)
+  })
+
+  it('survives a probe that throws, reporting no game', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+    mocks.execTracked.mockRejectedValue(new Error('powershell blocked'))
+
+    startGameDetector({ onGameDetected: vi.fn(), onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(mocks.execTracked).toHaveBeenCalled()
+    expect(getDetectedGame()).toBeNull()
+  })
+
+  it('still detects a known game by name when the probe would fail', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"cs2.exe"\n"explorer.exe"\n', stderr: '' })
+    mocks.execTracked.mockRejectedValue(new Error('powershell blocked'))
+
+    startGameDetector({ onGameDetected: vi.fn(), onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(getDetectedGame()).toBe('cs2.exe')
+  })
+
+  it('reports the game as exited when the probe stops matching it', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"FiveM_b3258_GTAProcess.exe"\n', stderr: '' })
+    mocks.execTracked.mockResolvedValue({ stdout: fivemWindow, stderr: '' })
+    const onDetected = vi.fn()
+    const onExited = vi.fn()
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, [])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(getDetectedGame()).toBe('FiveM_b3258_GTAProcess.exe')
+
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+    mocks.execTracked.mockResolvedValue({ stdout: '', stderr: '' })
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(onExited).toHaveBeenCalled()
+    expect(getDetectedGame()).toBeNull()
+  })
+
+  it('aborts an in-flight probe when the detector stops', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"unknowngame.exe"\n', stderr: '' })
+    let capturedSignal: AbortSignal | undefined
+    mocks.execTracked.mockImplementation(
+      (_file: string, _args: string[], opts?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          capturedSignal = opts?.signal
+          opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        }),
+    )
+    const onDetected = vi.fn()
+
+    startGameDetector({ onGameDetected: onDetected, onGameExited: vi.fn() }, [])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(capturedSignal?.aborted).toBe(false)
+
+    stopGameDetector()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(capturedSignal?.aborted).toBe(true)
+    expect(onDetected).not.toHaveBeenCalled()
+  })
+
+  it('resets the probe gate when the detector restarts', async () => {
+    mocks.execFileAsync.mockResolvedValue({ stdout: '"explorer.exe"\n', stderr: '' })
+    const cbs = { onGameDetected: vi.fn(), onGameExited: vi.fn() }
+
+    startGameDetector(cbs, [])
+    await vi.advanceTimersByTimeAsync(0)
+    stopGameDetector()
+    startGameDetector(cbs, [])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(mocks.execTracked).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('poll concurrency guard', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -443,5 +582,116 @@ describe('games.json database loading', () => {
 
     const running = new Set(['DOTA2.exe'])
     expect(findGame(running, [])).toBe('DOTA2.exe')
+  })
+
+  it('indexes windowClass from the database', async () => {
+    writeFileSync(
+      tempDb,
+      JSON.stringify({
+        version: 2,
+        games: [{ processName: 'FiveM_GTAProcess', windowClass: 'grcWindow', displayName: 'FiveM (GTA V)' }],
+      }),
+    )
+    await loadGameDatabase(tempDb)
+
+    expect(getWindowClassLookup().get('grcwindow')).toBe('FiveM (GTA V)')
+  })
+
+  it('keeps the hardcoded class map when the database has no windowClass', async () => {
+    writeFileSync(tempDb, JSON.stringify({ version: 2, games: [{ processName: 'gris' }] }))
+    await loadGameDatabase(tempDb)
+
+    expect(getWindowClassLookup().get('grcwindow')).toBeDefined()
+  })
+
+  it('keeps the hardcoded class map when the database is unavailable', async () => {
+    await loadGameDatabase(join(tmpdir(), 'does-not-exist-games.json'))
+
+    expect(getWindowClassLookup().get('grcwindow')).toBeDefined()
+  })
+})
+
+describe('resolveGameProfile', () => {
+  const profiles = {
+    'cs2.exe': { gameName: 'CS2', enabledOptimizations: ['sys-power-plan'] },
+    'FiveM (GTA V)': { gameName: 'FiveM', enabledOptimizations: ['gpu-boost'] },
+  }
+
+  it('matches on the process name', () => {
+    expect(resolveGameProfile(profiles, 'cs2.exe')?.enabledOptimizations).toEqual(['sys-power-plan'])
+  })
+
+  it('matches on the display name of a window-class detection', () => {
+    expect(resolveGameProfile(profiles, 'FiveM_b3258_GTAProcess.exe', 'FiveM (GTA V)')?.enabledOptimizations).toEqual([
+      'gpu-boost',
+    ])
+  })
+
+  it('prefers the process name when both keys exist', () => {
+    const both = { ...profiles, 'FiveM_b3258_GTAProcess.exe': { gameName: 'ByName', enabledOptimizations: ['a'] } }
+    expect(resolveGameProfile(both, 'FiveM_b3258_GTAProcess.exe', 'FiveM (GTA V)')?.enabledOptimizations).toEqual(['a'])
+  })
+
+  it('returns undefined with no profiles at all', () => {
+    expect(resolveGameProfile(undefined, 'cs2.exe')).toBeUndefined()
+  })
+
+  it('returns undefined when no key matches', () => {
+    expect(resolveGameProfile(profiles, 'unknown.exe', 'Unknown Game')).toBeUndefined()
+  })
+
+  it('ignores a missing or empty display name', () => {
+    expect(resolveGameProfile(profiles, 'cs2.exe', null)).toEqual(profiles['cs2.exe'])
+    expect(resolveGameProfile(profiles, 'unknown.exe', '')).toBeUndefined()
+  })
+})
+
+describe('findGameWithDisplay', () => {
+  const dbPath = join(tmpdir(), 'game-detector-window-class-db.json')
+
+  // `loadGameDatabase` replaces the name set wholesale, so pin a known fixture
+  // instead of depending on whatever a previous suite left loaded.
+  beforeEach(async () => {
+    writeFileSync(
+      dbPath,
+      JSON.stringify({
+        version: 2,
+        games: [
+          { processName: 'cs2' },
+          { processName: 'FiveM_GTAProcess', windowClass: 'grcWindow', displayName: 'FiveM (GTA V)' },
+        ],
+      }),
+    )
+    await loadGameDatabase(dbPath)
+  })
+
+  afterAll(() => {
+    rmSync(dbPath, { force: true })
+  })
+
+  it('prefers a process-name match and reports no friendly name', () => {
+    const match = findGameWithDisplay(new Set(['cs2.exe']), [], [], getWindowClassLookup())
+    expect(match).toEqual({ processName: 'cs2.exe', displayName: null })
+  })
+
+  it('detects a build-stamped game by window class when the name is unknown', () => {
+    const windows = [{ className: 'grcWindow', pid: 18260, processName: 'FiveM_b3258_GTAProcess.exe' }]
+    const match = findGameWithDisplay(new Set(['fivem_b3258_gtaprocess.exe']), [], windows, getWindowClassLookup())
+    expect(match).toEqual({ processName: 'FiveM_b3258_GTAProcess.exe', displayName: 'FiveM (GTA V)' })
+  })
+
+  it('rejects a class match whose process is no longer running', () => {
+    const windows = [{ className: 'grcWindow', pid: 18260, processName: 'FiveM.exe' }]
+    expect(findGameWithDisplay(new Set(['explorer.exe']), [], windows, getWindowClassLookup())).toBeNull()
+  })
+
+  it('ignores a class match with an empty process name', () => {
+    const windows = [{ className: 'grcWindow', pid: 18260, processName: '' }]
+    expect(findGameWithDisplay(new Set(['']), [], windows, getWindowClassLookup())).toBeNull()
+  })
+
+  it('returns null when neither name nor class matches', () => {
+    const windows = [{ className: 'Notepad', pid: 1, processName: 'notepad.exe' }]
+    expect(findGameWithDisplay(new Set(['notepad.exe']), [], windows, getWindowClassLookup())).toBeNull()
   })
 })

@@ -35,7 +35,10 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('../../services/exec-utf8', () => ({ execFileAsync: vi.fn(async () => ({ stdout: '[]', stderr: '' })) }))
 vi.mock('../../services/logger.service', () => ({ getLogger: () => state.logger }))
-vi.mock('../../services/game-detector', () => ({
+vi.mock('../../services/game-detector', async (importOriginal) => ({
+  // `resolveGameProfile` is pure, so keep the real implementation and stub
+  // only the stateful detector.
+  ...(await importOriginal<typeof import('../../services/game-detector')>()),
   isDetectorRunning: vi.fn(() => false),
   startGameDetector: vi.fn(),
   stopGameDetector: vi.fn(),
@@ -468,6 +471,7 @@ describe('onGameDetected callback', () => {
     expect(win.webContents.send).toHaveBeenCalledWith(IPC.GAME_MODE_AUTO_EVENT, {
       type: 'game-detected',
       processName: 'game.exe',
+      displayName: null,
     })
   })
 
@@ -530,6 +534,7 @@ describe('refreshGameDetector', () => {
     expect(win.webContents.send).toHaveBeenCalledWith(IPC.GAME_MODE_AUTO_EVENT, {
       type: 'game-detected',
       processName: 'game.exe',
+      displayName: null,
     })
     await state.callbacks.onGameExited!()
     expect(win.webContents.send).toHaveBeenCalledWith(IPC.GAME_MODE_AUTO_EVENT, {

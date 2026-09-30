@@ -195,7 +195,9 @@ export function initGameModeStore(): void {
   window.dinho?.onGameModeAutoEvent?.((event) => {
     const s = useGameModeStore.getState()
     if (event.type === 'game-detected') {
-      s.setDetectedGame(event.processName)
+      // A window-class match carries a friendly name; prefer it over the raw
+      // build-stamped image name for display.
+      s.setDetectedGame(event.displayName || event.processName)
     } else {
       s.setDetectedGame(null)
     }

@@ -8,6 +8,7 @@ import { execFileAsync } from '../../services/exec-utf8'
 import type { GameAutoEvent } from '../../services/game-detector'
 import {
   isDetectorRunning,
+  resolveGameProfile,
   startGameDetector,
   stopGameDetector,
   suppressCurrentGame,
@@ -195,13 +196,15 @@ export function initGameDetector(
 
   startGameDetector(
     {
-      onGameDetected: async (processName) => {
+      onGameDetected: async (processName, displayName) => {
         if (readSnapshot() !== null) return
 
         const cfg = getSettings().gameMode
         if (cfg.enabledOptimizations.length === 0) return
 
-        const profile = cfg.gameProfiles?.[processName]
+        // A window-class match reports a friendly name, so accept a profile
+        // keyed by either the real image name or the friendly one.
+        const profile = resolveGameProfile(cfg.gameProfiles, processName, displayName)
         const activeCfg: GameModeConfig = profile ? { ...cfg, enabledOptimizations: profile.enabledOptimizations } : cfg
 
         autoActivated = true
@@ -211,7 +214,7 @@ export function initGameDetector(
           getLogger().info('game-mode', 'autoStartCapture enabled — starting clip capture')
           await startClipCapture()
         }
-        sendAutoEvent({ type: 'game-detected', processName })
+        sendAutoEvent({ type: 'game-detected', processName, displayName: displayName ?? null })
       },
       onGameExited: async () => {
         if (!autoActivated) return
