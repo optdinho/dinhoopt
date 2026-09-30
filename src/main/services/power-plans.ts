@@ -3,11 +3,15 @@ import type {
   PowerPlanCreateResult,
   PowerPlanDeleteResult,
   PowerPlanInfo,
+  PowerPlanUnlockResult,
 } from '@shared/types'
 import { execFileAsync, psUtf8 } from './exec-utf8'
 
 const GUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 const SANITIZE_RE = /[^A-Za-z0-9 ._\-()]/g
+
+/** Windows hides this scheme on every edition except Pro for Workstations; cloning it is what reveals it. */
+export const ULTIMATE_PERFORMANCE_GUID = 'e9a42b02-d5df-448d-aa00-03f14749eb61'
 
 async function ps(script: string, timeout = 15000): Promise<string> {
   const { stdout } = await execFileAsync(
@@ -20,7 +24,7 @@ async function ps(script: string, timeout = 15000): Promise<string> {
 
 export async function listPowerPlans(): Promise<PowerPlanInfo[]> {
   const out = await ps(
-    `powercfg /LIST | ForEach-Object { if ($_ -match '^.*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}).*\\s(.+)$') { $guid=$matches[1]; $name=$matches[2].Trim(); $isActive=$_ -match '\\*'; $hp=$name -match '(?i)alto desempenho|high performance|máximo|ultimate|desempenho'; $bal=$name -match '(?i)equilibrado|balanced|balan(ç|c)ed'; $ps=$name -match '(?i)economia|power saver|energy|economizer'; [PSCustomObject]@{Guid=$guid;Name=$name;IsActive=$isActive;IsHighPerformance=$hp;IsBalanced=$bal;IsPowerSaver=$ps} } } | ConvertTo-Json -Compress`,
+    `powercfg /LIST | ForEach-Object { if ($_ -match '^.*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}).*\\s(.+)$') { $guid=$matches[1]; $name=$matches[2].Trim(); $isActive=$_ -match '\\*'; $ult=($guid -eq '${ULTIMATE_PERFORMANCE_GUID}') -or ($name -match '(?i)ultimate|máximo|maximo'); $hp=$name -match '(?i)alto desempenho|high performance|desempenho' -or $ult; $bal=$name -match '(?i)equilibrado|balanced|balan(ç|c)ed'; $ps=$name -match '(?i)economia|power saver|energy|economizer'; [PSCustomObject]@{Guid=$guid;Name=$name;IsActive=$isActive;IsHighPerformance=$hp;IsBalanced=$bal;IsPowerSaver=$ps;IsUltimatePerformance=$ult} } } | ConvertTo-Json -Compress`,
     15000,
   )
   if (!out || out === '[]' || out === '') return []
@@ -39,6 +43,7 @@ export async function listPowerPlans(): Promise<PowerPlanInfo[]> {
     isHighPerformance: p.IsHighPerformance === true,
     isBalanced: p.IsBalanced === true,
     isPowerSaver: p.IsPowerSaver === true,
+    isUltimatePerformance: p.IsUltimatePerformance === true,
   }))
 }
 
@@ -70,6 +75,24 @@ export async function createPowerPlan(name: string): Promise<PowerPlanCreateResu
     return { success: true, guid: newGuid }
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : 'Failed to create power plan'
+    return { success: false, error: reason }
+  }
+}
+
+export async function unlockUltimatePerformance(): Promise<PowerPlanUnlockResult> {
+  try {
+    const out = await ps(`powercfg /DUPLICATESCHEME '${ULTIMATE_PERFORMANCE_GUID}' | Out-String`)
+    if (/already exists/i.test(out)) {
+      return { success: false, error: 'Ultimate Performance is already unlocked', alreadyExists: true }
+    }
+    if (/does not exist|cannot|unable/i.test(out)) {
+      return { success: false, error: 'Ultimate Performance is not available on this Windows build' }
+    }
+    const guidMatch = out.match(GUID_RE)
+    if (!guidMatch) return { success: false, error: 'Failed to unlock Ultimate Performance' }
+    return { success: true, guid: guidMatch[0] }
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : 'Failed to unlock Ultimate Performance'
     return { success: false, error: reason }
   }
 }

@@ -10,6 +10,7 @@ function makePlan(
     isHighPerformance: boolean
     isBalanced: boolean
     isPowerSaver: boolean
+    isUltimatePerformance: boolean
   }> = {},
 ) {
   return {
@@ -20,6 +21,7 @@ function makePlan(
     isHighPerformance: overrides.isHighPerformance ?? false,
     isBalanced: overrides.isBalanced ?? true,
     isPowerSaver: overrides.isPowerSaver ?? false,
+    isUltimatePerformance: overrides.isUltimatePerformance ?? false,
   }
 }
 
@@ -30,6 +32,7 @@ beforeEach(() => {
       powerPlansActivate: vi.fn(),
       powerPlansCreate: vi.fn(),
       powerPlansDelete: vi.fn(),
+      powerPlansUnlockUltimate: vi.fn(),
     },
   })
 })
@@ -106,6 +109,31 @@ describe('power-plans-store', () => {
     vi.mocked(window.dinho.powerPlansActivate).mockRejectedValue(new Error('network'))
     await usePowerPlansStore.getState().activatePlan('a')
     expect(usePowerPlansStore.getState().error).toBeTruthy()
+  })
+
+  it('unlockUltimate calls API and reloads plans on success', async () => {
+    vi.mocked(window.dinho.powerPlansUnlockUltimate).mockResolvedValue({ success: true, guid: 'new-1' })
+    vi.mocked(window.dinho.powerPlansList).mockResolvedValue([])
+    await usePowerPlansStore.getState().unlockUltimate()
+    expect(window.dinho.powerPlansUnlockUltimate).toHaveBeenCalled()
+    expect(window.dinho.powerPlansList).toHaveBeenCalled()
+    expect(usePowerPlansStore.getState().unlockingUltimate).toBe(false)
+  })
+
+  it('unlockUltimate surfaces the error and clears the flag on failure', async () => {
+    vi.mocked(window.dinho.powerPlansUnlockUltimate).mockResolvedValue({ success: false, error: 'not available' })
+    await usePowerPlansStore.getState().unlockUltimate()
+    const s = usePowerPlansStore.getState()
+    expect(s.error).toBe('not available')
+    expect(s.unlockingUltimate).toBe(false)
+  })
+
+  it('unlockUltimate sets error on exception', async () => {
+    vi.mocked(window.dinho.powerPlansUnlockUltimate).mockRejectedValue(new Error('boom'))
+    await usePowerPlansStore.getState().unlockUltimate()
+    const s = usePowerPlansStore.getState()
+    expect(s.error).toBeTruthy()
+    expect(s.unlockingUltimate).toBe(false)
   })
 
   it('createPlan calls API and reloads plans on success', async () => {

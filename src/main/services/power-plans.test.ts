@@ -13,6 +13,8 @@ import {
   deletePowerPlan,
   getActivePowerPlanGuid,
   listPowerPlans,
+  ULTIMATE_PERFORMANCE_GUID,
+  unlockUltimatePerformance,
 } from './power-plans'
 
 beforeEach(() => {
@@ -32,6 +34,40 @@ function mockFailure(message: string) {
 }
 
 describe('listPowerPlans', () => {
+  it('flags the hidden Ultimate Performance scheme', async () => {
+    const json = JSON.stringify([
+      {
+        Guid: ULTIMATE_PERFORMANCE_GUID,
+        Name: 'Desempenho Máximo',
+        IsActive: false,
+        IsHighPerformance: true,
+        IsBalanced: false,
+        IsPowerSaver: false,
+        IsUltimatePerformance: true,
+      },
+    ])
+    mockPsSuccess(json)
+    const plans = await listPowerPlans()
+    expect(plans[0]!.isUltimatePerformance).toBe(true)
+  })
+
+  it('reports isUltimatePerformance false when powercfg does not flag it', async () => {
+    const json = JSON.stringify([
+      {
+        Guid: '381b4222-f694-41f0-9685-ff5bb260df2e',
+        Name: 'Equilibrado',
+        IsActive: true,
+        IsHighPerformance: false,
+        IsBalanced: true,
+        IsPowerSaver: false,
+        IsUltimatePerformance: false,
+      },
+    ])
+    mockPsSuccess(json)
+    const plans = await listPowerPlans()
+    expect(plans[0]!.isUltimatePerformance).toBe(false)
+  })
+
   it('returns parsed power plans from powercfg', async () => {
     const json = JSON.stringify([
       {
@@ -62,6 +98,7 @@ describe('listPowerPlans', () => {
       isHighPerformance: false,
       isBalanced: true,
       isPowerSaver: false,
+      isUltimatePerformance: false,
     })
     expect(plans[1]).toEqual({
       guid: 'd-e-f',
@@ -71,6 +108,7 @@ describe('listPowerPlans', () => {
       isHighPerformance: true,
       isBalanced: false,
       isPowerSaver: false,
+      isUltimatePerformance: false,
     })
   })
 
@@ -209,6 +247,50 @@ describe('deletePowerPlan', () => {
     const result = await deletePowerPlan(validGuid)
     expect(result.success).toBe(false)
     expect(result.error).toMatch('Plan is active')
+  })
+})
+
+describe('unlockUltimatePerformance', () => {
+  it('clones the Ultimate Performance scheme and returns its new GUID', async () => {
+    mockPsSuccess('Power Scheme GUID: 11111111-2222-3333-4444-555555555555')
+    const result = await unlockUltimatePerformance()
+    expect(result).toEqual({ success: true, guid: '11111111-2222-3333-4444-555555555555' })
+  })
+
+  it('duplicates the official Ultimate Performance GUID, not High Performance', async () => {
+    mockPsSuccess('Power Scheme GUID: 11111111-2222-3333-4444-555555555555')
+    await unlockUltimatePerformance()
+    const script = mockExecFileAsync.mock.calls[0]?.[1]?.[3] ?? ''
+    expect(script).toContain(ULTIMATE_PERFORMANCE_GUID)
+    expect(script).not.toContain('8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c')
+  })
+
+  it('reports failure when the scheme does not exist on this build', async () => {
+    mockPsSuccess('Unable to create a new power scheme The power scheme, subgroup or setting specified does not exist.')
+    const result = await unlockUltimatePerformance()
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/not available on this Windows build/i)
+  })
+
+  it('reports failure when powercfg emits no GUID', async () => {
+    mockPsSuccess('')
+    const result = await unlockUltimatePerformance()
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+
+  it('reports failure when the scheme is already unlocked', async () => {
+    mockPsSuccess('Power scheme GUID: 11111111-2222-3333-4444-555555555555 already exists')
+    const result = await unlockUltimatePerformance()
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/already/i)
+  })
+
+  it('catches powercfg errors', async () => {
+    mockFailure('Access denied')
+    const result = await unlockUltimatePerformance()
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch('Access denied')
   })
 })
 

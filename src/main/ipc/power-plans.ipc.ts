@@ -1,7 +1,13 @@
 import { IPC } from '@shared/channels'
 import { ipcMain } from 'electron'
 import { getLogger } from '../services/logger.service'
-import { activatePowerPlan, createPowerPlan, deletePowerPlan, listPowerPlans } from '../services/power-plans'
+import {
+  activatePowerPlan,
+  createPowerPlan,
+  deletePowerPlan,
+  listPowerPlans,
+  unlockUltimatePerformance,
+} from '../services/power-plans'
 
 export function registerPowerPlansIpc(): void {
   ipcMain.handle(IPC.POWER_PLANS_LIST, async () => {
@@ -34,5 +40,10 @@ export function registerPowerPlansIpc(): void {
       return { success: false, error: 'Invalid GUID' }
     }
     return deletePowerPlan(guid)
+  })
+
+  ipcMain.handle(IPC.POWER_PLANS_UNLOCK_ULTIMATE, async () => {
+    getLogger().info('power-plans', 'Unlocking Ultimate Performance plan...')
+    return unlockUltimatePerformance()
   })
 }

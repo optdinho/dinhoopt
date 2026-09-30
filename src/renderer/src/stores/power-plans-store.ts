@@ -5,6 +5,7 @@ interface PowerPlansState {
   plans: PowerPlanInfo[]
   loading: boolean
   activating: boolean
+  unlockingUltimate: boolean
   error: string | null
   activeGuid: string | null
   lastResult: PowerPlanActivateResult | null
@@ -13,6 +14,7 @@ interface PowerPlansState {
   activatePlan: (guid: string) => Promise<void>
   createPlan: (name: string) => Promise<void>
   deletePlan: (guid: string) => Promise<void>
+  unlockUltimate: () => Promise<void>
   clearError: () => void
 }
 
@@ -20,6 +22,7 @@ export const usePowerPlansStore = create<PowerPlansState>((set, get) => ({
   plans: [],
   loading: false,
   activating: false,
+  unlockingUltimate: false,
   error: null,
   activeGuid: null,
   lastResult: null,
@@ -82,6 +85,21 @@ export const usePowerPlansStore = create<PowerPlansState>((set, get) => ({
       }
     } catch {
       set({ error: 'Falha ao remover plano de energia' })
+    }
+  },
+
+  unlockUltimate: async () => {
+    set({ unlockingUltimate: true, error: null })
+    try {
+      const result = await window.dinho.powerPlansUnlockUltimate()
+      if (result.success) {
+        set({ unlockingUltimate: false })
+        await get().loadPlans()
+      } else {
+        set({ unlockingUltimate: false, error: result.error ?? 'Falha ao desbloquear desempenho máximo' })
+      }
+    } catch {
+      set({ unlockingUltimate: false, error: 'Falha ao desbloquear desempenho máximo' })
     }
   },
 

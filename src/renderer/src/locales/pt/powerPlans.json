@@ -12,5 +12,16 @@
   "create": "Criar",
   "createPlaceholder": "Nome do novo plano de energia...",
   "loading": "Carregando...",
-  "noPlans": "Nenhum plano de energia encontrado"
+  "noPlans": "Nenhum plano de energia encontrado",
+  "dismiss": "Dispensar",
+  "groupStock": "Planos do sistema",
+  "groupCustom": "Planos personalizados",
+  "ultimateTitle": "Desempenho Máximo",
+  "ultimateDescription": "O Windows oculta este plano em quase todas as editions. Desbloqueie-o para desactivar as poupança de energia ao nível do hardware — ideal para máquinas de secretária ligadas à corrente. Consome mais energia e pode aumentar a temperatura.",
+  "unlockUltimate": "Desbloquear",
+  "kindUltimate": "Desempenho máximo",
+  "kindHighPerformance": "Alto desempenho",
+  "kindBalanced": "Equilibrado",
+  "kindPowerSaver": "Poupança de energia",
+  "kindCustom": "Personalizado"
 }

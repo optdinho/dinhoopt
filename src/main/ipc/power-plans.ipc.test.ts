@@ -58,6 +58,7 @@ describe('registerPowerPlansIpc', () => {
           isHighPerformance: false,
           isBalanced: true,
           isPowerSaver: false,
+          isUltimatePerformance: false,
         },
       ])
       const result = await getHandler(IPC.POWER_PLANS_LIST)()

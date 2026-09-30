@@ -12,5 +12,16 @@
   "create": "Crear",
   "createPlaceholder": "Nombre del nuevo plan de energía...",
   "loading": "Cargando...",
-  "noPlans": "No se encontraron planes de energía"
+  "noPlans": "No se encontraron planes de energía",
+  "dismiss": "Descartar",
+  "groupStock": "Planes del sistema",
+  "groupCustom": "Planes personalizados",
+  "ultimateTitle": "Rendimiento máximo",
+  "ultimateDescription": "Windows oculta este plan en casi todas las ediciones. Desbloquéelo para desactivar el ahorro de energía a nivel de hardware: ideal para equipos de sobremesa conectados a la red. Consume más energía y puede aumentar la temperatura.",
+  "unlockUltimate": "Desbloquear",
+  "kindUltimate": "Rendimiento máximo",
+  "kindHighPerformance": "Alto rendimiento",
+  "kindBalanced": "Equilibrado",
+  "kindPowerSaver": "Ahorro de energía",
+  "kindCustom": "Personalizado"
 }

@@ -12,5 +12,16 @@
   "create": "Create",
   "createPlaceholder": "New power plan name...",
   "loading": "Loading...",
-  "noPlans": "No power plans found"
+  "noPlans": "No power plans found",
+  "dismiss": "Dismiss",
+  "groupStock": "System plans",
+  "groupCustom": "Custom plans",
+  "ultimateTitle": "Ultimate Performance",
+  "ultimateDescription": "Windows hides this plan on nearly every edition. Unlock it to disable power saving at the hardware level — best for desktops plugged into mains power. It draws more power and may raise temperatures.",
+  "unlockUltimate": "Unlock",
+  "kindUltimate": "Ultimate performance",
+  "kindHighPerformance": "High performance",
+  "kindBalanced": "Balanced",
+  "kindPowerSaver": "Power saver",
+  "kindCustom": "Custom"
 }
