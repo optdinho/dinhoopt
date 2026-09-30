@@ -9,15 +9,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-95.7%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 
 <p align="center">
   <a href="#-download">📥 Download</a> •
+  <a href="#-novidades-da-202">📝 Novidades</a> •
   <a href="#-funcionalidades">⚡ Funcionalidades</a> •
   <a href="#-tecnologias">🛠️ Tecnologias</a> •
   <a href="#-arquitetura">🏗️ Arquitetura</a> •
@@ -30,7 +31,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -40,6 +41,35 @@
 | Portable | ~250 MB |
 
 > **⚠️ Requer:** Windows 10 (build 19041+) ou Windows 11, 4 GB RAM, 500 MB de espaço livre.
+
+---
+
+## 📝 Novidades da 2.0.2
+
+### 🛡️ Auto-atualização segura (correção)
+
+O auto-restart chamava `quitAndInstall(true, true)`, que é um encerramento forçado
+sem confirmação. Se a atualização terminasse de baixar no meio de uma gravação, de
+um scan de malware, de um re-encode de ffmpeg ou do upload de um clipe, o trabalho
+ia embora sem aviso e sem recuperação.
+
+Agora o app consulta um **guard** antes de reiniciar. Estando ocupado, a atualização
+baixada entra em estado `deferred` e um verificador reavalia a cada 15 s, instalando
+sozinho assim que o app fica ocioso — sem exigir clique nenhum. A tela "Sobre" mostra
+o que está segurando a instalação, com os motivos traduzidos. A instalação manual e o
+modo daemon seguem imediatos, por serem ações explícitas do usuário.
+
+### 🛑 Novo módulo STOPED
+
+Controle dos 7 serviços que degradam o Windows: `DiagTrack`, `DPS`, `SysMain`,
+`PcaSvc`, `EventLog`, `AdpSvc` e `UmRdp`. Mostra o status real (`RUN`/`STOPED`) de
+cada um, permite ações em massa, avisa sobre reinício e persiste a preferência.
+
+### 🧹 Qualidade interna
+
+- Auto-update não reinicia mais o app sobre trabalho em andamento
+- Testes isolados por worker: saída limpa, 0 warnings na suíte
+- Dependência `undici` atualizada (high corrigida), `npm audit` em 0
 
 ---
 
@@ -79,7 +109,7 @@
 </details>
 
 <details open>
-<summary><strong>🧹 Limpeza & Manutenção</strong> — 21 módulos</summary>
+<summary><strong>🧹 Limpeza & Manutenção</strong> — 22 módulos</summary>
 
 | Módulo | Descrição |
 |--------|-----------|
@@ -87,7 +117,7 @@
 | **Limpeza de Navegadores** | Chrome, Edge, Firefox, Brave, Opera, Vivaldi e mais — com proteção de cookies por padrão |
 | **Limpeza de Apps** | Discord, VS Code, Spotify, Teams, Zoom, Slack e dezenas |
 | **Limpeza de Jogos** | Steam, Epic Games, EA App, GOG — caches e shaders |
-| **Limpeza do Registro** | Entradas inválidas e órfãs com backup automático |
+| **Limpeza do Registro** | Entradas inválidas ou órfãs com backup automático |
 | **Limpeza de Rede** | DNS, perfis Wi-Fi, cache ARP, rotas |
 | **Limpeza de Atalhos** | Remove atalhos quebrados do sistema |
 | **Limpeza de Lixeira** | Esvazia e gerencia a lixeira do Windows |
@@ -97,6 +127,7 @@
 | **Importação WinApp2** | Importa regras de limpeza personalizadas |
 | **Gerenciador de Inicialização** | Gerencia programas que iniciam com o Windows |
 | **Gerenciador de Serviços** | Otimiza serviços do Windows por perfil |
+| **STOPED** | Para os 7 serviços que degradam o Windows (DiagTrack, DPS, SysMain, PcaSvc, EventLog, AdpSvc, UmRdp) com status exato e ações em massa |
 | **Gerenciador de Drivers** | Detecta, backup e remove drivers obsoletos |
 | **Removedor de Bloatware** | Remove aplicativos indesejados do Windows |
 | **Menu de Contexto** | Gerencia entradas do menu de contexto do Explorer |
@@ -129,7 +160,7 @@
 |--------|-----------|
 | **Atualizador de Programas** | Atualiza programas instalados via winget |
 | **Atualizador de Drivers** | Detecta e atualiza drivers desatualizados |
-| **Auto-Atualizador** | Atualiza o próprio DiNho Optimizer automaticamente |
+| **Auto-Atualizador** | Atualiza o próprio DiNho Optimizer automaticamente — e **nunca reinicia por cima de um trabalho em andamento**: se uma gravação, um scan, um re-encode ou um upload estiver ativo, a instalação é adiada e retoma sozinha quando o app fica ocioso |
 | **Desinstalador** | Remove programas e seus resíduos |
 | **Verificador de Segurança** | Exibe classificação de segurança de programas (UI pronta; avaliação offline/stub no backend) |
 | **Limpeza de Resíduos** | Remove sobras de desinstalações anteriores |
@@ -282,7 +313,7 @@ perfil de otimizações do jogo.
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (~235)              │      │
+│  │              IPC Handlers (~233)              │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -332,8 +363,8 @@ src/
 │   ├── index.ts                # Entry point + gerenciamento de janela
 │   ├── cli/                    # Modo linha de comando (headless)
 │   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # ~235 handlers IPC (1 por módulo)
-│   ├── services/               # Lógica de negócio (117 serviços)
+│   ├── ipc/                    # ~233 handlers IPC (1 por módulo)
+│   ├── services/               # Lógica de negócio (123 serviços)
 │   ├── platform/               # Abstração de plataforma
 │   │   └── win32/              # Implementação Windows (registry, WMI, API)
 │   └── constants/              # Paths, safelists, configurações
@@ -342,8 +373,8 @@ src/
 │   └── src/
 │       ├── App.tsx             # Router + layout principal
 │       ├── pages/              # 40 rotas (uma por módulo funcional)
-│       ├── stores/             # Estado global (Zustand, 36 stores)
-│       ├── components/         # Componentes reutilizáveis (124)
+│       ├── stores/             # Estado global (Zustand, 37 stores)
+│       ├── components/         # Componentes reutilizáveis (127)
 │       ├── hooks/              # Hooks customizados
 │       ├── lib/                # Utilitários e helpers
 │       └── locales/            # i18n (inglês, português, espanhol)
@@ -423,8 +454,8 @@ npx playwright test
 ```
 
 ```
-📊 Cobertura atual: 95,7% de linhas · 94,5% de funções · 86,5% de branches
-   252 arquivos de teste · 7.367 testes (Vitest) · 2.212 testes (C#, Release)
+📊 Cobertura atual: 95,8% de linhas · 94,5% de funções · 86,6% de branches
+   262 arquivos de teste · 7.561 testes (Vitest) · 2.212 testes (C#, Release)
 ```
 
 ---
@@ -435,15 +466,15 @@ npx playwright test
 |---------|-------|
 | Módulos | 60+ |
 | Rotas | 40 |
-| Stores (Zustand) | 36 |
-| Componentes React | 124 |
-| Serviços | 117 |
-| Handlers IPC | ~237 |
-| Arquivos de teste (TS) | 252 |
-| Testes (TS) | 7.367 |
+| Stores (Zustand) | 37 |
+| Componentes React | 127 |
+| Serviços | 123 |
+| Handlers IPC | ~233 |
+| Arquivos de teste (TS) | 262 |
+| Testes (TS) | 7.561 |
 | Testes (C#) | 2.212 |
-| Cobertura de linhas | 95,7% |
-| Cobertura de branches | 86,5% |
+| Cobertura de linhas | 95,8% |
+| Cobertura de branches | 86,6% |
 | Linhas de código (TS, sem testes) | ~87.000 |
 | Linhas de código (C#, sem testes) | ~27.000 |
 
