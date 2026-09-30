@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DURATION } from '@/lib/animation'
@@ -18,18 +17,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--page-bg)' }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={
+        {
+          background: 'var(--page-bg)',
+          '--sidebar-w': sidebarCollapsed ? '60px' : '250px',
+          transition: `--sidebar-w ${DURATION.slow * 1000}ms ease-in-out`,
+        } as React.CSSProperties
+      }
+    >
       <button type="button" className="skip-nav" onClick={handleSkip}>
         {t('skipToContent')}
       </button>
-      <motion.div
-        className="relative z-10 shrink-0 overflow-hidden"
-        animate={{ width: sidebarCollapsed ? 60 : 250 }}
-        layout
-        transition={{ duration: DURATION.slow, ease: 'easeInOut' }}
-      >
+      <div className="relative z-10 shrink-0 overflow-hidden" style={{ width: 'var(--sidebar-w)' }}>
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((v) => !v)} />
-      </motion.div>
+      </div>
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Ambient background glow */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">

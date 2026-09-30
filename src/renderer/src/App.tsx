@@ -84,6 +84,7 @@ import LicenseGate from './components/LicenseGate'
 import { Onboarding } from './components/Onboarding'
 import { useBackgroundScans } from './hooks/useBackgroundScans'
 import { PlatformContext, usePlatformLoader } from './hooks/usePlatform'
+import { useRepairReminder } from './hooks/useRepairReminder'
 import { useAppUpdateStore } from './stores/app-update-store'
 import { initGameModeStore } from './stores/game-mode-store'
 import { useHistoryStore } from './stores/history-store'
@@ -156,6 +157,9 @@ export function App() {
   const platformInfo = usePlatformLoader()
 
   useScheduledScan()
+
+  // Nudge the user to run DISM/SFC every 15 days
+  useRepairReminder()
 
   // Run software-update & driver-update scans silently in the background
   useBackgroundScans()

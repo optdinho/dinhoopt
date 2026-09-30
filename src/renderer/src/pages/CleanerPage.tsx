@@ -19,7 +19,7 @@ import { useScanStore } from '@/stores/scan-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { CategoryResultsPanel } from './cleaner/CategoryResultsPanel'
-import { categories } from './cleaner/CleanerPageConstants'
+import { CLEANER_GROUPS, categories } from './cleaner/CleanerPageConstants'
 
 export function CleanerPage() {
   const { t } = useTranslation('cleaner')
@@ -30,6 +30,14 @@ export function CleanerPage() {
 
   const protectRecycleBin = useSettingsStore((s) => s.settings.cleaner.protectRecycleBin)
   const visibleCategories = protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories
+  const groupedCategories = useMemo(
+    () =>
+      CLEANER_GROUPS.map((groupKey) => ({
+        groupKey,
+        items: visibleCategories.filter((c) => c.group === groupKey),
+      })).filter((g) => g.items.length > 0),
+    [visibleCategories],
+  )
   const [activeCategory, setActiveCategory] = useState<CleanerType>(CleanerType.System)
   const [showConfirm, setShowConfirm] = useState(false)
   const [showNetworkModal, setShowNetworkModal] = useState(false)
@@ -269,7 +277,7 @@ export function CleanerPage() {
         title={t('pageTitle')}
         description={t('pageDescription')}
         action={
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5" data-testid="page-header-actions">
             <button
               type="button"
               onClick={handleScan}
@@ -294,68 +302,16 @@ export function CleanerPage() {
               <Sparkles className="h-4 w-4" strokeWidth={2} />
               {t('cleanButton')}
             </button>
-            <button
-              type="button"
-              onClick={() => setShowNetworkModal(true)}
-              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium text-zinc-300 transition-all"
-              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-medium)' }}
-            >
-              <Wifi className="h-4 w-4" strokeWidth={1.8} />
-              {t('networkLink')}
-            </button>
           </div>
         }
       />
 
       <div className="flex gap-5">
         {/* Category sidebar */}
-        <div className="w-56 shrink-0 space-y-1.5">
-          {visibleCategories.map((cat) => {
-            const count = store.results.filter((r) => r.category === cat.type).reduce((sum, r) => sum + r.itemCount, 0)
-            const isActive = activeCategory === cat.type
-            return (
-              <button
-                type="button"
-                key={cat.type}
-                onClick={() => setActiveCategory(cat.type)}
-                className="relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
-                style={{
-                  background: isActive ? 'var(--accent-muted-bg)' : 'transparent',
-                  color: isActive ? 'var(--accent-hover)' : 'var(--text-muted)',
-                }}
-              >
-                {isActive && (
-                  <div
-                    className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full"
-                    style={{ background: 'var(--accent)' }}
-                  />
-                )}
-                {scanningCategory === cat.type ? (
-                  <Loader2 className="h-[17px] w-[17px] shrink-0 animate-spin text-amber-400" strokeWidth={1.8} />
-                ) : (
-                  <cat.icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
-                )}
-                <div className="flex-1 min-w-0">
-                  <span className="text-[13px] font-medium">{t(cat.labelKey)}</span>
-                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    {t(cat.descriptionKey)}
-                  </p>
-                </div>
-                {count > 0 && (
-                  <span
-                    className="rounded-md px-1.5 py-0.5 font-mono text-[11px]"
-                    style={{ background: 'var(--bg-hover-2)', color: 'var(--text-muted)' }}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-
+        <div className="w-64 shrink-0 space-y-4">
           {hasResults && (
             <div
-              className="mt-5 rounded-2xl p-4"
+              className="rounded-2xl p-4"
               style={{ background: 'var(--card-bg)', border: '1px solid var(--border-default)' }}
             >
               <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
@@ -373,6 +329,85 @@ export function CleanerPage() {
               </div>
             </div>
           )}
+
+          {groupedCategories.map((group) => (
+            <div key={group.groupKey} data-testid={`category-group-${group.groupKey}`}>
+              <div className="mb-1.5 flex items-center gap-2.5 px-4" data-testid={`group-heading-${group.groupKey}`}>
+                <span
+                  className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {t(group.groupKey)}
+                </span>
+                <div className="h-px flex-1" style={{ background: 'var(--border-subtle)' }} />
+              </div>
+
+              <div className="space-y-0.5">
+                {group.items.map((cat) => {
+                  const count = store.results
+                    .filter((r) => r.category === cat.type)
+                    .reduce((sum, r) => sum + r.itemCount, 0)
+                  const isActive = activeCategory === cat.type
+                  return (
+                    <button
+                      type="button"
+                      key={cat.type}
+                      onClick={() => setActiveCategory(cat.type)}
+                      className="relative w-full rounded-xl px-4 py-2.5 text-left transition-all hover:bg-[var(--bg-hover)]"
+                      style={{
+                        background: isActive ? 'var(--accent-muted-bg)' : 'transparent',
+                        color: isActive ? 'var(--accent-hover)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {isActive && (
+                        <div
+                          className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full"
+                          style={{ background: 'var(--accent)' }}
+                        />
+                      )}
+                      <div className="flex items-center gap-3">
+                        {scanningCategory === cat.type ? (
+                          <Loader2
+                            className="h-[17px] w-[17px] shrink-0 animate-spin text-amber-400"
+                            strokeWidth={1.8}
+                          />
+                        ) : (
+                          <cat.icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
+                        )}
+                        <span className="flex-1 min-w-0 text-[13px] font-medium">{t(cat.labelKey)}</span>
+                        {count > 0 && (
+                          <span
+                            className="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px]"
+                            style={{ background: 'var(--bg-hover-2)', color: 'var(--text-muted)' }}
+                          >
+                            {count}
+                          </span>
+                        )}
+                      </div>
+                      {isActive && (
+                        <p
+                          className="mt-1 pl-[29px] text-[11px] leading-relaxed"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          {t(cat.descriptionKey)}
+                        </p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setShowNetworkModal(true)}
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-all hover:bg-[var(--bg-hover)]"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <Wifi className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
+            {t('networkLink')}
+          </button>
         </div>
 
         {/* Item panel */}

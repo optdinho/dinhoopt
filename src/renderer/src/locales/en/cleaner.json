@@ -1,5 +1,8 @@
 {
-  "pageTitle": "Complete Windows Optimization & Maintenance",
+  "pageTitle": "Cleanup",
+  "groupSystem": "System",
+  "groupApps": "Applications",
+  "groupMaintenance": "Maintenance",
   "pageDescription": "Optimize, clean, and maintain your Windows for peak performance",
   "scanButton": "Scan",
   "cleanButton": "Clean",

@@ -1,5 +1,8 @@
 {
-  "pageTitle": "Otimização e manutenção completa do Windows",
+  "pageTitle": "Limpeza",
+  "groupSystem": "Sistema",
+  "groupApps": "Aplicações",
+  "groupMaintenance": "Manutenção",
   "pageDescription": "Otimize, limpe e mantenha o seu Windows com desempenho máximo",
   "scanButton": "Analisar",
   "cleanButton": "Limpar",

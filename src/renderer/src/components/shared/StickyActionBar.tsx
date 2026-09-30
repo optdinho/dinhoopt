@@ -20,12 +20,14 @@ export function StickyActionBar({
     <AnimatePresence>
       {selectedCount > 0 && (
         <motion.div
+          data-testid="sticky-action-bar"
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'tween', ease: 'easeOut', duration: 0.25 }}
-          className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-3"
+          className="fixed bottom-0 right-0 z-40 flex items-center justify-between px-4 py-3 lg:px-10"
           style={{
+            left: 'var(--sidebar-w, 250px)',
             background: 'var(--card-bg)',
             borderTop: '1px solid var(--border-medium)',
             boxShadow: '0 -8px 32px rgba(0,0,0,0.3)',

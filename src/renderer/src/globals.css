@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@property --sidebar-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 250px;
+}
+
 .skip-nav {
   position: absolute;
   top: 8px;
