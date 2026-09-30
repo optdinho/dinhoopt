@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="#-download">📥 Download</a> •
-  <a href="#-novidades-da-202">📝 Novidades</a> •
+  <a href="#-novidades-da-203">📝 Novidades</a> •
   <a href="#-funcionalidades">⚡ Funcionalidades</a> •
   <a href="#-tecnologias">🛠️ Tecnologias</a> •
   <a href="#-arquitetura">🏗️ Arquitetura</a> •
@@ -31,7 +31,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -44,32 +44,75 @@
 
 ---
 
-## 📝 Novidades da 2.0.2
+## 📝 Novidades da 2.0.3
 
-### 🛡️ Auto-atualização segura (correção)
+### 🌐 Escolher e medir o DNS de verdade
 
-O auto-restart chamava `quitAndInstall(true, true)`, que é um encerramento forçado
-sem confirmação. Se a atualização terminasse de baixar no meio de uma gravação, de
-um scan de malware, de um re-encode de ffmpeg ou do upload de um clipe, o trabalho
-ia embora sem aviso e sem recuperação.
+A escolha de DNS deixou de ser uma caixa cega. O **teste de velocidade mede agora o
+resolvedor por UDP** — o mesmo mecanismo que o Windows usa para resolver nomes — em vez
+de fazer `ping`, que media o caminho até ao servidor e não a resposta do resolvedor.
 
-Agora o app consulta um **guard** antes de reiniciar. Estando ocupado, a atualização
-baixada entra em estado `deferred` e um verificador reavalia a cada 15 s, instalando
-sozinho assim que o app fica ocioso — sem exigir clique nenhum. A tela "Sobre" mostra
-o que está segurando a instalação, com os motivos traduzidos. A instalação manual e o
-modo daemon seguem imediatos, por serem ações explícitas do usuário.
+Todas as opções (Cloudflare, Google, OpenDNS, Quad9) ficam sempre visíveis: **pode
+aplicar qualquer uma**, o teste apenas ordena a lista por velocidade. O servidor mais
+rápido ganha o selo **Melhor**, e há ação rápida para o aplicar. Servers que não
+respondem dentro do tempo limite vão para o fim, marcados como sem resposta.
 
-### 🛑 Novo módulo STOPED
+O app passa a **detetar o DNS que está em uso**, lendo o servidor da interface que tem a
+rota por omissão, e mostra se veio por DHCP. Depois de aplicar, volta a ler o estado real
+— o selo **Atual** já não fica desatualizado depois de uma escolha manual.
 
-Controle dos 7 serviços que degradam o Windows: `DiagTrack`, `DPS`, `SysMain`,
-`PcaSvc`, `EventLog`, `AdpSvc` e `UmRdp`. Mostra o status real (`RUN`/`STOPED`) de
-cada um, permite ações em massa, avisa sobre reinício e persiste a preferência.
+### ⚡ Planos de Energia reconstruídos
 
-### 🧹 Qualidade interna
+A página foi reescrita: planos agrupados entre **Planos do sistema** e **Planos
+personalizados**, com o tipo de cada plano identificado (Desempenho máximo, Alto
+desempenho, Equilibrado, Poupança, Personalizado).
 
-- Auto-update não reinicia mais o app sobre trabalho em andamento
-- Testes isolados por worker: saída limpa, 0 warnings na suíte
-- Dependência `undici` atualizada (high corrigida), `npm audit` em 0
+O plano **Desempenho Máximo** desbloqueia com um clique. O Windows oculta-o em quase todas
+as editions, e é o único que desliga a poupança de energia ao nível do hardware — útil em
+máquinas de secretária ligadas à corrente. O botão avisa que consome mais energia e pode
+subir a temperatura.
+
+### 🧰 Otimizações do Windows — Ferramentas Avançadas
+
+Três tweaks que mexem no comportamento interno do Windows, com explicação do que fazem,
+o respetivo link de documentação da Microsoft e os avisos correspondentes: ajustes da
+pilha **TCP/IP** (chimney, timestamps, RTO) e do **timer** (HPET, TSC Sync, Dynamic
+Tick). Não são necessários para o dia a dia — a secção diz isso explicitamente, porque a
+Microsoft os documenta como opções de depuração e podem destabilizar o sistema.
+
+### 🔧 Correções no `powercfg`
+
+O leitor de saída do `powercfg` dependia de texto em inglês e passava a falhar em
+Windows português ou deutsch. Passou a ser **independente do idioma**.
+
+Corrigidos ainda os **GUIDs do ASPM**, que não endereçavam o subgrupo correto, e o revert
+do `PROCTHROTTLEMIN`, que restaurava o mínimo do processador em 100% em vez dos 5%
+originais.
+
+### 🧹 Limpeza
+
+A página passa a chamar-se **Limpeza**, com os resultados agrupados em **Sistema**,
+**Aplicações** e **Manutenção**.
+
+A barra de ação inferior deixava de estardes "solta": estava fixa à janela, começava em
+`x=0` e ficava **por cima da barra lateral**. Agora está alinhada à coluna de conteúdo,
+encostada ao fundo, e **acompanha a barra lateral quando a recolhemos** — durante a
+animação, píxel a píxel.
+
+### 🛠️ Reparo do Windows
+
+Passa a chamar-se **Reparo do Windows** (as ferramentas são DISM e SFC, não de disco) e
+avisa quando passa mais de 15 dias sem uma verificação, para apanhar ficheiros de sistema
+corrompidos antes que causem instabilidade.
+
+### ✅ Qualidade interna
+
+- `powercfg` coberto por testes contra o parser locale-independent
+- DNS: benchmark, leitura do estado atual e refresh pós-aplicação com testes
+- Geometria da barra de ação verificada em browser real (19 medições: fundo da janela,
+  sidebar recolhida, alinhamento, zero scroll horizontal)
+- 7741 testes em 272 ficheiros · `tsc` 0 · Biome 0 em 882 ficheiros · build ok
+- `npm audit` em 0 vulnerabilidades
 
 ---
 
@@ -469,9 +512,9 @@ npx playwright test
 | Stores (Zustand) | 37 |
 | Componentes React | 127 |
 | Serviços | 123 |
-| Handlers IPC | ~233 |
-| Arquivos de teste (TS) | 262 |
-| Testes (TS) | 7.561 |
+| Handlers IPC | 237 |
+| Arquivos de teste (TS) | 272 |
+| Testes (TS) | 7.741 |
 | Testes (C#) | 2.212 |
 | Cobertura de linhas | 95,8% |
 | Cobertura de branches | 86,6% |
