@@ -89,8 +89,8 @@ export const config: ConfigState = {
   audioSampleRate: 48000,
   autoCleanupEnabled: true,
   autoCleanupThresholdGB: 100,
-  adaptiveQuality: true,
-  stretchToFit: false,
+  adaptiveQuality: false,
+  stretchToFit: true,
   replayBufferMode: 'disk',
 }
 
@@ -222,8 +222,8 @@ export function loadPersistedClipsConfig(): void {
   config.micVolume = saved.micVolume ?? 1.0
   config.selectedAudioSessions = saved.selectedAudioSessions ?? []
   config.noiseSuppression = saved.noiseSuppression ?? false
-  config.adaptiveQuality = saved.adaptiveQuality ?? true
-  config.stretchToFit = saved.stretchToFit ?? false
+  config.adaptiveQuality = saved.adaptiveQuality ?? false
+  config.stretchToFit = saved.stretchToFit ?? true
   config.replayBufferMode = saved.replayBufferMode ?? 'disk'
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true

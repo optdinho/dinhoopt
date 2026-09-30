@@ -123,9 +123,9 @@ export interface ClipsConfig {
   autoCleanupThresholdGB: number
   /** RNNoise/anlmdn noise suppression on microphone */
   noiseSuppression?: boolean
-  /** RAM-aware adaptive quality: adjusts CQ/resolution/replay based on available system RAM */
+  /** RAM-aware adaptive quality: adjusts CQ/resolution/replay based on available system RAM (default false) */
   adaptiveQuality?: boolean
-  /** Remove black bars (letterboxing) by stretching to fill the full 16:9 frame instead of preserving aspect ratio */
+  /** Remove black bars (letterboxing) by stretching to fill the full 16:9 frame instead of preserving aspect ratio (default true) */
   stretchToFit?: boolean
   /** Buffer de replay: 'ram' = só RAM (excedente descartado); 'hybrid' = RAM cap 3min + excedente no disco; 'disk' = só disco (RAM staging ~1s, vídeo+áudio spill) */
   replayBufferMode?: 'ram' | 'hybrid' | 'disk'

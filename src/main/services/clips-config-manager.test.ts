@@ -49,7 +49,8 @@ vi.mock('./clips-config-store', () => ({
     audioSampleRate: 48000,
     autoCleanupEnabled: true,
     autoCleanupThresholdGB: 100,
-    adaptiveQuality: true,
+    adaptiveQuality: false,
+    stretchToFit: true,
   })),
   saveClipsConfig: vi.fn((cfg: Record<string, unknown>) => cfg),
 }))
@@ -134,15 +135,26 @@ describe('clips-config-manager', () => {
       config.micDeviceId = 'mic-1'
     })
 
-    it('includes stretchToFit false by default', () => {
-      config.stretchToFit = false
-      expect(buildEngineConfig().stretchToFit).toBe(false)
-    })
-
-    it('propagates stretchToFit true to the engine payload', () => {
+    it('includes stretchToFit true by default', () => {
       config.stretchToFit = true
       expect(buildEngineConfig().stretchToFit).toBe(true)
+    })
+
+    it('propagates stretchToFit false when disabled', () => {
       config.stretchToFit = false
+      expect(buildEngineConfig().stretchToFit).toBe(false)
+      config.stretchToFit = true
+    })
+
+    it('includes adaptiveQuality disabled by default', () => {
+      config.adaptiveQuality = false
+      expect(buildEngineConfig().adaptiveQuality).toBe(false)
+    })
+
+    it('propagates adaptiveQuality true to the engine payload', () => {
+      config.adaptiveQuality = true
+      expect(buildEngineConfig().adaptiveQuality).toBe(true)
+      config.adaptiveQuality = false
     })
 
     it('includes replayBufferMode disk by default', () => {
@@ -394,6 +406,7 @@ describe('clips-config-manager', () => {
       expect(config.audioSampleRate).toBe(48000)
       expect(config.autoCleanupEnabled).toBe(true)
       expect(config.autoCleanupThresholdGB).toBe(100)
+      expect(config.adaptiveQuality).toBe(false)
       expect(config.stretchToFit).toBe(false)
     })
 
@@ -510,11 +523,11 @@ describe('clips-config-manager', () => {
     })
 
     it('persists stretchToFit from config', () => {
-      config.stretchToFit = true
+      config.stretchToFit = false
       persistClipsConfig()
       const saved = vi.mocked(saveClipsConfig).mock.calls[0]![0] as Record<string, unknown>
-      expect(saved.stretchToFit).toBe(true)
-      config.stretchToFit = false
+      expect(saved.stretchToFit).toBe(false)
+      config.stretchToFit = true
     })
 
     it('persists replayBufferMode from config', () => {

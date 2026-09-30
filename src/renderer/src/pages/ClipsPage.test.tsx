@@ -547,6 +547,7 @@ describe('ClipsPage', () => {
   })
 
   it('shows calibrated machine profile badge when adaptive quality is active', async () => {
+    mockGetConfig.mockResolvedValue({ ...baseConfig, adaptiveQuality: true })
     mockGetStatus.mockResolvedValue({
       running: true,
       capturing: true,
@@ -568,6 +569,22 @@ describe('ClipsPage', () => {
       uptime: 120,
       fps: 30,
       replayTimeSeconds: 120,
+    })
+    render(<ClipsPage />)
+    showSettings()
+    await screen.findByText('recordingQuality')
+    expect(screen.queryByText('calibrationActive')).toBeNull()
+  })
+
+  it('hides calibration badge when adaptive quality is disabled even with a tier', async () => {
+    mockGetConfig.mockResolvedValue({ ...baseConfig, adaptiveQuality: false })
+    mockGetStatus.mockResolvedValue({
+      running: true,
+      capturing: true,
+      uptime: 120,
+      fps: 30,
+      replayTimeSeconds: 120,
+      calibrationTier: 'Strong',
     })
     render(<ClipsPage />)
     showSettings()

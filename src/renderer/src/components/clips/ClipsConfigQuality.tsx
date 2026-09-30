@@ -273,8 +273,8 @@ export function QualitySection({
         tooltipId="stretch-to-fit"
         activeTip={activeTip}
         setActiveTip={setActiveTip}
-        enabled={config.stretchToFit ?? false}
-        onToggle={() => handleConfigUpdate({ stretchToFit: !(config.stretchToFit ?? false) })}
+        enabled={config.stretchToFit ?? true}
+        onToggle={() => handleConfigUpdate({ stretchToFit: !(config.stretchToFit ?? true) })}
       />
 
       {/* Replay buffer mode (RAM / hybrid / disk-only) */}
@@ -368,10 +368,10 @@ export function QualitySection({
         tooltipId="adaptive-quality"
         activeTip={activeTip}
         setActiveTip={setActiveTip}
-        enabled={config.adaptiveQuality ?? true}
-        onToggle={() => handleConfigUpdate({ adaptiveQuality: !(config.adaptiveQuality ?? true) })}
+        enabled={config.adaptiveQuality ?? false}
+        onToggle={() => handleConfigUpdate({ adaptiveQuality: !(config.adaptiveQuality ?? false) })}
       />
-      {(config.adaptiveQuality ?? true) && _status.calibrationTier && (
+      {(config.adaptiveQuality ?? false) && _status.calibrationTier && (
         <div
           className="flex items-center gap-2 rounded-xl border px-3 py-2"
           style={{
