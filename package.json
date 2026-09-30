@@ -96,9 +96,6 @@
     "esbuild@0.25.12": true,
     "electron-winstaller@5.4.0": true
   },
-  "directories": {
-    "doc": "docs"
-  },
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/optdinho/dinhoopt/issues"
