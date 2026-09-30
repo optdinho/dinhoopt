@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Download, Loader, RefreshCw } from 'lucide-react'
+import { CircleAlert, CircleCheck, Clock, Download, Loader, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import logoSrc from '@/assets/logo.png'
 import { useAppUpdateStore } from '@/stores/app-update-store'
@@ -94,6 +94,24 @@ export function AboutPage() {
               <Download className="h-3.5 w-3.5" strokeWidth={1.8} />{' '}
               {t('restartAndInstall', { version: updateStatus.version })}
             </button>
+          )}
+          {updateStatus.state === 'deferred' && (
+            <div className="flex flex-1 flex-col gap-1" data-testid="update-deferred">
+              <span className="flex items-center gap-2 text-[12px] text-amber-300">
+                <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                {t('updateDeferredBody', { version: updateStatus.version })}
+              </span>
+              {updateStatus.deferredReasons && updateStatus.deferredReasons.length > 0 && (
+                <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  {updateStatus.deferredReasons.map((reason) => (
+                    <li key={reason.key} className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                      <span className="h-1 w-1 shrink-0 rounded-full bg-zinc-600" />
+                      {t(reason.label)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {updateStatus.state === 'error' && (
             <>

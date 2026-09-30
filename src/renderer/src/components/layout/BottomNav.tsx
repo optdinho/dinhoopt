@@ -6,7 +6,9 @@ import type { NavItemDef } from './NavTypes'
 
 function useBottomNavItems(): NavItemDef[] {
   const updateState = useAppUpdateStore((s) => s.status.state)
-  const showUpdateBadge = updateState === 'available' || updateState === 'downloaded'
+  // `deferred` counts too: the update is already downloaded and only waiting,
+  // so there is something for the user to act on or be aware of.
+  const showUpdateBadge = updateState === 'available' || updateState === 'downloaded' || updateState === 'deferred'
 
   return [
     {

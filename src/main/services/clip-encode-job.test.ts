@@ -8,6 +8,7 @@ import {
   isClipJobCancelled,
   PROGRESS_THROTTLE_MS,
   registerClipJob,
+  runningClipJobCount,
   shouldEmitProgress,
 } from './clip-encode-job'
 
@@ -156,5 +157,34 @@ describe('clip job registry', () => {
     expect(cancelAllClipJobs()).toBe(2)
     expect(p1.kill).toHaveBeenCalled()
     expect(p2.kill).toHaveBeenCalled()
+  })
+
+  it('reports no running jobs when the registry is empty', () => {
+    expect(runningClipJobCount()).toBe(0)
+  })
+
+  it('counts a registered job even when it is already cancelled', () => {
+    registerClipJob('a', fakeProc())
+    cancelClipJob('a')
+    expect(runningClipJobCount()).toBe(1)
+  })
+
+  it('counts every running job', () => {
+    registerClipJob('a', fakeProc())
+    registerClipJob('b', fakeProc())
+    expect(runningClipJobCount()).toBe(2)
+  })
+
+  it('stops counting a job once it is cleared', () => {
+    registerClipJob('a', fakeProc())
+    clearClipJob('a')
+    expect(runningClipJobCount()).toBe(0)
+  })
+
+  it('drops back to zero after a bulk cancel', () => {
+    registerClipJob('a', fakeProc())
+    registerClipJob('b', fakeProc())
+    cancelAllClipJobs()
+    expect(runningClipJobCount()).toBe(0)
   })
 })

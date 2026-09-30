@@ -149,7 +149,7 @@ import { MAX_SHARPNESS } from '@shared/types'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { cancelAllClipJobs } from '../services/clip-encode-job'
 import { config as clipsConfig } from '../services/clips-config-manager'
-import { registerClipsIpc } from './clips.ipc'
+import { activePublishCount, registerClipsIpc } from './clips.ipc'
 import { resetClipsCache, stopEngineProcess } from './clips-engine-connection'
 
 function captureHandlers(): Map<string, (...args: any[]) => any> {
@@ -2601,6 +2601,46 @@ describe('CLIPS_PUBLISH', () => {
     expect(second).toEqual({ success: false, error: 'Upload already in progress' })
     resolveUpload({ success: true })
     await first
+  })
+
+  it('counts no uploads in flight before anything starts', () => {
+    expect(activePublishCount()).toBe(0)
+  })
+
+  it('counts an upload while it is in flight, even a duplicate request', async () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    let resolveUpload: (v: { success: boolean }) => void = () => {}
+    mockUploadClipToGofile.mockImplementation(
+      () =>
+        new Promise<{ success: boolean }>((resolve) => {
+          resolveUpload = resolve
+        }),
+    )
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    const first = handler({}, 'C:\\clips\\clip.mp4')
+    await handler({}, 'C:\\clips\\clip.mp4')
+    expect(activePublishCount()).toBe(1)
+    resolveUpload({ success: true })
+    await first
+  })
+
+  it('stops counting an upload once it settles', async () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    mockUploadClipToGofile.mockResolvedValue({ success: true, link: 'https://gofile.io/d/abc' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    await handler({}, 'C:\\clips\\clip.mp4')
+    expect(activePublishCount()).toBe(0)
+  })
+
+  it('stops counting an upload that failed', async () => {
+    vi.mocked(access).mockResolvedValue(undefined)
+    mockUploadClipToGofile.mockResolvedValue({ success: false, error: 'Connection lost during upload' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_PUBLISH)
+    await handler({}, 'C:\\clips\\clip.mp4')
+    expect(activePublishCount()).toBe(0)
   })
 
   it('returns ABORTED code when upload is cancelled', async () => {

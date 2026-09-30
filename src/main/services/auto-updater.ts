@@ -5,10 +5,21 @@ import { autoUpdater } from 'electron-updater'
 import { getSecret } from './env-sanitize'
 import { getLogger } from './logger.service'
 import { getSettings } from './settings-store'
+import { type BusyReason, getBusyReasons, isBusyForUpdate } from './update-install-guard'
+
+/**
+ * How often a deferred install re-checks whether the app went idle.
+ *
+ * Short enough that the update lands shortly after a recording stops, long
+ * enough that the check is free: it only reads booleans that already live in
+ * this process, it makes no request and touches no disk.
+ */
+export const UPDATE_DEFERRED_RETRY_MS = 15_000
 
 let status: UpdateStatus = { state: 'idle' }
 let daemonMode = false
 let checkInterval: ReturnType<typeof setInterval> | null = null
+let deferredRetry: ReturnType<typeof setInterval> | null = null
 
 function broadcast(s: UpdateStatus): void {
   status = s
@@ -78,18 +89,28 @@ export function initAutoUpdater(opts: InitOptions = {}): void {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    broadcast({ state: 'downloaded', version: info.version })
     if (daemonMode) {
+      broadcast({ state: 'downloaded', version: info.version })
       process.stdout.write(`[${new Date().toISOString()}] [updater] Installing v${info.version} and restarting...\n`)
       autoUpdater.quitAndInstall(true, true)
       return
     }
     // GUI mode: auto-restart if the user opted in
     const current = getSettings()
-    if (current.autoRestart) {
-      getLogger().info('auto-updater', `Auto-restart enabled, installing v${info.version} and restarting...`)
-      autoUpdater.quitAndInstall(true, true)
+    if (!current.autoRestart) {
+      broadcast({ state: 'downloaded', version: info.version })
+      return
     }
+    // `quitAndInstall(true, true)` is a hard kill with no prompt. Restarting
+    // over a live recording or a running ffmpeg re-encode would throw away
+    // work the user cannot recover, so defer until the guard reports idle.
+    if (isBusyForUpdate()) {
+      deferInstall(info.version)
+      return
+    }
+    broadcast({ state: 'downloaded', version: info.version })
+    getLogger().info('auto-updater', `Installing v${info.version} and restarting...`)
+    autoUpdater.quitAndInstall(true, true)
   })
 
   autoUpdater.on('error', (err) => {
@@ -118,6 +139,51 @@ function startPeriodicChecks(intervalHours: number): void {
       getLogger().error('auto-updater', `Periodic check failed: ${err?.message || err}`)
     })
   }, ms)
+}
+
+/** Drops a pending deferred install. Called on quit and when one goes through. */
+export function cancelDeferredInstall(): void {
+  if (deferredRetry) {
+    clearInterval(deferredRetry)
+    deferredRetry = null
+  }
+}
+
+/**
+ * Holds a downloaded update back while the app is busy, and installs it as soon
+ * as the guard clears.
+ *
+ * Deferring rather than cancelling is the point: the update is already on disk,
+ * so the only question is when to restart. Polling on a short timer means the
+ * install still happens on its own — the user does not have to notice a badge
+ * and click anything, and nothing is lost if the app is busy for hours.
+ */
+function deferInstall(version: string): void {
+  const reasons: BusyReason[] = getBusyReasons()
+  broadcast({ state: 'deferred', version, deferredReasons: reasons })
+  getLogger().info(
+    'auto-updater',
+    `Deferring install of v${version}, busy with: ${reasons.map((r) => r.key).join(', ')}`,
+  )
+
+  // Re-register rather than stack timers: a second download while already
+  // deferred must not leave two pollers racing to call quitAndInstall.
+  cancelDeferredInstall()
+  deferredRetry = setInterval(() => {
+    if (isBusyForUpdate()) {
+      // Refresh the reported reasons. A multi-hour defer can outlive the work
+      // that blocked it and pick up new work, and a stale list would tell the
+      // user the update is waiting on something that already finished.
+      const current = getBusyReasons()
+      if (current.map((r) => r.key).join(',') !== reasons.map((r) => r.key).join(',')) {
+        broadcast({ state: 'deferred', version, deferredReasons: current })
+      }
+      return
+    }
+    cancelDeferredInstall()
+    getLogger().info('auto-updater', `App went idle, installing deferred v${version}`)
+    autoUpdater.quitAndInstall(true, true)
+  }, UPDATE_DEFERRED_RETRY_MS)
 }
 
 /** Call when the user changes updateCheckIntervalHours at runtime */

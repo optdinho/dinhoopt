@@ -59,6 +59,11 @@ export function cancelClipJob(jobKey: string): boolean {
   return true
 }
 
+/** How many ffmpeg re-encodes are alive right now. */
+export function runningClipJobCount(): number {
+  return runningJobs.size
+}
+
 /** Kills every running job, e.g. on app quit. Returns how many were killed. */
 export function cancelAllClipJobs(): number {
   const keys = Array.from(runningJobs.keys())

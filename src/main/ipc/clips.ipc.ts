@@ -973,3 +973,8 @@ export function registerClipsIpc(): void {
     return { success: true }
   })
 }
+
+/** How many clip uploads are in flight. Read by the update-install guard. */
+export function activePublishCount(): number {
+  return _publishingPaths.size
+}

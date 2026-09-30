@@ -165,10 +165,21 @@ export interface UpdateResult {
 // ─── Auto-Updater ───────────────────────────────────────────
 
 export interface UpdateStatus {
-  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  state:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'not-available'
+    | 'downloading'
+    | 'downloaded'
+    /** Downloaded and ready, but held back because the app is busy. */
+    | 'deferred'
+    | 'error'
   version?: string
   progress?: number
   error?: string
+  /** Why a `deferred` install is waiting. `label` is an i18n key. */
+  deferredReasons?: { key: string; label: string }[]
 }
 
 // ─── Compliance Auditor ─────────────────────────────────────

@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   logger: { info: vi.fn(), error: vi.fn(), warning: vi.fn(), success: vi.fn() },
   browserWindows: [] as Array<Record<string, unknown>>,
   isPackaged: true,
+  isBusyForUpdate: vi.fn(() => false),
+  getBusyReasons: vi.fn(() => [] as Array<{ key: string; label: string }>),
 }))
 
 vi.mock('electron', () => ({
@@ -41,6 +43,15 @@ vi.mock('./settings-store', () => ({
   getSettings: () => mocks.settings,
 }))
 
+vi.mock('./update-install-guard', () => ({
+  isBusyForUpdate: mocks.isBusyForUpdate,
+  getBusyReasons: mocks.getBusyReasons,
+}))
+
+vi.mock('./env-sanitize', () => ({
+  getSecret: () => undefined,
+}))
+
 vi.mock('@shared/channels', () => ({
   IPC: { UPDATER_STATUS: 'updater:status' },
 }))
@@ -53,6 +64,7 @@ import {
   initAutoUpdater,
   installUpdate,
   setAutoDownload,
+  UPDATE_DEFERRED_RETRY_MS,
   updateCheckInterval,
 } from './auto-updater'
 
@@ -65,12 +77,15 @@ beforeEach(() => {
   mocks.settings.autoUpdate = true
   mocks.settings.autoRestart = false
   mocks.settings.updateCheckIntervalHours = 24
+  mocks.isBusyForUpdate.mockReturnValue(false)
+  mocks.getBusyReasons.mockReturnValue([])
   mockAutoUpdater.autoDownload = false
 })
 
 afterEach(() => {
   mocks.isPackaged = true
   updateCheckInterval(0)
+  vi.useRealTimers()
 })
 
 function getHandler(event: string): (...args: unknown[]) => void {
@@ -173,6 +188,163 @@ describe('initAutoUpdater', () => {
     handler({ version: '2.0.0' })
     expect(getUpdateStatus()).toEqual({ state: 'downloaded', version: '2.0.0' })
     expect(mocks.autoUpdaterQuitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('defers the restart while work is in progress instead of killing it', () => {
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    mocks.getBusyReasons.mockReturnValue([{ key: 'recording', label: 'clipRecording' }])
+    initAutoUpdater()
+    const handler = getHandler('update-downloaded')
+    handler({ version: '2.0.0' })
+    expect(mocks.autoUpdaterQuitAndInstall).not.toHaveBeenCalled()
+    expect(getUpdateStatus()).toEqual({
+      state: 'deferred',
+      version: '2.0.0',
+      deferredReasons: [{ key: 'recording', label: 'clipRecording' }],
+    })
+  })
+
+  it('defers even with several reasons in flight', () => {
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    mocks.getBusyReasons.mockReturnValue([
+      { key: 'recording', label: 'clipRecording' },
+      { key: 'clipEncode', label: 'clipEncoding' },
+    ])
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(getUpdateStatus().deferredReasons).toHaveLength(2)
+  })
+
+  it('logs why the restart was deferred', () => {
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    mocks.getBusyReasons.mockReturnValue([{ key: 'recording', label: 'clipRecording' }])
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(mocks.logger.info).toHaveBeenCalledWith('auto-updater', expect.stringContaining('recording'))
+  })
+
+  it('installs on the retry tick once the app goes idle', () => {
+    vi.useFakeTimers()
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(mocks.autoUpdaterQuitAndInstall).not.toHaveBeenCalled()
+
+    mocks.isBusyForUpdate.mockReturnValue(false)
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS + 10)
+
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledWith(true, true)
+  })
+
+  it('keeps waiting while the app is still busy', () => {
+    vi.useFakeTimers()
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS * 3)
+
+    expect(mocks.autoUpdaterQuitAndInstall).not.toHaveBeenCalled()
+    expect(getUpdateStatus().state).toBe('deferred')
+  })
+
+  it('refreshes the reported reasons when the blocking work changes', () => {
+    vi.useFakeTimers()
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    mocks.getBusyReasons.mockReturnValue([
+      { key: 'recording', label: 'busyClipRecording' },
+      { key: 'malwareScan', label: 'busyMalwareScan' },
+    ])
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(getUpdateStatus().deferredReasons).toHaveLength(2)
+
+    // The scan finishes but a recording is still running: a list frozen at
+    // defer time would keep telling the user the scan is the reason.
+    mocks.getBusyReasons.mockReturnValue([{ key: 'recording', label: 'busyClipRecording' }])
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS + 10)
+
+    expect(getUpdateStatus().deferredReasons).toEqual([{ key: 'recording', label: 'busyClipRecording' }])
+    expect(mocks.autoUpdaterQuitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('does not re-broadcast when the reasons are unchanged', () => {
+    vi.useFakeTimers()
+    const winSend = vi.fn()
+    mocks.browserWindows = [{ isDestroyed: () => false, webContents: { send: winSend } }]
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    mocks.getBusyReasons.mockReturnValue([{ key: 'recording', label: 'busyClipRecording' }])
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+
+    const broadcastsAfterDefer = winSend.mock.calls.length
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS * 3)
+
+    expect(winSend).toHaveBeenCalledTimes(broadcastsAfterDefer)
+  })
+
+  it('stops polling after the deferred install goes through', () => {
+    vi.useFakeTimers()
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+
+    mocks.isBusyForUpdate.mockReturnValue(false)
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS + 10)
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS * 3)
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledTimes(1)
+  })
+
+  it('never starts a retry timer when the app is idle', () => {
+    vi.useFakeTimers()
+    mocks.settings.autoRestart = true
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS * 3)
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not defer the daemon install: the headless mode has no user work to lose', () => {
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    initAutoUpdater({ daemon: true })
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledWith(true, true)
+    writeSpy.mockRestore()
+  })
+
+  it('does not defer when the user disabled auto-restart', () => {
+    mocks.settings.autoRestart = false
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    expect(getUpdateStatus().state).toBe('downloaded')
+    expect(getUpdateStatus().deferredReasons).toBeUndefined()
+  })
+
+  it('a second download while deferred keeps the newer version and does not stack timers', () => {
+    vi.useFakeTimers()
+    mocks.settings.autoRestart = true
+    mocks.isBusyForUpdate.mockReturnValue(true)
+    initAutoUpdater()
+    getHandler('update-downloaded')({ version: '2.0.0' })
+    getHandler('update-downloaded')({ version: '2.1.0' })
+    expect(getUpdateStatus().version).toBe('2.1.0')
+
+    mocks.isBusyForUpdate.mockReturnValue(false)
+    vi.advanceTimersByTime(UPDATE_DEFERRED_RETRY_MS + 10)
+    expect(mocks.autoUpdaterQuitAndInstall).toHaveBeenCalledTimes(1)
   })
 
   it('broadcasts error state', () => {

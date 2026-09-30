@@ -61,7 +61,7 @@ import { stopEngineProcess } from './ipc/clips-engine-connection'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
 import { initAuditLog } from './services/audit-log'
 import { relaunchElevated } from './services/auto-elevate'
-import { initAutoUpdater } from './services/auto-updater'
+import { cancelDeferredInstall, initAutoUpdater } from './services/auto-updater'
 import { initBackupManager } from './services/backup-manager'
 import { cancelAllClipJobs } from './services/clip-encode-job'
 import { isAdmin } from './services/elevation'
@@ -77,6 +77,7 @@ import {
 } from './services/scheduler'
 import { getSettings } from './services/settings-store'
 import { getThreatIntelService } from './services/threat-intel.service'
+import { registerUpdateBusyProbes } from './services/update-install-guard.probes'
 import { stopPeriodicRuleChecks } from './services/yara-rules-store'
 
 process.on('uncaughtException', (err) => {
@@ -609,6 +610,10 @@ function initGui(): void {
     initBackupManager()
 
     // Initialize auto-updater
+    // Register the busy signals first: the updater's very first check runs
+    // inside initAutoUpdater(), and a download can complete before the UI
+    // settles, so the guard has to be in place first.
+    registerUpdateBusyProbes()
     initAutoUpdater()
 
     // Start the scheduled scan checker
@@ -677,6 +682,10 @@ function initGui(): void {
 
   app.on('before-quit', () => {
     getLogger().info('app', 'App shutting down')
+    // Drop the deferred-install poller: the app is going away, so there is
+    // nothing left for it to install into, and a live interval would keep the
+    // event loop alive.
+    cancelDeferredInstall()
     stopScheduler()
     stopEngineProcess()
     stopPeriodicRuleChecks()
