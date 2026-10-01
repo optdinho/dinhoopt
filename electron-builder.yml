@@ -9,12 +9,31 @@ directories:
 files:
   - out/**/*
 
-# asar DESLIGADO: o leitor C++ de asar do Chromium (netstack) falha com
-# ERR_FILE_NOT_FOUND no mainframe quando o exe e processado pelo builder
-# (rcedit/fuses) nesta combinacao Electron 44.4.5 + electron-vite 6 beta.
-# Node fs le o mesmo asar normalmente - bug isolado em 2026-08-23.
-# Sem asar, o app vai para resources/app/ como diretorio real.
-asar: false
+# asar LIGADO (reativado em 2026-09-30).
+#
+# Historia: em 2026-08-23 o asar foi DESLIGADO (commit 1276170) por causa de um
+# bug do leitor C++ de asar do Chromium: o netstack do renderer devolvia
+# ERR_FILE_NOT_FOUND no mainframe (tela preta no app empacotado), enquanto o
+# `fs` do Node lia o mesmo asar normalmente. Root cause nao foi isolada.
+#
+# RETESTE 2026-09-30 (Electron 44.4.5 + electron-vite 6.0.0-beta.4, build --dir):
+# o bug NAO reproduz. app.asar gerado (78,7 MB) + app.asar.unpacked com os 78
+# arquivos nativos, e o app empacotado ABRE e carrega a UI: janela com titulo
+# "Inicio - DiNho Optimizer", 4 processos Responding=True, renderer executando
+# as varreduras em background (useBackgroundScans) e ZERO ocorrencias de
+# ERR_FILE_NOT_FOUND/netstack no JSONL. Provavelmente corrigido upstream - o
+# Electron reescreveu a camada de leitura de asar (PR #52833, 2026) para servir
+# fd/stream/copyFile direto do archive em vez de extrair copia temporaria.
+#
+# Ganho medido: win-unpacked de 10.939 arquivos -> 449 (-96%). O Defender
+# escaneia POR ARQUIVO ESCRITO, entao ~10.939 operacoes de scan no install caem
+# para ~449. Habilita tambem nsis.differentialPackage "store-asar" (delta de
+# update proporcional ao que mudou, em vez de rebaixar o asar inteiro).
+#
+# INVARIANTE: better-sqlite3 e @litko/yara-x-win32-x64-msvc DEVEM continuar em
+# asarUnpack (ver bloco asarUnpack abaixo) - sao modulos nativos carregados por
+# dlopen e nao podem ficar dentro do archive.
+asar: true
 
 extraResources:
   - from: resources/icon.ico
