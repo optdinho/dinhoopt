@@ -70,6 +70,12 @@ export interface GameModeConfig {
   customGameProcesses: string[]
   /** Per-game profiles — keyed by process name (e.g. "cs2.exe") */
   gameProfiles: Record<string, GameProfile>
+  /**
+   * Last Game Mode pre-config version seeded into this install.
+   * 0 means "never seeded" — the one-shot migration applies the canonical
+   * list once, then never touches the user's own choices again.
+   */
+  preconfigVersion: number
 }
 
 export interface GameModeSnapshot {

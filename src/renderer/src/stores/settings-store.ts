@@ -1,3 +1,4 @@
+import { canonicalGameModeOptimizations } from '@shared/game-mode-preconfig'
 import type { DiNhoSettings } from '@shared/types'
 import { create } from 'zustand'
 
@@ -39,23 +40,13 @@ const defaultSettings: DiNhoSettings = {
   },
   schedules: [],
   gameMode: {
-    enabledOptimizations: [
-      'svc-wsearch',
-      'svc-sysmain',
-      'proc-kill-updaters',
-      'mem-clear-standby',
-      'sys-focus-assist',
-      'sys-power-plan',
-      'sys-prevent-sleep',
-      'sys-disable-game-bar',
-      'sys-disable-fse-opt',
-      'net-flush-dns',
-    ],
-    gameProfiles: {},
+    enabledOptimizations: canonicalGameModeOptimizations(),
     customProcessKillList: [],
     autoDetect: false,
     autoDeactivate: true,
     customGameProcesses: [],
+    gameProfiles: {},
+    preconfigVersion: 0,
   },
   registryIgnoredTweaks: [],
   malwareAllowlist: [],

@@ -36,9 +36,9 @@ describe('settings persistence — game mode toggle round-trip (issue #172)', ()
 
   it('keeps a game mode optimization disabled across a simulated restart', async () => {
     const initial = getSettings()
-    expect(initial.gameMode.enabledOptimizations).toContain('svc-sysmain')
+    expect(initial.gameMode.enabledOptimizations).toContain('svc-wsearch')
 
-    const without = initial.gameMode.enabledOptimizations.filter((o) => o !== 'svc-sysmain')
+    const without = initial.gameMode.enabledOptimizations.filter((o) => o !== 'svc-wsearch')
     setSettings({
       gameMode: {
         ...initial.gameMode,
@@ -48,7 +48,7 @@ describe('settings persistence — game mode toggle round-trip (issue #172)', ()
     await flushSettings()
 
     const afterRestart = getSettings()
-    expect(afterRestart.gameMode.enabledOptimizations).not.toContain('svc-sysmain')
+    expect(afterRestart.gameMode.enabledOptimizations).not.toContain('svc-wsearch')
     expect(afterRestart.gameMode.enabledOptimizations).toEqual(without)
   })
 
@@ -61,6 +61,7 @@ describe('settings persistence — game mode toggle round-trip (issue #172)', ()
         autoDeactivate: true,
         customGameProcesses: [],
         gameProfiles: {},
+        preconfigVersion: 0,
       },
     })
     await flushSettings()

@@ -552,7 +552,7 @@ function initGui(): void {
     }
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     getLogger().info(
       'app',
       `App starting — v${app.getVersion()}, platform: ${process.platform}, elevated: ${isAdmin()}`,
@@ -616,8 +616,27 @@ function initGui(): void {
     registerUpdateBusyProbes()
     initAutoUpdater()
 
+    // Apply Game Mode pre-config once per shipped version (seeds existing installs)
+    try {
+      const { applyGameModePreconfig } = await import('./services/preconfig-migration')
+      applyGameModePreconfig()
+    } catch (err) {
+      getLogger().error(
+        'app',
+        `Failed to apply Game Mode pre-config: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+
     // Start the scheduled scan checker
     startScheduler(() => mainWindow)
+
+    // Start Game Mode detector globally at boot (autoDetect controlled by settings)
+    try {
+      const { refreshGameDetector } = await import('./ipc/game-mode/handlers')
+      refreshGameDetector(() => mainWindow)
+    } catch (err) {
+      getLogger().error('app', `Failed to start game detector: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
     // Listen for settings changes to update auto-launch and tray
     ipcMain.handle(IPC.SETTINGS_APPLY_STARTUP, async (_event, enabled: boolean) => {

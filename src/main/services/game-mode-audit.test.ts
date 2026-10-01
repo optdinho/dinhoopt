@@ -276,6 +276,7 @@ describe('runGameModeAudit', () => {
     autoDeactivate: true,
     customGameProcesses: [],
     gameProfiles: {},
+    preconfigVersion: 0,
   }
 
   beforeEach(() => {

@@ -27,7 +27,10 @@ beforeEach(() => {
       autoDetect: false,
       autoDeactivate: true,
       customGameProcesses: [],
-      gameProfiles: {},
+      gameProfiles: {
+        'Minecraft.exe': { gameName: 'Minecraft', enabledOptimizations: [] },
+      },
+      preconfigVersion: 0,
     },
     expandedCategories: new Set(),
   })
@@ -158,6 +161,7 @@ describe('game-mode-store - simple setters', () => {
       autoDeactivate: false,
       customGameProcesses: ['Minecraft.exe'],
       gameProfiles: {},
+      preconfigVersion: 0,
     }
     useGameModeStore.getState().setConfig(newConfig)
     expect(useGameModeStore.getState().config).toEqual(newConfig)
@@ -181,6 +185,7 @@ describe('game-mode-store - toggleOptimization', () => {
         autoDeactivate: true,
         customGameProcesses: [],
         gameProfiles: {},
+        preconfigVersion: 0,
       },
     })
     useGameModeStore.getState().toggleOptimization('svc-wsearch')
@@ -411,6 +416,7 @@ describe('game-mode-store - setGameProfile', () => {
             enabledOptimizations: [],
           },
         },
+        preconfigVersion: 0,
       },
     })
     useGameModeStore.getState().setGameProfile('Minecraft.exe', null)

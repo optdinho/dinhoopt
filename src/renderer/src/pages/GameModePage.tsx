@@ -46,8 +46,10 @@ export function GameModePage() {
     }
   }, [])
 
+  // The game detector is owned by the main process and started at boot — the
+  // page no longer starts/stops it, so navigating away does not break
+  // auto-detection for Clips or the tray.
   useEffect(() => {
-    window.dinho?.gameModeDetectorStart?.()
     window.dinho
       ?.clipsGetConfig?.()
       .then((cfg) => {
@@ -56,9 +58,6 @@ export function GameModePage() {
         }
       })
       .catch(() => {})
-    return () => {
-      window.dinho?.gameModeDetectorStop?.()
-    }
   }, [])
 
   const handleToggleAutoStartCapture = useCallback(() => {

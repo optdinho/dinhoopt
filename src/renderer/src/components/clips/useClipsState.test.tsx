@@ -147,17 +147,17 @@ describe('useClipsState', () => {
     expect(result.current.statusLoaded).toBe(true)
     expect(result.current.clips).toHaveLength(1)
     expect(result.current.refreshing).toBe(false)
-    expect(dinho.gameModeDetectorStart).toHaveBeenCalled()
   })
 
-  it('stops the game mode detector on unmount', async () => {
+  it('does not own the game detector lifecycle — main process starts it at boot', async () => {
     const dinho = makeDinho()
     const { unmount } = renderHook(() => useClipsState())
 
-    await waitFor(() => expect(dinho.gameModeDetectorStart).toHaveBeenCalled())
+    await waitFor(() => expect(dinho.clipsList).toHaveBeenCalled())
     unmount()
 
-    expect(dinho.gameModeDetectorStop).toHaveBeenCalled()
+    expect(dinho.gameModeDetectorStart).not.toHaveBeenCalled()
+    expect(dinho.gameModeDetectorStop).not.toHaveBeenCalled()
   })
 
   it('restores favorites and published links from localStorage', async () => {

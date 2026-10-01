@@ -45,6 +45,7 @@ describe('settings-store', () => {
           autoDeactivate: true,
           customGameProcesses: [],
           gameProfiles: {},
+          preconfigVersion: 0,
         },
         registryIgnoredTweaks: [],
         malwareAllowlist: [],

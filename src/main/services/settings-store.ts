@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { canonicalGameModeOptimizations } from '@shared/game-mode-preconfig'
 import type { AppStats, DiNhoSettings, MalwareAllowlistEntry, ScheduleEntry, ScheduleTaskType } from '@shared/types'
 import { createJsonStore } from './store-base'
 
@@ -43,25 +44,13 @@ const defaults: StoreData = {
     },
     schedules: [],
     gameMode: {
-      enabledOptimizations: [
-        'svc-wsearch',
-        'svc-sysmain',
-        'proc-kill-updaters',
-        'mem-clear-standby',
-        'sys-focus-assist',
-        'sys-power-plan',
-        'sys-prevent-sleep',
-        'sys-disable-game-bar',
-        'sys-disable-fse-opt',
-        'sys-timer-resolution',
-        'cpu-game-priority',
-        'net-flush-dns',
-      ],
+      enabledOptimizations: canonicalGameModeOptimizations(),
       customProcessKillList: [],
       autoDetect: false,
       autoDeactivate: true,
       customGameProcesses: [],
       gameProfiles: {},
+      preconfigVersion: 0,
     },
     registryIgnoredTweaks: [],
     malwareAllowlist: [],

@@ -313,17 +313,15 @@ export function useClipsState(): ClipsState {
   }, [clips, loadThumbnail])
 
   // Initial data load — all three in one effect so clipsLoaded is set in same microtask batch
+  // Detector lifecycle is owned by the main process (started at boot); this
+  // effect only loads initial data.
   useEffect(() => {
-    window.dinho?.gameModeDetectorStart?.()
     ;(async () => {
       await Promise.all([refreshStatus(), refreshConfig()])
       setStatusLoaded(true)
       await refreshClips()
       setClipsLoaded(true)
     })()
-    return () => {
-      window.dinho?.gameModeDetectorStop?.()
-    }
   }, [refreshStatus, refreshConfig, refreshClips])
 
   // Poll status every 3s

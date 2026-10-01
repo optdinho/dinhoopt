@@ -1,3 +1,4 @@
+import { canonicalGameModeOptimizations } from '@shared/game-mode-preconfig'
 import type {
   GameModeAuditReport,
   GameModeConfig,
@@ -49,25 +50,13 @@ interface GameModeStoreState {
 }
 
 const defaultConfig: GameModeConfig = {
-  enabledOptimizations: [
-    'svc-wsearch',
-    'svc-sysmain',
-    'proc-kill-updaters',
-    'mem-clear-standby',
-    'sys-focus-assist',
-    'sys-power-plan',
-    'sys-prevent-sleep',
-    'sys-timer-resolution',
-    'cpu-game-priority',
-    'sys-disable-game-bar',
-    'sys-disable-fse-opt',
-    'net-flush-dns',
-  ],
+  enabledOptimizations: canonicalGameModeOptimizations(),
   customProcessKillList: [],
   autoDetect: false,
   autoDeactivate: true,
   customGameProcesses: [],
   gameProfiles: {},
+  preconfigVersion: 0,
 }
 
 export const useGameModeStore = create<GameModeStoreState>((set, get) => ({
