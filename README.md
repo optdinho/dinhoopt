@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.4-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -31,16 +31,47 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.4-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
 | Componente | Tamanho |
 |------------|---------|
-| Instalador (NSIS) | ~250 MB |
-| Portable | ~250 MB |
+| Instalador (NSIS) | ~243 MB |
+| Portable | ~243 MB |
 
 > **⚠️ Requer:** Windows 10 (build 19041+) ou Windows 11, 4 GB RAM, 500 MB de espaço livre.
+
+---
+
+## 📝 Novidades da 2.0.4
+
+### ⚡ Instalação 96% mais rápida
+
+O DiNho passa a ser empacotado em **asar** — um arquivo único — em vez de ~10.900 ficheiros
+soltos no disco. Na prática, o que muda para quem instala:
+
+- **10.939 → 449 ficheiros** copiados durante a instalação (−96%).
+- O antivírus scanneia **cada ficheiro escrito**, portanto o custo de segurança cai na
+  mesma proporção. A instalação deixou de arrastar o Defender durante vários minutos.
+- Instalador ligeiramente **mais pequeno**: ~250 MB → **~243 MB**.
+
+### 🧹 Porque estava desligado (e porque voltou)
+
+Em agosto de 2026 o asar foi desligado por causa de um bug do Chromium: o `netstack` do
+renderer devolvia `ERR_FILE_NOT_FOUND` e o app abria com ecrã preto. O `fs` do Node lia o
+mesmo asar sem qualquer problema — a causa nunca foi isolada com precisão.
+
+Em 2026-09-30 voltámos a testar em profundidade (Electron 44.4.5 + electron-vite 6.0.0) e
+**o problema já não se reproduz**. A explicação provável: o Electron reescreveu a camada de
+leitura de asar para servir ficheiros diretamente do arquivo, sem extrair uma cópia
+temporária. O bug que nos travou foi corrigido a montante.
+
+### 🔐 Invariantes de segurança mantidos
+
+Os módulos nativos (`better-sqlite3` e o motor de malware) continuam **fora** do asar, onde
+têm de estar para o carregamento via `dlopen` funcionar. E nada foi afrouxado nas restantes
+fuses de segurança do Electron.
 
 ---
 
