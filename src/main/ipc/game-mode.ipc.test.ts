@@ -98,6 +98,17 @@ vi.mock('@shared/service-safety-kb', () => ({
   isGameCompatible: mockIsGameCompatible,
 }))
 
+const mockArmGameExitGrace = vi.fn()
+const mockCancelGameExitGrace = vi.fn()
+const mockStartAutoRecording = vi.fn(async () => {})
+const mockStopAutoRecording = vi.fn(async () => {})
+vi.mock('./game-mode/auto-session', () => ({
+  armGameExitGrace: mockArmGameExitGrace,
+  cancelGameExitGrace: mockCancelGameExitGrace,
+  startAutoRecording: mockStartAutoRecording,
+  stopAutoRecording: mockStopAutoRecording,
+}))
+
 import { IPC } from '@shared/channels'
 import type { GameModeConfig, GameModeSnapshot } from '@shared/types'
 import { ipcMain, powerSaveBlocker } from 'electron'
@@ -1675,7 +1686,7 @@ describe('initGameDetector', () => {
     })
   })
 
-  it('onGameExited does nothing when autoActivated is false', async () => {
+  it('onGameExited does nothing once the auto-activated session was already torn down', async () => {
     mockGetSettings.mockReturnValue({
       gameMode: {
         enabledOptimizations: [],
@@ -1693,11 +1704,20 @@ describe('initGameDetector', () => {
     initGameDetector(mockGetWindow as unknown as WindowGetter, vi.fn(), sendAutoEvent)
     const callbacks = mockStartGameDetector.mock.calls[0]?.[0] as GameDetectorCallbacks
 
+    // A session that was detected and then torn down leaves nothing to exit.
+    await callbacks.onGameDetected('cs2.exe')
+    await callbacks.onGameExited()
+    const armed = mockArmGameExitGrace.mock.calls.at(-1)?.[0] as { onElapsed: () => Promise<void> }
+    await armed.onElapsed()
+    mockWindow.webContents.send.mockClear()
+    mockArmGameExitGrace.mockClear()
+
     await callbacks.onGameExited()
 
-    // Should do nothing since autoActivated was never set to true
+    // Should do nothing since autoActivated was consumed by the teardown
     expect(fsWriteFileSync).not.toHaveBeenCalled()
     expect(mockWindow.webContents.send).not.toHaveBeenCalled()
+    expect(mockArmGameExitGrace).not.toHaveBeenCalled()
   })
 
   it('onGameExited sends event even when autoDeactivate is false', async () => {

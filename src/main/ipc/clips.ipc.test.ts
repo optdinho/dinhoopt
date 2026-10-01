@@ -97,6 +97,9 @@ const mockSendWithFallback = vi.hoisted(() => vi.fn().mockResolvedValue({ succes
 const mockSendPipeCommand = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
 const mockSendPipeCommandLongRunning = vi.hoisted(() => vi.fn().mockResolvedValue({ cmd: 'test', payload: {} }))
 const mockSetEngineCapturing = vi.hoisted(() => vi.fn())
+const mockStopClipCapture = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ success: boolean; error?: string }> => ({ success: true })),
+)
 const mockInvalidateDurationCache = vi.hoisted(() => vi.fn())
 
 const realInvalidateDurationCache = vi.hoisted(() => {
@@ -120,6 +123,7 @@ vi.mock('./clips-engine-connection', async (importOriginal) => {
     sendPipeCommand: mockSendPipeCommand,
     sendPipeCommandLongRunning: mockSendPipeCommandLongRunning,
     setEngineCapturing: mockSetEngineCapturing,
+    stopClipCapture: mockStopClipCapture,
     invalidateDurationCache: mockInvalidateDurationCache,
   }
 })
@@ -131,6 +135,7 @@ function resetEngineMocks(): void {
   mockSendPipeCommand.mockResolvedValue({ cmd: 'test', payload: {} })
   mockSendPipeCommandLongRunning.mockResolvedValue({ cmd: 'test', payload: {} })
   mockSetEngineCapturing.mockReset()
+  mockStopClipCapture.mockReset().mockResolvedValue({ success: true })
   mockInvalidateDurationCache.mockReset()
   mockAmdCache.loadAmdGpuCache.mockReturnValue(false)
   mockAmdCache.rememberAmdDetection.mockReset()
@@ -1035,36 +1040,21 @@ describe('CLIPS_STOP_CAPTURE', () => {
     resetEngineMocks()
   })
 
-  it('returns success when engine is not running', async () => {
-    mockIsEngineRunning.mockReturnValue(false)
+  it('delegates to stopClipCapture and returns its result', async () => {
+    mockStopClipCapture.mockResolvedValue({ success: true })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)
     const result = (await handler()) as { success: boolean }
-    expect(result.success).toBe(true)
-    expect(mockSetEngineCapturing).toHaveBeenCalledWith(false)
-    expect(mockSendWithFallback).not.toHaveBeenCalled()
+    expect(mockStopClipCapture).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ success: true })
   })
 
-  it('stops capture when engine is running and pipe responds', async () => {
-    mockIsEngineRunning.mockReturnValue(true)
-    mockSendWithFallback.mockResolvedValue({ success: true })
-    const handlers = captureHandlers()
-    const handler = getAsyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)
-    const result = (await handler()) as { success: boolean }
-    expect(result.success).toBe(true)
-    expect(mockSendWithFallback).toHaveBeenCalledWith('stopCapture')
-    expect(mockSetEngineCapturing).toHaveBeenCalledWith(false)
-  })
-
-  it('returns error when engine is running but pipe fails', async () => {
-    mockIsEngineRunning.mockReturnValue(true)
-    mockSendWithFallback.mockResolvedValue({ success: false, error: 'pipe error' })
+  it('propagates the failure from stopClipCapture', async () => {
+    mockStopClipCapture.mockResolvedValue({ success: false, error: 'pipe error' })
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)
     const result = (await handler()) as { success: boolean; error?: string }
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('pipe error')
-    expect(mockSetEngineCapturing).not.toHaveBeenCalled()
+    expect(result).toEqual({ success: false, error: 'pipe error' })
   })
 })
 

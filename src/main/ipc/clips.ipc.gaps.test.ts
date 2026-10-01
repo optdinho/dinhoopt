@@ -55,6 +55,7 @@ const engineConnMock = vi.hoisted(() => ({
   sendPipeCommand: vi.fn(async () => ({ cmd: 'x', payload: {} }) as Record<string, unknown>),
   sendPipeCommandLongRunning: vi.fn(async () => ({ cmd: 'x', payload: {} }) as Record<string, unknown>),
   setEngineCapturing: vi.fn(),
+  stopClipCapture: vi.fn(async (): Promise<{ success: boolean; error?: string }> => ({ success: true })),
   invalidateDurationCache: vi.fn(),
 }))
 
@@ -320,13 +321,13 @@ describe('CLIPS_SAVE_CLIP failure paths', () => {
   })
 })
 
-describe('CLIPS_STOP_CAPTURE default error', () => {
-  it('falls back to a generic message when the engine omits the error', async () => {
+describe('CLIPS_STOP_CAPTURE delegation', () => {
+  it('hands the work to stopClipCapture, which owns the error fallback', async () => {
     resetMocks()
-    engineConnMock.isEngineRunning.mockReturnValue(true)
-    engineConnMock.sendWithFallback.mockResolvedValue({ success: false })
+    engineConnMock.stopClipCapture.mockResolvedValue({ success: false, error: 'Failed to stop capture' })
     const handlers = captureHandlers()
     const result = (await asyncHandler(handlers, IPC.CLIPS_STOP_CAPTURE)()) as { success: boolean; error?: string }
+    expect(engineConnMock.stopClipCapture).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ success: false, error: 'Failed to stop capture' })
   })
 })

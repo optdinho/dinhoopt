@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ─── Module-level mocks (hoisted) ─────────────────────────
-const mockLogger = { info: vi.fn(), error: vi.fn(), warning: vi.fn() }
+const mockLogger = { info: vi.fn(), error: vi.fn(), warning: vi.fn(), success: vi.fn() }
 let dataHandlers: Array<(chunk: Buffer) => void> = []
 let errorHandlers: Array<(err: Error) => void> = []
 let closeHandlers: Array<() => void> = []
@@ -79,6 +79,7 @@ import { connect } from 'node:net'
 import { app, BrowserWindow } from 'electron'
 import { buildEngineConfig, config as C, persistClipsConfig } from '../services/clips-config-manager'
 import {
+  ensureClipCaptureStarted,
   getCurrentStatus,
   getEnginePath,
   getEnginePid,
@@ -94,6 +95,7 @@ import {
   setEngineCapturing,
   startClipCapture,
   startEngine,
+  stopClipCapture,
   stopEngineProcess,
 } from './clips-engine-connection'
 import { connectPipe, disconnectPipe, getPipeSocket } from './clips-pipe'
@@ -163,6 +165,27 @@ function mockFfmpegDuration(stderr: string) {
 
 function triggerPipeData(chunk: string): void {
   for (const h of dataHandlers) h(Buffer.from(chunk, 'utf-8'))
+}
+
+function writeCount(cmd: string): number {
+  return vi
+    .mocked(mockSocket.write)
+    .mock.calls.filter((call) => typeof call[0] === 'string' && (call[0] as string).includes(`"cmd":"${cmd}"`)).length
+}
+
+/**
+ * Pipe responses are matched by cmd, so a reply fired before its request is
+ * written is dropped.  Tests drive the engine by replying only once the
+ * matching write has actually landed.
+ */
+async function waitForWrites(cmd: string, from: number, count = 1): Promise<void> {
+  const deadline = Date.now() + 2000
+  while (writeCount(cmd) < from + count) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${count} write(s) of "${cmd}" (saw ${writeCount(cmd) - from})`)
+    }
+    await new Promise((r) => setTimeout(r, 1))
+  }
 }
 
 // ─── Tests ─────────────────────────────────────────────────
@@ -1325,6 +1348,141 @@ describe('startClipCapture', () => {
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
     expect(result).toEqual({ success: true })
+  })
+})
+
+// ─── stopClipCapture ────────────────────────────────────────
+describe('stopClipCapture', () => {
+  it('returns success and clears the capturing flag when the engine is not running', async () => {
+    setEngineCapturing(true)
+    const result = await stopClipCapture()
+    expect(result).toEqual({ success: true })
+    expect(isEngineCapturing()).toBe(false)
+  })
+
+  it('sends stopCapture over the pipe and clears the capturing flag', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    setEngineCapturing(true)
+
+    const promise = stopClipCapture()
+    await waitForWrites('stopCapture', 0, 1)
+    triggerPipeData(`{"cmd":"stopCapture","payload":{"success":true}}\n`)
+
+    const result = await promise
+    expect(result).toEqual({ success: true })
+    expect(isEngineCapturing()).toBe(false)
+  })
+
+  it('surfaces the pipe error and keeps the capturing flag set', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    setEngineCapturing(true)
+
+    const promise = stopClipCapture()
+    await waitForWrites('stopCapture', 0, 1)
+    triggerPipeData(`{"cmd":"stopCapture","payload":{"success":false,"error":"busy"}}\n`)
+
+    const result = await promise
+    expect(result).toEqual({ success: false, error: 'busy' })
+    expect(isEngineCapturing()).toBe(true)
+  })
+  it('never leaks an undefined error when the engine omits one', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    setEngineCapturing(true)
+
+    const promise = stopClipCapture()
+    await waitForWrites('stopCapture', 0, 1)
+    triggerPipeData(`{"cmd":"stopCapture","payload":{"success":false}}\n`)
+
+    const result = await promise
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+})
+
+// ─── ensureClipCaptureStarted ───────────────────────────────
+describe('ensureClipCaptureStarted', () => {
+  it('boots the engine before starting capture when it was not running', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+
+    const promise = ensureClipCaptureStarted({ retryDelayMs: 0 })
+    await waitForWrites('config', 0, 1)
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    await waitForWrites('startCapture', 0, 1)
+    triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
+
+    const result = await promise
+    expect(vi.mocked(spawn).mock.calls.length).toBeGreaterThan(0)
+    expect(result).toEqual({ success: true })
+    expect(isEngineCapturing()).toBe(true)
+  })
+
+  it('returns success immediately without spawning when already capturing', async () => {
+    setEngineCapturing(true)
+    const result = await ensureClipCaptureStarted()
+    expect(result).toEqual({ success: true })
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled()
+  })
+
+  it('reports the engine start failure without attempting capture', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    const result = await ensureClipCaptureStarted()
+    expect(result.success).toBe(false)
+    expect(isEngineCapturing()).toBe(false)
+  })
+
+  it('retries startCapture and succeeds on a later attempt', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    const cfgBase = writeCount('config')
+
+    const promise = ensureClipCaptureStarted({ attempts: 3, retryDelayMs: 0 })
+    for (let i = 1; i <= 2; i++) {
+      await waitForWrites('config', cfgBase, i)
+      triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+      await waitForWrites('startCapture', 0, i)
+      triggerPipeData(`{"cmd":"startCapture","payload":{"success":false,"error":"warming up"}}\n`)
+    }
+    await waitForWrites('config', cfgBase, 3)
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    await waitForWrites('startCapture', 0, 3)
+    triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
+
+    const result = await promise
+    expect(result).toEqual({ success: true })
+    expect(isEngineCapturing()).toBe(true)
+  })
+
+  it('gives up after the configured attempts and returns the last error', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+    const cfgBase = writeCount('config')
+
+    const promise = ensureClipCaptureStarted({ attempts: 2, retryDelayMs: 0 })
+    for (let i = 1; i <= 2; i++) {
+      await waitForWrites('config', cfgBase, i)
+      triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+      await waitForWrites('startCapture', 0, i)
+      triggerPipeData(`{"cmd":"startCapture","payload":{"success":false,"error":"nope"}}\n`)
+    }
+
+    const result = await promise
+    expect(result).toEqual({ success: false, error: 'nope' })
+    expect(isEngineCapturing()).toBe(false)
   })
 })
 

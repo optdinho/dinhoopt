@@ -12,6 +12,7 @@ import {
   isEngineCapturing as _isEngineCapturing,
   isEngineRunning as _isEngineRunning,
   setEngineCapturing as _setEngineCapturing,
+  startEngine as _startEngine,
   initEnginePipeIntegration,
   readEngineStatus,
   registerGetCurrentStatus,
@@ -464,4 +465,78 @@ export async function startClipCapture(): Promise<{ success: boolean; error?: st
     _setEngineCapturing(true)
   }
   return result
+}
+
+export async function stopClipCapture(): Promise<{ success: boolean; error?: string }> {
+  if (!_isEngineRunning()) {
+    _setEngineCapturing(false)
+    return { success: true }
+  }
+  const result = await _sendWithFallback('stopCapture')
+  if (!result.success) {
+    return { success: false, error: result.error ?? 'Failed to stop capture' }
+  }
+  _setEngineCapturing(false)
+  return { success: true }
+}
+
+export interface EnsureClipCaptureOptions {
+  attempts?: number
+  retryDelayMs?: number
+}
+
+const DEFAULT_START_ATTEMPTS = 3
+const DEFAULT_START_RETRY_DELAY_MS = 2000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Unattended counterpart of the renderer's start-recording button: boots the
+ * engine when it is down, then retries `startClipCapture` so a capture that
+ * races the engine's pipe handshake still lands. Returns the last failure
+ * instead of throwing, because callers here are fire-and-forget.
+ */
+export async function ensureClipCaptureStarted(
+  options: EnsureClipCaptureOptions = {},
+): Promise<{ success: boolean; error?: string }> {
+  const attempts = Math.max(1, options.attempts ?? DEFAULT_START_ATTEMPTS)
+  const retryDelayMs = Math.max(0, options.retryDelayMs ?? DEFAULT_START_RETRY_DELAY_MS)
+
+  if (_isEngineCapturing()) {
+    return { success: true }
+  }
+
+  if (!_isEngineRunning()) {
+    getLogger().info('clips', 'ensureClipCaptureStarted: engine not running — starting it')
+    const engine = await _startEngine()
+    if (!engine.success) {
+      const error = engine.error ?? 'Engine failed to start'
+      getLogger().error('clips', `ensureClipCaptureStarted: ${error}`)
+      return { success: false, error }
+    }
+  }
+
+  let last: { success: boolean; error?: string } = { success: false, error: 'Capture not started' }
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    last = await startClipCapture()
+    if (last.success) {
+      getLogger().success('clips', `ensureClipCaptureStarted: capture started on attempt ${attempt}/${attempts}`)
+      return last
+    }
+    if (attempt < attempts) {
+      getLogger().warning(
+        'clips',
+        `ensureClipCaptureStarted: attempt ${attempt}/${attempts} failed (${last.error ?? 'unknown'}) — retrying in ${retryDelayMs}ms`,
+      )
+      await sleep(retryDelayMs)
+    }
+  }
+
+  getLogger().error(
+    'clips',
+    `ensureClipCaptureStarted: gave up after ${attempts} attempts (${last.error ?? 'unknown'})`,
+  )
+  return last
 }

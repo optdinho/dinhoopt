@@ -7,6 +7,7 @@ import { loadClipsConfig } from '../../services/clips-config-store'
 import { execFileAsync } from '../../services/exec-utf8'
 import type { GameAutoEvent } from '../../services/game-detector'
 import {
+  getDetectedGame,
   isDetectorRunning,
   resolveGameProfile,
   startGameDetector,
@@ -16,9 +17,9 @@ import {
 import { runGameModeAudit } from '../../services/game-mode-audit'
 import { getLogger } from '../../services/logger.service'
 import { getSettings } from '../../services/settings-store'
-import { startClipCapture } from '../clips-engine-connection'
 import type { WindowGetter } from '../index'
 import { activateGameMode } from './activate'
+import { armGameExitGrace, cancelGameExitGrace, startAutoRecording, stopAutoRecording } from './auto-session'
 import { deactivateGameMode } from './deactivate'
 import { deleteSnapshot, readSnapshot } from './snapshot'
 import { getGameModeStatus } from './status'
@@ -75,7 +76,12 @@ export function registerGameModeIpc(getWindow: WindowGetter): void {
       suppressCurrentGame()
     }
     autoActivated = false
-    return deactivateGameMode(sendProgress)
+    cancelGameExitGrace()
+    try {
+      return await deactivateGameMode(sendProgress)
+    } finally {
+      await stopAutoRecording()
+    }
   })
 
   ipcMain.handle(IPC.GAME_MODE_STATUS, () => {
@@ -197,6 +203,7 @@ export function initGameDetector(
   startGameDetector(
     {
       onGameDetected: async (processName, displayName) => {
+        cancelGameExitGrace()
         if (readSnapshot() !== null) return
 
         const cfg = getSettings().gameMode
@@ -212,26 +219,52 @@ export function initGameDetector(
         const clipsCfg = loadClipsConfig()
         if (clipsCfg.autoStartCapture) {
           getLogger().info('game-mode', 'autoStartCapture enabled — starting clip capture')
-          await startClipCapture()
+          await startAutoRecording()
         }
         sendAutoEvent({ type: 'game-detected', processName, displayName: displayName ?? null })
       },
       onGameExited: async () => {
         if (!autoActivated) return
 
-        const wasAutoActivated = autoActivated
-        autoActivated = false
-
-        const cfg = getSettings().gameMode
-        if (cfg.autoDeactivate !== false && wasAutoActivated) {
-          await deactivateGameMode(sendProgress)
+        if (getSettings().gameMode.autoDeactivate === false) {
+          autoActivated = false
+          getLogger().info('game-mode', 'autoDeactivate disabled — leaving Game Mode and the recording running')
+          sendAutoEvent({ type: 'game-exited', processName: null })
+          return
         }
 
         sendAutoEvent({ type: 'game-exited', processName: null })
+        armGameExitGrace({
+          onElapsed: () => teardownAutoSession(sendProgress),
+          isGameAbsent: () => getDetectedGame() === null,
+        })
       },
     },
     settings.gameMode.customGameProcesses ?? [],
   )
+}
+
+/**
+ * Runs once the grace period expires without a game coming back: restore the
+ * system settings and stop the recording the session started.  The recording
+ * is stopped even when restoration fails, so a stuck capture never outlives
+ * the session that created it.
+ */
+async function teardownAutoSession(sendProgress: (data: GameModeProgress) => void): Promise<void> {
+  const wasAutoActivated = autoActivated
+  autoActivated = false
+  if (getSettings().gameMode.autoDeactivate === false) {
+    getLogger().info('game-mode', 'autoDeactivate disabled during the grace period — teardown skipped')
+    await stopAutoRecording()
+    return
+  }
+  try {
+    if (wasAutoActivated) {
+      await deactivateGameMode(sendProgress)
+    }
+  } finally {
+    await stopAutoRecording()
+  }
 }
 
 export function refreshGameDetector(getWindow: WindowGetter): void {

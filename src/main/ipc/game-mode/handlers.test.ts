@@ -47,7 +47,12 @@ vi.mock('../../services/game-detector', async (importOriginal) => ({
 vi.mock('../../services/game-mode-audit', () => ({ runGameModeAudit: vi.fn(async () => ({})) }))
 vi.mock('../../services/settings-store', () => ({ getSettings: vi.fn() }))
 vi.mock('../../services/clips-config-store', () => ({ loadClipsConfig: vi.fn() }))
-vi.mock('../clips-engine-connection', () => ({ startClipCapture: vi.fn(async () => ({})) }))
+vi.mock('./auto-session', () => ({
+  armGameExitGrace: vi.fn(),
+  cancelGameExitGrace: vi.fn(),
+  startAutoRecording: vi.fn(async () => {}),
+  stopAutoRecording: vi.fn(async () => {}),
+}))
 vi.mock('./activate', () => ({
   activateGameMode: vi.fn(async (_cfg: unknown, sendProgress?: (d: unknown) => void) => {
     sendProgress?.({ phase: 'idle', progress: 0 })
@@ -73,8 +78,8 @@ import {
 } from '../../services/game-detector'
 import { runGameModeAudit } from '../../services/game-mode-audit'
 import { getSettings } from '../../services/settings-store'
-import { startClipCapture } from '../clips-engine-connection'
 import { activateGameMode } from './activate'
+import { armGameExitGrace, cancelGameExitGrace, startAutoRecording, stopAutoRecording } from './auto-session'
 import { deactivateGameMode } from './deactivate'
 import { initGameDetector, refreshGameDetector, registerGameModeIpc } from './handlers'
 import { deleteSnapshot, readSnapshot } from './snapshot'
@@ -163,7 +168,10 @@ beforeEach(() => {
   vi.mocked(loadClipsConfig)
     .mockReset()
     .mockReturnValue({ autoStartCapture: false } as never)
-  vi.mocked(startClipCapture).mockReset().mockResolvedValue({ success: true })
+  vi.mocked(startAutoRecording).mockReset().mockResolvedValue(undefined)
+  vi.mocked(stopAutoRecording).mockReset().mockResolvedValue(undefined)
+  vi.mocked(armGameExitGrace).mockReset()
+  vi.mocked(cancelGameExitGrace).mockReset()
   vi.mocked(activateGameMode)
     .mockReset()
     .mockImplementation(async (_cfg, sendProgress) => {
@@ -280,6 +288,22 @@ describe('registerGameModeIpc', () => {
     await onGameDetected('game.exe')
     await getHandler(IPC.GAME_MODE_DEACTIVATE)()
     expect(suppressCurrentGame).toHaveBeenCalled()
+  })
+
+  it('cancels a pending exit grace period', async () => {
+    await getHandler(IPC.GAME_MODE_DEACTIVATE)()
+    expect(cancelGameExitGrace).toHaveBeenCalled()
+  })
+
+  it('stops the auto-started recording', async () => {
+    await getHandler(IPC.GAME_MODE_DEACTIVATE)()
+    expect(stopAutoRecording).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops the recording even when restoration throws', async () => {
+    vi.mocked(deactivateGameMode).mockRejectedValueOnce(new Error('restore failed'))
+    await expect(getHandler(IPC.GAME_MODE_DEACTIVATE)()).rejects.toThrow('restore failed')
+    expect(stopAutoRecording).toHaveBeenCalledTimes(1)
   })
 
   it('returns the current status', async () => {
@@ -455,7 +479,7 @@ describe('onGameDetected callback', () => {
     expect(activateGameMode).not.toHaveBeenCalled()
   })
 
-  it('activates with the profile merge and starts clip capture when configured', async () => {
+  it('activates with the profile merge and starts clip recording when configured', async () => {
     vi.mocked(loadClipsConfig).mockReturnValue({ autoStartCapture: true } as never)
     const win = liveWindow()
     const { onGameDetected } = await setupDetector({
@@ -466,7 +490,7 @@ describe('onGameDetected callback', () => {
       expect.objectContaining({ enabledOptimizations: ['p1'] }),
       expect.any(Function),
     )
-    expect(startClipCapture).toHaveBeenCalled()
+    expect(startAutoRecording).toHaveBeenCalled()
     expect(state.logger.info).toHaveBeenCalledWith('game-mode', 'autoStartCapture enabled — starting clip capture')
     expect(win.webContents.send).toHaveBeenCalledWith(IPC.GAME_MODE_AUTO_EVENT, {
       type: 'game-detected',
@@ -475,46 +499,120 @@ describe('onGameDetected callback', () => {
     })
   })
 
-  it('activates with the base config and skips clip capture when not configured', async () => {
+  it('activates with the base config and skips clip recording when not configured', async () => {
     const { onGameDetected } = await setupDetector()
     await onGameDetected('game.exe')
     expect(activateGameMode).toHaveBeenCalledWith(
       expect.objectContaining({ enabledOptimizations: ['optimization-a'] }),
       expect.any(Function),
     )
-    expect(startClipCapture).not.toHaveBeenCalled()
+    expect(startAutoRecording).not.toHaveBeenCalled()
+  })
+
+  it('cancels a pending exit grace period before activating', async () => {
+    const { onGameDetected } = await setupDetector()
+    await onGameDetected('game.exe')
+    expect(cancelGameExitGrace).toHaveBeenCalled()
   })
 })
 
+function graceOptions(): { onElapsed: () => Promise<void>; isGameAbsent: () => boolean } {
+  const call = vi.mocked(armGameExitGrace).mock.calls.at(-1)
+  if (!call) throw new Error('armGameExitGrace was not called')
+  return call[0] as { onElapsed: () => Promise<void>; isGameAbsent: () => boolean }
+}
+
 describe('onGameExited callback', () => {
-  it('returns early when not auto-activated', async () => {
-    const { onGameExited } = await setupDetector()
+  it('returns early once the auto-activated session was already torn down', async () => {
+    const { onGameDetected, onGameExited } = await setupDetector()
+    await onGameDetected('game.exe')
     await onGameExited()
-    expect(deactivateGameMode).not.toHaveBeenCalled()
+    await graceOptions().onElapsed()
+    vi.mocked(armGameExitGrace).mockClear()
+
+    await onGameExited()
+    expect(armGameExitGrace).not.toHaveBeenCalled()
   })
 
-  it('deactivates and emits the exit event when auto-deactivation is enabled', async () => {
+  it('arms the grace period instead of deactivating immediately', async () => {
     const win = liveWindow()
     const { onGameDetected, onGameExited } = await setupDetector()
     await onGameDetected('game.exe')
     await onGameExited()
-    expect(deactivateGameMode).toHaveBeenCalledWith(expect.any(Function))
+    expect(deactivateGameMode).not.toHaveBeenCalled()
+    expect(armGameExitGrace).toHaveBeenCalledTimes(1)
     expect(win.webContents.send).toHaveBeenCalledWith(IPC.GAME_MODE_AUTO_EVENT, {
       type: 'game-exited',
       processName: null,
     })
   })
 
-  it('emits the exit event without deactivating when auto-deactivation is disabled', async () => {
+  it('does not arm the grace period when auto-deactivation is disabled', async () => {
     const win = liveWindow()
     const { onGameDetected, onGameExited } = await setupDetector({ autoDeactivate: false })
     await onGameDetected('game.exe')
     await onGameExited()
+    expect(armGameExitGrace).not.toHaveBeenCalled()
     expect(deactivateGameMode).not.toHaveBeenCalled()
     expect(win.webContents.send).toHaveBeenCalledWith(IPC.GAME_MODE_AUTO_EVENT, {
       type: 'game-exited',
       processName: null,
     })
+  })
+})
+
+describe('exit grace teardown', () => {
+  it('deactivates Game Mode and stops the recording when the grace period elapses', async () => {
+    const { onGameDetected, onGameExited } = await setupDetector()
+    await onGameDetected('game.exe')
+    await onGameExited()
+
+    await graceOptions().onElapsed()
+
+    expect(deactivateGameMode).toHaveBeenCalledWith(expect.any(Function))
+    expect(stopAutoRecording).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-checks that the game is still absent at the deadline', async () => {
+    const { onGameDetected, onGameExited } = await setupDetector()
+    await onGameDetected('game.exe')
+    await onGameExited()
+
+    expect(graceOptions().isGameAbsent()).toBe(true)
+  })
+
+  it('skips the teardown when auto-deactivation was turned off meanwhile', async () => {
+    const { onGameDetected, onGameExited } = await setupDetector()
+    await onGameDetected('game.exe')
+    await onGameExited()
+
+    setGameMode({ autoDeactivate: false })
+    await graceOptions().onElapsed()
+
+    expect(deactivateGameMode).not.toHaveBeenCalled()
+    expect(stopAutoRecording).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not deactivate twice if the deadline is reached again', async () => {
+    const { onGameDetected, onGameExited } = await setupDetector()
+    await onGameDetected('game.exe')
+    await onGameExited()
+
+    await graceOptions().onElapsed()
+    setGameMode()
+    await graceOptions().onElapsed()
+
+    expect(deactivateGameMode).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops the recording even when restoring the system settings fails', async () => {
+    const { onGameDetected, onGameExited } = await setupDetector()
+    await onGameDetected('game.exe')
+    await onGameExited()
+    vi.mocked(deactivateGameMode).mockRejectedValueOnce(new Error('restore blew up'))
+
+    await expect(graceOptions().onElapsed()).rejects.toThrow('restore blew up')
+    expect(stopAutoRecording).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -543,12 +641,14 @@ describe('refreshGameDetector', () => {
     })
   })
 
-  it('skips sending when no window is present', async () => {
+  it('still runs the automation when no window is present', async () => {
     setGameMode({ autoDetect: true })
+    getWindow.mockReturnValue(undefined)
     refreshGameDetector(getWindow as never)
     await state.callbacks.onGameDetected!('game.exe')
+    expect(activateGameMode).toHaveBeenCalled()
     await state.callbacks.onGameExited!()
-    expect(deactivateGameMode).toHaveBeenCalled()
+    expect(armGameExitGrace).toHaveBeenCalled()
   })
 
   it('skips sending when the window is destroyed', async () => {

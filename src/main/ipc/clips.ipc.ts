@@ -57,9 +57,9 @@ import {
   sendPipeCommand,
   sendPipeCommandLongRunning,
   sendWithFallback,
-  setEngineCapturing,
   startClipCapture,
   startEngine,
+  stopClipCapture,
   stopEngineProcess,
 } from './clips-engine-connection'
 
@@ -163,16 +163,8 @@ export function registerClipsIpc(): void {
   ipcMain.handle(IPC.CLIPS_START_CAPTURE, startClipCapture)
 
   ipcMain.handle(IPC.CLIPS_STOP_CAPTURE, async (): Promise<IpcResult> => {
-    if (!isEngineRunning()) {
-      setEngineCapturing(false)
-      return { success: true }
-    }
-    const result = await sendWithFallback('stopCapture')
-    if (!result.success) {
-      return { success: false, error: result.error ?? 'Failed to stop capture' }
-    }
-    setEngineCapturing(false)
-    return { success: true }
+    const result = await stopClipCapture()
+    return result.success ? { success: true } : { success: false, error: result.error ?? 'Failed to stop capture' }
   })
 
   ipcMain.handle(IPC.CLIPS_SAVE_CLIP, async (): Promise<IpcResult> => {
