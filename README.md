@@ -44,6 +44,63 @@
 
 ---
 
+## 📝 Novidades da 2.0.5
+
+### 🎮 Modo Jogo realmente automático
+
+A **Detecção Automática** estava a meio caminho: quando um jogo era detectado, o app
+abria a captura de Clips sem o motor de captura estar a correr. O `startClipCapture()`
+respondia `Engine not running` e a gravação não começava — sem erro visível, porque o
+resultado era engolido.
+
+Agora o Modo Jogo **sobe o motor de captura** quando precisa e só depois inicia a
+gravação, com 3 tentativas separadas por 2 s para cobrir a subida do processo C#. Se
+ainda assim falhar, o motivo fica no log em vez de desaparecer.
+
+### ⏱️ 5 minutos de tolerância ao sair do jogo
+
+Desligar o Modo Jogo no instante em que o processo sumia era frágil demais — o FiveM
+relança o `GTAProcess.exe`, e uma janela que pisca podia derrubar a sessão a meio da
+partida. Agora o app espera **5 minutos** sem jogo antes de reagir:
+
+- O jogo voltou dentro do prazo → **nada acontece**, a sessão continua.
+- Passou o prazo → restaura o sistema e **para a gravação**.
+
+Quem liga a captura é quem a para. Mesmo que a restauração falhe, a gravação é
+encerrada na mesma medida — não há cenário em que a captura fica a correr sozinha.
+
+### 🎛️ Pré-configuração chega a toda a gente
+
+As 16 otimizações do Modo Jogo passaram a ser a **pré-configuração do app**, definida
+num único sítio e consumida pelo processo principal e pelos dois stores do renderer
+(antes havia três listas, todas diferentes).
+
+O ponto que faltava: instalações **já existentes** nunca recebiam novidades, porque a
+leitura da configuração só acrescenta chaves em falta — nunca atualiza listas. Uma
+migração versionada resolve isso e corre **uma única vez**, carimbando a configuração
+com a versão aplicada. A partir daí o utilizador decide, e a migração não volta a mexer.
+
+### 🐛 Correções
+
+- O detector de jogos passa a arrancar no **boot do app**. Antes só começava ao abrir a
+  página do Modo Jogo ou dos Clips — e pior, **sair** de uma dessas páginas desligava
+  a detecção a meio.
+- `svc-sysmain` saiu da lista padrão: desligar o Superfetch prejudica o carregamento
+  inicial dos jogos, que é justamente quando se quer o sistema rápido.
+- `svc-diagtrack` saiu da lista padrão: os serviços de diagnóstico são uma porta de
+  entrada para rastreio, e não é um risco que valha a pena por omissão.
+
+### ✅ Qualidade interna
+
+| | Antes | Agora |
+|---|---|---|
+| Testes (TS) | 7.741 | **7.792** |
+| Arquivos de teste | 272 | **275** |
+
+`biome` limpo em 888 ficheiros, `tsc --noEmit` sem erros, build sem avisos.
+
+---
+
 ## 📝 Novidades da 2.0.4
 
 ### ⚡ Instalação 96% mais rápida
@@ -342,8 +399,11 @@ O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, s
 ### 🎮 Detecção de jogos no Modo Jogo
 
 Com **Detecção Automática** ligada, o Modo Jogo ativa as otimizações quando um jogo é
-detectado e as reverte quando ele fecha. A detecção tem duas etapas, porque nenhuma
- delas sozinha cobre tudo:
+detectado e as reverte quando ele fecha. O detector é iniciado no **boot do app**, pelo
+processo principal — não depende de nenhuma página estar aberta, portanto navegar para
+fora do Modo Jogo não desliga a detecção.
+
+A detecção tem duas etapas, porque nenhuma delas sozinha cobre tudo:
 
 1. **Por nome de processo** — polling de `tasklist` a cada 30 s contra a lista embutida
    mais o catálogo `games.json` do motor de clips (452 jogos), incluindo aliases.
@@ -363,6 +423,41 @@ detecção por nome.
 Quando o jogo vem da classe de janela, o evento carrega também o nome amigável do
 catálogo (ex.: `FiveM (GTA V)`), usado no banner e como chave alternativa para o
 perfil de otimizações do jogo.
+
+### ⏱️ Tolerância de 5 minutos ao sair do jogo
+
+Quando o jogo deixa de ser detectado, o Modo Jogo **não desativa imediatamente**. Um
+jogo pode fechar a janela, trocar de executável ou reaparecer com outro nome durante
+segundos — FiveM relança `GTAProcess.exe`, por exemplo. Desativar nesse instante
+derrubia as otimizações e a gravação no meio da sessão.
+
+O comportamento é agora:
+
+| Situação | O que acontece |
+|----------|----------------|
+| Jogo detectado | Motor de captura subido (se preciso) e gravação iniciada |
+| Jogo ausente **< 5 min** | Tolerância cancelada se voltar — a sessão continua intacta |
+| Jogo ausente **≥ 5 min** | Restaura o sistema **e para a gravação**, sempre |
+| Desativar manualmente | Restaura o sistema e para a gravação |
+
+A gravação automática é pareada com a sessão: quem inicia, para. O `finally` garante que
+uma falha na restauração **nunca** deixa a captura rodando. Se o jogo voltar dentro da
+tolerância, a verificação final aborta o teardown.
+
+### 🎛️ Pré-configuração do Modo Jogo
+
+O app traz uma lista canônica de 16 otimizações, definida num único lugar
+(`src/shared/game-mode-preconfig.ts`) e consumida pelo processo principal e pelos dois
+stores do renderer — as listas não podem divergir entre si.
+
+Para que **instalações já existentes** também recebam a pré-config, uma migração
+versionada roda uma única vez no boot: grava a lista e carimba `preconfigVersion`.
+Depois disso o arquivo fica congelado e o utilizador configura à vontade — a
+migração nunca mais toca nele. Instalações novas já nascem com a lista e o marcador.
+
+Um teste garante que todo id da lista canônica existe no allowlist
+(`VALID_OPTIMIZATION_IDS`) e que não há duplicados, portanto o catálogo e a
+validação não podem ficar dessincronizados.
 
 ---
 
@@ -544,8 +639,8 @@ npx playwright test
 | Componentes React | 127 |
 | Serviços | 123 |
 | Handlers IPC | 237 |
-| Arquivos de teste (TS) | 272 |
-| Testes (TS) | 7.741 |
+| Arquivos de teste (TS) | 275 |
+| Testes (TS) | 7.792 |
 | Testes (C#) | 2.212 |
 | Cobertura de linhas | 95,8% |
 | Cobertura de branches | 86,6% |
