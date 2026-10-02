@@ -395,6 +395,73 @@ public sealed class FfmpegEncoderCapacityGuardTests
     }
 
     [Fact]
+    public void FeedFps_RemainsMeasured_WhileTheWindowIsStillRenewing()
+    {
+        // Regressão de runtime 2026-10-01 23:32:37. O getter exigia janela COMPLETA
+        // (elapsed >= 3 s) mas RecordFeedFrame renova a janela no primeiro frame
+        // depois de vencida. O getter só conseguia ler um número na fatia de ~25 ms
+        // entre "janela vencida" e "próximo frame" (<1% do tempo), então o guard
+        // lia "feed sem medição" praticamente sempre: com FeedTelemetry a medir
+        // 39,6 fps o log dizia que não havia medição, e a promoção de resolução
+        // (que exige FeedState.Healthy) nunca podia disparar.
+        //
+        // Este é o ciclo REAL: janela vencida -> frame renova -> 500 ms depois
+        // ainda estamos dentro da janela nova, com frames a entrar.
+        using var enc = CreateEncoder();
+
+        enc.RecordFeedFrame(); // abre a primeira janela
+        SetWindowStart(enc, Stopwatch.GetTimestamp() - (long)(3.0 * Stopwatch.Frequency));
+        enc.RecordFeedFrame(); // o frame que renova (contagem volta a 1)
+        for (var i = 0; i < 20; i++) enc.RecordFeedFrame(); // ~500 ms a ~40 fps
+        SetWindowStart(enc, Stopwatch.GetTimestamp() - (long)(0.5 * Stopwatch.Frequency));
+
+        var feedFps = enc.FeedFps;
+
+        Assert.True(feedFps > 0,
+            "a meio da janela o feed tem de continuar medido, senão o guard lê Unknown para sempre");
+        Assert.Equal(42.0, feedFps, 1); // 21 frames / 0,5 s
+    }
+
+    [Fact]
+    public void FeedFps_ClassifiesTheFeedWhileTheWindowIsRenewing_NotUnknown()
+    {
+        // O sintoma do T4 em runtime: feed medido a ~40 fps de um alvo de 60 tem de
+        // chegar ao guard como Deficient (bloqueia degradação E promoção), nunca como
+        // Unknown — que era o que a janela nunca fechada produzia.
+        using var enc = CreateEncoder();
+
+        enc.RecordFeedFrame();
+        SetWindowStart(enc, Stopwatch.GetTimestamp() - (long)(3.0 * Stopwatch.Frequency));
+        enc.RecordFeedFrame();
+        for (var i = 0; i < 20; i++) enc.RecordFeedFrame();
+        SetWindowStart(enc, Stopwatch.GetTimestamp() - (long)(0.5 * Stopwatch.Frequency));
+
+        var feed = CapacityGuardMath.ClassifyFeed(enc.FeedFps, 60);
+
+        Assert.Equal(FeedState.Deficient, feed);
+    }
+
+    [Fact]
+    public void FeedFps_DecaysTowardZero_WhenTheFeedStopsEntirely()
+    {
+        // Se o feed morre não há renovação, logo a janela envelhece: a taxa tem de
+        // decair sozinha em vez de ficar presa no último valor bom (que leria
+    // "saudável" e o guard degradaria por um encoder que nem está a receber).
+        using var enc = CreateEncoder();
+        for (var i = 0; i < 180; i++) enc.RecordFeedFrame(); // 60 fps
+        SetWindowStart(enc, Stopwatch.GetTimestamp() - (long)(3.0 * Stopwatch.Frequency));
+
+        var whileFlowing = enc.FeedFps;
+        SetWindowStart(enc, Stopwatch.GetTimestamp() - (long)(300.0 * Stopwatch.Frequency));
+        var afterSilence = enc.FeedFps;
+
+        Assert.True(whileFlowing > 0);
+        Assert.True(afterSilence < whileFlowing / 10,
+            $"feed parado tem de cair muito abaixo do valor anterior ({whileFlowing:F1} -> {afterSilence:F2})");
+        Assert.Equal(FeedState.Deficient, CapacityGuardMath.ClassifyFeed(afterSilence, 60));
+    }
+
+    [Fact]
     public void FeedFps_IsNotDisturbedByConcurrentRecording()
     {
         // RecordFeedFrame roda na thread do writer do ffmpeg e é chamado de

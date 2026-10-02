@@ -421,8 +421,26 @@ internal sealed partial class FfmpegEncoder
     internal const double FeedFpsWindowSec = 3.0;
 
     /// <summary>
-    /// fps efetivo do feed na última janela. 0 = sem medição (janela ainda não
-    /// fechou, ou nenhum frame entrou).
+    /// Tempo mínimo antes de a taxa da janela valer como medição.
+    ///
+    /// Não pode ser o próprio <see cref="FeedFpsWindowSec"/>: a janela é renovada
+    /// por <see cref="RecordFeedFrame"/> no primeiro frame depois de vencer, o que
+    /// zera o início. Exigir a janela completa fazia o getter devolver 0 durante
+    /// quase 3 s após cada renovação e só ler número na fatia de ~25 ms antes da
+    /// seguinte (<1% do tempo) — o guard via "feed sem medição" permanentemente e
+    /// a promoção de resolução nunca tinha como disparar. Medir a taxa com 250 ms
+    /// de janela é estável acima de ~4 fps, bem abaixo de qualquer gargalo real.
+    /// </summary>
+    internal const double FeedFpsMinElapsedSec = 0.25;
+
+    /// <summary>
+    /// fps efetivo do feed na janela corrente. 0 = sem medição (nenhum frame
+    /// entrou, ou a janela tem menos de <see cref="FeedFpsMinElapsedSec"/>).
+    ///
+    /// A defasagem é limitada por <see cref="FeedFpsWindowSec"/> porque a renovação
+    /// zera a contagem; se o feed PARAR, não há renovação e a taxa decai sozinha em
+    /// direção a 0, que é o comportamento desejado (feed morto não pode ler
+    /// "saudável").
     /// </summary>
     internal double FeedFps
     {
@@ -430,9 +448,9 @@ internal sealed partial class FfmpegEncoder
         {
             var (count, start) = (Volatile.Read(ref _feedFrameCount), Volatile.Read(ref _feedWindowStartTicks));
             if (start == 0 || count == 0) return 0;
-            var windowTicks = (long)(FeedFpsWindowSec * Stopwatch.Frequency);
+            var minElapsed = (long)(FeedFpsMinElapsedSec * Stopwatch.Frequency);
             var elapsed = Stopwatch.GetTimestamp() - start;
-            if (elapsed < windowTicks) return 0; // janela ainda enchendo
+            if (elapsed < minElapsed) return 0; // janela nova demais para uma taxa
             return count * (double)Stopwatch.Frequency / elapsed;
         }
     }
