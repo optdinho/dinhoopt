@@ -263,6 +263,12 @@ public sealed partial class EngineCoordinator : IDisposable
         if (orphans > 0)
             Log.I("EngineCoordinator", $"Spill cleanup: {orphans} orphan temp file(s) removed");
 
+        // Remove export temp files órfãos (dhn_*.mkv/.adts) — o finally de ExportToMp4
+        // não corre num crash/kill, deixando ~1GB por export abortado no %TEMP%.
+        var exportOrphans = Export.ClipExporter.CleanupOrphanTempFiles();
+        if (exportOrphans > 0)
+            Log.I("EngineCoordinator", $"Export temp cleanup: {exportOrphans} orphan file(s) removed");
+
         // timeBeginPeriod(1) garante resolução de 1ms no scheduler,
         // reduzindo glitches de áudio e melhorando precisão de timestamps QPC
         var result = PInvoke.timeBeginPeriod(1);

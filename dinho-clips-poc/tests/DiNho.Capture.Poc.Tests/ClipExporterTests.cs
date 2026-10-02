@@ -897,4 +897,53 @@ Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
         }
         finally { File.Delete(path); }
     }
+
+    // ── CleanupOrphanTempFiles ──
+
+    private static string NewTempDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dhn-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    [Fact]
+    public void CleanupOrphanTempFiles_RemovesOnlyExportTemps()
+    {
+        var dir = NewTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "dhn_aaaa.mkv"), "stale");
+            File.WriteAllText(Path.Combine(dir, "dhn_bbbb.adts"), "stale");
+            var keepTxt = Path.Combine(dir, "important.txt");
+            File.WriteAllText(keepTxt, "keep");
+            var wrongExt = Path.Combine(dir, "dhn_cccc.mp4");
+            File.WriteAllText(wrongExt, "not-a-temp");
+            Directory.CreateDirectory(Path.Combine(dir, "dhn_subdir"));
+
+            int removed = ClipExporter.CleanupOrphanTempFiles(dir);
+
+            Assert.Equal(2, removed);
+            Assert.False(File.Exists(Path.Combine(dir, "dhn_aaaa.mkv")));
+            Assert.False(File.Exists(Path.Combine(dir, "dhn_bbbb.adts")));
+            Assert.True(File.Exists(keepTxt), "Non-dhn file must be kept");
+            Assert.True(File.Exists(wrongExt), "Only .mkv/.adts are removed");
+            Assert.True(Directory.Exists(Path.Combine(dir, "dhn_subdir")),
+                "Directories with dhn_ prefix must be kept");
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void CleanupOrphanTempFiles_NoFiles_ReturnsZero()
+    {
+        var dir = NewTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "unrelated.txt"), "data");
+            Assert.Equal(0, ClipExporter.CleanupOrphanTempFiles(dir));
+            Assert.True(File.Exists(Path.Combine(dir, "unrelated.txt")));
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
 }

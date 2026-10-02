@@ -19,6 +19,37 @@ public sealed partial class ClipExporter : IDisposable
         return Path.Combine(directory, $"DiNho Optimizer {DateTime.Now:yyyy-MM-dd_HH-mm-ss}.mp4");
     }
 
+    /// <summary>
+    /// Remove orphaned export temp files (dhn_*.mkv / dhn_*.adts) left behind by
+    /// crashed sessions. The <c>finally</c> in <see cref="ExportToMp4"/> deletes
+    /// these on the normal path, but a hard crash/kill bypasses it and the file
+    /// lingers in %TEMP% forever (~1 GB each). Called once at engine startup.
+    /// Only our own temp files are deleted — unrelated files and directories are
+    /// never touched.
+    /// </summary>
+    /// <returns>The number of files removed.</returns>
+    public static int CleanupOrphanTempFiles(string? tempDir = null)
+    {
+        var dir = tempDir ?? Path.GetTempPath();
+        int removed = 0;
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(dir, "dhn_*"))
+            {
+                var ext = Path.GetExtension(file);
+                if (ext is not (".mkv" or ".adts")) continue;
+                try
+                {
+                    File.Delete(file);
+                    removed++;
+                }
+                catch { /* best effort — a live export may hold the file (Windows locks) */ }
+            }
+        }
+        catch { /* temp directory may not exist */ }
+        return removed;
+    }
+
     public string ExportToMp4(
         string outputPath,
         List<EncodedPacket> videoPackets,
