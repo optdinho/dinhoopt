@@ -24,6 +24,7 @@ internal static class FeedLogLine
             $"wait={summary.WaitMs.ToString("F1", i)}ms copy={summary.CopyMs.ToString("F1", i)}ms ",
             $"convert={summary.ConvertMs.ToString("F1", i)}ms total={summary.TotalMs.ToString("F1", i)}ms ",
             $"clean={summary.CleanFrames}/{summary.GoodFrames} totalAll={summary.TotalMsAll.ToString("F1", i)}ms ",
+            $"diag={summary.DiagnosticsMs.ToString("F1", i)}ms ",
             $"pace=delay {summary.PacingDelayMs.ToString("F1", i)}ms + spin {summary.PacingSpinMs.ToString("F1", i)}ms ",
             $"iters={summary.PacingCount} | ",
             $"queue={summary.QueueDepthAvg.ToString("F1", i)} avg / {summary.QueueDepthMax} max | ",

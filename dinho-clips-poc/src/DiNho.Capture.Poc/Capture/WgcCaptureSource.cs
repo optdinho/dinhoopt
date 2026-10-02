@@ -38,6 +38,7 @@ public sealed class WgcCaptureSource : ICaptureSource
     private int _frameArrivedFailures;
     private int _pumpStarted;
     private TexturePool? _texturePool;
+    private readonly CaptureDeliveryStats _deliveryStats = new();
 
     // Cap de captura (padrão OBS reset_frame_interval): só converte/codifica 1 frame
     // a cada intervalo do fps alvo. Frames excedentes do DWM são descartados antes da
@@ -60,6 +61,18 @@ public sealed class WgcCaptureSource : ICaptureSource
     /// </summary>
     public static bool ShouldAcceptFrame(long nowTicks, long lastTicks, long capIntervalTicks) =>
         capIntervalTicks <= 0 || lastTicks == 0 || nowTicks - lastTicks >= capIntervalTicks;
+
+    /// <summary>
+    /// Escolhe o tick usado pelo cap: o timestamp de apresentação do frame
+    /// (<c>Direct3D11CaptureFrame.SystemRelativeTime</c>, 100 ns) quando disponível;
+    /// senão o horário do callback (<paramref name="callbackTicks"/>). O callback pode
+    /// chegar em rajada/atrasado (batching do DWM), fazendo um frame real de 60 fps
+    /// parecer &lt; 16,666 ms e ser rejeitado pelo cap mesmo com o DWM já limitado a 60.
+    /// O timestamp de apresentação reflete a cadência real e mantém o cap em 60 fps sem
+    /// descartar frames válidos.
+    /// </summary>
+    public static long ResolveCapTimestamp(long systemRelativeTicks, long callbackTicks) =>
+        systemRelativeTicks > 0 ? systemRelativeTicks : callbackTicks;
 
     /// <summary>Define o fps alvo do cap de captura (0 = sem cap).</summary>
     public void SetCaptureFrameRate(int fps)
@@ -316,6 +329,12 @@ public sealed class WgcCaptureSource : ICaptureSource
 
         var ticks = Stopwatch.GetTimestamp();
         var count = Interlocked.Increment(ref _frameArrivedCount);
+        _deliveryStats.RecordArrived();
+
+        // Cap usa o timestamp de apresentação do frame (cadência real), não o horário
+        // do callback. O callback pode ser entregue em rajada pelo DWM e fazer um frame
+        // de 60 fps parecer < 16,666 ms → cap rejeitava ~35% (medido 2026-10-02).
+        var capTicks = ResolveCapTimestamp(frame.SystemRelativeTime.Ticks, ticks);
 
         // T3: resize. O pool nasce dimensionado para captureItem.Size; se a janela
         // muda, o WGC passa a entregar frames de outra dimensao num pool da dimensao
@@ -333,12 +352,13 @@ public sealed class WgcCaptureSource : ICaptureSource
         // Cap de captura (OBS reset_frame_interval): descarta frames que chegaram antes
         // do intervalo do fps alvo. O skip acontece AQUI — antes da extração/cópia D3D
         // e do VideoProcessorBlt — então o custo GPU roda na taxa alvo, não na taxa DWM.
-        if (!ShouldAcceptFrame(ticks, _lastAcceptedTicks, _capIntervalTicks))
+        if (!ShouldAcceptFrame(capTicks, _lastAcceptedTicks, _capIntervalTicks))
         {
+            _deliveryStats.RecordCapRejected();
             frame.Dispose();
             return;
         }
-        _lastAcceptedTicks = ticks;
+        _lastAcceptedTicks = capTicks;
 
         if (count == 1)
             Log.I("WGC", $"OnFrameArrived: first frame! size={frame.ContentSize.Width}x{frame.ContentSize.Height} pool={_framePool?.GetType().Name ?? "null"}");
@@ -354,11 +374,22 @@ public sealed class WgcCaptureSource : ICaptureSource
         }
 
         var old = Interlocked.Exchange(ref _latestFrame, frame);
-        old?.Dispose();
+        if (old is not null)
+        {
+            _deliveryStats.RecordOverwritten();
+            old.Dispose();
+        }
+        _deliveryStats.RecordDelivered();
         Interlocked.Exchange(ref _latestFrameTicks, ticks);
         _hasReceivedFrame = true;
         _frameSignal.Set();
     }
+
+    /// <summary>
+    /// Snapshot dos contadores do hand-off WGC→loop (cumulativos). O loop difa por
+    /// janela para separar cap local, overwrite do slot e acordar-vazio.
+    /// </summary>
+    internal DeliveryStatsSnapshot GetDeliveryStats() => _deliveryStats.Snapshot();
 
     /// <summary>
     /// T3: recria o <c>Direct3D11CaptureFramePool</c> na nova geometria.
@@ -582,6 +613,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             {
                 if (!_frameSignal.WaitOne(effectiveTimeout))
                 {
+                    _deliveryStats.RecordTimeout();
                     var timeoutTicks = Stopwatch.GetTimestamp();
                     return new CapturedFrame(startTicks, timeoutTicks, 0, 0, success: false, waitEndTicks: timeoutTicks);
                 }
@@ -610,10 +642,12 @@ public sealed class WgcCaptureSource : ICaptureSource
 
             if (frame is null)
             {
+                _deliveryStats.RecordEmptyWakeup();
                 var failTicks = Stopwatch.GetTimestamp();
                 return new CapturedFrame(startTicks, failTicks, 0, 0, success: false, waitEndTicks: failTicks);
             }
 
+            _deliveryStats.RecordConsumed();
             var size = frame.ContentSize;
             var endTicks = frameTicks;
 
@@ -684,7 +718,12 @@ public sealed class WgcCaptureSource : ICaptureSource
     /// Win11+ — configurações avançadas da sessão WGC.
     /// Session2 (Win10 1903+): IsCursorCaptureEnabled=false — evita overhead de software cursor.
     /// Session3 (Win11 21H2+): IsBorderRequired=false — remove indicador amarelo de captura.
-    /// Session5 (Win11 24H2+): MinUpdateInterval=0 — força frame rate máximo, impede throttling do DWM.
+    /// Session5 (Win11 24H2+): MinUpdateInterval = intervalo do cap de captura (166666 ticks
+    ///                         ≈ 16,666 ms para 60 fps). NÃO é 0. O default 0 é BUGADO no 24H2:
+    ///                         o DWM entrega ~50 fps em vez de destravar a taxa máxima — ao
+    ///                         contrário do que sugere a intuição (ver robmikh/Win32CaptureSample#82;
+    ///                         o OBS fixa o mesmo valor no PR #12708). Setar o intervalo do cap
+    ///                         torna o MinUpdateInterval um TETO real de 60 fps, não um piso.
     ///                         IncludeSecondaryWindows=true — captura janelas filhas (popups, tooltips).
     /// </summary>
     private void ConfigureSession3()
@@ -713,7 +752,8 @@ public sealed class WgcCaptureSource : ICaptureSource
             TrySetSessionBool(nativePtr, S2_CURSOR_ENABLED, "Session2: IsCursorCaptureEnabled=false", value: false);
             TrySetSessionBool(nativePtr, S3_BORDER_REQUIRED, "Session3: IsBorderRequired=false", value: false);
             TrySetSessionEnum(nativePtr, S4_DIRTY_REGION_MODE, "Session4: DirtyRegionMode=ReportAndRender", value: 1);
-            TrySetSessionTimeSpan(nativePtr, S5_MIN_UPDATE_INTERVAL, $"Session5: MinUpdateInterval={_capIntervalTicks} (cap de captura)", durationTicks: _capIntervalTicks);
+            // MinUpdateInterval = intervalo do cap (nunca 0 — o default 0 é bugado no 24H2, see robmikh#82).
+            TrySetSessionTimeSpan(nativePtr, S5_MIN_UPDATE_INTERVAL, $"Session5: MinUpdateInterval={_capIntervalTicks} (teto do cap de captura)", durationTicks: _capIntervalTicks);
             TrySetSessionBool(nativePtr, S6_INCLUDE_SECONDARY, "Session6: IncludeSecondaryWindows=true", value: true);
         }
         finally

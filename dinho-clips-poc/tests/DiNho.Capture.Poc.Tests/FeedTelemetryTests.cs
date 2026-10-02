@@ -210,6 +210,45 @@ public sealed class FeedTelemetryTests
         Assert.Equal(0.0, s.PacingSpinMs, 3);
     }
 
+    // O bloco de diagnóstico (foreground/alvo/status/drift) roda por iteração FORA do
+    // `total` medido (que fecha no AddVideo). Sem expô-lo, `total + pace` não fecha o
+    // período e o tempo roubado do loop fica invisível no log.
+    [Fact]
+    public void Summary_ExpoeDiagnostico_ParaFecharAContaDoPeriodo()
+    {
+        var t = Create(5.0);
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        t.AddDiagnostics(4_000); // 4ms — Freq=1MHz, ticks=µs
+        t.AddPacing(4_000, 700);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(4.0, s.DiagnosticsMs, 2);
+        // work + diag + delay + spin = 12 + 4 + 4 + 0.7 = 20.7ms
+        Assert.Equal(20.7, s.TotalMsAll + s.DiagnosticsMs + s.PacingDelayMs + s.PacingSpinMs, 2);
+    }
+
+    // O diagnóstico é amostrado por iteração (como o pacing): a média cobre todas as
+    // iterações da janela, inclusive as que não viraram frame bom.
+    [Fact]
+    public void AddDiagnostics_MediaDeVariasIteracoes()
+    {
+        var t = Create(5.0);
+        t.AddDiagnostics(2_000);
+        t.AddDiagnostics(4_000);
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(3.0, s.DiagnosticsMs, 2);
+    }
+
+    // Janela sem nenhum sample de diagnóstico não quebra (warmup / reinit).
+    [Fact]
+    public void Summary_SemDiagnostico_Zera()
+    {
+        var t = Create(5.0);
+        t.AddGoodFrame(9_000, 100, 2_900, 12_000);
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(0.0, s.DiagnosticsMs, 3);
+    }
+
     // O log não fecha sem saber quantas ITERAÇÕES o loop deu. O pacing é amostrado por
     // iteração e o trabalho por frame bom; se as populações diferem, existe iteração
     // queimada (frame não-bom: timeout diferido do WGC, textura nula) que o `good` não

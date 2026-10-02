@@ -280,6 +280,62 @@ public sealed class WgcCaptureSourceTests
         Assert.True(WgcCaptureSource.ShouldAcceptFrame(100_000, 0, 166_666));
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  ResolveCapTimestamp — o cap decide pelo timestamp de apresentação
+    //  do frame (SystemRelativeTime, 100 ns), não pelo callback (rajada)
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ResolveCapTimestamp_SystemRelativePositive_UsesIt()
+    {
+        Assert.Equal(1_234_567L, WgcCaptureSource.ResolveCapTimestamp(1_234_567, 9_999_999));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ResolveCapTimestamp_NonPositive_FallsBackToCallback(long systemRelativeTicks)
+    {
+        Assert.Equal(9_999_999L, WgcCaptureSource.ResolveCapTimestamp(systemRelativeTicks, 9_999_999));
+    }
+
+    [Fact]
+    public void CapWithPresentationTicks_AcceptsExact60FpsSequence_EvenWhenCallbackJitters()
+    {
+        // Cenário real medido (2026-10-02): DWM entrega 60 fps (intervalo exato 166666),
+        // mas o callback chega com jitter/rajada. Com timestamps de callback, o cap
+        // rejeitava ~35% dos frames; com o timestamp de apresentação, aceita todos.
+        var interval = WgcCaptureSource.ComputeCapIntervalTicks(60); // 166666
+
+        long[] presentation = { 1_000_000, 1_166_666, 1_333_332, 1_499_998, 1_666_664 };
+        long[] callback = { 1_000_000, 1_166_200, 1_333_000, 1_499_500, 1_666_664 };
+
+        long lastPresentation = 0;
+        long lastCallback = 0;
+        var acceptedPresentation = 0;
+        var acceptedCallback = 0;
+
+        for (var i = 0; i < presentation.Length; i++)
+        {
+            var capTicks = WgcCaptureSource.ResolveCapTimestamp(presentation[i], callback[i]);
+            if (WgcCaptureSource.ShouldAcceptFrame(capTicks, lastPresentation, interval))
+            {
+                lastPresentation = capTicks;
+                acceptedPresentation++;
+            }
+
+            if (WgcCaptureSource.ShouldAcceptFrame(callback[i], lastCallback, interval))
+            {
+                lastCallback = callback[i];
+                acceptedCallback++;
+            }
+        }
+
+        Assert.Equal(presentation.Length, acceptedPresentation);
+        Assert.True(acceptedCallback < presentation.Length,
+            $"callback jitter deveria rejeitar (bug), mas aceitou {acceptedCallback}/{presentation.Length}");
+    }
+
     [Fact]
     public void TryExtractTexture_UnsupportedPointer_DoesNotOverReleaseCallersPointer()
     {

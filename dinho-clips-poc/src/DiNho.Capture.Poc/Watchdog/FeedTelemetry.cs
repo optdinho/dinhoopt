@@ -29,6 +29,8 @@ internal sealed class FeedTelemetry
     private long _pacingDelaySum;
     private long _pacingSpinSum;
     private int _pacingCount;
+    private long _diagnosticsSum;
+    private int _diagnosticsCount;
     private long _queueDepthSum;
     private long _queueDepthCount;
     private int _queueDepthMax;
@@ -102,6 +104,22 @@ internal sealed class FeedTelemetry
         lock (_sync) _failFrames++;
     }
 
+    /// <summary>
+    /// Tempo do bloco de diagnóstico por iteração — checagens de foreground/alvo/stall,
+    /// atualização de status e drift. É tudo o que roda entre o fim do trabalho medido
+    /// (<c>total</c>, que fecha no <c>AddVideo</c>) e o pacing, por isso fica FORA do
+    /// <c>AddGoodFrame</c>. Sem medi-lo o período não fecha: <c>total + diag + pace ≈
+    /// 1/fps</c>; era o tempo que sumia entre o fps observado e o período das iterações.
+    /// </summary>
+    internal void AddDiagnostics(long diagTicks)
+    {
+        lock (_sync)
+        {
+            _diagnosticsSum += diagTicks;
+            _diagnosticsCount++;
+        }
+    }
+
     internal void AddQueueDepth(int depth)
     {
         lock (_sync)
@@ -145,7 +163,8 @@ internal sealed class FeedTelemetry
                 PacingCount: _pacingCount,
                 FeedFps: _goodFrames / _windowSeconds,
                 QueueDepthAvg: _queueDepthCount > 0 ? _queueDepthSum / (double)_queueDepthCount : 0,
-                QueueDepthMax: _queueDepthMax);
+                QueueDepthMax: _queueDepthMax,
+                DiagnosticsMs: _diagnosticsCount > 0 ? Ms(TicksToMs(_diagnosticsSum) / _diagnosticsCount) : 0);
 
             _windowStartTicks = nowTicks;
             _goodFrames = 0;
@@ -158,6 +177,8 @@ internal sealed class FeedTelemetry
             _pacingDelaySum = 0;
             _pacingSpinSum = 0;
             _pacingCount = 0;
+            _diagnosticsSum = 0;
+            _diagnosticsCount = 0;
             _queueDepthSum = 0;
             _queueDepthCount = 0;
             _queueDepthMax = 0;
@@ -249,4 +270,5 @@ internal readonly record struct FeedSummary(
     int PacingCount,
     double FeedFps,
     double QueueDepthAvg,
-    int QueueDepthMax);
+    int QueueDepthMax,
+    double DiagnosticsMs = 0);

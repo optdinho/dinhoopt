@@ -21,6 +21,43 @@ namespace DiNho.Capture.Poc;
 
 public sealed partial class EngineCoordinator
 {
+    // Último snapshot do hand-off WGC→loop, para difar por janela no LogFeedSummary
+    // (os contadores da fonte são cumulativos). Resetado no arranque do loop.
+    private DeliveryStatsSnapshot _lastDeliveryStats;
+
+    // ── Debounce das checagens de foreground/alvo ────────────────────────────
+    // IsTargetProcessAlive (OpenProcess), IsForegroundNonGame e IsTargetGameForeground
+    // eram chamadas POR FRAME (60Hz) dentro do bloco de diagnóstico — fora do `total`
+    // medido. Alt-tab é evento de escala de ms, não de frame: avaliar a cada 250ms
+    // corta ~15x as chamadas de Win32 no hot loop sem mudar a reação (≤250ms de atraso).
+    internal const int ForegroundCheckIntervalMs = 250;
+    private long _fgCheckLastTicks;
+    private bool _fgCachedFgIsNonGame;
+    private bool _fgCachedTargetKnownGame;
+    private bool _fgCachedTargetAlive;
+    private bool _fgCachedTargetForeground;
+
+    /// <summary>
+    /// Gate de debounce: true quando o intervalo passou desde a última avaliação
+    /// (<paramref name="lastTicks"/> == 0 = nunca avaliado). Puro e testável.
+    /// </summary>
+    internal static bool ShouldRefreshForegroundChecks(long nowTicks, long lastTicks, long intervalTicks)
+        => lastTicks == 0 || nowTicks - lastTicks >= intervalTicks;
+
+    /// <summary>
+    /// Decide se a ausência de frames deve ser lida como "jogo em background" (alt-tab
+    /// → suprime reinit e reseta o watchdog) em vez de stall do WGC. Extraído do loop
+    /// para ser testável fora do D3D11. A semântica é a original de 2026-09-28:
+    /// a supressão só é legítima quando o ALVO é jogo conhecido; se o foreground é
+    /// não-jogo e o alvo não é jogo válido, é pipeline preso no alvo errado.
+    /// </summary>
+    internal static bool ShouldSuppressAsBackground(
+        bool isWgc, bool targetIsKnownGame, bool targetAlive, bool targetForeground,
+        bool fgIsNonGame, bool targetValid)
+        => (isWgc && targetIsKnownGame && targetAlive && !targetForeground)
+           || (fgIsNonGame && !targetValid)
+           || (fgIsNonGame && targetIsKnownGame);
+
     private void ToggleCapture()
     {
         if (_captureActive)
@@ -838,6 +875,10 @@ public sealed partial class EngineCoordinator
         var spinTargetTicks = 0L;
             var modeCheckDue = DateTime.UtcNow;
             var diagFrames = 0;
+            // Baseline da janela WGC: parte do cumulativo atual para o 1º delta não
+            // incluir frames entregues antes do loop (reinit/reuso da fonte).
+            _lastDeliveryStats = (_capture as WgcCaptureSource)?.GetDeliveryStats() ?? default;
+            _fgCheckLastTicks = 0; // força reavaliação no 1º frame (lastTicks==0)
             var loggedFirstNullFrame = false;
             var loggedFirstFailFrame = false;
             var lastRamLogUtc = DateTime.UtcNow.AddSeconds(-2);
@@ -896,6 +937,9 @@ public sealed partial class EngineCoordinator
                 Log.I("RAM", $"video={d.videoCount}frames {videoMb:F1}MB | audio={d.audioCount}pkts {audioMb:F1}MB | total={totalMb:F1}MB | duracao={d.videoDuration.TotalSeconds:F1}s | proc={workingSetMb}MB | gcManaged={gcManagedMb}MB | allocated={allocatedMb}MB | native={nativeMb}MB | managedRetained={retainedMb}MB | loh={lohMb}MB | gen2={gen2Mb}MB | gen01={gen01Mb}MB | committed={committedMb}MB | pinned={pinnedMb}MB | gcPause={gcPauseTotalMs}ms (+{gcPauseDeltaMs}ms)");
             }
 
+            // Medição do bloco de diagnóstico. 0 = ainda não iniciado nesta iteração
+            // (exceção antes de chegar nele) → AddDiagnostics é pulado.
+            var diagStartTicks = 0L;
             try
             {
                 int captureTimeout = ComputeCaptureTimeoutMs(_config.Config.Fps);
@@ -1002,6 +1046,14 @@ public sealed partial class EngineCoordinator
                     }
                 }
 
+                // ── Bloco de diagnóstico (fora do `total` medido) ─────────────────
+                // Daqui até o pacing roda a cada iteração e NÃO entra no `total`
+                // (que fecha no AddVideo): checagens de foreground/alvo/stall,
+                // status (~30 frames) e drift (~300). É o candidato #1 a roubar
+                // orçamento do período. Medido à parte para o log FECHAR a conta:
+                // total + diag + pace ≈ 1/fps.
+                diagStartTicks = Stopwatch.GetTimestamp();
+
                 if (!_needsReinit)
                 {
                     // Se o processo alvo ainda está vivo, usamos WGC per-window E o
@@ -1018,20 +1070,30 @@ public sealed partial class EngineCoordinator
                     // (AnyDesk, explorer, navegador...), não reinicia — o usuário
                     // está fora do jogo e vai voltar. Aplica a TODOS os backends
                     // (WGC/DXGI/hybrid), não só WGC per-window.
-                    bool fgIsNonGame = IsForegroundNonGame();
+                    // Debounce: as flags vêm de Win32 (OpenProcess/GetForegroundWindow) e
+                    // não precisam de cadência de frame. Reavalia no máximo a cada 250ms.
+                    var fgCheckIntervalTicks = Stopwatch.Frequency * ForegroundCheckIntervalMs / 1000;
+                    if (ShouldRefreshForegroundChecks(diagStartTicks, _fgCheckLastTicks, fgCheckIntervalTicks))
+                    {
+                        _fgCheckLastTicks = diagStartTicks;
+                        _fgCachedTargetKnownGame = IsKnownGameTarget(_captureTargetGame);
+                        _fgCachedFgIsNonGame = IsForegroundNonGame();
+                        _fgCachedTargetAlive = IsTargetProcessAlive();
+                        _fgCachedTargetForeground = IsTargetGameForeground();
+                    }
 
                     // Incidente 2026-09-28: com o alvo = janela do Medal (não-jogo),
                     // a queda de frames era lida como "usuário alt-tabou e vai voltar"
                     // e o watchdog era resetado para sempre → 175 drops em ~70s.
                     // Suppressão de alt-tab só é legítima se o ALVO é um jogo conhecido;
                     // senão a queda é pipeline preso no alvo errado e precisa reiniciar.
-                    bool targetIsKnownGame = IsKnownGameTarget(_captureTargetGame);
-
-                    if ((_capture is WgcCaptureSource && targetIsKnownGame &&
-                        IsTargetProcessAlive() &&
-                        !IsTargetGameForeground())
-                        || (fgIsNonGame && !_captureTargetGame.IsValid)
-                        || (fgIsNonGame && targetIsKnownGame))
+                    if (ShouldSuppressAsBackground(
+                            _capture is WgcCaptureSource,
+                            _fgCachedTargetKnownGame,
+                            _fgCachedTargetAlive,
+                            _fgCachedTargetForeground,
+                            _fgCachedFgIsNonGame,
+                            _captureTargetGame.IsValid))
                     {
                         _bgDropCount++;
                         if (_bgDropCount >= BG_DEBOUNCE_DROPS)
@@ -1050,7 +1112,7 @@ public sealed partial class EngineCoordinator
                             _pendingTimeoutDrop = false;
                         }
                     }
-                    else if (ShouldEscalateStall(out var stallKind, out var stallSec))
+                    else if (ShouldEscalateStall(_fgCachedTargetForeground, out var stallKind, out var stallSec))
                     {
                         // Se o processo alvo MORREU enquanto backgrounded, sai do loop
                         // (não chama StopCapture() aqui para evitar deadlock com _pipelineTask.Wait)
@@ -1167,6 +1229,9 @@ public sealed partial class EngineCoordinator
                 Log.E("Pipeline", $"Erro: {ex}");
             }
 
+            if (diagStartTicks != 0)
+                _feed.AddDiagnostics(Stopwatch.GetTimestamp() - diagStartTicks);
+
             // Timing preciso (QPC-based): sleep para o bulk, spin para o residual
             var elapsedSinceCapture = Stopwatch.GetTimestamp() - beforeCapture;
             var elapsedUs = elapsedSinceCapture / freqPerUs;
@@ -1234,7 +1299,32 @@ public sealed partial class EngineCoordinator
         }
 
         Log.I("FeedTelemetry", FeedLogLine.Build(s, codec, scaleDivisor, speedX, outputLag));
+        LogWgcHandoff(s.GoodFrames);
         MaybeDegradeEncoderForCapacity();
+    }
+
+    /// <summary>
+    /// Fecha a conta do feed pelo lado do WGC: quantos frames o produtor entregou na
+    /// janela (<c>arrived</c>), quantos o cap local barrou (<c>capRejected</c>),
+    /// quantos o slot de 1 posição sobrescreveu sem o loop consumir (<c>overwritten</c>),
+    /// quantos o loop retirou (<c>consumed</c>) e quantas vezes ele acordou sem frame
+    /// (<c>emptyWakeup</c>) ou expirou (<c>timeout</c>). O <c>perdidos</c> = arrived −
+    /// consumed é exatamente o que sai do WGC e não vira frame bom — o número que
+    /// separa "o WGC entrega pouco" de "nós descartamos no caminho".
+    /// Só faz sentido para o backend WGC; nos demais é no-op.
+    /// </summary>
+    private void LogWgcHandoff(int goodFrames)
+    {
+        if (_capture is not WgcCaptureSource wgc)
+            return;
+
+        var now = wgc.GetDeliveryStats();
+        var d = now - _lastDeliveryStats;
+        _lastDeliveryStats = now;
+
+        Log.I("WgcHandoff", $"arrived={d.Arrived} capRejected={d.CapRejected} overwritten={d.Overwritten} " +
+            $"delivered={d.Delivered} consumed={d.Consumed} emptyWakeup={d.EmptyWakeup} timeout={d.Timeout} " +
+            $"| good={goodFrames} perdidos={d.Arrived - d.Consumed}");
     }
 
     /// <summary>
@@ -1268,7 +1358,7 @@ public sealed partial class EngineCoordinator
     /// <c>IsAlive</c> (bool) sozinho não distingue.
     /// </para>
     /// </summary>
-    private bool ShouldEscalateStall(out string kind, out double seconds)
+    private bool ShouldEscalateStall(bool gameInForeground, out string kind, out double seconds)
     {
         // A starvation é medida por relógio de parede (DateTime), o pump por
         // Stopwatch. Convertemos uma vez só.
@@ -1315,7 +1405,7 @@ public sealed partial class EngineCoordinator
                     stalled: stalled,
                     watchdogTripped: watchdogTripped,
                     starvationSec: starvationSec,
-                    gameInForeground: IsTargetGameForeground(),
+                    gameInForeground: gameInForeground,
                     out kind))
             {
                 seconds = stalled ? 0 : starvationSec;

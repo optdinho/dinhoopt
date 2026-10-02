@@ -14,6 +14,7 @@ public sealed class FeedLogLineTests
     private const int Clean = 193;
     private const double TotalAll = 18.9;
     private const double PacingDelay = 13.4, PacingSpin = 0.2;
+    private const double Diag = 4.1;
 
     private static readonly FeedSummary Summary = new(
         GoodFrames: Good,
@@ -30,7 +31,8 @@ public sealed class FeedLogLineTests
         PacingCount: 211,
         FeedFps: Fps,
         QueueDepthAvg: QueueAvg,
-        QueueDepthMax: QueueMax);
+        QueueDepthMax: QueueMax,
+        DiagnosticsMs: Diag);
 
     [Fact]
     public void Build_IncludesCodecScaleSpeedLag()
@@ -116,5 +118,19 @@ public sealed class FeedLogLineTests
     {
         var line = FeedLogLine.Build(Summary, "av1_nvenc", 1, 0.64, 5);
         Assert.Contains("iters=211", line);
+    }
+
+    // `diag` fica no bloco do feed, entre `totalAll` (fim do trabalho medido) e `pace`:
+    // é a metade "fora do total" do período que o pacing não cobre.
+    [Fact]
+    public void Build_ExpoeDiagnostico_EntreTotalAllEPace()
+    {
+        var line = FeedLogLine.Build(Summary, "av1_nvenc", 1, 0.64, 5);
+        Assert.Contains("diag=4.1ms", line);
+        var totalAllIdx = line.IndexOf("totalAll=", StringComparison.Ordinal);
+        var diagIdx = line.IndexOf("diag=", StringComparison.Ordinal);
+        var paceIdx = line.IndexOf("pace=", StringComparison.Ordinal);
+        Assert.True(totalAllIdx > 0 && diagIdx > totalAllIdx && paceIdx > diagIdx,
+            $"ordem inesperada: {line}");
     }
 }
