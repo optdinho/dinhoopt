@@ -80,3 +80,6 @@ e2e/.dbg-userdata/
 # E2E license bypass marker (created by e2e specs at launch time)
 **/.dinho-e2e-license
 .esbuild-tmp/
+
+# Soak harness output (scripts/soak-test.cjs)
+soak-out/
