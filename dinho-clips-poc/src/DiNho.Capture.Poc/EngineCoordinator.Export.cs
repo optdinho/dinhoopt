@@ -211,6 +211,10 @@ public sealed partial class EngineCoordinator
             }
             // Trim pós-save em thread de fundo: devolve RAM sem perder a "quente" do pool.
             _ = Task.Run(PostSaveTrim);
+            // Telemetria de recuperação: o [RAM] de captura morre com o save, então
+            // observar 60s a partir daqui é a única forma de PROVAR que allocated/
+            // committed caem de facto em vez de assumir que o trim resolve.
+            PostSaveMemoryWatch.Start();
         }
     }
 

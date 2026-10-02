@@ -2105,6 +2105,9 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     private static Task InvokeSaveClipAsync(EngineCoordinator coord)
     {
         var method = CoordinatorType.GetMethod("SaveClipAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        // A telemetria pós-save abre uma janela de 60s em background; em teste isso
+        // só polui o log (e segura um timer vivo). Desliga só neste helper.
+        PostSaveMemoryWatch.Enabled = false;
         return (Task)method.Invoke(coord, new object?[] { null })!;
     }
 

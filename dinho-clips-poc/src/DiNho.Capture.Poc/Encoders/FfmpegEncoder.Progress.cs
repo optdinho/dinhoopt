@@ -152,11 +152,11 @@ internal sealed partial class FfmpegEncoder
         // lento" — com -r 60 e feed de 40 fps o `time` fica atrás do `elapsed`
         // mesmo com encoder instantâneo. Só degrada se o encoder for o gargalo.
         //
-        // `FeedFps` devolve 0 quando NÃO há medição (janela enchendo, contador
-        // zerado, nenhum frame ainda) — e é exatamente nos colapsos do WGC que a
-        // janela não fecha. Derivar "encoder é o gargalo" desse 0 foi a regressão
-        // de 2026-10-01 21:34:14: feed a 5,8 fps, guard degradou para 720p e
-        // reiniciou o ffmpeg. `ClassifyFeed` separa desconhecido de saudável.
+        // `FeedFps` devolve 0 só enquanto a janela ainda não tem
+        // `FeedFpsMinElapsedSec` de frames (nenhum frame ainda, ou recém renovada).
+        // Derivar "encoder é o gargalo" desse 0 foi a regressão de
+        // 2026-10-01 21:34:14: feed a 5,8 fps, guard degradou para 720p e reiniciou
+        // o ffmpeg. `ClassifyFeed` separa desconhecido de saudável.
         var feedFps = FeedFps;
         var feed = CapacityGuardMath.ClassifyFeed(feedFps, _frameRate);
         if (!ShouldDegradeForCapacity(speedX, outputLag, feed))
