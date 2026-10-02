@@ -198,6 +198,13 @@ public sealed partial class EngineCoordinator
         }
         finally
         {
+            // Pico do export ANTES de qualquer Release(): é o número que a janela
+            // pós-save compara com t+60s. Capturado depois do trim não haveria queda
+            // nenhuma para medir — em 2026-10-01 o baseline saía já com a memória
+            // devolvida (proc 466MB em vez dos 566MB do pico) e o veredito não tinha
+            // o que provar.
+            var postSavePeak = PostSaveMemoryWatch.SnapshotPreRelease();
+
             // Libera retain dos pacotes — TrimExcess pode já ter Release()'d alguns,
             // então este Release() extra é o que efetivamente retorna ao pool.
             // Em finally para cobrir exceções do export (H1) e o early-return de buffer vazio.
@@ -212,9 +219,9 @@ public sealed partial class EngineCoordinator
             // Trim pós-save em thread de fundo: devolve RAM sem perder a "quente" do pool.
             _ = Task.Run(PostSaveTrim);
             // Telemetria de recuperação: o [RAM] de captura morre com o save, então
-            // observar 60s a partir daqui é a única forma de PROVAR que allocated/
-            // committed caem de facto em vez de assumir que o trim resolve.
-            PostSaveMemoryWatch.Start();
+            // observar 60s a partir daqui é a única forma de PROVAR que a RAM do
+            // export volta — comparando proc/gcManaged do pico com os de t+60s.
+            PostSaveMemoryWatch.Start(postSavePeak);
         }
     }
 
