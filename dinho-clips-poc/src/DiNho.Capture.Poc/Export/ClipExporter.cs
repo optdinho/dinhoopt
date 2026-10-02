@@ -290,14 +290,11 @@ public sealed partial class ClipExporter : IDisposable
                 var audioOffset = ComputeAudioMuxOffset(videoPackets, audioPackets);
                 if (audioOffset > TimeSpan.Zero)
                     Log.I("Exporter", $"Mux audio offset: {audioOffset.TotalMilliseconds:F0}ms (-itsoffset)");
+                // T1: MuxWithFfmpegStreaming grava num PARCIAL, verifica (probe +
+                // thumbnail na mesma chamada ffmpeg) e só publica no caminho final
+                // se passar. Um export quebrado agora LANÇA — nunca chega um
+                // arquivo truncado ao diretório do usuário.
                 MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat, adtsTemp, audioOffset);
-
-                // Pós-mux: verifica presença de áudio no MP4 E gera thumbnail em
-                // UMA chamada ffmpeg (B4 — antes eram 2 processos de 217MB por save).
-                // A dump de input do ffmpeg (stderr) já lista "Stream #0:..." com
-                // "Audio:"/"Video:", então o probe dedicado é desnecessário.
-                try { GenerateThumbnail(outputPath, expectedAudio: hasAudioTracks); }
-                catch (Exception ex) { Log.W("Exporter", $"Thumbnail generation failed: {ex.Message}"); }
             }
             finally
             {
@@ -330,9 +327,27 @@ public sealed partial class ClipExporter : IDisposable
         if (hasAudioTracks && !audioInput)
             Log.W("Exporter", $"Áudio disponível ({adtsPath ?? "null"}) mas arquivo ADTS não existe — exportando vídeo sem áudio!");
 
-        var args = BuildMuxArgs(outputPath, videoPath, audioInput, audioOffset, adtsPath);
-        Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
+        // T1: o ffmpeg grava no PARCIAL e o verify roda antes do publish. O
+        // thumbnail é gerado na mesma chamada (B4: 1 processo, não 2) mas num
+        // STAGING ao lado do parcial — o MuxAndPublish só o move para o caminho
+        // final depois que o MP4 foi publicado. Gravar direto no final deixaria
+        // a imagem de um clip reprovado ao lado do MP4 de um clip aprovado.
+        var stagingThumb = ResolveStagingThumbnailPath(outputPath);
+        MuxAndPublish(
+            outputPath,
+            partial =>
+            {
+                var args = BuildMuxArgs(partial, videoPath, audioInput, audioOffset, adtsPath);
+                Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
+                RunFfmpegMux(args);
+            },
+            partial => GenerateThumbnailAndVerify(partial, stagingThumb, hasAudioTracks),
+            stagingThumb);
+    }
 
+    /// <summary>Executa o mux gravando direto no caminho recebido (o parcial).</summary>
+    private static void RunFfmpegMux(string args)
+    {
         // Option A: reduz prioridade do processo durante o mux pesado de leitura
         // (temp MKV + ADTS → MP4) para não starvationar o jogo/gravação.
         var savedPriority = Process.GetCurrentProcess().PriorityClass;
@@ -374,6 +389,216 @@ public sealed partial class ClipExporter : IDisposable
         {
             try { Process.GetCurrentProcess().PriorityClass = savedPriority; } catch { }
         }
+    }
+
+    // ── T1: publicação atômica (verify antes do publish) ──────────────────
+
+    /// <summary>Por que o export não pode publicar direto no caminho final.</summary>
+    internal enum ExportVerdict
+    {
+        Ok,
+        MissingFile,
+        EmptyFile,
+        NoVideoStream,
+        ExpectedAudioMissing
+    }
+
+    /// <summary>Resultado da verificação do arquivo exportado, antes de publicá-lo.</summary>
+    internal readonly record struct ExportVerification(
+        ExportVerdict Verdict, int Streams, bool HasVideo, bool HasAudio, long Bytes)
+    {
+        public bool IsOk => Verdict == ExportVerdict.Ok;
+
+        /// <summary>Texto do veredito — vai para o log e para o renderer.</summary>
+        public string Reason => Verdict switch
+        {
+            ExportVerdict.Ok => $"Ok: {Streams} stream(s), {Bytes / 1024} KB",
+            ExportVerdict.MissingFile => "arquivo não existe após o mux",
+            ExportVerdict.EmptyFile => $"arquivo tem {Bytes} bytes (mux não escreveu nada)",
+            ExportVerdict.NoVideoStream => $"nenhuma trilha de vídeo no container ({Streams} stream(s))",
+            ExportVerdict.ExpectedAudioMissing => "áudio esperado mas ausente no container",
+            _ => Verdict.ToString()
+        };
+    }
+
+    /// <summary>
+    /// Caminho do parcial: MESMO diretório do final, para que o
+    /// <see cref="File.Move(string,string,bool)"/> seja uma renomeação atômica
+    /// (mesmo volume). Parcial em %TEMP% seria uma cópia non-atômica.
+    /// </summary>
+    internal static string ResolveTempOutputPath(string outputPath)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".";
+        var stem = Path.GetFileNameWithoutExtension(outputPath);
+        var ext = Path.GetExtension(outputPath);
+        return Path.Combine(dir, $"{stem}.partial{ext}");
+    }
+
+    internal static string ResolveThumbnailPath(string videoPath) =>
+        Path.ChangeExtension(videoPath, ".thumb.jpg");
+
+    /// <summary>
+    /// Staging do thumbnail: mesmo diretório do MP4 (mesmo volume), nome derivado
+    /// do PARCIAL. Fica visível para o renderer apenas se o export morrer no meio
+    /// — e o <c>finally</c> de <see cref="MuxAndPublish"/> o apaga.
+    /// </summary>
+    internal static string ResolveStagingThumbnailPath(string videoPath)
+    {
+        var partial = ResolveTempOutputPath(videoPath);
+        var dir = Path.GetDirectoryName(partial) ?? ".";
+        // GetFileNameWithoutExtension tiraria só o ".mp4" e o stem já viraria
+        // "clip.partial" — daí o ".thumb.jpg" ser explícito em vez de reaproveitado
+        // de ResolveThumbnailPath, que produz ".thumb.jpg" a partir do final.
+        var stem = Path.GetFileNameWithoutExtension(partial);
+        return Path.Combine(dir, $"{stem}.thumb.jpg");
+    }
+
+    /// <summary>
+    /// Veredito do export a partir do tamanho do arquivo + do dump de input do ffmpeg.
+    /// Decisão pura (sem I/O) para ser testável — o probe real vive em
+    /// <see cref="GenerateThumbnailAndVerify"/>.
+    /// </summary>
+    internal static ExportVerification VerifyExportOutput(long bytes, string? ffmpegStderr, bool expectedAudio)
+    {
+        var stderr = ffmpegStderr ?? "";
+        var hasVideo = stderr.Contains("Video:");
+        var hasAudio = stderr.Contains("Audio:");
+        var streams = System.Text.RegularExpressions.Regex.Matches(stderr, "Stream #").Count;
+
+        var verdict =
+            bytes < 0 ? ExportVerdict.MissingFile
+            : bytes == 0 ? ExportVerdict.EmptyFile
+            : !hasVideo ? ExportVerdict.NoVideoStream
+            : expectedAudio && !hasAudio ? ExportVerdict.ExpectedAudioMissing
+            : ExportVerdict.Ok;
+
+        return new ExportVerification(verdict, streams, hasVideo, hasAudio, bytes);
+    }
+
+    /// <summary>
+    /// T1: o MP4 só aparece no caminho final depois de passar pela verificação.
+    /// <para>
+    /// Antes o ffmpeg escrevia direto em <c>outputPath</c>: morto no meio do mux
+    /// (timeout de 5 min com <c>Kill()</c>, ou o app fechando durante o export)
+    /// deixava um MP4 <b>sem átomo moov</b> — sem índice, impossível de abrir. Foi
+    /// o <c>DiNho Optimizer 2026-10-01_09-51-12.mp4</c>.
+    /// </para>
+    /// <para>
+    /// Sequência mux → verify → move. O <c>finally</c> apaga o parcial em
+    /// qualquer falha, então o diretório de saída do usuário nunca recebe lixo.
+    /// </para>
+    /// </summary>
+    internal static void MuxAndPublish(
+        string outputPath,
+        Action<string> writePartial,
+        Func<string, ExportVerification> verify,
+        string? stagingThumbPath = null)
+    {
+        var partial = ResolveTempOutputPath(outputPath);
+        var thumb = ResolveThumbnailPath(outputPath);
+        try
+        {
+            writePartial(partial);
+
+            var verification = verify(partial);
+            Log.I("Exporter", $"Export verify: verdict={verification.Verdict} — {verification.Reason}");
+            if (!verification.IsOk)
+            {
+                throw new InvalidOperationException(
+                    $"export não publicado ({verification.Verdict}): {verification.Reason} → {outputPath}");
+            }
+
+            File.Move(partial, outputPath, overwrite: true);
+
+            // O thumbnail vai para o caminho FINAL só depois do MP4 estar
+            // publicado. O ffmpeg grava num staging ao lado do parcial: se gravasse
+            // direto no final, um verify reprovado deixaria a imagem do clip que
+            // FALHOU ao lado do MP4 do clip que deu certo — o renderer mostraria
+            // a imagem errada sem nenhum erro visível.
+            if (stagingThumbPath is not null && File.Exists(stagingThumbPath))
+            {
+                try
+                {
+                    File.Move(stagingThumbPath, thumb, overwrite: true);
+                    Log.I("Exporter", $"Thumbnail: {thumb} ({new FileInfo(thumb).Length / 1024} KB)");
+                }
+                catch (Exception ex)
+                {
+                    // Já publicamos o MP4 válido: thumbnail ausente é cosmético
+                    // (o renderer trata), então não desfaz o save.
+                    Log.W("Exporter", $"Thumbnail {thumb} não publicado: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            if (File.Exists(partial))
+            {
+                try { File.Delete(partial); }
+                catch { /* parcial órfão é cosmético; o que importa é não publicar lixo */ }
+            }
+            if (stagingThumbPath is not null && File.Exists(stagingThumbPath))
+            {
+                try { File.Delete(stagingThumbPath); }
+                catch { }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Uma única chamada ffmpeg faz as duas coisas: gera o thumbnail no STAGING
+    /// e produz o dump de input usado como probe (B4 — antes eram 2 processos de
+    /// 217 MB por save). O <paramref name="videoPath"/> é o PARCIAL, ainda não
+    /// publicado, e o <paramref name="thumbPath"/> é o staging que o
+    /// <see cref="MuxAndPublish"/> move para o caminho final só após o publish.
+    /// </summary>
+    private static ExportVerification GenerateThumbnailAndVerify(
+        string videoPath, string thumbPath, bool expectedAudio)
+    {
+        var sb = new StringBuilder();
+        using var proc = new Process { StartInfo = FfmpegPathResolver.CreateFfmpegStartInfo(args: $"-y -loglevel info -i \"{videoPath}\" -vframes 1 -s 320x180 -f image2 \"{thumbPath}\"", redirectError: true) };
+        proc.ErrorDataReceived += (s, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
+
+        proc.Start();
+        proc.BeginErrorReadLine();
+
+        bool timedOut = !proc.WaitForExit(30_000);
+        if (timedOut)
+            proc.Kill();
+
+        // M14: o dump de input do ffmpeg (stderr) lista as streams ANTES do encode —
+        // é o probe (B4). Sem ffmpeg utilizável o veredito degrada: MissingFile/
+        // EmptyFile se não houver bytes, NoVideoStream se o dump não trouxer vídeo.
+        string stderr;
+        lock (sb) { stderr = sb.ToString(); }
+
+        var bytes = File.Exists(videoPath) ? new FileInfo(videoPath).Length : -1;
+        var verification = VerifyExportOutput(bytes, stderr, expectedAudio);
+
+        Log.I("Exporter", $"MP4 probe: verdict={verification.Verdict} streams={verification.Streams} " +
+                          $"video={verification.HasVideo} audio={verification.HasAudio} bytes={bytes}");
+
+        if (timedOut)
+        {
+            if (File.Exists(thumbPath)) { try { File.Delete(thumbPath); } catch { } }
+            throw new InvalidOperationException(
+                $"ffmpeg thumbnail timed out (verdict={verification.Verdict}):\n{stderr}");
+        }
+
+        // Exit code ≠ 0 SEM afetar o publish: se o probe do MP4 passou, o clip é
+        // publicável e um thumbnail ausente é cosmético (o renderer trata a
+        // ausência). Mas o código de saída precisa ficar visível — era um
+        // "No such file" silencioso.
+        if (proc.ExitCode != 0)
+            Log.W("Exporter", $"ffmpeg thumbnail/probe exit={proc.ExitCode} (verdict={verification.Verdict}): {stderr.Trim()}");
+
+        // Log do STAGING; quem publica é o MuxAndPublish (que reporta o caminho final).
+        if (File.Exists(thumbPath))
+            Log.I("Exporter", $"Thumbnail gerado no staging: {thumbPath} ({new FileInfo(thumbPath).Length / 1024} KB)");
+        else
+            Log.W("Exporter", $"Thumbnail não gerado (verdict={verification.Verdict}, exit={proc.ExitCode})");
+
+        return verification;
     }
 
     // Monta o comando ffmpeg do mux. Extraído para permitir testar a posição do

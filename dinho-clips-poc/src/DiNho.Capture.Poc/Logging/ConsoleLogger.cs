@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace DiNho.Capture.Poc.Logging;
 
-public sealed class ConsoleLogger : ILogger, IDisposable
+public sealed class ConsoleLogger : ILogger, ICriticalLogger, IDisposable
 {
     private readonly TextWriter _writer;
     private readonly Lock _lock = new();
@@ -33,6 +33,24 @@ public sealed class ConsoleLogger : ILogger, IDisposable
             // 6.8: bufferiza e faz flush a cada 64 linhas — evita flush síncrono
             // por linha no hot path de captura (PipelineDiag/FeedTelemetry/RAM).
             if (_buffer.Count >= FlushThreshold) FlushLocked();
+        }
+    }
+
+    /// <summary>
+    /// Linha crítica (SAVE START/OK, EXPORT FAILED): vai para disco na hora, sem
+    /// esperar as 64 do lote. Ver <see cref="ICriticalLogger"/>.
+    /// </summary>
+    public void Critical(string source, string message)
+    {
+        if (_disposed) return;
+        var ts = _writeTimestamps ? $"{DateTime.Now:HH:mm:ss.fff} " : "";
+        var line = $"{ts}[CRITICAL] [{source}] {message}";
+        lock (_lock)
+        {
+            // Enfileira (para não perder nem reordenar o que já está no buffer) e
+            // drena tudo em seguida — uma única escrita no writer.
+            _buffer.Add(line);
+            FlushLocked();
         }
     }
 

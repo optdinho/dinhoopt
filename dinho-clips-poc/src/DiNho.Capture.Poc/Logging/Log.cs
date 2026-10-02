@@ -28,4 +28,18 @@ public static class Log
     public static void I(string source, string message) => Instance.Info(source, message);
     public static void W(string source, string message) => Instance.Warning(source, message);
     public static void E(string source, string message) => Instance.Error(source, message);
+
+    /// <summary>
+    /// Linha que não pode ser perdida em shutdown abrupto — flush imediato, sem
+    /// esperar o lote de 64. Degrada para <see cref="I"/> se o logger instalado não
+    /// implementar <see cref="ICriticalLogger"/> (o logger nunca pode lançar).
+    /// </summary>
+    public static void Critical(string source, string message)
+    {
+        var logger = Instance;
+        if (logger is ICriticalLogger critical)
+            critical.Critical(source, message);
+        else
+            logger.Info(source, message);
+    }
 }

@@ -1050,8 +1050,7 @@ public sealed partial class EngineCoordinator
                             _pendingTimeoutDrop = false;
                         }
                     }
-                    else if (_watchdog.ShouldReinit()
-                        || (_starvationStart != default && (DateTime.UtcNow - _starvationStart).TotalSeconds > 8))
+                    else if (ShouldEscalateStall(out var stallKind, out var stallSec))
                     {
                         // Se o processo alvo MORREU enquanto backgrounded, sai do loop
                         // (não chama StopCapture() aqui para evitar deadlock com _pipelineTask.Wait)
@@ -1075,13 +1074,14 @@ public sealed partial class EngineCoordinator
                         else
                         {
                             var health = _watchdog.GetHealth();
-                            var starvationSec = (_starvationStart != default ? (DateTime.UtcNow - _starvationStart).TotalSeconds : 0);
-                            Log.E("Pipeline", $"Reinit acionado: watchdog={_watchdog.ShouldReinit()} starvation={_starvationStart != default} " +
+                            // T5: `kind` é a CAUSA — antes este log dizia só "reinit
+                            // acionado", sem distinguir pump morto de feed parada.
+                            Log.E("Pipeline", $"Reinit acionado: causa={stallKind} starvation={_starvationStart != default} " +
                                 $"consecutiveGood={health.ConsecutiveGoodFrames} dropped={health.DroppedFrames}/{health.TotalFrames} " +
-                                $"lastIssue={health.LastIssue} reinitCount={_reinitCount} starvationTime={starvationSec:F1}s");
-                            if (starvationSec > 8)
+                                $"lastIssue={health.LastIssue} reinitCount={_reinitCount} starvationTime={stallSec:F1}s");
+                            if (stallKind == "starvation" && stallSec > 8)
                             {
-                                Log.E("Pipeline", $"GPU starvation sustentado ({starvationSec:F0}s) — considere reduzir qualidade (preset/resolução) ou fechar aplicações que usam GPU");
+                                Log.E("Pipeline", $"GPU starvation sustentado ({stallSec:F0}s) — considere reduzir qualidade (preset/resolução) ou fechar aplicações que usam GPU");
                             }
                             _needsReinit = true;
                             _reinitCount++;
@@ -1238,15 +1238,111 @@ public sealed partial class EngineCoordinator
     }
 
     /// <summary>
-    /// Guard proativo de capacidade: degrada a escala do encoder (1/1 → 1/2 → 1/4, mesmo
-    /// codec) quando o ffmpeg está sustentadamente atrás do realtime (speed &lt; 1x e lag de
-    /// saída crescendo), em vez de esperar o restart por crash. Chamado no mesmo cadence do
-    /// FeedTelemetry (~2Hz) — o cooldown interno (60s) e o threshold de lag decidem sozinhos.
+    /// Guard de capacidade nos dois sentidos: degrada a escala do encoder (1/1 → 1/2 → 1/4,
+    /// mesmo codec) quando o ffmpeg está sustentadamente atrás do realtime, e PROMOVE de volta
+    /// quando o encoder se recupera. Sem a promoção a degradação era de mão única e o usuário
+    /// ficava preso em 720p pelo resto da sessão (incidente 2026-10-01).
+    /// Chamado no mesmo cadence do FeedTelemetry (~2Hz) — cooldown, dwell e thresholds decidem.
     /// </summary>
     private void MaybeDegradeEncoderForCapacity()
     {
         if (_encoder is FfmpegEncoder ff)
-            ff.TryDegradeScaleForCapacity();
+            ff.TickCapacityGuard();
+    }
+
+    /// <summary>
+    /// T5: a decisão de escalar, agora com a CAUSA no log.
+    ///
+    /// <para>
+    /// Antes eram duas condições fundidas num <c>else if</c>:
+    /// <c>_watchdog.ShouldReinit()</c> OU 8 s de starvation. Ambas levavam ao
+    /// mesmo reinit, sem dizer qual era o motivo — e o log de 2026-10-01 provou
+    /// que essa distinção importa: <c>WGC-Pump msgs=0</c> por 2m35s podia ser
+    /// pump morto (problema da thread) ou DWM parado de entregar (problema de
+    /// captura). Tratados igual, os dois viravam reinit cego.
+    /// </para>
+    /// <para>
+    /// Agora: watchdog OU starvation, e o log diz qual. O pump entra como fonte
+    /// de verdade via <see cref="CaptureStallDetector"/> — que separa "a thread
+    /// da mensagem morreu" de "o feed parou" pelos HEARTBEATS, algo que o
+    /// <c>IsAlive</c> (bool) sozinho não distingue.
+    /// </para>
+    /// </summary>
+    private bool ShouldEscalateStall(out string kind, out double seconds)
+    {
+        // A starvation é medida por relógio de parede (DateTime), o pump por
+        // Stopwatch. Convertemos uma vez só.
+        var starvationSec = _starvationStart == default
+            ? 0
+            : (DateTime.UtcNow - _starvationStart).TotalSeconds;
+
+        // O detector do pump só vale para WGC — DXGI/hybrid não têm message pump.
+        // O watchdog NÃO é exclusivo do ramo sem pump: ele cobre falha de
+        // encode/export que o detector não enxerga, e WGC é o caminho do jogo.
+        var watchdogTripped = _watchdog.ShouldReinit();
+        if (_capture is WgcCaptureSource wgc && _wgcPump is { } pump)
+        {
+            var lastFrameTicks = wgc.LatestFrameTicks;
+            var stalled = CaptureStallDetector.IsPumpStalled(
+                pumpAlive: pump.IsAlive,
+                lastLoopTicks: pump.LastLoopTicks,
+                lastFrameTicks: lastFrameTicks,
+                nowTicks: Stopwatch.GetTimestamp());
+
+            if (stalled)
+            {
+                // O log precisa dizer QUAL: sem isso o próximo diagnóstico é
+                // exatamente o do incidente de 01/10 — adivinhar entre as duas.
+                var sinceFrameSec = lastFrameTicks == 0
+                    ? 0
+                    : (Stopwatch.GetTimestamp() - lastFrameTicks) / (double)Stopwatch.Frequency;
+                // Inclui a geometria REALMENTE observada pelo pool: um stall logo
+                // após um resize tem a pista mais óbvia aqui, e o incident log de
+                // 2026-10-01 (resize de 1 px) não tinha nenhuma linha dizendo qual
+                // dimensão o pipeline estava vendo.
+                var size = wgc.PipelineSize;
+                Log.E("Pipeline",
+                    $"stall detectado: pumpAlive={pump.IsAlive} loops={pump.LoopCount} " +
+                    $"msgs={pump.LastMessageCount} lastLoop={pump.LastLoopTicks} " +
+                    $"framesParados={sinceFrameSec:F1}s pipelineSize={size.Width}x{size.Height} " +
+                    $"alvo={_captureWidth}x{_captureHeight} " +
+                    (pump.IsAlive
+                        ? "— pump VIVO, feed do WGC parou (DWM/foreground)"
+                        : $"— pump MORTO: {pump.CrashReason}"));
+            }
+
+            if (CaptureStallDetector.ShouldEscalateDecision(
+                    stalled: stalled,
+                    watchdogTripped: watchdogTripped,
+                    starvationSec: starvationSec,
+                    gameInForeground: IsTargetGameForeground(),
+                    out kind))
+            {
+                seconds = stalled ? 0 : starvationSec;
+                return true;
+            }
+
+            seconds = 0;
+            return false;
+        }
+
+        // Sem pump (DXGI/hybrid): comportamento original.
+        if (watchdogTripped)
+        {
+            kind = "watchdog";
+            seconds = starvationSec;
+            return true;
+        }
+        if (starvationSec > 8)
+        {
+            kind = "starvation";
+            seconds = starvationSec;
+            return true;
+        }
+
+        kind = string.Empty;
+        seconds = 0;
+        return false;
     }
 
     /// <summary>

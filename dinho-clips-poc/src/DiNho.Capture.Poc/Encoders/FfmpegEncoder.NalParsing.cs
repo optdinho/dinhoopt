@@ -303,7 +303,20 @@ internal partial class FfmpegEncoder
 
             if (prevPts >= 0 && ptsTicks <= prevPts)
             {
-                ptsTicks = prevPts + 1;
+                // Um frame INTEIRO de distância, não 1 tick (100 ns).
+                //
+                // Corrigir para `prevPts + 1` deixava o PTS praticamente duplicado do
+                // frame anterior. O muxer calcula DTS = PTS − duração, então um PTS
+                // colado no anterior produz DTS atrás do DTS anterior: o ffmpeg
+                // reclamava "Non-monotonic DTS" a cada frame e corrigia por conta
+                // própria com `dct=1`, mascarando o problema na origem. No log de
+                // 2026-10-01 foram dezenas de correções por export.
+                //
+                // A extrapolação (acima) e a rota AnnexB já usam a duração completa
+                // como passo — a correção precisava do mesmo passo para ser
+                // consistente. `durTicks` aqui é a duração NOMINAL: o gap real é
+                // <= 0, então `ClampRealGap` devolve o fallback.
+                ptsTicks = prevPts + durTicks;
                 _lastRealPtsTicks = ptsTicks;
                 Log.W("FfmpegEncoder", $"ProcessIvfFrames: corrected non-monotonic pts to {ptsTicks / 10000}ms (frameIndex={_outputFrameIndex})");
             }
@@ -761,7 +774,12 @@ internal partial class FfmpegEncoder
 
         if (prevPts >= 0 && pts <= prevPts)
         {
-            pts = prevPts + 1;
+            // Um frame INTEIRO de distância, não 1 tick (100 ns) — mesma correção e
+            // mesmo motivo da rota IVF: `prevPts + 1` colava o PTS no do frame
+            // anterior, e como o muxer deriva DTS = PTS − duração, o DTS ia para trás
+            // ("Non-monotonic DTS" do ffmpeg, mascarado com dct=1). `dur` ainda é a
+            // duração NOMINAL aqui: o gap real é <= 0.
+            pts = prevPts + dur;
             _lastRealPtsTicks = pts;
             Log.W("FfmpegEncoder", $"EmitPacket: corrected non-monotonic pts to {pts / 10000}ms (frameIndex={_outputFrameIndex})");
         }

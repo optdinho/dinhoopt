@@ -65,6 +65,18 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private volatile bool _lastFrameBusyDrop;
     private int _gpuBusyDrops;
 
+    // T3: frames convertidos com blit ESCALADO na GPU (textura != dims do encoder).
+    // Antes isso não existia: qualquer mismatch ia para CPU. O contador é o que
+    // permite ver no log que o resize foi absorvido na GPU em vez de degradar.
+    private int _gpuScaledFrames;
+
+    // T4: fps EFETIVO do feed, medido numa janela deslizante pelo writer thread.
+    // É o que separa "encoder lento" de "feed lento" no capacity guard — o
+    // outputLagSeconds do ffmpeg (-r 60 contra um feed de 40fps) mente em
+    // qualquer um dos dois casos. 0 = ainda sem medição.
+    private long _feedFrameCount;
+    private long _feedWindowStartTicks;
+
     // Absolute restart limiter: max 10 restarts in any 30-second window to prevent CLR crash from GC pressure
     private int _restartsInWindow;
     private long _restartWindowStartTicks;
@@ -1106,6 +1118,9 @@ internal sealed partial class FfmpegEncoder : IEncoder
         _inputPtsQueue.Enqueue(pts);
         _frameCount++;
         _restartAttempts = 0;
+        // T4: mede o fps EFETIVO do feed. É este número (e não o outputLagSeconds
+        // do ffmpeg) que diz ao capacity guard se o encoder é o gargalo.
+        RecordFeedFrame();
     }
 
     private void OnStdinWriteFailed(string cause, Exception? fault)

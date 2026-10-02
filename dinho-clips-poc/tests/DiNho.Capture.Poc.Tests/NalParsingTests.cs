@@ -1735,8 +1735,44 @@ public sealed class NalParsingTests
         var packet = InvokeProcessIvfFrames(enc, BuildIvfFrameBlock(ptsIvf: 250, payload: [0x12, 0x00, 0x00]))!;
 
         Assert.NotNull(packet);
-        // PTS real (4000ms) é menor que o último emitido (9000ms) → corrige para prevPts+1 tick.
-        Assert.Equal(TimeSpan.FromSeconds(9).Ticks + 1, packet.Pts.Ticks);
+        // PTS real (4000ms) é menor que o último emitido (9000ms) → corrige advancing
+        // UM FRAME INTEIRO (timebase 1/1000 → 1ms), não 1 tick.
+        Assert.Equal(TimeSpan.FromSeconds(9).Ticks + TimeSpan.FromMilliseconds(1).Ticks, packet.Pts.Ticks);
+    }
+
+    /// <summary>
+    /// Regressão de 2026-10-01: a correção usava <c>prevPts + 1</c> tick (100 ns), o que
+    /// deixava o PTS praticamente COLADO no do frame anterior. Como o muxer deriva
+    /// <c>DTS = PTS − duração</c>, um PTS colado empurra o DTS para trás e o ffmpeg emitia
+    /// "Non-monotonic DTS" a cada frame (corrigido por ele com <c>dct=1</c>, escondendo o
+    /// defeito na origem).
+    ///
+    /// <para>
+    /// O passo mínimo seguro é a duração nominal do frame: é o mesmo passo que a
+    /// extrapolação e a rota AnnexB já usavam.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ProcessIvfFrames_NonMonotonicCorrection_AdvancesAFullFrame_NotOneTick()
+    {
+        var enc = CreateEncoderForTest();
+        SetEncoderField(enc, "_codec", "av1_nvenc");
+        var prevPts = TimeSpan.FromSeconds(9).Ticks;
+        SetEncoderField(enc, "_lastRealPtsTicks", prevPts);
+        ((System.Collections.Concurrent.ConcurrentQueue<TimeSpan>)GetEncoderField(enc, "_inputPtsQueue"))
+            .Enqueue(TimeSpan.FromMilliseconds(4000)); // muito atrás de prevPts
+
+        var packet = InvokeProcessIvfFrames(enc, BuildIvfFrameBlock(ptsIvf: 250, payload: [0x12, 0x00, 0x00]))!;
+
+        var nominalDur = TimeSpan.FromMilliseconds(1).Ticks; // timebase 1/1000 do harness
+        var advance = packet.Pts.Ticks - prevPts;
+
+        Assert.Equal(nominalDur, advance);
+        Assert.True(advance > 1,
+            $"avançar {advance} tick(s) deixa PTS e DTS sobrepostos — o muxer reclama non-monotonic DTS");
+        // O DTS derivado (PTS − duração) precisa continuar à frente do frame anterior.
+        Assert.True(packet.Pts.Ticks - packet.Duration.Ticks >= prevPts,
+            "DTS do frame corrigido não pode ficar atrás do PTS do frame anterior");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1869,6 +1905,34 @@ public sealed class NalParsingTests
 
         Assert.Equal(16.666, first.Duration.TotalMilliseconds, 0.5);
         Assert.Equal(50, second.Duration.TotalMilliseconds, 0.5);
+    }
+
+    /// <summary>
+    /// Par da regressão de 2026-10-01 na rota AnnexB (H264/HEVC): a correção de PTS não
+    /// monotônico usava <c>prevPts + 1</c> tick (100 ns), colando o PTS no do frame
+    /// anterior. Como o muxer deriva <c>DTS = PTS − duração</c>, isso fazia o DTS ir para
+    /// trás e o ffmpeg emitia "Non-monotonic DTS" (corrigido por ele com dct=1).
+    /// O passo correto é a duração nominal do frame.
+    /// </summary>
+    [Fact]
+    public void EmitPacket_NonMonotonicCorrection_AdvancesAFullFrame_NotOneTick()
+    {
+        var enc = CreateEncoderForTest();
+        SetEncoderField(enc, "_codec", "h264_nvenc");
+        var prevPts = TimeSpan.FromSeconds(9).Ticks;
+        SetEncoderField(enc, "_lastRealPtsTicks", prevPts);
+
+        SetPendingSlice(enc);
+        ((System.Collections.Concurrent.ConcurrentQueue<TimeSpan>)GetEncoderField(enc, "_inputPtsQueue"))
+            .Enqueue(TimeSpan.FromMilliseconds(4000)); // muito atrás de prevPts
+        InvokeEmitPacket(enc);
+
+        Assert.True(GetOutputReader(enc).TryRead(out var packet));
+
+        var nominalDur = TimeSpan.FromSeconds(1).Ticks / 60; // 1/60fps
+        Assert.Equal(prevPts + nominalDur, packet.Pts.Ticks);
+        Assert.True(packet.Pts.Ticks - packet.Duration.Ticks >= prevPts,
+            "DTS do frame corrigido não pode ficar atrás do PTS do frame anterior");
     }
 
     [Fact]

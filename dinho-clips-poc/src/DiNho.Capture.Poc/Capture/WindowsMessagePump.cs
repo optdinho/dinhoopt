@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading;
 using DiNho.Capture.Poc.Logging;
 
@@ -24,6 +25,26 @@ internal sealed class WindowsMessagePump : IDisposable
     // Run() sai do loop), Invokes subsequentes aguardavam 10s e retornavam como se tudo
     // estivesse OK, atribuindo um WgcCaptureSource NÃO inicializado ao _capture.
     internal TimeSpan InvokeTimeout { get; set; } = TimeSpan.FromSeconds(10);
+    
+    // T5 — liveness/heartbeat observável
+    private long _loopCount;
+    private long _lastLoopTicks;
+    private long _lastMsgCount;
+    private volatile bool _crashed;
+    private string? _crashReason;
+
+    public bool IsAlive => !_crashed && !_disposed && _thread.IsAlive;
+    public long LoopCount => Volatile.Read(ref _loopCount);
+    public long LastMessageCount => Volatile.Read(ref _lastMsgCount);
+
+    /// <summary>
+    /// Timestamp da última volta do laço. É o heartbeat: um pump "vivo" cujo
+    /// laço parou tem <c>IsAlive==true</c> e este valor parado — o detector usa
+    /// a diferença entre os dois para achar o deadlock silencioso.
+    /// </summary>
+    public long LastLoopTicks => Volatile.Read(ref _lastLoopTicks);
+    public string? CrashReason => _crashReason;
+    internal void MarkCrashedForTest(string reason){ _crashed = true; _crashReason = reason; }
 
     public WindowsMessagePump()
     {
@@ -41,6 +62,13 @@ internal sealed class WindowsMessagePump : IDisposable
     public void Invoke(Action action)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(WindowsMessagePump));
+
+        // T5: pump crashed = thread da mensagem MORREU. Falhar na hora é
+        // honesto; antes o caller ficava 10s esperando um done que nunca vinha.
+        if (_crashed)
+            throw new InvalidOperationException(
+                $"WindowsMessagePump está morto ({_crashReason}) — não aceita mais trabalho");
+
         var done = new ManualResetEventSlim(false);
         Exception? error = null;
         _queue.Enqueue(() =>
@@ -91,20 +119,40 @@ internal sealed class WindowsMessagePump : IDisposable
                 }
 
                 loopCount++;
+                // T5: heartbeat. Sem isto, um pump SAUDÁVEL sem frames do DWM
+                // produzia "msgs=0" indistinguível de um pump morto — o log de
+                // 2026-10-01 (2m35s de msgs=0) não dizia qual dos dois era.
+                Volatile.Write(ref _loopCount, loopCount);
+                Volatile.Write(ref _lastMsgCount, msgCount);
+                Interlocked.Exchange(ref _lastLoopTicks, Stopwatch.GetTimestamp());
+
                 if (loopCount % 500 == 0)
                     Log.D("WGC-Pump", $"Pump alive: loops={loopCount} msgs={msgCount} queueLen={_queue.Count}");
 
                 // Wait ≤4ms: fast enough for 60fps (16.67ms/frame), minimal CPU waste.
                 // Previous 100ms sleep caused ~6 frames lost per cycle because DWM
                 // frame delivery via COM was stuck in the queue while pump slept.
-                _workAvailable.Wait(TimeSpan.FromMilliseconds(4));
+                //
+                // T5: Reset() ANTES de Wait(), nunca depois. Com `Wait(); Reset()` um
+                // Set() que caia entre o retorno do Wait e o Reset era apagado — o
+                // trabalho enfileirado ficava esperando o próximo ciclo. Com
+                // `Reset(); Wait()` um Set() que chega entre os dois deixa o evento
+                // sinalizado e o Wait retorna na hora; um Set() que chegou antes do
+                // Reset só acorda o pump para um laço que não encontra nada (inócuo).
+                // A janela de perda é eliminada nos dois sentidos.
                 _workAvailable.Reset();
+                _workAvailable.Wait(TimeSpan.FromMilliseconds(4));
             }
 
             Log.I("WGC-Pump", $"Pump exiting: loops={loopCount} msgs={msgCount}");
         }
         catch (Exception ex)
         {
+            // T5: o catch saía do loop em silêncio. Quem chamasse Invoke depois
+            // esperava 10s e recebia uma exceção genérica, sem sinal de que a
+            // thread da mensagem tinha MORRIDO — diferente de "a ação travou".
+            _crashed = true;
+            _crashReason = $"{ex.GetType().Name}: {ex.Message}";
             Log.E("WGC-Pump", $"Message pump crashed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
         }
     }

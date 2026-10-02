@@ -74,6 +74,8 @@ vi.mock('./clips-pipe', () => ({
 }))
 
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { app } from 'electron'
 import {
   classifyEngineLines,
   engineLogPrefix,
@@ -87,6 +89,10 @@ import {
 } from './clips-engine'
 
 const ORIG_ENV = { ...process.env }
+
+function setPackaged(value: boolean): void {
+  Object.defineProperty(app, 'isPackaged', { value, configurable: true })
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -105,6 +111,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env = { ...ORIG_ENV }
+  setPackaged(false)
 })
 
 describe('engine log severity routing', () => {
@@ -183,6 +190,55 @@ describe('getEnginePath', () => {
     const result = getEnginePath()
 
     expect(result).toContain('clips-engine')
+  })
+
+  // `npm run dev` NÃO constrói o C#: o resolver apontava para bin/Debug, que fica com o
+  // build de quando alguém rodou `dotnet build` por último. Um smoke test de 10h rodou o
+  // engine de 2 dias atrás — as três strings novas de log nunca apareceram. Em dev o
+  // engine tem que vir do staging, que `npm run copy-engine` publica fresco e é
+  // exatamente o que entra no instalador.
+
+  it('prefers the staged engine in dev over the stale bin/Debug build', () => {
+    process.env.USERPROFILE = 'C:\\Users\\Tester'
+    delete process.env.DINHO_CLIPS_ENGINE_PATH
+    setPackaged(false)
+    vi.mocked(existsSync).mockReturnValue(true)
+
+    const result = getEnginePath()
+
+    expect(result).toContain(join('resources', 'clips-engine-staging'))
+    expect(result).not.toContain(join('bin', 'Debug'))
+  })
+
+  it('falls back to the bin/Debug build in dev when staging is missing', () => {
+    process.env.USERPROFILE = 'C:\\Users\\Tester'
+    delete process.env.DINHO_CLIPS_ENGINE_PATH
+    setPackaged(false)
+    vi.mocked(existsSync).mockImplementation((p) => !p.toString().includes('clips-engine-staging'))
+
+    const result = getEnginePath()
+
+    expect(result).toContain(join('bin', 'Debug'))
+  })
+
+  it('never picks the dev staging engine when packaged', () => {
+    process.env.USERPROFILE = 'C:\\Users\\Tester'
+    delete process.env.DINHO_CLIPS_ENGINE_PATH
+    setPackaged(true)
+    vi.mocked(existsSync).mockReturnValue(true)
+
+    const result = getEnginePath()
+
+    expect(result).not.toContain('clips-engine-staging')
+    expect(result).toContain(join('bin', 'Release'))
+  })
+
+  it('lets DINHO_CLIPS_ENGINE_PATH win over staging so an IDE can drive bin/Debug', () => {
+    process.env.USERPROFILE = 'C:\\Users\\Tester'
+    process.env.DINHO_CLIPS_ENGINE_PATH = 'D:\\eng\\DiNho.Capture.Poc.exe'
+    vi.mocked(existsSync).mockReturnValue(true)
+
+    expect(getEnginePath()).toBe('D:\\eng\\DiNho.Capture.Poc.exe')
   })
 })
 

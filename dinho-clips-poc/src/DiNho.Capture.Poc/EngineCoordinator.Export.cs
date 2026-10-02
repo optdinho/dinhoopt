@@ -148,7 +148,11 @@ public sealed partial class EngineCoordinator
 
             var fileName = $"DiNho Optimizer {DateTime.Now:yyyy-MM-dd_HH-mm-ss}.mp4";
             var outputPath = Path.Combine(outputDir, fileName);
-            Log.I("EngineCoordinator", $"═══════ SAVE START ═══════  → {outputPath}");
+            // Critical (não Info): em 2026-10-01 o SAVE START do clip 09-51-12 — o
+            // mesmo que saiu sem átomo moov — NÃO apareceu no JSONL. O Log é
+            // bufferizado em lotes de 64 e o app morreu antes do flush. Uma linha
+            // que precisa sobreviver a shutdown abrupto não pode esperar o lote.
+            Log.Critical("EngineCoordinator", $"═══════ SAVE START ═══════  → {outputPath}");
 
             var ffEncoder = _encoder as FfmpegEncoder;
             var cachedAvcc = ffEncoder?.AvccCache;
@@ -168,9 +172,17 @@ public sealed partial class EngineCoordinator
                     hvccFallback: cachedHvcc);
 
                 var fileInfo = new FileInfo(result);
-                Log.I("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");
-                Log.I("EngineCoordinator", $"═══════ SAVE OK ═══════");
-                _status.Update(s => s.LastClipSize = fileInfo.Length);
+                // SAVE OK é a única prova de que o clip survived o mux — o
+                // veredito já veio do probe (verify antes do publish), então este
+                // Log.Critical é a confirmação honesta. Não anunciamos tamanho de
+                // arquivo que não existe: o size do renderer só é atualizado depois
+                // que FileInfo confirma bytes > 0.
+                Log.Critical("EngineCoordinator", $"Clip salvo: {result} ({fileInfo.Length / 1024} KB)");
+                Log.Critical("EngineCoordinator", $"═══════ SAVE OK ═══════");
+                if (fileInfo.Exists && fileInfo.Length > 0)
+                    _status.Update(s => s.LastClipSize = fileInfo.Length);
+                else
+                    Log.W("EngineCoordinator", $"SAVE OK sem bytes em {result} — size não atualizado");
             });
             exportSw.Stop();
             if (exportSw.ElapsedMilliseconds > ExportStallThresholdMs)
@@ -178,9 +190,11 @@ public sealed partial class EngineCoordinator
         }
         catch (Exception ex)
         {
-            Log.E("EngineCoordinator", $"═══ EXPORT FAILED ═══  {ex.GetType().Name}: {ex.Message}");
+            // Critical: um export que falhou é a linha mais importante do log — foi
+            // ela que sumiu antes (o Log.E era engolido no flush de shutdown).
+            Log.Critical("EngineCoordinator", $"═══ EXPORT FAILED ═══  {ex.GetType().Name}: {ex.Message}");
             if (ex.InnerException != null)
-                Log.E("EngineCoordinator", $"Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                Log.Critical("EngineCoordinator", $"Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
         }
         finally
         {

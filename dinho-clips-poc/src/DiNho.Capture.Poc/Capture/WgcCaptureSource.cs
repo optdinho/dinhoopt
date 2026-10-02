@@ -73,6 +73,74 @@ public sealed class WgcCaptureSource : ICaptureSource
             ConfigureSession3();
     }
 
+    /// <summary>
+    /// Janela de estabilização para um resize, em ticks de Stopwatch.
+    /// Resize de janela no Windows vem em rajada (DWM negocia, o jogo relayout,
+    /// snap, maximize) — recriar o pool em cada frame intermediário derrubaria
+    /// a sessão repetidamente. 250 ms agrupa a rajada inteira.
+    /// </summary>
+    public static long ResizeDebounceTicks => Stopwatch.Frequency / 4;
+
+    // ── T3: recriar o frame pool quando o content size muda ──────────────
+    //
+    // O pool era criado UMA vez com captureItem.Size e nunca recriado. Quando a
+    // janela muda de tamanho, o WGC passa a entregar frames na nova dimensão
+    // num poolDimensionado para a antiga — e o encoder, inicializado com a
+    // dimensão antiga, caía no fallback CPU (70-75 ms/frame em 2026-10-01).
+    //
+    // A referência é a WebRTC, que recria o pool em OnContentSizeChanged
+    // (modules/desktop_capture/win/wgc_capture_session.cc).
+
+    private int _poolW, _poolH;
+    private long _lastResizeTicks;
+
+    // Geometria observada pelo pipeline, published como UM long (PipelineSize.Pack):
+    // em dois campos separados cada Volatile.Read era tear-free por campo, mas o par
+    // não era — o consumidor podia ler a largura nova com a altura antiga.
+    private long _observedSize;
+
+    /// <summary>
+    /// Dimensões que o pipeline realmente entregou — diferente de
+    /// <see cref="Width"/>/<see cref="Height"/>, que são captureItem.Size.
+    /// </summary>
+    public PipelineSize PipelineSize => PipelineSize.Unpack(Interlocked.Read(ref _observedSize));
+
+    /// <summary>
+    /// Timestamp do último frame ENTREGUE (0 = nenhum ainda). O watchdog usa
+    /// isto via <see cref="CaptureStallDetector"/> para separar "a thread da
+    /// mensagem morreu" de "o DWM parou de entregar frames" — em 2026-10-01 as
+    /// duas condições eram indistinguíveis.
+    /// </summary>
+    public long LatestFrameTicks => Interlocked.Read(ref _latestFrameTicks);
+
+    /// <summary>
+    /// Decide se o frame pool precisa ser recriado para um frame de
+    /// <paramref name="frameW"/>x<paramref name="frameH"/>.
+    /// <para>
+    /// Pool ainda não criado (0x0) → sempre. Dimensão diferente → sim.
+    /// Frame degenerado → nunca (alt-tab/minimize não pode derrubar a sessão).
+    /// </para>
+    /// <para>
+    /// Não há debounce AQUI de propósito: um resize real precisa recriar na hora.
+    /// Resize de janela no Windows chega em rajada, e o debounce existe só para
+    /// não logar 40 linhas — ver <see cref="ShouldLogResize"/>.
+    /// </para>
+    /// </summary>
+    public static bool ShouldRecreatePool(int frameW, int frameH, int poolW, int poolH)
+    {
+        if (frameW <= 0 || frameH <= 0) return false;
+        if (poolW <= 0 || poolH <= 0) return true;
+        return frameW != poolW || frameH != poolH;
+    }
+
+    /// <summary>
+    /// Rate-limit do LOG de resize (250 ms). A decisão de recriar não passa
+    /// por aqui — só o barulho.
+    /// </summary>
+    public static bool ShouldLogResize(long nowTicks, long lastResizeTicks, long? debounceTicks = null) =>
+        lastResizeTicks == 0
+        || nowTicks - lastResizeTicks >= (debounceTicks ?? ResizeDebounceTicks);
+
     public void Initialize(ID3D11Device? sharedDevice = null) =>
         Initialize(sharedDevice, IntPtr.Zero, IntPtr.Zero);
 
@@ -191,6 +259,10 @@ public sealed class WgcCaptureSource : ICaptureSource
             numberOfBuffers: 5,
             _captureItem.Size);
 
+        _poolW = (int)_captureItem.Size.Width;
+        _poolH = (int)_captureItem.Size.Height;
+        Interlocked.Exchange(ref _observedSize, PipelineSize.Pack(new PipelineSize(_poolW, _poolH)));
+
         _session = _framePool.CreateCaptureSession(_captureItem);
 
         // Win11 24H2+ session settings — fail silently on older Windows
@@ -245,8 +317,21 @@ public sealed class WgcCaptureSource : ICaptureSource
         var ticks = Stopwatch.GetTimestamp();
         var count = Interlocked.Increment(ref _frameArrivedCount);
 
+        // T3: resize. O pool nasce dimensionado para captureItem.Size; se a janela
+        // muda, o WGC passa a entregar frames de outra dimensao num pool da dimensao
+        // antiga — e o encoder (inicializado com a dimensao antiga) cai no fallback
+        // CPU. Recriar o pool mantem pool e frames coerentes.
+        //
+        // Feito ANTES do cap de captura: um frame que mudou de dimensao nao pode ser
+        // aceito contra um pool stale, mesmo que o cap fosse accepta-lo.
+        var content = frame.ContentSize;
+        var frameW = (int)content.Width;
+        var frameH = (int)content.Height;
+        if (ShouldRecreatePool(frameW, frameH, _poolW, _poolH))
+            RecreatePoolForResize(sender, frameW, frameH, frame.ContentSize);
+
         // Cap de captura (OBS reset_frame_interval): descarta frames que chegaram antes
-        // do intervalo do fps alvo. O skip acontece AQUI — antes da extração/cópia D3D11
+        // do intervalo do fps alvo. O skip acontece AQUI — antes da extração/cópia D3D
         // e do VideoProcessorBlt — então o custo GPU roda na taxa alvo, não na taxa DWM.
         if (!ShouldAcceptFrame(ticks, _lastAcceptedTicks, _capIntervalTicks))
         {
@@ -273,6 +358,59 @@ public sealed class WgcCaptureSource : ICaptureSource
         Interlocked.Exchange(ref _latestFrameTicks, ticks);
         _hasReceivedFrame = true;
         _frameSignal.Set();
+    }
+
+    /// <summary>
+    /// T3: recria o <c>Direct3D11CaptureFramePool</c> na nova geometria.
+    ///
+    /// <para>
+    /// Só o POOL é recriado — a <c>GraphicsCaptureSession</c> continua a mesma.
+    /// <c>Direct3D11CaptureFramePool.Recreate</c> mantém a sessão: o
+    /// <c>ContentSize</c> já lagava porque o pool foi criado com
+    /// <c>captureItem.Size</c>, que o DWM só atualiza quando a janela realmente
+    /// para de mudar.
+    /// </para>
+    /// <para>
+    /// As texturas do <see cref="TexturePool"/> são dimensionadas por
+    /// <c>Rent(frameW, frameH, ...)</c>, que já descarta as do tamanho antigo
+    /// (TexturePool.cs:34-44) — não há nada a invalidar aqui.
+    /// </para>
+    /// </summary>
+    private void RecreatePoolForResize(
+        Direct3D11CaptureFramePool pool, int frameW, int frameH, Windows.Graphics.SizeInt32 newSize)
+    {
+        if (_disposed || pool is null) return;
+
+        var oldW = _poolW;
+        var oldH = _poolH;
+        var now = Stopwatch.GetTimestamp();
+
+        try
+        {
+            pool.Recreate(device: null, DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                numberOfBuffers: 5, size: newSize);
+
+            _poolW = frameW;
+            _poolH = frameH;
+            Interlocked.Exchange(ref _observedSize, PipelineSize.Pack(new PipelineSize(frameW, frameH)));
+
+            // A sessão foi criada com MinUpdateInterval do cap de captura; um
+            // Recreate não o preserva em algumas builds, então reaplicamos.
+            if (_session is not null)
+                ConfigureSession3();
+
+            if (ShouldLogResize(now, Interlocked.Read(ref _lastResizeTicks)))
+            {
+                Interlocked.Exchange(ref _lastResizeTicks, now);
+                Log.I("WGC", $"Frame pool recriado por resize: {oldW}x{oldH} -> {frameW}x{frameH}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Não propaga: perder um frame por resize é melhor que derrubar o
+            // handler da thread WinRT. O próximo frame tenta de novo.
+            Log.W("WGC", $"Recreate por resize falhou ({oldW}x{oldH} -> {frameW}x{frameH}): {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>

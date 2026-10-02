@@ -293,32 +293,23 @@ describe('getEnginePath', () => {
     expect(getEnginePath()).toBe(resourcesPath)
   })
 
-  it('returns cwd fallback when no candidate exists and USERPROFILE cleared', () => {
+  // Sem engine no disco, o fallback de dev é o staging de propósito: o erro "Engine
+  // executable not found at:" precisa apontar o caminho que `npm run copy-engine` popula.
+  // Apontar bin/Debug mandava o dev procurar um build que nenhum script npm produz.
+  it('returns the staging fallback in dev when nothing exists', () => {
     delete process.env.USERPROFILE
     setPackaged(false)
     vi.mocked(existsSync).mockReturnValue(false)
-    const sub = engineSubpath(true)
-    // Last candidate is cwd, fallback = candidates[1] when no desktop
-    const fallback = join(__dirname, '..', '..', 'dinho-clips-poc', sub)
-    expect(getEnginePath()).toBe(fallback)
+
+    expect(getEnginePath()).toBe(join(process.cwd(), 'resources', 'clips-engine-staging', 'DiNho.Capture.Poc.exe'))
   })
 
-  it('returns desktop fallback when nothing matches and USERPROFILE is set', () => {
+  it('returns the desktop Release fallback when packaged and nothing matches', () => {
     process.env.USERPROFILE = 'C:\\Users\\TestDev'
-    setPackaged(false)
+    setPackaged(true)
     vi.mocked(existsSync).mockReturnValue(false)
-    const sub = engineSubpath(true)
-    const desktopPath = join('C:\\Users\\TestDev', 'Desktop', 'dinho-clips-poc', sub)
+    const desktopPath = join('C:\\Users\\TestDev', 'Desktop', 'dinho-clips-poc', engineSubpath(false))
     expect(getEnginePath()).toBe(desktopPath)
-  })
-
-  it('returns fallback candidates[1] when desktop is empty and existsSync returns none', () => {
-    delete process.env.USERPROFILE
-    setPackaged(false)
-    vi.mocked(existsSync).mockReturnValue(false)
-    const sub = engineSubpath(true)
-    const expected = join(__dirname, '..', '..', 'dinho-clips-poc', sub)
-    expect(getEnginePath()).toBe(expected)
   })
 
   it('uses Release subpath when isPackaged is true', () => {

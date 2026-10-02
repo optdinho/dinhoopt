@@ -225,6 +225,17 @@ export function getEnginePath(): string {
   }
   const desktop = process.env.USERPROFILE ? join(process.env.USERPROFILE, 'Desktop') : ''
   const isDev = !app.isPackaged
+  // Em dev o engine tem que sair do staging: `npm run dev` não compila o C#, então
+  // bin/Debug carrega o build de quando alguém rodou `dotnet build` por último (foi o que
+  // fez um smoke test de 10h rodar engine de 2 dias atrás). O staging é o que
+  // `npm run copy-engine` publica fresco e é exatamente o que entra no instalador.
+  // Quem quiser depurar pelo IDE aponta DINHO_CLIPS_ENGINE_PATH para o bin/Debug dele.
+  const devStaging = isDev
+    ? [
+        join(process.cwd(), 'resources', 'clips-engine-staging', ENGINE_EXE),
+        join(__dirname, '..', '..', 'resources', 'clips-engine-staging', ENGINE_EXE),
+      ]
+    : []
   const engineSubpath = join(
     'src',
     'DiNho.Capture.Poc',
@@ -234,6 +245,7 @@ export function getEnginePath(): string {
     isDev ? ENGINE_EXE : join('publish', ENGINE_EXE),
   )
   const candidates = [
+    ...devStaging,
     desktop ? join(desktop, 'dinho-clips-poc', engineSubpath) : '',
     join(__dirname, '..', '..', 'dinho-clips-poc', engineSubpath),
     join(__dirname, '..', '..', 'clips-engine', ENGINE_EXE),
@@ -243,7 +255,14 @@ export function getEnginePath(): string {
   for (const p of candidates) {
     if (p && existsSync(p)) return p
   }
-  const fallback = desktop ? join(desktop, 'dinho-clips-poc', engineSubpath) : (candidates[1] ?? ENGINE_EXE)
+  // Sem engine no disco: dev devolve o staging (o primeiro candidato) para o erro de
+  // "Engine executable not found" apontar o caminho que `copy-engine` popula, em vez do
+  // bin/Debug que o dev nunca constrói.
+  const fallback = isDev
+    ? (devStaging[0] ?? ENGINE_EXE)
+    : desktop
+      ? join(desktop, 'dinho-clips-poc', engineSubpath)
+      : (candidates[devStaging.length + 1] ?? ENGINE_EXE)
   return fallback
 }
 
@@ -253,6 +272,9 @@ export async function startEngine(): Promise<{ success: boolean; error?: string 
   if (_engineRunning) return { success: true }
 
   const exePath = getEnginePath()
+  // Sem isto não há como provar, de um log de runtime, qual binário rodou — o smoke test
+  // de 10h executou engine de 2 dias atrás e só o path do games.json denunciou.
+  getLogger().info('clips-engine', `Engine exe: ${exePath}`)
   if (!existsSync(exePath)) {
     const err = `Engine executable not found at: ${exePath}`
     getLogger().error('clips', err)

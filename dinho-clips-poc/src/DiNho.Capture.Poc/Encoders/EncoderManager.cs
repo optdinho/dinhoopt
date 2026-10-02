@@ -13,6 +13,18 @@ internal static class FfmpegPathResolver
     private static string? _cachedPath;
     private static string? _cachedDir;
 
+    /// <summary>
+    /// Seam de teste: fixa o caminho do ffmpeg e pula a resolução por candidatos.
+    /// Sem isto os testes de integração de export rodam com ffmpeg ausente do PATH
+    /// e retornam cedo com "skip" — o caminho de publicação atômica (T1) ficaria
+    /// sem cobertura justamente na máquina onde se roda a suíte.
+    /// </summary>
+    internal static void OverridePathForTest(string? path)
+    {
+        _cachedPath = path;
+        _cachedDir = path is null ? null : Path.GetDirectoryName(path);
+    }
+
     /// <summary>Get the directory containing ffmpeg.exe (for DLL resolution).</summary>
     public static string GetFfmpegDir() => _cachedDir ?? Path.GetDirectoryName(GetFfmpegPath()) ?? "";
 
@@ -21,26 +33,8 @@ internal static class FfmpegPathResolver
         if (_cachedPath != null)
             return _cachedPath;
 
-        // Candidate paths in priority order:
-        //   1. Same dir as engine exe (packaged app)
-        //   2. Release publish dir (dev: published standalone)
-        //   3. Staging dir (dev: npm run dev, engine in bin/Debug)
-        //   4. Fallback to PATH
         var baseDir = AppContext.BaseDirectory;
-        var candidates = new[]
-        {
-            // Packaged: ffmpeg.exe next to DiNho.Capture.Poc.exe
-            Path.Combine(baseDir, "ffmpeg.exe"),
-            // Dev: Release publish (engine published with -o)
-            Path.Combine(baseDir, "..", "..", "..", "bin", "Release", "net10.0-windows10.0.26100.0", "publish", "ffmpeg.exe"),
-            // Dev: electron staging dir (6 levels up from bin/Debug/net10/.../ to solution root)
-            Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "resources", "clips-engine-staging", "ffmpeg.exe"),
-            // Packaged: resources/clips-engine/ (electron-builder layout)
-            Path.Combine(baseDir, "..", "clips-engine", "ffmpeg.exe"),
-            "ffmpeg", // fallback to PATH
-        };
-
-        foreach (var candidate in candidates)
+        foreach (var (candidate, reason) in BuildCandidates(baseDir))
         {
             try
             {
@@ -73,7 +67,10 @@ internal static class FfmpegPathResolver
                         {
                             _cachedPath = candidate;
                             _cachedDir = Path.GetDirectoryName(candidate) ?? "";
-                            Log.D("FfmpegPathResolver", $"Found ffmpeg at: {candidate}");
+                            // Info (não Debug): incidente 2026-10-01 — o app INSTALADO
+                            // executou o ffmpeg do staging de DEV e o log não dizia
+                            // qual. Sem esta linha o path errado é invisível.
+                            Log.I("FfmpegPathResolver", $"Found ffmpeg at: {candidate} (motivo: {reason})");
                             return candidate;
                         }
                     }
@@ -86,6 +83,71 @@ internal static class FfmpegPathResolver
         return "ffmpeg"; // final fallback, will likely fail
     }
 
+    /// <summary>
+    /// Candidatos do ffmpeg em ordem de prioridade, com o motivo de cada um.
+    /// <para>
+    /// Incidente 2026-10-01 (E6): o candidato de staging de DEV era testado
+    /// <b>antes</b> do layout empacotado. Numa máquina de desenvolvimento os dois
+    /// existem, o de dev respondia <c>-version</c> primeiro, e o app INSTALADO
+    /// passou a usar <c>C:\Users\...\Desktop\001\resources\clips-engine-staging\ffmpeg.exe</c>
+    /// — um binário que não é o validado pelo gate <c>verify-ffmpeg.js</c>.
+    /// </para>
+    /// <para>
+    /// Regra: quando o layout empacotado está presente, os candidatos empacotados
+    /// vêm primeiro e o staging de dev fica <b>fora</b> da lista — um app empacotado
+    /// nunca deve carregar binário de desenvolvimento. Em dev puro (sem
+    /// <c>clips-engine/</c> ao lado) o staging continua disponível, que é o que o
+    /// <c>npm run dev</c> precisa.
+    /// </para>
+    /// </summary>
+    internal static (string Path, string Reason)[] BuildCandidates(string baseDir)
+    {
+        var packagedDir = Path.GetFullPath(Path.Combine(baseDir, "..", "clips-engine"));
+        var isPackaged = Directory.Exists(packagedDir);
+
+        var nextToExe = Path.Combine(baseDir, "ffmpeg.exe");
+        var packagedResources = Path.Combine(baseDir, "..", "clips-engine", "ffmpeg.exe");
+        var devPublish = Path.Combine(baseDir, "..", "..", "..", "bin", "Release", "net10.0-windows10.0.26100.0", "publish", "ffmpeg.exe");
+        var devStaging = Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "resources", "clips-engine-staging", "ffmpeg.exe");
+
+        var ordered = isPackaged
+            ? new (string Path, string Reason)[]
+            {
+                (nextToExe, "próximo ao exe (empacotado)"),
+                (packagedResources, "resources/clips-engine (empacotado)"),
+                (devPublish, "publish Release local (fallback de dev)"),
+                ("ffmpeg", "PATH do sistema"),
+            }
+            :
+            [
+                (nextToExe, "próximo ao exe (dev)"),
+                (devStaging, "staging do electron (npm run dev)"),
+                (devPublish, "publish Release local"),
+                (packagedResources, "resources/clips-engine (empacotado)"),
+                ("ffmpeg", "PATH do sistema"),
+            ];
+
+        // Deduplica por caminho NORMALIZADO. No layout empacotado baseDir já é
+        // `...\resources\clips-engine`, então `nextToExe` e `packagedResources`
+        // são o mesmo arquivo escrito de duas formas (`<base>\ffmpeg.exe` vs
+        // `<base>\..\clips-engine\ffmpeg.exe`). Comparar strings cruas não pega
+        // isso — e o custo é um `ffmpeg -version` (spawn de processo) duplicado.
+        // Mantém-se a PRIMEIRA ocorrência, que é a de maior prioridade.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var deduped = new List<(string Path, string Reason)>(ordered.Length);
+        foreach (var candidate in ordered)
+        {
+            var key = candidate.Path == "ffmpeg"
+                ? candidate.Path
+                : Path.GetFullPath(candidate.Path);
+
+            if (seen.Add(key))
+                deduped.Add(candidate);
+        }
+
+        return [.. deduped];
+    }
+
     /// <summary>Create a ProcessStartInfo for ffmpeg with correct WorkingDirectory (for DLL resolution).</summary>
     public static ProcessStartInfo CreateFfmpegStartInfo(
         string? args = null,
@@ -93,12 +155,13 @@ internal static class FfmpegPathResolver
         bool redirectOutput = false,
         bool redirectError = false)
     {
-        return new ProcessStartInfo(GetFfmpegPath())
+        var path = GetFfmpegPath();
+        return new ProcessStartInfo(path)
         {
             Arguments = args ?? "",
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = GetFfmpegDir(),
+            WorkingDirectory = Path.GetDirectoryName(path) ?? "",
             RedirectStandardInput = redirectInput,
             RedirectStandardOutput = redirectOutput,
             RedirectStandardError = redirectError,

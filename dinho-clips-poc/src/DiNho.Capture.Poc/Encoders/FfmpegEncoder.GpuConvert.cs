@@ -175,39 +175,58 @@ internal partial class FfmpegEncoder
         }
 
         var texDesc = texture.Description;
-        // Allow height mismatch of 1 pixel (odd→even rounding in Initialize).
-        // G3: mismatch NÃO descarta o frame permanentemente — cai para a conversão CPU
-        // (que acomoda dims arbitrárias da textura). Antes o frame era dropado até o
-        // restart; um mismatch transiente (stale do pool/res change) custava vídeo.
-        if (texDesc.Width != _width || Math.Abs((int)texDesc.Height - _height) > 1)
+        var device = texture.Device;
+        int nv12W = Nv12W, nv12H = Nv12H;
+        int texW = (int)texDesc.Width, texH = (int)texDesc.Height;
+
+        // T3: a decisão saiu para ConvertPathResolver (função pura, testada).
+        //
+        // ANTES: qualquer diferença de largura caía direto para ConvertCpuNv12.
+        // Em 2026-10-01 a janela foi de 1932x1052 para 1933x1052 — UM pixel — e a
+        // conversão foi de ~2,2 ms para 70-75 ms por frame. O encoder virou o
+        // gargalo e o save saiu em 152,82 s de 305,01 s esperados.
+        //
+        // O blit escalado do VideoProcessor custa microssegundos; a conversão em
+        // software custa ~30x mais. Como o OUTPUT NV12 já é o que o ffmpeg recebe
+        // (nv12W x nv12H, independente da textura), o resize absorve na GPU sem
+        // mudar nada no stream codificado.
+        var path = ConvertPathResolver.ResolveConvertPath(
+            texW, texH, _width, _height, nv12W, nv12H,
+            converterInCooldown: DateTime.UtcNow < _gpuConverterFailedUntil);
+
+        if (path == ConvertPath.CpuFallback)
         {
             _gpuConvertFails++;
-            Log.W("FfmpegEncoder", $"DIM MISMATCH guard: tex={texDesc.Width}x{texDesc.Height} esperado={_width}x{_height} — usando conversão CPU");
-            return ConvertCpuNv12(texture, texture.Device, dst);
+            Log.W("FfmpegEncoder",
+                $"GPU convert indisponível (tex={texW}x{texH} esperado={_width}x{_height} nv12={nv12W}x{nv12H}) — conversão CPU");
+            return ConvertCpuNv12(texture, device, dst);
         }
 
-        // Odd capture height: GpuVideoConverter requires even NV12 dimensions — go straight to CPU fallback
-        if ((texDesc.Height & 1) != 0)
-            return ConvertCpuNv12(texture, texture.Device, dst);
+        // Log do resize real, mas não a cada frame: o pipeline T3 já recria o pool
+        // e conta uma vez por mudança.
+        if (path == ConvertPath.GpuScaled
+            && Interlocked.Increment(ref _gpuScaledFrames) % 120 == 1)
+        {
+            Log.I("FfmpegEncoder",
+                $"GPU convert escalando: tex={texW}x{texH} -> nv12={nv12W}x{nv12H} (esperado={_width}x{_height})");
+        }
 
-        var device = texture.Device;
         var ctx = device.ImmediateContext;
 
-        if (_gpuConverter == null && DateTime.UtcNow < _gpuConverterFailedUntil)
-            return ConvertCpuNv12(texture, device, dst);
-
-        int nv12W = Nv12W, nv12H = Nv12H;
         try
         {
             // Recria se as dims mudaram (cascading fallback altera o scale target).
+            // O INPUT é a dimensao REAL da textura — a converter precisa saber o que
+            // entra, não o que o encoder acha que entra. É isso que permite o
+            // GpuScaled acima em vez do fallback CPU.
             if (_gpuConverter == null
-                || _gpuConverter.InputWidth != _width
-                || _gpuConverter.InputHeight != _height
+                || _gpuConverter.InputWidth != texW
+                || _gpuConverter.InputHeight != texH
                 || _gpuConverter.OutputWidth != nv12W
                 || _gpuConverter.OutputHeight != nv12H)
             {
                 _gpuConverter?.Dispose();
-                _gpuConverter = new GpuVideoConverter(device, _width, _height, nv12W, nv12H);
+                _gpuConverter = new GpuVideoConverter(device, texW, texH, nv12W, nv12H);
             }
             _gpuConverterFailedUntil = DateTime.MinValue;
         }
