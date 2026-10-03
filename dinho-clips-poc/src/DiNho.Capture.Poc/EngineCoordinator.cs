@@ -93,6 +93,10 @@ public sealed partial class EngineCoordinator : IDisposable
     private int _consecutiveDrops;
     private long _droppedFrames;
 
+    // Início da pipeline atual (timestamp do Stopwatch): ancora a janela de aquecimento
+    // (StartupWarmup), que rebaixa drops/overflow de cold-start para Debug.
+    private long _captureStartTicks;
+
     // Opção C — timeout isolado do WaitOne (jitter do DWM vs cap do WGC): o frame
     // chega no instante seguinte, fora da janela do cap. O 1º timeout é diferido;
     // um frame bom (ou o retorno do alt-tab) zera o flag. Timeouts consecutivos

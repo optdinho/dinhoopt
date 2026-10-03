@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using DiNho.Capture.Poc.Logging;
 
@@ -50,6 +51,9 @@ internal sealed partial class FfmpegEncoder
         private int _threadStarted;
         private int _droppedOverflow;
         private readonly Thread _thread;
+        // Ancora a janela de aquecimento (StartupWarmup): o transiente de cold-start do
+        // ffmpeg enche a fila logo após criar o writer; overflow tardio continua WARN.
+        private readonly long _startTicks = Stopwatch.GetTimestamp();
 
         private sealed class Frame
         {
@@ -110,7 +114,13 @@ internal sealed partial class FfmpegEncoder
                     ReturnFrame(_queue.Dequeue());
                     int drops = Interlocked.Increment(ref _droppedOverflow);
                     if (drops == 1 || drops % 100 == 0)
-                        Log.W("FfmpegEncoder.FrameWriter", $"input queue overflow — {drops} queued frames dropped total (encoder slower than capture)");
+                    {
+                        var msg = $"input queue overflow — {drops} queued frames dropped total (encoder slower than capture)";
+                        if (StartupWarmup.IsWarmup(Stopwatch.GetElapsedTime(_startTicks)))
+                            Log.D("FfmpegEncoder.FrameWriter", $"[startup] {msg}");
+                        else
+                            Log.W("FfmpegEncoder.FrameWriter", msg);
+                    }
                 }
 
                 var frame = _framePool.Count > 0 ? _framePool.Pop() : new Frame();

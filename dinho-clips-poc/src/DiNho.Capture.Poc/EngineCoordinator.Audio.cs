@@ -343,7 +343,7 @@ public sealed partial class EngineCoordinator
         if ((_audioPacketCount <= 5 || _audioPacketCount % 100 == 0) && aacCount > 0)
             Log.D("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced={aacCount}");
         else if (_audioPacketCount <= 5 && aacCount == 0 && packet.PcmSamples != null)
-            Log.W("AudioDiag", $"packet #{_audioPacketCount}: AAC frames produced=0 (encoder pode estar aquecendo)");
+            Log.D("AudioDiag", $"[startup] packet #{_audioPacketCount}: AAC frames produced=0 (encoder pode estar aquecendo)");
     }
 
     private List<(int Pid, string Name)> ResolveAudioPids(Dictionary<int, string> selectedPids)

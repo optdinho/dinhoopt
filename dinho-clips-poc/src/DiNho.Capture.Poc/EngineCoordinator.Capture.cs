@@ -691,7 +691,11 @@ public sealed partial class EngineCoordinator
         _droppedFrames++;
         if (ShouldLogDrop(_droppedFrames))
         {
-            Log.W("Pipeline", $"Frame dropped — drop #{_consecutiveDrops} consecutivo (total {_droppedFrames}). {reason}");
+            var sinceStart = Stopwatch.GetElapsedTime(_captureStartTicks);
+            if (StartupWarmup.IsWarmup(sinceStart))
+                Log.D("Pipeline", $"[startup] Frame dropped — drop #{_consecutiveDrops} consecutivo (total {_droppedFrames}). {reason}");
+            else
+                Log.W("Pipeline", $"Frame dropped — drop #{_consecutiveDrops} consecutivo (total {_droppedFrames}). {reason}");
         }
     }
 
@@ -710,6 +714,7 @@ public sealed partial class EngineCoordinator
 
     private async Task PipelineLoop(CancellationToken ct)
     {
+        _captureStartTicks = Stopwatch.GetTimestamp();
         try
         {
             Log.I("Pipeline", $"PipelineLoop INICIADO — capture={_capture?.GetType().Name ?? "null"} encoder={_encoder?.GetType().Name ?? "null"} fps={_config.Config.Fps} ct={ct.IsCancellationRequested}");
@@ -1165,9 +1170,16 @@ public sealed partial class EngineCoordinator
     /// janela (<c>arrived</c>), quantos o cap local barrou (<c>capRejected</c>),
     /// quantos o slot de 1 posição sobrescreveu sem o loop consumir (<c>overwritten</c>),
     /// quantos o loop retirou (<c>consumed</c>) e quantas vezes ele acordou sem frame
-    /// (<c>emptyWakeup</c>) ou expirou (<c>timeout</c>). O <c>perdidos</c> = arrived −
-    /// consumed é exatamente o que sai do WGC e não vira frame bom — o número que
-    /// separa "o WGC entrega pouco" de "nós descartamos no caminho".
+    /// (<c>emptyWakeup</c>) ou expirou (<c>timeout</c>).
+    ///
+    /// <para>
+    /// <c>naoConsumidos</c> = arrived − consumed é o excedente da janela (arrived acima do
+    /// alvo de fps, ou jitter de fronteira — pode ser levemente NEGATIVO). NÃO é perda de
+    /// clipe: enquanto <c>good</c> casa com o alvo (~300/5 s), o feed entregou 60 fps.
+    /// Picos de <c>overwritten</c> são o drop-policy do slot único funcionando sob a I/O do
+    /// save de clipe (evidência 2026-10-02: picos exatamente nos saves de 30 em 30 min com
+    /// <c>good=300</c> em todos; <c>timeout</c> é jitter do WaitOne, não perda). Ver Candidato 6.
+    /// </para>
     /// Só faz sentido para o backend WGC; nos demais é no-op.
     /// </summary>
     private void LogWgcHandoff(int goodFrames)
@@ -1181,7 +1193,7 @@ public sealed partial class EngineCoordinator
 
         Log.I("WgcHandoff", $"arrived={d.Arrived} capRejected={d.CapRejected} overwritten={d.Overwritten} " +
             $"delivered={d.Delivered} consumed={d.Consumed} emptyWakeup={d.EmptyWakeup} timeout={d.Timeout} " +
-            $"| good={goodFrames} perdidos={d.Arrived - d.Consumed}");
+            $"| good={goodFrames} naoConsumidos={d.Arrived - d.Consumed}");
     }
 
     /// <summary>
