@@ -392,7 +392,7 @@ describe('CLIPS_LIST_CLIPS', () => {
             ) => void)
           | null,
       ) => {
-        if (cb) cb(new Error('ffmpeg not found'), '', '')
+        if (cb) cb(Object.assign(new Error('ffmpeg not found'), { cmd: '' }), '', '')
         return undefined as never
       },
     )
@@ -424,7 +424,7 @@ describe('CLIPS_LIST_CLIPS', () => {
             ) => void)
           | null,
       ) => {
-        if (cb) cb(new Error('ffmpeg not found'), '', '')
+        if (cb) cb(Object.assign(new Error('ffmpeg not found'), { cmd: '' }), '', '')
         return undefined as never
       },
     )
@@ -1208,7 +1208,7 @@ describe('CLIPS_GET_RUNNING_PROCESSES', () => {
             ) => void)
           | null,
       ) => {
-        if (cb) cb(new Error('tasklist not found'), '', '')
+        if (cb) cb(Object.assign(new Error('tasklist not found'), { cmd: '' }), '', '')
         return undefined as never
       },
     )
@@ -1745,7 +1745,7 @@ describe('CLIPS_TRIM_CLIP', () => {
             ) => void)
           | null,
       ) => {
-        if (cb) cb(new Error('ffmpeg error'), '', '')
+        if (cb) cb(Object.assign(new Error('ffmpeg error'), { cmd: '' }), '', '')
         return mockFFProc as never
       },
     )
@@ -2054,7 +2054,7 @@ describe('CLIPS_MERGE_CLIPS', () => {
             ) => void)
           | null,
       ) => {
-        if (cb) cb(new Error('merge failed'), '', '')
+        if (cb) cb(Object.assign(new Error('merge failed'), { cmd: '' }), '', '')
         return mockFFProc as never
       },
     )

@@ -359,7 +359,7 @@ describe('getVideoDuration', () => {
             ) => void)
           | null,
       ) => {
-        if (cb) cb(new Error('ENOENT'), '', '')
+        if (cb) cb(Object.assign(new Error('ENOENT'), { cmd: '' }), '', '')
         return undefined as never
       },
     )
