@@ -143,4 +143,67 @@ public sealed class FeedLogLineTests
         var line = FeedLogLine.Build(healthy, "av1_nvenc", 1, 0.99, 173, 60);
         Assert.EndsWith("speed=0.99x outLag=173s feedLag=0%/s", line);
     }
+
+    // =============================================================
+    // Bloco CFR (2026-10-03). Sem estes campos o log de 5 s não distingue
+    // "60 fps reais" de "57,8 fps com 542 buracos" — as duas coisas imprimem fps≈58.
+    // =============================================================
+
+    private static readonly FeedSummary CfrSummary = Summary with
+    {
+        TotalMsMax = 44.2,
+        OverrunFrames = 7,
+        DuplicateFrames = 12,
+        MaxConsecutiveDup = 2,
+        SkippedFrames = 3,
+    };
+
+    [Fact]
+    public void Build_ExpoeBlocoCfr_Completo()
+    {
+        var line = FeedLogLine.Build(CfrSummary, "av1_nvenc", 1, 0.64, 5, 60);
+        Assert.Contains("totalMax=44.2ms", line);
+        Assert.Contains("over=7", line);
+        Assert.Contains("dup=12", line);
+        Assert.Contains("dupMax=2", line);
+        Assert.Contains("skip=3", line);
+    }
+
+    // O bloco CFR pertence ao FEED, não ao encoder: tem de ficar depois de `totalAll`
+    // e antes de `queue`/`codec`, ou quem lê o log atribui as contagens ao ffmpeg.
+    [Fact]
+    public void Build_BlocoCfrFicaNoBlocoDoFeed_AntesDaQueue()
+    {
+        var line = FeedLogLine.Build(CfrSummary, "av1_nvenc", 1, 0.64, 5, 60);
+        var totalAllIdx = line.IndexOf("totalAll=", StringComparison.Ordinal);
+        var cfrIdx = line.IndexOf("totalMax=", StringComparison.Ordinal);
+        var queueIdx = line.IndexOf("queue=", StringComparison.Ordinal);
+        var codecIdx = line.IndexOf("codec=", StringComparison.Ordinal);
+        Assert.True(totalAllIdx > 0 && cfrIdx > totalAllIdx && queueIdx > cfrIdx && codecIdx > queueIdx,
+            $"ordem inesperada: {line}");
+    }
+
+    // Sessão saudável: o bloco tem de aparecer na mesma, com zeros — a ausência de
+    // "dup=3" é indistinguível de "campo não implementado".
+    [Fact]
+    public void Build_BlocoCfr_ApareceComZeros_QuandoSaudavel()
+    {
+        var line = FeedLogLine.Build(Summary, "av1_nvenc", 1, 0.64, 5, 60);
+        Assert.Contains("totalMax=0.0ms", line);
+        Assert.Contains("over=0 dup=0 dupMax=0 skip=0", line);
+    }
+
+    // `over` ao lado de `dup`: os dois juntos dizem QUAL dos dois mechanisms está a
+    // furar a grelha (loop lento vs. WGC sem frame nova). Múltiplos espaços
+    // separadores quebram o grep do log.
+    [Fact]
+    public void Build_OverEDup_FicamJuntos_SemEspacosDuplos()
+    {
+        var line = FeedLogLine.Build(CfrSummary, "av1_nvenc", 1, 0.64, 5, 60);
+        Assert.DoesNotContain("  ", line);
+        var overIdx = line.IndexOf("over=", StringComparison.Ordinal);
+        var dupIdx = line.IndexOf("dup=", StringComparison.Ordinal);
+        var dupMaxIdx = line.IndexOf("dupMax=", StringComparison.Ordinal);
+        Assert.True(overIdx > 0 && dupIdx > overIdx && dupMaxIdx > dupIdx, $"ordem inesperada: {line}");
+    }
 }

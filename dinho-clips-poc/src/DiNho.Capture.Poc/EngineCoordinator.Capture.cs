@@ -5,6 +5,7 @@ using DiNho.Capture.Poc.GameDetection;
 using DiNho.Capture.Poc.Graphics;
 using DiNho.Capture.Poc.Logging;
 using DiNho.Capture.Poc.Memory;
+using DiNho.Capture.Poc.Pipeline;
 using DiNho.Capture.Poc.Watchdog;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -626,6 +627,12 @@ public sealed partial class EngineCoordinator
     // Margem extra (opção C): o DWM entrega frames com jitter de 1-3ms; sem
     // folga, ~1/6 dos polls expiravam no instante da rejeição do cap (width=0).
     internal const int CaptureTimeoutMarginMs = 5;
+
+    /// <summary>
+    /// Orçamento de duplicatas consecutivas do padding CFR. É <c>poolSize − 1</c> do
+    /// <c>TexturePool</c>: com o default de 3 texturas, 2 duplicatas seguidas.
+    /// </summary>
+    internal static int TexturePoolPaddingBudget => TexturePool.DefaultPoolSize - 1;
     internal static int ComputeCaptureTimeoutMs(int fps)
         => fps <= 0 ? 1 : Math.Max(1, Math.Min(100, (int)Math.Ceiling(1000.0 / fps) + CaptureTimeoutMarginMs));
 
@@ -729,11 +736,24 @@ public sealed partial class EngineCoordinator
         // como thread de captura multimídia, reduzindo latência e glitches
         SetMmThreadPriority();
 
-        var frameIntervalUs = 1_000_000L / _config.Config.Fps;
-        var frameDuration = TimeSpan.FromSeconds(1.0 / _config.Config.Fps);
+        var fps = _config.Config.Fps;
+        var frameDuration = TimeSpan.FromSeconds(1.0 / fps);
         var frameDurationHns = frameDuration.Ticks;
         var freq = Stopwatch.Frequency;
-        var freqPerUs = freq / 1_000_000L;
+
+        // Grelha CFR ABSOLUTA (2026-10-03). O PTS e o deadline de cada tick sao
+        // `ancora + (slot+1) x intervalo`, nunca `beforeCapture + intervalo`: o pacer
+        // relativo fazia qualquer iteracao que excedesse os 16,667 ms deslocar a grelha
+        // de PTS de forma PERMANENTE (542 dPTS >= 18,5 ms em 305 s no clip de 2026-10-03).
+        // O grid e recriado aqui (e em cada ReinitializePipeline) — sobreviver a um reinit
+        // deixaria uma ancora QPC obsoleta.
+        var grid = new FrameGrid(Stopwatch.GetTimestamp(), fps, freq);
+
+        // Padding de slots perdidos. `poolSize - 1` = quantas duplicadas consecutivas o
+        // TexturePool ping-pong sustenta sem tocar na textura que o NVENC ainda consome.
+        var padder = new FramePadder<ID3D11Texture2D>(TexturePoolPaddingBudget);
+
+        var captureTimeoutCapMs = ComputeCaptureTimeoutMs(fps);
         var spinTargetTicks = 0L;
             var modeCheckDue = DateTime.UtcNow;
             var diagFrames = 0;
@@ -751,9 +771,28 @@ public sealed partial class EngineCoordinator
             var enc = _encoder;
 
             var beforeCapture = Stopwatch.GetTimestamp();
-            // Captura o PTS da câmera ANTES de TryCaptureFrame — reflete o momento
-            // real da captura, não o momento após latência de encoding (NVENC/AMF)
-            var capturePts = TimeSpan.FromSeconds((double)(beforeCapture - _clock.StartTimestamp) / Stopwatch.Frequency);
+
+            // Ressincroniza a grelha se o loop se atrasou mais do que MaxSlipSlots
+            // periodos (reinit, GPU stall, alt-tab). Preserva a fase: o PTS continua a
+            // descrever o tempo real, sem saltar. Os slots perdidos contam para o log.
+            if (grid.ShouldResync(beforeCapture))
+            {
+                var skippedBefore = grid.Skipped;
+                grid.Resync(beforeCapture);
+                var lost = grid.Skipped - skippedBefore;
+                if (lost > 0)
+                {
+                    _feed.AddSkippedFrame(lost);
+                    padder.Invalidate();
+                    Log.W("Pipeline", $"Grelha CFR ressincronizada — {lost} slots perdidos, ancora agora={beforeCapture} skipTotal={grid.Skipped}");
+                }
+            }
+
+            // PTS do slot corrente: o instante da grelha, NÃO o `beforeCapture` real.
+            // É isto que torna o ficheiro CFR mesmo quando o loop se atrasa — o atraso
+            // é absorvido pelo slot seguinte em vez de furar a timeline.
+            var slotPtsTicks = grid.PtsTicksFor(grid.Slot);
+            var capturePts = TimeSpan.FromSeconds((double)(slotPtsTicks - _clock.StartTimestamp) / Stopwatch.Frequency);
 
             // Log de RAM em tempo real (~1s). Usa clock, não diagFrames, para que
             // continue rodando mesmo durante stall de vídeo (frames null/success=false)
@@ -804,8 +843,18 @@ public sealed partial class EngineCoordinator
             var diagStartTicks = 0L;
             try
             {
-                int captureTimeout = ComputeCaptureTimeoutMs(_config.Config.Fps);
+                // Topo do tick, orientado ao deadline. Se a janela do slot já fechou
+                // (o loop acordou atrasado), devolve 1 ms em vez dos 22 do tecto — esperar
+                // de novo era o "timeout composto" que produzia os deltas de 38-46 ms.
+                var captureTimeout = grid.CaptureWaitMs(beforeCapture, captureTimeoutCapMs);
                 using var frame = cap?.TryCaptureFrame(captureTimeout);
+
+                // MISS: nem cap nulo, nem frame sem textura, nem Success=false (timeout do
+                // WGC) são "sem frame" desde que exista uma textura anterior: o slot da
+                // grelha existe e tem de ser preenchido, ou o PTS abre um buraco de
+                // 16,667 ms. Este é o path que substitui o `continue` antigo.
+                var isMiss = frame is null || !frame.Success || frame.Texture is null;
+
                 if (frame is null)
                 {
                     if (!loggedFirstNullFrame)
@@ -813,99 +862,140 @@ public sealed partial class EngineCoordinator
                         loggedFirstNullFrame = true;
                         Log.E("Pipeline", $"TryCaptureFrame retornou NULL — cap={cap?.GetType().Name ?? "null"} cap disposed={cap == null}. Isso significa que _capture é null no momento da chamada.");
                     }
-                    _watchdog.ReportDroppedFrame(PipelineIssue.CaptureError);
-                    continue;
                 }
                 if (++diagFrames % 60 == 1)
                 {
                     var captureType = _capture?.GetType().Name ?? "null";
-                    Log.I("PipelineDiag", $"frame.Success={frame.Success} texture={(frame.Texture != null ? "ok" : "null")} " +
+                    Log.I("PipelineDiag", $"frame.Success={frame?.Success} texture={(frame?.Texture != null ? "ok" : "null")} " +
                         $"capture={captureType} encoder={(_encoder?.GetType().Name ?? "null")}");
                 }
-                if (frame.Success)
+
+                // ── PADDING (2026-10-03) ────────────────────────────────────────────
+                // Preenche o slot da grelha com a ÚLTIMA textura quando a WGC não entregou
+                // frame nova. Sem isto, cada miss vira um buraco de 16,667 ms no PTS: foram
+                // os ~124 deltas de 22-23 ms do clip real.
+                //
+                // A textura vem do TexturePool ping-pong e o `frame` que a traz é
+                // descartado a seguir (`ownsTexture: false` ⇒ Dispose é no-op), por isso a
+                // mesma textura pode ser codificada várias vezes seguidas sem CopyResource.
+                if (isMiss)
                 {
-                    if (frame.Texture != null)
+                    var padW = frame?.Width ?? 0;
+                    var padH = frame?.Height ?? 0;
+                    if (padder.TryPad(out var dupTexture, padW, padH) && dupTexture is not null)
                     {
-                        if (diagFrames == 1)
-                            Log.I("Pipeline", $"Primeiro frame com textura! width={frame.Width} height={frame.Height} captureType={_capture?.GetType().Name ?? "null"}");
-                        if (_gameBackgrounded && frame.Texture != null)
+                        var dupStartTicks = Stopwatch.GetTimestamp();
+                        var encodedDup = enc.EncodeFrame(dupTexture, capturePts);
+                        var dupAfterTicks = Stopwatch.GetTimestamp();
+                        grid.Advance();
+                        if (encodedDup is not null)
                         {
-                            _fgGoodCount++;
-                            if (_fgGoodCount >= FG_DEBOUNCE_FRAMES)
-                            {
-                                _gameBackgrounded = false;
-                                _fgGoodCount = 0;
-                                Log.I("Pipeline", "Jogo retornou ao foreground — frames retomados");
-                            }
-                        }
-                        else
-                        {
-                            _fgGoodCount = 0;
-                        }
-                        _bgDropCount = 0;
-                        _starvationStart = default;
-                        _pendingTimeoutDrop = false;
-                        // NOTA: NoGCRegion removido aqui. O orçamento fixo de 4MB era
-                        // estourado por keyframes grandes, forçando um full GC bloqueante
-                        // no EndNoGCRegion (padrão de serra no working set). Com o
-                        // VideoPacketPool reutilizando os arrays evictados, o churn de
-                        // LOH sumiu e GCs gen0/gen1 rápidos não causam frame drops.
-                        var encoded = enc.EncodeFrame(frame.Texture!, capturePts);
-                        if (encoded != null)
-                        {
-                            _buffer.AddVideo(encoded);
-                            var afterTicks = Stopwatch.GetTimestamp();
-                            var elapsedMs = (afterTicks - beforeCapture) * 1000.0 / Stopwatch.Frequency;
-                            _watchdog.ReportGoodFrame(elapsedMs);
+                            _buffer.AddVideo(encodedDup);
+                            _feed.AddDuplicateFrame(dupAfterTicks - dupStartTicks);
+                            _watchdog.ReportGoodFrame((dupAfterTicks - beforeCapture) * 1000.0 / Stopwatch.Frequency);
                             _hasEverBeenHealthy = true;
-                            TraceFeedFrame(beforeCapture, frame, afterTicks);
+                            _bgDropCount = 0;
+                            _starvationStart = default;
+                            _pendingTimeoutDrop = false;
                             LogRecoveryIfDropped();
                         }
                         else
                         {
+                            // Encode da duplicata falhou (busy): conta como o fail faria.
                             _feed.AddEncodeNull();
                             _watchdog.ReportDroppedFrame(PipelineIssue.EncodeError);
-                            var isBusy = (enc as FfmpegEncoder)?.LastFrameBusyDrop ?? false;
-                            ReportDrop(FfmpegEncoder.BuildEncodeDropReason(isBusy));
+                            var dupBusy = (enc as FfmpegEncoder)?.LastFrameBusyDrop ?? false;
+                            ReportDrop(FfmpegEncoder.BuildEncodeDropReason(dupBusy));
                         }
                     }
                     else
                     {
-                        if (_starvationStart == default)
+                        // Sem orçamento de duplicatas (ou sem frame anterior): miss a SÉRIO.
+                        // O slot fica perdido e o `skip`/`dup` da telemetria é que explica.
+                        if (!loggedFirstFailFrame && frame is not null)
                         {
-                            _starvationStart = DateTime.UtcNow;
-                            Log.W("Pipeline", "Frame sem textura detectado — possível GPU starvation ou WGC throttle. Monitorando...");
+                            loggedFirstFailFrame = true;
+                            Log.D("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={(frame.WaitEndTicks - frame.CaptureStartTicks) * 1000.0 / Stopwatch.Frequency:F1}. Monitorando...");
                         }
+
+                        // Timeout isolado (width=0 height=0) é jitter do DWM — o frame chega
+                        // no instante seguinte, fora da janela do cap. DIFERIDO: não conta
+                        // como drop nem toca o watchdog, tal como antes do padding. Só
+                        // timeouts CONSECUTIVOS (stall real do WGC/DWM) progridem.
+                        var deferred = frame is not null && frame.Width == 0 && frame.Height == 0 &&
+                            ShouldDeferTimeoutDrop(ref _pendingTimeoutDrop);
+
+                        if (!deferred)
+                        {
+                            if (frame is null)
+                                _watchdog.ReportDroppedFrame(PipelineIssue.CaptureError);
+                            else
+                            {
+                                _feed.AddFailFrame();
+                                _watchdog.ReportDroppedFrame(PipelineIssue.NoFrame);
+                            }
+
+                            if (_starvationStart == default)
+                            {
+                                _starvationStart = DateTime.UtcNow;
+                                Log.W("Pipeline", "Frame dropped (miss acima do budget de duplicatas) — possível GPU overload ou device busy. Monitorando...");
+                            }
+                            ReportDrop(padder.HasPayload
+                                ? $"Miss acima do budget de {padder.MaxConsecutive} duplicatas — captura a perder frames de verdade."
+                                : "Miss sem frame anterior para duplicar (arranque/reinit).");
+                        }
+
+                        grid.Advance();
                     }
                 }
                 else
                 {
-                    if (!loggedFirstFailFrame)
-                    {
-                        loggedFirstFailFrame = true;
-                        Log.D("Pipeline", $"Primeiro frame Success=false capturado — width={frame.Width} height={frame.Height} waitMs={(frame.WaitEndTicks - frame.CaptureStartTicks) * 1000.0 / Stopwatch.Frequency:F1}. Monitorando...");
-                    }
-                    // Opção C: frame timeout (width=0 height=0) ISOLADO = jitter do
-                    // DWM (o frame chega no instante seguinte, fora da janela do cap).
-                    // O 1º é DIFERIDO — não conta como drop, não inicia starvation nem
-                    // toca o watchdog. Se o próximo frame recuperar, nunca é contado.
-                    // Só timeouts CONSECUTIVOS (stall real do WGC/DWM) progridem.
-                    // O branch alt-tab/reinit abaixo ainda roda — frames ausentes por
-                    // background não são jitter e precisam da contagem de _bgDropCount.
-                    bool deferred = frame.Width == 0 && frame.Height == 0 &&
-                        ShouldDeferTimeoutDrop(ref _pendingTimeoutDrop);
+                    // A partir daqui: Success == true E Texture != null (garantido por
+                    // !isMiss). Retém a textura para o padding e abre o orçamento de dups.
+                    padder.Observe(frame!.Texture!, frame.Width, frame.Height);
 
-                    if (!deferred)
+                    if (diagFrames == 1)
+                        Log.I("Pipeline", $"Primeiro frame com textura! width={frame.Width} height={frame.Height} captureType={_capture?.GetType().Name ?? "null"}");
+                    if (_gameBackgrounded)
                     {
-                        _feed.AddFailFrame();
-                        if (_starvationStart == default)
+                        _fgGoodCount++;
+                        if (_fgGoodCount >= FG_DEBOUNCE_FRAMES)
                         {
-                            _starvationStart = DateTime.UtcNow;
-                            Log.W("Pipeline", "Frame dropped (Success=false) — possível GPU overload ou device busy. Monitorando...");
+                            _gameBackgrounded = false;
+                            _fgGoodCount = 0;
+                            Log.I("Pipeline", "Jogo retornou ao foreground — frames retomados");
                         }
-                        _watchdog.ReportDroppedFrame(PipelineIssue.NoFrame);
-                        ReportDrop("Success=false — GPU overload ou device busy.");
                     }
+                    else
+                    {
+                        _fgGoodCount = 0;
+                    }
+                    _bgDropCount = 0;
+                    _starvationStart = default;
+                    _pendingTimeoutDrop = false;
+                    // NOTA: NoGCRegion removido. O orçamento fixo de 4MB era estourado por
+                    // keyframes grandes, forçando um full GC bloqueante no EndNoGCRegion
+                    // (padrão de serra no working set). Com o VideoPacketPool reutilizando os
+                    // arrays evictados, o churn de LOH sumiu e GCs rápidos não causam drops.
+                    var encoded = enc.EncodeFrame(frame.Texture!, capturePts);
+                    if (encoded != null)
+                    {
+                        _buffer.AddVideo(encoded);
+                        var afterTicks = Stopwatch.GetTimestamp();
+                        var elapsedMs = (afterTicks - beforeCapture) * 1000.0 / Stopwatch.Frequency;
+                        _watchdog.ReportGoodFrame(elapsedMs);
+                        _hasEverBeenHealthy = true;
+                        TraceFeedFrame(beforeCapture, frame, afterTicks);
+                        LogRecoveryIfDropped();
+                    }
+                    else
+                    {
+                        _feed.AddEncodeNull();
+                        _watchdog.ReportDroppedFrame(PipelineIssue.EncodeError);
+                        var isBusy = (enc as FfmpegEncoder)?.LastFrameBusyDrop ?? false;
+                        ReportDrop(FfmpegEncoder.BuildEncodeDropReason(isBusy));
+                    }
+                    grid.Advance();
                 }
 
                 // ── Bloco de diagnóstico (fora do `total` medido) ─────────────────
@@ -1006,10 +1096,13 @@ public sealed partial class EngineCoordinator
                             if (stallKind == "starvation" && stallSec > 8)
                             {
                                 Log.E("Pipeline", $"GPU starvation sustentado ({stallSec:F0}s) — considere reduzir qualidade (preset/resolução) ou fechar aplicações que usam GPU");
-                            }
-                            _needsReinit = true;
-                            _reinitCount++;
-                            _ = ReinitializePipelineAsync();
+}
+                    _needsReinit = true;
+                    _reinitCount++;
+                    // O pool WGC vai ser descartado: a textura retida para o padding
+                    // pertence a esse pool e reutilizá-la depois seria um access violation.
+                    padder.Invalidate();
+                    _ = ReinitializePipelineAsync();
                         }
                     }
                 }
@@ -1085,6 +1178,7 @@ public sealed partial class EngineCoordinator
                 {
                     _deviceLost = true;
                     _needsReinit = true;
+                    padder.Invalidate();
                     Log.E("Pipeline", $"Device D3D11 perdido ({ex.GetType().Name})! Recriando...");
                 }
                 _watchdog.ReportDroppedFrame(PipelineIssue.CaptureError);
@@ -1094,20 +1188,19 @@ public sealed partial class EngineCoordinator
             if (diagStartTicks != 0)
                 _feed.AddDiagnostics(Stopwatch.GetTimestamp() - diagStartTicks);
 
-            // Timing preciso (QPC-based): sleep para o bulk, spin para o residual
-            var elapsedSinceCapture = Stopwatch.GetTimestamp() - beforeCapture;
-            var elapsedUs = elapsedSinceCapture / freqPerUs;
-            var remainingUs = frameIntervalUs - elapsedUs;
+            // Timing preciso (QPC-based) orientado à GRELHA: o alvo é
+            // `DeadlineTicksFor(slot)` = `ancora + (slot+1) x intervalo`, e não
+            // `beforeCapture + intervalo`. É esta linha que elimina os ~360 deltas de
+            // 18-21 ms: um overrun de 1,5 ms desloca o alvo em 1,5 ms para sempre.
+            // Sleep para o bulk, spin para o residual. Se o alvo já passou, não há espera
+            // nenhuma — só o spin de saída.
+            spinTargetTicks = grid.DeadlineTicksFor(grid.Slot);
             var delayStartTicks = Stopwatch.GetTimestamp();
-            if (remainingUs > 500)
+            var remainingTicks = spinTargetTicks - delayStartTicks;
+            if (remainingTicks > freq / 1000)
             {
-                var remainingMs = (int)(remainingUs / 1000);
+                var remainingMs = (int)(remainingTicks * 1000 / freq);
                 await Task.Delay(Math.Max(1, remainingMs - 1), ct);
-                spinTargetTicks = beforeCapture + frameIntervalUs * freqPerUs;
-            }
-            else
-            {
-                spinTargetTicks = beforeCapture + frameIntervalUs * freqPerUs;
             }
 
             var spinStartTicks = Stopwatch.GetTimestamp();

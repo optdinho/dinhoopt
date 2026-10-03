@@ -37,6 +37,9 @@ internal static class FeedLogLine
             $"convert={summary.ConvertMs.ToString("F1", i)}ms total={summary.TotalMs.ToString("F1", i)}ms ",
             $"clean={summary.CleanFrames}/{summary.GoodFrames} totalAll={summary.TotalMsAll.ToString("F1", i)}ms ",
             $"diag={summary.DiagnosticsMs.ToString("F1", i)}ms ",
+            // Bloco CFR: o pico e as contagens da grelha. Fica aqui, e não no fim da linha,
+            // porque são métricas do FEED — colado ao bloco do encoder pareceria do ffmpeg.
+            $"totalMax={summary.TotalMsMax.ToString("F1", i)}ms over={summary.OverrunFrames} dup={summary.DuplicateFrames} dupMax={summary.MaxConsecutiveDup} skip={summary.SkippedFrames} ",
             $"pace=delay {summary.PacingDelayMs.ToString("F1", i)}ms + spin {summary.PacingSpinMs.ToString("F1", i)}ms ",
             $"iters={summary.PacingCount} | ",
             $"queue={summary.QueueDepthAvg.ToString("F1", i)} avg / {summary.QueueDepthMax} max | ",

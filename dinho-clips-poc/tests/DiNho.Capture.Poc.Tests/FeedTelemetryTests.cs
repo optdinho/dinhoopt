@@ -289,4 +289,164 @@ public sealed class FeedTelemetryTests
         Assert.Equal(2.0, s.WaitMs, 3);
         Assert.Equal(4.0, s.ConvertMs, 3);
     }
+
+    // =============================================================
+    // Bloco CFR (2026-10-03): contagens que só existem depois da grelha
+    // absoluta + padding. Sem elas o log de 5 s não distingue "60 fps
+    // reais" de "57,8 fps + buracos" — as duas coisas imprimem fps=~58.
+    // =============================================================
+
+    private const long Period = 16_667; // 1/60 s @1 MHz
+
+    private static FeedTelemetry CreateCfr(double windowSeconds = 5.0)
+        => new(windowSeconds, Freq, Period);
+
+    // O miss da WGC (conteudo estatico — Microsoft #142) é preenchido com uma
+    // duplicata: conta à parte para não inflar `good` e saber quantos slots foram
+    // recuperados sem frame nova.
+    [Fact]
+    public void AddDuplicateFrame_ContaSeparadoDeGood()
+    {
+        var t = CreateCfr();
+        t.AddGoodFrame(1_000, 200, 3_000, 16_000);
+        t.AddDuplicateFrame();
+        t.AddDuplicateFrame();
+        t.AddGoodFrame(1_000, 200, 3_000, 16_000);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(2, s.GoodFrames);
+        Assert.Equal(2, s.DuplicateFrames);
+    }
+
+    // `dupMax` é a REGRA DE DIAGNÓSTICO do plano: duplicados consecutivos > poolSize-1
+    // significam que o conteúdo mudou e nós estamos a mentir. A run-length só pode ser
+    // calculada se um frame bom interrompe a sequência — daí o reset em AddGoodFrame.
+    [Fact]
+    public void MaxConsecutiveDup_ContaRetaEObtidoPorFrameBom()
+    {
+        var t = CreateCfr();
+        t.AddDuplicateFrame();
+        t.AddDuplicateFrame();
+        t.AddDuplicateFrame();
+        t.AddGoodFrame(1_000, 200, 3_000, 16_000); // interrompe a run
+        t.AddDuplicateFrame();                    // nova run de 1
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(4, s.DuplicateFrames);
+        Assert.Equal(3, s.MaxConsecutiveDup);
+    }
+
+    // Run de duplicados atravessando a fronteira da janela não pode ser contada duas vezes.
+    [Fact]
+    public void MaxConsecutiveDup_NaoRepeteARun_EntreJanelas()
+    {
+        var t = CreateCfr();
+        t.AddDuplicateFrame();
+        t.AddDuplicateFrame();
+        Assert.True(t.TryTakeSummary(5_000_000, out var s1));
+        Assert.Equal(2, s1.MaxConsecutiveDup);
+
+        t.AddDuplicateFrame();
+        Assert.True(t.TryTakeSummary(11_000_000, out var s2));
+        Assert.Equal(3, s2.MaxConsecutiveDup); // a run continua: 3, não 1
+        Assert.Equal(1, s2.DuplicateFrames);   // mas a contagem da janela é só a nova
+    }
+
+    // `skip` = slots perdidos numa ressincronização (FrameGrid.Resync) — nunca emitidos
+    // e nunca duplicados. Distingue "recuperei o slot com uma duplicata" de "o slot sumiu".
+    [Fact]
+    public void AddSkippedFrame_SomaSlotsPerdidos()
+    {
+        var t = CreateCfr();
+        t.AddSkippedFrame(3);
+        t.AddSkippedFrame(12);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(15, s.SkippedFrames);
+    }
+
+    // `totalMax` é o PIOR tick da janela, não a média. A média escondia o defeito: uma
+    // janela com 2 iterações de 40 ms entre 300 de 10 ms dá média ~10,5 ms e não denuncia nada.
+    [Fact]
+    public void TotalMsMax_PegaOPiorTickDaJanela_NAoAMedia()
+    {
+        var t = CreateCfr();
+        for (int i = 0; i < 20; i++) t.AddGoodFrame(1_000, 200, 3_000, 10_000);
+        t.AddGoodFrame(1_000, 200, 3_000, 44_000);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(44.0, s.TotalMsMax, 1);
+        Assert.True(s.TotalMsMax > s.TotalMsAll, "o pico tem de ser maior que a média de todos");
+    }
+
+    // `over` conta ticks cujo `total` excedeu o período — é a métrica que decide se a
+    // grelha está a conseguir acompanhar o relógio. O intervalo vem do construtor; sem ele
+    // (0) a contagem fica desligada para não marcar todos os frames como overrun.
+    [Fact]
+    public void OverrunFrames_ContaTicksAcimaDoPeriodo()
+    {
+        var t = CreateCfr();
+        t.AddGoodFrame(1_000, 200, 3_000, 15_000); // ok
+        t.AddGoodFrame(1_000, 200, 3_000, 16_667); // ok (exato)
+        t.AddGoodFrame(1_000, 200, 3_000, 40_000); // over
+        t.AddDuplicateFrame(totalTicks: 50_000);   // over
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(2, s.OverrunFrames);
+        Assert.Equal(50.0, s.TotalMsMax, 1);
+    }
+
+    [Fact]
+    public void OverrunFrames_Desligado_SemPeriodo()
+    {
+        var t = new FeedTelemetry(5.0, Freq); // frameIntervalTicks = 0
+        t.AddGoodFrame(1_000, 200, 3_000, 999_000);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(0, s.OverrunFrames);
+    }
+
+    // Frame bom NUNCA conta como overrun só por ser outlier de métrica: `total` > 100 ms
+    // é outlier da média, mas para o relógio é um overrun real e tem de aparecer.
+    [Fact]
+    public void OverrunFrames_ContaOutlierDeTotal()
+    {
+        var t = CreateCfr();
+        t.AddGoodFrame(500_000, 500, 4_000, 521_000);
+
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(1, s.OverrunFrames);
+        Assert.Equal(0, s.CleanFrames); // excluído da média, mas não do overrun
+    }
+
+    // Fim de janela limpa as contagens do bloco CFR — como todas as outras.
+    [Fact]
+    public void BlocoCfr_ZeraNaFimDaJanela()
+    {
+        var t = CreateCfr();
+        t.AddDuplicateFrame();
+        t.AddSkippedFrame(5);
+        t.AddGoodFrame(1_000, 200, 3_000, 40_000);
+        Assert.True(t.TryTakeSummary(5_000_000, out _));
+
+        Assert.True(t.TryTakeSummary(11_000_000, out var s2));
+        Assert.Equal(0, s2.DuplicateFrames);
+        Assert.Equal(0, s2.SkippedFrames);
+        Assert.Equal(0, s2.MaxConsecutiveDup);
+        Assert.Equal(0, s2.OverrunFrames);
+        Assert.Equal(0.0, s2.TotalMsMax);
+    }
+
+    // Janela vazia não gera pico inventado nem erro.
+    [Fact]
+    public void BlocoCfr_JanelaVazia_Zeros()
+    {
+        var t = CreateCfr();
+        Assert.True(t.TryTakeSummary(5_000_000, out var s));
+        Assert.Equal(0, s.DuplicateFrames);
+        Assert.Equal(0, s.SkippedFrames);
+        Assert.Equal(0, s.MaxConsecutiveDup);
+        Assert.Equal(0, s.OverrunFrames);
+        Assert.Equal(0.0, s.TotalMsMax);
+    }
 }

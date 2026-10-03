@@ -34,6 +34,12 @@ internal sealed class FeedTelemetry
     private long _queueDepthSum;
     private long _queueDepthCount;
     private int _queueDepthMax;
+    private int _duplicateFrames;
+    private int _consecutiveDups;
+    private int _maxConsecutiveDups;
+    private long _skippedFrames;
+    private readonly List<long> _dupSamples = new();
+    private readonly long _overrunTicks;
 
     /// <summary>
     /// Limite de outlier por estágio (ms). Frames com qualquer estágio acima disso —
@@ -43,12 +49,17 @@ internal sealed class FeedTelemetry
     private readonly long _outlierTicks;
 
     /// <param name="freq">Ticks por segundo (default: <see cref="Stopwatch.Frequency"/>).</param>
-    internal FeedTelemetry(double windowSeconds = 5.0, long freq = 0)
+    /// <param name="frameIntervalTicks">
+    /// Período da grelha CFR em ticks. &lt;= 0 desliga a contagem de
+    /// <see cref="FeedSummary.OverrunFrames"/> — sem ele, todo frame pareceria overrun.
+    /// </param>
+    internal FeedTelemetry(double windowSeconds = 5.0, long freq = 0, long frameIntervalTicks = 0)
     {
         _windowSeconds = Math.Max(0.1, windowSeconds);
         _freq = freq > 0 ? freq : Stopwatch.Frequency;
         _windowTicks = (long)(_freq * _windowSeconds);
         _outlierTicks = _freq * OutlierMs / 1000;
+        _overrunTicks = frameIntervalTicks > 0 ? frameIntervalTicks : 0;
     }
 
     internal int GoodFrames
@@ -71,11 +82,43 @@ internal sealed class FeedTelemetry
         lock (_sync)
         {
             _goodFrames++;
+            _consecutiveDups = 0;
             _waitSamples.Add(waitTicks);
             _copySamples.Add(copyTicks);
             _convertSamples.Add(convertTicks);
             _totalSamples.Add(totalTicks);
         }
+    }
+
+    /// <summary>
+    /// Slot preenchido com uma duplicata do último frame porque a WGC não entregou frame
+    /// nova (conteúdo estático — Microsoft #142: "MinUpdateInterval is a throttling
+    /// mechanism"). Não entra em <see cref="AddGoodFrame"/>: inflar <c>good</c> esconderia
+    /// exatamente o que a telemetria existe para mostrar.
+    /// <para>
+    /// A run-length de duplicados é mantida aqui porque só o chamador sabe quando um frame
+    /// bom interrompe a sequência — e <c>dupMax &gt; poolSize-1</c> é a regra de diagnóstico
+    /// que diz "isto já não é padding, é mentira".
+    /// </para>
+    /// </summary>
+    internal void AddDuplicateFrame(long totalTicks = 0)
+    {
+        lock (_sync)
+        {
+            _duplicateFrames++;
+            _consecutiveDups++;
+            if (_consecutiveDups > _maxConsecutiveDups) _maxConsecutiveDups = _consecutiveDups;
+            _dupSamples.Add(totalTicks);
+        }
+    }
+
+    /// <summary>
+    /// Slots perdidos numa ressincronização da grelha (<c>FrameGrid.Resync</c>): nunca
+    /// emitidos nem duplicados. Distingue "recuperei o slot" de "o slot sumiu".
+    /// </summary>
+    internal void AddSkippedFrame(long slots = 1)
+    {
+        lock (_sync) _skippedFrames += Math.Max(0, slots);
     }
 
     internal void AddEncodeNull()
@@ -164,7 +207,12 @@ internal sealed class FeedTelemetry
                 FeedFps: _goodFrames / _windowSeconds,
                 QueueDepthAvg: _queueDepthCount > 0 ? _queueDepthSum / (double)_queueDepthCount : 0,
                 QueueDepthMax: _queueDepthMax,
-                DiagnosticsMs: _diagnosticsCount > 0 ? Ms(TicksToMs(_diagnosticsSum) / _diagnosticsCount) : 0);
+                DiagnosticsMs: _diagnosticsCount > 0 ? Ms(TicksToMs(_diagnosticsSum) / _diagnosticsCount) : 0,
+                TotalMsMax: Ms(ComputeTotalMaxMs()),
+                OverrunFrames: CountOverruns(),
+                DuplicateFrames: _duplicateFrames,
+                MaxConsecutiveDup: _maxConsecutiveDups,
+                SkippedFrames: (int)Math.Min(int.MaxValue, _skippedFrames));
 
             _windowStartTicks = nowTicks;
             _goodFrames = 0;
@@ -174,6 +222,7 @@ internal sealed class FeedTelemetry
             _copySamples.Clear();
             _convertSamples.Clear();
             _totalSamples.Clear();
+            _dupSamples.Clear();
             _pacingDelaySum = 0;
             _pacingSpinSum = 0;
             _pacingCount = 0;
@@ -182,8 +231,44 @@ internal sealed class FeedTelemetry
             _queueDepthSum = 0;
             _queueDepthCount = 0;
             _queueDepthMax = 0;
+            _duplicateFrames = 0;
+            _maxConsecutiveDups = 0;
+            _skippedFrames = 0;
+            // _consecutiveDups NÃO é zerado: uma run de duplicados que atravessa a fronteira
+            // da janela é uma run só. Zerar aqui faria o `dupMax` da janela seguinte reportar
+            // 1 em vez de 3 — e um ecrã estático longo apareceria como duplicações isoladas.
             return true;
         }
+    }
+
+    /// <summary>
+    /// PIOR iteração da janela, frames bons e duplicatas juntos. A média escondia o defeito:
+    /// duas iterações de 40 ms entre trezentas de 10 ms dão média ~10,5 ms e não denunciam
+    /// nada — era o que escondia os deltas de 38–46 ms do clip de 2026-10-03.
+    /// </summary>
+    private double ComputeTotalMaxMs()
+    {
+        var max = 0L;
+        for (var i = 0; i < _totalSamples.Count; i++)
+            if (_totalSamples[i] > max) max = _totalSamples[i];
+        for (var i = 0; i < _dupSamples.Count; i++)
+            if (_dupSamples[i] > max) max = _dupSamples[i];
+        return TicksToMs(max);
+    }
+
+    /// <summary>
+    /// Ticks cujo <c>total</c> excedeu o período da grelha. Um outlier de métrica (&gt;100 ms)
+    /// é excluído da média mas é um overrun real para o relógio, e tem de aparecer.
+    /// </summary>
+    private int CountOverruns()
+    {
+        if (_overrunTicks <= 0) return 0;
+        var n = 0;
+        for (var i = 0; i < _totalSamples.Count; i++)
+            if (_totalSamples[i] > _overrunTicks) n++;
+        for (var i = 0; i < _dupSamples.Count; i++)
+            if (_dupSamples[i] > _overrunTicks) n++;
+        return n;
     }
 
     private (double WaitMs, double CopyMs, double ConvertMs, double TotalMs, int CleanFrames) ComputeCleanMeans()
@@ -254,6 +339,14 @@ internal sealed class FeedTelemetry
 /// impedia o log de fechar: <c>TotalMs × GoodFrames</c> subestima o trabalho real na
 /// proporção dos outliers.
 /// </para>
+/// <para>
+/// <b>Bloco CFR (2026-10-03).</b> <see cref="TotalMsMax"/>, <see cref="OverrunFrames"/>,
+/// <see cref="DuplicateFrames"/>, <see cref="MaxConsecutiveDup"/> e <see cref="SkippedFrames"/>
+/// só existem depois da grelha absoluta + padding. Sem eles o log de 5 s não distingue
+/// "60 fps reais" de "57,8 fps com 542 buracos" — as duas coisas imprimem <c>fps≈58</c>.
+/// <c>MaxConsecutiveDup &gt; poolSize−1</c> é a regra de diagnóstico que separa padding
+/// honesto (conteúdo parado) de mentira (a captura está a perder frames).
+/// </para>
 /// </summary>
 internal readonly record struct FeedSummary(
     int GoodFrames,
@@ -271,4 +364,9 @@ internal readonly record struct FeedSummary(
     double FeedFps,
     double QueueDepthAvg,
     int QueueDepthMax,
-    double DiagnosticsMs = 0);
+    double DiagnosticsMs = 0,
+    double TotalMsMax = 0,
+    int OverrunFrames = 0,
+    int DuplicateFrames = 0,
+    int MaxConsecutiveDup = 0,
+    int SkippedFrames = 0);

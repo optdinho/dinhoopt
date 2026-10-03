@@ -8,6 +8,13 @@ namespace DiNho.Capture.Poc.Capture;
 /// Pool ping-pong de texturas D3D11 para evitar alocações por frame.
 /// O pipeline de captura é single-threaded — 2 texturas bastam:
 /// uma sendo capturada (retorno de Rent), outra sendo encoded pelo NVENC.
+///
+/// <para><b>Pool 3 (2026-10-03).</b> O default subiu para 3 porque este pool passou a
+/// ser também o <b>cache de duplicação</b> do padding CFR: num miss a WGC não chama
+/// <c>Rent</c>/<c>CopyResource</c>, logo a textura anterior continua válida e pode ser
+/// codificada outra vez. Com 2 texturas só se sustenta 1 duplicado consecutivo; com 3
+/// sustentam-se 2 — o dobro de tolerância a jitter do DWM por ~8,3 MB de VRAM a 1080p.
+/// Ver <c>docs/plans/clips-cfr-60fps-padding-2026-10-03.md</c>.</para>
 /// </summary>
 public sealed class TexturePool : IDisposable
 {
@@ -18,11 +25,16 @@ public sealed class TexturePool : IDisposable
     private Format _format;
     private bool _disposed;
 
-    public TexturePool(ID3D11Device device, int poolSize = 2)
+    public TexturePool(ID3D11Device device, int poolSize = DefaultPoolSize)
     {
         _device = device;
-        _pool = new ID3D11Texture2D[poolSize];
+        _pool = new ID3D11Texture2D[Math.Max(1, poolSize)];
     }
+
+    /// <summary>
+    /// 3 = duas texturas em voo + uma retida para o padding CFR (ver resumo da classe).
+    /// </summary>
+    public const int DefaultPoolSize = 3;
 
     /// <summary>
     /// Obtém uma textura do pool com as dimensões desejadas.

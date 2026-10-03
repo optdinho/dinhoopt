@@ -281,7 +281,8 @@ public sealed class WgcCaptureSource : ICaptureSource
         // Win11 24H2+ session settings — fail silently on older Windows
         ConfigureSession3();
 
-        _texturePool = new TexturePool(_device, poolSize: 2);
+        // poolSize = TexturePool.DefaultPoolSize (3): 2 em voo + 1 retida para o padding CFR.
+        _texturePool = new TexturePool(_device, poolSize: TexturePool.DefaultPoolSize);
 
         // NOTA: FrameArrived NÃO é registrado aqui — precisa ser na pump thread.
         // StartCapture() também não é chamado aqui — será via StartFramePump().

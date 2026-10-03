@@ -79,7 +79,7 @@ public sealed partial class EngineCoordinator : IDisposable
     private CancellationTokenSource? _pipelineCts;
     private Task? _pipelineTask;
     private readonly PipelineWatchdog _watchdog = new();
-    private readonly FeedTelemetry _feed = new();
+    private readonly FeedTelemetry _feed;
     private int _reinitCount;
     private volatile bool _needsReinit;
     private volatile bool _hasEverBeenHealthy;
@@ -209,6 +209,11 @@ public sealed partial class EngineCoordinator : IDisposable
     public EngineCoordinator(bool forceSoftware = false)
     {
         _config = new ConfigManager();
+
+        // frameIntervalTicks = 1/fps em ticks de Stopwatch: liga a contagem de overruns
+        // da telemetria CFR (`over=` no log de 5 s). Precisa do config, por isso é aqui.
+        _feed = new FeedTelemetry(frameIntervalTicks:
+            (long)Math.Round(Stopwatch.Frequency / (double)Math.Max(1, _config.Config.Fps)));
 
         if (forceSoftware)
             _config.Config.ForceSoftware = true;
