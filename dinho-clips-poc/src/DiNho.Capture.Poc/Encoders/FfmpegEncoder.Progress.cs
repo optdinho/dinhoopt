@@ -182,10 +182,11 @@ internal sealed partial class FfmpegEncoder
         if (now - _lastCapacityDegradeTicks < CapacityDegradeCooldownSec * Stopwatch.Frequency)
             return false;
 
-        // Com o piso absoluto (Item 1) os divisores convergem: em 1080p 1/2 e 1/4 dao os
-        // mesmos 1280x720, e abaixo do piso nenhum degrau muda a resolucao. Reiniciar o
-        // ffmpeg nesse caso descartaria o backlog de output e o estado de PTS sem mudar os
-        // argumentos, entao o degrau util e' ignorado. Ver CapacityStepChangesResolution.
+        // Resolucao da UI e' sagrada: com alvo explicito (producao sempre) o divisor e'
+        // inerte, entao NENHUM degrau muda a resolucao e o guard nao reinicia o ffmpeg a
+        // meio da sessao. No caminho native o piso absoluto tambem faz 1/2 e 1/4 convergirem
+        // em 1280x720. Reiniciar nesses casos descartaria o backlog de output e o estado de
+        // PTS sem mudar um byte dos argumentos. Ver CapacityStepChangesResolution.
         if (!CapacityStepChangesResolution(
                 _width, _height, _outputWidth, _outputHeight, _scaleDivisor, next.ScaleDivisor))
             return false;

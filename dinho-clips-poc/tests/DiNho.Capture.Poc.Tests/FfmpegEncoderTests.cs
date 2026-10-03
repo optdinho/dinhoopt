@@ -465,35 +465,34 @@ public sealed class FfmpegEncoderTests
     public void ComputeScaleTarget_FallbackDivisor_DoesNotReduceBelowUserOutput()
     {
         // Cascading fallback 1/2 + user 720p num capture 1920×1080 → mantém 1280×720.
-        // O usuário em 720p está exatamente no piso absoluto, então não há degradação.
+        // O alvo explícito é sagrado: o divisor é inerte e o 720p do usuário fica.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1280, 720, 2);
         Assert.NotNull(result);
         Assert.Equal((1280, 720), result!.Value);
     }
 
-    // ── 6.11 Item 1: guard de capacidade com piso ABSOLUTO 1280×720 ────────
-    // A cascata de fallback (HW 1/2 → HW 1/4 → CPU 1/2) promete reduzir a resolução para
-    // segurar o fps, mas o divisor era neutralizado sempre que o coordinator mandava uma
-    // resolução explícita (> 0) — os passos "1/2" e "1/4" eram só rótulo no log. Agora o
-    // divisor APLICA sempre, mas o resultado nunca cai abaixo do piso absoluto 1280×720.
-    // Piso = 1280×720 (o mesmo cap que o perfil RAM LowMemory já usa, então é consistente).
+    // ── Resolução da UI é SAGRADA: o divisor só vale para "native" ─────────
+    // A resolução escolhida na UI chega como alvo explícito (> 0) e é sagrada: nenhum
+    // divisor de fallback/capacity guard pode reduzi-la. O divisor (HW 1/2 → HW 1/4 →
+    // CPU 1/2) só age quando NÃO há alvo explícito (native), onde não existe escolha do
+    // usuário a violar. Foi o contrário disto que a sessão FiveM de 2026-10-03 expôs: o
+    // capacity guard baixou 1080p→720p a meio da gravação e dessincronizou o A/V.
 
     [Theory]
-    [InlineData(2, 1280, 720)]   // 1/2 de 1080p = 960×540 → cai no piso
-    [InlineData(4, 1280, 720)]   // 1/4 = 480×270 → o piso absorve o degrau extra
-    public void ComputeScaleTarget_FallbackDivisor_AppliesDownToAbsoluteFloor(int divisor, int expW, int expH)
+    [InlineData(2)]
+    [InlineData(4)]
+    public void ComputeScaleTarget_UserOutput_IsNeverReducedByFallbackDivisor(int divisor)
     {
-        // Usuário em 1080p (acima do piso) + divisor → degrada até o piso, nunca abaixo.
+        // Usuário em 1080p + divisor → mantém 1080p (sem scale). O divisor é inerte.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 1920, 1080, divisor);
-        Assert.NotNull(result);
-        Assert.Equal((expW, expH), result!.Value);
+        Assert.Null(result);
     }
 
     [Fact]
     public void ComputeScaleTarget_FallbackDivisor_UsesUserOutputWhenBelowFloor()
     {
-        // Usuário em 960×540 (abaixo do piso) + 1/2 → o alvo do usuário vence; o piso
-        // absoluto não pode degradar um alvo que já está abaixo dele.
+        // Usuário em 960×540 + 1/2 → o alvo do usuário vence; o divisor é inerte com
+        // alvo explícito, mesmo abaixo do piso.
         var result = FfmpegEncoder.ComputeScaleTarget(1920, 1080, 960, 540, 2);
         Assert.NotNull(result);
         Assert.Equal((960, 540), result!.Value);
@@ -509,13 +508,11 @@ public sealed class FfmpegEncoderTests
     }
 
     [Fact]
-    public void ComputeScaleTarget_1440pUser_FallsToFloor()
+    public void ComputeScaleTarget_1440pUser_IsPreserved()
     {
-        // Usuário em 1440p + 1/2 → 1280×720 (o 1/2 daria 1280×720 exato; o clamp ao piso
-        // garante que nem 1/4 passa abaixo).
+        // Usuário em 1440p + 1/2 → mantém 1440p: o divisor não toca num alvo explícito.
         var result = FfmpegEncoder.ComputeScaleTarget(2560, 1440, 2560, 1440, 2);
-        Assert.NotNull(result);
-        Assert.Equal((1280, 720), result!.Value);
+        Assert.Null(result);
     }
 
     [Fact]
@@ -568,8 +565,8 @@ public sealed class FfmpegEncoderTests
     [Fact]
     public void ComputeScaleTarget_PreservesAspect_WithFallbackDivisor()
     {
-        // Captura 2560×1600 + preset 1280×720 + fallback 1/2 → ajustado para 1152×720 (16:10),
-        // encaixado no box 1280×720 sem esticar.
+        // Captura 2560×1600 (16:10) + preset 1280×720 (16:9) → ajustado para 1152×720 (16:10),
+        // encaixado no box 1280×720 sem esticar. O divisor é inerte (alvo explícito).
         var result = FfmpegEncoder.ComputeScaleTarget(2560, 1600, 1280, 720, 2);
         Assert.NotNull(result);
         Assert.Equal((1152, 720), result!.Value);
@@ -812,24 +809,22 @@ public sealed class FfmpegEncoderTests
     }
 
     [Fact]
-    public void ResolveOutput_NoCrop_User1080p_FallbackDropsToAbsoluteFloor()
+    public void ResolveOutput_NoCrop_User1080p_FallbackKeepsUserResolution()
     {
-        // 6.11 Item 1: este é o caso que estava QUEBRADO em produção. O coordinator sempre
-        // manda resolução explícita, e a condição antiga (outputW <= 0) anulava o divisor —
-        // então o passo "HW 1/2" da cascata caía em NV12 1920×1080 enquanto o log dizia 1/2.
-        // Com o piso absoluto o passo degrada de fato, e nunca abaixo de 720p.
+        // Resolução da UI é sagrada: user 1080p + divisor 2 continua 1920×1080 na NV12,
+        // sem scale. (Antes o "Item 1" degradava para 720p — foi o que quebrou o A/V na
+        // sessão FiveM de 2026-10-03.)
         var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 1920, 1080, 2);
-        Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
-        Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));
+        Assert.Equal((1920, 1080), (r.EncodedW, r.EncodedH));
+        Assert.Equal((1920, 1080), (r.Nv12W, r.Nv12H));
         Assert.Null(r.ScaleW);
     }
 
     [Fact]
     public void ResolveOutput_NoCrop_User720p_FallbackKeepsUserFloor()
     {
-        // 6.11 Item 1: user 720p está exatamente no piso absoluto, então o fallback 1/2 não
-        // tem para onde reduzir. (Antes isso era garantido por ser "decisão do usuário";
-        // agora é garantido por já estar no piso.)
+        // User 720p com fallback 1/2 → mantém 1280×720: a resolução da UI é sagrada e
+        // o divisor só age em native (sem alvo explícito).
         var r = FfmpegEncoder.ResolveOutput(1920, 1080, 0, 0, 1280, 720, 2);
         Assert.Equal((1280, 720), (r.EncodedW, r.EncodedH));
         Assert.Equal((1280, 720), (r.Nv12W, r.Nv12H));

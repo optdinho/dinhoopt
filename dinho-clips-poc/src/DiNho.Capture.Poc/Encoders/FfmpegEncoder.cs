@@ -483,58 +483,44 @@ internal sealed partial class FfmpegEncoder : IEncoder
     private int EncodedWidth => _encodedW > 0 ? _encodedW : _width;
     private int EncodedHeight => _encodedH > 0 ? _encodedH : _height;
 
-    /// <summary>Piso ABSOLUTO de resolução do guard de capacidade (Item 1, opção A). O
-    /// divisor da cascata de fallback pode degradar o alvo do usuário, mas nunca abaixo
-    /// disto. 1280×720 é o mesmo teto que o perfil RAM <c>LowMemory</c> já usa como cap,
-    /// então o piso não introduz um conceito novo — só dá um nome a ele.</summary>
+    /// <summary>Simplificador do piso efetivo da escala de fallback (caminho native).
+    ///
+    /// Só é consultado quando NÃO há alvo explícito da UI (native), onde não existe escolha
+    /// do utilizador a violar. Quando há alvo explícito, a resolução da UI é SAGRADA e o
+    /// divisor é inerte (ver <see cref="ComputeScaleTarget"/>) — logo este piso nem entra.
+    /// 1280×720 é o mesmo teto que o perfil RAM <c>LowMemory</c> já usa como cap.</summary>
     internal const int MinOutputWidth = 1280;
     internal const int MinOutputHeight = 720;
 
     /// <summary>
-    /// Calcula a resolução alvo do filtro scale combinando a resolução de saída do
-    /// usuário com o scale do cascading fallback (1/N da entrada). Preserva o aspect
-    /// ratio da entrada quando a resolução do usuário tem proporção diferente (ex.:
-    /// captura 16:10/21:9 + preset 16:9) — ajusta dentro do box alvo sem esticar.
-    /// Retorna null quando nenhum scale é necessário (saída == entrada).
+    /// Contrato de resolução (2026-10-03): a resolução escolhida na UI é SAGRADA.
     ///
-    /// <para><b>Item 1 — o divisor antes era um no-op em produção.</b> A condição era
-    /// <c>scaleDivisor &gt; 1 &amp;&amp; outputW &lt;= 0</c>, mas o coordinator SEMPRE manda
-    /// resolução explícita &gt; 0 (<c>EngineCoordinator.Capture.cs:278-279</c>), então os
-    /// degraus "HW 1/2", "HW 1/4" e "CPU 1/2" da cascata existiam só como rótulo no log:
-    /// o ffmpeg continuava codificando na resolução cheia enquanto o log dizia 1/2. O
-    /// commit que introduziu a cascata (7474fce) não protegia nada.</para>
+    /// O divisor de escala (cascata de fallback: HW 1/2 → HW 1/4 → CPU 1/2) e o capacity
+    /// guard só podem reduzir a resolução quando NÃO há alvo explícito (native,
+    /// <c>outputW &lt;= 0</c>). Com alvo explícito (>0) o divisor é <b>inerte</b>: o ffmpeg
+    /// codifica exatamente a resolução que o utilizador escolheu. Em produção o coordinator
+    /// SEMPRE manda alvo explícito (<c>EngineCoordinator.Capture.cs</c>), portanto nenhum
+    /// degrau degrada a UI.
     ///
-    /// <para><b>Contrato atual (opção A, piso absoluto):</b> o divisor APLICA sempre que
-    /// <c>scaleDivisor &gt; 1</c>, e o resultado é limitado por <b>piso absoluto 1280×720</b>,
-    /// não pela escolha do usuário. A escolha do usuário continua sendo o TETO (e nunca
-    /// gera upscale), mas deixa de ser o piso — um alvo de 1080p cai para 720p quando o
-    /// encoder não sustenta a resolução cheia, que é justamente o propósito da cascata.
-    /// Um alvo já abaixo do piso (ex.: 960×540) é preservado, porque degradá-lo mais ainda
-    /// só pioraria o resultado sem comprar fps.</para>
-    ///
-    /// <para>O piso nunca vira upscale: numa captura menor que o piso, o piso efetivo é o
-    /// próprio tamanho da entrada.</para>
-    ///
-    /// <para><b>Limitação conhecida fora de 16:9 (medido):</b> o piso é aplicado por eixo e
-    /// <i>depois</i> a razão de aspecto é preservada, que pode puxar a altura para baixo do
-    /// piso. Em ultrawide 2560x1080 o divisor 2 dá 1280x720 pelo piso, mas como
-    /// <c>inAr &gt; outAr</c> o ajuste final limita pela <b>largura</b> e o resultado é
-    /// <b>1280x540</b> — a altura fica abaixo dos 720 do piso. O comportamento é o correto
-    /// (preservar proporção sem esticar), mas o "piso 1280x720" só é garantido em 16:9.
-    /// Forçar 720 de altura daria 1706x720, mudando a saída de quem captura ultrawide — por
-    /// isso a limitação fica documentada em vez de "corrigida".</para>
+    /// <para><b>Regressão de runtime 2026-10-03 (FiveM, av1_nvenc 1080p60).</b> O "Item 1"
+    /// tinha invertido isto: o alvo do utilizador virou apenas TETO e o divisor degradava
+    /// 1080p→720p ao atingir o piso absoluto. O capacity guard disparou por ruído (feed
+    /// ~58–59 fps classificado como "saudável" num tick, com speed/lag que medem o feed e
+    /// não o encoder), reiniciou o ffmpeg a meio da gravação e o save saiu com A/V
+    /// dessincronizado (<c>AlignAudio -9453ms</c>). Ver <see cref="CapacityGuardMath"/>.</para>
     /// </summary>
     /// <summary>
     /// O degrau de escala realmente muda a resolução que o ffmpeg recebe?
     ///
-    /// <para><b>Por que isso precisa existir:</b> com o piso absoluto 1280x720 (Item 1) os
-    /// divisores <b>convergem</b>. Em 1080p, <c>1/2</c> e <c>1/4</c> dão os mesmos 1280x720
-    /// (o piso segura), e numa captura já abaixo do piso nenhum divisor tem para onde ir.
-    /// <c>NextScaleStepFor</c> não conhece o piso — ele devolve o próximo degrau da cadeia —
-    /// então o guard reiniciava o ffmpeg (descartando o backlog de output e o estado de
-    /// PTS) sem alterar um único byte dos argumentos, e o log anunciava "1/2 → 1/4" como se
-    /// fosse uma mudança. Antes do Item 1 o divisor nem era aplicado, então o guard era
-    /// no-op; agora ele precisa saber quando o degrau é real.</para>
+    /// <para>Com alvo explícito (produção) o divisor é inerte, então <b>nenhum</b> degrau
+    /// muda a resolução: o guard fica impedido de reiniciar o ffmpeg a meio da sessão — que
+    /// é o que a regra "resolução da UI é sagrada" exige (o restart descarta backlog de
+    /// output e o estado de PTS, como aconteceu em 2026-10-03).</para>
+    ///
+    /// <para>No caminho native o piso absoluto 1280×720 faz os divisores convergirem: em
+    /// 1080p, <c>1/2</c> e <c>1/4</c> dão os mesmos 1280×720, e numa captura abaixo do piso
+    /// nenhum divisor tem para onde ir. Sem esta trava o guard reiniciava sem alterar um byte
+    /// dos argumentos e o log anunciava "1/2 → 1/4" como se fosse mudança real.</para>
     /// </summary>
     internal static bool CapacityStepChangesResolution(
         int inputW, int inputH, int outW, int outH, int oldDivisor, int newDivisor)
@@ -646,7 +632,11 @@ internal sealed partial class FfmpegEncoder : IEncoder
     {
         int outW = outputW > 0 ? outputW : inputW;
         int outH = outputH > 0 ? outputH : inputH;
-        if (scaleDivisor > 1)
+        // Resolução da UI é SAGRADA: o divisor (cascata de fallback / capacity guard) só age
+        // quando NÃO há alvo explícito (native). Com outputW > 0 o usuário escolheu a
+        // resolução e o divisor é inerte. Em produção o coordinator SEMPRE manda alvo
+        // explícito (EngineCoordinator.Capture.cs), então nenhum degrau degrada a UI.
+        if (scaleDivisor > 1 && outputW <= 0)
         {
             // Piso efetivo nunca upscale: se a entrada já é menor que o piso, o piso efetivo
             // é a própria entrada (e o divisor não tem para onde reduzir).
