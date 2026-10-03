@@ -1,11 +1,21 @@
 using System.Globalization;
+using DiNho.Capture.Poc.Encoders;
 
 namespace DiNho.Capture.Poc.Watchdog;
 
 /// <summary>
 /// Formata o tick periódico do feed (FeedTelemetry) com o diagnóstico do encoder: codec ativo,
-/// divisor de escala do fallback e backlog de saída (speed/lag do ffmpeg). Mantém o formato
+/// divisor de escala do fallback e o atraso de SAÍDA do ffmpeg (speed/outLag). Mantém o formato
 /// existente das métricas da janela e adiciona o bloco do encoder ao final.
+///
+/// <para>
+/// <c>outLag</c> é <c>elapsed − time</c> do próprio ffmpeg: cresce com o uptime por relógio
+/// (com <c>-r 60</c> nominal e feed marginalmente abaixo, o <c>time</c> fica atrás do
+/// <c>elapsed</c> mesmo sem backlog — sessão 2026-10-02: ~173 s em 4 h, linear, e ZERA no
+/// restart). NÃO é saúde do feed. A medida honesta é <c>feedLag</c>
+/// (<see cref="CapacityGuardMath.FeedLagSeconds"/>: déficit de mídia/s de wall-clock), que
+/// fica ~0 enquanto o feed entrega o fps alvo. Ver <c>CapacityGuardMath</c> para o histórico.
+/// </para>
 /// </summary>
 internal static class FeedLogLine
 {
@@ -14,8 +24,10 @@ internal static class FeedLogLine
         string codec,
         int scaleDivisor,
         double speedX,
-        double outputLagSeconds)
+        double outputLagSeconds,
+        double nominalFps)
     {
+        var feedLag = CapacityGuardMath.FeedLagSeconds(summary.FeedFps, nominalFps);
         var scale = scaleDivisor > 1 ? $"1/{scaleDivisor}" : "full";
 
         var i = CultureInfo.InvariantCulture;
@@ -28,6 +40,7 @@ internal static class FeedLogLine
             $"pace=delay {summary.PacingDelayMs.ToString("F1", i)}ms + spin {summary.PacingSpinMs.ToString("F1", i)}ms ",
             $"iters={summary.PacingCount} | ",
             $"queue={summary.QueueDepthAvg.ToString("F1", i)} avg / {summary.QueueDepthMax} max | ",
-            $"codec={codec} scale={scale} speed={speedX.ToString("F2", i)}x lag={outputLagSeconds.ToString("F0", i)}s");
+            $"codec={codec} scale={scale} speed={speedX.ToString("F2", i)}x " +
+            $"outLag={outputLagSeconds.ToString("F0", i)}s feedLag={(feedLag * 100).ToString("F0", i)}%/s");
     }
 }

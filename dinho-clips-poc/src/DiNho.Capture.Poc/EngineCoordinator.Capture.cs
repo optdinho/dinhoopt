@@ -1155,7 +1155,7 @@ public sealed partial class EngineCoordinator
             (speedX, outputLag) = ff.LastProgress;
         }
 
-        Log.I("FeedTelemetry", FeedLogLine.Build(s, codec, scaleDivisor, speedX, outputLag));
+        Log.I("FeedTelemetry", FeedLogLine.Build(s, codec, scaleDivisor, speedX, outputLag, _config.Config.Fps));
         LogWgcHandoff(s.GoodFrames);
         MaybeDegradeEncoderForCapacity();
     }
