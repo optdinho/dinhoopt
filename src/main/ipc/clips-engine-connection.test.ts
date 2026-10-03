@@ -918,6 +918,7 @@ describe('handlePipeMessage (via pipe data)', () => {
     const mockWin = {
       isDestroyed: vi.fn(() => false),
       webContents: { send: vi.fn() },
+      setContentProtection: vi.fn(),
     }
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockWin as never])
 
@@ -932,6 +933,25 @@ describe('handlePipeMessage (via pipe data)', () => {
       'clips:engine-status',
       expect.objectContaining({ running: true, capturing: true }),
     )
+    expect(mockWin.setContentProtection).toHaveBeenCalledWith(true)
+  })
+
+  it('clears content protection when the engine stops recording', () => {
+    const mockWin = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: vi.fn() },
+      setContentProtection: vi.fn(),
+    }
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockWin as never])
+
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: { type: 'engineStatus', recording: false },
+      })}\n`,
+    )
+
+    expect(mockWin.setContentProtection).toHaveBeenCalledWith(false)
   })
 
   it('skips BrowserWindow send when no valid window', () => {

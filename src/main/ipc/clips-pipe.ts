@@ -238,6 +238,12 @@ function handlePipeMessage(msg: PipeMessage): void {
 
     _statusUpdater?.(src)
     const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (win && typeof src.recording === 'boolean') {
+      // WDA_EXCLUDEFROMCAPTURE só esconde janelas do PRÓPRIO processo. O engine C#
+      // é outro processo e não pode excluir a UI do DiNho; o Electron, dono da
+      // janela, é quem aplica a proteção (liga ao gravar, desliga ao parar).
+      win.setContentProtection(src.recording === true)
+    }
     if (win && _getCurrentStatus) {
       win.webContents.send(IPC.CLIPS_ENGINE_STATUS, _getCurrentStatus())
     }

@@ -338,9 +338,10 @@ namespace DiNho.Capture.Poc.Capture
     }
 
     /// <summary>
-    /// Detecção e configuração WDA (Window Display Affinity).
-    /// Jogos que usam SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) não podem ser capturados.
-    /// Usamos WDA_EXCLUDEFROMCAPTURE para esconder a janela DnHo do próprio recording.
+    /// Detecção de WDA (Window Display Affinity): jogos que usam
+    /// SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) não podem ser capturados via WGC.
+    /// A exclusão da própria janela do DiNho é feita pelo Electron (dono da janela) —
+    /// SetWindowDisplayAffinity só vale para janelas do próprio processo.
     /// </summary>
     internal static class WdaHelper
     {
@@ -365,54 +366,5 @@ namespace DiNho.Capture.Poc.Capture
             }
         }
 
-        public static bool ExcludeWindowFromCapture(IntPtr hwnd)
-        {
-            if (hwnd == IntPtr.Zero) return false;
-            try
-            {
-                var ok = Windows.Win32.PInvoke.SetWindowDisplayAffinity(
-                    (Windows.Win32.Foundation.HWND)hwnd,
-                    (Windows.Win32.UI.WindowsAndMessaging.WINDOW_DISPLAY_AFFINITY)WDA_EXCLUDEFROMCAPTURE);
-                if (!ok)
-                {
-                    ok = Windows.Win32.PInvoke.SetWindowDisplayAffinity(
-                        (Windows.Win32.Foundation.HWND)hwnd,
-                        (Windows.Win32.UI.WindowsAndMessaging.WINDOW_DISPLAY_AFFINITY)WDA_EXCLUDEFROMCAPTURE_MODERN);
-                    if (ok)
-                        Log.I("WDA", $"SetWindowDisplayAffinity(0x{WDA_EXCLUDEFROMCAPTURE_MODERN:X}) OK (Win11 variant) on hwnd=0x{hwnd:X}");
-                }
-                else
-                {
-                    Log.I("WDA", $"SetWindowDisplayAffinity(0x{WDA_EXCLUDEFROMCAPTURE:X}) OK on hwnd=0x{hwnd:X}");
-                }
-                if (!ok)
-                    Log.D("WDA", $"SetWindowDisplayAffinity failed on hwnd=0x{hwnd:X}");
-                return ok;
-            }
-            catch (Exception ex)
-            {
-                Log.W("WDA", $"SetWindowDisplayAffinity exception: {ex.Message}");
-                return false;
-            }
-        }
-
-        public static bool RestoreWindowCapture(IntPtr hwnd)
-        {
-            if (hwnd == IntPtr.Zero) return false;
-            try
-            {
-                var ok = Windows.Win32.PInvoke.SetWindowDisplayAffinity(
-                    (Windows.Win32.Foundation.HWND)hwnd,
-                    Windows.Win32.UI.WindowsAndMessaging.WINDOW_DISPLAY_AFFINITY.WDA_NONE);
-                if (ok)
-                    Log.I("WDA", "SetWindowDisplayAffinity(WDA_NONE) OK — window visible in capture again");
-                return ok;
-            }
-            catch (Exception ex)
-            {
-                Log.W("WDA", $"RestoreWindowCapture exception: {ex.Message}");
-                return false;
-            }
-        }
     }
 }

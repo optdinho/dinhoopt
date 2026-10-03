@@ -53,7 +53,6 @@ public sealed class EngineCoordinatorIpcTests : IDisposable
         SetField(coord, "_status", new DiNho.Capture.Poc.Status.EngineStatus());
         SetField(coord, "_clock", new DiNho.Capture.Poc.Sync.MasterClock());
         SetField(coord, "_watchdog", new PipelineWatchdog());
-        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
         SetField(coord, "_pipelineCts", null);
         SetField(coord, "_pipelineTask", null);
         SetField(coord, "_pttDiagTimer", null);

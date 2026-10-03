@@ -217,9 +217,9 @@ public sealed partial class EngineCoordinator
                 SelectCaptureSourceAsync().GetAwaiter().GetResult();
                 Log.I("EngineCoordinator", "[2/7] SelectCaptureSource OK (async)");
 
-                // WDA_EXCLUDEFROMCAPTURE — esconde a janela DnHo do recording.
-                // Evita que o usuário veja a UI do DiNho ao alt-tab durante gameplay.
-                ExcludeDinhoWindowFromCapture();
+                // A exclusão da própria janela (WDA_EXCLUDEFROMCAPTURE) é feita no
+                // Electron (dono da janela): o engine é outro processo e o Win32 só
+                // permite SetWindowDisplayAffinity em janelas do próprio processo.
 
                 if (_capture == null)
                 {
@@ -598,151 +598,8 @@ public sealed partial class EngineCoordinator
                 s.CalibrationTier = "";
             });
             Log.I("EngineCoordinator", "Captura parada.");
-
-            // Restaura visibilidade da janela DnHo no recording
-            RestoreDinhoWindowCapture();
         }
     }
-
-    #region WDA_EXCLUDEFROMCAPTURE — exclude DnHo window from capture
-
-    private readonly List<IntPtr> _dinhoHwnds = new();
-    private int _wdaRetryCount;
-    private Task? _wdaRetryTask;
-
-    // Seams p/ teste determinístico do retry (P4).
-    internal static int WdaRetryDelayMs = 2000;
-    internal static Func<int, List<IntPtr>>? EnumerateDinhoHwndsProbe = null;
-    internal static Func<IntPtr, bool>? WdaExcludeProbe = null;
-    internal static Action<IntPtr>? WdaRestoreProbe = null;
-
-    /// <summary>
-    /// Retry do WDA ainda pendente, para o teardown dos testes aguardar.
-    /// O corpo do retry roda inteiro sob lock (_dinhoHwnds), entao o teardown ja
-    /// era serializado por ele; isto torna a espera explicita em vez de
-    /// dependente dessa ordem de lock. Nao e a causa da falha intermitente de
-    /// AllExclusionsFail — ver o comentário em ResetWdaSeams.
-    /// </summary>
-    internal Task WdaRetryTask => _wdaRetryTask ?? Task.CompletedTask;
-
-    /// <summary>
-    /// Finds DnHo windows by Electron PID and sets WDA_EXCLUDEFROMCAPTURE.
-    /// This hides the DiNho UI from recording footage when the user alt-tabs.
-    /// </summary>
-    private unsafe void ExcludeDinhoWindowFromCapture()
-    {
-        var electronPid = _config.Config.ElectronPid;
-        if (electronPid <= 0) return;
-        try
-        {
-            var enumerated = EnumerateDinhoHwndsProbe != null
-                ? EnumerateDinhoHwndsProbe(electronPid)
-                : EnumerateDinhoHwnds(electronPid);
-
-            lock (_dinhoHwnds)
-            {
-                _dinhoHwnds.Clear();
-                var excluded = 0;
-                foreach (var hwnd in enumerated)
-                {
-                    var ok = WdaExcludeProbe != null
-                        ? WdaExcludeProbe(hwnd)
-                        : WdaHelper.ExcludeWindowFromCapture(hwnd);
-                    if (ok) excluded++;
-                    _dinhoHwnds.Add(hwnd);
-                }
-
-                if (excluded > 0)
-                {
-                    Log.I("EngineCoordinator", $"WDA: excluded {excluded} DnHo window(s) from capture (PID={electronPid})");
-                    return;
-                }
-            }
-
-            ScheduleWdaRetryIfNeeded();
-        }
-        catch (Exception ex)
-        {
-            Log.W("EngineCoordinator", $"WDA exclude failed: {ex.Message}");
-            ScheduleWdaRetryIfNeeded();
-        }
-    }
-
-    private unsafe List<IntPtr> EnumerateDinhoHwnds(int electronPid)
-    {
-        var result = new List<IntPtr>();
-        PInvoke.EnumWindows((hwnd, _) =>
-        {
-            uint pid;
-            PInvoke.GetWindowThreadProcessId(hwnd, &pid);
-            if (pid == electronPid && PInvoke.IsWindowVisible(hwnd))
-                result.Add((IntPtr)hwnd);
-            return true;
-        }, default);
-        return result;
-    }
-
-    /// <summary>
-    /// Agenda um único retry (atrasado) para tentar excluir de novo.
-    /// _wdaRetryCount == 0 => retry pendente/possível; == 1 => já agendado (at-most-once).
-    /// RestoreDinhoWindowCapture zera o contador e cancela o retry pendente.
-    /// </summary>
-    private void ScheduleWdaRetryIfNeeded()
-    {
-        lock (_dinhoHwnds)
-        {
-            if (_wdaRetryCount != 0) return;
-            _wdaRetryCount = 1;
-        }
-        Log.W("EngineCoordinator", "WDA: excluding failed — scheduling one retry to hide DnHo window(s)");
-        _wdaRetryTask = Task.Run(async () =>
-        {
-            await Task.Delay(WdaRetryDelayMs);
-            lock (_dinhoHwnds)
-            {
-                if (_wdaRetryCount == 0) return;
-                try
-                {
-                    ExcludeDinhoWindowFromCapture();
-                }
-                catch (Exception ex)
-                {
-                    Log.W("EngineCoordinator", $"WDA retry failed: {ex.Message}");
-                }
-            }
-        });
-    }
-
-    /// <summary>
-    /// Restores WDA_NONE on DnHo windows — makes them visible in capture again.
-    /// </summary>
-    private void RestoreDinhoWindowCapture()
-    {
-        List<IntPtr> toRestore;
-        lock (_dinhoHwnds)
-        {
-            _wdaRetryCount = 0;
-            if (_dinhoHwnds.Count == 0) return;
-            toRestore = new List<IntPtr>(_dinhoHwnds);
-            _dinhoHwnds.Clear();
-        }
-
-        try
-        {
-            foreach (var hwnd in toRestore)
-            {
-                if (WdaRestoreProbe != null) WdaRestoreProbe(hwnd);
-                else WdaHelper.RestoreWindowCapture(hwnd);
-            }
-            Log.I("EngineCoordinator", $"WDA: restored {toRestore.Count} DnHo window(s) visibility");
-        }
-        catch (Exception ex)
-        {
-            Log.W("EngineCoordinator", $"WDA restore failed: {ex.Message}");
-        }
-    }
-
-    #endregion
 
     // ── Agregação de frames dropped ──────────────────────────────────────────
     // Em vez de logar cada frame dropped (91 linhas numa rajada GPU típica),

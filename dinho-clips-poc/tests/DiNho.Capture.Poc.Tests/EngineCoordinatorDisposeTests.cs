@@ -64,7 +64,6 @@ public sealed class EngineCoordinatorDisposeTests : IDisposable
     {
         var coord = CreateUninitialized();
         SetField(coord, "_config", CreateConfig());
-        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
 #pragma warning disable CS9216 // falso positivo: SetValue(reflection) exige object; prod relê o campo como Lock (EnterScope).
         SetField(coord, "_pipelineLock", new object());
 #pragma warning restore CS9216
@@ -155,7 +154,6 @@ public sealed class EngineCoordinatorDisposeTests : IDisposable
     {
         var coord = CreateUninitialized();
         SetField(coord, "_config", CreateConfig());
-        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
 #pragma warning disable CS9216 // falso positivo: SetValue(reflection) exige object; prod relê o campo como Lock (EnterScope).
         SetField(coord, "_pipelineLock", new object());
 #pragma warning restore CS9216

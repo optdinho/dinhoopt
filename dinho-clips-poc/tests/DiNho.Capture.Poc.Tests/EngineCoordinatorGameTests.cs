@@ -114,7 +114,6 @@ public sealed class EngineCoordinatorGameTests : IDisposable
         SetField(coord, "_capturedGameProcess", null);
         SetField(coord, "_appliedGameAudioOnly", false);
         SetField(coord, "_appliedGameAudioPid", 0);
-        SetField(coord, "_dinhoHwnds", new List<IntPtr>());
         #pragma warning disable CS9216 // falso positivo: SetValue(reflection) exige object; prod relê o campo como Lock (EnterScope).
         SetField(coord, "_pipelineLock", new System.Threading.Lock());
 #pragma warning restore CS9216
