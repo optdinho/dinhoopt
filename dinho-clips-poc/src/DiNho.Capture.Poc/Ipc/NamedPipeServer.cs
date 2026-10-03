@@ -176,11 +176,12 @@ public sealed class NamedPipeServer : IDisposable
     private readonly string _pipeName;
     private CancellationTokenSource? _cts;
     private Task? _listenerTask;
-    // 5.7: Fila global de broadcasts. A limitação (não preemptar por client ID)
-    // é aceita e intencional — o pipe usa CurrentUserOnly, o que garante apenas
-    // uma instância Electron conectada. Dois clientes exigiriam token/canal
-    // por sessão — overhead não justificado para um app desktop single-user.
-    private readonly ConcurrentQueue<string> _rawBroadcastQueue = new();
+
+    // 5.7 assumia "CurrentUserOnly garante uma única instância Electron" e por isso
+    // aceitava filas GLOBAIS drenadas por qualquer cliente que fizesse poll. Esse
+    // pressuposto deixou de ser verdade: o accept loop aceita vários clientes (ver ListenLoop)
+    // e as filas passaram a ser por-cliente. Ver _clients e _responseRouter.
+    private readonly ConcurrentDictionary<Guid, PipeClientChannel> _clients = new();
     private const int MaxBroadcastQueueSize = 1000;
 
     // 5.8: client tasks registradas p/ Stop() aguardar o drain dos handlers ativos
@@ -235,11 +236,27 @@ public sealed class NamedPipeServer : IDisposable
         }
     }
 
+internal ClientResponseRouter ResponseRouter => _responseRouter;
+
+    /// <summary>Clientes já registados (isto é, já em <c>HandleClientAsync</c>). Um
+    /// pipe pode estar ligado no SO e ainda não estar aqui: nesse intervalo um
+    /// broadcast é perdido. Só usado por testes/diagnóstico.</summary>
+    internal int ConnectedClientCount => _clients.Count;
+
+    /// <summary>Regista um cliente sem pipe real. Usado só pelos testes para exercitar
+    /// o fan-out de <see cref="BroadcastRaw"/> sem abrir um pipe.</summary>
+    internal PipeClientChannel RegisterTestClient()
+    {
+        var channel = new PipeClientChannel();
+        _clients[channel.Id] = channel;
+        return channel;
+    }
+
     public void BroadcastRaw(string json)
     {
-        _rawBroadcastQueue.Enqueue(json);
-        while (_rawBroadcastQueue.Count > MaxBroadcastQueueSize)
-            _rawBroadcastQueue.TryDequeue(out _);
+        // Fan-out: um raw broadcast é por definição para todos os clientes ligados.
+        foreach (var client in _clients.Values)
+            EnqueueBounded(client.Raw, json, MaxBroadcastQueueSize);
     }
 
     /// <summary>Enfileira com teto (drop-oldest): impede crescimento ilimitado quando o
@@ -256,12 +273,18 @@ public sealed class NamedPipeServer : IDisposable
         while (!ct.IsCancellationRequested)
         {
             NamedPipeServerStream? server = null;
+            bool slotTaken = false;
             try
             {
+                // Espera por um slot LIVRE antes de criar a instância: garante que nunca
+                // existem mais instâncias do que a capacidade, logo nunca há "pipe busy".
+                await _clientSlots.WaitAsync(ct);
+                slotTaken = true;
+
                 server = new NamedPipeServerStream(
                     _pipeName,
                     PipeDirection.InOut,
-                    maxNumberOfServerInstances: 1,
+                    maxNumberOfServerInstances: MaxConcurrentClients,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
@@ -269,7 +292,7 @@ public sealed class NamedPipeServer : IDisposable
 
                 var captured = server;
                 server = null;
-                var clientTask = Task.Run(() => HandleClientAsync(captured, ct), ct);
+                var clientTask = Task.Run(() => HandleClientAsync(captured, slotTaken, ct), ct);
                 // 5.8: acompanha o handler até terminar para o Stop() poder aguardá-lo.
                 _clientTasks.TryAdd(clientTask.Id, clientTask);
                 _ = clientTask.ContinueWith(t => _clientTasks.TryRemove(clientTask.Id, out _),
@@ -294,19 +317,49 @@ public sealed class NamedPipeServer : IDisposable
         "saveClip", "trimClip", "mergeClips"
     };
 
-    private readonly ConcurrentQueue<string> _longRunningResultQueue = new();
-    private const int MaxLongRunningResultQueueSize = 32;
+    /// <summary>Tetos de capacidade. O de raw broadcast é por cliente (cada um tem a sua
+    /// fila); o de respostas long-running é por cliente E para a fila órfã.</summary>
+    private const int MaxClientResponseQueueSize = 32;
 
-    private void EnqueueLongRunningResult(string json)
+    /// <summary>Respostas long-running cujo <c>reqId</c> não pertence a nenhum cliente ligado
+    /// (clientes legacy que não enviam reqId — o Electron não envia). Preserva o
+    /// comportamento anterior: fila partilhada, drenada por quem pollar primeiro.</summary>
+    private readonly ConcurrentQueue<string> _orphanResults = new();
+
+    private readonly ClientResponseRouter _responseRouter = new();
+
+/// <summary>
+    /// Teto de clientes em simultâneo. Tem de ser um número POSITIVO e explícito:
+    /// <c>NamedPipeServerStream.MaxAllowedServerInstances</c> é -1 (um sentinel), e
+    /// <c>new SemaphoreSlim(-1, -1)</c> lança <c>ArgumentOutOfRangeException</c>.
+    /// </summary>
+    public const int MaxConcurrentClients = 16;
+
+    /// <summary>
+    /// Antes de criar uma instância, espera por um slot. Sem isto, criar a 2.ª instância
+    /// enquanto a 1.ª está ocupada por um cliente persistente lança <c>IOException</c>
+    /// (pipe busy), que era engolida por <c>DebugWrite</c> e gerava um retry por segundo
+    /// para sempre — nenhum segundo cliente conseguia jamais ligar-se.
+    /// </summary>
+    private readonly SemaphoreSlim _clientSlots = new(MaxConcurrentClients, MaxConcurrentClients);
+
+    private void PublishLongRunningResult(string? requestId, string json)
     {
-        _longRunningResultQueue.Enqueue(json);
-        while (_longRunningResultQueue.Count > MaxLongRunningResultQueueSize)
-            _longRunningResultQueue.TryDequeue(out _);
+        if (_responseRouter.TryResolve(requestId, out var clientId)
+            && _clients.TryGetValue(clientId, out var channel))
+        {
+            EnqueueBounded(channel.Responses, json, MaxClientResponseQueueSize);
+            return;
+        }
+
+        EnqueueBounded(_orphanResults, json, MaxClientResponseQueueSize);
     }
 
-    private async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken ct)
+private async Task HandleClientAsync(NamedPipeServerStream server, bool slotHeld, CancellationToken ct)
     {
-        var broadcastQueue = new ConcurrentQueue<string>();
+        var channel = new PipeClientChannel();
+        var broadcastQueue = channel.Raw;
+        _clients[channel.Id] = channel;
         var onStatus = new Action<EngineStatusMessage>(msg =>
         {
             try
@@ -379,7 +432,10 @@ public sealed class NamedPipeServer : IDisposable
                                     {
                                         var capturedCmd = envelope.Command;
                                         var capturedMsg = msgCopy;
-                                        var capturedReqId = envelope.RequestId;
+var capturedReqId = envelope.RequestId;
+                                        // Liga o reqId a ESTE cliente antes de disparar o
+                                        // trabalho: o resultado tem de saber para onde ir.
+                                        _responseRouter.Register(capturedReqId, channel.Id);
                                         _ = ProcessLongRunningAsync(capturedCmd, capturedMsg, capturedReqId, ct);
                                     }
                                 }
@@ -442,14 +498,21 @@ public sealed class NamedPipeServer : IDisposable
                         await writer.WriteLineAsync(broadcastJson);
                     }
 
-                    while (_rawBroadcastQueue.TryDequeue(out var rawJson))
+while (broadcastQueue.TryDequeue(out var rawJson))
                     {
                         await writer.WriteLineAsync(rawJson);
                     }
 
-                    while (_longRunningResultQueue.TryDequeue(out var resultJson))
+                    // Respostas long-running DESTE cliente (por reqId) + a fila órfã
+                    // partilhada, para clientes que não enviam reqId.
+                    while (channel.Responses.TryDequeue(out var ownResult))
                     {
-                        await writer.WriteLineAsync(resultJson);
+                        await writer.WriteLineAsync(ownResult);
+                    }
+
+                    while (_orphanResults.TryDequeue(out var orphanJson))
+                    {
+                        await writer.WriteLineAsync(orphanJson);
                     }
                 }
             }
@@ -463,9 +526,18 @@ public sealed class NamedPipeServer : IDisposable
         {
             DebugWrite($"Client handler error: {ex.Message}");
         }
-        finally
+finally
         {
             OnStatusBroadcast -= onStatus;
+            _clients.TryRemove(channel.Id, out _);
+            _responseRouter.ForgetClient(channel.Id);
+            // Liberta o slot para o accept loop poder criar a próxima instância. Sem
+            // isto, um cliente que se desconecta deixa o loop à espera para sempre.
+            if (slotHeld)
+            {
+                try { _clientSlots.Release(); }
+                catch (SemaphoreFullException) { /* já liberado — nada a fazer */ }
+            }
         }
     }
 
@@ -505,7 +577,7 @@ public sealed class NamedPipeServer : IDisposable
                     })
                 };
             }
-            EnqueueLongRunningResult(JsonSerializer.Serialize(resultEnvelope));
+            PublishLongRunningResult(requestId, JsonSerializer.Serialize(resultEnvelope));
         }
         catch (Exception ex)
         {
@@ -522,7 +594,7 @@ public sealed class NamedPipeServer : IDisposable
                     error = ex.Message
                 })
             };
-            EnqueueLongRunningResult(JsonSerializer.Serialize(errorEnvelope));
+            PublishLongRunningResult(requestId, JsonSerializer.Serialize(errorEnvelope));
         }
     }
 
@@ -537,3 +609,5 @@ public sealed class NamedPipeServer : IDisposable
         Stop();
     }
 }
+
+

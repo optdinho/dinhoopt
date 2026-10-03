@@ -362,28 +362,117 @@ public sealed class NamedPipeServerTests
         Assert.Contains("1024", payloadStr);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  NamedPipeServer — BroadcastRaw queue
-    // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  NamedPipeServer — multi-cliente (2026-10-03)
+// ═══════════════════════════════════════════════════════════════
 
+[Fact]
+public void BroadcastRaw_FansOutToEveryRegisteredClient()
+{
+    using var server = new NamedPipeServer();
+    var a = server.RegisterTestClient();
+    var b = server.RegisterTestClient();
+
+    server.BroadcastRaw("{\"broadcast\":1}");
+
+    Assert.Single(a.Raw);
+    Assert.Single(b.Raw);
+}
+
+[Fact]
+public void PublishLongRunningResult_WithRegisteredReqId_GoesToThatClientOnly()
+{
+    using var server = new NamedPipeServer();
+    var owner = server.RegisterTestClient();
+    var other = server.RegisterTestClient();
+
+    server.ResponseRouter.Register("req-A", owner.Id);
+
+    EnqueueLongRunningResultViaReflection(server, "{\"result\":\"A\"}", "req-A");
+
+    Assert.Single(owner.Responses);
+    Assert.Empty(other.Responses);
+    Assert.Empty(GetLongRunningResultQueue(server));
+}
+
+[Fact]
+public void PublishLongRunningResult_WithUnknownReqId_FallsBackToOrphanQueue()
+{
+    using var server = new NamedPipeServer();
+
+    EnqueueLongRunningResultViaReflection(server, "{\"result\":1}", "req-desconhecido");
+
+    Assert.Single(GetLongRunningResultQueue(server));
+}
+
+[Fact]
+public void ClientResponseRouter_ResolvesOnlyOnce()
+{
+    var router = new ClientResponseRouter();
+    var clientId = Guid.NewGuid();
+
+    router.Register("req-1", clientId);
+    Assert.True(router.TryResolve("req-1", out var resolved));
+    Assert.Equal(clientId, resolved);
+
+    // Segunda tentativa: cada pedido tem UMA resposta.
+    Assert.False(router.TryResolve("req-1", out _));
+}
+
+[Fact]
+public void ClientResponseRouter_ForgetClient_DropsOnlyItsEntries()
+{
+    var router = new ClientResponseRouter();
+    var a = Guid.NewGuid();
+    var b = Guid.NewGuid();
+    router.Register("req-a", a);
+    router.Register("req-b", b);
+
+    Assert.Equal(1, router.ForgetClient(a));
+
+    Assert.False(router.TryResolve("req-a", out _));
+    Assert.True(router.TryResolve("req-b", out _));
+}
+
+[Fact]
+public void ClientResponseRouter_NullRequestId_IsNotRegistered()
+{
+    var router = new ClientResponseRouter();
+    router.Register(null, Guid.NewGuid());
+
+    Assert.False(router.TryResolve(null, out _));
+    Assert.Equal(0, router.Count);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NamedPipeServer — BroadcastRaw queue
+// ═══════════════════════════════════════════════════════════════
+
+    /// <summary>Desde 2026-10-03 as filas raw são POR CLIENTE (fan-out em BroadcastRaw):
+    /// com filas globais, o primeiro cliente a fazer poll levava tudo. Para exercitar
+    /// BroadcastRaw sem um pipe real, registamos um cliente de teste.</summary>
     private static ConcurrentQueue<string> GetRawBroadcastQueue(NamedPipeServer server)
     {
-        return (ConcurrentQueue<string>)typeof(NamedPipeServer)
-            .GetField("_rawBroadcastQueue", BindingFlags.NonPublic | BindingFlags.Instance)!
+        var clients = (ConcurrentDictionary<Guid, PipeClientChannel>)typeof(NamedPipeServer)
+            .GetField("_clients", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(server)!;
+        return clients.IsEmpty ? server.RegisterTestClient().Raw : clients.Values.First().Raw;
     }
 
-    private static void EnqueueLongRunningResultViaReflection(NamedPipeServer server, string json)
+    private static void EnqueueLongRunningResultViaReflection(
+        NamedPipeServer server, string json, string? requestId = null)
     {
         typeof(NamedPipeServer)
-            .GetMethod("EnqueueLongRunningResult", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .Invoke(server, [json]);
+            .GetMethod("PublishLongRunningResult", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(server, [requestId, json]);
     }
 
+    /// <summary>Filas órfãs: respostas long-running sem reqId registado (o Electron
+    /// não envia reqId), preservando o comportamento partilhado anterior.</summary>
     private static ConcurrentQueue<string> GetLongRunningResultQueue(NamedPipeServer server)
     {
         return (ConcurrentQueue<string>)typeof(NamedPipeServer)
-            .GetField("_longRunningResultQueue", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetField("_orphanResults", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(server)!;
     }
 
