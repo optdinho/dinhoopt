@@ -44,6 +44,43 @@
 
 ---
 
+## 📝 Novidades da 2.0.6
+
+### 🎯 A resolução que escolhes é a que é gravada
+
+O motor de Clips podia **degradar a resolução escolhida a meio de uma gravação**. Ao
+detetar que o encoder "não acompanhava", o *capacity guard* baixava de 1080p para 720p e
+reiniciava o ffmpeg — e esse reinício descartava o backlog de output e o estado de PTS,
+deixando o áudio dessincronizado do vídeo (num clip real, ~9,5 s de desvio).
+
+O sinal que disparava o guard estava errado: `speed` e `outLag` do ffmpeg medem o
+**feed** (a taxa a que os frames chegam ao encoder), não o trabalho do encoder. Um jogo a
+renderizar abaixo de 60 fps fazia parecer saturação onde não havia nenhuma — a fila estava
+vazia e não se perdia um único frame.
+
+A regra passou a ser explícita: o divisor de fallback e o *capacity guard* **só reduzem a
+resolução quando não há alvo explícito** (modo nativo). Logo que escolhes uma resolução, é
+essa que sai — e o guard deixa de reiniciar o ffmpeg a meio da sessão.
+
+### 📦 Dependências em dia
+
+Electron 44.5.1, Vite 8.3.2, Biome 2.5.15, Vitest 5.0.3, framer-motion 14 e
+`@types/node` 26 (tipos alinhados com o Node 24 embutido no Electron 44), CsWin32 0.3.346.
+A suíte cobre a adaptação — `ExecException.cmd` passou a obrigatório e os mocks de
+`execFile` foram ajustados. Os advisories de `npm audit` que restam são todos de
+ferramentas de build (dev), nenhum no runtime embarcado.
+
+### ✅ Qualidade interna
+
+| | Antes | Agora |
+|---|---|---|
+| Testes (TS) | 7.792 | **7.800** |
+| Testes (C#, Release) | 2.212 | **2.443** |
+
+`biome` limpo em 888 ficheiros, `tsc --noEmit` sem erros, build sem avisos.
+
+---
+
 ## 📝 Novidades da 2.0.5
 
 ### 🎮 Modo Jogo realmente automático
@@ -337,7 +374,7 @@ corrompidos antes que causem instabilidade.
 | **Push-to-Talk** | Ativa o microfone por tecla personalizável (hold/toggle) |
 | **Redução de Ruído** | Denoising do microfone em tempo real (ffmpeg anlmdn) |
 | **Replay Buffer** | Modo RAM ou híbrido com spill em disco para clips longos |
-| **Qualidade Adaptativa** | Reduz resolução automaticamente em PC com pouca performance |
+| **Qualidade Adaptativa** | Calibra preset e limita a resolução ao perfil de RAM da máquina (opcional); a resolução escolhida nunca é degradada por fallback a meio da gravação |
 | **Configuração de Qualidade** | Presets CQ+VBV, resolução, nitidez (CAS), stretch |
 | **Notificações & Hotkeys** | Hotkeys personalizáveis, toast ao salvar clip, favoritos e auto-limpeza |
 
@@ -624,7 +661,7 @@ npx playwright test
 
 ```
 📊 Cobertura atual: 95,8% de linhas · 94,5% de funções · 86,6% de branches
-   262 arquivos de teste · 7.561 testes (Vitest) · 2.212 testes (C#, Release)
+   275 arquivos de teste · 7.800 testes (Vitest) · 2.443 testes (C#, Release)
 ```
 
 ---
@@ -640,8 +677,8 @@ npx playwright test
 | Serviços | 123 |
 | Handlers IPC | 237 |
 | Arquivos de teste (TS) | 275 |
-| Testes (TS) | 7.792 |
-| Testes (C#) | 2.212 |
+| Testes (TS) | 7.800 |
+| Testes (C#) | 2.443 |
 | Cobertura de linhas | 95,8% |
 | Cobertura de branches | 86,6% |
 | Linhas de código (TS, sem testes) | ~87.000 |
