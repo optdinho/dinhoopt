@@ -379,6 +379,8 @@ export async function readClipsFromDisk(): Promise<ClipInfo[]> {
 export function getCurrentStatus(): ClipsEngineStatus {
   const e = readEngineStatus()
   const captureBackend = e.captureBackend || undefined
+  const captureMode =
+    e.captureMode === 'game' || e.captureMode === 'window' || e.captureMode === 'desktop' ? e.captureMode : undefined
   const encoder = e.encoder || undefined
   const estimatedRamMB = e.estimatedRamMB || undefined
   const diskSpaceOk = e.diskSpaceOk
@@ -407,6 +409,7 @@ export function getCurrentStatus(): ClipsEngineStatus {
     replayTimeSeconds: C.engineReplayTimeSeconds,
     audioSampleRate: C.audioSampleRate,
     ...(captureBackend ? { captureBackend } : {}),
+    ...(captureMode ? { captureMode } : {}),
     ...(encoder ? { encoder } : {}),
     ...(estimatedRamMB ? { estimatedRamMB } : {}),
     ...(diskSpaceOk != null ? { diskSpaceOk } : {}),

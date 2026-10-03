@@ -1,5 +1,8 @@
 // ─── Clips / Game Capture ───────────────────────────────────
 
+/** Alvo real da captura ativa: jogo conhecido, janela avulsa (HWND) ou monitor inteiro. */
+export type ClipsCaptureMode = 'game' | 'window' | 'desktop'
+
 export type HotkeyAction = 'saveClip' | 'toggleCapture' | 'toggleMic' | 'pushToTalk'
 export type HotkeyModifier = 'Ctrl' | 'Shift' | 'Alt'
 export type PushToTalkMode = 'off' | 'hold' | 'toggle'
@@ -27,6 +30,11 @@ export interface ClipsEngineStatus {
   fps: number
   replayTimeSeconds: number
   captureBackend?: string
+  /**
+   * Alvo da captura ativa. `desktop`/`window` explicam o que está sendo gravado quando
+   * não há jogo detectado (`currentGame` ausente). Ausente = captura inativa.
+   */
+  captureMode?: ClipsCaptureMode
   encoder?: string
   estimatedRamMB?: number
   diskSpaceOk?: boolean

@@ -88,6 +88,14 @@ public sealed class EngineStatusValue
     [JsonPropertyName("captureBackend")]
     public string CaptureBackend { get; set; } = "DXGI";
 
+    /// <summary>
+    /// Alvo da captura ativa: "game" | "window" | "desktop" ("" = inativa). O front
+    /// usa isto para mostrar o que está sendo gravado quando não há jogo detectado
+    /// (Game = null e' correto semanticamente, mas nao informa o alvo).
+    /// </summary>
+    [JsonPropertyName("captureMode")]
+    public string CaptureMode { get; set; } = "";
+
     [JsonPropertyName("encoder")]
     public string Encoder { get; set; } = "NONE";
 

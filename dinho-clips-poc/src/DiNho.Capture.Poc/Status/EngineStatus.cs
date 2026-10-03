@@ -5,6 +5,15 @@ namespace DiNho.Capture.Poc.Status;
 public sealed class EngineStatusSnapshot
 {
     public string CaptureBackend { get; set; } = "NONE";
+
+    /// <summary>
+    /// O que está sendo capturado: "game" (janela de jogo conhecido), "window"
+    /// (janela avulsa via HWND) ou "desktop" (monitor inteiro). "" = captura inativa.
+    /// Preenche o vazio que o front via quando não há jogo detectado (Game = null),
+    /// deixando claro que a gravação de desktop está ativa.
+    /// </summary>
+    public string CaptureMode { get; set; } = "";
+
     public string Encoder { get; set; } = "NONE";
     public bool DiskSpaceOk { get; set; } = true;
     public bool LastCrashRecovered { get; set; } = false;
@@ -79,6 +88,7 @@ public sealed class EngineStatus : IDisposable
             var snapshot = new EngineStatusSnapshot
             {
                 CaptureBackend = _current.CaptureBackend,
+                CaptureMode = _current.CaptureMode,
                 Encoder = _current.Encoder,
                 DiskSpaceOk = _current.DiskSpaceOk,
                 LastCrashRecovered = _current.LastCrashRecovered,

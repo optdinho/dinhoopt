@@ -69,6 +69,7 @@ let _engineRunning = false
 let _engineCapturing = false
 let _engineStartTime = 0
 let _engineCaptureBackend = ''
+let _engineCaptureMode = ''
 let _engineEncoder = ''
 let _engineCodec = ''
 let _engineReplayBufferBytes = 0
@@ -104,6 +105,7 @@ function statusUpdater(src: Record<string, unknown>): void {
   if (typeof src.fps === 'number') C.engineFps = src.fps
   if (typeof src.replayTimeSeconds === 'number') C.engineReplayTimeSeconds = src.replayTimeSeconds
   if (typeof src.captureBackend === 'string') _engineCaptureBackend = src.captureBackend
+  if (typeof src.captureMode === 'string') _engineCaptureMode = src.captureMode
   if (typeof src.encoder === 'string') _engineEncoder = src.encoder
   if (typeof src.codec === 'string') _engineCodec = src.codec
   if (typeof src.estimatedRamMB === 'number') _engineEstimatedRamMB = src.estimatedRamMB
@@ -171,6 +173,7 @@ export function readEngineStatus(): {
   capturing: boolean
   startTime: number
   captureBackend: string
+  captureMode: string
   encoder: string
   codec: string
   replayBufferBytes: number
@@ -195,6 +198,7 @@ export function readEngineStatus(): {
     capturing: _engineCapturing,
     startTime: _engineStartTime,
     captureBackend: _engineCaptureBackend,
+    captureMode: _engineCaptureMode,
     encoder: _engineEncoder,
     codec: _engineCodec,
     replayBufferBytes: _engineReplayBufferBytes,

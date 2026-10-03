@@ -141,6 +141,27 @@ public sealed partial class EngineCoordinator
         return null;
     }
 
+    /// <summary>
+    /// Descreve o ALVO da captura para o front: "game", "window" ou "desktop".
+    /// Diferente de <see cref="ResolveStatusGameString"/>, que segue o foreground
+    /// quando não há alvo (ex.: jogo em foreground com captura de desktop), aqui a
+    /// resposta é sempre sobre o que a captura está realmente pegando — é o que
+    /// preenche o vazio visual quando <c>Game = null</c> (captura de desktop ativa).
+    /// </summary>
+    internal static string ResolveCaptureMode(GameInfo captureTarget, IntPtr captureTargetHwnd)
+    {
+        if (IsKnownGameTarget(captureTarget))
+            return "game";
+        return captureTargetHwnd != IntPtr.Zero ? "window" : "desktop";
+    }
+
+    /// <summary>
+    /// Modo publicado no status. "" quando a captura está inativa, para não sugerir
+    /// um alvo enquanto o engine está apenas em idle.
+    /// </summary>
+    internal static string ResolveStatusCaptureMode(bool recording, GameInfo captureTarget, IntPtr captureTargetHwnd)
+        => recording ? ResolveCaptureMode(captureTarget, captureTargetHwnd) : "";
+
     // ---------------------------------------------------------------------------
     // Alive-check por PID via OpenProcess (Opção A — fix do falso-negativo FiveM).
     // O nome do processo do FiveM inclui o build number (FiveM_b3258_GTAProcess),

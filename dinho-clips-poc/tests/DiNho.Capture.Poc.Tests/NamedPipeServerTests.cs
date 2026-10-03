@@ -254,6 +254,7 @@ public sealed class NamedPipeServerTests
 
     [Theory]
     [InlineData(nameof(EngineStatusValue.CaptureBackend), "DXGI")]
+    [InlineData(nameof(EngineStatusValue.CaptureMode), "")]
     [InlineData(nameof(EngineStatusValue.Encoder), "NONE")]
     [InlineData(nameof(EngineStatusValue.OutputDirectory), "")]
     [InlineData(nameof(EngineStatusValue.CalibrationTier), "")]

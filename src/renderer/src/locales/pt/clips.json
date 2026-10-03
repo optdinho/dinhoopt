@@ -72,6 +72,8 @@
   "gameDetection": "Detecção de Jogos",
   "gameAudioOnly": "Só Jogo + Microfone",
   "noGameDetected": "Nenhum jogo detectado",
+  "captureModeDesktop": "Área de trabalho",
+  "captureModeWindow": "Janela",
   "choose": "Escolher",
   "change": "Alterar",
   "clear": "Limpar",

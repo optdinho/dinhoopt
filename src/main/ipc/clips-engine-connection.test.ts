@@ -623,6 +623,36 @@ describe('getCurrentStatus', () => {
     expect(s.calibrationTier).toBe('Medium')
   })
 
+  it('exposes captureMode from engineStatus', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: { type: 'engineStatus', captureMode: 'desktop' },
+      })}\n`,
+    )
+    expect(getCurrentStatus().captureMode).toBe('desktop')
+  })
+
+  it('omits captureMode when the engine sends an unknown value', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: { type: 'engineStatus', captureMode: 'bogus' },
+      })}\n`,
+    )
+    expect(getCurrentStatus().captureMode).toBeUndefined()
+  })
+
   it('exposes watchdogOk, memoryMB and micLevel from engineStatus', async () => {
     const child = makeMockChild()
     vi.mocked(spawn).mockReturnValue(child as never)

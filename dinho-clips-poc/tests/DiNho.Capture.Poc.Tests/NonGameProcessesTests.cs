@@ -537,4 +537,64 @@ public sealed class NonGameProcessesTests
     }
 
     #endregion ResolveStatusGameString
+
+    #region ResolveCaptureMode — alvo real da captura publicado no status
+
+    // Preenche o vazio do front quando Game = null: informa se a captura ativa é de
+    // desktop, de uma janela avulsa ou de um jogo conhecido.
+
+    private static string InvokeResolveCaptureMode(object captureTarget, IntPtr hwnd)
+    {
+        var method = typeof(EngineCoordinator).GetMethod("ResolveCaptureMode",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        return (string)method!.Invoke(null, [captureTarget, hwnd])!;
+    }
+
+    private static string InvokeResolveStatusCaptureMode(bool recording, object captureTarget, IntPtr hwnd)
+    {
+        var method = typeof(EngineCoordinator).GetMethod("ResolveStatusCaptureMode",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        return (string)method!.Invoke(null, [recording, captureTarget, hwnd])!;
+    }
+
+    [Fact]
+    public void ResolveCaptureMode_KnownGameTarget_ReturnsGame()
+    {
+        var mode = InvokeResolveCaptureMode(MakeGame("FiveM"), new IntPtr(0xABCD));
+        Assert.Equal("game", mode);
+    }
+
+    [Fact]
+    public void ResolveCaptureMode_NonGameWindow_ReturnsWindow()
+    {
+        // Sem jogo conhecido, mas com HWND alvo (janela avulsa) — "window".
+        var mode = InvokeResolveCaptureMode(MakeNonGame("notepad"), new IntPtr(0x1234));
+        Assert.Equal("window", mode);
+    }
+
+    [Fact]
+    public void ResolveCaptureMode_NoTarget_ReturnsDesktop()
+    {
+        var mode = InvokeResolveCaptureMode(new GameInfo(), IntPtr.Zero);
+        Assert.Equal("desktop", mode);
+    }
+
+    [Fact]
+    public void ResolveStatusCaptureMode_Inactive_ReturnsEmpty()
+    {
+        // Sem gravação ativa, não publica alvo (evita sugerir captura em idle).
+        var mode = InvokeResolveStatusCaptureMode(false, MakeGame("FiveM"), new IntPtr(0xABCD));
+        Assert.Equal("", mode);
+    }
+
+    [Fact]
+    public void ResolveStatusCaptureMode_ActiveDesktop_ReturnsDesktop()
+    {
+        var mode = InvokeResolveStatusCaptureMode(true, new GameInfo(), IntPtr.Zero);
+        Assert.Equal("desktop", mode);
+    }
+
+    #endregion ResolveCaptureMode
 }

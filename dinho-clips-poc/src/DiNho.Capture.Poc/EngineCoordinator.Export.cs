@@ -319,6 +319,7 @@ public sealed partial class EngineCoordinator
             Value = new EngineStatusValue
             {
                 CaptureBackend = s.CaptureBackend,
+                CaptureMode = ResolveStatusCaptureMode(_recording, _captureTargetGame, _captureTargetHwnd),
                 Encoder = s.Encoder,
                 Codec = string.IsNullOrWhiteSpace(liveCodec) ? s.Codec : liveCodec!,
                 DiskSpaceOk = CheckDiskSpace(),

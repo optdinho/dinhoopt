@@ -1,5 +1,6 @@
 import {
   Activity,
+  AppWindow,
   CircleStop,
   Cpu,
   Download,
@@ -8,6 +9,7 @@ import {
   Loader2,
   Mic,
   Microscope,
+  Monitor,
   ShieldAlert,
   TriangleAlert,
   Video,
@@ -146,6 +148,21 @@ export function ClipsStatusBar({
                 <span>{status.currentGame}</span>
               </div>
             )}
+            {status.running &&
+              status.capturing &&
+              (status.captureMode === 'desktop' || status.captureMode === 'window') && (
+                <div
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+                  style={{ background: 'rgba(113,113,122,0.08)', color: 'var(--text-dim)' }}
+                >
+                  {status.captureMode === 'desktop' ? (
+                    <Monitor className="h-3 w-3" />
+                  ) : (
+                    <AppWindow className="h-3 w-3" />
+                  )}
+                  <span>{status.captureMode === 'desktop' ? t('captureModeDesktop') : t('captureModeWindow')}</span>
+                </div>
+              )}
             {status.running && (status.replayBufferBytes || estimatedRamMB > 0) && (
               <div
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"

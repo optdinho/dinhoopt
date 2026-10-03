@@ -72,6 +72,8 @@
   "gameDetection": "Detección de Juegos",
   "gameAudioOnly": "Solo Juego + Micrófono",
   "noGameDetected": "Ningún juego detectado",
+  "captureModeDesktop": "Escritorio",
+  "captureModeWindow": "Ventana",
   "choose": "Elegir",
   "change": "Cambiar",
   "clear": "Limpiar",

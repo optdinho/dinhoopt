@@ -72,6 +72,8 @@
   "gameDetection": "Game Detection",
   "gameAudioOnly": "Game + Mic Only",
   "noGameDetected": "No game detected",
+  "captureModeDesktop": "Desktop",
+  "captureModeWindow": "Window",
   "choose": "Choose",
   "change": "Change",
   "clear": "Clear",

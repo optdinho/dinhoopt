@@ -27,6 +27,7 @@ vi.mock('lucide-react', () => {
   const Icon = ({ children, ...props }: { children?: React.ReactNode }) => <div {...props}>{children}</div>
   const icons = [
     'Activity',
+    'AppWindow',
     'ChevronDown',
     'CircleStop',
     'Clapperboard',
@@ -42,6 +43,7 @@ vi.mock('lucide-react', () => {
     'HardDrive',
     'Mic',
     'Microscope',
+    'Monitor',
     'Pencil',
     'Plus',
     'Power',
@@ -243,6 +245,32 @@ describe('ClipsPage', () => {
     expect(screen.getByText('512megabytes')).toBeTruthy()
     expect(screen.getByText('Cyberpunk 2077')).toBeTruthy()
     expect(screen.getByText('crashRecovered')).toBeTruthy()
+  })
+
+  it('shows desktop capture mode badge when no game is detected', async () => {
+    mockGetStatus.mockResolvedValue({
+      running: true,
+      capturing: true,
+      uptime: 60,
+      fps: 60,
+      replayTimeSeconds: 120,
+      captureMode: 'desktop',
+    })
+    render(<ClipsPage />)
+    expect(await screen.findByText('captureModeDesktop')).toBeTruthy()
+  })
+
+  it('shows window capture mode badge for a non-game window', async () => {
+    mockGetStatus.mockResolvedValue({
+      running: true,
+      capturing: true,
+      uptime: 60,
+      fps: 60,
+      replayTimeSeconds: 120,
+      captureMode: 'window',
+    })
+    render(<ClipsPage />)
+    expect(await screen.findByText('captureModeWindow')).toBeTruthy()
   })
 
   it('shows low disk warning in status badges when diskSpaceOk is false', async () => {
