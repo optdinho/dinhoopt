@@ -96,19 +96,37 @@ internal sealed class FrameGrid
     /// juntos). Os slots perdidos ficam contados em <see cref="Skipped"/>.
     ///
     /// <para>
-    /// <b>Isto insere um buraco de <c>lost × intervalo</c> ms no ficheiro.</b> Não é um
-    /// efeito colateral, é o objectivo: só entra aqui quem atrasou mais de
-    /// <see cref="MaxSlipSlots"/> periodos (reinit, stall de GPU, alt-tab), e nesse
-    /// cenário a alternativa — apanhar o atraso slot a slot — é pior, porque o orçamento
-    /// de duplicatas (<c>poolSize − 1</c>) esgota-se ao 3.º miss e cada slot seguinte
-    /// fura <b>um</b> intervalo. Resync troca N buracos de 16,667 ms por <b>um</b> de
-    /// N × 16,667 ms.
+    /// <b>Objectivo:</b> so entra aqui quem atrasou mais de <see cref="MaxSlipSlots"/>
+    /// periodos (reinit, stall de GPU, alt-tab), e nesse cenario a alternativa - apanhar o
+    /// atraso slot a slot - e pior, porque o orcamento de duplicatas (<c>poolSize - 1</c>)
+    /// esgota-se ao 3.o miss e cada slot seguinte fura <b>um</b> intervalo.
     /// </para>
     /// <para>
-    /// A consequência é que um buraco grande é sempre VISÍVEL no log (linha
-    /// <c>Grelha CFR ressincronizada</c> + <c>skip=</c> na telemetria). Ao medir o soak,
-    /// um ΔPTS grande tem de ser confrontado com o <c>skip=</c> da mesma janela antes de
-    /// contar como falha do pacer.
+    /// <b>A afirmação original deste comentário ("insere um buraco de lost × intervalo ms
+    /// no ficheiro") foi REMOVIDA por não estar provada.</b> O salto theorico e de
+    /// <c>(lost + 1) × intervalo</c>, medido em
+    /// <c>CfrPacerSimulationTests.SaltoDoResync_ValeraoSlotsContados</c> - o resync ancora o
+    /// slot <i>actual</i> em <paramref name="nowTicks"/> e o pacote anterior foi emitido no
+    /// slot anterior.
+    /// </para>
+    /// <para>
+    /// <b>O que a medição diz (soak CFR 6/6, 6 clips, 1817 s):</b> 36 resyncs a somar 1030 slots
+    /// perdidos (com ressyncs de 142 e de 272 slots) e mesmo assim o excesso total foi
+    /// <b>0,168 s</b>, com DMax <= 50 ms. <b>Resync e ΔPTS nao tem correlacao 1:1
+    /// observada</b>: um clip com 2 resyncs de 87 slots deu D18=4 e outro com 2 resyncs de
+    /// 84 slots deu D18=0.
+    /// </para>
+    /// <para>
+    /// <b>Porquê, exactamente, continua por explicar.</b> O PTS que vai para o ficheiro nao e
+    /// lido directamente da grelha: <c>FfmpegEncoder.NalParsing</c> substitui o PTS de cada
+    /// pacote AV1 a partir de <c>_inputPtsQueue</c> (dequeue real / extrapolacao), e o
+    /// reancoramento parece ser absorvido por essa camada. Isto e <b>inferencia, nao facto
+    /// medido</b> - nao tratar como mecanismo confirmado.
+    /// </para>
+    /// <para>
+    /// <b>Regra de diagnostico:</b> nunca atribuir um ΔPTS grande a um resync sem o confrontar
+    /// com o <c>skip=</c> da mesma janela (ver AGENTS.md). As 9 anomalias residuais do soak
+    /// (0,008% dos frames) continuam sem causa identificada.
     /// </para>
     /// </summary>
     internal void Resync(long nowTicks)

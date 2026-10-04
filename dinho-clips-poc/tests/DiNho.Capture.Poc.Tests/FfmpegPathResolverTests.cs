@@ -18,6 +18,7 @@ namespace DiNho.Capture.Poc.Tests;
 /// <c>node scripts/verify-ffmpeg.js</c>, e o sucesso era logado em Debug — sumindo
 /// do log da sessão instalada.
 /// </summary>
+[Collection("FfmpegPathOverride")]
 public sealed class FfmpegPathResolverTests
 {
     private static string[] Paths(string baseDir) =>

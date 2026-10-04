@@ -18,6 +18,7 @@ namespace DiNho.Capture.Poc.Tests;
 /// <c>SAVE OK</c> sobre um arquivo quebrado. 3 de 4 clips da sessão foram anunciados
 /// como salvos com vídeo incompleto.
 /// </summary>
+[Collection("FfmpegPathOverride")]
 public sealed class ClipExporterAtomicityTests
 {
     private static string TempMp4() =>

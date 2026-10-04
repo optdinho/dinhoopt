@@ -3,6 +3,7 @@ using DiNho.Capture.Poc.Quality;
 
 namespace DiNho.Capture.Poc.Tests;
 
+[Collection("MachineCapabilitiesGlobals")]
 public sealed class MachineCapabilitiesTests : IDisposable
 {
     private const long Gb = 1024L * 1024 * 1024;
