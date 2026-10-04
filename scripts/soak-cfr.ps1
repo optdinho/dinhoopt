@@ -45,10 +45,28 @@ function Say($m) {
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $fwd = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
-    foreach ($k in $PSBoundParameters.Keys) { $fwd += @("-$k", $PSBoundParameters[$k]) }
-    Say "auto-elevar: $($fwd -join ' ')"
-    Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -WindowStyle Hidden -ArgumentList $fwd | Out-Null
+    # Um [switch] tem de ser passado PELO NOME. `-Measure True` chega ao processo
+    # elevado como argumento posicional e muda o parameter set, pelo que o script
+    # deixava de measure. Os valores que nao sao switch vao citados.
+    $switchNames = @('Capture', 'Measure')
+    $fwd = @()
+    foreach ($k in $PSBoundParameters.Keys) {
+        $fwd += "-$k"
+        if ($switchNames -notcontains $k) { $fwd += "`"$($PSBoundParameters[$k])`"" }
+    }
+    # `-Verb RunAs` nao pode ser combinado com -RedirectStandardOutput (Start-Process
+    # usa o parameter set ShellExecute). Sem `-Wait` e sem redireccao, o processo
+    # elevado corria as costas do chamador e TODO o output se perdia - foi o que
+    # aconteceu na primeira tentativa de medir o 7.o clip. Passamos por cmd.exe,
+    # que redigere para o MESMO log, e esperamos.
+    $exe = (Get-Process -Id $PID).Path
+    # `*>&1` e sintaxe do PowerShell e nao do cmd: com `-File` ele chega ao script
+    # como argumento posicional e mata o processo. O redireccionamento e do cmd.
+    $inner = "`"$exe`" -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $($fwd -join ' ') >> `"$Log`" 2>&1"
+    $cmdLine = "cd /d `"$PWD`" && $inner"
+    Say "auto-elevar: $cmdLine"
+    Start-Process -FilePath cmd.exe -ArgumentList '/c', $cmdLine -Verb RunAs -Wait -WindowStyle Hidden | Out-Null
+    Say "auto-elevar terminou"
     return
 }
 

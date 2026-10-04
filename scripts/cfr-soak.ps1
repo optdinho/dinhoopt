@@ -174,10 +174,14 @@ function Measure-Clips {
     $rows = @()
     foreach ($c in $clips) {
         # ── Vista fina (ms, timescale do contentor = 1/16000): a que reproduz o baseline ──
-        # showinfo exige DECODIFICACAO: ~4 min por clip de 5 min. E' a unica via sem ffprobe.
-        Write-Step "showinfo (decodifica): $($c.Name)"
+# showinfo exige DECODIFICACAO: ~4 min por clip de 5 min. E' a unica via sem ffprobe.
+# `-nostdin` e obrigatorio: por omissao o ffmpeg le stdin para comandos interactivos
+# e, lanado a partir de uma janela elevada oculta com o handle herdado partido, fica
+# BLOQUEADO indefinidamente sem consumir CPU (observado: 0,06 s de CPU em 20 min, sem
+# .crc escrito). Nao e um timeout - nao termina nunca sozinho.
+Write-Step "showinfo (decodifica): $($c.Name)"
         $sw = [Diagnostics.Stopwatch]::StartNew()
-        $log = & $Ffmpeg -hide_banner -loglevel info -i $c.FullName -vf showinfo -f null - 2>&1
+        $log = & $Ffmpeg -nostdin -hide_banner -loglevel info -i $c.FullName -vf showinfo -f null - 2>&1
         $sw.Stop()
         $t = @($log | ForEach-Object {
             if ($_ -match 'n:\s*\d+ pts:\s*\d+ pts_time:([0-9.]+)') { [double]$Matches[1] }
@@ -201,7 +205,7 @@ function Measure-Clips {
         # confirmar quantos frames NAO foram escritos.
         Write-Step "framecrc (estrutural): $($c.Name)"
         $crc = Join-Path $MeasureDir ($c.BaseName + '.crc')
-        & $Ffmpeg -v error -i $c.FullName -map 0:v:0 -f framecrc $crc 2>&1 | Out-Null
+        & $Ffmpeg -nostdin -v error -i $c.FullName -map 0:v:0 -f framecrc $crc 2>&1 | Out-Null
         $lines = Get-Content $crc
         $tb = $lines | Where-Object { $_ -like '#tb*' } | Select-Object -First 1
         $ticks = @()
