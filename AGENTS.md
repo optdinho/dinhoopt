@@ -113,10 +113,10 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 | `…19-49-54` | 304,67 | 18 281 | **60,00** | **0** | **0** | **17 ms** | **+0 s** | 0 |
 | `…19-55-18` | 296,22 | 17 773 | **60,00** | 1 | 0 | 33 ms | +0,017 s | 1 |
 | `…20-00-35` | 304,47 | 18 269 | **60,00** | **0** | **0** | **17 ms** | **+0 s** | 0 |
-| **TOTAL** | **1 817,5** | **110 045** | 59,99 | **9** | **1** | — | **+0,168 s** | 8 |
+| **TOTAL** | **1 817,5** | **109 045** | 59,99 | **9** | **1** | — | **+0,168 s** | 8 |
 
 Baseline (1 clip de 305 s): 542 D18, 58 D34, **+3,987 s** de excesso, 59,18 fps.
-**Taxa de D18: 3,006% → 0,0082% (redução 367×). Excesso na timeline: +0,009% vs +1,3%.** 2 dos 6 clips são matematicamente perfeitos (só os dois valores da grelha `16/17`).
+**Taxa de D18: 3,006% → 0,0083% (redução 364×). Excesso na timeline: +0,009% vs +1,3%.** 2 dos 6 clips são matematicamente perfeitos (só os dois valores da grelha `16/17`).
 
 ⚠️ **O critério `D18==0` do `-Measure` era demasiado rígido e dá FAIL enganador.** Anomalia isolada de 33–50 ms **não acumula** (o excesso total dos 6 clips é 0,168 s em 1817 s), logo o pacer está correcto; `D18==0` só se atinge em condições de máquina folgada. **Critério correcto a adoptar: excesso ≈ 0 e fps = 60**, não "zero anomalias de qualquer tamanho".
 
