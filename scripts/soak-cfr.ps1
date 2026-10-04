@@ -19,7 +19,11 @@ param(
     # Rejulga um results-*.csv ja medido sem voltar a descodificar (~1 s em vez de
     # ~4 min/clip). Existe porque o criterio de aceitacao mudou depois do soak
     # 6/6: sem isto, corrigir o veredicto obrigaria a repetir 60 min de medicao.
-    [Parameter(ParameterSetName = 'Measure')][string]$ResultsPath
+    [Parameter(ParameterSetName = 'Measure')][string]$ResultsPath,
+    # Alvo CFR com que o clip foi gravado (a app so aceita 30 ou 60 - normalizeFps).
+    # Tem de bater certo com a config no momento da captura: e' a grelha contra a qual
+    # fps, D18/D34 e excesso sao julgados. Default 60 mantem o comportamento anterior.
+    [Parameter(ParameterSetName = 'Measure')][ValidateSet(30, 60)][int]$TargetFps = 60
 )
 
 $RunDir      = "$env:TEMP\opencode\cfr-soak"
@@ -337,7 +341,7 @@ if ($ResultsPath) {
         if (-not (Test-Path $path)) { Say "  FALTA $($c.Name) - saltado"; continue }
         Say "==> a medir $($c.Name)  (showinfo, ~4 min)"
         try {
-            & pwsh -NoProfile -ExecutionPolicy Bypass -File $harn -Glob $path *> $null
+            & pwsh -NoProfile -ExecutionPolicy Bypass -File $harn -Glob $path -TargetFps $TargetFps *> $null
             $csv = Join-Path $RunDir 'clips.csv'
             if (Test-Path $csv) {
                 $row = Import-Csv $csv | Select-Object -Last 1
@@ -366,18 +370,23 @@ if (Test-Path $ResultsCsv) {
     # na timeline. No soak 6/6 houve 9 anomalias em 110 045 frames (0,008%) a
     # valer +0,168 s em 1817 s de duracao - ou seja, ZERO deriva. O que prova que
     # o pacer esta correcto e a DERIVA, nao a contagem bruta de anomalias.
-    #   PASS  = fps >= 59,95  E  |excesso| <= 0,1% da duracao  (o grelha esta no sitio)
-    #   AVISO = fps e deriva ok, mas dPTS >= 18,5 ms acima de 0,5% dos frames
-    #   FAIL  = deriva > 0,1%  OU  fps < 59,95  (a grelha fugiu)
+    #
+    # O alvo vem POR LINHA (AlvoFps), nao de uma constante 60. Antes era fixo: um clip
+    # CFR-30 perfeito (5741 frames, 191,33 s, delta 33/34 ms) era julgado a 30 fps contra
+    # a grelha de 60 e recebia "FAIL - a grelha fugiu" - mentira. Passou a PASS em 2026-10-03.
+    #   PASS  = fps >= alvo - 0,05  E  |excesso| <= 0,1% da duracao
+    #   AVISO = fps e deriva ok, mas D18 acima de 0,5% dos frames
+    #   FAIL  = deriva > 0,1%  OU  fps abaixo do alvo - 0,05  (a grelha fugiu)
     $Num = { param($v) [double](($v -replace '\.', '') -replace ',', '.') }
     $fails = @(); $warns = @(); $totExc = 0.0; $totSec = 0.0; $totD18 = 0; $totFr = 0
     foreach ($r in $rows) {
         $sec = & $Num $r.Segundos; $fps = & $Num $r.Fps; $exc = & $Num $r.ExcessoS
+        $alvo = if ($r.AlvoFps) { [int]$r.AlvoFps } else { $TargetFps }
         $fr = [int]$r.Frames; $d18 = [int]$r.D18
         $totExc += [math]::Abs($exc); $totSec += $sec; $totD18 += $d18; $totFr += $fr
         $pctExc = if ($sec -gt 0) { [math]::Abs($exc) / $sec * 100 } else { 999 }
         $pctD18 = if ($fr -gt 0) { $d18 / $fr * 100 } else { 999 }
-        if ($fps -lt 59.95 -or $pctExc -gt 0.1) { $fails += $r }
+        if ($fps -lt ($alvo - 0.05) -or $pctExc -gt 0.1) { $fails += $r }
         elseif ($pctD18 -gt 0.5) { $warns += $r }
     }
     Say ''
@@ -390,10 +399,13 @@ if (Test-Path $ResultsCsv) {
         Say 'VEREDITO: PASS — a grelha CFR nao fugiu: fps e deriva dentro do alvo em todos os clips.'
     }
     elseif ($fails.Count -eq 0) {
-        Say "VEREDITO: PASS com AVISO — grelha no sitio (sem deriva), mas $($warns.Count) clip(s) com dPTS >= 18,5 ms acima de 0,5% dos frames. Investigar a origem das anomalias."
+        Say "VEREDITO: PASS com AVISO — grelha no sitio (sem deriva), mas $($warns.Count) clip(s) com D18 acima de 0,5% dos frames. Investigar a origem das anomalias."
     }
     else {
-        Say "VEREDITO: FAIL — $($fails.Count) clip(s) com deriva > 0,1% ou fps < 59,95 (a grelha fugiu). Nao e o mesmo que 'tem anomalias'."
-        foreach ($f in $fails) { Say ("   FALHOU: {0}  fps={1}  excesso={2}s" -f $f.Clip, $f.Fps, $f.ExcessoS) }
+        Say "VEREDITO: FAIL — $($fails.Count) clip(s) com deriva > 0,1% ou fps abaixo do alvo - 0,05 (a grelha fugiu). Nao e o mesmo que 'tem anomalias'."
+        foreach ($f in $fails) {
+            $fa = if ($f.AlvoFps) { [int]$f.AlvoFps } else { $TargetFps }
+            Say ("   FALHOU: {0}  fps={1} (alvo {2})  excesso={3}s" -f $f.Clip, $f.Fps, $fa, $f.ExcessoS)
+        }
     }
 }

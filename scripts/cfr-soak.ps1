@@ -23,7 +23,12 @@ param(
     [Parameter(ParameterSetName = 'Session')]    [ValidateSet('A', 'B', 'C')][string]$Label = 'A',
     [Parameter(ParameterSetName = 'Measure')]    [string]$Glob,
     [Parameter(ParameterSetName = 'Session')]    [string]$GameProcess = '',
-    [int]$SegmentSeconds = 600
+    [int]$SegmentSeconds = 600,
+    # Alvo CFR do clip. A app so suporta 30 ou 60 (normalizeFps em clips-quality-presets.ts),
+    # por isso a whitelist e' exactamente essa. Todas as grelhas derivadas sao funcao do alvo:
+    # um clip gravado a 30 FPS deve ser julgado contra 33,333 ms por frame de OBJECTO, e
+    # nao sempre contra 60 - senao da' FAIL enganador num clip CFR-30 perfeito.
+    [ValidateSet(30, 60)][int]$TargetFps = 60
 )
 
 $ErrorActionPreference = 'Stop'
@@ -195,7 +200,13 @@ Write-Step "showinfo (decodifica): $($c.Name)"
             if ($t[$i] -le $t[$i - 1]) { $mono = $false }
         }
         $spanS = $t[-1] - $t[0]
-        $nominalS = ($t.Count - 1) / 60.0
+        # Toda a grelha deriva do alvo, nao de 60 hardcoded. A 60 fps reproduz os valores
+        # historicos (18,33 e 33,33 ms); a 30 fps o periodo dobra e o excesso passa a medir
+        # 33,333 ms de fundo de escala.
+        $periodMs = 1000.0 / $TargetFps
+        $thr1 = $periodMs * 1.1
+        $thr2 = $periodMs * 2.0
+        $nominalS = ($t.Count - 1) / $TargetFps
         $hist = ($d | ForEach-Object { [math]::Round($_) } | Group-Object |
                 Sort-Object { [int]$_.Name } | ForEach-Object { "$($_.Name):$($_.Count)" }) -join ' '
 
@@ -224,8 +235,9 @@ Write-Step "showinfo (decodifica): $($c.Name)"
             Segundos = [math]::Round($spanS, 2)
             Frames   = $t.Count
             Fps      = [math]::Round(($t.Count - 1) / $spanS, 2)
-            D18      = @($d | Where-Object { $_ -ge 18.5 }).Count
-            D34      = @($d | Where-Object { $_ -ge 34.0 }).Count
+            AlvoFps = $TargetFps
+            D18      = @($d | Where-Object { $_ -ge $thr1 }).Count
+            D34      = @($d | Where-Object { $_ -ge $thr2 }).Count
             DMax     = [math]::Round((($d | Measure-Object -Maximum).Maximum), 2)
             DAvg     = [math]::Round((($d | Measure-Object -Average).Average), 3)
             ExcessoS = [math]::Round($spanS - $nominalS, 3)
@@ -237,7 +249,7 @@ Write-Step "showinfo (decodifica): $($c.Name)"
         }
     }
 
-    $rows | Select-Object Clip, Segundos, Frames, Fps, D18, D34, DMax, DAvg, ExcessoS, T2, T3, Monotonico, DecodS |
+    $rows | Select-Object Clip, Segundos, Frames, Fps, AlvoFps, D18, D34, DMax, DAvg, ExcessoS, T2, T3, Monotonico, DecodS |
         Format-Table -AutoSize | Out-String -Width 220 | Write-Output
     $rows | Export-Csv (Join-Path $MeasureDir 'clips.csv') -NoTypeInformation
     Write-Output "=> $(Join-Path $MeasureDir 'clips.csv')"
