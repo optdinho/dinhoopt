@@ -31,7 +31,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.4-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.6-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -45,6 +45,40 @@
 ---
 
 ## 📝 Novidades da 2.0.6
+
+### 🎬 Clips a 60 fps sem judder
+
+O gravador anunciava 60 fps e o ficheiro saía mesmo a 60 fps — mas a **timeline tinha
+buracos**. Numa medição de um clip de 5 minutos: **542 saltos** na timeline e **+3,99 s de
+excesso**, ou seja, 1,3% do vídeo era tempo que não existia. O sintoma é o judder: o
+leitor avança, não há frame para mostrar, e a imagem dá um tranco.
+
+A causa era a **âncora dos timestamps**. Cada frame recebia o instante a que foi capturado
+em vez do instante a que *deveria* estar na grelha. Bastava a captura demorar dois
+milissegundos a mais do que o habitual nesse instante, e o salto ficava permanentemente
+deslocado — não se recuperava nunca.
+
+A grelha passou a ser **absoluta**: o frame *n* tem sempre o tempo *n* × 16,667 ms, onde quer
+que a captura o tenha entregue. Quando não há frame novo nesse instante, **o anterior é
+repetido** em vez de se criar um buraco — com um limite de 2 repetições seguidas, para não
+mascarar uma captura que parou. E o PTS é escrito ao nível do pacote, já no encoder, sem
+re-encodificar no fim.
+
+| 5 minutos de jogo | Antes | Agora (8 clips, 37 min) |
+|---|---|---|
+| Saltos na timeline | 542 | **14** |
+| Excesso de tempo | +3,99 s (1,3%) | **+0,28 s (0,013%)** |
+| FPS efectivo | 59,18 | **60,00** |
+
+**289× menos saltos** e **103× menos deriva**, medido descodificando os ficheiros e
+contando os deltas de PTS — não por confiança no contador interno.
+
+**Bónus para máquinas lentas:** se o PC não consegue entregar 60 fps, o que antes produzia
+um clip aos soluços passa a ser preenchido. Validado com ficheiros reais nos três
+regimes: PC que entrega o alvo (sem repetições), PC ligeiramente abaixo (3-6%), e PC a
+meia taxa (~50% de repetições). Nos três, o ficheiro sai a 60 fps exactos. Também
+validado que 37 "saltos" de sequência, quando a captura pára de repente, **não abrem
+buracos** no ficheiro.
 
 ### 🎯 A resolução que escolhes é a que é gravada
 
@@ -75,9 +109,10 @@ ferramentas de build (dev), nenhum no runtime embarcado.
 | | Antes | Agora |
 |---|---|---|
 | Testes (TS) | 7.792 | **7.800** |
-| Testes (C#, Release) | 2.212 | **2.443** |
+| Testes (C#, Release) | 2.212 | **2.528** |
 
-`biome` limpo em 888 ficheiros, `tsc --noEmit` sem erros, build sem avisos.
+`biome` limpo em 888 ficheiros, `tsc --noEmit` sem erros, build sem avisos, gate do ffmpeg
+52/52 contra o binário embarcado.
 
 ---
 
@@ -678,7 +713,7 @@ npx playwright test
 | Handlers IPC | 237 |
 | Arquivos de teste (TS) | 275 |
 | Testes (TS) | 7.800 |
-| Testes (C#) | 2.443 |
+| Testes (C#) | 2.528 |
 | Cobertura de linhas | 95,8% |
 | Cobertura de branches | 86,6% |
 | Linhas de código (TS, sem testes) | ~87.000 |
