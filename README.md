@@ -96,6 +96,32 @@ A regra passou a ser explícita: o divisor de fallback e o *capacity guard* **s�
 resolução quando não há alvo explícito** (modo nativo). Logo que escolhes uma resolução, é
 essa que sai — e o guard deixa de reiniciar o ffmpeg a meio da sessão.
 
+### 🪟 A app deixa de aparecer nas tuas próprias gravações
+
+O motor tentava esconder a janela do DiNho da captura, e **nunca conseguia**. A
+`SetWindowDisplayAffinity` só tem efeito em janelas do *próprio processo* — mas quem
+chamava a API era o engine em C#, a partir de outro processo, e a chamada devolvia
+`ERROR_ACCESS_DENIED`. A tentativa de repetir era inútil, e o resultado era silencioso:
+nos testes de 4 horas só aparecia uma linha de aviso.
+
+Agora quem esconde a janela é o próprio dono dela: o Electron aplica
+`setContentProtection` quando a gravação começa e desfaz quando para. A janela do DiNho
+sai do enquadramento de clips gravados com a app aberta, e **261 linhas de código de
+produção** de interoperabilidade Windows desapareceram com o arranjo (mais 453 de testes
+que testavam o caminho morto).
+
+### 🔧 Correções
+
+- **O modo de captura passa a estar visível** (desktop / janela / jogo) na barra de estado.
+- **Já não fica um segundo cliente do motor a expirar** — o motor passava a recusar
+  qualquer segunda ligação ao pipe, e agora aceita várias em simultâneo.
+- **Ficheiros temporários órfãos de exportação são limpos no arranque**, em vez de
+  irem ocupando disco entre sessões.
+- **O veredicto de memória após gravar** deixou de usar um contador acumulado que nunca
+  voltava ao normal: o `.NET` chega a ~2 GB logo depois de exportar e o coletor de lixo
+  recolhe ao fim de ~5 minutos. Agora o motor acompanha e reporta esse regresso em vez de
+  dizer para sempre "em memória".
+
 ### 📦 Dependências em dia
 
 Electron 44.5.1, Vite 8.3.2, Biome 2.5.15, Vitest 5.0.3, framer-motion 14 e
