@@ -39,7 +39,40 @@ jobs:
           echo "LICENSE_API_URL=${{ secrets.LICENSE_API_URL }}" >> .env
           echo "LICENSE_API_TOKEN=${{ secrets.LICENSE_API_TOKEN }}" >> .env
 
-      - name: Build + publish installer
-        run: npm run publish
+      # Isto era um step só ("npm run publish"), que é a mesma coisa que
+      # copy-engine && electron-vite build && electron-builder --publish always.
+      # Mesma semântica de encadeamento — um step que falha aborta os seguintes —
+      # mas cada stage passa a ter o seu nome no log. A 2.0.6 e as anteriores
+      # falharam com "Build + publish installer" e nenhuma pista de qual dos três
+      # passos era; sem os logs do run não há como distinguir restore do NuGet de
+      # gate do ffmpeg de upload, e adivinhar seria chute.
+      - name: Stage engine (dotnet publish + ffmpeg gate)
+        run: npm run copy-engine
+
+      - name: Stage build (electron-vite)
+        run: npm run build
+
+      - name: Stage publish (electron-builder)
+        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      # Corre mesmo quando um stage acima falha, para o próximo run com nome errado
+      # dizer qual era. `dotnet --info` é a primeira coisa a suspectar num build de
+      # .NET 10 num runner que muda de imagem.
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          "--- node ---"
+          node -v
+          npm -v
+          "--- dotnet ---"
+          dotnet --info
+          "--- artifacts ---"
+          Get-ChildItem dist -ErrorAction SilentlyContinue |
+            Select-Object Name, Length, LastWriteTime |
+            Format-Table -AutoSize
+          "--- env (sem segredos) ---"
+          "GH_TOKEN definido: $([bool]$env:GH_TOKEN)"
+          "NUGET_PACKAGES: $($env:NUGET_PACKAGES)"
