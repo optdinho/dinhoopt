@@ -79,17 +79,42 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ---
 
-## Current Status (consolidado — 2026-09-29)
+## Current Status (consolidado — 2026-10-04)
+
+### Auditoria à release 2.0.6 (2026-10-04) — packaging PASS, 3 defeitos de log corrigidos
+
+**A release entrega tudo o que promete.** Setup publicado byte-idêntico ao local (254 753 479 B, SHA-512 `D1EmyRz5LNEaBoAF…`, conferido por `node scripts/verify-release.js` contra o feed do electron-updater) · `resources/clips-engine` instalado == staging (296 ficheiros; o único extra é `games-update-check.json`, gerado em runtime) · ffmpeg embarcado **52/52** no gate · log de produção a executar `C:\Program Files\DiNho Optimizer\resources\clips-engine\DiNho.Capture.Poc.exe` com `av1_nvenc` + AAC e padding de frames activo. **Não é um problema de empacotamento.**
+
+**⚠️ Os "falsos erros" no log são um defeito real, e maior do que pareciam.** O `ConsoleLogger` do engine usa `Console.Error` como writer para **todas** as gamas (`ConsoleLogger.cs:16`), mas o Electron prefixava stderr inteiro como `[ENGINE:ERR]`. Pior: o nível vinha **metade** da linha — o flush é de 64 linhas (`ConsoleLogger.cs:35`) e um pipe não respeita fronteiras. Medido no log de 2026-10-04, nas **duas** metades:
+- **68 caudas** sem prefixo → `level:"error"` (`"Pause=26ms (+0ms)"`, `"e=0.1 avg / 1 max | codec=av1_nvenc…"`);
+- **7 cabeças** truncadas a meio de uma palavra (`"| queu"`) em 1168 linhas do formato novo — nível certo, **texto cortado**, logo escapavam a qualquer contagem por nível.
+
+As duas metades da mesma linha estão no ficheiro como entradas separadas ⇒ **a linha real nunca era registada**: uma linha partida virava dois registos, um deles falso erro. Corrigido em `0cd3b59` (`engine-log-reader.ts`): retém a cauda, `TextDecoder` streaming (multi-byte partido deixa de corromper), tecto de 64 KB, drenagem em `end`/`exit`. **O item 6 do plano (avisos amarelos `[ENGINE:ERR]`) era o mesmo defeito, não um problema separado.**
+
+**`fps=undefined` — 4039 de 4039** broadcasts de estado. A linha lia `src.fps`, mas `EngineStatusValue` (`NamedPipeServer.cs:86`) **não tem campo `fps`** (tem `lastFrameMs`). Nenhum consumidor TS usa `fps`, portanto nunca chegou à UI: era o log a enganar quem o lia. Corrigido em `be32760` (passa a `lastFrameMs`/`activePipelines`, e `game=null` JSON null sai como `none`).
+
+**Pendentes (bloqueados, não são bugs de código):**
+- **Body da `v2.0.6` vazio** (`body length: 0`, confirmado na API). O texto já existe no README §2.0.6 (linhas 47–144). O `GH_TOKEN` do `.env` responde **401** — precisa de token novo.
+- **Causa do CI da `v2.0.6` (run 37172844739) indeterminada**: a API de logs exige auth e o token é inválido. A workflow passou a ter 3 stages nomeados + diagnostics `if: always()` (`ce2c4e3`) para o próximo run dizer qual falhou. **Não** fixar `setup-dotnet`/cache do NuGet sem ler o log: TFM `net10.0-windows10.0.26100.0` sem `global.json`, e testar a workflow só é possível **publicando outra release**.
+- **ffmpeg de 217 MB embarcado** (o build full do Gyan). Fora de âmbito; reduzia o setup para ~40 MB.
+
+**Gate novo:** `npm run verify:release` (metadados) / `verify:release:full` (descarrega e confere sha512+tamanho). Verifica o feed pelo **mesmo URL do electron-updater**, não pela API — a API diz que a release existe enquanto o CDN ainda serve um `latest.yml` antigo. PASS e FAIL testados contra a 2.0.6 real.
+
+**Números desta sessão:** TS **7812 testes verdes, 0 skipped**, 276 arquivos · Biome 0 em **890** · `tsc --noEmit` 0. C# não tocado (2443 continua a ser o número).
+
+**Correções a diagnósticos anteriores desta sessão:** `out/undefined` **não existe** (erro meu de leitura — o defeito no mesmo sítio era o `fps=undefined`); as `[FeedTelemetry]` "truncadas" das 00:05 eram só **formato antigo**, de antes da reinstalação (sem `totalMax`/`dup`/`skip`, `lag=` em vez de `outLag=`+`feedLag=`).
+
+---
 
 **Resumos de sessões 2026-09-13 → 2026-09-29 MOVIDOS para o histórico em 2026-09-29** — conteúdo completo verbatim em `SESSION-HISTORY-FULL.md` (entradas `## Session Summary (AAAA-MM-DD …)`), índice condensado por sessão em `SESSION-HISTORY.md` (entradas `- **AAAA-MM-DD** — …`). Blocos movidos: **09-25** PLANO "Clips Leve" 60fps + vitest.explorer, **09-27** limpeza de warnings, **09-29** INCIDENTE AAC + bordas/áudio + defeitos do log + análise da log do dia (09-29d). Consulte esses arquivos antes de reabrir uma investigação.
 
 **Stack (versões atuais):** Electron 44.5.1 · Vite 8.3.2 · Biome 2.5.15 · Vitest 5.0.3 · TypeScript 7.0.2 · React 19.3.0 · NAudio 3.1.0 · ffmpeg 9.0.2 · electron-vite 6.0.0-beta.5 (intencional, beta mais novo que o 5.0.0 estável) · framer-motion 14.0.0 · lucide-react 1.50.0 · react-router-dom 7.18.4 · systeminformation 5.33.15 · jsdom 30.1.1 · dotenv 18.0.5 · electron-builder 26.17.0 · electron-updater 6.8.10 · Microsoft.NET.Test.Sdk 18.10.1 · CsWin32 0.3.346
 
-**Testes/Qualidade (contagens refrescadas em 2026-10-02 após atualização de dependências):**
-- TS: **7800 testes, 7800 verdes, 0 skipped**, 275 arquivos, 0 falhas, **0 warnings** (0 act, 0 React-prop, 0 dotenv — 355 warnings eliminados em 2026-09-27)
-- C#: **2443 testes, 0 falhas em Release** (as 3 falhas `NamedPipeServerTests.RoundTrip_*` só ocorrem rodando a suíte com o app aberto: colisão documentada do pipe `\\.\pipe\dinho-clips-engine`, não é regressão)
+**Testes/Qualidade (contagens refrescadas em 2026-10-04):**
+- TS: **7812 testes, 7812 verdes, 0 skipped**, 276 arquivos, 0 falhas, **0 warnings** (0 act, 0 React-prop, 0 dotenv — 355 warnings eliminados em 2026-09-27)
+- C#: **2443 testes, 0 falhas em Release** (as 3 falhas `NamedPipeServerTests.RoundTrip_*` só ocorrem rodando a suíte com o app aberto: colisão documentada do pipe `\\.\pipe\dinho-clips-engine`, não é regressão). **Não tocado em 2026-10-04.**
 - Gate do ffmpeg: `node scripts/verify-ffmpeg.js --ffmpeg=resources/ffmpeg-custom/ffmpeg.exe` **52/52** contra o binário embarcado real, exit 0 (revalidado em 2026-09-29; `node scripts/copy-engine.js` exit 0, 296 arquivos)
-- Biome: **0 erros, 0 warnings, 0 infos** em **888 arquivos** (`npx biome check .`; schema migrado para `2.5.15` em 2026-10-02) · `tsc --noEmit` 0 · `npm run build` ok
+- Biome: **0 erros, 0 warnings, 0 infos** em **890 arquivos** (`npx biome check .`; schema migrado para `2.5.15` em 2026-10-02) · `tsc --noEmit` 0 · `npm run build` ok
 
 **Dependências — estado 2026-10-02 (auditoria + `npm update` + majors):** aplicados — Electron 44.4.5→**44.5.1**, Vite 8.3.1→**8.3.2**, Biome 2.5.14→**2.5.15**, Vitest/@vitest/coverage-v8 5.0.2→**5.0.3**, electron-vite 6.0.0-beta.4→**beta.5**, framer-motion 13.4.4→**14.0.0** (major), lucide-react 1.48.0→**1.50.0**, systeminformation 5.33.14→**5.33.15**, dotenv 18.0.4→**18.0.5**, @types/node 24.19.0→**26.6.4** (major; Electron 44 embute Node 24 — tipos à frente do runtime, **vigiar uso de APIs novas**), CsWin32 0.3.335→**0.3.346**. **Adaptação exigida pelo @types/node 26:** `ExecException.cmd` passou a obrigatório → 6 mocks de `execFile` em `clips.ipc.test.ts`/`clips-engine-connection.test.ts` passaram a `Object.assign(new Error(...), { cmd: '' })`. `electron-builder`/`electron-updater` em `latest` no registry estão **abaixo** da versão instalada (sem downgrade). ffmpeg 9.0.2 = última estável (2026-09-18). **Vulns `npm audit`: 12 high, todas em dev/build tooling** (`patch-package`→`find-yarn-workspace-root`; `http-cache-semantics` via `@electron/get`→`got` dentro do `app-builder-lib`), **não no runtime embarcado**; `npm audit fix --force` rebaixaria `electron-builder` para 26.5.0 (breaking) — **não aplicar**.
 
