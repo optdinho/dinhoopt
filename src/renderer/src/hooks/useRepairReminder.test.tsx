@@ -6,6 +6,12 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }))
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key}:${JSON.stringify(opts)}` : key),
+  }),
+}))
+
 import { toast } from 'sonner'
 import { REPAIR_REMINDER_INTERVAL_MS, useRepairReminder } from './useRepairReminder'
 
