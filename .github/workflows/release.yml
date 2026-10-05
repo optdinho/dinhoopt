@@ -57,6 +57,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
+      # O electron-builder publicar não é o mesmo que o auto-update estar a caminho:
+      # pode uploading correr bem e o CDN continuar a servir um `latest.yml` antigo. Foi
+      # exactamente o que a auditoria à 2.0.6 encontrou — a release existia na API e o
+      # `dist/latest.yml` era órfão. Este step fecha o ciclo e falha o job se o feed não
+      # expuser a versão acabada de construir.
+      #
+      # Só metadados: o sha512 do que foi uploaded é conferido aqui, e descarregar os
+      # 250 MB no CI só serviria para repetir o que o electron-builder já garantiu.
+      # `verify:release:full` continua disponível para quando se quer a descarga.
+      #
+      # `if: always()` para também correr quando o publish falhou: aí o resultado útil
+      # é ver que o feed ficou na versão anterior, o que distingue "não publicou" de
+      # "publicou mas o feed não propagou".
+      - name: Verify auto-update feed serves this build
+        if: always()
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          "a verificar se o feed expoe a versão $version"
+          npm run verify:release -- --expect $version
+
       # Corre mesmo quando um stage acima falha, para o próximo run com nome errado
       # dizer qual era. `dotnet --info` é a primeira coisa a suspectar num build de
       # .NET 10 num runner que muda de imagem.
