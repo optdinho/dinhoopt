@@ -30,7 +30,7 @@ describe('createEngineLogReader', () => {
 
     expect(reader.push('21:00:00.000 [Info   ] [FeedTelemetry] q')).toEqual([])
 
-    expect(reader.push('ue=0.6 avg / 1 max | codec=av1_nvenc\n')).toEqual([
+    expect(reader.push('ueue=0.6 avg / 1 max | codec=av1_nvenc\n')).toEqual([
       {
         level: 'info',
         text: '21:00:00.000 [Info   ] [FeedTelemetry] queue=0.6 avg / 1 max | codec=av1_nvenc',
@@ -79,10 +79,11 @@ describe('createEngineLogReader', () => {
 
     expect(emitted).toBeGreaterThanOrEqual(49_000)
     const tail = reader.flush()
-    expect(tail.length).toBe(1)
-    expect(tail[0].text.length).toBeLessThanOrEqual(max)
+    expect(tail).toHaveLength(1)
+    const [only] = tail
+    expect(only?.text.length).toBeLessThanOrEqual(max)
     // O nível das linhas forçadas é o fallback — não há `[Nível]` para ler.
-    expect(tail[0].level).toBe('error')
+    expect(only?.level).toBe('error')
   })
 
   it('handles CRLF without leaving a stray carriage return', () => {
@@ -102,8 +103,6 @@ describe('createEngineLogReader', () => {
     expect(cut).toBeGreaterThan(0)
 
     expect(reader.push(full.subarray(0, cut))).toEqual([])
-    expect(reader.push(full.subarray(cut))).toEqual([
-      { level: 'info', text: '00:00:00.000 [Info   ] [X] ação' },
-    ])
+    expect(reader.push(full.subarray(cut))).toEqual([{ level: 'info', text: '00:00:00.000 [Info   ] [X] ação' }])
   })
 })

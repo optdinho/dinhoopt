@@ -4,18 +4,22 @@ const h = vi.hoisted(() => {
   const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warning: vi.fn() }
   const stdoutHandlers: Array<(chunk: Buffer) => void> = []
   const stderrHandlers: Array<(chunk: Buffer) => void> = []
+  const stdoutEndHandlers: Array<() => void> = []
+  const stderrEndHandlers: Array<() => void> = []
   const child = {
     pid: 4242,
     killed: false,
     kill: vi.fn(),
     stdout: {
-      on: (_event: string, cb: (chunk: Buffer) => void) => {
-        stdoutHandlers.push(cb)
+      on: (event: string, cb: (chunk: Buffer) => void) => {
+        if (event === 'data') stdoutHandlers.push(cb)
+        else if (event === 'end') stdoutEndHandlers.push(cb as unknown as () => void)
       },
     },
     stderr: {
-      on: (_event: string, cb: (chunk: Buffer) => void) => {
-        stderrHandlers.push(cb)
+      on: (event: string, cb: (chunk: Buffer) => void) => {
+        if (event === 'data') stderrHandlers.push(cb)
+        else if (event === 'end') stderrEndHandlers.push(cb as unknown as () => void)
       },
     },
     on: vi.fn(),
@@ -25,6 +29,8 @@ const h = vi.hoisted(() => {
     child,
     stdoutHandlers,
     stderrHandlers,
+    stdoutEndHandlers,
+    stderrEndHandlers,
     statusCb: null as ((src: Record<string, unknown>) => void) | null,
     statusGet: null as (() => unknown) | null,
     reconnectCb: null as (() => Promise<void>) | null,
@@ -78,6 +84,7 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import {
   classifyEngineLines,
+  createEngineLogReader,
   engineLogPrefix,
   getEnginePath,
   initEnginePipeIntegration,
@@ -98,6 +105,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.stdoutHandlers.length = 0
   h.stderrHandlers.length = 0
+  h.stdoutEndHandlers.length = 0
+  h.stderrEndHandlers.length = 0
   h.statusCb = null
   h.statusGet = null
   h.reconnectCb = null
@@ -151,11 +160,20 @@ describe('engine log severity routing', () => {
 
   it('falls back to the stream default only when the level is unparseable', () => {
     // stderr é o canal de erro por convenção do engine, então o fallback é conservador de
-    // propósito: rebaixar para info esconderia erro real. Fragmento de linha partida pelo
-    // pipe também cai aqui — é o comportamento anterior, não uma regressão.
-    expect(classifyEngineLines('use=4ms (+0ms)', 'error')[0]?.level).toBe('error')
+    // propósito: rebaixar para info esconderia erro real. Só que o fallback só se aplica a
+    // linha MONTADA — a cauda partida pelo pipe fica retida no reader (ver
+    // engine-log-reader.test.ts), em vez de ser registada como erro.
+    const stderr = createEngineLogReader('error')
+    expect(stderr.push('use=4ms (+0ms)\n')).toEqual([{ level: 'error', text: 'use=4ms (+0ms)' }])
+
     // stdout é o canal de dados (saída dos probes), então o fallback é info.
-    expect(classifyEngineLines('bitrate = 21100 kbit/s', 'info')[0]?.level).toBe('info')
+    const stdout = createEngineLogReader('info')
+    expect(stdout.push('bitrate = 21100 kbit/s\n')).toEqual([{ level: 'info', text: 'bitrate = 21100 kbit/s' }])
+  })
+
+  it('classifyEngineLines still honours the level of complete lines', () => {
+    // Função pura, mantida exportada: classifica linhas já completas, sem estado de chunk.
+    expect(classifyEngineLines('[Warning] [WDA] excluding failed', 'error')[0]?.level).toBe('warning')
   })
 
   it('drops blank lines and trims padding around the line', () => {
@@ -324,10 +342,13 @@ describe('startEngine', () => {
     expect(isEngineRunning()).toBe(true)
     expect(h.stdoutHandlers).toHaveLength(1)
     expect(h.stderrHandlers).toHaveLength(1)
+    // 'end' é onde a cauda incompleta é drenada, senão a última linha do engine perdia-se.
+    expect(h.stdoutEndHandlers).toHaveLength(1)
+    expect(h.stderrEndHandlers).toHaveLength(1)
 
-    h.stdoutHandlers[0]!(Buffer.from('  engine up  '))
+    h.stdoutHandlers[0]!(Buffer.from('  engine up\n'))
     h.stdoutHandlers[0]!(Buffer.from('   '))
-    h.stderrHandlers[0]!(Buffer.from('warning text'))
+    h.stderrHandlers[0]!(Buffer.from('warning text\n'))
     h.stderrHandlers[0]!(Buffer.from(''))
 
     expect(h.logger.info).toHaveBeenCalledWith('clips-engine', 'engine up')
@@ -349,7 +370,7 @@ describe('startEngine', () => {
 
     await startEngine()
 
-    h.stderrHandlers[0]!(Buffer.from('00:04:45.104 [Info   ] [EngineCoordinator] Pronto. Aguardando hotkeys...'))
+    h.stderrHandlers[0]!(Buffer.from('00:04:45.104 [Info   ] [EngineCoordinator] Pronto. Aguardando hotkeys...\n'))
 
     expect(h.logger.info).toHaveBeenCalledWith(
       'clips-engine',
@@ -358,6 +379,69 @@ describe('startEngine', () => {
     // A regressão exata do log de produção: Info chegando como warning/erro.
     expect(h.logger.warning).not.toHaveBeenCalledWith('clips-engine', expect.anything())
     expect(h.logger.error).not.toHaveBeenCalledWith('clips-engine', expect.anything())
+
+    stdoutWrite.mockRestore()
+  })
+
+  it('routes a line split across two chunks by the level it carries, not by the stream default', async () => {
+    // Par REAL tirado do log de produção de 2026-10-04, onde as duas metades da mesma
+    // linha estão gravadas em entradas separadas: a head truncada em '| queu' (nível info,
+    // texto cortado) e a tail sem prefixo (nível error). Uma linha de telemetria partida
+    // pelo pipe produzia 2 registos em vez de 1 — e um deles virava falso erro.
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+
+    await startEngine()
+
+    // O arranque do engine também emite info, por isso a contagem é relativa.
+    const before = h.logger.info.mock.calls.length
+
+    h.stderrHandlers[0]!(
+      Buffer.from(
+        '18:58:31.513 [Info   ] [FeedTelemetry] fps=29.8 good=149 fail=0 enqNull=0 | wait=2.5ms ' +
+          'copy=0.1ms convert=1.9ms total=4.5ms clean=149/149 totalAll=4.5ms diag=0.2ms ' +
+          'totalMax=8.3ms over=0 dup=150 dupMax=2 skip=0 pace=delay 9.1ms + spin 1.4ms ' +
+          'iters=300 | queu',
+      ),
+    )
+    // A head truncada é o bug: entrava no log como info mas cortada a meio de uma palavra.
+    expect(h.logger.info.mock.calls.length).toBe(before)
+
+    h.stderrHandlers[0]!(
+      Buffer.from('e=0.1 avg / 1 max | codec=av1_nvenc scale=full speed=0.99x outLag=1s feedLag=50%/s\n'),
+    )
+
+    expect(h.logger.info.mock.calls.length).toBe(before + 1)
+    expect(h.logger.info).toHaveBeenLastCalledWith(
+      'clips-engine',
+      '18:58:31.513 [Info   ] [FeedTelemetry] fps=29.8 good=149 fail=0 enqNull=0 | wait=2.5ms ' +
+        'copy=0.1ms convert=1.9ms total=4.5ms clean=149/149 totalAll=4.5ms diag=0.2ms ' +
+        'totalMax=8.3ms over=0 dup=150 dupMax=2 skip=0 pace=delay 9.1ms + spin 1.4ms ' +
+        'iters=300 | queue=0.1 avg / 1 max | codec=av1_nvenc scale=full speed=0.99x outLag=1s ' +
+        'feedLag=50%/s',
+    )
+    expect(h.logger.error).not.toHaveBeenCalledWith('clips-engine', expect.anything())
+    expect(h.logger.warning).not.toHaveBeenCalledWith('clips-engine', expect.anything())
+
+    stdoutWrite.mockRestore()
+  })
+
+  it('flushes a held partial line when the engine exits', async () => {
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+
+    await startEngine()
+
+    // Sem newline: a linha fica retida. Num crash é exactamente a linha que interessa, e
+    // sem o flush no 'exit' perdia-se.
+    h.stderrHandlers[0]!(Buffer.from('23:59:59.999 [Error  ] [Pipeline] ultimo antes de morrer'))
+    expect(h.logger.error).not.toHaveBeenCalled()
+
+    const exitHandler = h.child.on.mock.calls.find((call) => call[0] === 'exit')?.[1] as () => void
+    exitHandler()
+
+    expect(h.logger.error).toHaveBeenCalledWith(
+      'clips-engine',
+      '23:59:59.999 [Error  ] [Pipeline] ultimo antes de morrer',
+    )
 
     stdoutWrite.mockRestore()
   })
