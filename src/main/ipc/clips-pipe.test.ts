@@ -122,6 +122,36 @@ describe('clips-pipe broadcast events', () => {
     expect(mockLogger.info).toHaveBeenCalledWith('clips-pipe', 'RAM pressure: level=unknown used=0.0%')
   })
 
+  it('logs the engineStatus fields the engine actually sends, never undefined', () => {
+    // Payload real do EngineStatusValue (NamedPipeServer.cs:86). Medido no log de
+    // 2026-10-04: 4039 de 4039 broadcasts de estado sairam com `fps=undefined`, porque
+    // EngineStatusValue nao tem campo `fps`. O que tem e' lastFrameMs.
+    onPipeData(
+      line({
+        cmd: '_event',
+        payload: {
+          type: 'engineStatus',
+          data: {
+            game: null,
+            recording: true,
+            captureBackend: 'WGC',
+            lastFrameMs: 16.7,
+            activePipelines: 1,
+          },
+        },
+      }),
+    )
+
+    const logged = mockLogger.info.mock.calls.map((call) => String(call[1])).join('\n')
+    expect(logged).toContain('lastFrameMs=16.7')
+    expect(logged).toContain('pipelines=1')
+    expect(logged).toContain('recording=true')
+    expect(logged).toContain('backend=WGC')
+    // `game=null` e' JSON null, nao um jogo chamado "null".
+    expect(logged).toContain('game=none')
+    expect(logged).not.toContain('undefined')
+  })
+
   it('warns when a long-running command result has no pending request', () => {
     onPipeData(line({ cmd: '_event', payload: { type: 'commandResult', originalCmd: 'trim', error: 'boom' } }))
 

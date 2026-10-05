@@ -231,9 +231,15 @@ function handlePipeMessage(msg: PipeMessage): void {
     const p = msg.payload as Record<string, unknown>
     const d = p.data as Record<string, unknown> | undefined
     const src = d ?? p
+    // Só campos que o EngineStatusValue envia mesmo (NamedPipeServer.cs:86). A linha
+    // anterior imprimia `fps=${src.fps}` e o engine não tem campo `fps` — o log de
+    // 2026-10-04 tem 4039 linhas `fps=undefined`, que lidas como "o fps não funciona"
+    // quando o número certo estava no mesmo payload. `game=null` é JSON null, não um
+    // jogo chamado "null".
     getLogger().info(
       'clips-pipe',
-      `Engine status: game="${src.game}" recording=${src.recording} fps=${src.fps} backend=${src.captureBackend}`,
+      `Engine status: game=${src.game ?? 'none'} recording=${src.recording} ` +
+        `lastFrameMs=${src.lastFrameMs} pipelines=${src.activePipelines} backend=${src.captureBackend}`,
     )
 
     _statusUpdater?.(src)
