@@ -28,11 +28,11 @@ export async function fixRegistryEntries(
     mkdirSync(backupDir, { recursive: true })
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const mode = getSettings().backupMode ?? 'targeted'
-    if (mode === 'full') {
-      await createFullBackup(backupDir, timestamp, signal)
-    } else {
-      await createTargetedBackup(entries, backupDir, timestamp, signal)
-    }
+    const ok =
+      mode === 'full'
+        ? await createFullBackup(backupDir, timestamp, signal)
+        : await createTargetedBackup(entries, backupDir, timestamp, signal)
+    if (!ok) backupFailed = true
     pruneOldBackups(backupDir, 3)
   } catch {
     backupFailed = true

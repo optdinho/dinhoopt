@@ -1,6 +1,6 @@
 import type { ServiceSafety, ServiceStartType, ServiceStatus, WindowsService } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useServiceStore } from './service-store'
+import { postApplyServices, useServiceStore } from './service-store'
 
 function mockKudu() {
   const mock = {
@@ -223,6 +223,26 @@ describe('service-store', () => {
       await useServiceStore.getState().apply()
 
       expect(useServiceStore.getState().applying).toBe(false)
+    })
+  })
+
+  describe('postApplyServices', () => {
+    it('replaces the current list with the fresh rescan', () => {
+      const fresh = makeService('DiagTrack', 'safe', 'Disabled', 'Stopped')
+      const merged = postApplyServices([makeService('DiagTrack', 'safe', 'Automatic', 'Running')], {
+        services: [fresh],
+      })
+      expect(merged).toEqual([fresh])
+    })
+
+    it('keeps the current list when the rescan has no services', () => {
+      const current = [makeService('DiagTrack', 'safe', 'Automatic', 'Running')]
+      expect(postApplyServices(current, { services: [] })).toBe(current)
+    })
+
+    it('keeps the current list when there is no rescan result', () => {
+      const current = [makeService('DiagTrack', 'safe', 'Automatic', 'Running')]
+      expect(postApplyServices(current, null)).toBe(current)
     })
   })
 })

@@ -47,7 +47,7 @@ describe('fixRegistryEntries', () => {
     vi.clearAllMocks()
     mocks.getBackupDir.mockReturnValue('C:\\backups')
     mocks.getSettings.mockReturnValue({ backupMode: 'targeted' })
-    mocks.createTargetedBackup.mockResolvedValue(undefined)
+    mocks.createTargetedBackup.mockResolvedValue(true)
     mocks.pruneOldBackups.mockImplementation(() => {})
   })
 
@@ -171,6 +171,23 @@ describe('fixRegistryEntries', () => {
       mocks.mkdirSync.mockImplementation(() => {
         throw new Error('EACCES')
       })
+      const result = await fixRegistryEntries([deleteEntry as never])
+      expect(result.backupFailed).toBe(true)
+      expect(result.fixed).toBe(1)
+    })
+
+    it('sets backupFailed=true when the targeted backup reports failure (returns false)', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      mocks.createTargetedBackup.mockResolvedValue(false)
+      const result = await fixRegistryEntries([deleteEntry as never])
+      expect(result.backupFailed).toBe(true)
+      expect(result.fixed).toBe(1)
+    })
+
+    it('sets backupFailed=true when the full backup reports failure (returns false)', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      mocks.getSettings.mockReturnValue({ backupMode: 'full' })
+      mocks.createFullBackup.mockResolvedValue(false)
       const result = await fixRegistryEntries([deleteEntry as never])
       expect(result.backupFailed).toBe(true)
       expect(result.fixed).toBe(1)

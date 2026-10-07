@@ -305,19 +305,20 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
         const script =
           action === 'apply'
             ? `
-          $e = $null
-          try { netsh int tcp set global chimney=disabled } catch { $e = $_ }
-          try { netsh int tcp set global rss=enabled } catch { $e = $_ }
-          try { netsh int tcp set global timestamps=disabled } catch { $e = $_ }
-          try { netsh int tcp set global initialRto=2000 } catch { $e = $_ }
-          if ($e) { Write-Output "ERROR: $e" } else { Write-Output "OK" }
+          $errs = @()
+          & netsh int tcp set global chimney=disabled 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'chimney' }
+          & netsh int tcp set global rss=enabled 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'rss' }
+          & netsh int tcp set global timestamps=disabled 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'timestamps' }
+          & netsh int tcp set global initialRto=2000 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'initialRto' }
+          if ($errs.Count -gt 0) { Write-Output "ERROR: netsh failed for: $($errs -join ', ')" } else { Write-Output "OK" }
         `
             : `
-          try { netsh int tcp set global chimney=enabled } catch {}
-          try { netsh int tcp set global rss=default } catch {}
-          try { netsh int tcp set global timestamps=default } catch {}
-          try { netsh int tcp set global initialRto=3000 } catch {}
-          Write-Output "OK"
+          $errs = @()
+          & netsh int tcp set global chimney=enabled 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'chimney' }
+          & netsh int tcp set global rss=default 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'rss' }
+          & netsh int tcp set global timestamps=default 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'timestamps' }
+          & netsh int tcp set global initialRto=3000 2>$null; if ($LASTEXITCODE -ne 0) { $errs += 'initialRto' }
+          if ($errs.Count -gt 0) { Write-Output "ERROR: netsh failed for: $($errs -join ', ')" } else { Write-Output "OK" }
         `
         const { stdout } = await execFileAsync(
           'powershell.exe',

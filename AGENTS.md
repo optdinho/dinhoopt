@@ -277,6 +277,27 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
 
 ---
 
+## Auditoria Pedido 4 — falsa prontidão (2026-10-06) · relatório completo em `AUDITORIA-PEDIDO-4-FALSA-PRONTIDAO.md` (gitignored)
+
+**Tema:** features que parecem feitas mas não executam a acção real. Método: 4 agentes explore em paralelo + verificação pessoal de cada achado grave por leitura/`rg`. **11 achados confirmados (F1–F11)**.
+
+**Positivos REAL (confirmados por amostragem, não são fake):** compliance (re-scan pós-apply), privacy shield, threat intel/sandbox, benchmark, service apply backend, malware YARA, disk/cleaner scans. O fallback `scanner-network` (LLMNR/WPAD default habilitado) é defensível (default do Windows), não é falso.
+
+**Decisão do utilizador (question tool): «Relatório + corrigir os graves (Recomendado)»** — corrigir **F5, F2, F1, F3, F7** com TDD; F4/F6/F8/F9/F10/F11 ficam "decisão aberta".
+
+**Lote 1 — ✅ 5 correcções executadas (TDD, RED→GREEN):**
+- **F5:** `backup.ts` — `exportHive` responde `boolean`; `createFullBackup`→false se algum dos 9 exports falhar (continua tentando os restantes); `createTargetedBackup`→false se houver keys esperadas e 0 bodies, ou tasks esperadas e nenhuma gravada. `fixer.ts` → `backupFailed = !ok`. Restauro (`reg import`) **não** existe — decisão de produto em aberto. `backup.test.ts` ganhou mock de node:fs; `fixer.test.ts` +2 casos.
+- **F2:** scripts em `network.ts:305-337` reescritos: `$errs=@()`, `$LASTEXITCODE -ne 0` após cada `netsh`, `Write-Output "ERROR: netsh failed for: ..."` se `$errs.Count -gt 0` — reverte o `Write-Output "OK"` incondicional do revert. Testes no `windows-tweaks.ipc.test.ts` inspeccionam `mockExecFile.mock.calls[0][1][3]`.
+- **F1:** removidos `CVE-2025-0001/0002/0003`, `CVE-2024-29059`, `CVE-2024-43579`, `CVE-2023-38169`, `CVE-2000-0001`, `CVE-2024-0057`. Mantidos só os canónicos: smbv1 `CVE-2017-0143` (EternalBlue), rdp `CVE-2019-0708` (BlueKeep), tls10 `CVE-2011-3389` (BEAST). Teste: `expect(finding.cve).toBeUndefined()`.
+- **F3:** `WindowsTweaksPage.tsx` — `showApplyFeedback(result, verb)`: `null` → `toast.error('operationFailed')`; `failed>0` → `toast.error('someFailed')`; senão sucesso. Aplicado a apply (`lastResult`) e revert (`revertResult`). 5 testes novos no `WindowsTweaksPage.test.tsx`. A store já propagava via `lastResult` — só a página não lia.
+- **F7:** `service-store.ts` ganhou `postApplyServices(current, scanResult)` puro (retorna `scanResult.services` se não-vazio, senão `current`); `ServiceManagerPage.tsx` passou de `setServices(getState().services)` (no-op) a `setServices(postApplyServices(...))`. 3 testes novos. A store já tinha o caminho correcto em `apply` — o defeito era a página contorná-lo.
+
+**Gates (Lote 1):** vitest **7 773 verdes / 277 ficheiros** (baseline 7 757 → **+16**) · tsc 0 · biome 0/859 · build 0 (819 ms) · C# intocado (2525/0/3 de referência). **Sem commit** (16 ficheiros modificados na working tree).
+
+**Armadilha de processo:** a barreira i18n exige **chaves reais nos locales** mesmo com defaultValue (`operationFailed`+`someFailed` adicionados aos 3 `windowsTweaks.json`) — literal default NÃO isenta da chave.
+
+---
+
 ## Itens fechados por decisão (2026-10-03 23:45) — não reabrir sem sintoma novo
 
 | Item | Decisão | Razão |

@@ -8,6 +8,14 @@ import type {
 } from '@shared/types'
 import { create } from 'zustand'
 
+export function postApplyServices(
+  current: WindowsService[],
+  scanResult: { services: WindowsService[] } | null,
+): WindowsService[] {
+  if (scanResult?.services && scanResult.services.length > 0) return scanResult.services
+  return current
+}
+
 interface ServiceState {
   services: WindowsService[]
   scanning: boolean

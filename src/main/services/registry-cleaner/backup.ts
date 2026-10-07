@@ -6,14 +6,16 @@ import { execNativeUtf8 } from '../exec-utf8'
 import { getLogger } from '../logger.service'
 import { execReg, splitTaskPath, stripRegHeader } from './utils'
 
-async function exportHive(hive: string, backupPath: string, timeout: number, signal?: AbortSignal): Promise<void> {
+async function exportHive(hive: string, backupPath: string, timeout: number, signal?: AbortSignal): Promise<boolean> {
   try {
     await execReg(['export', hive, backupPath, '/y'], { timeout, ...(signal ? { signal } : {}) })
+    return true
   } catch (err: unknown) {
     const detail = (err as { stderr?: string; message?: string })?.stderr
       ? (err as { stderr: string }).stderr.trim()
       : ((err as { message?: string })?.message ?? 'unknown error')
     getLogger().warning('registry-backup', `Failed to export ${hive}: ${detail}`)
+    return false
   }
 }
 
@@ -48,28 +50,37 @@ function pruneOldBackups(backupDir: string, keep: number): void {
   }
 }
 
-async function createFullBackup(backupDir: string, timestamp: string, signal?: AbortSignal): Promise<void> {
+async function createFullBackup(backupDir: string, timestamp: string, signal?: AbortSignal): Promise<boolean> {
   const backupPath = join(backupDir, `registry-backup-${timestamp}.reg`)
   const hkcuBackupPath = join(backupDir, `registry-backup-HKCU-${timestamp}.reg`)
   const systemBackupPath = join(backupDir, `registry-backup-SYSTEM-${timestamp}.reg`)
   const hkcrClsidPath = join(backupDir, `registry-backup-HKCR-CLSID-${timestamp}.reg`)
   const hkcrIfacePath = join(backupDir, `registry-backup-HKCR-Interface-${timestamp}.reg`)
   const hkcrMimePath = join(backupDir, `registry-backup-HKCR-MIME-${timestamp}.reg`)
-  await exportHive('HKLM\\SOFTWARE', backupPath, 30000, signal)
-  await exportHive('HKCU\\SOFTWARE', hkcuBackupPath, 30000, signal)
-  await exportHive('HKLM\\SYSTEM\\CurrentControlSet\\Services', systemBackupPath, 60000, signal)
-  await exportHive('HKCR\\CLSID', hkcrClsidPath, 60000, signal)
-  await exportHive('HKCR\\Interface', hkcrIfacePath, 60000, signal)
-  await exportHive('HKCR\\MIME', hkcrMimePath, 30000, signal)
+  const exports: [string, string, number][] = [
+    ['HKLM\\SOFTWARE', backupPath, 30000],
+    ['HKCU\\SOFTWARE', hkcuBackupPath, 30000],
+    ['HKLM\\SYSTEM\\CurrentControlSet\\Services', systemBackupPath, 60000],
+    ['HKCR\\CLSID', hkcrClsidPath, 60000],
+    ['HKCR\\Interface', hkcrIfacePath, 60000],
+    ['HKCR\\MIME', hkcrMimePath, 30000],
+  ]
   const shellRoots = [
     { key: '*', file: 'AllFileTypes' },
     { key: 'Directory', file: 'Directory' },
     { key: 'Folder', file: 'Folder' },
   ]
+  let ok = true
+  for (const [hive, path, timeout] of exports) {
+    const result = await exportHive(hive, path, timeout, signal)
+    if (!result) ok = false
+  }
   for (const { key, file } of shellRoots) {
     const shellPath = join(backupDir, `registry-backup-HKCR-${file}-shellex-${timestamp}.reg`)
-    await exportHive(`HKCR\\${key}\\shellex`, shellPath, 30000, signal)
+    const result = await exportHive(`HKCR\\${key}\\shellex`, shellPath, 30000, signal)
+    if (!result) ok = false
   }
+  return ok
 }
 
 export function collectBackupTargets(entries: RegistryEntry[]): { keys: string[]; tasks: string[] } {
@@ -98,9 +109,9 @@ async function createTargetedBackup(
   backupDir: string,
   timestamp: string,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<boolean> {
   const { keys, tasks } = collectBackupTargets(entries)
-  if (keys.length === 0 && tasks.length === 0) return
+  if (keys.length === 0 && tasks.length === 0) return true
   const tempDir = mkdtempSync(join(tmpdir(), 'dinho-reg-backup-'))
   try {
     const bodies: string[] = []
@@ -122,6 +133,7 @@ async function createTargetedBackup(
       const body = Buffer.from(finalText, 'utf16le')
       writeFileSync(consolidatedPath, Buffer.concat([bom, body]))
     }
+    let wroteAnyTask = false
     if (tasks.length > 0) {
       const taskDir = join(backupDir, `registry-backup-tasks-${timestamp}`)
       mkdirSync(taskDir, { recursive: true })
@@ -137,6 +149,7 @@ async function createTargetedBackup(
             ...(signal ? { signal } : {}),
           })
           writeFileSync(join(taskDir, `${safeName}.xml`), stdout, 'utf-8')
+          wroteAnyTask = true
         } catch (err: unknown) {
           if (signal?.aborted) throw err
           const detail = (err as { stderr?: string; message?: string })?.stderr
@@ -146,6 +159,9 @@ async function createTargetedBackup(
         }
       }
     }
+    if (keys.length > 0 && bodies.length === 0) return false
+    if (tasks.length > 0 && !wroteAnyTask) return false
+    return true
   } finally {
     try {
       rmSync(tempDir, { recursive: true, force: true })

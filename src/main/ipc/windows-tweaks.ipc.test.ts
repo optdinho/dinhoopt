@@ -976,6 +976,25 @@ describe('WINDOWS_TWEAKS_NETSH_TCP handler', () => {
     expect(result).toEqual({ success: true })
   })
 
+  it('apply script checks $LASTEXITCODE so native netsh failures surface as errors', async () => {
+    stubExecFile({ stdout: 'OK' })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:netsh-tcp')
+    await handler({}, 'apply')
+    const script = mockExecFile.mock.calls[0]?.[1]?.[3] as string
+    expect(script).toContain('$LASTEXITCODE')
+  })
+
+  it('revert script checks $LASTEXITCODE (no unconditional OK)', async () => {
+    stubExecFile({ stdout: 'OK' })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:netsh-tcp')
+    await handler({}, 'revert')
+    const script = mockExecFile.mock.calls[0]?.[1]?.[3] as string
+    expect(script).toContain('$LASTEXITCODE')
+    expect(script).toContain('if ($errs.Count -gt 0) { Write-Output "ERROR')
+  })
+
   it('reports error when netsh output contains ERROR', async () => {
     stubExecFile({ stdout: 'ERROR: Access denied' })
     registerWindowsTweaksIpc(() => null)

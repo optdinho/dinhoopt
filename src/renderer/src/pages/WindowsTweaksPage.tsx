@@ -1,4 +1,4 @@
-import type { WindowsTweakCategory } from '@shared/types'
+import type { WindowsTweakCategory, WindowsTweakResult } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -175,15 +175,33 @@ export function WindowsTweaksPage() {
     store.getState().toggle(id)
   }, [])
 
+  const showApplyFeedback = useCallback(
+    (result: WindowsTweakResult | null, verb: 'applied' | 'reverted') => {
+      if (!result) {
+        toast.error(t('operationFailed', 'A operação falhou'))
+        return
+      }
+      if (result.failed > 0) {
+        toast.error(t('someFailed', 'Falhou {{count}} otimização(ões)', { count: result.failed }))
+        return
+      }
+      if (verb === 'applied') toast.success(t('toastAppliedSuccess', 'Tweaks applied successfully!'))
+      else toast.success(t('toastRevertedSuccess', 'Tweaks reverted!'))
+    },
+    [t],
+  )
+
   const handleApply = useCallback(async () => {
+    if (store.getState().selectedIds.size === 0) return
     await store.getState().apply()
-    toast.success(t('toastAppliedSuccess', 'Tweaks applied successfully!'))
-  }, [t])
+    showApplyFeedback(store.getState().lastResult, 'applied')
+  }, [showApplyFeedback])
 
   const handleRevert = useCallback(async () => {
+    if (store.getState().selectedIds.size === 0) return
     await store.getState().revert()
-    toast.success(t('toastRevertedSuccess', 'Tweaks reverted!'))
-  }, [t])
+    showApplyFeedback(store.getState().revertResult, 'reverted')
+  }, [showApplyFeedback])
 
   const handleSelectAll = useCallback(() => store.getState().selectAll(), [])
   const handleDeselectAll = useCallback(() => store.getState().deselectAll(), [])

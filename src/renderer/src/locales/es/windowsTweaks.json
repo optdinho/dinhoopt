@@ -32,6 +32,8 @@
   },
   "toastAppliedSuccess": "¡Tweaks aplicados con éxito!",
   "toastRevertedSuccess": "¡Tweaks revertidos!",
+  "operationFailed": "La operación falló",
+  "someFailed": "Falló(n) {{count}} optimización(ones)",
   "dnsChanged": "¡DNS cambiado!",
   "dnsChangeFailed": "No se pudo cambiar el DNS",
   "scanningTweaks": "Verificando tweaks...",

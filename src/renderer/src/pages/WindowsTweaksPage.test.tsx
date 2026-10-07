@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
+
+import type { WindowsTweakResult } from '@shared/types'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockStore = {
@@ -12,8 +14,8 @@ const mockStore = {
   scanning: false,
   applying: false,
   progress: null,
-  lastResult: null,
-  revertResult: null,
+  lastResult: null as WindowsTweakResult | null,
+  revertResult: null as WindowsTweakResult | null,
   expandedCategories: new Set<string>(),
   gamingTimer: null,
   gamingTimerLoading: false,
@@ -105,6 +107,7 @@ vi.mock('@/components/shared/EmptyState', () => ({
   ),
 }))
 
+import { toast } from 'sonner'
 import { WindowsTweaksPage } from './WindowsTweaksPage'
 
 describe('WindowsTweaksPage', () => {
@@ -195,5 +198,72 @@ describe('WindowsTweaksPage layout', () => {
   it('keeps the empty and scanning states free of the extra padding too', () => {
     const { container } = render(<WindowsTweaksPage />)
     expect((container.firstElementChild as HTMLElement).className).not.toMatch(/(^|\s)p-6(\s|$)/)
+  })
+})
+
+describe('WindowsTweaksPage apply/revert feedback', () => {
+  const okResult = { succeeded: 1, failed: 0, errors: [], rebootRequired: [], logoffRequired: [] }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockStore.scanning = false
+    mockStore.tweaks = [
+      { applied: false, tweak: { id: 't1', name: 'Tweak 1', description: '', category: 'system', level: 'basico' } },
+    ] as never
+    mockStore.selectedIds = new Set(['t1'])
+    mockStore.applying = false
+    mockStore.lastResult = null
+    mockStore.revertResult = null
+  })
+
+  it('toasts success only when apply reports no failures', async () => {
+    mockStore.apply.mockResolvedValue(undefined)
+    mockStore.lastResult = okResult
+    render(<WindowsTweaksPage />)
+    fireEvent.click(within(screen.getByTestId('toolbar-actions')).getByRole('button', { name: 'applyWithCount' }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('toastAppliedSuccess'))
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('toasts error when apply reports failures', async () => {
+    mockStore.apply.mockResolvedValue(undefined)
+    mockStore.lastResult = {
+      succeeded: 0,
+      failed: 2,
+      errors: [{ id: 'x', name: 'N', reason: 'R' }],
+      rebootRequired: [],
+      logoffRequired: [],
+    }
+    render(<WindowsTweaksPage />)
+    fireEvent.click(within(screen.getByTestId('toolbar-actions')).getByRole('button', { name: 'applyWithCount' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('toasts error when apply settles with no result', async () => {
+    mockStore.apply.mockResolvedValue(undefined)
+    mockStore.lastResult = null
+    render(<WindowsTweaksPage />)
+    fireEvent.click(within(screen.getByTestId('toolbar-actions')).getByRole('button', { name: 'applyWithCount' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('toasts success only when revert reports no failures', async () => {
+    mockStore.revert.mockResolvedValue(undefined)
+    mockStore.revertResult = okResult
+    render(<WindowsTweaksPage />)
+    fireEvent.click(within(screen.getByTestId('toolbar-actions')).getByRole('button', { name: 'revert' }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('toastRevertedSuccess'))
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('toasts error when revert reports failures', async () => {
+    mockStore.revert.mockResolvedValue(undefined)
+    mockStore.revertResult = { succeeded: 0, failed: 3, errors: [], rebootRequired: [], logoffRequired: [] }
+    render(<WindowsTweaksPage />)
+    fireEvent.click(within(screen.getByTestId('toolbar-actions')).getByRole('button', { name: 'revert' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })

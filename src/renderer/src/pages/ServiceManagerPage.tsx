@@ -10,7 +10,7 @@ import { useIpcAction } from '@/hooks/useIpcAction'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
 import { useHistoryStore } from '@/stores/history-store'
-import { useServiceStore } from '@/stores/service-store'
+import { postApplyServices, useServiceStore } from '@/stores/service-store'
 import { CATEGORY_LABEL_KEYS, FilterDropdown, SafetyGroup, StatCard } from './service-manager/ServiceManagerComponents'
 
 export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
@@ -98,10 +98,10 @@ export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
       s.setError(null)
       confirmModeRef.current = confirmMode
     },
-    onResult: ({ result, selected }) => {
+    onResult: ({ result, selected, scanResult }) => {
       const s = useServiceStore.getState()
       s.setApplyResult(result)
-      s.setServices(useServiceStore.getState().services)
+      s.setServices(postApplyServices(s.services, scanResult))
 
       const byCat: Record<string, { found: number; disabled: number }> = {}
       for (const svc of selected) {
