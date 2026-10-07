@@ -63,13 +63,32 @@ function legacyMachineId(): Buffer {
 }
 
 function loadOrCreateSalt(saltFile: string): Buffer {
-  try {
-    if (existsSync(saltFile)) return readFileSync(saltFile)
-  } catch {}
+  if (existsSync(saltFile)) {
+    try {
+      return readFileSync(saltFile)
+    } catch (err) {
+      // Nunca substituir um salt ilegivel: um salt novo tornaria definitivamente
+      // ilegivel tudo o que ja foi cifrado com o antigo. Devolve um salt so para
+      // esta sessao e deixa a falha visivel para quem for diagnosticar.
+      console.error(
+        `[license-store] falha ao ler o salt em ${saltFile} — o ficheiro mantem-se, salt novo so em memoria`,
+        err,
+      )
+      return randomBytes(16)
+    }
+  }
   const s = randomBytes(16)
   try {
     writeFileSync(saltFile, s)
-  } catch {}
+  } catch (err) {
+    // O salt nao foi persistido: o proximo arranque vai gerar outro e as chaves
+    // gravadas com este ficam inacessiveis. Sem este log o utilizador perdia a
+    // licenca sem qualquer mensagem.
+    console.error(
+      `[license-store] falha ao gravar o salt em ${saltFile} — o salt desta sessao nao sera reutilizado no proximo arranque`,
+      err,
+    )
+  }
   return s
 }
 

@@ -50,5 +50,6 @@
   "idleTitle": "Buscar archivos duplicados",
   "idleDescription": "Seleccione un directorio para buscar archivos duplicados y recuperar espacio en disco desperdiciado.",
   "scanCancelled": "El análisis se canceló; se muestran resultados parciales.",
-  "addExcludeAria": "Agregar a la lista de exclusión"
+  "addExcludeAria": "Agregar a la lista de exclusión",
+  "hashed": "Con hash"
 }

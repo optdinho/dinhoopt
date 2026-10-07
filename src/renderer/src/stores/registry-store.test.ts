@@ -283,6 +283,17 @@ describe('registry-store', () => {
       expect(useRegistryStore.getState().entries).toHaveLength(1)
     })
 
+    it('fix preserves backupFailed so the UI can warn (A1)', async () => {
+      const kudu = mockKudu()
+      kudu.registryFix.mockResolvedValue({ fixed: 2, failed: 0, failures: [], backupFailed: true })
+      const store = useRegistryStore.getState()
+      store.setEntries([makeEntry({ id: 'a' })])
+
+      await store.fix(['a'])
+
+      expect(useRegistryStore.getState().fixResult?.backupFailed).toBe(true)
+    })
+
     it('fix sets fixing false on error', async () => {
       const kudu = mockKudu()
       kudu.registryFix.mockRejectedValue(new Error('fail'))

@@ -97,7 +97,7 @@ function ToolCard({
 }
 
 export function AdvancedTools(props: AdvancedToolsProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation('windowsTweaks')
   const {
     applying,
     dnsPresets,

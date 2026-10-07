@@ -90,5 +90,6 @@
   "dnsViaDhcp": "via DHCP",
   "learnMore": "Learn more",
   "tcpIpDescription": "Adjusts chimney, timestamps and the initial retransmission timeout (RTO) of the TCP stack. It lowers latency in general use, but turns off features that help on unstable networks.",
-  "timerCaution": "Microsoft documents HPET, TSC Sync Policy and Dynamic Tick as debugging options. They can destabilise some systems: if you notice stutter, revert them."
+  "timerCaution": "Microsoft documents HPET, TSC Sync Policy and Dynamic Tick as debugging options. They can destabilise some systems: if you notice stutter, revert them.",
+  "dnsChangedSuccess": "DNS changed successfully!"
 }

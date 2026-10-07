@@ -17,6 +17,7 @@
   "failedCount": "{{count}} fallaron",
   "failedHideDetails": "ocultar detalles",
   "failedShowDetails": "mostrar detalles",
+  "backupFailedWarning": "No se creó ningún punto de restauración — la copia de seguridad falló, por lo que estos cambios no se pueden deshacer.",
   "emptyStateTitle": "No se encontraron problemas en el registro",
   "emptyStateDescription": "Busque entradas del registro dañadas y oportunidades de refuerzo del sistema.",
   "startScan": "Iniciar análisis",
@@ -59,5 +60,6 @@
   "riskLow": "Bajo",
   "riskMedium": "Medio",
   "riskHigh": "Alto",
-  "cancelButton": "Detener"
+  "cancelButton": "Detener",
+  "progressGauge": "Progreso"
 }

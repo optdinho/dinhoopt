@@ -137,8 +137,12 @@ export const systemMethods = {
   registryScan: (): Promise<RegistryEntry[]> => ipcRenderer.invoke(IPC.REGISTRY_SCAN),
   registryFix: (
     entryIds: string[],
-  ): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> =>
-    ipcRenderer.invoke(IPC.REGISTRY_FIX, entryIds),
+  ): Promise<{
+    fixed: number
+    failed: number
+    failures: { issue: string; reason: string }[]
+    backupFailed: boolean
+  }> => ipcRenderer.invoke(IPC.REGISTRY_FIX, entryIds),
   registryScanCancel: (): Promise<void> => ipcRenderer.invoke(IPC.REGISTRY_SCAN_CANCEL),
   registryFixCancel: (): Promise<void> => ipcRenderer.invoke(IPC.REGISTRY_FIX_CANCEL),
   registrySetTweakIgnored: (signatures: string[], ignored: boolean): Promise<void> =>

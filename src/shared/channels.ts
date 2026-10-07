@@ -108,7 +108,6 @@ export const IPC = {
   ELEVATION_CHECK: 'elevation:check',
   ELEVATION_RELAUNCH: 'elevation:relaunch',
   // Scheduled scans (legacy single-schedule)
-  SCHEDULE_NEXT_SCAN: 'schedule:next-scan',
   SCHEDULE_SCAN_COMPLETE: 'schedule:scan-complete',
 
   // Multi-schedule
@@ -138,7 +137,6 @@ export const IPC = {
   MALWARE_YARA_UPDATE: 'malware:yara:update',
   MALWARE_YARA_COMPILE_PROGRESS: 'malware:yara:compile-progress',
   MALWARE_CANCEL_SCAN: 'malware:cancel-scan',
-  MALWARE_YARA_ROLLBACK: 'yara:rollback-update',
 
   // File watcher
   MALWARE_WATCHER_START: 'malware:watcher-start',

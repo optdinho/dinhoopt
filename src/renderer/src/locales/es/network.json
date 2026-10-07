@@ -45,5 +45,6 @@
   "monitorColRemote": "Dirección Remota",
   "monitorColPort": "Puerto",
   "monitorColProcess": "Proceso",
-  "monitorColState": "Estado"
+  "monitorColState": "Estado",
+  "cleaningItem": "Limpiando {{item}}..."
 }

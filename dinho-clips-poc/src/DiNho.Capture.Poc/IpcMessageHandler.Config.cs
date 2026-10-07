@@ -15,7 +15,6 @@ public sealed partial class EngineCoordinator
         return action switch
         {
             "handshake" => HandleHandshake(msg),
-            "setReplayTime" => HandleSetReplayTime(msg),
             "setCustomGameProcess" => HandleSetCustomGameProcess(msg),
             "config" => HandleConfig(msg),
             "getGpus" => HandleGetGpus(),
@@ -59,26 +58,13 @@ public sealed partial class EngineCoordinator
         };
     }
 
-    private IpcMessage HandleSetReplayTime(IpcMessage msg)
-    {
-        if (msg.Value.HasValue)
-        {
-            var secs = Math.Clamp(msg.Value.Value.GetInt32(), 30, 600);
-            _config.Update(c => c.ReplayTimeSeconds = secs);
-        }
-        return new IpcMessage { Action = "ok" };
-    }
-
-    // 5.1: startEngine/stopEngine agora são AWAITados — o ACK "ok" só sai quando
-    // a operação terminou e erros viram "error" (mensagem neutra p/ não vazar detalhes).
+    // 5.1: stopEngine é AWAITADO — o ACK "ok" só sai quando a operação terminou e
+    // erros viram "error" (mensagem neutra p/ não vazar detalhes).
     private async Task<IpcMessage> HandleEngineLifecycleAsync(string action)
     {
         try
         {
-            if (action == "startEngine")
-                await StartAsync();
-            else
-                await StopAsync();
+            await StopAsync();
             return new IpcMessage { Action = "ok" };
         }
         catch (Exception ex)

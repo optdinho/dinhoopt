@@ -150,5 +150,7 @@
   "historyRegistry": "Registry",
   "historyStaleDrivers": "Stale Drivers",
   "historyMalware": "Malware",
-  "historyNetwork": "Network"
+  "historyNetwork": "Network",
+  "gameModeStart": "Start",
+  "gameModeStop": "Stop"
 }

@@ -1,4 +1,4 @@
-import { CircleCheckBig, Database, Loader2, Search, Shield, StopCircle, Wrench } from 'lucide-react'
+import { Database, Loader2, Search, Shield, StopCircle, Wrench } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -13,6 +13,7 @@ import { useProgressListener } from '@/hooks/useProgressListener'
 import { useHistoryStore } from '@/stores/history-store'
 import { useRegistryStore } from '@/stores/registry-store'
 import { useStatsStore } from '@/stores/stats-store'
+import { FixResultCard } from './registry/FixResultCard'
 import { RegistryCardsSection } from './registry/RegistryPageComponents'
 
 export function RegistryPage() {
@@ -41,8 +42,6 @@ function RegistryPageContent() {
   const fixing = useRegistryStore((s) => s.fixing)
   const fixProgress = useRegistryStore((s) => s.fixProgress)
   const expandedCards = useRegistryStore((s) => s.expandedCards)
-  const fixResult = useRegistryStore((s) => s.fixResult)
-  const showFailures = useRegistryStore((s) => s.showFailures)
   const error = useRegistryStore((s) => s.error)
 
   const [showConfirm, setShowConfirm] = useState(false)
@@ -257,49 +256,7 @@ function RegistryPageContent() {
         </div>
       )}
 
-      {fixResult && (
-        <div
-          className="mb-5 overflow-hidden rounded-2xl"
-          style={{ border: `1px solid ${fixResult.failed > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}` }}
-        >
-          <div
-            className="flex items-center gap-3 p-4"
-            style={{ background: fixResult.failed > 0 ? 'rgba(239,68,68,0.04)' : 'rgba(34,197,94,0.06)' }}
-          >
-            <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
-            <p className="flex-1 text-[13px] text-zinc-200">
-              {t('fixedEntries', { count: fixResult.fixed })}
-              {fixResult.failed > 0 && (
-                <button
-                  type="button"
-                  onClick={() => useRegistryStore.getState().setShowFailures(!showFailures)}
-                  className="ml-2 text-red-400 underline decoration-red-400/30 hover:decoration-red-400 transition-colors"
-                >
-                  {t('failedCount', { count: fixResult.failed })} —{' '}
-                  {showFailures ? t('failedHideDetails') : t('failedShowDetails')}
-                </button>
-              )}
-            </p>
-          </div>
-          {showFailures && fixResult.failures.length > 0 && (
-            <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
-              {fixResult.failures.map((f, i) => (
-                <div
-                  key={`${f.issue}-${f.reason}`}
-                  className="flex items-start gap-3 px-5 py-3"
-                  style={{ borderBottom: i < fixResult.failures.length - 1 ? '1px solid var(--bg-subtle)' : 'none' }}
-                >
-                  <div className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                  <div className="min-w-0">
-                    <p className="text-[12px] text-zinc-300">{f.issue}</p>
-                    <p className="mt-0.5 text-[11px] text-red-400/80">{f.reason}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <FixResultCard />
 
       {!scanned && !scanning && (
         <EmptyState

@@ -1,3 +1,4 @@
+import type { RegistryFixAction } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = {
@@ -108,5 +109,71 @@ describe('fixRegistryEntries', () => {
     expect(result.fixed).toBe(0)
     expect(result.failed).toBe(1)
     expect(result.failures[0]?.reason).toContain('Access denied')
+  })
+
+  it('counts an entry with an unrecognised fix.op as a failure, not as fixed', async () => {
+    const result = await fixRegistryEntries([
+      {
+        id: 'unknown-op',
+        type: 'obsolete',
+        issue: 'unknown op entry',
+        keyPath: 'K',
+        valueName: 'V',
+        risk: 'low',
+        selected: true,
+        fix: { op: 'replace-value' } as unknown as RegistryFixAction,
+      },
+    ])
+    expect(result.fixed).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.failures[0]?.issue).toBe('unknown op entry')
+    expect(result.failures[0]?.reason).toContain('Unknown fix operation')
+    expect(mocks.execReg).not.toHaveBeenCalled()
+    expect(mocks.execTracked).not.toHaveBeenCalled()
+  })
+
+  describe('backupFailed flag (A1)', () => {
+    const deleteEntry = {
+      id: 'e1',
+      type: 'obsolete',
+      issue: 'some issue',
+      keyPath: 'K',
+      valueName: 'V',
+      risk: 'low',
+      selected: true,
+      fix: { op: 'delete-value' as const },
+    }
+
+    it('sets backupFailed=true and still fixes when the backup throws', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      mocks.createTargetedBackup.mockRejectedValue(new Error('disk full'))
+      const result = await fixRegistryEntries([deleteEntry as never])
+      expect(result.backupFailed).toBe(true)
+      expect(result.fixed).toBe(1)
+      expect(result.failed).toBe(0)
+    })
+
+    it('sets backupFailed=false when the backup succeeds', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      const result = await fixRegistryEntries([deleteEntry as never])
+      expect(result.backupFailed).toBe(false)
+      expect(result.fixed).toBe(1)
+    })
+
+    it('sets backupFailed=false when nothing was selected', async () => {
+      const result = await fixRegistryEntries([])
+      expect(result.backupFailed).toBe(false)
+      expect(result.fixed).toBe(0)
+    })
+
+    it('sets backupFailed=true when the backup directory cannot be created', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      mocks.mkdirSync.mockImplementation(() => {
+        throw new Error('EACCES')
+      })
+      const result = await fixRegistryEntries([deleteEntry as never])
+      expect(result.backupFailed).toBe(true)
+      expect(result.fixed).toBe(1)
+    })
   })
 })

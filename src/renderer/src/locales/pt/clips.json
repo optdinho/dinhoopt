@@ -207,5 +207,6 @@
   "minutes": "m",
   "seconds": "s",
   "hideSettings": "Ocultar configurações",
-  "showSettings": "Mostrar configurações"
+  "showSettings": "Mostrar configurações",
+  "audioSampleRate": "Taxa de amostragem"
 }

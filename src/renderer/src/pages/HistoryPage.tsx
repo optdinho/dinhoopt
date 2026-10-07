@@ -1,6 +1,7 @@
 import { History, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import type { ViewMode } from '@/components/history/constants'
 import { OverviewView } from '@/components/history/OverviewView'
 import { TimelineView } from '@/components/history/TimelineView'
@@ -12,6 +13,7 @@ import { useHistoryStore } from '@/stores/history-store'
 
 export function HistoryPage() {
   const { t } = useTranslation('history')
+  const navigate = useNavigate()
   const typeConfig = useTypeConfig()
   const { entries, loaded, load, clear } = useHistoryStore()
   const [showClearConfirm, setShowClearConfirm] = useState(false)
@@ -97,7 +99,7 @@ export function HistoryPage() {
           actions={[
             {
               label: t('emptyStateScanAction'),
-              onClick: () => window.location.assign('/cleaner'),
+              onClick: () => navigate('/cleaner'),
               icon: History,
             },
           ]}

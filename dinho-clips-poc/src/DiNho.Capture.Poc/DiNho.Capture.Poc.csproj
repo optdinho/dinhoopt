@@ -22,7 +22,6 @@
     <!-- Bindings de DXGI / Direct3D11 / D3D11 device, sem precisar escrever P/Invoke manual para tudo -->
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
-    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
 
     <!-- .NET 10 projects Windows.Graphics.Capture and Direct3D11 natively — CsWinRT package no longer needed -->
 

@@ -231,8 +231,9 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
         fixed: number
         failed: number
         failures: { issue: string; reason: string }[]
+        backupFailed: boolean
       }>('cleaner:registry:fix', ['id1'])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
     })
 
     it('returns zeros when validation fails', async () => {
@@ -241,8 +242,9 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
         fixed: number
         failed: number
         failures: { issue: string; reason: string }[]
+        backupFailed: boolean
       }>('cleaner:registry:fix', [123])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
     })
 
     it('fixes entries successfully', async () => {
@@ -282,16 +284,51 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
       expect(result.failed).toBe(1)
     })
 
+    it('propagates backupFailed from the fixer to the caller (A1)', async () => {
+      mockValidateStringArray.mockReturnValue(['test-entry-1'])
+      mockFixRegistryEntries.mockResolvedValue({
+        fixed: 2,
+        failed: 0,
+        failures: [],
+        backupFailed: true,
+      })
+
+      const sessionMap = new Map<string, RegistryEntry>()
+      sessionMap.set('test-entry-1', mockEntry)
+      mockState.scanSessions.set('session-1', sessionMap)
+
+      const result = await callHandler<{ backupFailed: boolean }>('cleaner:registry:fix', ['test-entry-1'])
+      expect(result.backupFailed).toBe(true)
+    })
+
+    it('warns in the log and audits when the backup failed (A1)', async () => {
+      mockValidateStringArray.mockReturnValue(['test-entry-1'])
+      mockFixRegistryEntries.mockResolvedValue({
+        fixed: 2,
+        failed: 0,
+        failures: [],
+        backupFailed: true,
+      })
+
+      const sessionMap = new Map<string, RegistryEntry>()
+      sessionMap.set('test-entry-1', mockEntry)
+      mockState.scanSessions.set('session-1', sessionMap)
+
+      await callHandler('cleaner:registry:fix', ['test-entry-1'])
+      expect(loggerInstance.warning).toHaveBeenCalledWith('registry-cleaner', expect.stringContaining('backup'))
+    })
+
     it('returns empty results when entry IDs not found in any session', async () => {
       mockValidateStringArray.mockReturnValue(['nonexistent-id'])
-      mockFixRegistryEntries.mockResolvedValue({ fixed: 0, failed: 0, failures: [] })
+      mockFixRegistryEntries.mockResolvedValue({ fixed: 0, failed: 0, failures: [], backupFailed: false })
 
       const result = await callHandler<{
         fixed: number
         failed: number
         failures: { issue: string; reason: string }[]
+        backupFailed: boolean
       }>('cleaner:registry:fix', ['nonexistent-id'])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
       expect(mockFixRegistryEntries).toHaveBeenCalledWith([], expect.any(Function), expect.anything())
     })
 

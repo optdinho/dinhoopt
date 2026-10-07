@@ -17,6 +17,7 @@
   "failedCount": "{{count}} failed",
   "failedHideDetails": "hide details",
   "failedShowDetails": "show details",
+  "backupFailedWarning": "No restore point was created — the backup failed, so these changes cannot be undone.",
   "emptyStateTitle": "No registry issues found",
   "emptyStateDescription": "Check for broken registry entries and system hardening opportunities.",
   "startScan": "Start Scan",
@@ -59,5 +60,6 @@
   "riskLow": "Low",
   "riskMedium": "Medium",
   "riskHigh": "High",
-  "cancelButton": "Stop"
+  "cancelButton": "Stop",
+  "progressGauge": "Progress"
 }

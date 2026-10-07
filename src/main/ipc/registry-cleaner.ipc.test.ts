@@ -223,7 +223,7 @@ describe('IPC.REGISTRY_FIX', () => {
       registerRegistryCleanerIpc(() => mockWindow() as never)
       const handler = getHandler(IPC.REGISTRY_FIX)
       const result = await handler({}, ['any-id'])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
     } finally {
       if (origDescriptor) {
         Object.defineProperty(process, 'platform', origDescriptor)
@@ -236,7 +236,7 @@ describe('IPC.REGISTRY_FIX', () => {
     registerRegistryCleanerIpc(() => mockWindow() as never)
     const handler = getHandler(IPC.REGISTRY_FIX)
     const result = await handler({}, ['invalid'])
-    expect(result).toEqual({ fixed: 0, failed: 0, failures: [] })
+    expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
     expect(mockLogger.warning).toHaveBeenCalledWith('registry-cleaner', 'Fix called with invalid entry IDs')
   })
 
@@ -294,6 +294,7 @@ describe('IPC.REGISTRY_FIX', () => {
       fixed: 0,
       failed: 0,
       failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+      backupFailed: false,
     })
     expect(mockLogger.info).toHaveBeenCalledWith('registry-cleaner', 'Registry fix cancelled')
   })
@@ -510,6 +511,7 @@ describe('IPC.REGISTRY_FIX_CANCEL', () => {
       fixed: 0,
       failed: 0,
       failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+      backupFailed: false,
     })
   })
 })

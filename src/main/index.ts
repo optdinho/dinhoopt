@@ -68,13 +68,7 @@ import { isAdmin } from './services/elevation'
 import { execNativeUtf8, killAllChildren, psUtf8 } from './services/exec-utf8'
 import { getLogger } from './services/logger.service'
 import { attachRendererDiagnostics } from './services/renderer-diagnostics'
-import {
-  completeScheduleRun,
-  getNextScanTime,
-  notifyScheduledScanComplete,
-  startScheduler,
-  stopScheduler,
-} from './services/scheduler'
+import { completeScheduleRun, notifyScheduledScanComplete, startScheduler, stopScheduler } from './services/scheduler'
 import { getSettings } from './services/settings-store'
 import { getThreatIntelService } from './services/threat-intel.service'
 import { registerUpdateBusyProbes } from './services/update-install-guard.probes'
@@ -654,13 +648,6 @@ function initGui(): void {
     // Rebuild tray menu when language changes so labels update immediately
     app.on('dinho:language-changed' as never, () => {
       rebuildTrayMenu()
-    })
-
-    // IPC to get next scan time for the UI
-    ipcMain.handle(IPC.SCHEDULE_NEXT_SCAN, () => {
-      const s = getSettings()
-      const next = getNextScanTime(s)
-      return next ? next.toISOString() : null
     })
 
     // Handle scheduled scan completion notification from renderer

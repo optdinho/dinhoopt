@@ -44,6 +44,23 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # A auditoria de 2026-10-06 encontrou zero passos `dotnet` no CI: os 2525
+  # testes C# (mais de um quarto da suíte) nunca correram aqui, e o projecto de
+  # testes nem sequer era compilado. Comandos idênticos aos gates locais
+  # documentados no AGENTS.md. O SDK já vem na imagem do runner — é o mesmo
+  # que o release.yml usa no `npm run copy-engine` (dotnet publish).
+  dotnet:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: dotnet --info
+        shell: pwsh
+        run: dotnet --info
+      - name: Build engine + testes (Release)
+        run: dotnet build dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/DiNho.Capture.Poc.Tests.csproj -c Release
+      - name: Testes C#
+        run: dotnet test dinho-clips-poc/tests/DiNho.Capture.Poc.Tests/DiNho.Capture.Poc.Tests.csproj -c Release --no-build
+
   e2e:
     runs-on: windows-latest
     needs: build

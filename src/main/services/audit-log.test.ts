@@ -19,14 +19,22 @@ vi.mock('node:path', () => ({
   join: (...a: unknown[]) => mocks.join(...a),
 }))
 
+vi.mock('./elevation', () => ({
+  isAdmin: vi.fn(() => false),
+}))
+
 describe('audit-log', () => {
   let initAuditLog: typeof import('./audit-log').initAuditLog
   let logAudit: typeof import('./audit-log').logAudit
+  let isAdminMock: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
     mocks.join.mockImplementation(((...parts: string[]) => parts.join('\\')) as never)
+    const elevation = await import('./elevation')
+    isAdminMock = vi.mocked(elevation.isAdmin)
+    isAdminMock.mockReturnValue(false)
     const mod = await import('./audit-log')
     initAuditLog = mod.initAuditLog
     logAudit = mod.logAudit
@@ -70,14 +78,27 @@ describe('audit-log', () => {
       expect(parsed.details).toEqual({})
     })
 
-    it('sets admin true when ELEVATED=1', () => {
-      process.env.ELEVATED = '1'
+    it('sets admin from isAdmin() so the field reflects the real elevation state', () => {
+      isAdminMock.mockReturnValue(true)
       initAuditLog()
       logAudit('clean', 'registry')
       const [, line] = mocks.appendFileSync.mock.calls[0]!
       const parsed = JSON.parse(String(line)) as { admin: boolean }
       expect(parsed.admin).toBe(true)
-      delete process.env.ELEVATED
+      expect(isAdminMock).toHaveBeenCalled()
+    })
+
+    it('ignores ELEVATED — no production code path ever sets it, so it used to pin admin to false', () => {
+      process.env.ELEVATED = '1'
+      try {
+        initAuditLog()
+        logAudit('clean', 'registry')
+        const [, line] = mocks.appendFileSync.mock.calls[0]!
+        const parsed = JSON.parse(String(line)) as { admin: boolean }
+        expect(parsed.admin).toBe(false)
+      } finally {
+        delete process.env.ELEVATED
+      }
     })
 
     it('swallows append errors (best effort)', () => {

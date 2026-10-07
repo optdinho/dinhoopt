@@ -76,5 +76,6 @@
   "unknownBinary": "(desconocido)",
   "durationMs": "{{count}}ms",
   "durationSec": "{{count}}s",
-  "durationMinSec": "{{min}}m {{sec}}s"
+  "durationMinSec": "{{min}}m {{sec}}s",
+  "checkmark": "Seleccionado"
 }

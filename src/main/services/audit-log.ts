@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
+import { isAdmin } from './elevation'
 
 interface AuditEntry {
   timestamp: string
@@ -25,7 +26,7 @@ export function logAudit(action: string, category: string, details: Record<strin
     action,
     category,
     details,
-    admin: process.env.ELEVATED === '1',
+    admin: isAdmin(),
   }
   try {
     appendFileSync(auditPath, `${JSON.stringify(entry)}\n`)

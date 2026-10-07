@@ -116,5 +116,7 @@
   "statusNotApplicable": "Não aplicável",
   "statusDisabled": "Desativado",
   "statusUnknown": "Desconhecido",
-  "selectDrive": "Selecionar {{drive}}"
+  "selectDrive": "Selecionar {{drive}}",
+  "systemDrive": "Sistema",
+  "runButton": "Executar"
 }

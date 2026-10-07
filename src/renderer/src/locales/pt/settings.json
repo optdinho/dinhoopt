@@ -102,5 +102,7 @@
   "logsNoEntries": "Nenhum registro encontrado",
   "logsRetentionLabel": "Retenção (dias)",
   "logsRetentionDesc": "Quantos dias manter os arquivos de registro antes da limpeza automática",
-  "brandName": "DiNho Optimizer"
+  "brandName": "DiNho Optimizer",
+  "themeLabel": "Tema",
+  "themeDesc": "Escolha entre a aparência escura ou clara"
 }

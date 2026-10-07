@@ -60,14 +60,19 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
     async (
       event,
       entryIds: string[],
-    ): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> => {
+    ): Promise<{
+      fixed: number
+      failed: number
+      failures: { issue: string; reason: string }[]
+      backupFailed: boolean
+    }> => {
       if (!validateSender(event, getWindow()))
-        return { fixed: 0, failed: 0, failures: [{ issue: 'Invalid sender', reason: '' }] }
-      if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [] }
+        return { fixed: 0, failed: 0, failures: [{ issue: 'Invalid sender', reason: '' }], backupFailed: false }
+      if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [], backupFailed: false }
       const valid = validateStringArray(entryIds)
       if (!valid) {
         getLogger().warning('registry-cleaner', 'Fix called with invalid entry IDs')
-        return { fixed: 0, failed: 0, failures: [] }
+        return { fixed: 0, failed: 0, failures: [], backupFailed: false }
       }
 
       getLogger().info('registry-cleaner', `Fixing ${valid.length} registry issue(s)...`)
@@ -100,14 +105,25 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
           entryCount: entriesToFix.length,
           fixed: result.fixed,
           failed: result.failed,
+          backupFailed: result.backupFailed,
           keys: entriesToFix.slice(0, 20).map((e) => e.id),
         })
+        if (result.backupFailed)
+          getLogger().warning(
+            'registry-cleaner',
+            'Registry backup failed — no restore point was created, these changes cannot be undone',
+          )
         getLogger().success('registry-cleaner', `Fix complete — ${result.fixed} fixed, ${result.failed} failed`)
         return result
       } catch (err: unknown) {
         if (signal.aborted) {
           getLogger().info('registry-cleaner', 'Registry fix cancelled')
-          return { fixed: 0, failed: 0, failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }] }
+          return {
+            fixed: 0,
+            failed: 0,
+            failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+            backupFailed: false,
+          }
         }
         getLogger().error(
           'registry-cleaner',

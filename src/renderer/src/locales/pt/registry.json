@@ -17,6 +17,7 @@
   "failedCount": "{{count}} falharam",
   "failedHideDetails": "ocultar detalhes",
   "failedShowDetails": "mostrar detalhes",
+  "backupFailedWarning": "Nenhum ponto de restauração foi criado — a cópia de segurança falhou, por isso estas alterações não podem ser desfeitas.",
   "emptyStateTitle": "Não foram encontrados problemas no registro",
   "emptyStateDescription": "Verifique se existem entradas de registro corrompidas e oportunidades de reforço da segurança do sistema.",
   "startScan": "Iniciar verificação",
@@ -59,5 +60,6 @@
   "riskLow": "Baixo",
   "riskMedium": "Médio",
   "riskHigh": "Alto",
-  "cancelButton": "Parar"
+  "cancelButton": "Parar",
+  "progressGauge": "Progresso"
 }

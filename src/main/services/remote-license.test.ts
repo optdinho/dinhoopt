@@ -24,6 +24,8 @@ const mockNet = vi.hoisted(() => {
   let _capturedPayload = ''
   let _callIndex = 0
   const _responses: Array<{ status?: number; body?: any; error?: string }> = []
+  type ReqRecord = { url: string; headers: Record<string, string>; payload: string }
+  const _requests: ReqRecord[] = []
 
   return {
     setResponse: (body: any, status = 200) => {
@@ -63,15 +65,25 @@ const mockNet = vi.hoisted(() => {
       _callIndex = 0
     },
     getCapturedPayload: () => _capturedPayload,
-    _makeRequest: () => {
+    /** URL + headers de CADA pedido, por ordem — usado nos testes de redirect */
+    getRequests: () => _requests,
+    resetRequests: () => {
+      _requests.length = 0
+    },
+    _makeRequest: (url: string) => {
       _capturedPayload = ''
+      const record: ReqRecord = { url, headers: {}, payload: '' }
+      _requests.push(record)
       return {
         on(ev: string, cb: any) {
-          const idx = Math.min(_callIndex, _responses.length > 0 ? _responses.length - 1 : 0)
           let status = _status
           let body = _body
           let error = _error
-          if (_responses.length > 0) {
+          // A sequencia avanca POR PEDIDO (uma resposta HTTP), nao por
+          // subscricao de evento — senao `.on('error')` e `.on('abort')`
+          // consomem entradas antes do `.on('response')` ver a primeira.
+          if (_responses.length > 0 && ev === 'response') {
+            const idx = Math.min(_callIndex, _responses.length - 1)
             const r = _responses[idx]!
             if (r.error !== undefined) error = r.error
             if (r.body !== undefined) body = r.body
@@ -89,7 +101,8 @@ const mockNet = vi.hoisted(() => {
                     on(dEv: string, dCb: any) {
                       if (dEv === 'error' && _streamError) dCb(new Error(_streamError))
                       if (dEv === 'aborted' && _streamAborted) dCb(null)
-                      if (dEv === 'data') dCb(Buffer.from(JSON.stringify(body)))
+                      // string va em cru: uma pagina de erro HTML nao e JSON
+                      if (dEv === 'data') dCb(Buffer.from(typeof body === 'string' ? body : JSON.stringify(body)))
                       if (dEv === 'end') dCb(null)
                     },
                   },
@@ -99,8 +112,11 @@ const mockNet = vi.hoisted(() => {
           }
           return this
         },
-        setHeader() {},
+        setHeader(k: string, v: string) {
+          record.headers[k.toLowerCase()] = v
+        },
         write(data: string) {
+          record.payload = data
           _capturedPayload = data
         },
         end() {},
@@ -118,15 +134,27 @@ vi.mock('electron', () => {
       isPackaged: false,
     },
     net: {
-      request: () => mockNet._makeRequest(),
+      request: (opts: { url?: string }) => mockNet._makeRequest(opts?.url ?? ''),
     },
   }
 })
 
-vi.mock('./hwid', () => ({ generateHwid: async () => 'test-hwid-12345' }))
+const mockHwid = vi.hoisted(() => ({
+  generateHwid: vi.fn(async () => 'test-hwid-12345'),
+  getHwidSync: vi.fn(() => 'test-hwid-12345'),
+}))
+
+vi.mock('./hwid', () => mockHwid)
 
 import { initStore, readSavedKey } from './license-store'
-import { __resetForTest, activateLicense, checkLicense, getHwid } from './remote-license'
+import {
+  __resetForTest,
+  activateLicense,
+  checkLicense,
+  getHwid,
+  OFFLINE_FALLBACK_REASON,
+  validateLicense,
+} from './remote-license'
 
 const KEYFILE = 'remote-license.key'
 let testRoot = ''
@@ -138,6 +166,7 @@ beforeEach(() => {
     fs.rmSync(testRoot, { recursive: true, force: true })
   } catch {}
   fs.mkdirSync(testRoot, { recursive: true })
+  mockNet.resetRequests()
   __resetForTest()
 })
 
@@ -206,9 +235,9 @@ describe('remote-license', () => {
 
     it('falls back to offline cache when server is unreachable and cache is valid', async () => {
       fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
-      // write a valid cache entry
-      const cache = { valid: true, type: 'lifetime', expires_at: null, timestamp: Date.now() }
-      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify(cache), 'utf-8')
+      // o cache valido so existe assinado pelo proprio app
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+      await validateLicense('KEY', 'test-hwid-12345')
       mockNet.setError('connection refused')
 
       const result = await checkLicense()
@@ -236,8 +265,8 @@ describe('remote-license', () => {
 
     it('serves fresh valid cache without consulting the network', async () => {
       fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
-      const cache = { valid: true, type: 'lifetime', expires_at: null, timestamp: Date.now() }
-      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify(cache), 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+      await validateLicense('KEY', 'test-hwid-12345')
       // Servidor acessível e respondendo inválido — cache fresco deve vencer sem rede
       mockNet.setResponse({ valid: false, reason: 'bloqueado' })
 
@@ -246,10 +275,8 @@ describe('remote-license', () => {
       expect(result.type).toBe('lifetime')
     })
 
-    it('consults the network when fresh cache says invalid', async () => {
+    it('consults the network when there is no signed cache', async () => {
       fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
-      const cache = { valid: false, reason: 'x', timestamp: Date.now() }
-      fs.writeFileSync(path.join(testRoot, '.license-cache.json'), JSON.stringify(cache), 'utf-8')
       mockNet.setResponse({ valid: true, type: 'subscription', expires_at: '2026-12-31' })
 
       const result = await checkLicense()
@@ -259,9 +286,11 @@ describe('remote-license', () => {
 
     it('revalidates in background and refreshes the cache', async () => {
       fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
-      const cache = { valid: true, type: 'lifetime', expires_at: null, timestamp: Date.now() - 1000 }
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+      await validateLicense('KEY', 'test-hwid-12345')
       const cachePath = path.join(testRoot, '.license-cache.json')
-      fs.writeFileSync(cachePath, JSON.stringify(cache), 'utf-8')
+      const before = JSON.parse(fs.readFileSync(cachePath, 'utf-8'))
+      const beforeTs = JSON.parse(before.payload).timestamp
       mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
 
       const result = await checkLicense()
@@ -270,14 +299,70 @@ describe('remote-license', () => {
       await vi.waitFor(
         () => {
           const refreshed = JSON.parse(fs.readFileSync(cachePath, 'utf-8'))
-          expect(refreshed.timestamp).toBeGreaterThan(cache.timestamp)
+          const refreshedTs = JSON.parse(refreshed.payload).timestamp
+          expect(refreshedTs).toBeGreaterThan(beforeTs)
         },
         { timeout: 5000 },
       )
     })
   })
 
-  // ── activateLicense ───────────────────────────────────────────────
+  // ── A4: assinatura HMAC do cache (ligada ao HWID) ─────────────────
+  describe('cache signing (A4)', () => {
+    afterEach(() => {
+      mockHwid.getHwidSync.mockReturnValue('test-hwid-12345')
+    })
+
+    it('rejects a fresh cache forged by hand with no signature', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      // exactamente a falsificacao do relatorio: {"valid":true,"timestamp":<agora>}
+      fs.writeFileSync(
+        path.join(testRoot, '.license-cache.json'),
+        JSON.stringify({ valid: true, timestamp: Date.now() }),
+        'utf-8',
+      )
+      // servidor acessivel e a recusar — um cache falsificado NAO pode ganhar
+      mockNet.setResponse({ valid: false, reason: 'bloqueado' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+    })
+
+    it('rejects a cache whose payload no longer matches its signature', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+      await validateLicense('KEY', 'test-hwid-12345')
+      const cachePath = path.join(testRoot, '.license-cache.json')
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8'))
+      const forged = { payload: raw.payload.replace('true', 'false'), sig: raw.sig }
+      fs.writeFileSync(cachePath, JSON.stringify(forged), 'utf-8')
+      mockNet.setResponse({ valid: false, reason: 'bloqueado' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+    })
+
+    it('rejects a cache signed for another machine (HWID binding)', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+      await validateLicense('KEY', 'test-hwid-12345')
+      mockHwid.getHwidSync.mockReturnValue('another-machine')
+      mockNet.setResponse({ valid: false, reason: 'bloqueado' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+    })
+
+    it('serves a cache signed for this machine (control for HWID binding)', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
+      await validateLicense('KEY', 'test-hwid-12345')
+      mockNet.setResponse({ valid: false, reason: 'bloqueado' })
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+    })
+  })
   describe('activateLicense', () => {
     it('saves key and returns valid on successful activation', async () => {
       mockNet.setResponse({ valid: true, type: 'lifetime', expires_at: null })
@@ -404,6 +489,46 @@ describe('remote-license', () => {
       expect(result.valid).toBe(true)
     })
 
+    // ── A9: a queda para o endpoint publico deixa de ser invisível ──
+    it('registra um aviso quando license-config.json está corrompido', async () => {
+      fs.writeFileSync(path.join(testRoot, 'license-config.json'), '{bad json}', 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await activateLicense('MY-KEY')
+        const logged = spy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+        expect(logged).toContain('license-config.json')
+        expect(logged).toMatch(/ileg[ií]vel|corrompid/i)
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('registra um aviso quando license-config.json existe mas não tem url/token', async () => {
+      fs.writeFileSync(path.join(testRoot, 'license-config.json'), JSON.stringify({ url: 'https://x.test' }), 'utf-8')
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await activateLicense('MY-KEY')
+        const logged = spy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+        expect(logged).toContain('license-config.json')
+        expect(logged).toMatch(/token|url/)
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('não regista aviso nenhum quando license-config.json simplesmente não existe', async () => {
+      mockNet.setResponse({ valid: true, type: 'lifetime' })
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await activateLicense('MY-KEY')
+        expect(spy).not.toHaveBeenCalled()
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
     // Regressao: o token de admin vivia hardcoded no fonte, que e repo
     // publico. `validate` e rota publica, entao o app funciona sem token.
     it('omits the token field entirely when none is configured', async () => {
@@ -465,6 +590,109 @@ describe('remote-license', () => {
       const result = await checkLicense()
       expect(result.valid).toBe(false)
       expect(result.reason).toBe('Sem validação offline disponível')
+    })
+  })
+
+  // ── A5: redirect não deve seguir para outra origem ────────────────
+  describe('redirect origin validation (A5)', () => {
+    const CFG = 'license-config.json'
+    const API = 'https://license.test/api'
+
+    it('recusa redirect para outra origem e nunca envia o token para ela', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      fs.writeFileSync(path.join(testRoot, CFG), JSON.stringify({ url: API, token: 'super-secret-token' }), 'utf-8')
+      mockNet.setSequence([
+        { status: 302, body: 'Location: https://evil.example/steal' },
+        { status: 302, body: 'Location: https://evil.example/steal' },
+      ])
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+
+      const urls = mockNet.getRequests().map((r) => r.url)
+      expect(urls.some((u) => u.includes('evil.example'))).toBe(false)
+      expect(urls.every((u) => u.startsWith(API))).toBe(true)
+    })
+
+    it('recusa redirect para um esquema diferente (http a partir de https)', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      fs.writeFileSync(path.join(testRoot, CFG), JSON.stringify({ url: API, token: 'tok' }), 'utf-8')
+      mockNet.setSequence([
+        { status: 302, body: 'Location: http://license.test/api-downgrade' },
+        { status: 302, body: 'Location: http://license.test/api-downgrade' },
+      ])
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(false)
+      expect(mockNet.getRequests().every((r) => r.url.startsWith(API))).toBe(true)
+    })
+
+    it('segue redirect de mesma origem (não bloqueia o caso legítimo)', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      fs.writeFileSync(path.join(testRoot, CFG), JSON.stringify({ url: API, token: 'tok' }), 'utf-8')
+      mockNet.setSequence([
+        { status: 302, body: 'Location: /api-v2' },
+        { status: 200, body: { valid: true, type: 'subscription' } },
+      ])
+
+      const result = await checkLicense()
+      expect(result.valid).toBe(true)
+      const urls = mockNet.getRequests().map((r) => r.url)
+      expect(urls).toContain('https://license.test/api-v2')
+    })
+
+    it('mantém o Authorization no header quando o redirect é de mesma origem', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      fs.writeFileSync(path.join(testRoot, CFG), JSON.stringify({ url: API, token: 'same-origin-token' }), 'utf-8')
+      mockNet.setSequence([
+        { status: 302, body: 'Location: /api-v2' },
+        { status: 200, body: { valid: true } },
+      ])
+
+      await checkLicense()
+      const second = mockNet.getRequests()[1]
+      expect(second?.headers.authorization).toBe('Bearer same-origin-token')
+    })
+  })
+
+  // ── A8: o erro real da API deixa de ser engolido ──────────────────
+  describe('erro real da API é diagnosticável (A8)', () => {
+    it('registra o corpo da resposta quando a API devolve HTML em vez de JSON', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setResponse('<html><body>502 Bad Gateway — upstream db down</body></html>', 502)
+
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        const result = await validateLicense('KEY', 'test-hwid-12345')
+        // o sentinel tem de ser preservado: checkLicense compara com
+        // OFFLINE_FALLBACK_REASON para cair no fallback offline
+        expect(result.reason).toBe(OFFLINE_FALLBACK_REASON)
+        const logged = spy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+        expect(logged).toContain('502 Bad Gateway')
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('regista a causa quando a ligacao falha antes de qualquer resposta', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      mockNet.setError('getaddrinfo ENOTFOUND license.invalid')
+
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        const result = await validateLicense('KEY', 'test-hwid-12345')
+        expect(result.reason).toBe(OFFLINE_FALLBACK_REASON)
+        const logged = spy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+        expect(logged).toContain('ENOTFOUND')
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('o sentinel do fallback offline é uma constante partilhada', async () => {
+      // se alguém trocar a string num dos dois sitios, o fallback offline
+      // de checkLicense deixa de funcionar — este teste trava a regressão
+      expect(OFFLINE_FALLBACK_REASON).toBe('Sem conexao com o servidor')
     })
   })
 

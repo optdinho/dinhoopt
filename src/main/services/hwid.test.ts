@@ -123,6 +123,41 @@ describe('generateHwid', () => {
     expect(hwid).toBe('unknown-hwid')
     expect(mocks.getLogger().warning).toHaveBeenCalledWith('Hwid', expect.stringContaining('All HWID sources failed'))
   })
+
+  it('A7: fallback HWID nao inclui randomBytes — e e estavel entre arranques', async () => {
+    const { createHash: realCreateHash } = await vi.importActual<typeof import('node:crypto')>('node:crypto')
+    mocks.createHash.mockImplementation(((alg: string) => realCreateHash(alg)) as typeof realCreateHash)
+    mocks.machineId.mockRejectedValue(new Error('not supported'))
+    mocks.existsSync.mockReturnValue(false)
+    mocks.hostname.mockReturnValue('my-pc')
+    mocks.userInfo.mockReturnValue({ username: 'user' })
+    mocks.randomBytes.mockReturnValueOnce(Buffer.alloc(16, 0xaa)).mockReturnValueOnce(Buffer.alloc(16, 0xbb))
+
+    const first = await generateHwid()
+    const second = await generateHwid()
+
+    expect(mocks.randomBytes).not.toHaveBeenCalled()
+    expect(first).toMatch(/^[0-9a-f]{32}$/)
+    expect(second).toBe(first)
+  })
+
+  it('A7: um .hwid existente mas ilegivel nunca e sobrescrito', async () => {
+    mocks.machineId.mockRejectedValue(new Error('not supported'))
+    mocks.existsSync.mockReturnValue(true)
+    mocks.readFileSync.mockImplementation(() => {
+      throw new Error('EACCES simulado: .hwid ilegivel')
+    })
+    mocks.hostname.mockReturnValue('my-pc')
+
+    const hwid = await generateHwid()
+
+    expect(mocks.writeFileSync).not.toHaveBeenCalled()
+    expect(mocks.getLogger().warning).toHaveBeenCalledWith(
+      'Hwid',
+      expect.stringContaining('Failed to read cached HWID'),
+    )
+    expect(hwid).toMatch(/^[0-9a-f]{32}$/)
+  })
 })
 
 describe('getHwProfileRaw', () => {

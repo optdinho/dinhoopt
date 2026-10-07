@@ -32,8 +32,7 @@
     "validate:rules": "npx tsx src/main/rules/validate.ts",
     "new-rule": "node scripts/new-rule.js",
     "find-cache": "node scripts/find-cache.js",
-    "preview-rule": "node scripts/preview-rule.js",
-    "postinstall": "patch-package"
+    "preview-rule": "node scripts/preview-rule.js"
   },
   "keywords": [
     "system-cleaner",
@@ -59,7 +58,6 @@
     "electron-builder": "^26.17.0",
     "electron-vite": "^6.0.0-beta.4",
     "jsdom": "^30.1.1",
-    "patch-package": "^8.0.1",
     "playwright": "^1.63.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",

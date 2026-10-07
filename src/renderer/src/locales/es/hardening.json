@@ -276,5 +276,14 @@
   },
   "expandAria": "Expandir",
   "scoreGaugeAria": "Medidor de privacidad",
-  "itemsSelected": "elementos seleccionados"
+  "itemsSelected": "elementos seleccionados",
+  "applying": "Aplicando...",
+  "scanningServices": "Analizando...",
+  "scanServicesButton": "Analizar servicios",
+  "selectRecommended_one": "Seleccionar {{count}} recomendado",
+  "selectRecommended_other": "Seleccionar {{count}} recomendados",
+  "disableSelected_one": "Desactivar {{count}} servicio",
+  "disableSelected_other": "Desactivar {{count}} servicios",
+  "enableSelected_one": "Activar {{count}} servicio",
+  "enableSelected_other": "Activar {{count}} servicios"
 }

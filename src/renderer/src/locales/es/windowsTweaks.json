@@ -90,5 +90,6 @@
   "dnsViaDhcp": "via DHCP",
   "learnMore": "Saber más",
   "tcpIpDescription": "Ajusta chimney, timestamps y el tiempo de espera inicial (RTO) de la pila TCP. Reduce la latencia en uso general, pero desactiva recursos que ayudan en redes inestables.",
-  "timerCaution": "Microsoft documenta HPET, TSC Sync Policy y Dynamic Tick como opciones de depuración. En algunos sistemas pueden desestabilizar: si notas tirones, revierte."
+  "timerCaution": "Microsoft documenta HPET, TSC Sync Policy y Dynamic Tick como opciones de depuración. En algunos sistemas pueden desestabilizar: si notas tirones, revierte.",
+  "dnsChangedSuccess": "¡DNS cambiado con éxito!"
 }

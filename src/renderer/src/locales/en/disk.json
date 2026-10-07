@@ -117,5 +117,6 @@
   "statusDisabled": "Disabled",
   "statusUnknown": "Unknown",
   "selectDrive": "Select {{drive}}",
-  "systemDrive": "System"
+  "systemDrive": "System",
+  "runButton": "Run"
 }

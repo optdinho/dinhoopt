@@ -10,11 +10,17 @@ export async function fixRegistryEntries(
   entries: RegistryEntry[],
   onProgress?: (current: number, total: number, label: string) => void,
   signal?: AbortSignal,
-): Promise<{ fixed: number; failed: number; failures: { issue: string; reason: string }[] }> {
+): Promise<{
+  fixed: number
+  failed: number
+  failures: { issue: string; reason: string }[]
+  backupFailed: boolean
+}> {
   const total = entries.length
   onProgress?.(0, total, 'Creating registry backup...')
   let fixed = 0
   let failed = 0
+  let backupFailed = false
   const failures: { issue: string; reason: string }[] = []
 
   try {
@@ -29,7 +35,7 @@ export async function fixRegistryEntries(
     }
     pruneOldBackups(backupDir, 3)
   } catch {
-    /* Backup failed, but continue */
+    backupFailed = true
   }
 
   for (let i = 0; i < entries.length; i++) {
@@ -88,6 +94,8 @@ export async function fixRegistryEntries(
           })
           break
         }
+        default:
+          throw new Error(`Unknown fix operation: ${String(fix.op)}`)
       }
       fixed++
     } catch (err: unknown) {
@@ -106,5 +114,5 @@ export async function fixRegistryEntries(
   }
 
   onProgress?.(total, total, 'Done')
-  return { fixed, failed, failures }
+  return { fixed, failed, failures, backupFailed }
 }

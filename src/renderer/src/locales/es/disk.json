@@ -117,5 +117,6 @@
   "statusDisabled": "Deshabilitado",
   "statusUnknown": "Desconocido",
   "selectDrive": "Seleccionar {{drive}}",
-  "systemDrive": "Sistema"
+  "systemDrive": "Sistema",
+  "runButton": "Ejecutar"
 }

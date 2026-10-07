@@ -276,5 +276,14 @@
   },
   "expandAria": "Expand",
   "scoreGaugeAria": "Privacy score gauge",
-  "itemsSelected": "items selected"
+  "itemsSelected": "items selected",
+  "applying": "Applying...",
+  "scanningServices": "Scanning...",
+  "scanServicesButton": "Scan services",
+  "selectRecommended_one": "Select {{count}} recommended",
+  "selectRecommended_other": "Select {{count}} recommended",
+  "disableSelected_one": "Disable {{count}} service",
+  "disableSelected_other": "Disable {{count}} services",
+  "enableSelected_one": "Enable {{count}} service",
+  "enableSelected_other": "Enable {{count}} services"
 }

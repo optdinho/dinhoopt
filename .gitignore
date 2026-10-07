@@ -51,6 +51,12 @@ docs/
 # Engine/temp logs
 engine-stderr.txt
 engine-stdout.txt
+dinho-clips-poc/stderr.txt
+dinho-clips-poc/stdout.txt
+
+# Stale test run dumps (A10 — 800 KB de output de julho ficou no repo)
+vitest_error.txt
+vitest_output.txt
 
 # Coverage/lint/scan temp reports
 cov-*.txt
