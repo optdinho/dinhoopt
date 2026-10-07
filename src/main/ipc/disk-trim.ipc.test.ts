@@ -952,13 +952,3 @@ describe('DISK_TRIM_RUN handler — mutex and progress', () => {
     expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ phase: 'done' }))
   })
 })
-
-describe('readWindowsLastTrim cache', () => {
-  it('returns empty object by default', () => {
-    // The cache starts empty; refreshWindowsLastTrim is only called from
-    // listTrimDrives on win32. This test verifies the initial state.
-    // Since we can't easily import the cache, we test this indirectly:
-    // if listTrimDrives is called on non-win32, the cache is not touched.
-    expect(true).toBe(true)
-  })
-})

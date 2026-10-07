@@ -91,8 +91,7 @@ describe('ReadWriteLock', () => {
       readersExecuted++
       lock.releaseRead()
     })
-    await new Promise((r) => setTimeout(r, 50))
-    expect(readersExecuted).toBe(2)
+    await vi.waitFor(() => expect(readersExecuted).toBe(2))
     lock.releaseRead()
     await p2
     await p3
@@ -137,11 +136,19 @@ describe('ReadWriteLock', () => {
 
   it('allows readers after writers complete', async () => {
     const lock = new ReadWriteLock()
+    let readersExecuted = 0
     await lock.acquireWrite()
     lock.releaseWrite()
-    await lock.acquireRead()
-    expect(true).toBe(true)
-    lock.releaseRead()
+    const p1 = lock.acquireRead().then(() => {
+      readersExecuted++
+      lock.releaseRead()
+    })
+    const p2 = lock.acquireRead().then(() => {
+      readersExecuted++
+      lock.releaseRead()
+    })
+    await Promise.all([p1, p2])
+    expect(readersExecuted).toBe(2)
   })
 
   it('does not starve writers when readers keep coming', async () => {

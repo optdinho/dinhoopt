@@ -21,7 +21,6 @@ vi.mock('../services/logger.service', () => ({
 }))
 
 import {
-  cancelBenchmark,
   classifyScore,
   registerBenchmarkIpc,
   scoreCpu,
@@ -282,7 +281,8 @@ describe('registerBenchmarkIpc', () => {
       const promise = handler()
       await vi.advanceTimersByTimeAsync(500)
 
-      cancelBenchmark()
+      // O handler de cancelar tem de cancelar o run em curso (flag → medida)
+      getHandler('benchmark:cancel')()
       await vi.advanceTimersByTimeAsync(30000)
 
       const result = (await promise) as { details: Record<string, unknown> }
@@ -292,11 +292,11 @@ describe('registerBenchmarkIpc', () => {
   })
 
   describe('BENCHMARK_CANCEL handler', () => {
-    it('sets cancelled flag', () => {
+    it('sets cancelled flag via the registered handler', () => {
       registerBenchmarkIpc(() => null)
       const handler = getHandler('benchmark:cancel')
       handler()
-      expect(true).toBe(true)
+      expect(mocks.logger.info).toHaveBeenCalledWith('benchmark', 'Benchmark cancelled by user')
     })
   })
 })

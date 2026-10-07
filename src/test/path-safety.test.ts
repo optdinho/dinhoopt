@@ -48,12 +48,18 @@ describe('getMalwareScanDirs', () => {
     expect(dirs).toContain('C:\\Users\\ScanUser\\AppData\\LocalLow')
   })
 
-  it('throws when userProfile is empty string and USERPROFILE not set', async () => {
+  it('falls back to the OS homedir when userProfile is empty and USERPROFILE is unset', async () => {
     const originalProfile = process.env.USERPROFILE
     delete process.env.USERPROFILE
-    const { getMalwareScanDirs } = await import('../main/platform/win32/paths')
-    expect(() => getMalwareScanDirs('')).not.toThrow()
-    process.env.USERPROFILE = originalProfile
+    try {
+      const { getMalwareScanDirs } = await import('../main/platform/win32/paths')
+      const path = await import('node:path')
+      const { homedir } = await import('node:os')
+      const dirs = getMalwareScanDirs('')
+      expect(dirs).toContain(path.win32.join(homedir(), 'AppData', 'LocalLow'))
+    } finally {
+      process.env.USERPROFILE = originalProfile
+    }
   })
 })
 

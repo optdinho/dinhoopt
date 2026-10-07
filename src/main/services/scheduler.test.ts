@@ -15,6 +15,14 @@ const mockLogInfo = vi.fn()
 const mockUpdateScheduleEntry = vi.fn()
 let mockSettings: DiNhoSettings
 
+const mocks = vi.hoisted(() => ({
+  // biome-ignore lint/complexity/useArrowFunction: construtível com `new Notification(...)`
+  notificationCtor: vi.fn(function () {
+    return { show: vi.fn() }
+  }),
+  notificationSupported: vi.fn(() => false),
+}))
+
 vi.mock('./logger.service', () => ({
   getLogger: () => ({
     info: (...args: unknown[]) => mockLogInfo(...args),
@@ -31,18 +39,12 @@ vi.mock('../i18n', () => ({
 }))
 
 vi.mock('electron', () => {
-  const sendMock = vi.fn()
   const MockBrowserWindow = vi.fn(() => ({
     isDestroyed: vi.fn(() => false),
-    webContents: { send: sendMock },
+    webContents: { send: vi.fn() },
   }))
-  // biome-ignore lint/complexity/useArrowFunction: vitest 4.x requires function() for constructor mocks
-  const MockNotification = vi.fn(function () {
-    return { show: vi.fn() }
-  })
-  Object.assign(MockNotification, { isSupported: vi.fn(() => false) })
   return {
-    Notification: MockNotification,
+    Notification: Object.assign(mocks.notificationCtor, { isSupported: mocks.notificationSupported }),
     BrowserWindow: MockBrowserWindow,
   }
 })
@@ -234,31 +236,47 @@ describe('notifyScheduledScanComplete', () => {
   beforeEach(() => {
     mockSettings = makeSettings()
     mockSettings.showNotificationOnComplete = true
+    mocks.notificationCtor.mockClear()
+    mocks.notificationSupported.mockReset()
+    mocks.notificationSupported.mockReturnValue(false)
   })
 
-  it('does not throw when called', () => {
-    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
+  it('returns early when Notification is unsupported (default mock)', () => {
+    notifyScheduledScanComplete(1024, 5)
+    expect(mocks.notificationCtor).not.toHaveBeenCalled()
   })
 
-  it('handles zero values', () => {
-    expect(() => notifyScheduledScanComplete(0, 0)).not.toThrow()
-  })
-
-  it('returns early when --daemon flag is present', () => {
+  it('returns early when the --daemon flag is present', () => {
+    mocks.notificationSupported.mockReturnValue(true)
     const originalArgv = process.argv
     process.argv = [...process.argv, '--daemon']
-    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
-    process.argv = originalArgv
-  })
-
-  it('returns early when Notification is not supported (default mock)', () => {
-    // Default mock already has isSupported returning false
-    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
+    try {
+      notifyScheduledScanComplete(1024, 5)
+      expect(mocks.notificationCtor).not.toHaveBeenCalled()
+    } finally {
+      process.argv = originalArgv
+    }
   })
 
   it('returns early when showNotificationOnComplete is false', () => {
+    mocks.notificationSupported.mockReturnValue(true)
     mockSettings.showNotificationOnComplete = false
-    expect(() => notifyScheduledScanComplete(1024, 5)).not.toThrow()
+    notifyScheduledScanComplete(1024, 5)
+    expect(mocks.notificationCtor).not.toHaveBeenCalled()
+  })
+
+  it('shows a Notification when supported and enabled', () => {
+    mocks.notificationSupported.mockReturnValue(true)
+    notifyScheduledScanComplete(2 * 1024 * 1024, 3)
+    expect(mocks.notificationCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'scanCompleteNotificationTitle', silent: false }),
+    )
+  })
+
+  it('shows a Notification even with zero values', () => {
+    mocks.notificationSupported.mockReturnValue(true)
+    notifyScheduledScanComplete(0, 0)
+    expect(mocks.notificationCtor).toHaveBeenCalledWith(expect.objectContaining({ silent: false }))
   })
 })
 

@@ -22,6 +22,13 @@ vi.mock('../services/registry-cleaner.service', () => ({
   collectBackupTargets: (...args: unknown[]) => mockCollectBackupTargets(...args),
 }))
 
+const mockListRegistryBackups = vi.fn()
+const mockRestoreRegistryBackup = vi.fn()
+vi.mock('../services/registry-cleaner/restore', () => ({
+  listRegistryBackups: (...args: unknown[]) => mockListRegistryBackups(...args),
+  restoreRegistryBackup: (...args: unknown[]) => mockRestoreRegistryBackup(...args),
+}))
+
 const mockValidateStringArray = vi.fn()
 vi.mock('../services/ipc-validation', () => ({
   validateStringArray: (...args: unknown[]) => mockValidateStringArray(...args),
@@ -86,15 +93,17 @@ describe('registerRegistryCleanerIpc', () => {
     mockGetSettings.mockReturnValue({ registryIgnoredTweaks: [] })
   })
 
-  it('registers all five IPC handlers', () => {
+  it('registers all seven IPC handlers', () => {
     registerRegistryCleanerIpc(() => mockWindow() as never)
     const channels = mockHandle.mock.calls.map((c) => c[0])
-    expect(channels).toHaveLength(5)
+    expect(channels).toHaveLength(7)
     expect(channels).toContain(IPC.REGISTRY_SCAN)
     expect(channels).toContain(IPC.REGISTRY_FIX)
     expect(channels).toContain(IPC.REGISTRY_SET_TWEAK_IGNORED)
     expect(channels).toContain(IPC.REGISTRY_SCAN_CANCEL)
     expect(channels).toContain(IPC.REGISTRY_FIX_CANCEL)
+    expect(channels).toContain(IPC.REGISTRY_RESTORE_LIST)
+    expect(channels).toContain(IPC.REGISTRY_RESTORE)
   })
 })
 
@@ -223,7 +232,7 @@ describe('IPC.REGISTRY_FIX', () => {
       registerRegistryCleanerIpc(() => mockWindow() as never)
       const handler = getHandler(IPC.REGISTRY_FIX)
       const result = await handler({}, ['any-id'])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false })
     } finally {
       if (origDescriptor) {
         Object.defineProperty(process, 'platform', origDescriptor)
@@ -236,7 +245,7 @@ describe('IPC.REGISTRY_FIX', () => {
     registerRegistryCleanerIpc(() => mockWindow() as never)
     const handler = getHandler(IPC.REGISTRY_FIX)
     const result = await handler({}, ['invalid'])
-    expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
+    expect(result).toEqual({ fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false })
     expect(mockLogger.warning).toHaveBeenCalledWith('registry-cleaner', 'Fix called with invalid entry IDs')
   })
 
@@ -294,6 +303,7 @@ describe('IPC.REGISTRY_FIX', () => {
       fixed: 0,
       failed: 0,
       failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+      fixedByType: {},
       backupFailed: false,
     })
     expect(mockLogger.info).toHaveBeenCalledWith('registry-cleaner', 'Registry fix cancelled')
@@ -405,7 +415,12 @@ describe('IPC.REGISTRY_FIX', () => {
     )
 
     const fixHandler = getHandler(IPC.REGISTRY_FIX)
-    await fixHandler({}, ['null-win'])
+    const result = await fixHandler({}, ['null-win'])
+
+    // Getter null ≠ sender inválido: o fix corre na mesma (o progresso é que
+    // não tem janela para onde ir) e o resultado é devolvido intacto.
+    expect(mockFixRegistryEntries).toHaveBeenCalled()
+    expect(result).toEqual({ fixed: 1, failed: 0, failures: [] })
   })
 })
 
@@ -511,6 +526,7 @@ describe('IPC.REGISTRY_FIX_CANCEL', () => {
       fixed: 0,
       failed: 0,
       failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+      fixedByType: {},
       backupFailed: false,
     })
   })

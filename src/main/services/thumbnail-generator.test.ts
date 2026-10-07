@@ -303,10 +303,12 @@ describe('thumbnail-generator', () => {
       await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
       expect(execFileMock).toHaveBeenCalledTimes(2)
 
-      await new Promise((resolve) => setTimeout(resolve, 80))
-
-      await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
-      expect(execFileMock).toHaveBeenCalledTimes(4)
+      // O TTL (50 ms) é baseado em relógio real: o waitFor re-tenta a geração
+      // até a janela expirar, altura em que a segunda tentativa corre o retry.
+      await vi.waitFor(async () => {
+        await expect(generateThumbnail('C:\\DiNhoClips', 'test.mp4')).resolves.toBeNull()
+        expect(execFileMock).toHaveBeenCalledTimes(4)
+      })
     })
 
     it('still copies the engine thumb within the retry window', async () => {

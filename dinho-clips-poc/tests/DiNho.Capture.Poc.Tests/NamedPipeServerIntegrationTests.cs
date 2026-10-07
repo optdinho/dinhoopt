@@ -53,7 +53,7 @@ public sealed class NamedPipeServerIntegrationTests
         catch (OperationCanceledException) { return null; }
     }
 
-    [RequiresAdminFact]
+    [Fact]
     public void SecondClient_Connects_WhileFirstClientHoldsThePipe()
     {
         var pipeName = NewPipeName();
@@ -82,7 +82,7 @@ public sealed class NamedPipeServerIntegrationTests
         finally { server.Stop(); }
     }
 
-    [RequiresAdminFact]
+    [Fact]
     public void RawBroadcast_ReachesEveryConnectedClient()
     {
         var pipeName = NewPipeName();
@@ -156,7 +156,7 @@ public sealed class NamedPipeServerIntegrationTests
         return null;
     }
 
-    [RequiresAdminFact]
+    [Fact]
     public void LongRunningResult_GoesOnlyToTheRequestingClient()
     {
         var pipeName = NewPipeName();

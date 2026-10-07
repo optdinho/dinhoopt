@@ -1105,14 +1105,19 @@ describe('connectPipe event handlers', () => {
     // Engine never started — engineRunning = false
     // Trigger close event on socket (simulates pipe close after connectPipe was called)
     // Since engineRunning is false, scheduleReconnect should NOT call connectPipe again
-    const before = vi.mocked(connect).mock.calls.length
-    for (const h of closeHandlers) h()
+    vi.useFakeTimers()
+    try {
+      const before = vi.mocked(connect).mock.calls.length
+      for (const h of closeHandlers) h()
 
-    // Wait for the reconnect delay (3s) + some buffer
-    await new Promise((r) => setTimeout(r, 3500))
+      // Para lá do delay de reconnect (3 s) nada deve voltar a ligar-se
+      await vi.advanceTimersByTimeAsync(4000)
 
-    // No new connect call should have been made since engineRunning is false
-    expect(vi.mocked(connect).mock.calls.length).toBe(before)
+      // No new connect call should have been made since engineRunning is false
+      expect(vi.mocked(connect).mock.calls.length).toBe(before)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('calls syncConfigOnConnect on connect event', async () => {
@@ -1550,9 +1555,8 @@ describe('stopEngineProcess', () => {
     await startEngine()
 
     stopEngineProcess()
-    // Should have tried to send stopEngine (fire-and-forget)
-    // Since pipeConnected is true, it tries sendPipeCommand
-    // The catch handler swallows the error since no response resolves
+
+    expect(writeCount('stopEngine')).toBeGreaterThan(0)
   })
 
   it('ignores pipe errors during shutdown', async () => {

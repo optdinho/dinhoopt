@@ -339,7 +339,7 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(IPC.BENCHMARK_CANCEL, () => {
     getLogger().info('benchmark', 'Benchmark cancelled by user')
-    _benchmarkCancelled = true
+    cancelBenchmark()
   })
 }
 

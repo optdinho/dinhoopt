@@ -222,6 +222,21 @@ describe('registerPerfMonitorIpc', () => {
     })
 
     it('does not start monitoring on show when webContents is destroyed', () => {
+      const mockStart = vi.fn()
+      const MockService = mocks.perfMonitorService
+      // biome-ignore lint/complexity/useArrowFunction: called with `new`
+      MockService.mockImplementation(function () {
+        return {
+          getSystemInfo: vi.fn(),
+          startMonitoring: mockStart,
+          stopMonitoring: vi.fn(),
+          getProcessName: vi.fn(),
+          killProcess: vi.fn(),
+          getDiskHealth: vi.fn(),
+          startProcessPolling: vi.fn(),
+          stopProcessPolling: vi.fn(),
+        }
+      })
       const mockOn = vi.fn()
       const sender = { id: 1 }
       const win = { id: 1, on: mockOn, webContents: { isDestroyed: () => true } } as never
@@ -229,10 +244,14 @@ describe('registerPerfMonitorIpc', () => {
       const handler = getHandler('perf:start')
       handler({ sender } as any)
 
+      // Deve começar uma vez no próprio perf:start
+      expect(mockStart).toHaveBeenCalledTimes(1)
+
       const showHandler = mockOn.mock.calls.find((c: string[]) => c[0] === 'show')![1]
       showHandler()
-      // startMonitoring should not have been called by show handler
-      // (only by the original PERF_START call)
+
+      // webContents destruída → o show NÃO pode voltar a arrancar o monitoring
+      expect(mockStart).toHaveBeenCalledTimes(1)
     })
 
     it('does not stop on hide when rendererRequestedMonitoring is false', () => {

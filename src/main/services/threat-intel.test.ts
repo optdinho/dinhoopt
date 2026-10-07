@@ -409,11 +409,12 @@ describe('ThreatIntelService', () => {
   it('startAutoUpdate interval callback fires updateAllFeeds', async () => {
     vi.useFakeTimers()
     const svc = new ThreatIntelService()
-    vi.spyOn(svc, 'updateAllFeeds').mockResolvedValue([])
+    const spy = vi.spyOn(svc, 'updateAllFeeds').mockResolvedValue([])
     svc.startAutoUpdate()
     await vi.advanceTimersByTimeAsync(600000)
     svc.stopAutoUpdate()
     vi.useRealTimers()
+    expect(spy).toHaveBeenCalled()
   })
 
   it('updateAllFeeds handles non-Error thrown from feed parser', async () => {

@@ -220,9 +220,7 @@ describe('custom game process detection via public API', () => {
     startGameDetector({ onGameDetected: onDetected, onGameExited: onExited }, ['MyGame.exe'])
 
     // Wait for the immediate async poll to complete
-    await new Promise((resolve) => setTimeout(resolve, 200))
-
-    expect(onDetected).toHaveBeenCalledWith('mygame.exe')
+    await vi.waitFor(() => expect(onDetected).toHaveBeenCalledWith('mygame.exe'))
   })
 })
 
