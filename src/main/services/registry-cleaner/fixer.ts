@@ -14,6 +14,7 @@ export async function fixRegistryEntries(
   fixed: number
   failed: number
   failures: { issue: string; reason: string }[]
+  fixedByType: Record<string, number>
   backupFailed: boolean
 }> {
   const total = entries.length
@@ -21,6 +22,7 @@ export async function fixRegistryEntries(
   let fixed = 0
   let failed = 0
   let backupFailed = false
+  const fixedByType: Record<string, number> = {}
   const failures: { issue: string; reason: string }[] = []
 
   try {
@@ -98,6 +100,7 @@ export async function fixRegistryEntries(
           throw new Error(`Unknown fix operation: ${String(fix.op)}`)
       }
       fixed++
+      fixedByType[entry.type] = (fixedByType[entry.type] ?? 0) + 1
     } catch (err: unknown) {
       const e = err as { stderr?: string; message?: string }
       const stderr: string = (e?.stderr || e?.message) ?? 'Unknown error'
@@ -114,5 +117,5 @@ export async function fixRegistryEntries(
   }
 
   onProgress?.(total, total, 'Done')
-  return { fixed, failed, failures, backupFailed }
+  return { fixed, failed, failures, fixedByType, backupFailed }
 }

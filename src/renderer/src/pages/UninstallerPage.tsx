@@ -14,6 +14,7 @@ import logger from '@/lib/renderer-logger'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { UNUSED_THRESHOLD_DAYS, useUninstallerStore } from '@/stores/uninstaller-store'
+import { accumulateBatchTotals, type UninstallOutcome } from './uninstaller/batch-totals'
 
 import {
   SafeUninstallBanner,
@@ -152,17 +153,20 @@ export function UninstallerPage() {
     lastFailedProgramRef.current = null
     let successCount = 0
     let failCount = 0
-    let totalLeftoversCleaned = 0
-    let totalLeftoversSize = 0
+    const outcomes: UninstallOutcome[] = []
     for (const program of toUninstall) {
       try {
         const result = await window.dinho.uninstallerUninstall(program.id)
         const s = useUninstallerStore.getState()
+        outcomes.push({
+          success: result.success,
+          leftoversFound: result.leftoversFound,
+          leftoversCleaned: result.leftoversCleaned,
+          leftoversSize: result.leftoversSize,
+        })
         if (result.success) {
           successCount++
           s.removeProgram(program.id)
-          totalLeftoversCleaned += result.leftoversCleaned
-          totalLeftoversSize += result.leftoversSize
           if (result.leftoversCleaned > 0) {
             await addEntry({
               id: Date.now().toString(),
@@ -189,8 +193,10 @@ export function UninstallerPage() {
         }
       } catch {
         failCount++
+        outcomes.push({ success: false, leftoversFound: 0, leftoversCleaned: 0, leftoversSize: 0 })
       }
     }
+    const totals = accumulateBatchTotals(outcomes)
     const s = useUninstallerStore.getState()
     s.clearSelected()
     s.setProgress(null)
@@ -203,9 +209,9 @@ export function UninstallerPage() {
             ? t('batchResultProgramsPlural', { count: successCount })
             : t('batchResultProgramsSingular', { count: successCount }),
         exitCode: null,
-        leftoversFound: totalLeftoversCleaned,
-        leftoversCleaned: totalLeftoversCleaned,
-        leftoversSize: totalLeftoversSize,
+        leftoversFound: totals.leftoversFound,
+        leftoversCleaned: totals.leftoversCleaned,
+        leftoversSize: totals.leftoversSize,
       })
     } else {
       s.setUninstallResult({
@@ -216,9 +222,9 @@ export function UninstallerPage() {
             : t('batchResultProgramsSingular', { count: successCount + failCount }),
         exitCode: null,
         error: t('batchResultFailedSucceeded', { failed: failCount, succeeded: successCount }),
-        leftoversFound: totalLeftoversCleaned,
-        leftoversCleaned: totalLeftoversCleaned,
-        leftoversSize: totalLeftoversSize,
+        leftoversFound: totals.leftoversFound,
+        leftoversCleaned: totals.leftoversCleaned,
+        leftoversSize: totals.leftoversSize,
       })
     }
     if (successCount > 0) recomputeStats()

@@ -27,7 +27,6 @@ const mocks = vi.hoisted(() => {
     registerVulnerabilityScannerIpc: vi.fn(),
     registerPrivacyShieldIpc: vi.fn(),
     registerDriverManagerIpc: vi.fn(),
-    registerDriverAgentIpc: vi.fn(),
     registerPerfMonitorIpc: vi.fn(),
     registerProgramUninstallerIpc: vi.fn(),
     registerServiceManagerIpc: vi.fn(),
@@ -268,9 +267,6 @@ vi.mock('./privacy-shield.ipc', () => ({
 vi.mock('./driver-manager.ipc', () => ({
   registerDriverManagerIpc: (...a: unknown[]) => mocks.registerFns.registerDriverManagerIpc(...a),
 }))
-vi.mock('./driver-agent.ipc', () => ({
-  registerDriverAgentIpc: (...a: unknown[]) => mocks.registerFns.registerDriverAgentIpc(...a),
-}))
 vi.mock('./perf-monitor.ipc', () => ({
   registerPerfMonitorIpc: (...a: unknown[]) => mocks.registerFns.registerPerfMonitorIpc(...a),
 }))
@@ -378,7 +374,6 @@ describe('registerCleanerIpc', () => {
       'registerVulnerabilityScannerIpc',
       'registerPrivacyShieldIpc',
       'registerDriverManagerIpc',
-      'registerDriverAgentIpc',
       'registerPerfMonitorIpc',
       'registerProgramUninstallerIpc',
       'registerServiceManagerIpc',

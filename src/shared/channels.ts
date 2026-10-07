@@ -46,6 +46,8 @@ export const IPC = {
   REGISTRY_SCAN_CANCEL: 'cleaner:registry:scan:cancel',
   REGISTRY_FIX_CANCEL: 'cleaner:registry:fix:cancel',
   REGISTRY_SET_TWEAK_IGNORED: 'cleaner:registry:tweak:set-ignored',
+  REGISTRY_RESTORE_LIST: 'cleaner:registry:restore:list',
+  REGISTRY_RESTORE: 'cleaner:registry:restore',
 
   // Context Menu Cleaner (Windows shell extensions / right-click verbs)
   CONTEXT_MENU_SCAN: 'cleaner:context-menu:scan',
@@ -332,10 +334,6 @@ export const IPC = {
   HOSTS_READ: 'hosts:read',
   HOSTS_WRITE: 'hosts:write',
   HOSTS_FLUSH_DNS: 'hosts:flush-dns',
-
-  // Driver Agent Evaluation
-  DRIVER_AGENT_EVALUATE: 'driver:agent:evaluate',
-  DRIVER_AGENT_APPROVE: 'driver:agent:approve',
 
   // Custom YARA rules
   MALWARE_CUSTOM_RULES_LIST: 'malware:custom-rules-list',

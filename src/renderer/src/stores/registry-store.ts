@@ -6,6 +6,7 @@ interface FixResult {
   fixed: number
   failed: number
   failures: { issue: string; reason: string }[]
+  fixedByType?: Record<string, number>
   backupFailed?: boolean
 }
 

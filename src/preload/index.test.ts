@@ -371,14 +371,7 @@ describe('preload API bridge', () => {
   })
 
   describe('drivers', () => {
-    for (const m of [
-      'driverScan',
-      'driverClean',
-      'driverUpdateScan',
-      'driverUpdateInstall',
-      'driverAgentEvaluate',
-      'driverAgentApprove',
-    ]) {
+    for (const m of ['driverScan', 'driverClean', 'driverUpdateScan', 'driverUpdateInstall']) {
       it(`${m} calls invoke`, async () => {
         mockIpc.invoke.mockResolvedValueOnce(null)
         await (api[m] as (...a: unknown[]) => Promise<unknown>)([])

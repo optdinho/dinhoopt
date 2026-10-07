@@ -49,8 +49,15 @@ export async function deleteStartupItem(
       try {
         await execNativeUtf8('reg', ['delete', location, '/v', name, '/f'], { timeout: 10000 })
         deletedSource = true
-      } catch {
-        deletedSource = true
+      } catch (err: unknown) {
+        const e = err as { code?: number; stderr?: string }
+        const msg = `${e.stderr ?? ''}`.trim()
+        const notFound =
+          e.code === 2 ||
+          /cannot find|unable to find|not found|não encontrad|não foi encontrad|no se encuentr|nicht gefunden|introuvable|non trovato/i.test(
+            msg,
+          )
+        deletedSource = notFound
       }
       const approvedKey =
         source === 'registry-hkcu'

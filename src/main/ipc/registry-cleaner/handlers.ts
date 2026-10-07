@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/channels'
 import { applyIgnoredTweaks } from '@shared/registry-tweaks'
-import type { RegistryEntry } from '@shared/types'
+import type { RegistryBackupInfo, RegistryEntry } from '@shared/types'
 import { ipcMain } from 'electron'
 import { logAudit } from '../../services/audit-log'
 import { validateStringArray } from '../../services/ipc-validation'
 import { getLogger } from '../../services/logger.service'
+import { listRegistryBackups, restoreRegistryBackup } from '../../services/registry-cleaner/restore'
 import { collectBackupTargets, fixRegistryEntries, scanRegistry } from '../../services/registry-cleaner.service'
 import { getSettings, updateRegistryIgnoredTweaks } from '../../services/settings-store'
 import type { WindowGetter } from '../index'
@@ -64,15 +65,23 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
       fixed: number
       failed: number
       failures: { issue: string; reason: string }[]
+      fixedByType: Record<string, number>
       backupFailed: boolean
     }> => {
       if (!validateSender(event, getWindow()))
-        return { fixed: 0, failed: 0, failures: [{ issue: 'Invalid sender', reason: '' }], backupFailed: false }
-      if (process.platform !== 'win32') return { fixed: 0, failed: 0, failures: [], backupFailed: false }
+        return {
+          fixed: 0,
+          failed: 0,
+          failures: [{ issue: 'Invalid sender', reason: '' }],
+          fixedByType: {},
+          backupFailed: false,
+        }
+      if (process.platform !== 'win32')
+        return { fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false }
       const valid = validateStringArray(entryIds)
       if (!valid) {
         getLogger().warning('registry-cleaner', 'Fix called with invalid entry IDs')
-        return { fixed: 0, failed: 0, failures: [], backupFailed: false }
+        return { fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false }
       }
 
       getLogger().info('registry-cleaner', `Fixing ${valid.length} registry issue(s)...`)
@@ -122,6 +131,7 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
             fixed: 0,
             failed: 0,
             failures: [{ issue: 'Cancelled', reason: 'Operation was cancelled by user' }],
+            fixedByType: {},
             backupFailed: false,
           }
         }
@@ -132,6 +142,36 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
         throw err
       } finally {
         if (state.fixAbort?.signal === signal) state.fixAbort = null
+      }
+    },
+  )
+
+  ipcMain.handle(IPC.REGISTRY_RESTORE_LIST, (): RegistryBackupInfo[] => {
+    if (process.platform !== 'win32') return []
+    return listRegistryBackups()
+  })
+
+  ipcMain.handle(
+    IPC.REGISTRY_RESTORE,
+    async (event, backupName: string): Promise<{ ok: boolean; message?: string }> => {
+      if (!validateSender(event, getWindow())) return { ok: false, message: 'Invalid sender' }
+      if (process.platform !== 'win32') return { ok: false, message: 'Not Windows' }
+      const valid = typeof backupName === 'string' && backupName.length > 0 && backupName.length <= 300
+      if (!valid) {
+        getLogger().warning('registry-restore', 'Restore called with an invalid backup name')
+        return { ok: false, message: 'Invalid backup name' }
+      }
+      try {
+        const result = await restoreRegistryBackup(backupName)
+        logAudit('REGISTRY_RESTORE', 'registry', {
+          backup: backupName,
+          ok: result.ok,
+        })
+        return result
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        getLogger().error('registry-restore', `Restore failed: ${message}`)
+        throw err
       }
     },
   )

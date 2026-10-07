@@ -1,11 +1,16 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ──
 const mockHandle = vi.fn()
 const mockSend = vi.fn()
+const tweaksSnapshotTmp = mkdtempSync(join(tmpdir(), 'tweaks-snapshot-ipc-'))
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
   ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },
+  app: { getPath: () => tweaksSnapshotTmp },
 }))
 
 const mockExecFile = vi.fn()
@@ -41,7 +46,12 @@ vi.mock('../platform', () => ({
   }),
 }))
 
+vi.mock('../services/hwid', () => ({
+  getHwidSync: (): string => 'machine-1',
+}))
+
 import type { WindowsTweakCategory } from '@shared/types'
+import { saveSnapshotEntry } from '../services/windows-tweaks/snapshot-store'
 import {
   DNS_PRESETS,
   getCatalog,
@@ -287,6 +297,10 @@ function stubExecFile(result: unknown, error?: Error) {
       callback(error ?? null, result)
     }
   })
+}
+
+function resetTweaksSnapshot(): void {
+  rmSync(join(tweaksSnapshotTmp, 'tweaks-snapshot.json'), { force: true })
 }
 
 // ── IPC registration ──
@@ -569,6 +583,7 @@ describe('checkInterfaceTweakApplied returns true', () => {
 describe('WINDOWS_TWEAKS_APPLY handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetTweaksSnapshot()
   })
 
   it('returns succeeded count for valid tweaks', async () => {
@@ -868,6 +883,87 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
 describe('WINDOWS_TWEAKS_REVERT handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetTweaksSnapshot()
+  })
+
+  it('restores the snapshot value for a tweak when one exists', async () => {
+    saveSnapshotEntry('mouse-speed', { exists: true, data: '0', regType: 'REG_SZ' })
+    const calls: string[][] = []
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      calls.push(args[1] as string[])
+      callback(null, { stdout: '' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:revert')
+
+    const result = (await handler({}, ['mouse-speed'])) as { succeeded: number }
+    expect(result.succeeded).toBe(1)
+    expect(calls).toContainEqual([
+      'add',
+      'HKCU\\Control Panel\\Mouse',
+      '/v',
+      'MouseSpeed',
+      '/t',
+      'REG_SZ',
+      '/d',
+      '0',
+      '/f',
+    ])
+  })
+
+  it('deletes the value when the snapshot says it did not exist', async () => {
+    saveSnapshotEntry('mouse-speed', { exists: false })
+    const calls: string[][] = []
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      calls.push(args[1] as string[])
+      callback(null, { stdout: '' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:revert')
+
+    const result = (await handler({}, ['mouse-speed'])) as { succeeded: number }
+    expect(result.succeeded).toBe(1)
+    expect(calls).toContainEqual(['delete', 'HKCU\\Control Panel\\Mouse', '/v', 'MouseSpeed', '/f'])
+  })
+
+  it('tolerates a not-found error while deleting a snapshot-absent value', async () => {
+    saveSnapshotEntry('mouse-speed', { exists: false })
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      callback(new Error('reg.exe: The system cannot find the file specified.'), { stdout: '' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:revert')
+
+    const result = (await handler({}, ['mouse-speed'])) as { succeeded: number }
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('falls back to the factory default when there is no snapshot', async () => {
+    const calls: string[][] = []
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      calls.push(args[1] as string[])
+      callback(null, { stdout: '' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:revert')
+
+    const result = (await handler({}, ['mouse-speed'])) as { succeeded: number }
+    expect(result.succeeded).toBe(1)
+    expect(calls).toContainEqual([
+      'add',
+      'HKCU\\Control Panel\\Mouse',
+      '/v',
+      'MouseSpeed',
+      '/t',
+      'REG_SZ',
+      '/d',
+      '1',
+      '/f',
+    ])
   })
 
   it('reverts selected tweaks', async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useHostsEditorStore } from './hosts-editor-store'
 
 function makeEntry(
@@ -98,6 +98,34 @@ describe('hosts-editor-store', () => {
     const s = useHostsEditorStore.getState()
     expect(s.entries[0]!.hostname).toBe('original.local')
     expect(s.headerComment).toBe('# orig')
+  })
+
+  it('revertFromDisk writes the originals to disk and resets the editor on success', async () => {
+    useHostsEditorStore.getState().setOriginal([makeEntry({ id: '1', hostname: 'original.local' })], '# orig')
+    useHostsEditorStore.getState().setEntries([makeEntry({ id: '2', hostname: 'modified.local' })])
+    useHostsEditorStore.getState().setHeaderComment('# modified')
+    const writer = vi.fn().mockResolvedValue({ success: true })
+    const result = await useHostsEditorStore.getState().revertFromDisk(writer)
+    expect(result).toEqual({ success: true })
+    expect(writer).toHaveBeenCalledWith({
+      headerComment: '# orig',
+      entries: [makeEntry({ id: '1', hostname: 'original.local' })],
+    })
+    const s = useHostsEditorStore.getState()
+    expect(s.entries[0]!.hostname).toBe('original.local')
+    expect(s.headerComment).toBe('# orig')
+  })
+
+  it('revertFromDisk does not reset the editor when the write fails', async () => {
+    useHostsEditorStore.getState().setOriginal([makeEntry({ id: '1', hostname: 'original.local' })], '# orig')
+    useHostsEditorStore.getState().setEntries([makeEntry({ id: '2', hostname: 'modified.local' })])
+    useHostsEditorStore.getState().setHeaderComment('# modified')
+    const writer = vi.fn().mockResolvedValue({ success: false, error: 'Access denied' })
+    const result = await useHostsEditorStore.getState().revertFromDisk(writer)
+    expect(result).toEqual({ success: false, error: 'Access denied' })
+    const s = useHostsEditorStore.getState()
+    expect(s.entries[0]!.hostname).toBe('modified.local')
+    expect(s.headerComment).toBe('# modified')
   })
 
   it('toggleEntry toggles enabled state', () => {

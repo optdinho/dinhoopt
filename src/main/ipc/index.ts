@@ -38,7 +38,6 @@ import { registerDatabaseOptimizerIpc } from './database-optimizer.ipc'
 import { registerDebloaterIpc } from './debloater.ipc'
 import { registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
 import { registerDiskTrimIpc } from './disk-trim.ipc'
-import { registerDriverAgentIpc } from './driver-agent.ipc'
 import { registerDriverManagerIpc } from './driver-manager.ipc'
 import { registerDuplicateFinderIpc } from './duplicate-finder.ipc'
 import { registerEmptyFolderCleanerIpc } from './empty-folder-cleaner.ipc'
@@ -102,7 +101,6 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerVulnerabilityScannerIpc(getWindow)
   registerPrivacyShieldIpc(getWindow)
   registerDriverManagerIpc(getWindow)
-  registerDriverAgentIpc(getWindow)
   registerPerfMonitorIpc(getWindow)
   registerProgramUninstallerIpc(getWindow)
   registerServiceManagerIpc(getWindow)

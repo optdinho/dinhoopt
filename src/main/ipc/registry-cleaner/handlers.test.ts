@@ -25,6 +25,8 @@ const {
   mockGetSettings,
   mockUpdateRegistryIgnoredTweaks,
   mockApplyIgnoredTweaks,
+  mockListRegistryBackups,
+  mockRestoreRegistryBackup,
 } = vi.hoisted(() => {
   const loggerInstance = {
     info: vi.fn(),
@@ -42,6 +44,8 @@ const {
     mockGetSettings: vi.fn(),
     mockUpdateRegistryIgnoredTweaks: vi.fn(),
     mockApplyIgnoredTweaks: vi.fn(),
+    mockListRegistryBackups: vi.fn(),
+    mockRestoreRegistryBackup: vi.fn(),
   }
 })
 
@@ -67,6 +71,11 @@ vi.mock('../../services/registry-cleaner.service', () => ({
   scanRegistry: (...args: unknown[]) => mockScanRegistry(...args),
   fixRegistryEntries: (...args: unknown[]) => mockFixRegistryEntries(...args),
   collectBackupTargets: (...args: unknown[]) => mockCollectBackupTargets(...args),
+}))
+
+vi.mock('../../services/registry-cleaner/restore', () => ({
+  listRegistryBackups: (...args: unknown[]) => mockListRegistryBackups(...args),
+  restoreRegistryBackup: (...args: unknown[]) => mockRestoreRegistryBackup(...args),
 }))
 
 vi.mock('../../services/settings-store', () => ({
@@ -233,7 +242,7 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
         failures: { issue: string; reason: string }[]
         backupFailed: boolean
       }>('cleaner:registry:fix', ['id1'])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false })
     })
 
     it('returns zeros when validation fails', async () => {
@@ -244,7 +253,7 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
         failures: { issue: string; reason: string }[]
         backupFailed: boolean
       }>('cleaner:registry:fix', [123])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false })
     })
 
     it('fixes entries successfully', async () => {
@@ -320,7 +329,13 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
 
     it('returns empty results when entry IDs not found in any session', async () => {
       mockValidateStringArray.mockReturnValue(['nonexistent-id'])
-      mockFixRegistryEntries.mockResolvedValue({ fixed: 0, failed: 0, failures: [], backupFailed: false })
+      mockFixRegistryEntries.mockResolvedValue({
+        fixed: 0,
+        failed: 0,
+        failures: [],
+        fixedByType: {},
+        backupFailed: false,
+      })
 
       const result = await callHandler<{
         fixed: number
@@ -328,7 +343,7 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
         failures: { issue: string; reason: string }[]
         backupFailed: boolean
       }>('cleaner:registry:fix', ['nonexistent-id'])
-      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], backupFailed: false })
+      expect(result).toEqual({ fixed: 0, failed: 0, failures: [], fixedByType: {}, backupFailed: false })
       expect(mockFixRegistryEntries).toHaveBeenCalledWith([], expect.any(Function), expect.anything())
     })
 
@@ -565,6 +580,67 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
         failures: { issue: string; reason: string }[]
       }>('cleaner:registry:fix', ['test-entry-1'])
       expect(result.fixed).toBe(1)
+    })
+  })
+
+  describe('REGISTRY_RESTORE_LIST', () => {
+    it('returns the backup list on win32', async () => {
+      mockListRegistryBackups.mockReturnValue([
+        {
+          name: 'registry-backup-targeted-2026-10-06T10-00-00-000Z.reg',
+          timestamp: '2026-10-06T10-00-00-000Z',
+          kind: 'targeted',
+          size: 10,
+        },
+      ])
+      const result = await callHandler<unknown[]>('cleaner:registry:restore:list')
+      expect(result).toHaveLength(1)
+      expect(mockListRegistryBackups).toHaveBeenCalled()
+    })
+
+    it('returns empty on non-win32', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+      const result = await callHandler<unknown[]>('cleaner:registry:restore:list')
+      expect(result).toEqual([])
+      expect(mockListRegistryBackups).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('REGISTRY_RESTORE', () => {
+    it('restores a valid backup name', async () => {
+      mockRestoreRegistryBackup.mockResolvedValue({ ok: true })
+      const result = await callHandler<{ ok: boolean; message?: string }>(
+        'cleaner:registry:restore',
+        'registry-backup-targeted-2026-10-06T10-00-00-000Z.reg',
+      )
+      expect(result).toEqual({ ok: true })
+      expect(mockRestoreRegistryBackup).toHaveBeenCalledWith('registry-backup-targeted-2026-10-06T10-00-00-000Z.reg')
+    })
+
+    it('propagates ok:false with message from the service', async () => {
+      mockRestoreRegistryBackup.mockResolvedValue({ ok: false, message: 'Access is denied.' })
+      const result = await callHandler<{ ok: boolean; message?: string }>('cleaner:registry:restore', 'x.reg')
+      expect(result).toEqual({ ok: false, message: 'Access is denied.' })
+    })
+
+    it('rejects invalid backup names without calling the service', async () => {
+      const result = await callHandler<{ ok: boolean; message?: string }>('cleaner:registry:restore', 123)
+      expect(result.ok).toBe(false)
+      expect(mockRestoreRegistryBackup).not.toHaveBeenCalled()
+      expect(loggerInstance.warning).toHaveBeenCalledWith('registry-restore', expect.stringContaining('invalid'))
+    })
+
+    it('returns ok:false on non-win32', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+      const result = await callHandler<{ ok: boolean; message?: string }>('cleaner:registry:restore', 'x.reg')
+      expect(result.ok).toBe(false)
+      expect(mockRestoreRegistryBackup).not.toHaveBeenCalled()
+    })
+
+    it('rethrows unexpected service errors', async () => {
+      mockRestoreRegistryBackup.mockRejectedValue(new Error('boom'))
+      await expect(callHandler('cleaner:registry:restore', 'x.reg')).rejects.toThrow('boom')
+      expect(loggerInstance.error).toHaveBeenCalledWith('registry-restore', expect.stringContaining('boom'))
     })
   })
 

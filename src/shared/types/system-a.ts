@@ -28,6 +28,15 @@ export interface RegistryEntry {
   fix?: RegistryFixAction
 }
 
+export type RegistryBackupKind = 'targeted' | 'full' | 'hive' | 'shell' | 'tasks'
+
+export interface RegistryBackupInfo {
+  name: string
+  timestamp: string
+  kind: RegistryBackupKind
+  size: number
+}
+
 // ─── Startup ───────────────────────────────────────────────────
 export interface StartupItem {
   id: string

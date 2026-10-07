@@ -1,5 +1,4 @@
 import { IPC, RENDERER_LOG } from '@shared/channels'
-import type { AgentEvaluationResult } from '@shared/driver-agent-types'
 import type {
   AppInstallerListResult,
   AppInstallProgress,
@@ -84,6 +83,7 @@ import type {
   PrivacyShieldState,
   QuarantinedItem,
   QuarantineMeta,
+  RegistryBackupInfo,
   RegistryEntry,
   ScanHistoryEntry,
   ServiceApplyResult,
@@ -141,12 +141,16 @@ export const systemMethods = {
     fixed: number
     failed: number
     failures: { issue: string; reason: string }[]
+    fixedByType: Record<string, number>
     backupFailed: boolean
   }> => ipcRenderer.invoke(IPC.REGISTRY_FIX, entryIds),
   registryScanCancel: (): Promise<void> => ipcRenderer.invoke(IPC.REGISTRY_SCAN_CANCEL),
   registryFixCancel: (): Promise<void> => ipcRenderer.invoke(IPC.REGISTRY_FIX_CANCEL),
   registrySetTweakIgnored: (signatures: string[], ignored: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC.REGISTRY_SET_TWEAK_IGNORED, signatures, ignored),
+  registryRestoreList: (): Promise<RegistryBackupInfo[]> => ipcRenderer.invoke(IPC.REGISTRY_RESTORE_LIST),
+  registryRestore: (backupName: string): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IPC.REGISTRY_RESTORE, backupName),
   onRegistryFixProgress: (callback: (data: { current: number; total: number; currentEntry: string }) => void) =>
     onEvent(IPC.REGISTRY_FIX_PROGRESS, callback),
 
@@ -273,10 +277,6 @@ export const systemMethods = {
     ipcRenderer.invoke(IPC.DRIVER_UPDATE_INSTALL, updateIds),
   onDriverUpdateProgress: (callback: (data: DriverUpdateProgress) => void) =>
     onEvent(IPC.DRIVER_UPDATE_PROGRESS, callback),
-
-  driverAgentEvaluate: (): Promise<AgentEvaluationResult> => ipcRenderer.invoke(IPC.DRIVER_AGENT_EVALUATE),
-  driverAgentApprove: (updateIds: string[]): Promise<{ success: boolean; error?: string; rebootRequired?: boolean }> =>
-    ipcRenderer.invoke(IPC.DRIVER_AGENT_APPROVE, { updateIds }),
 
   perfQuickStats: (): Promise<PerfQuickStats> => ipcRenderer.invoke(IPC.PERF_QUICK_STATS),
   perfGetSystemInfo: (): Promise<PerfSystemInfo> => ipcRenderer.invoke(IPC.PERF_GET_SYSTEM_INFO),

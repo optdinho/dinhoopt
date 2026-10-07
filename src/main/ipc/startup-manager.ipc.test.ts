@@ -886,7 +886,11 @@ describe('deleteStartupItem', () => {
     it('succeeds even if reg delete fails (entry already gone)', async () => {
       mockExecFile.mockImplementation(
         (_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
-          cb(new Error('Access denied'), '', '')
+          const err = Object.assign(new Error('reg delete failed'), {
+            code: 2,
+            stderr: 'ERROR: The system cannot find the file specified.',
+          })
+          cb(err, '', '')
         },
       )
 

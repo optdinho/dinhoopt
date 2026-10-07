@@ -10,6 +10,7 @@ import { ipcMain } from 'electron'
 import { isAdmin } from '../../services/elevation'
 import { execFileAsync, psUtf8 } from '../../services/exec-utf8'
 import { getLogger } from '../../services/logger.service'
+import { getSnapshotEntry, saveSnapshotEntry } from '../../services/windows-tweaks/snapshot-store'
 import type { WindowGetter } from '../index'
 import { POWERCFG_SETTINGS, parsePowerCfgAcIndex } from './powercfg-settings'
 import { CONTEXT_MENU_TWEAKS, registerContextMenuTweaks } from './tweaks/context-menu'
@@ -178,6 +179,44 @@ function mapRegError(err: unknown, _tweak: WindowsTweakDef): string {
   return 'Falha ao escrever no registro.'
 }
 
+function regErrorText(err: unknown): string {
+  const e = err as { message?: string; stderr?: string }
+  return `${e?.message ?? ''} ${e?.stderr ?? ''}`
+}
+
+function isRegNotFound(err: unknown): boolean {
+  return /cannot find (the |the specified )?(path|file|registry|key|value)|unable to find|does not exist|not found/i.test(
+    regErrorText(err),
+  )
+}
+
+function parseRegValueOutput(stdoutRaw: string, key: string): { data: string; regType: 'REG_DWORD' | 'REG_SZ' } | null {
+  const lines = String(stdoutRaw)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  const dataLine = lines.find((l) => l.includes(key))
+  if (!dataLine) return null
+  const match = dataLine.match(REG_TYPE_RE)
+  if (!match) return null
+  const data = match[2]?.trim() ?? ''
+  const regType = match[1] === 'REG_DWORD' ? 'REG_DWORD' : 'REG_SZ'
+  return { data, regType }
+}
+
+async function captureSnapshotForKey(tweak: WindowsTweakDef, baseKey: 'HKLM' | 'HKCU'): Promise<void> {
+  try {
+    const { stdout } = await execFileAsync('reg.exe', ['query', `${baseKey}\\${tweak.path}`, '/v', tweak.key], {
+      timeout: 10000,
+      windowsHide: true,
+    })
+    const parsed = parseRegValueOutput(String(stdout), tweak.key)
+    if (parsed) saveSnapshotEntry(tweak.id, { exists: true, data: parsed.data, regType: parsed.regType })
+  } catch (err) {
+    if (isRegNotFound(err)) saveSnapshotEntry(tweak.id, { exists: false })
+  }
+}
+
 async function applyRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolean; reason?: string }> {
   try {
     if (tweakRequiresAdmin(tweak) && !isAdmin()) {
@@ -198,6 +237,10 @@ async function applyRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolean
     const baseKey = tweak.hive === 'HKEY_LOCAL_MACHINE' ? 'HKLM' : 'HKCU'
     const value = typeof tweak.optimizedValue === 'string' ? tweak.optimizedValue : String(tweak.optimizedValue)
     const type = tweak.kind === 'DWord' ? 'REG_DWORD' : 'REG_SZ'
+
+    if (tweak.id !== 'ntfs-last-access-off') {
+      await captureSnapshotForKey(tweak, baseKey)
+    }
 
     await execFileAsync(
       'reg.exe',
@@ -240,11 +283,47 @@ async function revertRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolea
     const value = typeof tweak.defaultValue === 'string' ? tweak.defaultValue : String(tweak.defaultValue)
     const type = tweak.kind === 'DWord' ? 'REG_DWORD' : 'REG_SZ'
 
-    await execFileAsync(
-      'reg.exe',
-      ['add', `${baseKey}\\${tweak.path}`, '/v', tweak.key, '/t', type, '/d', value, '/f'],
-      { timeout: 10000, windowsHide: true },
-    )
+    const snapshot = tweak.id === 'ntfs-last-access-off' ? undefined : getSnapshotEntry(tweak.id)
+    if (snapshot) {
+      if (snapshot.exists && snapshot.data !== undefined) {
+        await execFileAsync(
+          'reg.exe',
+          [
+            'add',
+            `${baseKey}\\${tweak.path}`,
+            '/v',
+            tweak.key,
+            '/t',
+            snapshot.regType ?? type,
+            '/d',
+            snapshot.data,
+            '/f',
+          ],
+          { timeout: 10000, windowsHide: true },
+        )
+      } else if (!snapshot.exists) {
+        try {
+          await execFileAsync('reg.exe', ['delete', `${baseKey}\\${tweak.path}`, '/v', tweak.key, '/f'], {
+            timeout: 10000,
+            windowsHide: true,
+          })
+        } catch (err) {
+          if (!isRegNotFound(err)) throw err
+        }
+      } else {
+        await execFileAsync(
+          'reg.exe',
+          ['add', `${baseKey}\\${tweak.path}`, '/v', tweak.key, '/t', type, '/d', value, '/f'],
+          { timeout: 10000, windowsHide: true },
+        )
+      }
+    } else {
+      await execFileAsync(
+        'reg.exe',
+        ['add', `${baseKey}\\${tweak.path}`, '/v', tweak.key, '/t', type, '/d', value, '/f'],
+        { timeout: 10000, windowsHide: true },
+      )
+    }
 
     if (tweak.id === 'ntfs-last-access-off') {
       await execFileAsync('fsutil', ['behavior', 'set', 'disablelastaccess', value], {

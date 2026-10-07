@@ -193,4 +193,44 @@ describe('fixRegistryEntries', () => {
       expect(result.fixed).toBe(1)
     })
   })
+
+  describe('fixedByType (F6)', () => {
+    const entries = [
+      {
+        id: 'o1',
+        type: 'obsolete' as const,
+        issue: 'issue',
+        keyPath: 'K',
+        valueName: 'V',
+        risk: 'low' as const,
+        selected: true,
+        fix: { op: 'delete-value' as const },
+      },
+      {
+        id: 'r1',
+        type: 'orphaned' as const,
+        issue: 'issue',
+        keyPath: 'K',
+        valueName: 'V',
+        risk: 'low' as const,
+        selected: true,
+        fix: { op: 'delete-value' as const },
+      },
+    ]
+
+    it('conta por tipo as correções bem-sucedidas', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      const result = await fixRegistryEntries(entries as never[])
+      expect(result.fixed).toBe(2)
+      expect(result.fixedByType).toEqual({ obsolete: 1, orphaned: 1 })
+    })
+
+    it('não conta falhas no fixedByType', async () => {
+      mocks.execReg.mockRejectedValue(new Error('boom'))
+      const result = await fixRegistryEntries(entries as never[])
+      expect(result.fixed).toBe(0)
+      expect(result.failed).toBe(2)
+      expect(result.fixedByType).toEqual({})
+    })
+  })
 })

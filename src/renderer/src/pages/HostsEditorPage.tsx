@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Checkbox } from '@/components/shared/Checkbox'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { RECOMMENDATION_PACKS } from '@/lib/hosts-recommendations'
 import { useHostsEditorStore } from '@/stores/hosts-editor-store'
@@ -48,6 +49,7 @@ export function HostsEditorPage() {
       ))
   const [addingPack, setAddingPack] = useState<string | null>(null)
   const [expandedPack, setExpandedPack] = useState<string | null>(null)
+  const [confirmRevert, setConfirmRevert] = useState(false)
 
   const packIcons: Record<string, LucideIcon> = { Eye, Ban, Radio, Shield, Lock }
 
@@ -115,10 +117,27 @@ export function HostsEditorPage() {
     }
   }, [t])
 
-  const handleRevert = useCallback(() => {
+  const handleRevert = useCallback(async () => {
+    setConfirmRevert(false)
     const store = useHostsEditorStore.getState()
-    store.revert()
-    toast.success(t('toastRevertSuccess'))
+    store.setStatus('writing')
+    store.setError(null)
+    try {
+      const result = await store.revertFromDisk(window.dinho.hostsWrite)
+      store.setWriteResult(result)
+      if (result.success) {
+        store.setStatus('complete')
+        toast.success(t('toastRevertSuccess'))
+      } else {
+        store.setStatus('error')
+        store.setError(result.error ?? t('toastRevertFailed'))
+        toast.error(result.error ?? t('toastRevertFailed'))
+      }
+    } catch (err) {
+      store.setStatus('error')
+      store.setError(err instanceof Error ? err.message : t('toastRevertFailed'))
+      toast.error(t('toastRevertFailed'))
+    }
   }, [t])
 
   return (
@@ -154,7 +173,7 @@ export function HostsEditorPage() {
             {hasChanges && (
               <button
                 type="button"
-                onClick={handleRevert}
+                onClick={() => setConfirmRevert(true)}
                 disabled={busy}
                 className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
                 style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-medium)' }}
@@ -436,6 +455,16 @@ export function HostsEditorPage() {
           </span>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmRevert}
+        onConfirm={handleRevert}
+        onCancel={() => setConfirmRevert(false)}
+        title={t('revertConfirmTitle')}
+        description={t('revertConfirmDescription')}
+        confirmLabel={t('revertButton')}
+        variant="warning"
+      />
     </div>
   )
 }

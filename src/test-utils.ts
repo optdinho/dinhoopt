@@ -90,8 +90,6 @@ export function mockKudu(): Record<string, Mock> {
     driverClean: vi.fn(),
     driverUpdateScan: vi.fn(),
     driverUpdateInstall: vi.fn(),
-    driverAgentEvaluate: vi.fn(),
-    driverAgentApprove: vi.fn(),
 
     // Software
     softwareUpdateScan: vi.fn(),

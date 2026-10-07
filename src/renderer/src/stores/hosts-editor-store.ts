@@ -1,4 +1,4 @@
-import type { HostsEntry, HostsFileData } from '@shared/types'
+import type { HostsEntry, HostsFileData, HostsWriteRequest } from '@shared/types'
 import { create } from 'zustand'
 
 interface WriteResult {
@@ -31,6 +31,9 @@ interface HostsEditorState {
   setFlushResult: (result: FlushResult | null) => void
   setOriginal: (entries: HostsEntry[], headerComment: string) => void
   revert: () => void
+  revertFromDisk: (
+    write: (request: HostsWriteRequest) => Promise<{ success: boolean; error?: string }>,
+  ) => Promise<{ success: boolean; error?: string }>
   toggleEntry: (id: string) => void
   updateEntry: (id: string, fields: Partial<Pick<HostsEntry, 'ip' | 'hostname' | 'comment' | 'enabled'>>) => void
   addEntry: () => void
@@ -39,7 +42,7 @@ interface HostsEditorState {
   reset: () => void
 }
 
-export const useHostsEditorStore = create<HostsEditorState>((set, _get) => ({
+export const useHostsEditorStore = create<HostsEditorState>((set, get) => ({
   entries: [],
   headerComment: '',
   originalEntries: [],
@@ -65,6 +68,13 @@ export const useHostsEditorStore = create<HostsEditorState>((set, _get) => ({
       entries: s.originalEntries.map((e) => ({ ...e })),
       headerComment: s.originalHeaderComment,
     })),
+
+  revertFromDisk: async (write) => {
+    const s = get()
+    const result = await write({ headerComment: s.originalHeaderComment, entries: s.originalEntries })
+    if (result.success) s.revert()
+    return result
+  },
 
   toggleEntry: (id) =>
     set((s) => ({

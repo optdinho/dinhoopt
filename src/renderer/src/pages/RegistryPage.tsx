@@ -1,7 +1,8 @@
-import { Database, Loader2, Search, Shield, StopCircle, Wrench } from 'lucide-react'
+import { Database, History, Loader2, Search, Shield, StopCircle, Wrench } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { RestoreBackupDialog } from '@/components/registry/RestoreBackupDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
@@ -13,6 +14,7 @@ import { useProgressListener } from '@/hooks/useProgressListener'
 import { useHistoryStore } from '@/stores/history-store'
 import { useRegistryStore } from '@/stores/registry-store'
 import { useStatsStore } from '@/stores/stats-store'
+import { buildRegistryCategories } from './registry/category-breakdown'
 import { FixResultCard } from './registry/FixResultCard'
 import { RegistryCardsSection } from './registry/RegistryPageComponents'
 
@@ -45,6 +47,7 @@ function RegistryPageContent() {
   const error = useRegistryStore((s) => s.error)
 
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showRestore, setShowRestore] = useState(false)
   const fixStartRef = useRef<number>(0)
   const addEntry = useHistoryStore((s) => s.addEntry)
   const recomputeStats = useStatsStore((s) => s.recompute)
@@ -114,17 +117,7 @@ function RegistryPageContent() {
       s.setFixResult(result)
       s.setEntries(s.entries.filter((e) => !selectedIds.includes(e.id)))
 
-      const byType: Record<string, { found: number; fixed: number }> = {}
-      for (const e of selectedEntries) {
-        if (!byType[e.type]) byType[e.type] = { found: 0, fixed: 0 }
-        const typeEntry = byType[e.type]
-        if (typeEntry) typeEntry.found++
-      }
-      const totalSelected = selectedEntries.length
-      for (const t in byType) {
-        const typeEntry = byType[t]
-        if (typeEntry) typeEntry.fixed = Math.round((typeEntry.found / totalSelected) * result.fixed)
-      }
+      const byType = buildRegistryCategories(selectedEntries, result.fixedByType ?? {})
 
       addEntry({
         id: Date.now().toString(),
@@ -160,6 +153,15 @@ function RegistryPageContent() {
         description={t('pageDescription')}
         action={
           <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowRestore(true)}
+              disabled={busy}
+              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium text-zinc-300 transition-all disabled:opacity-40"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-medium)' }}
+            >
+              <History className="h-4 w-4" strokeWidth={1.8} /> {t('restoreButton')}
+            </button>
             <button
               type="button"
               onClick={handleScan}
@@ -303,6 +305,8 @@ function RegistryPageContent() {
         confirmLabel={t('confirmFixLabel')}
         variant="warning"
       />
+
+      <RestoreBackupDialog open={showRestore} onClose={() => setShowRestore(false)} />
     </div>
   )
 }
