@@ -372,7 +372,7 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
   - `useClipsActions.ts:228` — `toggleFavorite` reverte + `toast.error(result.error || 'favoriteFailed')` em falha/resolução `{success:false}`. **+3 testes** (sucesso sem toast; rejeição reverte+toast; resolve-failure reverte+toast). 2 chaves i18n novas: `settingsSaveFailed` (settings.json) e `favoriteFailed` (clips.json), nas 3 locales.
 - **Gates (2026-10-07):** vitest **7 823 / 283 ficheiros, 7 823 verdes, 0 falhas** (baseline 7 804 → +19) · tsc 0 · biome **0 / 869** · C# intocado (2528/0/0 de referência). **Sem commit** (working tree com 20+ ficheiros).
 
-**Pendente:** F3 (reverts mudos Compliance/Vulnerability), F4 (benchmark fabrica valores), F5 (quarantine delete), F6 (clips config→engine) — para decisão e execução futura.
+**Pendente (superado):** F3 (reverts mudos Compliance/Vulnerability), F4 (benchmark fabrica valores), F5 (quarantine delete), F6 (clips config→engine) — **todas executadas no Lote F3–F6 abaixo.**
 
 **Lote F3–F6 — ✅ EXECUTADO em 2026-10-07, TDD RED→GREEN, commit `c066ce3`** (`fix: feedback real em reverts, benchmark, quarantine delete e sync de clips (F3–F6)` — 26 ficheiros, 684 inserções).
 - **F3 (reverts mudos):** `runRevert` em `CompliancePage.tsx` e `VulnerabilityScannerPage.tsx` — `result.failed > 0` → `toast.error(t('applyFailed'))` (chave já existia) e o `catch` passou de `setStatus('done')` mudo para toast + `setStatus`. **Testes de página novos** (`CompliancePage.test.tsx`, `VulnerabilityScannerPage.test.tsx`, 4+4 testes).
