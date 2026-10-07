@@ -234,9 +234,30 @@ export function useClipsActions(deps: ClipsActionDeps) {
         else next.add(name)
         return next
       })
-      window.dinho?.clipsSetFavorite(name, !isFavorite).catch(() => {})
+      window.dinho
+        ?.clipsSetFavorite?.(name, !isFavorite)
+        .then((result) => {
+          if (result && result.success === false) {
+            setFavorites((prev) => {
+              const next = new Set(prev)
+              if (next.has(name)) next.delete(name)
+              else next.add(name)
+              return next
+            })
+            toast.error(result.error || t('favoriteFailed'))
+          }
+        })
+        .catch(() => {
+          setFavorites((prev) => {
+            const next = new Set(prev)
+            if (next.has(name)) next.delete(name)
+            else next.add(name)
+            return next
+          })
+          toast.error(t('favoriteFailed'))
+        })
     },
-    [favorites, setFavorites],
+    [favorites, setFavorites, t],
   )
 
   const addHotkey = useCallback(() => {

@@ -965,6 +965,69 @@ describe('validateSettingsPartial', () => {
       }),
     ).toBeNull()
   })
+
+  // ── backupMode / autoInstall (F1: settings rejected by allow-list) ──
+
+  it('accepts backupMode targeted and full', () => {
+    expect(validateSettingsPartial({ backupMode: 'targeted' })).toEqual({ backupMode: 'targeted' })
+    expect(validateSettingsPartial({ backupMode: 'full' })).toEqual({ backupMode: 'full' })
+  })
+
+  it('rejects invalid backupMode values', () => {
+    expect(validateSettingsPartial({ backupMode: 'partial' })).toBeNull()
+    expect(validateSettingsPartial({ backupMode: 123 })).toBeNull()
+  })
+
+  it('accepts boolean autoInstallUpdates', () => {
+    expect(validateSettingsPartial({ autoInstallUpdates: false })).toEqual({ autoInstallUpdates: false })
+    expect(validateSettingsPartial({ autoInstallUpdates: true })).toEqual({ autoInstallUpdates: true })
+  })
+
+  it('rejects non-boolean autoInstallUpdates', () => {
+    expect(validateSettingsPartial({ autoInstallUpdates: 'yes' })).toBeNull()
+    expect(validateSettingsPartial({ autoInstallUpdates: 1 })).toBeNull()
+  })
+
+  it('accepts autoInstallSchedule daily, weekly and null', () => {
+    expect(validateSettingsPartial({ autoInstallSchedule: 'daily' })).toEqual({ autoInstallSchedule: 'daily' })
+    expect(validateSettingsPartial({ autoInstallSchedule: 'weekly' })).toEqual({ autoInstallSchedule: 'weekly' })
+    expect(validateSettingsPartial({ autoInstallSchedule: null })).toEqual({ autoInstallSchedule: null })
+  })
+
+  it('rejects invalid autoInstallSchedule values', () => {
+    expect(validateSettingsPartial({ autoInstallSchedule: 'monthly' })).toBeNull()
+    expect(validateSettingsPartial({ autoInstallSchedule: 'always' })).toBeNull()
+    expect(validateSettingsPartial({ autoInstallSchedule: 42 })).toBeNull()
+  })
+
+  it('accepts cleaner protectRecycleBin boolean', () => {
+    expect(validateSettingsPartial({ cleaner: { protectRecycleBin: true } })).toEqual({
+      cleaner: { protectRecycleBin: true },
+    })
+    expect(validateSettingsPartial({ cleaner: { protectRecycleBin: false } })).toEqual({
+      cleaner: { protectRecycleBin: false },
+    })
+  })
+
+  it('rejects non-boolean protectRecycleBin', () => {
+    expect(validateSettingsPartial({ cleaner: { protectRecycleBin: 'yes' } })).toBeNull()
+    expect(validateSettingsPartial({ cleaner: { protectRecycleBin: 1 } })).toBeNull()
+  })
+
+  it('accepts gameMode preconfigVersion number', () => {
+    expect(validateSettingsPartial({ gameMode: { preconfigVersion: 0 } })).toEqual({
+      gameMode: { preconfigVersion: 0 },
+    })
+    expect(validateSettingsPartial({ gameMode: { preconfigVersion: 2 } })).toEqual({
+      gameMode: { preconfigVersion: 2 },
+    })
+  })
+
+  it('rejects invalid gameMode preconfigVersion', () => {
+    expect(validateSettingsPartial({ gameMode: { preconfigVersion: '2' } })).toBeNull()
+    expect(validateSettingsPartial({ gameMode: { preconfigVersion: -1 } })).toBeNull()
+    expect(validateSettingsPartial({ gameMode: { preconfigVersion: 2.5 } })).toBeNull()
+  })
 })
 
 describe('validateHistoryEntry', () => {

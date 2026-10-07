@@ -20,11 +20,14 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
     'runAtStartup',
     'autoUpdate',
     'autoRestart',
+    'autoInstallUpdates',
+    'autoInstallSchedule',
     'updateCheckIntervalHours',
     'cleaner',
     'exclusions',
     'ignoredSoftwareUpdates',
     'backupPath',
+    'backupMode',
     'schedule',
     'schedules',
     'gameMode',
@@ -40,6 +43,8 @@ export function validateSettingsPartial(input: unknown): Record<string, unknown>
   if (validateLanguage(obj) === null) return null
   if (validateBoolFields(obj) === null) return null
   if (validateUpdateInterval(obj) === null) return null
+  if (validateAutoInstallSchedule(obj) === null) return null
+  if (validateBackupMode(obj) === null) return null
   if (validateExclusions(obj) === null) return null
   if (validateIgnoredUpdates(obj) === null) return null
   if (validateBackupPath(obj) === null) return null
@@ -78,6 +83,7 @@ function validateBoolFields(obj: Record<string, unknown>): null | undefined {
     'runAtStartup',
     'autoUpdate',
     'autoRestart',
+    'autoInstallUpdates',
   ] as const
   for (const bk of boolKeys) {
     if (bk in obj && obj[bk] !== undefined && typeof obj[bk] !== 'boolean') return null
@@ -92,6 +98,19 @@ function validateUpdateInterval(obj: Record<string, unknown>): null | undefined 
       obj.updateCheckIntervalHours > 168
     )
       return null
+  }
+}
+
+function validateAutoInstallSchedule(obj: Record<string, unknown>): null | undefined {
+  if ('autoInstallSchedule' in obj && obj.autoInstallSchedule !== undefined) {
+    if (!['daily', 'weekly'].includes(obj.autoInstallSchedule as string) && obj.autoInstallSchedule !== null)
+      return null
+  }
+}
+
+function validateBackupMode(obj: Record<string, unknown>): null | undefined {
+  if ('backupMode' in obj && obj.backupMode !== undefined) {
+    if (!['targeted', 'full'].includes(obj.backupMode as string)) return null
   }
 }
 
@@ -184,6 +203,7 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
       'secureDelete',
       'closeBrowsersBeforeClean',
       'keepBrowserCookies',
+      'protectRecycleBin',
     ])
     for (const key of Object.keys(c)) {
       if (!allowedCleanerKeys.has(key)) return null
@@ -196,6 +216,7 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
     if ('secureDelete' in c && typeof c.secureDelete !== 'boolean') return null
     if ('closeBrowsersBeforeClean' in c && typeof c.closeBrowsersBeforeClean !== 'boolean') return null
     if ('keepBrowserCookies' in c && typeof c.keepBrowserCookies !== 'boolean') return null
+    if ('protectRecycleBin' in c && typeof c.protectRecycleBin !== 'boolean') return null
   }
 }
 
@@ -219,6 +240,7 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
       'autoDeactivate',
       'customGameProcesses',
       'gameProfiles',
+      'preconfigVersion',
     ])
     for (const key of Object.keys(g)) {
       if (!allowedGameModeKeys.has(key)) return null
@@ -269,6 +291,10 @@ function validateGameMode(obj: Record<string, unknown>): null | undefined {
     }
     if ('autoDetect' in g && typeof g.autoDetect !== 'boolean') return null
     if ('autoDeactivate' in g && typeof g.autoDeactivate !== 'boolean') return null
+    if ('preconfigVersion' in g && g.preconfigVersion !== undefined) {
+      if (typeof g.preconfigVersion !== 'number' || !Number.isInteger(g.preconfigVersion) || g.preconfigVersion < 0)
+        return null
+    }
     if ('customGameProcesses' in g) {
       if (!Array.isArray(g.customGameProcesses)) return null
       if (g.customGameProcesses.length > 50) return null

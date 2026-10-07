@@ -86,6 +86,7 @@
   "startupSettingFailedToast": "Failed to enable startup",
   "startupSettingFailedDesc": "Task Scheduler may be restricted by group policy or security software.",
   "startupSettingFailedAction": "Learn more",
+  "settingsSaveFailed": "Failed to save settings",
   "themeDark": "Dark",
   "themeLight": "Light",
   "themeSystem": "System",

@@ -47,6 +47,7 @@ import type {
   GameModeDeactivateResult,
   GameModeProgress,
   GameModeStatus,
+  IpcResult,
   LargeFileDeleteMode,
   LargeFileDeleteResult,
   LargeFileScanOptions,
@@ -196,7 +197,7 @@ export const systemMethods = {
   onboardingSet: (value: boolean): Promise<void> => ipcRenderer.invoke(IPC.ONBOARDING_SET, value),
 
   settingsGet: (): Promise<DiNhoSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),
-  settingsSet: (settings: Partial<DiNhoSettings>): Promise<void> => ipcRenderer.invoke(IPC.SETTINGS_SET, settings),
+  settingsSet: (settings: Partial<DiNhoSettings>): Promise<IpcResult> => ipcRenderer.invoke(IPC.SETTINGS_SET, settings),
   settingsSelectBackupDir: (): Promise<string | null> => ipcRenderer.invoke(IPC.SETTINGS_SELECT_BACKUP_DIR),
   settingsOpenBackupDir: (): Promise<string> => ipcRenderer.invoke(IPC.SETTINGS_OPEN_BACKUP_DIR),
 

@@ -331,6 +331,11 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
 
 **Correcções — R1 ✅ R2 ✅ R3 ✅ R6 ✅ executadas em 2026-10-06 (sem commit), ver "Correcções executadas" abaixo. Decisões de política (não aplicadas):** R4 (1 teste E2E de clip real — exige engine elevado + GPU + ffmpeg; fica nos scripts de soak existentes) · R5 (1 apply real revertível contra o SO — mutar o SO real em suite automática conflita com o princípio security-first "never mutate").
 
+**🔜 PENDENTES REGISTADOS (2026-10-06) — para executar outro dia (não são bugs nem dívida urgente):**
+- **R4 — E2E de clip real:** 1 teste/harness com engine **elevado** + GPU + ffmpeg embarcado que faça `saveClip` pelo pipe e verifique o `.mp4` com frames>0 (fechar o buraco "clips nunca é testado de verdade"). DoD: corre em máquina com GPU, fora do gate normal (CI não tem GPU); aproveitar os orquestradores `cfr-soak.ps1`/`soak-cfr.ps1` em vez de duplicar.
+- **R5 — apply real revertível contra o SO:** ex. tweak HKCU reversível aplicado e revertido, provando o fluxo real além de mocks. DoD: capturar snapshot pré-apply (o mecanismo de F10 já existe: `windows-tweaks/snapshot-store.ts`), aplicar, rever, asserir que o reverter restaurou — sem deixar estado residual. Regra: os 3 filtros ASLR/quarantine **não** entram; garantir `finally` que reverte.
+- Regra de ouro para qualquer um dos dois: **correr isolado e elevado**, nunca dentro do vitest default. Reabrir em AGENTS quando decidirmos fazê-los.
+
 **Correcções executadas (R1/R2/R3) — gates finais em 2026-10-06: vitest 7 804 / 282 ficheiros, 7 804 verdes, 0 falhas** · biome 0 / 868 · tsc 0 · **dotnet test 2 528 verdes, 0 falhas, 0 ignorados**. Sem commit.
 - **R1:** os 3 `NamedPipeServerIntegrationTests` provados SEM elevação (filtrado 3/3 verdes = round-trip real igual aos `NamedPipeServerTests`) → `[RequiresAdminFact]` → `[Fact]`; atributo órfão removido (`RequiresAdminFactAttribute.cs` apagado). **C# passou de 2 525/0/3 para 2 528/0/0** — a suíte inteira agora corre no gate normal.
 - **R2 — testes vazios/tauologias asseridos:** `clips-engine-connection.test.ts:1546` → `expect(writeCount('stopEngine')).toBeGreaterThan(0)` · `threat-intel.test.ts:409` → `expect(spy).toHaveBeenCalled()` · `benchmark` "sets cancelled flag" deixou o spy impossível (`spyOn(await import(...))` não intercepta referência interna) → o mid-cycle chama `getHandler('benchmark:cancel')()` (flag → run cortado, semântica real) + teste standalone via `mocks.logger.info` com `'Benchmark cancelled by user'`; import `cancelBenchmark` removido · `perf-monitor.ipc.test.ts:224` reescrito (destroyed) com asserts reais de `mockStart` · `scheduler`: 5 testes `not.toThrow` rescritos com `toHaveBeenCalled`/`not.toHaveBeenCalled` (mock Notification hoisted construtível) + 1 positivo novo · `yara-engine.test.ts:138` tautologia → 2 readers concorrentes · `path-safety.test.ts:51` teste invertido ("throws"+`not.toThrow`) corrigido · placeholder `disk-trim` removido · `registry-cleaner` null-window: `mockSend` não existia nesse describe → asserção do contrato real (com `sender-validation` mocked `()=>true`, o fix executa com getter null e devolve o resultado intacto).
@@ -338,6 +343,36 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
 - **R6:** claims do E2E no AGENTS corrigidas (não-elevado via `DINHO_E2E=1`, journey 26/38 rotas, 3/40 com 0 expect) — ver bloco "Testes/Qualidade" acima.
 
 ---
+
+## Auditoria "Falhas que não chegam ao usuário" (2026-10-07) · relatório completo em `AUDITORIA-FALHAS-SILENCIOSAS-2026-10-07.md` (gitignored)
+
+**Tema:** "a UI mostra sucesso enquanto a operação falhou" (7 áreas). Método: 5 agentes explore em paralelo + verificação pessoal. **Investigação pura — nenhum código alterado, sem commit.** 6 achados confirmados (F1–F6) + 1 observação (F7):
+
+- **F1 (ALTO) — settings rejeitados pela allow-list, UI mostra "salvo":** `ipc-validation.ts` — `allowedTopKeys` sem `backupMode`/`autoInstallUpdates`/`autoInstallSchedule`, `allowedCleanerKeys` sem `protectRecycleBin`, `allowedGameModeKeys` sem `preconfigVersion` (todos existem no tipo `common.ts:70,72,77,90` e `game-mode.ts:78`). `SETTINGS_SET` (`ipc/index.ts:158-160`) resolve `{success:false}` **sem rejeitar**; callers ignoram o resolve (`SettingsPage.tsx:27-30` `.catch(()=>{})`, `:163-164` `backupMode`, `:176-179` `protectRecycleBin`; `game-mode-store.ts:109-158` envia `{gameMode:{...config}}` com preconfigVersion ⇒ **todos os saves de game-mode rejeitados**; `preload/system.ts:199` tipa `Promise<void>`). Repro: trocar backupMode → Full → reiniciar → volta a `targeted`. Efeitos: backupMode nunca chega ao fixer, auto-install do updater nunca dispara, game-mode nunca persiste.
+- **F2 (ALTO) — padrão `.catch(()=>{})` + resolve-`{success:false}` ignorado:** `registry-store.ts:56`, `useClipsActions.ts:237`, `useClipsState.ts:204,214` + todos os do F1. Contrato correcto: chamador DEVE ler `success`/`error`, não só tratar rejeição.
+- **F3 (MÉDIO) — reverts mudos:** `CompliancePage.tsx:180-182` e `VulnerabilityScannerPage.tsx:175-177` → catch só `setStatus('done')`; `result.failed` nunca tostado; `applyResult` guardado mas nunca renderizado.
+- **F4 (MÉDIO) — benchmark fabrica valores:** `benchmark.ipc.ts:48,67` (CPU→50 no catch/cancel), `:190` (RAM→0), `:200-201` (powerplan→'balanced'); tipo sem campo `error`; `BenchmarkPage.tsx:92-128` renderiza scores como reais.
+- **F5 (MÉDIO-BAIXO) — quarantine delete:** `quarantine-ops.ts:112` `rm(...,{force:true})` conta ficheiro ausente como `succeeded++`; `MalwareScannerPage.tsx:341-349` não tosta `result.failed`.
+- **F6 (MÉDIO-BAIXO) — clips config→engine:** `clips.ipc.ts:432-448` sync falhado/sem pipe só loga warning e devolve `{success:true}`; `useClipsActions.ts:51-58` ignora o resultado.
+- **F7 (BAIXO, mitigado) — registry fix remove falhados da lista** (`registry-store.ts:134`); mitigado por `FixResultCard`.
+
+**Falsos provados (agentes erraram — não re-investigar):** better-sqlite3 "sem try/catch em 6 sítios" (`src/main/database/` **não existe**; só 4 refs, o `database-optimizer` guarda com try/catch+fallback; `asarUnpack` OK em `electron-builder.yml:100-101`) · "yara-x ausente no main" (carregado em `yara-engine.ts:97,132`, unpacked) · "Rec venham para sempre na morte do engine" (poll 3 s + broadcast em `useClipsState.ts:327-337`) · privacy/network "sem feedback" (toasts `failed` existem) · licença offline (é desenho — fallback 24 h HMAC/HWID, A4).
+
+**Área 6 sem falso sucesso confirmado:** `EngineCoordinator.Capture.cs:371-379` seta `Recording=true` logo após `_encoder.Initialize`; encoder morto a meio só se nota no `saveClip` (que devolve erro e a UI mostra). Sem verificação de ficheiro em disco pós-save (não reproduzido).
+
+**Decisão do utilizador (2026-10-07): «F1+F2 agora, F3–F6 depois»** → mas apenas a pedra angular funda em ipc/allow-list + sucesso propagado. F3/F4/F5/F6 permanecem ABERTOS (não corrigidos).
+
+**Lote F1+F2 — ✅ EXECUTADO em 2026-10-07, TDD RED→GREEN, sem commit.**
+- **F1 (allow-list, `src/main/services/ipc-validation.ts`):** `allowedTopKeys` ganhou `backupMode`, `autoInstallUpdates`, `autoInstallSchedule`; `allowedCleanerKeys` ganhou `protectRecycleBin`; `allowedGameModeKeys` ganhou `preconfigVersion`; validação de valores nova (`backupMode: 'targeted'|'full'`, `autoInstallSchedule: 'daily'|'weekly'|null`, booleanos, `preconfigVersion` inteiro ≥0). **5 testes RED → 151/151 GREEN.** Os saves de `settings:set` deixam de ser rejeitados em silêncio: backupMode, auto-install do updater, protectRecycleBin e todo o game-mode agora persistem (`SETTINGS_SET` chama `setSettings` e o handler já tratava gameMode/language/intervalo — ver `src/main/ipc/index.ts:158-160`).
+- **F2 (callers leem `success`/`error`):**
+  - `src/preload/system.ts:199` — `settingsSet` de `Promise<void>` → `Promise<IpcResult>`.
+  - `SettingsPage.tsx` — `save()` async lê o resultado; em `{success:false}` ou rejeição → `refreshSettings()` (store já tinha o helper) + `toast.error('settingsSaveFailed')` (3 locales). **`SettingsPage.test.tsx` novo** (3 testes: sucesso sem toast; resolve-failure com toast+refresh×2; rejeição com toast+refresh×2).
+  - `game-mode-store.ts` — novo helper `persistGameModeConfig(previous, updated)` que **reverte** a config optimista em `{success:false}`/rejeição (guard: só se `getState().config === updated`, para não apagar alteração mais recente). 6 writers usam. **+4 testes** (sucesso mantém; failure reverte; rejeição reverte; revert não apaga change mais nova).
+  - `registry-store.ts:50-66` — `persistTweakChoice` reverte a selecção optimista se `registrySetTweakIgnored` rejeitar. **+2 testes** (reject reverte, resolve mantém).
+  - `useClipsActions.ts:228` — `toggleFavorite` reverte + `toast.error(result.error || 'favoriteFailed')` em falha/resolução `{success:false}`. **+3 testes** (sucesso sem toast; rejeição reverte+toast; resolve-failure reverte+toast). 2 chaves i18n novas: `settingsSaveFailed` (settings.json) e `favoriteFailed` (clips.json), nas 3 locales.
+- **Gates (2026-10-07):** vitest **7 823 / 283 ficheiros, 7 823 verdes, 0 falhas** (baseline 7 804 → +19) · tsc 0 · biome **0 / 869** · C# intocado (2528/0/0 de referência). **Sem commit** (working tree com 20+ ficheiros).
+
+**Pendente:** F3 (reverts mudos Compliance/Vulnerability), F4 (benchmark fabrica valores), F5 (quarantine delete), F6 (clips config→engine) — para decisão e execução futura.
 
 ## Itens fechados por decisão (2026-10-03 23:45) — não reabrir sem sintoma novo
 

@@ -48,12 +48,19 @@ interface RegistryState {
  * the toggle: deselected ⇒ ignore, selected ⇒ un-ignore.
  */
 function persistTweakChoice(
-  entries: Pick<RegistryEntry, 'type' | 'keyPath' | 'valueName'>[],
+  entries: Pick<RegistryEntry, 'type' | 'keyPath' | 'valueName' | 'id' | 'selected'>[],
   selectedNow: boolean,
 ): void {
   const signatures = entries.filter((e) => isPersistentTweak(e.type)).map(tweakSignature)
   if (signatures.length === 0) return
-  window.dinho?.registrySetTweakIgnored?.(signatures, !selectedNow).catch(() => {})
+  const originalSelected = new Map<string, boolean>(entries.map((e) => [e.id, e.selected]))
+  window.dinho?.registrySetTweakIgnored?.(signatures, !selectedNow).catch(() => {
+    useRegistryStore.setState((s) => ({
+      entries: s.entries.map((e) =>
+        originalSelected.has(e.id) ? { ...e, selected: originalSelected.get(e.id) as boolean } : e,
+      ),
+    }))
+  })
 }
 
 export const useRegistryStore = create<RegistryState>((set, get) => ({

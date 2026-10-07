@@ -9,24 +9,30 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { loadLanguage } from '@/i18n'
 import { LANGUAGES } from '@/lib/languages'
 import { cn } from '@/lib/utils'
-import { useSettingsStore } from '@/stores/settings-store'
+import { refreshSettings, useSettingsStore } from '@/stores/settings-store'
 
 export function SettingsPage() {
   const { t } = useTranslation('settings')
   const { platform } = usePlatform()
-  const { settings, updateSettings, setSettings } = useSettingsStore()
+  const { settings, updateSettings } = useSettingsStore()
   const [newExclusion, setNewExclusion] = useState('')
 
   useEffect(() => {
-    window.dinho
-      ?.settingsGet?.()
-      .then(setSettings)
-      .catch(() => {})
-  }, [setSettings])
+    refreshSettings()
+  }, [])
 
-  const save = (partial: Partial<typeof settings>) => {
+  const save = async (partial: Partial<typeof settings>) => {
     updateSettings(partial)
-    window.dinho?.settingsSet?.(partial).catch(() => {})
+    try {
+      const result = await window.dinho?.settingsSet?.(partial)
+      if (result && result.success === false) {
+        refreshSettings()
+        toast.error(t('settingsSaveFailed'))
+      }
+    } catch {
+      refreshSettings()
+      toast.error(t('settingsSaveFailed'))
+    }
   }
 
   const saveStartup = async (enabled: boolean) => {

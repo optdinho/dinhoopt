@@ -35,7 +35,7 @@ beforeEach(() => {
     expandedCategories: new Set(),
   })
 
-  mockSettingsSet.mockResolvedValue(undefined)
+  mockSettingsSet.mockResolvedValue({ success: true })
   ;(globalThis as any).window = {
     dinho: {
       gameModeRunAudit: mockGameModeRunAudit,
@@ -240,6 +240,62 @@ describe('game-mode-store - config actions that persist', () => {
     expect(mockSettingsSet).toHaveBeenCalledWith({
       gameMode: expect.objectContaining({ customGameProcesses: ['Minecraft.exe', 'Cyberpunk2077.exe'] }),
     })
+  })
+})
+
+describe('game-mode-store - persistence failure reverts', () => {
+  it('keeps the change when settingsSet succeeds', async () => {
+    useGameModeStore.setState({ config: { ...useGameModeStore.getState().config, autoDetect: false } })
+    mockSettingsSet.mockResolvedValueOnce({ success: true })
+
+    useGameModeStore.getState().setAutoDetect(true)
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().config.autoDetect).toBe(true)
+    })
+  })
+
+  it('reverts config when settingsSet resolves { success: false }', async () => {
+    useGameModeStore.setState({ config: { ...useGameModeStore.getState().config, autoDetect: false } })
+    mockSettingsSet.mockResolvedValueOnce({ success: false as const, error: 'Invalid settings' })
+
+    useGameModeStore.getState().setAutoDetect(true)
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().config.autoDetect).toBe(false)
+    })
+  })
+
+  it('reverts config when settingsSet rejects', async () => {
+    useGameModeStore.setState({ config: { ...useGameModeStore.getState().config, autoDetect: false } })
+    mockSettingsSet.mockRejectedValueOnce(new Error('ipc failed'))
+
+    useGameModeStore.getState().setAutoDetect(true)
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().config.autoDetect).toBe(false)
+    })
+  })
+
+  it('does not revert a newer config change when an older persist fails', async () => {
+    useGameModeStore.setState({ config: { ...useGameModeStore.getState().config, autoDetect: false } })
+    let reject!: (e: Error) => void
+    mockSettingsSet.mockReturnValueOnce(
+      new Promise((_resolve, r) => {
+        reject = r
+      }),
+    )
+
+    useGameModeStore.getState().setAutoDetect(true)
+    useGameModeStore.setState({
+      config: { ...useGameModeStore.getState().config, autoDetect: true, autoDeactivate: false },
+    })
+    reject(new Error('ipc failed'))
+
+    await vi.waitFor(() => {
+      expect(useGameModeStore.getState().config.autoDeactivate).toBe(false)
+    })
+    expect(useGameModeStore.getState().config.autoDetect).toBe(true)
   })
 })
 

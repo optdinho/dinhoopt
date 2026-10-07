@@ -59,6 +59,22 @@ const defaultConfig: GameModeConfig = {
   preconfigVersion: 0,
 }
 
+/** Persist a config change optimistically; revert the local config if main rejects it. */
+async function persistGameModeConfig(previous: GameModeConfig, updated: GameModeConfig) {
+  try {
+    const result = await window.dinho?.settingsSet?.({ gameMode: updated })
+    if (result && result.success === false) {
+      if (useGameModeStore.getState().config === updated) {
+        useGameModeStore.setState({ config: previous })
+      }
+    }
+  } catch {
+    if (useGameModeStore.getState().config === updated) {
+      useGameModeStore.setState({ config: previous })
+    }
+  }
+}
+
 export const useGameModeStore = create<GameModeStoreState>((set, get) => ({
   active: false,
   activatedAt: null,
@@ -106,7 +122,7 @@ export const useGameModeStore = create<GameModeStoreState>((set, get) => ({
         : [...config.enabledOptimizations, id],
     }
     set({ config: updated })
-    window.dinho?.settingsSet?.({ gameMode: updated }).catch(() => {})
+    void persistGameModeConfig(config, updated)
   },
 
   toggleCategory: (category) =>
@@ -121,28 +137,28 @@ export const useGameModeStore = create<GameModeStoreState>((set, get) => ({
     const { config } = get()
     const updated: GameModeConfig = { ...config, customProcessKillList: list }
     set({ config: updated })
-    window.dinho?.settingsSet?.({ gameMode: updated }).catch(() => {})
+    void persistGameModeConfig(config, updated)
   },
 
   setAutoDetect: (enabled) => {
     const { config } = get()
     const updated: GameModeConfig = { ...config, autoDetect: enabled }
     set({ config: updated })
-    window.dinho?.settingsSet?.({ gameMode: updated }).catch(() => {})
+    void persistGameModeConfig(config, updated)
   },
 
   setAutoDeactivate: (enabled) => {
     const { config } = get()
     const updated: GameModeConfig = { ...config, autoDeactivate: enabled }
     set({ config: updated })
-    window.dinho?.settingsSet?.({ gameMode: updated }).catch(() => {})
+    void persistGameModeConfig(config, updated)
   },
 
   setCustomGameProcesses: (list) => {
     const { config } = get()
     const updated: GameModeConfig = { ...config, customGameProcesses: list }
     set({ config: updated })
-    window.dinho?.settingsSet?.({ gameMode: updated }).catch(() => {})
+    void persistGameModeConfig(config, updated)
   },
 
   setGameProfile: (processName, profile) => {
@@ -155,7 +171,7 @@ export const useGameModeStore = create<GameModeStoreState>((set, get) => ({
     }
     const updated: GameModeConfig = { ...config, gameProfiles: profiles }
     set({ config: updated })
-    window.dinho?.settingsSet?.({ gameMode: updated }).catch(() => {})
+    void persistGameModeConfig(config, updated)
   },
 }))
 

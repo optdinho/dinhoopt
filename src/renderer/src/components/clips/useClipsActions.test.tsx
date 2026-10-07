@@ -676,7 +676,7 @@ describe('useClipsActions', () => {
   describe('toggleFavorite', () => {
     it('adds a favorite and notifies the engine', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetFavorite.mockResolvedValue(true)
+      dinho.clipsSetFavorite.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
 
@@ -687,9 +687,10 @@ describe('useClipsActions', () => {
       expect(dinho.clipsSetFavorite).toHaveBeenCalledWith('clip1.mp4', true)
       const updater = deps.setFavorites.mock.calls[0]![0]
       expect(updater(new Set(['other.mp4']))).toEqual(new Set(['other.mp4', 'clip1.mp4']))
+      expect(toast.error).not.toHaveBeenCalled()
     })
 
-    it('removes an existing favorite', async () => {
+    it('reverts the favorite and toasts when the engine rejects', async () => {
       const dinho = mockDinho()
       dinho.clipsSetFavorite.mockRejectedValue(new Error('offline'))
       const deps = getDeps(makeDeps({ favorites: new Set(['clip1.mp4']) }))
@@ -700,8 +701,24 @@ describe('useClipsActions', () => {
       })
 
       expect(dinho.clipsSetFavorite).toHaveBeenCalledWith('clip1.mp4', false)
-      const updater = deps.setFavorites.mock.calls[0]![0]
-      expect(updater(new Set(['clip1.mp4']))).toEqual(new Set())
+      const revertUpdater = deps.setFavorites.mock.calls[1]![0]
+      expect(revertUpdater(new Set())).toEqual(new Set(['clip1.mp4']))
+      expect(toast.error).toHaveBeenCalledWith('favoriteFailed')
+    })
+
+    it('reverts the favorite and toasts when the result is { success: false }', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetFavorite.mockResolvedValue({ success: false, error: 'denied' })
+      const deps = getDeps(makeDeps({ favorites: new Set(['clip1.mp4']) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        result.current.toggleFavorite('clip1.mp4')
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('denied')
+      const revertUpdater = deps.setFavorites.mock.calls[1]![0]
+      expect(revertUpdater(new Set())).toEqual(new Set(['clip1.mp4']))
     })
   })
 

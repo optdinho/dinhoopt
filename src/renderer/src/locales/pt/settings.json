@@ -86,6 +86,7 @@
   "startupSettingFailedToast": "Falha ao ativar a execução na inicialização",
   "startupSettingFailedDesc": "O Agendador de Tarefas pode estar restringido por política de grupo ou software de segurança.",
   "startupSettingFailedAction": "Saber mais",
+  "settingsSaveFailed": "Falha ao guardar as definições",
   "themeDark": "Escuro",
   "themeLight": "Claro",
   "themeSystem": "Sistema",

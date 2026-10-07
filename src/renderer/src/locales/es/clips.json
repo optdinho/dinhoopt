@@ -45,6 +45,7 @@
   "today": "Hoy",
   "week": "7 Días",
   "favorites": "Favoritos",
+  "favoriteFailed": "Error al actualizar el favorito",
   "search": "Buscar clips...",
   "addHotkey": "Nuevo Atajo",
   "lowDisk": "Poco Espacio en Disco",

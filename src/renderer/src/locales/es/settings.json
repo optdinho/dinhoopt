@@ -86,6 +86,7 @@
   "startupSettingFailedToast": "No se pudo habilitar el inicio automático",
   "startupSettingFailedDesc": "Es posible que el Programador de tareas esté restringido por una directiva de grupo o por software de seguridad.",
   "startupSettingFailedAction": "Más información",
+  "settingsSaveFailed": "No se pudieron guardar los ajustes",
   "themeDark": "Oscuro",
   "themeLight": "Claro",
   "themeSystem": "Sistema",
