@@ -381,6 +381,20 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
 - **F6 (clips config→engine honesto):** `CLIPS_SET_CONFIG` em `clips.ipc.ts` — só devolvia `{success:true}` mesmo quando o sync ao pipe falhava; agora pipe ligado + sync falhado → `{success:false, error}`. Pipe não ligado continua `{success:true}` (config persistida, aplicada no start do engine). `useClipsActions.handleConfigUpdate` lê o resultado: `success===false` → `toast.error(error || 'configSyncFailed')` e re-refresh (reverte o optimista); rejeição → `toast.error('configSyncFailed')`. 3 chaves `configSyncFailed` novas; 16 mocks `mockResolvedValue(true)` → `{success:true}` no teste de actions + 2 testes novos (resolve-failure e rejeição).
 - **Gates (2026-10-07):** vitest **7 840 / 286 ficheiros, 7 840 verdes, 0 falhas** (baseline 7 804 → +36) · tsc 0 · biome **0 / 872** · build ok (821 ms) · C# intocado (2528/0/0 de referência). **Commit `c066ce3`** (só o lote F3–F6; o resto da working tree — Lote 4, Pedido 4, auditoria de testes, F5b — continua sem commit).
 
+## Auditoria Pipeline GPU (2026-10-07) · relatório completo em `auditoria-pipeline-gpu-2026-10-07.md` (gitignored)
+
+**Investigação pura — nenhum código alterado, sem commit, working tree limpa.** Varrimento directo do engine C# + lado TS, respondendo a 8 perguntas de pipeline (chains NVENC/AMF/QSV × AV1/HEVC/H264, detecção de capacidade, fallbacks, PTS, CQ, híbridos iGPU+dGPU, custo GPU→stdin, marca única + min Windows p/ WGC). Síntese:
+
+- **Chains:** UI força sempre `codec='auto'` (`clips.ipc.ts:361`); engine decide por vendor+probe (`EncoderManager.cs:177-199,338-351`); mux `-c:v copy`. Fallbacks (`BuildFallbackChain`, `EncoderManager.cs:1412-1490`): nativo → 1/2 → 1/4 → `av1_amf` (auto+AV1) → codec preferido → **D3D12VA** → CPU → CPU 1/2 — **confirmado pelo utilizador como o planejado ("por degrau é o planejado mesmo")**.
+- **Sem default fixo:** probe real por degrau, cache TTL 60 s (`CodecDetection.cs:18`), gates AV1 por marca.
+- **PTS:** `_inputPtsQueue` enqueue (`FfmpegEncoder.cs:1108`) + ClampRealGap + não-monotónico nas rotas IVF (AV1, `NalParsing.cs:289`) e AnnexB (H264/HEVC, `:763`).
+- **CQ:** NVENC `-cq cq` · CPU `-crf clamp(1,51)` · QSV `cq−4` (`:284`) · AMF vbr_peak **sem QP** · d3d12va `-qp clamp(0,52)` (`:335-337`). ⚠️ **INVARIANTE reafirmado pelo utilizador (2026-10-07):** presets 16/18/20/20/22 (default 20) **não podem ser alterados**; ajustes a rate-control têm de manter o valor configurado actual. **✅ Decisão (2026-10-07): a divergência AMF (captura não mapeia CQ) está medida em campo e mantém-se `vbr_peak`** — o `--probe-amf-cqp` (RX 5700 XT) mostrou CQP com QP=cq a 2–3,1× os bytes; só na escada auto (~qp31) compite e aí violaria o invariante. Nada foi mudado; o editor continua `-rc cqp` por desenho.
+- **Híbrido:** device D3D11 no adapter do monitor do jogo (`EngineCoordinator.Capture.cs:166-203`); convert no mesmo device; sem cópia cross-GPU (readback→stdin).
+- **GPU→stdin:** VideoProcessor BGRA→NV12+scale (~2,5 ms ≈ 15% budget) + staging Map DoNotWait/retry (`GpuConvert.cs:21-55`); idêntico para todas as marcas.
+- **Marca única fora dos clips:** zero — benchmark/debloater/tweaks sem vendor; só refs informativas (`driver-agent-evaluator.ts` score, `startup-manager/utils.ts:90-92` rótulo, `gaming-cleaner.ipc.ts:36` shader caches, `malware-scanner/utils.ts:67-69`). Enhance AMD-only nos clips (`clips.ipc.ts:559-575`). Min Windows p/ WGC = platform note (1803+/1903+, `WgcCaptureSource.cs:718-729`), sem gate no código.
+
+**Correções a achados de agentes (verificadas por leitura directa):** "sem nvidia-smi" é FALSO (`GetNvencSessionInfo`, `EncoderManager.cs:1289-1347`); `TryCreateDeviceOnAdapterLuid` não existe (`MonitorAdapterResolver.cs` tem 161 linhas; o device por adapter é `EngineCoordinator.Capture.cs:166-203`).
+
 ## Itens fechados por decisão (2026-10-03 23:45) — não reabrir sem sintoma novo
 
 | Item | Decisão | Razão |
