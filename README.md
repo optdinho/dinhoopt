@@ -44,6 +44,73 @@
 
 ---
 
+## 📝 Novidades da 2.0.7
+
+### 🟢 As definições passam a ser mesmo guardadas
+
+Três conjuntos de definições eram **rejeitados em silêncio**: o tipo de backup e a
+auto-instalação de atualizações (`backupMode`, `autoInstallUpdates`,
+`autoInstallSchedule`), a proteção da Lixeira (`protectRecycleBin`) e a configuração
+do Modo Jogo (com `preconfigVersion`). A allow-list de validação não os conhecia, por
+isso o `SETTINGS_SET` respondia `{success:false}` — e ninguém lia a resposta: a UI
+mostrava "salvo", mas ao reiniciar tudo voltava ao valor antigo. Agora estas chaves são
+validadas com os valores corretos e persistem: definir o backup como *Full* deixa de
+voltar a *targeted*, a auto-instalação do atualizador já dispara, e o Modo Jogo guarda
+mesmo a pré-configuração.
+
+Para nunca mais ninguém engolir um "ok" que não era: todos os chamadores de `settings:set`
+(e dos pares de `registry`, favoritos dos clips e sync de configuração) leem agora o
+resultado e **revertem o estado otimista** + avisam quando a gravação falha.
+
+### 🔍 Os resultados deixam de mentir
+
+Quatro caminhos mostravam sucesso quando a operação tinha falhado:
+
+- **Reverts do Compliance e do Scanner de Vulnerabilidades** — as falhas eram descartadas
+  e o estado apontava para "concluído". Agora o botão mostra um aviso com quantas
+  correções falharam.
+- **O Benchmark fabricava valores** — CPU a 50, RAM a 0, plano de energia "balanceado"
+  quando a medição tinha falhado por completo. Agora cada métrica que falha sai marcada
+  como `Falha na medição`, com um banner âmbar a dizer que o benchmark ficou incompleto.
+- **Eliminar um ficheiro da Quarentena já falhado** era contado como sucesso (o `force`
+  do apagamento engolia o erro). Agora um ficheiro ausente conta como falha e a página avisa.
+- **A configuração de Clips não chegava ao motor** — quando o sync pelo pipe falhava, o
+  `CLIPS_SET_CONFIG` respondia na mesma `{success:true}`. Agora falha de verdade e a UI avisa.
+
+### ♻️ Restauro do Registo
+
+A limpeza do registo criava sempre backups antes de corrigir — e nunca houve forma de os
+**restaurar** dentro do app. Chega agora um botão *Restaurar* na página de Registo: lista
+os backups existentes (classificados por tipo e data) e corre o `reg import` com o nome
+indicado. Backups de *tasks* não são suportados (fora de âmbito, o aviso é claro).
+
+### 🧹 Menos código, menos superfície de falha
+
+Três auditorias internas no código morto e na "falsa prontidão" removeram **35 ficheiros e
+~4.500 linhas** sem uso (o caminho antigo do scanner de vulnerabilidades, o handler de
+menu de contexto órfão, 27 componentes React sem referência, a superfície IPC do
+`DRIVER_AGENT`, a lib `D3DCompiler` nunca usada e o `patch-package` morto). O resultado
+é menos superfície para bugs e para revisão de segurança. A licença deixou de confiar
+num cache falsificável: o ficheiro `.license-cache.json` é agora assinado com
+`HMAC-SHA256` ligado ao hardware, e um `Admin` no registo de auditoria passou a ser
+detetado de verdade.
+
+### 🧪 Qualidade
+
+A suíte C# subiu para **2.528 testes, 0 ignorados** — os testes de pipe multi-cliente
+passam sem elevação (o atributo `RequiresAdminFact` era desnecessário). Testes vazios,
+*tauologias* e *sleeps* fixos foram asseridos e removidos. O CI ganhou um job `dotnet`
+(a suíte C# passou a correr no pipeline, antes não tinha nenhum passo de .NET) e um gate
+pós-publish que falha o worklow se o feed `latest.yml` não servir a versão recém-construída.
+
+| | Antes | Agora |
+|---|---|---|
+| Testes (TS) | 7.792 | **7.840** |
+| Testes (C#, Release) | 2.212 | **2.528** |
+| Vulnerabilidades `npm audit` (high) | 5 | **0** |
+
+---
+
 ## 📝 Novidades da 2.0.6
 
 ### 🎬 Clips a 60 fps sem judder
