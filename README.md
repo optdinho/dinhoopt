@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.4-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.6-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 
@@ -580,7 +580,7 @@ validação não podem ficar dessincronizados.
 ┌─────────────────────────┼─────────────────────────────┐
 │              Main Process (Node.js)                    │
 │  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (~233)              │      │
+│  │              IPC Handlers (~235)              │      │
 │  └──────────────────────┬──────────────────────┘      │
 │                         │                              │
 │  ┌──────────────────────┴──────────────────────┐      │
@@ -630,7 +630,7 @@ src/
 │   ├── index.ts                # Entry point + gerenciamento de janela
 │   ├── cli/                    # Modo linha de comando (headless)
 │   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # ~233 handlers IPC (1 por módulo)
+│   ├── ipc/                    # ~235 handlers IPC (1 por módulo)
 │   ├── services/               # Lógica de negócio (123 serviços)
 │   ├── platform/               # Abstração de plataforma
 │   │   └── win32/              # Implementação Windows (registry, WMI, API)
@@ -721,8 +721,8 @@ npx playwright test
 ```
 
 ```
-📊 Cobertura atual: 95,8% de linhas · 94,5% de funções · 86,6% de branches
-   275 arquivos de teste · 7.800 testes (Vitest) · 2.443 testes (C#, Release)
+📊 Cobertura atual: 95,6% de linhas · 94,3% de funções · 86,7% de branches
+   286 arquivos de teste · 7.840 testes (Vitest) · 2.528 testes (C#, Release)
 ```
 
 ---
@@ -736,12 +736,12 @@ npx playwright test
 | Stores (Zustand) | 37 |
 | Componentes React | 127 |
 | Serviços | 123 |
-| Handlers IPC | 237 |
-| Arquivos de teste (TS) | 275 |
-| Testes (TS) | 7.800 |
+| Handlers IPC | 235 |
+| Arquivos de teste (TS) | 286 |
+| Testes (TS) | 7.840 |
 | Testes (C#) | 2.528 |
-| Cobertura de linhas | 95,8% |
-| Cobertura de branches | 86,6% |
+| Cobertura de linhas | 95,6% |
+| Cobertura de branches | 86,7% |
 | Linhas de código (TS, sem testes) | ~87.000 |
 | Linhas de código (C#, sem testes) | ~27.000 |
 
