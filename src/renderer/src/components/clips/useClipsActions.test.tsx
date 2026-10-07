@@ -91,7 +91,7 @@ describe('useClipsActions', () => {
   describe('handleConfigUpdate', () => {
     it('merges the partial into config, pushes via IPC, and refreshes config', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
 
@@ -116,6 +116,34 @@ describe('useClipsActions', () => {
 
       const updater = deps.setConfig.mock.calls[0]![0]
       expect(updater(null)).toBeNull()
+    })
+
+    it('toasts the error and refreshes when the engine rejects the sync', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockResolvedValue({ success: false, error: 'pipe timeout' })
+      const deps = getDeps(makeDeps())
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleConfigUpdate({ replayTimeSeconds: 300 })
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('pipe timeout')
+      expect(deps.refreshConfig).toHaveBeenCalled()
+    })
+
+    it('toasts configSyncFailed and refreshes when the IPC rejects', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockRejectedValue(new Error('nope'))
+      const deps = getDeps(makeDeps())
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleConfigUpdate({ replayTimeSeconds: 300 })
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('configSyncFailed')
+      expect(deps.refreshConfig).toHaveBeenCalled()
     })
   })
 
@@ -647,7 +675,7 @@ describe('useClipsActions', () => {
     it('updates the output directory when one is chosen', async () => {
       const dinho = mockDinho()
       dinho.clipsSelectOutputDir.mockResolvedValue('C:\\Clips')
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
 
@@ -725,7 +753,7 @@ describe('useClipsActions', () => {
   describe('hotkey management', () => {
     it('adds a hotkey with the next free vk', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const existing: HotkeyBinding = {
         id: 'hk-1',
         vk: 0x7c,
@@ -765,7 +793,7 @@ describe('useClipsActions', () => {
 
     it('removes the matching hotkey', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const hk: HotkeyBinding = {
         id: 'hk-1',
         vk: 0x50,
@@ -787,7 +815,7 @@ describe('useClipsActions', () => {
 
     it('patches the matching hotkey', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const hk: HotkeyBinding = {
         id: 'hk-1',
         vk: 0x50,
@@ -834,7 +862,7 @@ describe('useClipsActions', () => {
 
     it('ignores modifier-only keys', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
       const cleanup = result.current.setupRebindingListeners('hk-1')
@@ -848,7 +876,7 @@ describe('useClipsActions', () => {
 
     it('rebinds a hotkey with captured modifiers', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const hk: HotkeyBinding = {
         id: 'hk-1',
         vk: 0x50,
@@ -873,7 +901,7 @@ describe('useClipsActions', () => {
 
     it('adds a push-to-talk key without duplicates', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x14] }) }))
       const { result } = renderHook(() => useClipsActions(deps))
       const cleanup = result.current.setupRebindingListeners('hk-ptt')
@@ -890,7 +918,7 @@ describe('useClipsActions', () => {
 
     it('rebinds from a mouse button press', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const hk: HotkeyBinding = {
         id: 'hk-1',
         vk: 0x50,
@@ -915,7 +943,7 @@ describe('useClipsActions', () => {
 
     it('ignores non-mapped mouse buttons', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps())
       const { result } = renderHook(() => useClipsActions(deps))
       const cleanup = result.current.setupRebindingListeners('hk-1')
@@ -927,7 +955,7 @@ describe('useClipsActions', () => {
 
     it('removes listeners on cleanup', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const hk: HotkeyBinding = {
         id: 'hk-1',
         vk: 0x50,
@@ -1051,7 +1079,7 @@ describe('useClipsActions', () => {
 
     it('leaves hotkeys untouched when patching an unknown id', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps({ config: makeConfig({ hotkeys: [hk('hk-1', 0x50)] }) }))
       const { result } = renderHook(() => useClipsActions(deps))
 
@@ -1071,7 +1099,7 @@ describe('useClipsActions', () => {
 
     it('rebinds with shift only and leaves other hotkeys untouched', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps({ config: makeConfig({ hotkeys: [hk('hk-1', 0x50), hk('hk-2', 0x51)] }) }))
       const { result } = renderHook(() => useClipsActions(deps))
       const cleanup = result.current.setupRebindingListeners('hk-1')
@@ -1088,7 +1116,7 @@ describe('useClipsActions', () => {
 
     it('adds a push-to-talk mouse button but not duplicates', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x14] }) }))
       const { result } = renderHook(() => useClipsActions(deps))
       const cleanup = result.current.setupRebindingListeners('hk-ptt')
@@ -1101,7 +1129,7 @@ describe('useClipsActions', () => {
       cleanup()
 
       const dinho2 = mockDinho()
-      dinho2.clipsSetConfig.mockResolvedValue(true)
+      dinho2.clipsSetConfig.mockResolvedValue({ success: true })
       const deps2 = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x05] }) }))
       const second = renderHook(() => useClipsActions(deps2))
       const cleanup2 = second.result.current.setupRebindingListeners('hk-ptt')
@@ -1115,7 +1143,7 @@ describe('useClipsActions', () => {
 
     it('rebinds a hotkey from a mouse button with modifiers', async () => {
       const dinho = mockDinho()
-      dinho.clipsSetConfig.mockResolvedValue(true)
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
       const deps = getDeps(makeDeps({ config: makeConfig({ hotkeys: [hk('hk-1', 0x50), hk('hk-2', 0x51)] }) }))
       const { result } = renderHook(() => useClipsActions(deps))
       const cleanup = result.current.setupRebindingListeners('hk-1')

@@ -888,6 +888,16 @@ describe('CLIPS_SET_CONFIG', () => {
     )) as { success: boolean; error?: string }
     expect(result.success).toBe(true)
   })
+
+  it('reports failure when pipe is connected but the engine sync fails', async () => {
+    mockIsPipeConnected.mockReturnValue(true)
+    mockSendWithFallback.mockResolvedValue({ success: false, error: 'pipe timeout' })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SET_CONFIG)
+    const result = (await handler({}, { fps: 120 })) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('pipe timeout')
+  })
 })
 
 describe('CLIPS_SELECT_OUTPUT_DIR', () => {

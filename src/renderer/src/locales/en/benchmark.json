@@ -15,6 +15,8 @@
   "tweakBonus": "Tweak Bonus",
   "powerBonus": "Power Plan",
   "totalScore": "Total Score",
+  "incompleteWarning": "Benchmark incomplete — some measurements failed. The score is partial.",
+  "cancelledWarning": "Benchmark cancelled — this is not a full measurement.",
   "scoreRingAriaLabel": "Benchmark score ring",
   "classS": "≥ 90",
   "classA": "≥ 80",

@@ -441,6 +441,7 @@ export function registerClipsIpc(): void {
       const syncResult = await sendWithFallback('config', engineConfig)
       if (!syncResult.success) {
         getLogger().warning('clips', `Config sync to engine failed: ${syncResult.error}`)
+        return { success: false, error: syncResult.error || 'Config sync to engine failed' }
       }
     } else {
       getLogger().info('clips', 'Config sync: pipe not connected, skipping')

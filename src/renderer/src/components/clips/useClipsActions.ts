@@ -51,10 +51,20 @@ export function useClipsActions(deps: ClipsActionDeps) {
   const handleConfigUpdate = useCallback(
     async (partial: Partial<ClipsConfig>) => {
       setConfig((prev) => (prev ? { ...prev, ...partial } : prev))
-      await window.dinho?.clipsSetConfig(partial)
-      await refreshConfig()
+      try {
+        const result = await window.dinho?.clipsSetConfig(partial)
+        if (result && result.success === false) {
+          toast.error(result.error || t('configSyncFailed'))
+          await refreshConfig()
+          return
+        }
+        await refreshConfig()
+      } catch {
+        toast.error(t('configSyncFailed'))
+        await refreshConfig()
+      }
     },
-    [setConfig, refreshConfig],
+    [setConfig, refreshConfig, t],
   )
 
   const handleStartRecording = useCallback(async () => {

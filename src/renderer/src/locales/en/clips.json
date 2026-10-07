@@ -14,6 +14,7 @@
   "clipSaved": "Clip saved successfully!",
   "recordingStarted": "Recording started",
   "recordingStopped": "Recording stopped",
+  "configSyncFailed": "Settings saved, but could not be applied to the engine. Start recording to apply them.",
   "rename": "Rename",
   "renameError": "Failed to rename clip",
   "actions": "Clip actions",

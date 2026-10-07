@@ -177,8 +177,10 @@ export function CompliancePage({ embedded }: { embedded?: boolean }) {
         useComplianceStore.getState().setApplyResult(result)
         useComplianceStore.getState().setStatus('done')
         if (result.succeeded > 0) toast.success(t('checksReverted', { count: result.succeeded }))
+        if (result.failed > 0) toast.error(t('applyFailed'))
       } catch {
         useComplianceStore.getState().setStatus('done')
+        toast.error(t('applyFailed'))
       }
     },
     [t],

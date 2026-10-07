@@ -1,6 +1,18 @@
 import type { BenchmarkScoreClass } from '@shared/types'
 import { motion } from 'framer-motion'
-import { CircleCheckBig, Cpu, Gauge, MemoryStick, RefreshCw, Star, Thermometer, Timer, Wifi, Zap } from 'lucide-react'
+import {
+  CircleCheckBig,
+  Cpu,
+  Gauge,
+  MemoryStick,
+  RefreshCw,
+  Star,
+  Thermometer,
+  Timer,
+  TriangleAlert,
+  Wifi,
+  Zap,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useBenchmarkStore } from '@/stores/benchmark-store'
@@ -230,6 +242,21 @@ export function BenchmarkPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
+            {/* Failure warning — o score não é uma medição completa */}
+            {result.failure && (
+              <div
+                className="flex items-center gap-2 rounded-lg border px-4 py-3 text-sm"
+                style={{
+                  borderColor: 'rgba(245,158,11,0.3)',
+                  background: 'rgba(245,158,11,0.08)',
+                  color: '#f59e0b',
+                }}
+              >
+                <TriangleAlert className="h-4 w-4 shrink-0" />
+                <span>{result.failure === 'cancelled' ? t('cancelledWarning') : t('incompleteWarning')}</span>
+              </div>
+            )}
+
             {/* Metric cards */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {metricCards.map((card) => (

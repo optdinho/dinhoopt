@@ -116,10 +116,67 @@ describe('registerBenchmarkIpc', () => {
       mocks.execFileAsync.mockRejectedValue(new Error('PowerShell not available'))
       registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
       const handler = getHandler('benchmark:run')
-      const result = (await handler()) as { score: number; scoreClass: string }
+      const result = (await handler()) as { score: number; scoreClass: string; failure?: string }
       expect(result).toHaveProperty('score')
       expect(result).toHaveProperty('scoreClass')
-    }, 10000)
+      expect(result.failure).toBe('incomplete')
+    }, 30000)
+
+    it('marks result incomplete with failedMetrics when a measurement fails (CPU)', async () => {
+      mocks.execFileAsync.mockRejectedValueOnce(new Error('powershell gone'))
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 4096, Total: 16384 }) })
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Balanced' })
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+      const result = (await handler()) as {
+        failure?: string
+        failedMetrics?: string[]
+        details: Record<string, unknown>
+      }
+      expect(result.failure).toBe('incomplete')
+      expect(result.failedMetrics).toContain('cpu')
+      const cpu = result.details.cpu as { score: number; detail: string }
+      expect(cpu.score).toBe(0)
+      expect(cpu.detail).toContain('Falha')
+    }, 30000)
+
+    it('marks power plan as failed instead of fabricating balanced', async () => {
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '10' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify({ Free: 4096, Total: 16384 }) })
+      for (let i = 0; i < 10; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: 'Reply from 8.8.8.8: time=15ms TTL=118' })
+      }
+      for (let i = 0; i < 3; i++) {
+        mocks.execFileAsync.mockResolvedValueOnce({ stdout: '500' })
+      }
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3100\n' })
+      mocks.execFileAsync.mockResolvedValueOnce({ stdout: '3' })
+      mocks.execFileAsync.mockRejectedValueOnce(new Error('powercfg missing'))
+
+      registerBenchmarkIpc(() => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }) as any)
+      const handler = getHandler('benchmark:run')
+      const result = (await handler()) as {
+        failure?: string
+        failedMetrics?: string[]
+        details: Record<string, unknown>
+      }
+      expect(result.failure).toBe('incomplete')
+      expect(result.failedMetrics).toContain('powerPlan')
+      const power = result.details.powerBonus as { score: number; plan: string }
+      expect(power.score).toBe(0)
+      expect(power.plan).toBe('Indisponível')
+    }, 30000)
 
     it('returns class S for best-case metrics', async () => {
       const run = mockBenchmarkRun({
@@ -260,7 +317,7 @@ describe('registerBenchmarkIpc', () => {
       vi.useRealTimers()
     })
 
-    it('cancelled mid-CPU measurement uses early return value', async () => {
+    it('cancelled mid-CPU measurement stops and reports failure cancelled', async () => {
       for (let i = 0; i < 10; i++) {
         mocks.execFileAsync.mockResolvedValueOnce({ stdout: '5' })
       }
@@ -281,13 +338,15 @@ describe('registerBenchmarkIpc', () => {
       const promise = handler()
       await vi.advanceTimersByTimeAsync(500)
 
-      // O handler de cancelar tem de cancelar o run em curso (flag → medida)
+      // O handler de cancelar tem de cancelar o run em curso (flag → medida abortada)
       getHandler('benchmark:cancel')()
       await vi.advanceTimersByTimeAsync(30000)
 
-      const result = (await promise) as { details: Record<string, unknown> }
+      const result = (await promise) as { failure?: string; failedMetrics?: string[]; details: Record<string, unknown> }
+      expect(result.failure).toBe('cancelled')
+      expect(result.failedMetrics).toContain('cpu')
       const cpu = result.details.cpu as { score: number }
-      expect(cpu.score).toBe(4)
+      expect(cpu.score).toBe(0)
     })
   })
 

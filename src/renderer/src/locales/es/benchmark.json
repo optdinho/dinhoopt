@@ -15,6 +15,8 @@
   "tweakBonus": "Bono de Ajustes",
   "powerBonus": "Plan de Energía",
   "totalScore": "Puntuación Total",
+  "incompleteWarning": "Benchmark incompleto: algunas mediciones fallaron. La puntuación es parcial.",
+  "cancelledWarning": "Benchmark cancelado: el resultado no es una medición completa.",
   "scoreRingAriaLabel": "Anillo de puntuación del benchmark",
   "classS": "≥ 90",
   "classA": "≥ 80",

@@ -124,6 +124,10 @@ export interface MemoryOptimizeResult {
 export interface BenchmarkResult {
   score: number
   scoreClass: BenchmarkScoreClass
+  /** Presento quando o resultado é parcial (medições falharam) ou foi cancelado */
+  failure?: 'cancelled' | 'incomplete'
+  /** IDs das métricas cuja medição falhou (cpu, ram, network, latencyDpc, tweakBonus, powerPlan) */
+  failedMetrics?: string[]
   details: {
     cpu: { score: number; detail: string }
     ram: { score: number; detail: string }

@@ -41,11 +41,11 @@ export function cancelBenchmark(): void {
   _benchmarkCancelled = true
 }
 
-async function measureCpuUsage(isCancelled: () => boolean): Promise<number> {
+async function measureCpuUsage(isCancelled: () => boolean): Promise<number | null> {
   try {
     let total = 0
     for (let i = 0; i < 10; i++) {
-      if (isCancelled()) return 50
+      if (isCancelled()) return null
       const { stdout } = await execFileAsync(
         'powershell.exe',
         [
@@ -64,11 +64,11 @@ async function measureCpuUsage(isCancelled: () => boolean): Promise<number> {
     }
     return total / 10
   } catch {
-    return 50
+    return null
   }
 }
 
-async function measureRam(): Promise<{ free: number; total: number }> {
+async function measureRam(): Promise<{ free: number; total: number } | null> {
   try {
     const { stdout } = await execFileAsync(
       'powershell.exe',
@@ -85,16 +85,16 @@ async function measureRam(): Promise<{ free: number; total: number }> {
     const parsed = JSON.parse(String(stdout).trim())
     return { free: parsed.Free, total: parsed.Total }
   } catch {
-    return { free: 0, total: 0 }
+    return null
   }
 }
 
-async function measurePing(isCancelled: () => boolean): Promise<{ avg: number; jitter: number }> {
+async function measurePing(isCancelled: () => boolean): Promise<{ avg: number; jitter: number } | null> {
   try {
     let total = 0
     const times: number[] = []
     for (let i = 0; i < 10; i++) {
-      if (isCancelled()) return { avg: 100, jitter: 0 }
+      if (isCancelled()) return null
       const { stdout } = await execFileAsync('ping', ['-n', '1', '-w', '3000', '8.8.8.8'], {
         timeout: 5000,
         windowsHide: true,
@@ -108,20 +108,20 @@ async function measurePing(isCancelled: () => boolean): Promise<{ avg: number; j
       }
       await sleep(300)
     }
-    if (times.length === 0) return { avg: 100, jitter: 0 }
+    if (times.length === 0) return null
     const avg = total / times.length
     const jitter = times.length > 1 ? Math.sqrt(times.reduce((sum, t) => sum + (t - avg) ** 2, 0) / times.length) : 0
     return { avg: Math.round(avg), jitter: Math.round(jitter) }
   } catch {
-    return { avg: 100, jitter: 0 }
+    return null
   }
 }
 
-async function measureDpcLatency(isCancelled: () => boolean): Promise<number> {
+async function measureDpcLatency(isCancelled: () => boolean): Promise<number | null> {
   try {
     let maxLatency = 0
     for (let i = 0; i < 3; i++) {
-      if (isCancelled()) return 1000
+      if (isCancelled()) return null
       const { stdout } = await execFileAsync(
         'powershell.exe',
         [
@@ -140,7 +140,7 @@ async function measureDpcLatency(isCancelled: () => boolean): Promise<number> {
     }
     return maxLatency
   } catch {
-    return 1000
+    return null
   }
 }
 
@@ -170,7 +170,7 @@ async function measureTemperature(): Promise<number | null> {
   }
 }
 
-async function countTweaksApplied(): Promise<number> {
+async function countTweaksApplied(): Promise<number | null> {
   try {
     const { stdout } = await execFileAsync(
       'powershell.exe',
@@ -185,20 +185,20 @@ async function countTweaksApplied(): Promise<number> {
       { timeout: 10000, windowsHide: true, encoding: 'utf-8' },
     )
     const c = Number.parseInt(String(stdout).trim(), 10)
-    return Number.isNaN(c) ? 0 : c
+    return Number.isNaN(c) ? null : c
   } catch {
-    return 0
+    return null
   }
 }
 
-async function getActivePowerPlan(): Promise<string> {
+async function getActivePowerPlan(): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync('powercfg', ['/getactivescheme'], { timeout: 5000, windowsHide: true })
     if (stdout.includes('e9a42b02-d5df-448d-aa00-03f14749eb61')) return 'ultimate'
     if (stdout.includes('8c5e7fda-e8bf-4a96-9a05-a4e062abba23')) return 'high'
     return 'balanced'
   } catch {
-    return 'balanced'
+    return null
   }
 }
 
@@ -257,6 +257,14 @@ export function scorePowerBonus(plan: string): number {
   return 0
 }
 
+function markFailed<T>(id: string, value: T | null, failures: string[]): value is T {
+  if (value === null) {
+    failures.push(id)
+    return false
+  }
+  return true
+}
+
 export function registerBenchmarkIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BENCHMARK_RUN, async () => {
     _benchmarkCancelled = false
@@ -265,30 +273,50 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
     sendProgress(win, 0, STEPS[0]?.label ?? '', STEPS[0]?.detail ?? '')
     await sleep(500)
 
+    const failures: string[] = []
+
     // CPU
     sendProgress(win, 1, STEPS[1]?.label ?? '', STEPS[1]?.detail ?? '')
     const cpuUsage = await measureCpuUsage(() => _benchmarkCancelled)
-    const cpuScore = scoreCpu(cpuUsage)
-    const cpuDetail = `Uso médio: ${cpuUsage.toFixed(1)}%`
+    let cpuScore = 0
+    let cpuDetail = 'Falha na medição'
+    if (markFailed('cpu', cpuUsage, failures)) {
+      cpuScore = scoreCpu(cpuUsage)
+      cpuDetail = `Uso médio: ${cpuUsage.toFixed(1)}%`
+    }
 
     // RAM
     sendProgress(win, 2, STEPS[2]?.label ?? '', STEPS[2]?.detail ?? '')
     const ram = await measureRam()
-    const ramFreePercent = ram.total > 0 ? (ram.free / ram.total) * 100 : 0
-    const ramScore = scoreRam(ramFreePercent)
-    const ramDetail = `Livre: ${ram.free}MB / ${ram.total}MB (${ramFreePercent.toFixed(0)}%)`
+    let ramScore = 0
+    let ramDetail = 'Falha na medição'
+    if (markFailed('ram', ram, failures)) {
+      const ramFreePercent = ram.total > 0 ? (ram.free / ram.total) * 100 : 0
+      ramScore = scoreRam(ramFreePercent)
+      ramDetail = `Livre: ${ram.free}MB / ${ram.total}MB (${ramFreePercent.toFixed(0)}%)`
+    }
 
     // Network
     sendProgress(win, 3, STEPS[3]?.label ?? '', STEPS[3]?.detail ?? '')
-    const { avg: pingAvg, jitter } = await measurePing(() => _benchmarkCancelled)
-    const netScore = scoreNetwork(pingAvg, jitter)
-    const netDetail = `Ping médio: ${pingAvg}ms, Jitter: ${jitter}ms`
+    const ping = await measurePing(() => _benchmarkCancelled)
+    let netScore = 0
+    let jitter = 0
+    let netDetail = 'Falha na medição'
+    if (markFailed('network', ping, failures)) {
+      jitter = ping.jitter
+      netScore = scoreNetwork(ping.avg, ping.jitter)
+      netDetail = `Ping médio: ${ping.avg}ms, Jitter: ${ping.jitter}ms`
+    }
 
     // DPC
     sendProgress(win, 4, STEPS[4]?.label ?? '', STEPS[4]?.detail ?? '')
     const dpc = await measureDpcLatency(() => _benchmarkCancelled)
-    const dpcScore = scoreDpc(dpc)
-    const dpcDetail = `Latência DPC: ${dpc}µs`
+    let dpcScore = 0
+    let dpcDetail = 'Falha na medição'
+    if (markFailed('latencyDpc', dpc, failures)) {
+      dpcScore = scoreDpc(dpc)
+      dpcDetail = `Latência DPC: ${dpc}µs`
+    }
 
     // Temperature
     sendProgress(win, 5, STEPS[5]?.label ?? '', STEPS[5]?.detail ?? '')
@@ -300,14 +328,21 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
     sendProgress(win, 6, STEPS[6]?.label ?? '', STEPS[6]?.detail ?? '')
     const tweaksApplied = await countTweaksApplied()
     const totalTweaks = 51
-    const tweakBonus = scoreTweakBonus(tweaksApplied, totalTweaks)
+    let tweakBonus = 0
+    if (markFailed('tweakBonus', tweaksApplied, failures)) {
+      tweakBonus = scoreTweakBonus(tweaksApplied, totalTweaks)
+    }
 
     // Power Plan
     sendProgress(win, 7, STEPS[7]?.label ?? '', STEPS[7]?.detail ?? '')
     const powerPlan = await getActivePowerPlan()
-    const powerBonus = scorePowerBonus(powerPlan)
-    const powerDetail =
-      powerPlan === 'ultimate' ? 'Ultimate Performance' : powerPlan === 'high' ? 'High Performance' : 'Balanced'
+    let powerBonus = 0
+    let powerDetail = 'Indisponível'
+    if (markFailed('powerPlan', powerPlan, failures)) {
+      powerDetail =
+        powerPlan === 'ultimate' ? 'Ultimate Performance' : powerPlan === 'high' ? 'High Performance' : 'Balanced'
+      powerBonus = scorePowerBonus(powerPlan)
+    }
 
     // Score
     const totalScore = cpuScore + ramScore + netScore + dpcScore + tempScore + tweakBonus + powerBonus
@@ -327,10 +362,18 @@ export function registerBenchmarkIpc(getWindow: WindowGetter): void {
         network: { score: netScore, detail: netDetail, jitter },
         latencyDpc: { score: dpcScore, detail: dpcDetail },
         temperature: { score: tempScore, detail: tempDetail },
-        tweakBonus: { score: tweakBonus, applied: tweaksApplied, total: totalTweaks },
+        tweakBonus: { score: tweakBonus, applied: tweaksApplied ?? 0, total: totalTweaks },
         powerBonus: { score: powerBonus, plan: powerDetail },
       },
       completedAt: new Date().toISOString(),
+      ...(failures.length > 0
+        ? {
+            failure: _benchmarkCancelled ? ('cancelled' as const) : ('incomplete' as const),
+            failedMetrics: failures,
+          }
+        : _benchmarkCancelled
+          ? { failure: 'cancelled' as const }
+          : {}),
     }
 
     getLogger().success('benchmark', `Benchmark completed with score ${totalScore} (${classifyScore(totalScore)})`)

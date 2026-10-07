@@ -14,6 +14,7 @@
   "clipSaved": "Clipe salvo com sucesso!",
   "recordingStarted": "Gravação iniciada",
   "recordingStopped": "Gravação parada",
+  "configSyncFailed": "Definições guardadas, mas não puderam ser aplicadas ao motor. Inicie a gravação para as aplicar.",
   "rename": "Renomear",
   "renameError": "Falha ao renomear clipe",
   "actions": "Ações do clipe",
