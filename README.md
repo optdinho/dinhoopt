@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.8-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.9-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.8-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.9-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,6 +47,15 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
+### 2.0.9
+
+**🔧 Instalador e release mais robustos.** O `electron-builder` publicava os dois alvos
+(**NSIS** + **portable**) em paralelo e cada um tentava criar a release no GitHub ao mesmo
+tempo — o segundo recebia `422 already_exists` e o run abortava a meio (a release nascia só
+com o `.blockmap`). A release passa a ser criada **uma única vez, de forma idempotente**,
+antes do `electron-builder`; os publishers apenas sobem os assets. O **body** da release
+também passa a ser gerado do `CHANGELOG.md`. Sem alterações funcionais.
+
 ### 2.0.8
 
 **🎬 A captura deixa de ser desligada pelas próprias otimizações.** Quatro tweaks "gaming"
@@ -61,22 +70,6 @@ por sessão** e a saltar diretamente para **DXGI** quando a captura está mesmo 
 **📉 Teto de bitrate dos Clips mais baixo.** Os presets **"boa"** (720p60) e **"leve-60"**
 (900p60) tinham um teto generoso demais e passam de 40/62,5 Mbps para **24/37,5 Mbps**. O CQ
 (16/18/20/22) não muda — o teto VBV é limite, não alvo, portanto a qualidade visível mantém-se.
-
-### 2.0.7
-
-- **As definições passam a ser mesmo guardadas.** `backupMode`, `autoInstallUpdates`,
-  `autoInstallSchedule`, `protectRecycleBin` e a config do Modo Jogo eram **rejeitados em
-  silêncio** pela allow-list: a UI mostrava "salvo" e ao reiniciar voltava tudo ao antigo.
-  Agora são validados e persistem — e todos os chamadores leem o resultado e **revertem o
-  estado otimista** + avisam quando a gravação falha.
-- **Os resultados deixam de mentir.** Reverts do Compliance/Vulnerabilidades já não descartam
-  falhas; o Benchmark deixa de fabricar valores (CPU a 50, RAM a 0…) e marca cada métrica com
-  `Falha na medição`; eliminar da Quarentena um ficheiro já ausente conta como falha; a
-  configuração de Clips passa a reportar o erro quando o sync ao motor falha.
-- **Restauro do Registo.** Novo botão para listar os backups da limpeza e restaurá-los com
-  `reg import`.
-- **Menos código, menos superfície.** ~35 ficheiros e ~4.500 linhas mortas removidas; o
-  `.license-cache.json` passou a ser assinado com `HMAC-SHA256` ligado ao hardware.
 
 ---
 

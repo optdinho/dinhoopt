@@ -5,6 +5,25 @@ as duas versões mais recentes; o histórico completo vive aqui.
 
 ---
 
+## 2.0.9
+
+### 🔧 Release mais robusto
+
+O `electron-builder` publica os dois alvos do instalador (**NSIS** + **portable**) em
+paralelo, e cada publisher tentava **criar a release do GitHub ao mesmo tempo** — o primeiro
+criava, o segundo recebia `422 already_exists` e o run abortava a meio (a release nascia só
+com o `.blockmap`, sem o `.exe` nem o `latest.yml`). A release passa a ser criada **uma única
+vez, de forma idempotente**, antes do `electron-builder` (`scripts/ensure-release.js`); os
+publishers encontram-na e apenas fazem upload dos assets.
+
+O **body da release** passa também a ser gerado automaticamente a partir deste `CHANGELOG.md`
+(`scripts/gen-release-notes.js` + `releaseInfo` no `electron-builder.yml`), em vez de ser
+corrigido à mão via API.
+
+Sem alterações funcionais na aplicação.
+
+---
+
 ## 2.0.8
 
 ### 🎬 A captura deixa de ser desligada pelas próprias otimizações

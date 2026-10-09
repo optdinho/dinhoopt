@@ -60,6 +60,16 @@ jobs:
       - name: Stage release notes (CHANGELOG -> release-notes.md)
         run: npm run release:notes
 
+      # Cria a release no GitHub de forma IDEMPOTENTE antes do electron-builder.
+      # Sem isto, os publishers nsis+portable correm em paralelo e disputam a
+      # criacao da release: um cria, o outro leva 422 `already_exists` e o run
+      # morre a meio (foi o run 37928024831 - so o .blockmap subiu). Com a
+      # release ja criada, os publishers encontram-na e apenas sobem os assets.
+      - name: Stage ensure release (idempotent)
+        run: npm run release:ensure
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
       - name: Stage publish (electron-builder)
         run: npx electron-builder --win --publish always
         env:
