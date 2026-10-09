@@ -621,6 +621,23 @@ function initGui(): void {
       )
     }
 
+    // Re-enable capture registry values once per version (heals installs that
+    // applied the removed Game DVR tweaks). Detached so gpupdate never blocks boot.
+    try {
+      const { applyCaptureEnableMigration } = await import('./services/capture-enable-migration')
+      applyCaptureEnableMigration().catch((err) => {
+        getLogger().error(
+          'app',
+          `Failed to re-enable capture registry values: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
+    } catch (err) {
+      getLogger().error(
+        'app',
+        `Failed to load capture-enable migration: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+
     // Start the scheduled scan checker
     startScheduler(() => mainWindow)
 

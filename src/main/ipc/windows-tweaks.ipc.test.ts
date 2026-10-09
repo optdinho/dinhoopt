@@ -67,7 +67,7 @@ const CATEGORY_EXPECTED_COUNTS: Record<WindowsTweakCategory, number> = {
   network: 17,
   gpu: 7,
   system: 21,
-  gaming: 12,
+  gaming: 8,
   privacy: 6,
   mmcss: 8,
   energy: 5,
@@ -857,7 +857,7 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
     expect(cmds.some((c) => c.includes('TcpAckFrequency'))).toBe(true)
   })
 
-  it('applies gamedvr-pm via policy PowerShell', async () => {
+  it('applies a registry tweak via reg.exe', async () => {
     mockIsAdmin.mockReturnValue(true)
     const cmds: string[] = []
     mockExecFile.mockImplementation((...args: unknown[]) => {
@@ -869,12 +869,10 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
     registerWindowsTweaksIpc(() => null)
     const handler = getHandler('windows-tweaks:apply')
 
-    const result = (await handler({}, ['gamedvr-pm'])) as { succeeded: number }
+    const result = (await handler({}, ['telemetria-off'])) as { succeeded: number }
 
     expect(result.succeeded).toBe(1)
-    // Policy tweak should call Set-ItemProperty + gpupdate
-    expect(cmds.some((c) => c.includes('Set-ItemProperty'))).toBe(true)
-    expect(cmds.some((c) => c.includes('gpupdate'))).toBe(true)
+    expect(cmds.some((c) => c.includes('AllowTelemetry'))).toBe(true)
   })
 })
 

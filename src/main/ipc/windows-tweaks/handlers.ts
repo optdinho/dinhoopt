@@ -149,18 +149,6 @@ async function checkInterfaceTweakApplied(tweak: WindowsTweakDef): Promise<boole
   return stdout.includes('OK')
 }
 
-async function applyPolicyTweak(value: number): Promise<boolean> {
-  const script = `
-    $ErrorActionPreference = 'Stop'
-    Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\PolicyManager\\default\\ApplicationManagement\\AllowGameDVR" -Name "value" -Value ${value} -Type DWord -Force
-    Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\PolicyManager\\current\\ApplicationManagement\\AllowGameDVR" -Name "value" -Value ${value} -Type DWord -Force -ErrorAction SilentlyContinue
-    gpupdate /target:computer /force 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Error "gpupdate falhou com codigo $LASTEXITCODE"; exit 1 }
-  `
-  await runPsScript(script)
-  return true
-}
-
 function tweakRequiresAdmin(tweak: WindowsTweakDef): boolean {
   return tweak.requiresAdmin ?? tweak.hive === 'HKEY_LOCAL_MACHINE'
 }
@@ -226,10 +214,6 @@ async function applyRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolean
       await applyInterfaceTweak(tweak, 'optimizedValue')
       return { ok: true }
     }
-    if (tweak.id === 'gamedvr-pm') {
-      await applyPolicyTweak(Number(tweak.optimizedValue))
-      return { ok: true }
-    }
     if (POWERCFG_TWEAKS.has(tweak.id)) {
       await applyPowerCfgTweak(tweak.id, 'apply')
       return { ok: true }
@@ -269,10 +253,6 @@ async function revertRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolea
     }
     if (tweak.path.includes('\\Interfaces')) {
       await applyInterfaceTweak(tweak, 'defaultValue')
-      return { ok: true }
-    }
-    if (tweak.id === 'gamedvr-pm') {
-      await applyPolicyTweak(Number(tweak.defaultValue))
       return { ok: true }
     }
     if (POWERCFG_TWEAKS.has(tweak.id)) {

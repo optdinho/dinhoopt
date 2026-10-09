@@ -1751,4 +1751,65 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
     }
 
     #endregion
+
+    #region WGC availability latch — coordinator consults (2026-10-08)
+
+    // O GameInfo default do CreateWithMinimalDeps é inválido (Hwnd=0), logo a
+    // secção 1 (WGC per-window) fica já fora; a secção 2 (WGC desktop) é a única
+    // reachable. Se o latch WGC estiver activo, NENHUMA secção WGC pode correr:
+    // o `_wgcPump` (criado SÓ dentro das secções WGC) tem de permanecer null, e
+    // `_capture` nunca pode ser um WgcCaptureSource. GPU-free de propósito (CI
+    // não tem GPU) — DXGI/Hybrid podem falhar em máquina sem GPU e são apanhados
+    // pelos catchs existentes; isso não interessa ao veredicto.
+
+    [Fact]
+    public void SelectCaptureSource_WhenWgcLatchedUnavailable_DoesNotTouchWgc()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            WgcCaptureSource.MarkWgcUnavailableForSession();
+            var coord = CreateWithMinimalDeps();
+
+            var method = CoordinatorType.GetMethod("SelectCaptureSource", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            try { method.Invoke(coord, null); }
+            catch (TargetInvocationException) { /* sem GPU em CI: DXGI/Hybrid falham por desígnio — não é o alvo */ }
+
+            var pump = GetField<object>(coord, "_wgcPump");
+            var capture = GetField(coord, "_capture");
+
+            Assert.Null(pump);
+            Assert.False(capture is WgcCaptureSource);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public async Task SelectCaptureSourceAsync_WhenWgcLatchedUnavailable_DoesNotTouchWgc()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            WgcCaptureSource.MarkWgcUnavailableForSession();
+            var coord = CreateWithMinimalDeps();
+
+            var method = CoordinatorType.GetMethod("SelectCaptureSourceAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var task = (Task)method.Invoke(coord, null)!;
+            await task;
+
+            var pump = GetField<object>(coord, "_wgcPump");
+            var capture = GetField(coord, "_capture");
+
+            Assert.Null(pump);
+            Assert.False(capture is WgcCaptureSource);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    // O controlo oposto é o comportamento já estabelecido: SEM latch, a secção
+    // WGC desktop é tentada (pump fica não-null antes de a sessão falhar em
+    // máquina sem o serviço). Não testamos aqui para não criarmos uma sessão WGC
+    // real em CI — o comportamento default está coberto pelos testes do WGC.
+
+    #endregion
 }

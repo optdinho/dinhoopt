@@ -46,6 +46,72 @@ public sealed class WgcCaptureSource : ICaptureSource
     private long _capIntervalTicks;
     private long _lastAcceptedTicks;
 
+    // ── Latch de disponibilidade WGC por sessão ──────────────────────────
+    // O Windows.Graphics.Capture pode ficar indisponível para a SESSÃO inteira
+    // (serviço de captura desligado — ERROR_SERVICE_DISABLED 0x80070422 — ou sem
+    // consentimento — E_ACCESSDENIED 0x80070005). Medido 2026-10-06: 17 falhas
+    // WGC + 4 reinícios de pipeline, todas 0x80070422. Em vez de re-tentar WGC a
+    // cada reinício (3× per-window + desktop) e só depois cair para DXGI, avaliamos
+    // UMA vez por sessão e o coordinator salta direto para DXGI.
+    // ⚠️ GraphicsCaptureSession.IsSupported() pode devolver TRUE no mesmo cenário
+    // (consulta estática de capacidade, não o estado do serviço no momento) → o
+    // latch também dispara dos catchs dos CreateFor*, via MarkWgcUnavailableForSession().
+    private static int _wgcAvailabilityCheckState; // 0 = não avaliado, 1 = avaliado
+    private static bool _wgcAvailable;
+
+    /// <summary>Limpa o latch (estático process-wide) para os testes.</summary>
+    internal static void ResetWgcAvailabilityForTests()
+    {
+        _wgcAvailabilityCheckState = 0;
+        _wgcAvailable = false;
+    }
+
+    /// <summary>
+    /// Indica se WGC está disponível para a SESSÃO atual. Avalia o gate uma única
+    /// vez e faz latch — chamadas seguintes devolvem o valor em cache. O gate
+    /// default é <see cref="GraphicsCaptureSession.IsSupported"/> (estático, sem
+    /// WinRT); nos testes, é substituído por injecção <see cref="Func{T}"/>.
+    /// </summary>
+    internal static bool IsWgcAvailableForSession(Func<bool>? gate = null)
+    {
+        if (Volatile.Read(ref _wgcAvailabilityCheckState) == 1)
+            return _wgcAvailable;
+
+        var available = false;
+        try
+        {
+            available = gate?.Invoke() ?? GraphicsCaptureSession.IsSupported();
+        }
+        catch
+        {
+            available = false;
+        }
+
+        _wgcAvailable = available;
+        Volatile.Write(ref _wgcAvailabilityCheckState, 1);
+        return available;
+    }
+
+    /// <summary>Fixa o latch em indisponível (usado nos catchs dos CreateFor*).</summary>
+    internal static void MarkWgcUnavailableForSession()
+    {
+        _wgcAvailable = false;
+        Volatile.Write(ref _wgcAvailabilityCheckState, 1);
+    }
+
+    /// <summary>
+    /// Classifica um HRESULT como falha de nível de SESSÃO (serviço de captura
+    /// desligado / sem consentimento) vs transitória (janela inválida, etc.).
+    /// Só as de sessão disparam o latch — uma janela que sumiu não pode derrubar
+    /// o WGC para as chamadas seguintes.
+    /// </summary>
+    internal static bool IsSessionLevelFailure(Exception ex)
+    {
+        if (ex is not COMException com)
+            return false;
+        return unchecked((uint)com.HResult) is 0x80070422U or 0x80070005U;
+    }
+
     /// <summary>
     /// Intervalo de captura (ticks de Stopwatch) para o fps alvo.
     /// fps &lt;= 0 desliga o cap (aceita todos os frames). Divisão truncada:
@@ -232,6 +298,8 @@ public sealed class WgcCaptureSource : ICaptureSource
             catch (Exception ex)
             {
                 Log.E("WGC-DIAG", $"CreateForWindow falhou: {ex.GetType().Name}: {ex.Message}");
+                if (IsSessionLevelFailure(ex))
+                    MarkWgcUnavailableForSession();
                 throw;
             }
             if (item is null)
@@ -251,6 +319,8 @@ public sealed class WgcCaptureSource : ICaptureSource
             catch (Exception ex)
             {
                 Log.E("WGC-DIAG", $"CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
+                if (IsSessionLevelFailure(ex))
+                    MarkWgcUnavailableForSession();
                 throw;
             }
             if (item is null)

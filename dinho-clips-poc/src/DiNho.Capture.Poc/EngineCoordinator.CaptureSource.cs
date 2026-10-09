@@ -15,6 +15,14 @@ public sealed partial class EngineCoordinator
         var game = _captureTargetGame;
         var gameHwnd = game.IsValid ? game.Hwnd : IntPtr.Zero;
 
+        // Latch de disponibilidade WGC por sessão (2026-10-08): se a sessão está
+        // condenada a falhar (ERROR_SERVICE_DISABLED 0x80070422 etc.), saltamos as
+        // secções WGC inteiras e vamos diretos para DXGI — eliminando os retries
+        // inúteis (3× per-window + desktop) observados em cada arranque/reinit.
+        var wgcAvailable = WgcCaptureSource.IsWgcAvailableForSession();
+        if (!wgcAvailable)
+            Log.W("EngineCoordinator", "[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente.");
+
         // Salva o HWND original para usar como fallback em reinit
         // (quando o jogo está minimizado, MainWindowHandle pode ser Zero)
         if (gameHwnd != IntPtr.Zero)
@@ -27,7 +35,7 @@ public sealed partial class EngineCoordinator
         }
 
         // 1) WGC per-window (melhor qualidade) — tenta até 3x com 400ms entre tentativas
-        if (game.IsValid && gameHwnd != IntPtr.Zero && IsWindowValidForWgc(gameHwnd)
+        if (wgcAvailable && game.IsValid && gameHwnd != IntPtr.Zero && IsWindowValidForWgc(gameHwnd)
             && !WdaHelper.IsExcludedFromCapture(gameHwnd))
         {
             const int maxRetries = 3;
@@ -89,32 +97,35 @@ public sealed partial class EngineCoordinator
 
         // 2) WGC desktop (full monitor via DWM) — funciona para qualquer janela
         //    No multi-monitor, captura o monitor onde o jogo está
-        WgcCaptureSource? wgcDesktop = null;
-        try
+        if (wgcAvailable)
         {
-            var gameMonitor = gameHwnd != IntPtr.Zero
-                ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd)
-                : IntPtr.Zero;
-
-            _wgcPump ??= new WindowsMessagePump();
-
-            wgcDesktop = new WgcCaptureSource();
-            _wgcPump.Invoke(() =>
+            WgcCaptureSource? wgcDesktop = null;
+            try
             {
-                wgcDesktop.SetCaptureFrameRate(_config.Config.Fps);
-                wgcDesktop.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
-                wgcDesktop.StartFramePump();
-            });
-            _capture = wgcDesktop;
-            _status.Update(s => s.CaptureBackend = "WGC");
-            Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
-            goto multiMonitor;
-        }
-        catch (Exception wgcEx)
-        {
-            wgcDesktop?.Dispose();
-            var innerMsg = wgcEx.InnerException != null ? $" → {wgcEx.InnerException.GetType().Name}: {wgcEx.InnerException.Message}" : "";
-            Log.E("EngineCoordinator", $"WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{innerMsg}");
+                var gameMonitor = gameHwnd != IntPtr.Zero
+                    ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd)
+                    : IntPtr.Zero;
+
+                _wgcPump ??= new WindowsMessagePump();
+
+                wgcDesktop = new WgcCaptureSource();
+                _wgcPump.Invoke(() =>
+                {
+                    wgcDesktop.SetCaptureFrameRate(_config.Config.Fps);
+                    wgcDesktop.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
+                    wgcDesktop.StartFramePump();
+                });
+                _capture = wgcDesktop;
+                _status.Update(s => s.CaptureBackend = "WGC");
+                Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
+                goto multiMonitor;
+            }
+            catch (Exception wgcEx)
+            {
+                wgcDesktop?.Dispose();
+                var innerMsg = wgcEx.InnerException != null ? $" → {wgcEx.InnerException.GetType().Name}: {wgcEx.InnerException.Message}" : "";
+                Log.E("EngineCoordinator", $"WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{innerMsg}");
+            }
         }
 
         // 3) DXGI Desktop Duplication (full monitor, funciona sempre)
@@ -164,6 +175,11 @@ public sealed partial class EngineCoordinator
         var game = _captureTargetGame;
         var gameHwnd = game.IsValid ? game.Hwnd : IntPtr.Zero;
 
+        // Mesmo latch de sessão que o sync — ver SelectCaptureSource().
+        var wgcAvailable = WgcCaptureSource.IsWgcAvailableForSession();
+        if (!wgcAvailable)
+            Log.W("EngineCoordinator", "[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente.");
+
         // Save hwnd fallback
         if (gameHwnd != IntPtr.Zero)
             _captureTargetHwnd = gameHwnd;
@@ -176,7 +192,7 @@ public sealed partial class EngineCoordinator
 
         // 1) WGC per-window (best) — async retries with delay, do not block pipeline lock
         
-        if (game.IsValid && gameHwnd != IntPtr.Zero && IsWindowValidForWgc(gameHwnd)
+        if (wgcAvailable && game.IsValid && gameHwnd != IntPtr.Zero && IsWindowValidForWgc(gameHwnd)
             && !WdaHelper.IsExcludedFromCapture(gameHwnd))
         {
             const int maxRetries = 3;
@@ -229,28 +245,31 @@ public sealed partial class EngineCoordinator
         }
 
         // 2) WGC desktop (monitor)
-        WgcCaptureSource? wgcDesktop = null;
-        try
+        if (wgcAvailable)
         {
-            var gameMonitor = gameHwnd != IntPtr.Zero ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd) : IntPtr.Zero;
-            _wgcPump ??= new WindowsMessagePump();
-            wgcDesktop = new WgcCaptureSource();
-            _wgcPump.Invoke(() =>
+            WgcCaptureSource? wgcDesktop = null;
+            try
             {
-                wgcDesktop.SetCaptureFrameRate(_config.Config.Fps);
-                wgcDesktop.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
-                wgcDesktop.StartFramePump();
-            });
-            _capture = wgcDesktop;
-            _status.Update(s => s.CaptureBackend = "WGC");
-            Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
-            return;
-        }
-        catch (Exception wgcEx)
-        {
-            wgcDesktop?.Dispose();
-            var inner = wgcEx.InnerException != null ? $" → {wgcEx.InnerException.GetType().Name}: {wgcEx.InnerException.Message}" : "";
-            Log.E("EngineCoordinator", $"WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{inner}");
+                var gameMonitor = gameHwnd != IntPtr.Zero ? MonitorHelper.GetMonitorFromWindowHandle(gameHwnd) : IntPtr.Zero;
+                _wgcPump ??= new WindowsMessagePump();
+                wgcDesktop = new WgcCaptureSource();
+                _wgcPump.Invoke(() =>
+                {
+                    wgcDesktop.SetCaptureFrameRate(_config.Config.Fps);
+                    wgcDesktop.Initialize(_sharedDevice, IntPtr.Zero, gameMonitor);
+                    wgcDesktop.StartFramePump();
+                });
+                _capture = wgcDesktop;
+                _status.Update(s => s.CaptureBackend = "WGC");
+                Log.I("EngineCoordinator", "Captura: Windows Graphics Capture (desktop)");
+                return;
+            }
+            catch (Exception wgcEx)
+            {
+                wgcDesktop?.Dispose();
+                var inner = wgcEx.InnerException != null ? $" → {wgcEx.InnerException.GetType().Name}: {wgcEx.InnerException.Message}" : "";
+                Log.E("EngineCoordinator", $"WGC desktop falhou: {wgcEx.GetType().Name}: {wgcEx.Message}{inner}");
+            }
         }
 
         // 3) DXGI Desktop Duplication (full monitor)

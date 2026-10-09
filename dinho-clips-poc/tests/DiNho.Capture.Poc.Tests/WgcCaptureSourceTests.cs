@@ -432,4 +432,109 @@ public sealed class WgcCaptureSourceTests
         source.Dispose();
         Assert.Throws<ObjectDisposedException>(() => source.StartFramePump());
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Latch de disponibilidade WGC por sessão (2026-10-08)
+    //  IsWgcAvailableForSession gate por injecção — sem WinRT real.
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void IsWgcAvailableForSession_FirstCallEvaluatesGate()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            var called = 0;
+            bool gate()
+            {
+                called++;
+                return true;
+            }
+
+            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.Equal(1, called);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_Latches_SecondCallDoesNotReEvaluateGate()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            var called = 0;
+            bool gate()
+            {
+                called++;
+                return false;
+            }
+
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            // O latch garante que o gate (WinRT caro/real) só corre UMA vez por sessão.
+            Assert.Equal(1, called);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_WhenGateThrows_ReturnsFalseAndLatches()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            var called = 0;
+            bool gate()
+            {
+                called++;
+                throw new InvalidOperationException("serviço de captura indisponível");
+            }
+
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.Equal(1, called);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void MarkWgcUnavailableForSession_Latches_EvenIfGateWouldReturnTrue()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            // Caminho do catch dos CreateFor*: o IsSupported devolveu true mas o
+            // CreateFor* falhou com 0x80070422 — o latch tem de disparar à mesma.
+            WgcCaptureSource.MarkWgcUnavailableForSession();
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void ResetWgcAvailabilityForTests_ClearsLatch()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        WgcCaptureSource.MarkWgcUnavailableForSession();
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        Assert.True(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+    }
+
+    [Theory]
+    [InlineData(unchecked((int)0x80070422), true)] // ERROR_SERVICE_DISABLED — serviço de captura desligado
+    [InlineData(unchecked((int)0x80070005), true)] // E_ACCESSDENIED — sem consentimento/conta de serviço
+    [InlineData(unchecked((int)0x80070057), false)] // E_INVALIDARG — janela inválida/transitório, NÃO é sessão
+    public void IsSessionLevelFailure_ClassifiesByHResult(int hr, bool expected)
+    {
+        var ex = new COMException("falha", hr);
+        Assert.Equal(expected, WgcCaptureSource.IsSessionLevelFailure(ex));
+    }
+
+    [Fact]
+    public void IsSessionLevelFailure_NonComException_IsFalse()
+    {
+        Assert.False(WgcCaptureSource.IsSessionLevelFailure(new InvalidOperationException("qualquer")));
+    }
 }

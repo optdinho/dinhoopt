@@ -135,14 +135,14 @@ vi.mock('./tweaks/performance', () => ({
 vi.mock('./tweaks/security', () => ({
   SECURITY_TWEAKS: [
     {
-      id: 'gamedvr-pm',
-      name: 'GameDVR Policy',
+      id: 'telemetria-off',
+      name: 'Telemetria OFF',
       description: 'd',
-      category: 'gaming',
+      category: 'security',
       level: 'basico',
       hive: 'HKEY_LOCAL_MACHINE' as const,
-      path: 'SOFTWARE\\Microsoft\\PolicyManager\\default\\ApplicationManagement\\AllowGameDVR',
-      key: 'value',
+      path: 'SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection',
+      key: 'AllowTelemetry',
       kind: 'DWord' as const,
       defaultValue: 1,
       optimizedValue: 0,
@@ -179,7 +179,7 @@ describe('handlers.ts', () => {
       expect(catalog.map((t) => t.id)).toContain('sticky-keys-off')
       expect(catalog.map((t) => t.id)).toContain('tcp-no-delay')
       expect(catalog.map((t) => t.id)).toContain('pcie-aspm-off')
-      expect(catalog.map((t) => t.id)).toContain('gamedvr-pm')
+      expect(catalog.map((t) => t.id)).toContain('telemetria-off')
     })
   })
 
@@ -405,17 +405,6 @@ describe('handlers.ts', () => {
       expect(result.rebootRequired[0].id).toBe('ntfs-last-access-off')
     })
 
-    it('applies gamedvr-pm via policy tweak path', async () => {
-      mockExecFileAsync.mockResolvedValue({ stdout: '', stderr: '' })
-
-      const { registerWindowsTweaksIpc } = await import('./handlers')
-      registerWindowsTweaksIpc(vi.fn())
-
-      const applyHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:apply')![1]
-      const result = await applyHandler(null, ['gamedvr-pm'])
-      expect(result.succeeded).toBe(1)
-    })
-
     it('applies pcie-aspm-off via powercfg path', async () => {
       const SCHEME_GUID = '12345678-abcd-1234-abcd-123456789abc'
       mockExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
@@ -510,17 +499,6 @@ describe('handlers.ts', () => {
       const revertHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:revert')![1]
       const result = await revertHandler(null, ['sticky-keys-off'])
       expect(result.failed).toBe(1)
-    })
-
-    it('reverts gamedvr-pm via policy path', async () => {
-      mockExecFileAsync.mockResolvedValue({ stdout: '', stderr: '' })
-
-      const { registerWindowsTweaksIpc } = await import('./handlers')
-      registerWindowsTweaksIpc(vi.fn())
-
-      const revertHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:revert')![1]
-      const result = await revertHandler(null, ['gamedvr-pm'])
-      expect(result.succeeded).toBe(1)
     })
 
     it('reverts pcie-aspm-off via powercfg path', async () => {
