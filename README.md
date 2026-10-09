@@ -5,11 +5,11 @@
 <h1 align="center">🛡️ DiNho Optimizer</h1>
 
 <p align="center">
-  <strong>Plataforma completa de otimização, segurança e privacidade para Windows 10/11 — 60+ módulos</strong>
+  <strong>Otimização, segurança e privacidade para Windows 10/11 — tudo numa app, 60+ módulos</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.0.6-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.0.8-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -18,10 +18,9 @@
 
 <p align="center">
   <a href="#-download">📥 Download</a> •
-  <a href="#-novidades-da-203">📝 Novidades</a> •
+  <a href="#-novidades">📝 Novidades</a> •
   <a href="#-funcionalidades">⚡ Funcionalidades</a> •
   <a href="#-tecnologias">🛠️ Tecnologias</a> •
-  <a href="#-arquitetura">🏗️ Arquitetura</a> •
   <a href="#-desenvolvimento">💻 Desenvolvimento</a>
 </p>
 
@@ -31,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.6-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.0.8-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -44,469 +43,107 @@
 
 ---
 
-## 📝 Novidades da 2.0.7
-
-### 🟢 As definições passam a ser mesmo guardadas
-
-Três conjuntos de definições eram **rejeitados em silêncio**: o tipo de backup e a
-auto-instalação de atualizações (`backupMode`, `autoInstallUpdates`,
-`autoInstallSchedule`), a proteção da Lixeira (`protectRecycleBin`) e a configuração
-do Modo Jogo (com `preconfigVersion`). A allow-list de validação não os conhecia, por
-isso o `SETTINGS_SET` respondia `{success:false}` — e ninguém lia a resposta: a UI
-mostrava "salvo", mas ao reiniciar tudo voltava ao valor antigo. Agora estas chaves são
-validadas com os valores corretos e persistem: definir o backup como *Full* deixa de
-voltar a *targeted*, a auto-instalação do atualizador já dispara, e o Modo Jogo guarda
-mesmo a pré-configuração.
-
-Para nunca mais ninguém engolir um "ok" que não era: todos os chamadores de `settings:set`
-(e dos pares de `registry`, favoritos dos clips e sync de configuração) leem agora o
-resultado e **revertem o estado otimista** + avisam quando a gravação falha.
-
-### 🔍 Os resultados deixam de mentir
-
-Quatro caminhos mostravam sucesso quando a operação tinha falhado:
-
-- **Reverts do Compliance e do Scanner de Vulnerabilidades** — as falhas eram descartadas
-  e o estado apontava para "concluído". Agora o botão mostra um aviso com quantas
-  correções falharam.
-- **O Benchmark fabricava valores** — CPU a 50, RAM a 0, plano de energia "balanceado"
-  quando a medição tinha falhado por completo. Agora cada métrica que falha sai marcada
-  como `Falha na medição`, com um banner âmbar a dizer que o benchmark ficou incompleto.
-- **Eliminar um ficheiro da Quarentena já falhado** era contado como sucesso (o `force`
-  do apagamento engolia o erro). Agora um ficheiro ausente conta como falha e a página avisa.
-- **A configuração de Clips não chegava ao motor** — quando o sync pelo pipe falhava, o
-  `CLIPS_SET_CONFIG` respondia na mesma `{success:true}`. Agora falha de verdade e a UI avisa.
-
-### ♻️ Restauro do Registo
-
-A limpeza do registo criava sempre backups antes de corrigir — e nunca houve forma de os
-**restaurar** dentro do app. Chega agora um botão *Restaurar* na página de Registo: lista
-os backups existentes (classificados por tipo e data) e corre o `reg import` com o nome
-indicado. Backups de *tasks* não são suportados (fora de âmbito, o aviso é claro).
-
-### 🧹 Menos código, menos superfície de falha
-
-Três auditorias internas no código morto e na "falsa prontidão" removeram **35 ficheiros e
-~4.500 linhas** sem uso (o caminho antigo do scanner de vulnerabilidades, o handler de
-menu de contexto órfão, 27 componentes React sem referência, a superfície IPC do
-`DRIVER_AGENT`, a lib `D3DCompiler` nunca usada e o `patch-package` morto). O resultado
-é menos superfície para bugs e para revisão de segurança. A licença deixou de confiar
-num cache falsificável: o ficheiro `.license-cache.json` é agora assinado com
-`HMAC-SHA256` ligado ao hardware, e um `Admin` no registo de auditoria passou a ser
-detetado de verdade.
-
-### 🧪 Qualidade
-
-A suíte C# subiu para **2.528 testes, 0 ignorados** — os testes de pipe multi-cliente
-passam sem elevação (o atributo `RequiresAdminFact` era desnecessário). Testes vazios,
-*tauologias* e *sleeps* fixos foram asseridos e removidos. O CI ganhou um job `dotnet`
-(a suíte C# passou a correr no pipeline, antes não tinha nenhum passo de .NET) e um gate
-pós-publish que falha o worklow se o feed `latest.yml` não servir a versão recém-construída.
-
-| | Antes | Agora |
-|---|---|---|
-| Testes (TS) | 7.792 | **7.840** |
-| Testes (C#, Release) | 2.212 | **2.528** |
-| Vulnerabilidades `npm audit` (high) | 5 | **0** |
-
----
-
-## 📝 Novidades da 2.0.6
-
-### 🎬 Clips a 60 fps sem judder
-
-O gravador anunciava 60 fps e o ficheiro saía mesmo a 60 fps — mas a **timeline tinha
-buracos**. Numa medição de um clip de 5 minutos: **542 saltos** na timeline e **+3,99 s de
-excesso**, ou seja, 1,3% do vídeo era tempo que não existia. O sintoma é o judder: o
-leitor avança, não há frame para mostrar, e a imagem dá um tranco.
-
-A causa era a **âncora dos timestamps**. Cada frame recebia o instante a que foi capturado
-em vez do instante a que *deveria* estar na grelha. Bastava a captura demorar dois
-milissegundos a mais do que o habitual nesse instante, e o salto ficava permanentemente
-deslocado — não se recuperava nunca.
-
-A grelha passou a ser **absoluta**: o frame *n* tem sempre o tempo *n* × 16,667 ms, onde quer
-que a captura o tenha entregue. Quando não há frame novo nesse instante, **o anterior é
-repetido** em vez de se criar um buraco — com um limite de 2 repetições seguidas, para não
-mascarar uma captura que parou. E o PTS é escrito ao nível do pacote, já no encoder, sem
-re-encodificar no fim.
-
-| 5 minutos de jogo | Antes | Agora (8 clips, 37 min) |
-|---|---|---|
-| Saltos na timeline | 542 | **14** |
-| Excesso de tempo | +3,99 s (1,3%) | **+0,28 s (0,013%)** |
-| FPS efectivo | 59,18 | **60,00** |
-
-**289× menos saltos** e **103× menos deriva**, medido descodificando os ficheiros e
-contando os deltas de PTS — não por confiança no contador interno.
-
-**Bónus para máquinas lentas:** se o PC não consegue entregar 60 fps, o que antes produzia
-um clip aos soluços passa a ser preenchido. Validado com ficheiros reais nos três
-regimes: PC que entrega o alvo (sem repetições), PC ligeiramente abaixo (3-6%), e PC a
-meia taxa (~50% de repetições). Nos três, o ficheiro sai a 60 fps exactos. Também
-validado que 37 "saltos" de sequência, quando a captura pára de repente, **não abrem
-buracos** no ficheiro.
-
-### 🎯 A resolução que escolhes é a que é gravada
-
-O motor de Clips podia **degradar a resolução escolhida a meio de uma gravação**. Ao
-detetar que o encoder "não acompanhava", o *capacity guard* baixava de 1080p para 720p e
-reiniciava o ffmpeg — e esse reinício descartava o backlog de output e o estado de PTS,
-deixando o áudio dessincronizado do vídeo (num clip real, ~9,5 s de desvio).
-
-O sinal que disparava o guard estava errado: `speed` e `outLag` do ffmpeg medem o
-**feed** (a taxa a que os frames chegam ao encoder), não o trabalho do encoder. Um jogo a
-renderizar abaixo de 60 fps fazia parecer saturação onde não havia nenhuma — a fila estava
-vazia e não se perdia um único frame.
-
-A regra passou a ser explícita: o divisor de fallback e o *capacity guard* **só reduzem a
-resolução quando não há alvo explícito** (modo nativo). Logo que escolhes uma resolução, é
-essa que sai — e o guard deixa de reiniciar o ffmpeg a meio da sessão.
-
-### 🪟 A app deixa de aparecer nas tuas próprias gravações
-
-O motor tentava esconder a janela do DiNho da captura, e **nunca conseguia**. A
-`SetWindowDisplayAffinity` só tem efeito em janelas do *próprio processo* — mas quem
-chamava a API era o engine em C#, a partir de outro processo, e a chamada devolvia
-`ERROR_ACCESS_DENIED`. A tentativa de repetir era inútil, e o resultado era silencioso:
-nos testes de 4 horas só aparecia uma linha de aviso.
-
-Agora quem esconde a janela é o próprio dono dela: o Electron aplica
-`setContentProtection` quando a gravação começa e desfaz quando para. A janela do DiNho
-sai do enquadramento de clips gravados com a app aberta, e **261 linhas de código de
-produção** de interoperabilidade Windows desapareceram com o arranjo (mais 453 de testes
-que testavam o caminho morto).
-
-### 🔧 Correções
-
-- **O modo de captura passa a estar visível** (desktop / janela / jogo) na barra de estado.
-- **Já não fica um segundo cliente do motor a expirar** — o motor passava a recusar
-  qualquer segunda ligação ao pipe, e agora aceita várias em simultâneo.
-- **Ficheiros temporários órfãos de exportação são limpos no arranque**, em vez de
-  irem ocupando disco entre sessões.
-- **O veredicto de memória após gravar** deixou de usar um contador acumulado que nunca
-  voltava ao normal: o `.NET` chega a ~2 GB logo depois de exportar e o coletor de lixo
-  recolhe ao fim de ~5 minutos. Agora o motor acompanha e reporta esse regresso em vez de
-  dizer para sempre "em memória".
-
-### 📦 Dependências em dia
-
-Electron 44.5.1, Vite 8.3.2, Biome 2.5.15, Vitest 5.0.3, framer-motion 14 e
-`@types/node` 26 (tipos alinhados com o Node 24 embutido no Electron 44), CsWin32 0.3.346.
-A suíte cobre a adaptação — `ExecException.cmd` passou a obrigatório e os mocks de
-`execFile` foram ajustados. Os advisories de `npm audit` que restam são todos de
-ferramentas de build (dev), nenhum no runtime embarcado.
-
-### ✅ Qualidade interna
-
-| | Antes | Agora |
-|---|---|---|
-| Testes (TS) | 7.792 | **7.800** |
-| Testes (C#, Release) | 2.212 | **2.528** |
-
-`biome` limpo em 888 ficheiros, `tsc --noEmit` sem erros, build sem avisos, gate do ffmpeg
-52/52 contra o binário embarcado.
-
----
-
-## 📝 Novidades da 2.0.5
-
-### 🎮 Modo Jogo realmente automático
-
-A **Detecção Automática** estava a meio caminho: quando um jogo era detectado, o app
-abria a captura de Clips sem o motor de captura estar a correr. O `startClipCapture()`
-respondia `Engine not running` e a gravação não começava — sem erro visível, porque o
-resultado era engolido.
-
-Agora o Modo Jogo **sobe o motor de captura** quando precisa e só depois inicia a
-gravação, com 3 tentativas separadas por 2 s para cobrir a subida do processo C#. Se
-ainda assim falhar, o motivo fica no log em vez de desaparecer.
-
-### ⏱️ 5 minutos de tolerância ao sair do jogo
-
-Desligar o Modo Jogo no instante em que o processo sumia era frágil demais — o FiveM
-relança o `GTAProcess.exe`, e uma janela que pisca podia derrubar a sessão a meio da
-partida. Agora o app espera **5 minutos** sem jogo antes de reagir:
-
-- O jogo voltou dentro do prazo → **nada acontece**, a sessão continua.
-- Passou o prazo → restaura o sistema e **para a gravação**.
-
-Quem liga a captura é quem a para. Mesmo que a restauração falhe, a gravação é
-encerrada na mesma medida — não há cenário em que a captura fica a correr sozinha.
-
-### 🎛️ Pré-configuração chega a toda a gente
-
-As 16 otimizações do Modo Jogo passaram a ser a **pré-configuração do app**, definida
-num único sítio e consumida pelo processo principal e pelos dois stores do renderer
-(antes havia três listas, todas diferentes).
-
-O ponto que faltava: instalações **já existentes** nunca recebiam novidades, porque a
-leitura da configuração só acrescenta chaves em falta — nunca atualiza listas. Uma
-migração versionada resolve isso e corre **uma única vez**, carimbando a configuração
-com a versão aplicada. A partir daí o utilizador decide, e a migração não volta a mexer.
-
-### 🐛 Correções
-
-- O detector de jogos passa a arrancar no **boot do app**. Antes só começava ao abrir a
-  página do Modo Jogo ou dos Clips — e pior, **sair** de uma dessas páginas desligava
-  a detecção a meio.
-- `svc-sysmain` saiu da lista padrão: desligar o Superfetch prejudica o carregamento
-  inicial dos jogos, que é justamente quando se quer o sistema rápido.
-- `svc-diagtrack` saiu da lista padrão: os serviços de diagnóstico são uma porta de
-  entrada para rastreio, e não é um risco que valha a pena por omissão.
-
-### ✅ Qualidade interna
-
-| | Antes | Agora |
-|---|---|---|
-| Testes (TS) | 7.741 | **7.792** |
-| Arquivos de teste | 272 | **275** |
-
-`biome` limpo em 888 ficheiros, `tsc --noEmit` sem erros, build sem avisos.
-
----
-
-## 📝 Novidades da 2.0.4
-
-### ⚡ Instalação 96% mais rápida
-
-O DiNho passa a ser empacotado em **asar** — um arquivo único — em vez de ~10.900 ficheiros
-soltos no disco. Na prática, o que muda para quem instala:
-
-- **10.939 → 449 ficheiros** copiados durante a instalação (−96%).
-- O antivírus scanneia **cada ficheiro escrito**, portanto o custo de segurança cai na
-  mesma proporção. A instalação deixou de arrastar o Defender durante vários minutos.
-- Instalador ligeiramente **mais pequeno**: ~250 MB → **~243 MB**.
-
-### 🧹 Porque estava desligado (e porque voltou)
-
-Em agosto de 2026 o asar foi desligado por causa de um bug do Chromium: o `netstack` do
-renderer devolvia `ERR_FILE_NOT_FOUND` e o app abria com ecrã preto. O `fs` do Node lia o
-mesmo asar sem qualquer problema — a causa nunca foi isolada com precisão.
-
-Em 2026-09-30 voltámos a testar em profundidade (Electron 44.4.5 + electron-vite 6.0.0) e
-**o problema já não se reproduz**. A explicação provável: o Electron reescreveu a camada de
-leitura de asar para servir ficheiros diretamente do arquivo, sem extrair uma cópia
-temporária. O bug que nos travou foi corrigido a montante.
-
-### 🔐 Invariantes de segurança mantidos
-
-Os módulos nativos (`better-sqlite3` e o motor de malware) continuam **fora** do asar, onde
-têm de estar para o carregamento via `dlopen` funcionar. E nada foi afrouxado nas restantes
-fuses de segurança do Electron.
-
----
-
-## 📝 Novidades da 2.0.3
-
-### 🌐 Escolher e medir o DNS de verdade
-
-A escolha de DNS deixou de ser uma caixa cega. O **teste de velocidade mede agora o
-resolvedor por UDP** — o mesmo mecanismo que o Windows usa para resolver nomes — em vez
-de fazer `ping`, que media o caminho até ao servidor e não a resposta do resolvedor.
-
-Todas as opções (Cloudflare, Google, OpenDNS, Quad9) ficam sempre visíveis: **pode
-aplicar qualquer uma**, o teste apenas ordena a lista por velocidade. O servidor mais
-rápido ganha o selo **Melhor**, e há ação rápida para o aplicar. Servers que não
-respondem dentro do tempo limite vão para o fim, marcados como sem resposta.
-
-O app passa a **detetar o DNS que está em uso**, lendo o servidor da interface que tem a
-rota por omissão, e mostra se veio por DHCP. Depois de aplicar, volta a ler o estado real
-— o selo **Atual** já não fica desatualizado depois de uma escolha manual.
-
-### ⚡ Planos de Energia reconstruídos
-
-A página foi reescrita: planos agrupados entre **Planos do sistema** e **Planos
-personalizados**, com o tipo de cada plano identificado (Desempenho máximo, Alto
-desempenho, Equilibrado, Poupança, Personalizado).
-
-O plano **Desempenho Máximo** desbloqueia com um clique. O Windows oculta-o em quase todas
-as editions, e é o único que desliga a poupança de energia ao nível do hardware — útil em
-máquinas de secretária ligadas à corrente. O botão avisa que consome mais energia e pode
-subir a temperatura.
-
-### 🧰 Otimizações do Windows — Ferramentas Avançadas
-
-Três tweaks que mexem no comportamento interno do Windows, com explicação do que fazem,
-o respetivo link de documentação da Microsoft e os avisos correspondentes: ajustes da
-pilha **TCP/IP** (chimney, timestamps, RTO) e do **timer** (HPET, TSC Sync, Dynamic
-Tick). Não são necessários para o dia a dia — a secção diz isso explicitamente, porque a
-Microsoft os documenta como opções de depuração e podem destabilizar o sistema.
-
-### 🔧 Correções no `powercfg`
-
-O leitor de saída do `powercfg` dependia de texto em inglês e passava a falhar em
-Windows português ou deutsch. Passou a ser **independente do idioma**.
-
-Corrigidos ainda os **GUIDs do ASPM**, que não endereçavam o subgrupo correto, e o revert
-do `PROCTHROTTLEMIN`, que restaurava o mínimo do processador em 100% em vez dos 5%
-originais.
-
-### 🧹 Limpeza
-
-A página passa a chamar-se **Limpeza**, com os resultados agrupados em **Sistema**,
-**Aplicações** e **Manutenção**.
-
-A barra de ação inferior deixava de estardes "solta": estava fixa à janela, começava em
-`x=0` e ficava **por cima da barra lateral**. Agora está alinhada à coluna de conteúdo,
-encostada ao fundo, e **acompanha a barra lateral quando a recolhemos** — durante a
-animação, píxel a píxel.
-
-### 🛠️ Reparo do Windows
-
-Passa a chamar-se **Reparo do Windows** (as ferramentas são DISM e SFC, não de disco) e
-avisa quando passa mais de 15 dias sem uma verificação, para apanhar ficheiros de sistema
-corrompidos antes que causem instabilidade.
-
-### ✅ Qualidade interna
-
-- `powercfg` coberto por testes contra o parser locale-independent
-- DNS: benchmark, leitura do estado atual e refresh pós-aplicação com testes
-- Geometria da barra de ação verificada em browser real (19 medições: fundo da janela,
-  sidebar recolhida, alinhamento, zero scroll horizontal)
-- 7741 testes em 272 ficheiros · `tsc` 0 · Biome 0 em 882 ficheiros · build ok
-- `npm audit` em 0 vulnerabilidades
+## 📝 Novidades
+
+> Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
+
+### 2.0.8
+
+**🎬 A captura deixa de ser desligada pelas próprias otimizações.** Quatro tweaks "gaming"
+punham o **Game DVR a zero** (`GameDVR_Enabled`, `AppCaptureEnabled` e `AllowGameDVR` em duas
+chaves de política). O motor de Clips assenta no **Windows Graphics Capture**, e o serviço de
+captura recusa arrancar enquanto essas chaves estão a 0 — falhava com `0x80070422` a cada
+arranque. As tweaks foram removidas do catálogo, e uma **migração versionada** corre uma vez
+após a atualização para repor as 5 chaves a `=1` em instalações existentes (idempotente, só
+elevada, retenta se falhar). O motor também passou a avaliar a disponibilidade do WGC **uma vez
+por sessão** e a saltar diretamente para **DXGI** quando a captura está mesmo desligada.
+
+**📉 Teto de bitrate dos Clips mais baixo.** Os presets **"boa"** (720p60) e **"leve-60"**
+(900p60) tinham um teto generoso demais e passam de 40/62,5 Mbps para **24/37,5 Mbps**. O CQ
+(16/18/20/22) não muda — o teto VBV é limite, não alvo, portanto a qualidade visível mantém-se.
+
+### 2.0.7
+
+- **As definições passam a ser mesmo guardadas.** `backupMode`, `autoInstallUpdates`,
+  `autoInstallSchedule`, `protectRecycleBin` e a config do Modo Jogo eram **rejeitados em
+  silêncio** pela allow-list: a UI mostrava "salvo" e ao reiniciar voltava tudo ao antigo.
+  Agora são validados e persistem — e todos os chamadores leem o resultado e **revertem o
+  estado otimista** + avisam quando a gravação falha.
+- **Os resultados deixam de mentir.** Reverts do Compliance/Vulnerabilidades já não descartam
+  falhas; o Benchmark deixa de fabricar valores (CPU a 50, RAM a 0…) e marca cada métrica com
+  `Falha na medição`; eliminar da Quarentena um ficheiro já ausente conta como falha; a
+  configuração de Clips passa a reportar o erro quando o sync ao motor falha.
+- **Restauro do Registo.** Novo botão para listar os backups da limpeza e restaurá-los com
+  `reg import`.
+- **Menos código, menos superfície.** ~35 ficheiros e ~4.500 linhas mortas removidas; o
+  `.license-cache.json` passou a ser assinado com `HMAC-SHA256` ligado ao hardware.
 
 ---
 
 ## ⚡ Funcionalidades
 
-<details open>
-<summary><strong>🔒 Segurança</strong> — 14 módulos</summary>
+### 🔒 Segurança — 14 módulos
 
 | Módulo | Descrição |
 |--------|-----------|
-| **Scanner de Malware** | Detecção de ameaças usando engine YARA-X + heurística comportamental |
-| **Sandbox Comportamental** | Executa suspeitos em ambiente isolado e analisa comportamento |
-| **Scanner de Memória** | Escaneia memória de processos ativos por assinaturas de malware |
-| **Analisador PE** | Analisa arquivos PE (seções, imports, hashes) |
-| **Detector de Explorações** | Assinaturas de shellcode em memória (NOP sled, heap spray, ROP, egg hunter) |
-| **Inteligência de Ameaças** | Consulta cruzada a feeds do abuse.ch (SSL Blacklist, Malware Bazaar) e PhishTank |
+| **Scanner de Malware** | Engine YARA-X + heurística comportamental |
+| **Sandbox Comportamental** | Executa suspeitos em ambiente isolado |
+| **Scanner de Memória** | Assinaturas de malware em memória de processos |
+| **Analisador PE** | Secções, imports e hashes de ficheiros PE |
+| **Detector de Explorações** | Shellcode em memória (NOP sled, heap spray, ROP) |
+| **Inteligência de Ameaças** | abuse.ch (SSL Blacklist, Malware Bazaar) e PhishTank |
 | **Linha do Tempo** | Correlação e timeline de eventos de segurança |
-| **Regras YARA Custom** | Importa e gerencia regras YARA personalizadas |
-| **Quarentena** | Gerenciamento completo com allowlist e restore |
+| **Regras YARA Custom** | Importa e gere regras YARA personalizadas |
+| **Quarentena** | Gestão completa com allowlist e restore |
 | **Scanner de Vulnerabilidades** | CVE scanner para software instalado |
-| **Escudo de Privacidade** | Bloqueia rastreadores, telemetria e coleta de dados |
-| **Auditoria de Firewall** | Audita e gerencia regras do Windows Defender Firewall |
-| **Editor de Hosts** | Bloqueia domínios via edição segura do arquivo hosts |
-| **Domínios Protegidos** | Protege domínios críticos contra alteração por malware |
+| **Escudo de Privacidade** | Bloqueia rastreadores, telemetria e recolha de dados |
+| **Auditoria de Firewall** | Audita e gere regras do Windows Defender Firewall |
+| **Editor de Hosts** | Bloqueia domínios via edição segura do ficheiro hosts |
+| **Domínios Protegidos** | Protege domínios críticos contra alteração |
 
-</details>
-
-<details open>
-<summary><strong>📊 Monitoramento</strong> — 3 módulos</summary>
+### 📊 Monitorização — 3 módulos
 
 | Módulo | Descrição |
 |--------|-----------|
 | **Monitor de Desempenho** | CPU, memória, disco, rede em tempo real + S.M.A.R.T. |
-| **Scanner de Conformidade** | Verifica se o sistema segue boas práticas de segurança |
-| **Coleta de Métricas** | Análise e coleta de métricas do sistema |
+| **Scanner de Conformidade** | Verifica boas práticas de segurança do sistema |
+| **Recolha de Métricas** | Análise e recolha de métricas do sistema |
 
-</details>
+### 🧹 Limpeza & Manutenção — 22 módulos
 
-<details open>
-<summary><strong>🧹 Limpeza & Manutenção</strong> — 22 módulos</summary>
+Limpeza do sistema (temp, logs, prefetch, DNS), navegadores, apps e jogos; registo com backup
+automático e **restauro**; rede, atalhos, lixeira, variáveis de ambiente; WinSxS e WinApp2;
+otimizador de base de dados; gestores de **inicialização**, **serviços** (incl. *STOPED*) e
+**drivers**; removedor de bloatware e do **menu de contexto**; **Ajustes do Windows**, **Planos
+de Energia**, **Tarefas Agendadas** e **Histórico**.
 
-| Módulo | Descrição |
-|--------|-----------|
-| **Limpeza do Sistema** | Temp files, logs, crash dumps, prefetch, cache DNS |
-| **Limpeza de Navegadores** | Chrome, Edge, Firefox, Brave, Opera, Vivaldi e mais — com proteção de cookies por padrão |
-| **Limpeza de Apps** | Discord, VS Code, Spotify, Teams, Zoom, Slack e dezenas |
-| **Limpeza de Jogos** | Steam, Epic Games, EA App, GOG — caches e shaders |
-| **Limpeza do Registro** | Entradas inválidas ou órfãs com backup automático |
-| **Limpeza de Rede** | DNS, perfis Wi-Fi, cache ARP, rotas |
-| **Limpeza de Atalhos** | Remove atalhos quebrados do sistema |
-| **Limpeza de Lixeira** | Esvazia e gerencia a lixeira do Windows |
-| **Variáveis de Ambiente** | Limpa variáveis de ambiente obsoletas |
-| **Otimizador de Banco de Dados** | Compacta e otimiza bancos do sistema |
-| **WinSxS Cleaner** | Reduz o componente store via DISM |
-| **Importação WinApp2** | Importa regras de limpeza personalizadas |
-| **Gerenciador de Inicialização** | Gerencia programas que iniciam com o Windows |
-| **Gerenciador de Serviços** | Otimiza serviços do Windows por perfil |
-| **STOPED** | Para os 7 serviços que degradam o Windows (DiagTrack, DPS, SysMain, PcaSvc, EventLog, AdpSvc, UmRdp) com status exato e ações em massa |
-| **Gerenciador de Drivers** | Detecta, backup e remove drivers obsoletos |
-| **Removedor de Bloatware** | Remove aplicativos indesejados do Windows |
-| **Menu de Contexto** | Gerencia entradas do menu de contexto do Explorer |
-| **Ajustes do Windows** | Personaliza desempenho e comportamento do Windows |
-| **Planos de Energia** | Cria, ativa e gerencia planos de energia |
-| **Tarefas Agendadas** | Agenda limpezas e manutenções automáticas |
-| **Histórico** | Histórico completo de scans e limpezas realizadas |
+### 💾 Ferramentas de Disco — 7 módulos
 
-</details>
+Analisador (TreeMap), buscador de duplicatas (SHA-256) e de ficheiros grandes, limpeza de
+pastas vazias, destruidor de ficheiros (sobrescrita), **Reparo de Disco** (SFC/DISM/CHKDSK) e
+**Manutenção de Disco** (SSD TRIM).
 
-<details open>
-<summary><strong>💾 Ferramentas de Disco</strong> — 7 módulos</summary>
+### 📦 Software — 6 módulos
 
-| Módulo | Descrição |
-|--------|-----------|
-| **Analisador de Disco** | TreeMap interativo do uso de espaço no disco |
-| **Buscador de Duplicatas** | Localiza duplicatas por hash SHA-256 |
-| **Buscador de Arquivos Grandes** | Encontra os maiores arquivos do disco |
-| **Limpeza de Pastas Vazias** | Remove pastas vazias residual |
-| **Destruidor de Arquivos** | Exclusão segura com sobrescrita (2 passadas) |
-| **Reparo de Disco** | SFC, DISM, CHKDSK com um clique |
-| **Manutenção de Disco** | SSD TRIM e otimização de unidades |
+Atualizador de programas (winget) e de drivers; **Auto-Atualizador** (que *nunca reinicia por
+cima de um trabalho em curso* — gravação, scan, re-encode ou upload adiam a instalação);
+Desinstalador com limpeza de resíduos; Verificador de Segurança; Limpeza de Resíduos.
 
-</details>
+### ⚡ Ferramentas — 7 módulos
 
-<details open>
-<summary><strong>📦 Software</strong> — 6 módulos</summary>
+**Modo Jogo** (com deteção automática), **Benchmark**, Otimizador de Memória, **Modo Daemon**
+(bandeja), **Modo CLI**, Onboarding e Exportação de Relatórios (CSV/JSON/TXT).
 
-| Módulo | Descrição |
-|--------|-----------|
-| **Atualizador de Programas** | Atualiza programas instalados via winget |
-| **Atualizador de Drivers** | Detecta e atualiza drivers desatualizados |
-| **Auto-Atualizador** | Atualiza o próprio DiNho Optimizer automaticamente — e **nunca reinicia por cima de um trabalho em andamento**: se uma gravação, um scan, um re-encode ou um upload estiver ativo, a instalação é adiada e retoma sozinha quando o app fica ocioso |
-| **Desinstalador** | Remove programas e seus resíduos |
-| **Verificador de Segurança** | Exibe classificação de segurança de programas (UI pronta; avaliação offline/stub no backend) |
-| **Limpeza de Resíduos** | Remove sobras de desinstalações anteriores |
+### ☁️ Cloud & Backup — 2 módulos
 
-</details>
+Cloud Backup de configurações e regras; Licenciamento via API remota.
 
-<details open>
-<summary><strong>⚡ Ferramentas</strong> — 7 módulos</summary>
+### 🎮 Game Clips — 12 módulos
 
-| Módulo | Descrição |
-|--------|-----------|
-| **Modo Jogo** | Otimiza o sistema para jogos |
-| **Benchmark** | Testa e pontua o desempenho do hardware |
-| **Otimizador de Memória** | Libera RAM em uso |
-| **Modo Daemon** | Execução em segundo plano na bandeja |
-| **Modo CLI** | Operação completa via linha de comando |
-| **Onboarding** | Configuração inicial guiada do usuário |
-| **Exportação de Relatórios** | Exporta resultados em CSV, JSON e TXT |
-
-</details>
-
-<details open>
-<summary><strong>☁️ Cloud & Backup</strong> — 2 módulos</summary>
-
-| Módulo | Descrição |
-|--------|-----------|
-| **Cloud Backup** | Backup em nuvem de configurações e regras |
-| **Licenciamento** | Ativação e validação via API remota |
-
-</details>
-
-<details open>
-<summary><strong>🎮 Game Clips</strong> — 12 módulos</summary>
-
-| Módulo | Descrição |
-|--------|-----------|
-| **Gravador de Clipes** | Captura replay buffer de jogos (WGC + NVENC/AMF/QSV) |
-| **Modo Só Jogo** | Captura apenas o jogo + microfone, mute de outras apps |
-| **Áudio por Aplicativo** | Seleciona quais apps terão áudio no clip (por processo) |
-| **Editor de Clipes** | Trim (fast copy ou re-encode), merge e enhance AMD via ffmpeg |
-| **Preview de Vídeo** | Player integrado com seek por HTTP Range |
-| **Publicação de Clipes** | Upload do clip e geração de link para compartilhar |
-| **Push-to-Talk** | Ativa o microfone por tecla personalizável (hold/toggle) |
-| **Redução de Ruído** | Denoising do microfone em tempo real (ffmpeg anlmdn) |
-| **Replay Buffer** | Modo RAM ou híbrido com spill em disco para clips longos |
-| **Qualidade Adaptativa** | Calibra preset e limita a resolução ao perfil de RAM da máquina (opcional); a resolução escolhida nunca é degradada por fallback a meio da gravação |
-| **Configuração de Qualidade** | Presets CQ+VBV, resolução, nitidez (CAS), stretch |
-| **Notificações & Hotkeys** | Hotkeys personalizáveis, toast ao salvar clip, favoritos e auto-limpeza |
-
-</details>
+Gravador de clipes (replay buffer, **WGC + NVENC/AMF/QSV**), Modo Só Jogo, áudio por
+aplicativo, editor (trim/merge/enhance), preview com seek por HTTP Range, publicação por link,
+push-to-talk, redução de ruído (anlmdn), replay buffer RAM/híbrido, qualidade adaptativa,
+presets CQ+VBV e notificações/hotkeys. Ver **[Tecnologias → Motor de Clips](#-motor-de-clips)**.
 
 ---
 
@@ -517,18 +154,10 @@ corrompidos antes que causem instabilidade.
   <img src="https://img.shields.io/badge/TypeScript-7-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
-  <img src="https://img.shields.io/badge/shadcn/ui-latest-000000?style=flat-square&logo=shadcnui&logoColor=white" alt="shadcn/ui" />
   <img src="https://img.shields.io/badge/Zustand-5-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand" />
-  <img src="https://img.shields.io/badge/electron--vite-6-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-vite" />
-  <img src="https://img.shields.io/badge/YARA--X-0.7-00ADD8?style=flat-square&logo=python&logoColor=white" alt="YARA-X" />
-  <img src="https://img.shields.io/badge/Vitest-5-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
-  <img src="https://img.shields.io/badge/Playwright-latest-45BA4B?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
-  <img src="https://img.shields.io/badge/electron--builder-26-47848F?style=flat-square&logo=electron&logoColor=white" alt="electron-builder" />
+  <img src="https://img.shields.io/badge/YARA--X-0.7-00ADD8?style=flat-square" alt="YARA-X" />
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET" />
   <img src="https://img.shields.io/badge/ffmpeg-9.0-008000?style=flat-square&logo=ffmpeg&logoColor=white" alt="ffmpeg" />
-  <img src="https://img.shields.io/badge/NVENC/AMF/QSV-HW%20Encoders-76B900?style=flat-square" alt="HW Encoders" />
-  <img src="https://img.shields.io/badge/Windows.Graphics.Capture-WGC-0078D4?style=flat-square&logo=windows&logoColor=white" alt="WGC" />
-  <img src="https://img.shields.io/badge/NAudio-3.1-512BD4?style=flat-square" alt="NAudio" />
 </p>
 
 | Categoria | Tecnologias |
@@ -540,195 +169,26 @@ corrompidos antes que causem instabilidade.
 | **Build** | electron-vite 6, electron-builder (NSIS) |
 | **Testes** | Vitest 5, Playwright, Testing Library |
 | **Segurança** | YARA-X 0.7 (bindings nativas), crypto (Node.js) |
-| **Banco de Dados** | better-sqlite3 v13 (SQLite) |
-| **Motor de Clips** | .NET 10 (C#), ffmpeg 9.0, NVENC/AMF/QSV, WGC, NAudio, RNNoise, Vortice (D3D11) |
+| **Base de dados** | better-sqlite3 v13 (SQLite) |
+| **Motor de Clips** | .NET 10 (C#), ffmpeg 9.0, NVENC/AMF/QSV, WGC, NAudio, Vortice (D3D11) |
 
 ### 🎬 Motor de Clips
 
-O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, self-contained, Windows-only) que roda ao lado do app Electron e se comunica via named pipes:
+O sistema de Game Clips usa um **motor de captura separado em C#** (`.NET 10`, self-contained,
+Windows-only) que corre ao lado do app Electron e comunica por **named pipes**:
 
 | Tecnologia | Uso |
 |------------|-----|
-| **.NET 10 (C#)** | Motor de captura `DiNho.Capture.Poc` (self-contained, sem runtime externo) |
-| **ffmpeg 9.0** | Encoders, mux MP4/Matroska, trim/merge, thumbnails (embarcado no instalador) |
+| **.NET 10 (C#)** | Motor `DiNho.Capture.Poc` (self-contained, sem runtime externo) |
+| **ffmpeg 9.0** | Encoders, mux MP4/Matroska, trim/merge, thumbnails (embarcado) |
 | **NVENC / AMF / QSV** | Encoders de hardware NVIDIA / AMD / Intel (h264, HEVC, AV1) |
-| **libx264 / libx265 / SVT-AV1** | Fallback de software quando HW não está disponível |
+| **libx264 / libx265 / SVT-AV1** | Fallback de software |
 | **Windows.Graphics.Capture (WGC)** | Captura de janela/desktop em alta qualidade |
-| **NAudio (WASAPI)** | Captura de áudio (loopback do sistema + microfone) |
-| **Vortice (DXGI/D3D11)** | Renderização, conversão e processamento de frames GPU |
-| **RNNoise (anlmdn)** | Supressão de ruído do microfone |
-| **ApplicationLoopback.dll (C++)** | Áudio por aplicativo (só o jogo, sem Discord/navegador) |
-| **Matroska/EBML + MP4** | Container intermediário com timestamps e mux final |
+| **DXGI Desktop Duplication** | Fallback de captura quando o WGC não está disponível |
+| **NAudio (WASAPI)** | Áudio (loopback do sistema + microfone) |
+| **Vortice (DXGI/D3D11)** | Conversão e processamento de frames na GPU |
+| **ApplicationLoopback.dll (C++)** | Áudio por aplicativo (só o jogo) |
 | **Named pipes** | IPC engine ↔ Electron (status, comandos, clips salvos) |
-
-### 🎮 Detecção de jogos no Modo Jogo
-
-Com **Detecção Automática** ligada, o Modo Jogo ativa as otimizações quando um jogo é
-detectado e as reverte quando ele fecha. O detector é iniciado no **boot do app**, pelo
-processo principal — não depende de nenhuma página estar aberta, portanto navegar para
-fora do Modo Jogo não desliga a detecção.
-
-A detecção tem duas etapas, porque nenhuma delas sozinha cobre tudo:
-
-1. **Por nome de processo** — polling de `tasklist` a cada 30 s contra a lista embutida
-   mais o catálogo `games.json` do motor de clips (452 jogos), incluindo aliases.
-2. **Por classe de janela (fallback)** — quando nenhum nome corresponde, uma sonda
-   Win32 (`EnumWindows` + `GetClassName`) enumera as janelas visíveis e compara a
-   classe de cada uma contra as 177 `windowClass` do catálogo (mais 7 entradas
-   fixas espelhadas do C#). É o que detecta jogos com nome versionado, como
-   `FiveM_b3258_GTAProcess.exe`, que nenhum catálogo de nomes consegue enumerar.
-
-A sonda é cara de propósito: iniciar o PowerShell já custa ~1,3 s (medido), e a
-enumeração completa leva ~1,8 s. Por isso ela **só roda quando algum processo novo
-apareceu desde o último polling** — nunca a cada 30 s. Também não depende do motor
-C# estar rodando, aborta junto com o detector, e qualquer falha dela (PowerShell
-bloqueado por política, `Add-Type` negado) devolve lista vazia sem quebrar a
-detecção por nome.
-
-Quando o jogo vem da classe de janela, o evento carrega também o nome amigável do
-catálogo (ex.: `FiveM (GTA V)`), usado no banner e como chave alternativa para o
-perfil de otimizações do jogo.
-
-### ⏱️ Tolerância de 5 minutos ao sair do jogo
-
-Quando o jogo deixa de ser detectado, o Modo Jogo **não desativa imediatamente**. Um
-jogo pode fechar a janela, trocar de executável ou reaparecer com outro nome durante
-segundos — FiveM relança `GTAProcess.exe`, por exemplo. Desativar nesse instante
-derrubia as otimizações e a gravação no meio da sessão.
-
-O comportamento é agora:
-
-| Situação | O que acontece |
-|----------|----------------|
-| Jogo detectado | Motor de captura subido (se preciso) e gravação iniciada |
-| Jogo ausente **< 5 min** | Tolerância cancelada se voltar — a sessão continua intacta |
-| Jogo ausente **≥ 5 min** | Restaura o sistema **e para a gravação**, sempre |
-| Desativar manualmente | Restaura o sistema e para a gravação |
-
-A gravação automática é pareada com a sessão: quem inicia, para. O `finally` garante que
-uma falha na restauração **nunca** deixa a captura rodando. Se o jogo voltar dentro da
-tolerância, a verificação final aborta o teardown.
-
-### 🎛️ Pré-configuração do Modo Jogo
-
-O app traz uma lista canônica de 16 otimizações, definida num único lugar
-(`src/shared/game-mode-preconfig.ts`) e consumida pelo processo principal e pelos dois
-stores do renderer — as listas não podem divergir entre si.
-
-Para que **instalações já existentes** também recebam a pré-config, uma migração
-versionada roda uma única vez no boot: grava a lista e carimba `preconfigVersion`.
-Depois disso o arquivo fica congelado e o utilizador configura à vontade — a
-migração nunca mais toca nele. Instalações novas já nascem com a lista e o marcador.
-
-Um teste garante que todo id da lista canônica existe no allowlist
-(`VALID_OPTIMIZATION_IDS`) e que não há duplicados, portanto o catálogo e a
-validação não podem ficar dessincronizados.
-
----
-
-## 🏗️ Arquitetura
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Electron Window                     │
-│  ┌───────────────────────────────────────────────┐  │
-│  │              Renderer (React 19)               │  │
-│  │  ┌─────────┐ ┌──────────┐ ┌────────────────┐  │  │
-│  │  │  Pages   │ │  Stores  │ │  Components    │  │  │
-│  │  │  (40)    │ │ (Zustand)│ │  (Reutiliz.)   │  │  │
-│  │  └────┬────┘ └────┬─────┘ └───────┬────────┘  │  │
-│  │       │           │               │            │  │
-│  │  ┌────▼───────────▼───────────────▼────────┐  │  │
-│  │  │           IPC Bridge (contextBridge)      │  │  │
-│  │  └───────────────────┬──────────────────────┘  │  │
-│  └──────────────────────┼──────────────────────────┘  │
-└─────────────────────────┼─────────────────────────────┘
-                          │
-┌─────────────────────────┼─────────────────────────────┐
-│              Main Process (Node.js)                    │
-│  ┌──────────────────────┴──────────────────────┐      │
-│  │              IPC Handlers (~235)              │      │
-│  └──────────────────────┬──────────────────────┘      │
-│                         │                              │
-│  ┌──────────────────────┴──────────────────────┐      │
-│  │              Services Layer                   │      │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────────┐ │      │
-│  │  │ Scanner  │ │ Cleaner  │ │  Security    │ │      │
-│  │  │ Engines  │ │ Pipeline │ │  Analyzers   │ │      │
-│  │  └──────────┘ └──────────┘ └──────────────┘ │      │
-│  └──────────────────────┬──────────────────────┘      │
-│                         │                              │
-│  ┌──────────────────────┴──────────────────────┐      │
-│  │            Platform Abstraction               │      │
-│  │  ┌────────────────────────────────────────┐ │      │
-│  │  │          Win32 Provider                 │ │      │
-│  │  │  (Registry, WMI, Win32 API, DISM, ...)  │ │      │
-│  │  └────────────────────────────────────────┘ │      │
-│  └─────────────────────────────────────────────┘      │
-│                                                         │
-│            Named Pipe (status, comandos, clips)         │
-│                         │                               │
-└─────────────────────────┼───────────────────────────────┘
-                          │
-┌─────────────────────────┼───────────────────────────────┐
-│            Motor de Clips (.NET 10 / C#)                 │
-│  ┌──────────────────────┴──────────────────────┐        │
-│  │          Windows.Graphics.Capture           │        │
-│  │          + DXGI / D3D11 (Vortice)            │        │
-│  └──────────────────────┬──────────────────────┘        │
-│  ┌──────────────────────┴──────────────────────┐        │
-│  │       Encoders (ffmpeg 9.0)                  │        │
-│  │  NVENC · AMF · QSV · libx264/x265/SVT-AV1   │        │
-│  └──────────────────────┬──────────────────────┘        │
-│  ┌──────────────────────┴──────────────────────┐        │
-│  │   Áudio (NAudio WASAPI + ApplicationLoopback)│        │
-│  └──────────────────────┬──────────────────────┘        │
-│  ┌──────────────────────┴──────────────────────┐        │
-│  │   Replay Buffer + Export (Matroska → MP4)    │        │
-│  └─────────────────────────────────────────────┘        │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 📁 Estrutura de diretórios
-
-```
-src/
-├── main/                       # Processo principal (Node.js)
-│   ├── index.ts                # Entry point + gerenciamento de janela
-│   ├── cli/                    # Modo linha de comando (headless)
-│   ├── daemon.ts               # Modo serviço (bandeja do sistema)
-│   ├── ipc/                    # ~235 handlers IPC (1 por módulo)
-│   ├── services/               # Lógica de negócio (123 serviços)
-│   ├── platform/               # Abstração de plataforma
-│   │   └── win32/              # Implementação Windows (registry, WMI, API)
-│   └── constants/              # Paths, safelists, configurações
-├── preload/                    # Bridge renderer ↔ main (contextBridge)
-├── renderer/                   # Interface React
-│   └── src/
-│       ├── App.tsx             # Router + layout principal
-│       ├── pages/              # 40 rotas (uma por módulo funcional)
-│       ├── stores/             # Estado global (Zustand, 37 stores)
-│       ├── components/         # Componentes reutilizáveis (127)
-│       ├── hooks/              # Hooks customizados
-│       ├── lib/                # Utilitários e helpers
-│       └── locales/            # i18n (inglês, português, espanhol)
-├── shared/                     # Código compartilhado
-│   ├── types.ts                # Interfaces e tipos globais
-│   └── channels.ts             # Constantes dos canais IPC
-└── rules/
-    └── win32/                  # Regras de limpeza (JSON)
-
-dinho-clips-poc/                # Motor de Clips (.NET 10, self-contained)
-└── src/
-    └── DiNho.Capture.Poc/
-        ├── Capture/            # WGC, DXGI, hotkeys
-        ├── Encoders/           # NVENC/AMF/QSV + fallback software
-        ├── Audio/              # NAudio WASAPI, RNNoise, loopback
-        ├── Buffer/             # Replay buffer (RAM + disk spill)
-        ├── Export/             # Matroska/EBML → MP4, thumbnails
-        ├── GameDetection/      # Detecção de jogos (games.json)
-        └── EngineCoordinator*  # Orquestração + IPC via named pipe
-```
 
 ---
 
@@ -736,106 +196,61 @@ dinho-clips-poc/                # Motor de Clips (.NET 10, self-contained)
 
 ### Pré-requisitos
 
-- **Node.js** 24+ (LTS)
-- **npm** 10+
+- **Node.js** 24+ (LTS) e **npm** 10+
 - **Windows** com **Visual Studio Build Tools 2022** (motor de Clips em .NET 10)
-  ```bash
-  npm install -g windows-build-tools
-  ```
 
 ### Setup
 
 ```bash
-# 1. Clone
 git clone https://github.com/optdinho/dinhoopt.git
 cd dinhoopt
-
-# 2. Instale as dependências
 npm install
-
-# 3. Inicie o servidor de desenvolvimento
 npm run dev
 ```
 
-### Scripts disponíveis
+> O `npm run dev` **auto-eleva** (o app precisa de privilégios de administrador): aceita o
+> prompt UAC uma vez e a app abre elevada com o renderer em `localhost:5173`.
+
+### Scripts
 
 | Comando | Descrição |
 |---------|-----------|
-| `npm run dev` | Inicia em modo desenvolvimento (hot reload) |
+| `npm run dev` | Modo desenvolvimento (hot reload, auto-elevação) |
 | `npm run build` | Compila TypeScript + bundler |
-| `npm run package` | Gera instalador NSIS em `dist/` |
+| `npm run package` | Gera o instalador NSIS em `dist/` |
 | `npm run publish` | Empacota e publica a release no GitHub Releases |
-| `npm test` | Executa testes unitários e de integração |
-| `npm run test:coverage` | Executa testes com relatório de cobertura |
-| `npm run lint` | Verifica código com Biome |
-| `npm run lint:fix` | Corrige problemas de formatação automaticamente |
+| `npm test` | Testes unitários e de integração (Vitest) |
+| `npm run test:coverage` | Testes com relatório de cobertura |
+| `npm run test:e2e` | Journey E2E (Playwright) |
+| `npm run lint` / `lint:fix` | Verifica / corrige com Biome |
 | `npm run typecheck` | Verificação de tipos TypeScript |
 
-### 🧪 Testes
-
-```bash
-# Todos os testes
-npm test
-
-# Com cobertura (80%+ requerido)
-npm run test:coverage
-
-# Modo watch
-npx vitest
-
-# E2E (Playwright)
-npx playwright test
-```
+### 🧪 Qualidade
 
 ```
-📊 Cobertura atual: 95,6% de linhas · 94,3% de funções · 86,7% de branches
-   286 arquivos de teste · 7.840 testes (Vitest) · 2.528 testes (C#, Release)
+Cobertura: 95,6% linhas · 94,3% funções · 86,7% branches  (gate mínimo: 80%)
+TS:  7.852 testes em 288 ficheiros (Vitest) · Biome 0 · tsc 0
+C#:  2.539 testes (Release), 0 falhas, 0 ignorados
 ```
 
----
-
-## 📊 Estatísticas do projeto
-
-| Métrica | Valor |
-|---------|-------|
-| Módulos | 60+ |
-| Rotas | 40 |
-| Stores (Zustand) | 37 |
-| Componentes React | 127 |
-| Serviços | 123 |
-| Handlers IPC | 235 |
-| Arquivos de teste (TS) | 286 |
-| Testes (TS) | 7.840 |
-| Testes (C#) | 2.528 |
-| Cobertura de linhas | 95,6% |
-| Cobertura de branches | 86,7% |
-| Linhas de código (TS, sem testes) | ~87.000 |
-| Linhas de código (C#, sem testes) | ~27.000 |
+A app eleva-se sozinha em desenvolvimento; para correr E2E sem elevação use `DINHO_E2E=1`.
 
 ---
 
 ## 🤝 Contribuindo
 
-1. Faça um fork do projeto
-2. Crie uma branch: `git checkout -b feat/nova-funcionalidade`
-3. Commit suas mudanças: `git commit -m 'feat: adiciona nova funcionalidade'`
-4. Push: `git push origin feat/nova-funcionalidade`
-5. Abra um Pull Request
-
-### Convenções
-
-- **Commits:** [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
-- **Cobertura:** Mínimo 80% para código novo
-- **Lint:** Biome — `npm run lint` deve passar
-- **TDD:** Escreva testes antes da implementação
+1. Fork do projeto e branch: `git checkout -b feat/nova-funcionalidade`
+2. Commit no padrão [Conventional Commits](https://www.conventionalcommits.org/) —
+   `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
+3. Garanta **80%+ de cobertura** para código novo e `npm run lint` a passar (TDD)
+4. Pull Request
 
 ---
 
 ## 📄 Licença
 
-**Comercial** — todos os direitos reservados.
-
-© 2026 DiNho. Este software não pode ser copiado, distribuído ou modificado sem autorização expressa.
+**Comercial** — todos os direitos reservados. © 2026 DiNho. Este software não pode ser
+copiado, distribuído ou modificado sem autorização expressa.
 
 🌐 [https://dinhooptimizer.netlify.app/](https://dinhooptimizer.netlify.app/)
 
