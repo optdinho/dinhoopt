@@ -45,6 +45,9 @@ resources/clips-engine-staging/
 resources/ffmpeg-custom/
 .tmp-esbuild/
 
+# Release body gerado a partir do CHANGELOG.md (npm run release:notes)
+release-notes.md
+
 # Generated docs
 docs/
 

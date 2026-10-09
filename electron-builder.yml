@@ -93,6 +93,15 @@ publish:
   # presa em draft e o badge "Baixar" do README apontava para nada.
   releaseType: release
 
+# Body da release no GitHub. O electron-builder le este ficheiro em
+# `resolveReleaseBody` (app-builder-lib/out/publish/PublishManager.js) e usa o
+# conteudo como release body. Sem isto, cada release nascia com o body vazio e
+# tinha de ser corrigido a mao via API (PATCH /releases/<id>). O
+# `scripts/gen-release-notes.js` gera-o a partir do CHANGELOG.md para a versao do
+# package.json, e corre no `npm run publish` e no CI antes do electron-builder.
+releaseInfo:
+  releaseNotesFile: release-notes.md
+
 # better-sqlite3 v13 loads its prebuilt from prebuilds/win32-x64.node via N-API
 # (no compilation needed) — skip @electron/rebuild, which would require Python+MSVC.
 npmRebuild: false

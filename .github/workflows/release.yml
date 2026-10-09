@@ -52,6 +52,14 @@ jobs:
       - name: Stage build (electron-vite)
         run: npm run build
 
+      # Gera o `release-notes.md` a partir do `CHANGELOG.md` para a versão do
+      # package.json. O electron-builder usa-o como body da release
+      # (`releaseInfo.releaseNotesFile`); sem isto o body nascia vazio e era
+      # corrigido à mão via API. O script falha o step se o CHANGELOG não tiver
+      # secção para a versão, antes de qualquer upload.
+      - name: Stage release notes (CHANGELOG -> release-notes.md)
+        run: npm run release:notes
+
       - name: Stage publish (electron-builder)
         run: npx electron-builder --win --publish always
         env:
