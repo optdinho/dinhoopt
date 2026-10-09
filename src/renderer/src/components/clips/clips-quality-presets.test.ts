@@ -54,7 +54,23 @@ describe('QUALITY_PRESETS', () => {
     const px = (w?: number, h?: number) => (w ?? 0) * (h ?? 0)
     const esperado = Math.round((boa.maxrateKbps as number) * (px(leve.width, leve.height) / px(boa.width, boa.height)))
     expect(leve.maxrateKbps).toBe(esperado)
-    expect(leve.maxrateKbps).toBe(62500)
+    expect(leve.maxrateKbps).toBe(37500)
+  })
+
+  it('boa escreve a 24000 (decisão 2026-10-08: corte de I/O ~40% do replay em modo disk)', () => {
+    // O log de produção escreve a ~14400K reais com maxrate 40000 (regra 0.36 do
+    // FfmpegEncoder). Com 24000 → ~8640K reais: ~48GB → ~29GB numa sessão de 7h.
+    // CQ 20 e 720p60 ficam intactos — só o teto VBV baixa.
+    expect(QUALITY_PRESETS.boa.maxrateKbps).toBe(24000)
+    expect(QUALITY_PRESETS.boa.bitrateKbps).toBe(24000)
+    expect(QUALITY_PRESETS.boa.bufsizeKbps).toBe(48000)
+    expect(QUALITY_PRESETS.boa.cq).toBe(20)
+  })
+
+  it('leve-60 acompanha boa em 37500 (derivação por pixels, invariante do plano)', () => {
+    expect(QUALITY_PRESETS['leve-60'].maxrateKbps).toBe(37500)
+    expect(QUALITY_PRESETS['leve-60'].bitrateKbps).toBe(37500)
+    expect(QUALITY_PRESETS['leve-60'].bufsizeKbps).toBe(75000)
   })
 
   it('bufsize é sempre 2x o maxrate em todos os presets', () => {

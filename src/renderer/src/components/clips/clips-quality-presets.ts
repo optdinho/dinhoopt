@@ -5,7 +5,7 @@ import type { ClipsConfig } from '@shared/types'
  * exibido vive no i18n (`presetDeus`, `presetAlta`, `presetBoa`, `presetLeve`,
  * `presetBatata`) e a ordem na tela vem de `PRESET_ORDER`. Manter os dois separados é
  * proposital — renomear o id para casar com o rótulo quebraria os testes que explicam
- * de onde cada número saiu (ex.: por que 'leve-60' tem maxrate 62500).
+ * de onde cada número saiu (ex.: por que 'leve-60' tem maxrate 37500).
  */
 export type QualityPresetKey = 'muito-alta' | 'alta' | 'boa' | 'leve-60' | 'performance'
 
@@ -40,30 +40,30 @@ export const QUALITY_PRESETS: Record<QualityPresetKey, Partial<ClipsConfig>> = {
   },
   boa: {
     cq: 20,
-    maxrateKbps: 40000,
-    bufsizeKbps: 80000,
+    maxrateKbps: 24000,
+    bufsizeKbps: 48000,
     encoderPreset: 'p5',
     bframes: 2,
     lookahead: 16,
-    bitrateKbps: 40000,
+    bitrateKbps: 24000,
     width: 1280,
     height: 720,
     fps: 60,
   },
   // 900p60 para GPU que não sustenta 1080p60 mas ainda tem folga para mais que 720p.
   // CQ 20 = o mesmo de 'boa' (invariante do plano: nenhum preset cria CQ novo), então o
-  // maxrate sai escalando o de 'boa' pelos pixels: 40000 × (1600×900 / 1280×720)
-  // = 40000 × 1,5625 = 62500. Mesmo CQ => mesmos bits por pixel, que é a curva que os
-  // outros degraus seguem. O VBV é teto, não alvo (ver lição do item 2: com 48 Mbps de
-  // folga ele nunca aperta), então teto alto não significa arquivo gordo.
+  // maxrate sai escalando o de 'boa' pelos pixels: 24000 × (1600×900 / 1280×720)
+  // = 24000 × 1,5625 = 37500. Mesmo CQ => mesmos bits por pixel, que é a curva que os
+  // outros degraus seguem. O VBV é teto, não alvo (ver lição do item 2: com folga ele
+  // nunca aperta), então teto alto não significa arquivo gordo.
   'leve-60': {
     cq: 20,
-    maxrateKbps: 62500,
-    bufsizeKbps: 125000,
+    maxrateKbps: 37500,
+    bufsizeKbps: 75000,
     encoderPreset: 'p5',
     bframes: 0,
     lookahead: 16,
-    bitrateKbps: 62500,
+    bitrateKbps: 37500,
     width: 1600,
     height: 900,
     fps: 60,
