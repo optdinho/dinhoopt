@@ -954,6 +954,12 @@ public sealed partial class EngineCoordinator
                     // !isMiss). Retém a textura para o padding e abre o orçamento de dups.
                     padder.Observe(frame!.Texture!, frame.Width, frame.Height);
 
+                    // Printscreen do frame atual (uma vez por pedido de hotkey). Gated:
+                    // custo zero no caminho normal. Lê a textura BGRA via staging e grava
+                    // um PNG com ffmpeg one-shot, na thread de captura.
+                    if (ConsumeScreenshotRequest())
+                        TryCaptureScreenshot(frame.Texture!, frame.Width, frame.Height);
+
                     if (diagFrames == 1)
                         Log.I("Pipeline", $"Primeiro frame com textura! width={frame.Width} height={frame.Height} captureType={_capture?.GetType().Name ?? "null"}");
                     if (_gameBackgrounded)

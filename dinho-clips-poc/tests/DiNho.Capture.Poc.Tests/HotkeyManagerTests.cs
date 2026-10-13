@@ -125,6 +125,15 @@ public sealed class HotkeyManagerTests : IDisposable
     }
 
     [Fact]
+    public void MatchAndFire_ScreenshotAction_Parses()
+    {
+        _hm.UpdateBindings([MakeBinding(0x70, "Screenshot")]);
+        _hm.MatchAndFireHotkey(0x70);
+        Assert.Single(_fired);
+        Assert.Equal(HotkeyAction.Screenshot, _fired[0].Action);
+    }
+
+    [Fact]
     public void MapToGenericVk_LeftAlt_ReturnsVkMenu()
     {
         // The generic mapping is tested indirectly via _keysDown behavior.

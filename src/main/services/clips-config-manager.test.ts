@@ -346,6 +346,14 @@ describe('clips-config-manager', () => {
       expect(config.width).toBe(1280)
     })
 
+    it('migrates legacy toggleCapture hotkeys to screenshot on load', () => {
+      loadPersistedClipsConfig()
+      const capture = config.hotkeys.find((h) => h.vk === 49)
+      expect(capture?.action).toBe('screenshot')
+      const saveHk = config.hotkeys.find((h) => h.action === 'saveClip')
+      expect(saveHk).toBeTruthy()
+    })
+
     it('applies defaults for missing optional fields', () => {
       vi.mocked(loadClipsConfig).mockReturnValueOnce({
         replayTimeSeconds: 300,

@@ -410,6 +410,7 @@ export const IPC = {
   CLIPS_MERGE_CANCEL: 'clips:merge-cancel',
   CLIPS_RENAME_CLIP: 'clips:rename-clip',
   CLIPS_CLIP_SAVED: 'clips:clip-saved',
+  CLIPS_SCREENSHOT: 'clips:screenshot',
   CLIPS_RAM_PRESSURE: 'clips:ram-pressure',
   CLIPS_DURATIONS_READY: 'clips:durations-ready',
   CLIPS_GET_ENHANCE_SUPPORT: 'clips:get-enhance-support',

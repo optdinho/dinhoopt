@@ -3,7 +3,13 @@
 /** Alvo real da captura ativa: jogo conhecido, janela avulsa (HWND) ou monitor inteiro. */
 export type ClipsCaptureMode = 'game' | 'window' | 'desktop'
 
-export type HotkeyAction = 'saveClip' | 'toggleCapture' | 'toggleMic' | 'pushToTalk'
+/**
+ * Ações de atalho. `screenshot` substituiu `toggleCapture` na UI (o atalho de "captura"
+ * passa a tirar um printscreen do jogo); `toggleCapture`/`pushToTalk` continuam válidos
+ * no tipo por compatibilidade com configurações antigas e com o motor (que os ignora ou
+ * mantém), mas já não são oferecidos na interface.
+ */
+export type HotkeyAction = 'saveClip' | 'toggleCapture' | 'toggleMic' | 'pushToTalk' | 'screenshot'
 export type HotkeyModifier = 'Ctrl' | 'Shift' | 'Alt'
 export type PushToTalkMode = 'off' | 'hold' | 'toggle'
 

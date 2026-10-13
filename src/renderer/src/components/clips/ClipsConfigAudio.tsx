@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TipBadge } from './ClipsConfigQuality'
-import { CollapsibleMini, ToggleItem, TogglePill, VK_MAP, VolumeSlider } from './clips-utils'
+import { CollapsibleMini, ToggleItem, TogglePill, VolumeSlider } from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
 export function AudioSection({
@@ -11,24 +11,13 @@ export function AudioSection({
   status,
   activeTip,
   setActiveTip,
-  rebindingId,
-  setRebindingId,
   micDevices,
   loadingMicDevices,
   handleConfigUpdate,
   t,
 }: Pick<
   ClipsState,
-  | 'config'
-  | 'status'
-  | 'activeTip'
-  | 'setActiveTip'
-  | 'rebindingId'
-  | 'setRebindingId'
-  | 'micDevices'
-  | 'loadingMicDevices'
-  | 'handleConfigUpdate'
-  | 't'
+  'config' | 'status' | 'activeTip' | 'setActiveTip' | 'micDevices' | 'loadingMicDevices' | 'handleConfigUpdate' | 't'
 >) {
   const [audioSessions, setAudioSessions] = useState<AudioSessionInfo[]>([])
   const loadSessions = useCallback(async () => {
@@ -100,79 +89,6 @@ export function AudioSection({
           onToggle={() => handleConfigUpdate({ noiseSuppression: !(config.noiseSuppression ?? false) })}
         />
       </div>
-
-      {/* Push-to-Talk */}
-      <CollapsibleMini
-        label={
-          <span className="flex items-center gap-1.5">
-            {t('pushToTalk')}
-            <TipBadge id="ptt" activeTip={activeTip} setActiveTip={setActiveTip} />
-          </span>
-        }
-        defaultOpen={false}
-      >
-        <div className="space-y-2">
-          <div className="flex gap-1">
-            {(['off', 'hold', 'toggle'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => handleConfigUpdate({ pushToTalk: mode })}
-                className="flex-1 rounded-lg py-1 text-[10px] font-medium transition-all"
-                style={{
-                  background: config.pushToTalk === mode ? 'var(--accent)' : 'rgba(113,113,122,0.08)',
-                  color: config.pushToTalk === mode ? '#fff' : 'var(--text-primary)',
-                }}
-              >
-                {t(`ptt${mode.charAt(0).toUpperCase() + mode.slice(1)}`)}
-              </button>
-            ))}
-          </div>
-          {config.pushToTalk !== 'off' && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                {t('pttKey')}:
-              </span>
-              {config.pushToTalkKeys.map((vk, i) => (
-                <span
-                  // biome-ignore lint/suspicious/noArrayIndexKey: duplicate VK codes possible — index disambiguates
-                  key={`${vk}-${i}`}
-                  className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium"
-                  style={{ borderColor: 'var(--border-medium)', color: 'var(--text-primary)' }}
-                >
-                  {VK_MAP[vk] || `0x${vk.toString(16)}`}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (config.pushToTalkKeys.length > 1) {
-                        handleConfigUpdate({
-                          pushToTalkKeys: config.pushToTalkKeys.filter((k) => k !== vk),
-                        })
-                      }
-                    }}
-                    className="rounded p-0.5 leading-none transition-colors hover:bg-white/10"
-                    style={{ color: 'var(--text-dim)', fontSize: '10px' }}
-                  >
-                    \u00d7
-                  </button>
-                </span>
-              ))}
-              <button
-                type="button"
-                disabled={!!rebindingId}
-                onClick={() => setRebindingId('hk-ptt')}
-                className="rounded-md border border-dashed px-1.5 py-0.5 font-mono text-[10px] font-medium transition-colors hover:bg-white/5 disabled:opacity-60"
-                style={{
-                  borderColor: rebindingId === 'hk-ptt' ? 'var(--accent)' : 'var(--border-medium)',
-                  color: rebindingId === 'hk-ptt' ? 'var(--accent)' : 'var(--text-dim)',
-                }}
-              >
-                {rebindingId === 'hk-ptt' ? '...' : `+ ${t('pttKey')}`}
-              </button>
-            </div>
-          )}
-        </div>
-      </CollapsibleMini>
 
       {/* Volume Sliders */}
       <div className="space-y-2">

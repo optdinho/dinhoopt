@@ -14,6 +14,7 @@ public enum HotkeyAction
     SaveClip,
     ToggleCapture,
     ToggleMic,
+    Screenshot,
 }
 
 public sealed class HotkeyPressedEventArgs : EventArgs

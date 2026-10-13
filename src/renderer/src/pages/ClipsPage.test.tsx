@@ -21,6 +21,8 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
+vi.mock('@/lib/app-version', () => ({ APP_VERSION: '2.0.9' }))
+
 vi.mock('framer-motion', async () => (await import('../../../test-motion-mock')).motionMock)
 
 vi.mock('lucide-react', () => {
@@ -111,7 +113,7 @@ const baseConfig = {
   gameDetection: false,
   hotkeys: [
     { id: 'hk-save', vk: 0x77, modifiers: [], action: 'saveClip', replayDurationSeconds: 60, enabled: true },
-    { id: 'hk-capture', vk: 0x78, modifiers: [], action: 'toggleCapture', enabled: true },
+    { id: 'hk-capture', vk: 0x78, modifiers: [], action: 'screenshot', enabled: true },
     { id: 'hk-mic', vk: 0x79, modifiers: [], action: 'toggleMic', enabled: true },
   ],
 }
@@ -119,6 +121,7 @@ const baseConfig = {
 describe('ClipsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     mockGetStatus.mockResolvedValue({
       running: false,
       capturing: false,
@@ -284,30 +287,6 @@ describe('ClipsPage', () => {
     })
     render(<ClipsPage />)
     expect(await screen.findByText('lowDisk')).toBeTruthy()
-  })
-
-  it('renders push-to-talk mode selector', async () => {
-    render(<ClipsPage />)
-    showSettings()
-    expect(await screen.findByText('recordingQuality')).toBeTruthy()
-    await act(async () => {
-      fireEvent.click(screen.getByText('pushToTalk'))
-    })
-    expect(await screen.findByText('pttOff')).toBeTruthy()
-    expect(screen.getByText('pttHold')).toBeTruthy()
-    expect(screen.getByText('pttToggle')).toBeTruthy()
-  })
-
-  it('calls setConfig when PTT mode button is clicked', async () => {
-    render(<ClipsPage />)
-    showSettings()
-    await screen.findByText('recordingQuality')
-    fireEvent.click(screen.getByText('pushToTalk'))
-    await screen.findByText('pttHold')
-    await act(async () => {
-      fireEvent.click(screen.getByText('pttHold'))
-    })
-    expect(mockSetConfig).toHaveBeenCalledWith({ pushToTalk: 'hold' })
   })
 
   it('calls setConfig when game detection toggle is clicked', async () => {
@@ -491,6 +470,56 @@ describe('ClipsPage', () => {
     expect(mockSetConfig).toHaveBeenLastCalledWith({ selectedAudioSessions: [] })
   })
 
+  it('shows a news badge on the settings gear after an update, cleared on click', async () => {
+    localStorage.setItem('dinho-clips-new-version', '2.0.8')
+    render(<ClipsPage />)
+    await screen.findByText('pageTitle')
+    expect(await screen.findByTestId('clips-news-badge')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('showSettings'))
+    })
+    await screen.findByText('recordingQuality')
+    expect(screen.queryByTestId('clips-news-badge')).toBeNull()
+  })
+
+  it('shows a "configure here" speech bubble next to the gear after an update', async () => {
+    localStorage.setItem('dinho-clips-new-version', '2.0.8')
+    render(<ClipsPage />)
+    await screen.findByText('pageTitle')
+    expect(await screen.findByText('configureClipsHint')).toBeTruthy()
+  })
+
+  it('hides the configure hint once the settings panel is open', async () => {
+    localStorage.setItem('dinho-clips-new-version', '2.0.8')
+    render(<ClipsPage />)
+    await screen.findByText('pageTitle')
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('showSettings'))
+    })
+    await screen.findByText('recordingQuality')
+    expect(screen.queryByText('configureClipsHint')).toBeNull()
+  })
+
+  it('does not show the news badge when the version was already seen', async () => {
+    localStorage.setItem('dinho-clips-new-version', '2.0.9')
+    render(<ClipsPage />)
+    await screen.findByText('pageTitle')
+    expect(screen.queryByTestId('clips-news-badge')).toBeNull()
+  })
+
+  it('lets the user dismiss the configure hint without opening settings', async () => {
+    localStorage.setItem('dinho-clips-new-version', '2.0.8')
+    render(<ClipsPage />)
+    await screen.findByText('pageTitle')
+    expect(await screen.findByTestId('clips-news-badge')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('close'))
+    })
+    expect(screen.queryByTestId('clips-news-badge')).toBeNull()
+    expect(screen.getByTitle('showSettings')).toBeTruthy()
+    expect(localStorage.getItem('dinho-clips-new-version')).toBe('2.0.9')
+  })
+
   it('renders game detection toggle', async () => {
     render(<ClipsPage />)
     showSettings()
@@ -498,7 +527,7 @@ describe('ClipsPage', () => {
     expect(screen.getAllByText('gameDetection')[1]).toBeTruthy()
   })
 
-  it('renders pushToTalk as a hotkey action option', async () => {
+  it('offers the screenshot hotkey action and no longer offers capture/PTT', async () => {
     mockGetConfig.mockResolvedValue({
       replayTimeSeconds: 120,
       micEnabled: true,
@@ -518,7 +547,7 @@ describe('ClipsPage', () => {
       pushToTalk: 'off',
       pushToTalkKeys: [0x7a],
       gameDetection: false,
-      hotkeys: [{ id: 'hk-ptt', vk: 0x7b, modifiers: [], action: 'pushToTalk', enabled: true }],
+      hotkeys: [{ id: 'hk-shot', vk: 0x7b, modifiers: [], action: 'screenshot', enabled: true }],
     })
     render(<ClipsPage />)
     showSettings()
@@ -526,7 +555,9 @@ describe('ClipsPage', () => {
     await act(async () => {
       fireEvent.click(screen.getByText('hotkeys'))
     })
-    expect(await screen.findByText('actionPushToTalkLabel')).toBeTruthy()
+    expect(await screen.findByText('actionScreenshotLabel')).toBeTruthy()
+    expect(screen.queryByText('actionToggleCaptureLabel')).toBeNull()
+    expect(screen.queryByText('actionPushToTalkLabel')).toBeNull()
   })
 
   it('renders quality presets', async () => {
@@ -574,7 +605,7 @@ describe('ClipsPage', () => {
     expect(mockSetConfig).toHaveBeenCalledWith(expect.objectContaining({ replayBufferMode: 'disk' }))
   })
 
-  it('shows calibrated machine profile badge when adaptive quality is active', async () => {
+  it('no longer offers adaptive quality in the UI (feature removed from UI)', async () => {
     mockGetConfig.mockResolvedValue({ ...baseConfig, adaptiveQuality: true })
     mockGetStatus.mockResolvedValue({
       running: true,
@@ -587,37 +618,16 @@ describe('ClipsPage', () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    expect(screen.getByText('calibrationActive')).toBeTruthy()
+    expect(screen.queryByText('adaptiveQuality')).toBeNull()
   })
 
-  it('hides calibration badge when no tier was reported', async () => {
-    mockGetStatus.mockResolvedValue({
-      running: true,
-      capturing: true,
-      uptime: 120,
-      fps: 30,
-      replayTimeSeconds: 120,
-    })
+  it('no longer offers the 480p resolution option', async () => {
     render(<ClipsPage />)
     showSettings()
     await screen.findByText('recordingQuality')
-    expect(screen.queryByText('calibrationActive')).toBeNull()
-  })
-
-  it('hides calibration badge when adaptive quality is disabled even with a tier', async () => {
-    mockGetConfig.mockResolvedValue({ ...baseConfig, adaptiveQuality: false })
-    mockGetStatus.mockResolvedValue({
-      running: true,
-      capturing: true,
-      uptime: 120,
-      fps: 30,
-      replayTimeSeconds: 120,
-      calibrationTier: 'Strong',
-    })
-    render(<ClipsPage />)
-    showSettings()
-    await screen.findByText('recordingQuality')
-    expect(screen.queryByText('calibrationActive')).toBeNull()
+    expect(screen.queryByText('480p')).toBeNull()
+    expect(screen.getByText('720p')).toBeTruthy()
+    expect(screen.getByText('1080p')).toBeTruthy()
   })
 
   it('does not show a dropped frames badge even when drop counters are non-zero', async () => {
@@ -727,6 +737,30 @@ describe('ClipsPage', () => {
       fireEvent.click(screen.getByText('replayCustom'))
     })
     expect(mockSetConfig).toHaveBeenCalledWith({ replayTimeSeconds: 150 })
+  })
+
+  it('shows the RAM warning at 5+ minutes in RAM buffer mode', async () => {
+    mockGetConfig.mockResolvedValue({ ...baseConfig, replayTimeSeconds: 300, replayBufferMode: 'ram' })
+    render(<ClipsPage />)
+    showSettings()
+    await screen.findByText('recordingQuality')
+    expect(screen.getByText('replayRamWarning')).toBeTruthy()
+  })
+
+  it('shows the RAM warning at 5+ minutes in hybrid buffer mode', async () => {
+    mockGetConfig.mockResolvedValue({ ...baseConfig, replayTimeSeconds: 300, replayBufferMode: 'hybrid' })
+    render(<ClipsPage />)
+    showSettings()
+    await screen.findByText('recordingQuality')
+    expect(screen.getByText('replayRamWarning')).toBeTruthy()
+  })
+
+  it('does not show the RAM warning in disk-only buffer mode', async () => {
+    mockGetConfig.mockResolvedValue({ ...baseConfig, replayTimeSeconds: 300, replayBufferMode: 'disk' })
+    render(<ClipsPage />)
+    showSettings()
+    await screen.findByText('recordingQuality')
+    expect(screen.queryByText('replayRamWarning')).toBeNull()
   })
 
   describe('grade de presets de qualidade (item 6)', () => {

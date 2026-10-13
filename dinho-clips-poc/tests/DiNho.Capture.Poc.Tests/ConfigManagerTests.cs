@@ -386,7 +386,7 @@ public sealed class ConfigManagerTests
             Assert.Equal(114, cfg.Config.HotkeyBindings[0].Vk);
             Assert.Equal("SaveClip", cfg.Config.HotkeyBindings[0].Action);
             Assert.Equal(115, cfg.Config.HotkeyBindings[1].Vk);
-            Assert.Equal("ToggleCapture", cfg.Config.HotkeyBindings[1].Action);
+            Assert.Equal("Screenshot", cfg.Config.HotkeyBindings[1].Action);
             Assert.Equal(116, cfg.Config.HotkeyBindings[2].Vk);
             Assert.Equal("ToggleMic", cfg.Config.HotkeyBindings[2].Action);
             Assert.Equal(300, cfg.Config.ReplayTimeSeconds);

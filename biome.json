@@ -46,6 +46,7 @@
       "!**/.archive",
       "!**/.opencode",
       "!**/.kilo",
+      "!**/gerador de key",
       "!**/scripts",
       "!node_modules",
       "!out",

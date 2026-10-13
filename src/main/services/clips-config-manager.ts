@@ -97,9 +97,17 @@ export const config: ConfigState = {
 function defaultHotkeys(): HotkeyBinding[] {
   return [
     { id: 'hk-save-8', vk: 0x77, modifiers: [], action: 'saveClip', replayDurationSeconds: 60, enabled: true },
-    { id: 'hk-capture', vk: 0x78, modifiers: [], action: 'toggleCapture', enabled: true },
+    { id: 'hk-capture', vk: 0x78, modifiers: [], action: 'screenshot', enabled: true },
     { id: 'hk-mic', vk: 0x79, modifiers: [], action: 'toggleMic', enabled: true },
   ]
+}
+
+/** Migra atalhos legados: o antigo "toggleCapture" virou printscreen (decisão do usuário). */
+function migrateHotkeys(hotkeys: HotkeyBinding[] | undefined): HotkeyBinding[] {
+  if (!hotkeys) return []
+  return hotkeys.map((hk) =>
+    hk.action === 'toggleCapture' ? { ...hk, action: 'screenshot' as HotkeyBinding['action'] } : hk,
+  )
 }
 
 function baseConfigPayload(): Record<string, unknown> {
@@ -228,7 +236,7 @@ export function loadPersistedClipsConfig(): void {
   config.audioSampleRate = saved.audioSampleRate ?? 48000
   config.autoCleanupEnabled = saved.autoCleanupEnabled ?? true
   config.autoCleanupThresholdGB = saved.autoCleanupThresholdGB ?? 100
-  config.hotkeys = saved.hotkeys
+  config.hotkeys = migrateHotkeys(saved.hotkeys)
   config.outputDirectory = saved.outputDirectory
   config.engineReplayTimeSeconds = saved.replayTimeSeconds
   config.engineFps = normalizeFps(saved.fps)

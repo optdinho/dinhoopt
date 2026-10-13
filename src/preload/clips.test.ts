@@ -127,6 +127,23 @@ describe('clipsMethods listener wrappers', () => {
     expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_CLIP_SAVED, handler)
   })
 
+  it('clipsOnScreenshot registers and unregisters a callback', () => {
+    const cb = vi.fn()
+    const unsubscribe = clipsMethods.clipsOnScreenshot(cb)
+
+    expect(mockIpc.on).toHaveBeenCalledWith(IPC.CLIPS_SCREENSHOT, expect.any(Function))
+    const handler = mockIpc.on.mock.calls[0]?.[1] as (
+      _event: unknown,
+      data: { success: boolean; path?: string; error?: string },
+    ) => void
+
+    handler({}, { success: true, path: 'C:\\clips\\shot.png' })
+    expect(cb).toHaveBeenCalledWith({ success: true, path: 'C:\\clips\\shot.png' })
+
+    unsubscribe()
+    expect(mockIpc.removeListener).toHaveBeenCalledWith(IPC.CLIPS_SCREENSHOT, handler)
+  })
+
   it('clipsOnRamPressure registers and unregisters a callback', () => {
     const cb = vi.fn()
     const unsubscribe = clipsMethods.clipsOnRamPressure(cb)

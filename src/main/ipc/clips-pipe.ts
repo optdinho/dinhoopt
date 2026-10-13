@@ -266,6 +266,24 @@ function handlePipeMessage(msg: PipeMessage): void {
     return
   }
 
+  if (msg.cmd === '_event' && (msg.payload?.type === 'screenshotSaved' || msg.payload?.type === 'screenshotFailed')) {
+    const p = msg.payload as Record<string, unknown>
+    const success = p.type === 'screenshotSaved'
+    getLogger().info(
+      'clips-pipe',
+      `Screenshot ${success ? 'saved' : 'failed'}: ${String(p.path ?? p.error ?? 'unknown')}`,
+    )
+    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (win) {
+      win.webContents.send(IPC.CLIPS_SCREENSHOT, {
+        success,
+        path: p.path,
+        error: p.error,
+      })
+    }
+    return
+  }
+
   // ramPressure broadcasts from RamManager watchdog (raw JSON, no envelope)
   if (msg.event === 'ramPressure') {
     const p = msg as unknown as Record<string, unknown>

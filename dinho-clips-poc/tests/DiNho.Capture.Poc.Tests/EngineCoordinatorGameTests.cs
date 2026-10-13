@@ -1965,6 +1965,7 @@ public sealed class EngineCoordinatorGameTests : IDisposable
     [InlineData("SaveClip")]
     [InlineData("ToggleCapture")]
     [InlineData("ToggleMic")]
+    [InlineData("Screenshot")]
     public void HotkeyBinding_Actions_AllowValidStrings(string action)
     {
         var binding = new HotkeyBinding { Action = action };

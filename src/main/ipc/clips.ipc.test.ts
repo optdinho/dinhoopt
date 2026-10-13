@@ -624,7 +624,7 @@ describe('CLIPS_GET_CONFIG', () => {
     expect(hk[2]).toMatchObject({
       vk: 49,
       modifiers: ['Alt'],
-      action: 'toggleCapture',
+      action: 'screenshot',
       enabled: true,
       replayDurationSeconds: 60,
     })

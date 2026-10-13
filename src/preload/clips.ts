@@ -107,6 +107,14 @@ export const clipsMethods = {
       ipcRenderer.removeListener(IPC.CLIPS_CLIP_SAVED, handler)
     }
   },
+  clipsOnScreenshot: (callback: (data: { success: boolean; path?: string; error?: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { success: boolean; path?: string; error?: string }) =>
+      callback(data)
+    ipcRenderer.on(IPC.CLIPS_SCREENSHOT, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.CLIPS_SCREENSHOT, handler)
+    }
+  },
   clipsOnRamPressure: (
     callback: (data: { level?: string; usedPercent?: number; reducedReplay?: number | null }) => void,
   ): (() => void) => {

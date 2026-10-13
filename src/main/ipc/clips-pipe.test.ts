@@ -93,6 +93,34 @@ describe('clips-pipe broadcast events', () => {
     expect(mockLogger.info).toHaveBeenCalledWith('clips-pipe', 'Clip saved: unknown')
   })
 
+  it('forwards screenshotSaved to the renderer with success=true', () => {
+    const win = makeWindow()
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([win as never])
+
+    onPipeData(line({ cmd: '_event', payload: { type: 'screenshotSaved', path: 'C:\\Clips\\shot.png' } }))
+
+    expect(mockLogger.info).toHaveBeenCalledWith('clips-pipe', 'Screenshot saved: C:\\Clips\\shot.png')
+    expect(win.webContents.send).toHaveBeenCalledWith(IPC.CLIPS_SCREENSHOT, {
+      success: true,
+      path: 'C:\\Clips\\shot.png',
+      error: undefined,
+    })
+  })
+
+  it('forwards screenshotFailed to the renderer with success=false', () => {
+    const win = makeWindow()
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([win as never])
+
+    onPipeData(line({ cmd: '_event', payload: { type: 'screenshotFailed', error: 'ffmpeg exit 1' } }))
+
+    expect(mockLogger.info).toHaveBeenCalledWith('clips-pipe', 'Screenshot failed: ffmpeg exit 1')
+    expect(win.webContents.send).toHaveBeenCalledWith(IPC.CLIPS_SCREENSHOT, {
+      success: false,
+      path: undefined,
+      error: 'ffmpeg exit 1',
+    })
+  })
+
   it('forwards ramPressure with the reduced replay detail', () => {
     const win = makeWindow()
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([win as never])

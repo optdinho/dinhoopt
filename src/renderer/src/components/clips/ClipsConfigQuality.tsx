@@ -1,4 +1,4 @@
-import { ChevronDown, Gauge, Sparkles } from 'lucide-react'
+import { ChevronDown, Gauge } from 'lucide-react'
 import { useState } from 'react'
 import {
   PRESET_DOTS,
@@ -109,9 +109,21 @@ export function QualitySection({
   'config' | 'status' | 'activeTip' | 'setActiveTip' | 'gpuList' | 'estimatedRamMB' | 'handleConfigUpdate' | 't'
 >) {
   const [gpuOpen, setGpuOpen] = useState(false)
+  const [customReplayOverride, setCustomReplayOverride] = useState<boolean | null>(null)
+  const [draftReplay, setDraftReplay] = useState<number | null>(null)
   if (!config) return null
   const replayPresets = [30, 120, 300]
-  const isCustomReplay = !replayPresets.includes(config.replayTimeSeconds)
+  const isCustomReplay =
+    draftReplay !== null || (customReplayOverride ?? !replayPresets.includes(config.replayTimeSeconds))
+  const clampReplay = (s: number) => Math.max(30, Math.min(600, s))
+  const commitReplay = () => {
+    if (draftReplay === null) return
+    const value = clampReplay(draftReplay)
+    setDraftReplay(null)
+    handleConfigUpdate({ replayTimeSeconds: value })
+  }
+  const showRamWarning =
+    (config.replayBufferMode === 'ram' || config.replayBufferMode === 'hybrid') && config.replayTimeSeconds >= 300
   const formatReplay = (s: number) =>
     s < 60
       ? `${s}${t('s')}`
@@ -237,12 +249,11 @@ export function QualitySection({
           <SegmentedControl
             layoutId="resolution"
             options={[
-              { value: '854', label: '480p' },
               { value: '1280', label: '720p' },
               { value: '1600', label: '900p' },
               { value: '1920', label: '1080p' },
             ]}
-            value={String(config.width) as '854' | '1280' | '1600' | '1920'}
+            value={String(config.width) as '1280' | '1600' | '1920'}
             onChange={(v) => {
               const w = Number(v)
               handleConfigUpdate({ width: w, height: RESOLUTION_HEIGHT[w] ?? 720 })
@@ -320,38 +331,53 @@ export function QualitySection({
             },
           ]}
           value={isCustomReplay ? 'custom' : String(config.replayTimeSeconds)}
-          onChange={(v) =>
-            handleConfigUpdate({
-              replayTimeSeconds: v === 'custom' ? (isCustomReplay ? config.replayTimeSeconds : 150) : Number(v),
-            })
-          }
+          onChange={(v) => {
+            const pending = draftReplay
+            setDraftReplay(null)
+            if (v === 'custom') {
+              setCustomReplayOverride(true)
+              handleConfigUpdate({
+                replayTimeSeconds: clampReplay(pending ?? (isCustomReplay ? config.replayTimeSeconds : 150)),
+              })
+            } else {
+              setCustomReplayOverride(false)
+              handleConfigUpdate({ replayTimeSeconds: Number(v) })
+            }
+          }}
         />
         {isCustomReplay && (
           <div className="mt-2">
             <input
               type="range"
+              data-testid="replay-time-slider"
               min={30}
               max={600}
               step={5}
-              value={Math.max(30, Math.min(600, config.replayTimeSeconds))}
-              onChange={(e) => handleConfigUpdate({ replayTimeSeconds: Number(e.target.value) })}
+              value={String(clampReplay(draftReplay ?? config.replayTimeSeconds))}
+              onChange={(e) => {
+                setDraftReplay(Number(e.target.value))
+              }}
+              onPointerUp={commitReplay}
+              onPointerCancel={commitReplay}
+              onKeyUp={commitReplay}
+              onBlur={commitReplay}
               className="clip-range w-full"
               style={{
                 background: `linear-gradient(to right, var(--accent) ${
-                  ((Math.max(30, Math.min(600, config.replayTimeSeconds)) - 30) / 570) * 100
-                }%, rgba(113,113,122,0.2) ${((Math.max(30, Math.min(600, config.replayTimeSeconds)) - 30) / 570) * 100}%)`,
+                  ((clampReplay(draftReplay ?? config.replayTimeSeconds) - 30) / 570) * 100
+                }%, rgba(113,113,122,0.2) ${((clampReplay(draftReplay ?? config.replayTimeSeconds) - 30) / 570) * 100}%)`,
               }}
             />
             <div className="mt-1 flex justify-between text-[10px]">
               <span style={{ color: 'var(--text-dim)' }}>{t('replayMin')}</span>
               <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                {formatReplay(config.replayTimeSeconds)}
+                {formatReplay(clampReplay(draftReplay ?? config.replayTimeSeconds))}
               </span>
               <span style={{ color: 'var(--text-dim)' }}>{t('replayMax')}</span>
             </div>
           </div>
         )}
-        {config.replayTimeSeconds >= 300 && (
+        {showRamWarning && (
           <div
             className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] leading-snug"
             style={{ color: '#f87171' }}
@@ -360,31 +386,6 @@ export function QualitySection({
           </div>
         )}
       </div>
-
-      {/* Adaptive Quality */}
-      <ToggleRow
-        title={t('adaptiveQuality')}
-        tip={t('tooltipAdaptiveQuality')}
-        tooltipId="adaptive-quality"
-        activeTip={activeTip}
-        setActiveTip={setActiveTip}
-        enabled={config.adaptiveQuality ?? false}
-        onToggle={() => handleConfigUpdate({ adaptiveQuality: !(config.adaptiveQuality ?? false) })}
-      />
-      {(config.adaptiveQuality ?? false) && _status.calibrationTier && (
-        <div
-          className="flex items-center gap-2 rounded-xl border px-3 py-2"
-          style={{
-            background: 'linear-gradient(90deg, rgba(139,92,246,0.16), rgba(59,130,246,0.1))',
-            borderColor: 'rgba(139,92,246,0.35)',
-          }}
-        >
-          <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--accent)' }} />
-          <span className="text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-            {t('calibrationActive', { tier: _status.calibrationTier })}
-          </span>
-        </div>
-      )}
 
       {/* Buffer Usage */}
       {estimatedRamMB > 0 && (

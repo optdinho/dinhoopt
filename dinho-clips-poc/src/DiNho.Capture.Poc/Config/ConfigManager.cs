@@ -20,7 +20,7 @@ public sealed class AppConfig
     public List<HotkeyBinding> HotkeyBindings { get; set; } = new()
     {
         new() { Vk = 0x77, Action = "SaveClip", Enabled = true },
-        new() { Vk = 0x78, Action = "ToggleCapture", Enabled = true },
+        new() { Vk = 0x78, Action = "Screenshot", Enabled = true },
         new() { Vk = 0x79, Action = "ToggleMic", Enabled = true },
     };
 
@@ -256,7 +256,7 @@ public sealed class ConfigManager : IDisposable
                 var root = doc.RootElement;
                 if (!root.TryGetProperty("Hotkeys", out _) && root.TryGetProperty("SaveClipVk", out var oldSave))
                 {
-                    // Migra para as 3 bindings padrão SEMPRE (SaveClip/ToggleCapture/ToggleMic),
+                    // Migra para as 3 bindings padrão SEMPRE (SaveClip/Screenshot/ToggleMic),
                     // puxando o VK customizado quando presente e o default quando ausente —
                     // nenhuma ação de hotkey pode ser perdida na migração.
                     var def = new AppConfig().HotkeyBindings;
@@ -268,7 +268,7 @@ public sealed class ConfigManager : IDisposable
                     config.HotkeyBindings = new List<HotkeyBinding>
                     {
                         new() { Vk = saveVk, Action = "SaveClip", Enabled = true },
-                        new() { Vk = capVk, Action = "ToggleCapture", Enabled = true },
+                        new() { Vk = capVk, Action = "Screenshot", Enabled = true },
                         new() { Vk = micVk, Action = "ToggleMic", Enabled = true },
                     };
                     config.ReplayTimeSeconds = root.TryGetProperty("ReplayTimeSeconds", out var oldDur)

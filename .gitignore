@@ -92,3 +92,6 @@ e2e/.dbg-userdata/
 
 # Soak harness output (scripts/soak-test.cjs)
 soak-out/
+
+# Ferramenta local de geracao de keys (nunca versionar)
+gerador de key/

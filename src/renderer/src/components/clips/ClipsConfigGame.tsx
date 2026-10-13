@@ -1,7 +1,14 @@
 import type { TFunction } from 'i18next'
 import { Gamepad2, Plus, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { CollapsibleMini, formatKey, GamePickerBtn, REPLAY_DURATIONS, TogglePill } from './clips-utils'
+import {
+  CollapsibleMini,
+  formatKey,
+  GamePickerBtn,
+  nativeSelectStyle,
+  REPLAY_DURATIONS,
+  TogglePill,
+} from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
 export function GameSection({
@@ -116,31 +123,28 @@ export function GameSection({
                   onChange={(e) =>
                     updateHotkey(hk.id, { action: e.target.value as import('@shared/types').HotkeyAction })
                   }
-                  className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
-                  style={{
-                    borderColor: 'var(--border-medium)',
-                    color: 'var(--text-primary)',
-                    colorScheme: 'dark',
-                  }}
+                  className="rounded-md border px-1 py-0.5 text-[10px] outline-none"
+                  style={{ ...nativeSelectStyle, borderColor: 'var(--border-medium)', colorScheme: 'dark' }}
                 >
-                  <option value="saveClip">{tClips('actionSaveClipLabel')}</option>
-                  <option value="toggleCapture">{tClips('actionToggleCaptureLabel')}</option>
-                  <option value="toggleMic">{tClips('actionToggleMicLabel')}</option>
-                  <option value="pushToTalk">{tClips('actionPushToTalkLabel')}</option>
+                  <option value="saveClip" style={nativeSelectStyle}>
+                    {tClips('actionSaveClipLabel')}
+                  </option>
+                  <option value="screenshot" style={nativeSelectStyle}>
+                    {tClips('actionScreenshotLabel')}
+                  </option>
+                  <option value="toggleMic" style={nativeSelectStyle}>
+                    {tClips('actionToggleMicLabel')}
+                  </option>
                 </select>
                 {hk.action === 'saveClip' && (
                   <select
                     value={hk.replayDurationSeconds || 60}
                     onChange={(e) => updateHotkey(hk.id, { replayDurationSeconds: Number(e.target.value) })}
-                    className="rounded-md border bg-transparent px-1 py-0.5 text-[10px] outline-none"
-                    style={{
-                      borderColor: 'var(--border-medium)',
-                      color: 'var(--text-primary)',
-                      colorScheme: 'dark',
-                    }}
+                    className="rounded-md border px-1 py-0.5 text-[10px] outline-none"
+                    style={{ ...nativeSelectStyle, borderColor: 'var(--border-medium)', colorScheme: 'dark' }}
                   >
                     {REPLAY_DURATIONS.map((d) => (
-                      <option key={d} value={d}>
+                      <option key={d} value={d} style={nativeSelectStyle}>
                         {d < 60 ? `${d}${t('s')}` : `${d / 60}${t('min')}`}
                       </option>
                     ))}
@@ -163,9 +167,8 @@ export function GameSection({
               </div>
               <p className="mt-1 px-0.5 text-[9px] leading-tight" style={{ color: 'var(--text-dim)', opacity: 0.7 }}>
                 {hk.action === 'saveClip' && t('saveClipDesc')}
-                {hk.action === 'toggleCapture' && t('toggleCaptureDesc')}
+                {hk.action === 'screenshot' && t('screenshotDesc')}
                 {hk.action === 'toggleMic' && t('toggleMicDesc')}
-                {hk.action === 'pushToTalk' && t('pushToTalkDesc')}
               </p>
             </div>
           ))}

@@ -366,6 +366,9 @@ public sealed partial class EngineCoordinator : IDisposable
             case HotkeyAction.ToggleMic:
                 ToggleMic();
                 break;
+            case HotkeyAction.Screenshot:
+                RequestScreenshot();
+                break;
         }
     }
 

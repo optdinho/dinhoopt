@@ -47,7 +47,9 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import logoSrc from '@/assets/logo.png'
 import { usePlatform } from '@/hooks/usePlatform'
+import { APP_VERSION } from '@/lib/app-version'
 import { cn } from '@/lib/utils'
+import { sectionForHeadingKey, sectionForPath, useNavNews } from '@/lib/whats-new'
 import { useDriverStore } from '@/stores/driver-store'
 import { useGameModeStore } from '@/stores/game-mode-store'
 import { useUpdaterStore } from '@/stores/updater-store'
@@ -216,6 +218,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
   const navigate = useNavigate()
   const badgeCounts = useBadgeCounts()
   const { features } = usePlatform()
+  const { visibleNews, markSeen } = useNavNews(APP_VERSION)
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -234,6 +237,12 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
       }
     }
   }, [location.pathname])
+
+  // Clear a section's "news" dot once the user visits one of its pages.
+  useEffect(() => {
+    const section = sectionForPath(location.pathname)
+    if (section && visibleNews.includes(section)) markSeen(section)
+  }, [location.pathname, visibleNews, markSeen])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: navGroups is a module-level const
   const filteredNavGroups = useMemo(
@@ -504,6 +513,11 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
   // The first group (Acesso rápido) has no heading, render items directly
   const [quickAccessGroup, ...sectionGroups] = filteredNavGroups
 
+  const newsDotForHeading = (headingKey: string | undefined): string | null => {
+    const section = sectionForHeadingKey(headingKey)
+    return section && visibleNews.includes(section) ? section : null
+  }
+
   return (
     <div
       className={cn('flex h-full w-full shrink-0 flex-col')}
@@ -689,60 +703,81 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
         )}
 
         {/* Section groups */}
-        {sectionGroups.map((group) => (
-          <div
-            key={group.headingKey || 'section'}
-            className="mt-2"
-            role="group"
-            aria-labelledby={group.headingKey ? `nav-group-${group.headingKey}` : undefined}
-          >
-            {group.headingKey && (
-              <div className={cn('flex items-center', collapsed ? 'justify-center px-0' : 'mb-1 gap-2 px-3')}>
-                <div
-                  className="h-1.5 w-1.5 rounded-full shrink-0"
-                  style={{
-                    background:
-                      group.color === 'red'
-                        ? '#ef4444'
-                        : group.color === 'blue'
-                          ? '#3b82f6'
-                          : group.color === 'green'
-                            ? '#22c55e'
-                            : group.color === 'purple'
-                              ? '#a78bfa'
-                              : '#f59e0b',
-                  }}
-                />
-                {!collapsed && (
-                  <span
-                    id={`nav-group-${group.headingKey}`}
-                    className="text-[10px] font-semibold uppercase tracking-[0.12em]"
-                    style={{ color: 'var(--text-faint)' }}
-                  >
-                    {t(group.headingKey)}
-                  </span>
-                )}
+        {sectionGroups.map((group) => {
+          const newsSection = newsDotForHeading(group.headingKey)
+          return (
+            <div
+              key={group.headingKey || 'section'}
+              className="mt-2"
+              role="group"
+              aria-labelledby={group.headingKey ? `nav-group-${group.headingKey}` : undefined}
+            >
+              {group.headingKey && (
+                <div className={cn('flex items-center', collapsed ? 'justify-center px-0' : 'mb-1 gap-2 px-3')}>
+                  <div
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                    style={{
+                      background:
+                        group.color === 'red'
+                          ? '#ef4444'
+                          : group.color === 'blue'
+                            ? '#3b82f6'
+                            : group.color === 'green'
+                              ? '#22c55e'
+                              : group.color === 'purple'
+                                ? '#a78bfa'
+                                : '#f59e0b',
+                    }}
+                  />
+                  {!collapsed && (
+                    <span
+                      id={`nav-group-${group.headingKey}`}
+                      className="text-[10px] font-semibold uppercase tracking-[0.12em]"
+                      style={{ color: 'var(--text-faint)' }}
+                    >
+                      {t(group.headingKey)}
+                    </span>
+                  )}
+                  {!collapsed && newsSection && (
+                    <span
+                      data-testid={`nav-news-${newsSection}`}
+                      role="status"
+                      aria-label={t('newSectionNews')}
+                      title={t('newSectionNews')}
+                      className="relative ml-auto flex h-2 w-2"
+                    >
+                      <span
+                        className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+                        style={{ background: 'var(--accent, #3b82f6)' }}
+                      />
+                      <span
+                        className="relative inline-flex h-2 w-2 rounded-full"
+                        style={{ background: 'var(--accent, #3b82f6)' }}
+                      />
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavItem
+                    key={item.path}
+                    item={item}
+                    badgeCount={effectiveBadgeCounts[item.path] ?? 0}
+                    badgeCounts={effectiveBadgeCounts}
+                    {...(item.badgeLabel ? { badgeLabel: item.badgeLabel } : {})}
+                    isActive={isPathActive(item)}
+                    submenuOpen={openSubmenu === item.path}
+                    collapsed={collapsed}
+                    sectionColor={(group.color ?? 'amber') as SectionColor}
+                    onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
+                    onCloseSubmenu={() => setOpenSubmenu(null)}
+                  />
+                ))}
               </div>
-            )}
-            <div className="space-y-0.5">
-              {group.items.map((item) => (
-                <NavItem
-                  key={item.path}
-                  item={item}
-                  badgeCount={effectiveBadgeCounts[item.path] ?? 0}
-                  badgeCounts={effectiveBadgeCounts}
-                  {...(item.badgeLabel ? { badgeLabel: item.badgeLabel } : {})}
-                  isActive={isPathActive(item)}
-                  submenuOpen={openSubmenu === item.path}
-                  collapsed={collapsed}
-                  sectionColor={(group.color ?? 'amber') as SectionColor}
-                  onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
-                  onCloseSubmenu={() => setOpenSubmenu(null)}
-                />
-              ))}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
       {/* ── Collapse toggle ── */}

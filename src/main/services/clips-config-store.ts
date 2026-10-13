@@ -81,7 +81,7 @@ const DEFAULTS: ClipsPersistedConfig = {
       id: 'hk-1782222941097',
       vk: 49,
       modifiers: ['Alt'],
-      action: 'toggleCapture',
+      action: 'screenshot',
       replayDurationSeconds: 60,
       enabled: true,
     },

@@ -437,6 +437,12 @@ function initGui(): void {
 
     attachRendererDiagnostics(mainWindow)
 
+    // Dev convenience: open the inspector detached so the news indicators can be
+    // inspected/seeded. Skipped in packaged builds and under Playwright (DINHO_E2E).
+    if (!app.isPackaged && process.env.DINHO_E2E !== '1') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
+    }
+
     mainWindow.on('ready-to-show', () => {
       assertTaskbarIcon()
       // If launched at startup with minimize-to-tray, stay hidden

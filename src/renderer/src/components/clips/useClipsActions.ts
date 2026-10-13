@@ -312,14 +312,6 @@ export function useClipsActions(deps: ClipsActionDeps) {
         e.preventDefault()
         e.stopPropagation()
         if (MODIFIER_KEYS.has(e.keyCode)) return
-        if (rebindingId === 'hk-ptt') {
-          const keys = config.pushToTalkKeys
-          if (!keys.includes(e.keyCode)) {
-            handleConfigUpdate({ pushToTalkKeys: [...keys, e.keyCode] })
-          }
-          setRebindingId(null)
-          return
-        }
         const modifiers: HotkeyBinding['modifiers'] = []
         if (e.ctrlKey) modifiers.push('Ctrl')
         if (e.shiftKey) modifiers.push('Shift')
@@ -333,14 +325,6 @@ export function useClipsActions(deps: ClipsActionDeps) {
         if (vk === null) return
         e.preventDefault()
         e.stopPropagation()
-        if (rebindingId === 'hk-ptt') {
-          const keys = config.pushToTalkKeys
-          if (!keys.includes(vk)) {
-            handleConfigUpdate({ pushToTalkKeys: [...keys, vk] })
-          }
-          setRebindingId(null)
-          return
-        }
         const modifiers: HotkeyBinding['modifiers'] = []
         if (e.ctrlKey) modifiers.push('Ctrl')
         if (e.shiftKey) modifiers.push('Shift')

@@ -463,7 +463,7 @@ public sealed class EngineCoordinatorTests
         var cfg = new AppConfig();
         Assert.Equal(3, cfg.HotkeyBindings.Count);
         Assert.Equal("SaveClip", cfg.HotkeyBindings[0].Action);
-        Assert.Equal("ToggleCapture", cfg.HotkeyBindings[1].Action);
+        Assert.Equal("Screenshot", cfg.HotkeyBindings[1].Action);
         Assert.Equal("ToggleMic", cfg.HotkeyBindings[2].Action);
     }
 

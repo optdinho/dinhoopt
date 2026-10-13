@@ -119,8 +119,6 @@ export function ClipsConfigPanel({
                   status={status}
                   activeTip={activeTip}
                   setActiveTip={setActiveTip}
-                  rebindingId={rebindingId}
-                  setRebindingId={setRebindingId}
                   micDevices={micDevices}
                   loadingMicDevices={loadingMicDevices}
                   handleConfigUpdate={handleConfigUpdate}

@@ -130,6 +130,17 @@ export const VK_MAP: Record<number, string> = {
 export const MODIFIER_KEYS = new Set([0x11, 0x10, 0x12])
 export const REPLAY_DURATIONS = [30, 60, 120, 300, 600]
 
+/**
+ * Estilo para os `<select>`/`<option>` nativos. O popup do SO ignora o tema do app e
+ * abre com fundo do sistema (branco) enquanto o texto herda `--text-primary` (branco em
+ * tema escuro) — resultado: texto invisível. Fixar fundo `--card-bg` + cor `--text-primary`
+ * mantém a lista legível em claro e escuro.
+ */
+export const nativeSelectStyle: React.CSSProperties = {
+  background: 'var(--card-bg)',
+  color: 'var(--text-primary)',
+}
+
 export function formatUptime(seconds: number, t: (key: string) => string): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60

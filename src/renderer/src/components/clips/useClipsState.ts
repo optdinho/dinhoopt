@@ -167,12 +167,10 @@ export function useClipsState(): ClipsState {
       'replay-buffer-mode': t('replayBufferModeTooltip'),
       mic: t('tooltipMic'),
       loopback: t('tooltipLoopback'),
-      ptt: t('pushToTalkTooltip'),
       'sample-rate': t('tooltipSampleRate'),
       'game-audio': t('tooltipGameAudio'),
       'noise-suppression': t('tooltipNoiseSuppression'),
       'audio-sessions': t('audioSessionsTooltip'),
-      'adaptive-quality': t('tooltipAdaptiveQuality'),
     }),
     [t],
   )
@@ -344,6 +342,18 @@ export function useClipsState(): ClipsState {
     })
     return () => unsub?.()
   }, [refreshClips, t])
+
+  // Listen for screenshot events (from the printscreen hotkey in the engine)
+  useEffect(() => {
+    const unsub = window.dinho?.clipsOnScreenshot?.((data) => {
+      if (data.success) {
+        toast.success(t('screenshotSaved'))
+      } else {
+        toast.error(t('screenshotFailed'))
+      }
+    })
+    return () => unsub?.()
+  }, [t])
 
   // Listen for RAM pressure broadcasts (RamManager watchdog)
   useEffect(() => {

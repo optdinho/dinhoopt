@@ -48,10 +48,12 @@ type MockFn = ReturnType<typeof vi.fn>
 
 type RamData = { level?: 'normal' | 'critical'; usedPercent?: number }
 type ProgressData = { clipPath: string; percent?: number }
+type ScreenshotData = { success: boolean; path?: string; error?: string }
 
 const listeners: {
   engineStatus?: (s: ClipsEngineStatus) => void
   clipSaved?: () => void
+  screenshot?: (d: ScreenshotData) => void
   ramPressure?: (d: RamData) => void
   durationsReady?: () => void
   publishProgress?: (d: ProgressData) => void
@@ -99,6 +101,10 @@ function makeDinho(overrides: Record<string, MockFn> = {}): Record<string, MockF
     }),
     clipsOnClipSaved: vi.fn((cb: () => void) => {
       listeners.clipSaved = cb
+      return vi.fn()
+    }),
+    clipsOnScreenshot: vi.fn((cb: (d: ScreenshotData) => void) => {
+      listeners.screenshot = cb
       return vi.fn()
     }),
     clipsOnRamPressure: vi.fn((cb: (d: RamData) => void) => {
@@ -457,6 +463,28 @@ describe('useClipsState', () => {
 
     await waitFor(() => expect(dinho.clipsList).toHaveBeenCalledTimes(2))
     expect(toast.success).toHaveBeenCalledWith('clipSaved')
+  })
+
+  it('toasts success when the engine saves a screenshot', async () => {
+    const dinho = makeDinho()
+    renderHook(() => useClipsState())
+
+    await waitFor(() => expect(dinho.clipsList).toHaveBeenCalledTimes(1))
+    act(() => listeners.screenshot?.({ success: true, path: 'C:\\Clips\\shot.png' }))
+
+    expect(toast.success).toHaveBeenCalledWith('screenshotSaved')
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('toasts an error when the screenshot fails', async () => {
+    const dinho = makeDinho()
+    renderHook(() => useClipsState())
+
+    await waitFor(() => expect(dinho.clipsList).toHaveBeenCalledTimes(1))
+    act(() => listeners.screenshot?.({ success: false, error: 'ffmpeg exit 1' }))
+
+    expect(toast.error).toHaveBeenCalledWith('screenshotFailed')
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('refreshes clips when durations are ready', async () => {
