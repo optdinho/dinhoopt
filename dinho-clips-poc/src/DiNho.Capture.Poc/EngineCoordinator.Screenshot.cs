@@ -30,11 +30,21 @@ public sealed partial class EngineCoordinator
     internal bool ConsumeScreenshotRequest() =>
         Interlocked.Exchange(ref _screenshotRequested, 0) == 1;
 
+    /// <summary>Subpasta (dentro do diretório de clips) onde os printscreen são gravados.</summary>
+    internal const string ScreenshotSubfolder = "Screenshots";
+
     /// <summary>
     /// Nome do ficheiro PNG de printscreen, ordenável por tempo.
     /// </summary>
     internal static string BuildScreenshotFileName(DateTime timestamp) =>
         $"screenshot-{timestamp.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)}.png";
+
+    /// <summary>
+    /// Caminho completo do PNG de printscreen: <c>&lt;outputDirectory&gt;/Screenshots/&lt;nome&gt;</c>.
+    /// Os prints ficam separados dos clips .mp4. Puro — testável.
+    /// </summary>
+    internal static string BuildScreenshotPath(string outputDirectory, DateTime timestamp) =>
+        Path.Combine(outputDirectory, ScreenshotSubfolder, BuildScreenshotFileName(timestamp));
 
     /// <summary>
     /// Argumentos do ffmpeg para converter um frame BGRA cru (stdin) num PNG.
@@ -101,7 +111,8 @@ public sealed partial class EngineCoordinator
                 }
             }
 
-            outputPath = Path.Combine(GetOutputDirectory(), BuildScreenshotFileName(DateTime.Now));
+            outputPath = BuildScreenshotPath(GetOutputDirectory(), DateTime.Now);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             var psi = FfmpegPathResolver.CreateFfmpegStartInfo(
                 args: BuildScreenshotFfmpegArgs(width, height, outputPath),
                 redirectInput: true,

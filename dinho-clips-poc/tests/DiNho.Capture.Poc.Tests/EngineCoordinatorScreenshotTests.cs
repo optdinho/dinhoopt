@@ -20,6 +20,22 @@ public sealed class EngineCoordinatorScreenshotTests
     }
 
     [Fact]
+    public void BuildScreenshotPath_PlacesPrintUnderScreenshotsSubfolder()
+    {
+        var path = EngineCoordinator.BuildScreenshotPath(@"C:\out\DiNho Clips", new DateTime(2026, 10, 11, 13, 5, 9, 42));
+        Assert.Equal(Path.Combine(@"C:\out\DiNho Clips", "Screenshots", "screenshot-20261011-130509-042.png"), path);
+    }
+
+    [Fact]
+    public void BuildScreenshotPath_KeepsScreenshotsOutOfClipsFolder()
+    {
+        var clipsDir = Path.Combine(Path.GetTempPath(), "DiNho Clips");
+        var path = EngineCoordinator.BuildScreenshotPath(clipsDir, DateTime.Now);
+        Assert.Equal(clipsDir, Path.GetDirectoryName(Path.GetDirectoryName(path)));
+        Assert.Equal("Screenshots", Path.GetFileName(Path.GetDirectoryName(path)));
+    }
+
+    [Fact]
     public void BuildScreenshotFfmpegArgs_EncodesRawBgraToPng()
     {
         var args = EngineCoordinator.BuildScreenshotFfmpegArgs(1920, 1080, @"C:\out\shot.png");
