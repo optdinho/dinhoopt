@@ -5,6 +5,39 @@ as duas versões mais recentes; o histórico completo vive aqui.
 
 ---
 
+## 2.1.0
+
+### 📸 O atalho de "captura" agora tira printscreen
+
+O atalho que ligava/desligava a captura passa a tirar um **printscreen (PNG)** do jogo. O
+frame é apanhado diretamente pela captura existente e gravado como
+`screenshot-AAAAMMDD-HHMMSS-mmm.png` na pasta dos clipes - sem custo de captura adicional.
+A ação `screenshot` substitui a antiga `toggleCapture`, com **migração automática** dos
+atalhos já configurados (não perdes a tecla). A app mostra um toast quando o ficheiro é
+gravado ou se a gravação falhar.
+
+### 🎛️ Configuração dos Clips mais simples
+
+- **Push-to-Talk removido** (secção de áudio, ação de atalho e rebinding).
+- **Qualidade Adaptativa removida** (toggle e indicador de calibração).
+- **480p removido** do seletor de resolução.
+- O écrã de configuração (atalhos, tempo de replay, qualidade) foi reorganizado.
+
+### ✨ Novidades por secção
+
+- Ao abrir os Clips depois de uma atualização, aparece um **balão "Configure os clipes
+  aqui"** junto à engrenagem, com botão de fechar.
+- A **barra lateral** marca com um ponto as secções com novidades; a marca desaparece
+  quando visitas a secção.
+- A app passa a mostrar **qual a versão** e um **badge de novidades** na navegação.
+
+### 🧹 Manutenção
+
+- Ferramenta local de geração de keys excluída do controlo de versões e das verificações
+  (`.gitignore` + Biome).
+
+---
+
 ## 2.0.9
 
 ### 🔧 Release mais robusto
