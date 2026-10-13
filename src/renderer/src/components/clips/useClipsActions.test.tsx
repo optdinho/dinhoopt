@@ -899,6 +899,23 @@ describe('useClipsActions', () => {
       cleanup()
     })
 
+    it('adds a push-to-talk key without duplicates', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
+      const deps = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x14] }) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+      const cleanup = result.current.setupRebindingListeners('hk-ptt')
+
+      dispatchKey({ keyCode: 0x14 })
+      expect(dinho.clipsSetConfig).not.toHaveBeenCalled()
+
+      dispatchKey({ keyCode: 0x15 })
+      const [patch] = dinho.clipsSetConfig.mock.calls[0]!
+      expect((patch as { pushToTalkKeys: number[] }).pushToTalkKeys).toEqual([0x14, 0x15])
+      expect(deps.setRebindingId).toHaveBeenCalledWith(null)
+      cleanup()
+    })
+
     it('rebinds from a mouse button press', async () => {
       const dinho = mockDinho()
       dinho.clipsSetConfig.mockResolvedValue({ success: true })
@@ -1095,6 +1112,33 @@ describe('useClipsActions', () => {
       expect(hotkeys[1]!.vk).toBe(0x51)
       expect(hotkeys[1]!.modifiers).toEqual([])
       cleanup()
+    })
+
+    it('adds a push-to-talk mouse button but not duplicates', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
+      const deps = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x14] }) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+      const cleanup = result.current.setupRebindingListeners('hk-ptt')
+
+      window.dispatchEvent(new MouseEvent('mousedown', { button: 3 }))
+
+      const [patch] = dinho.clipsSetConfig.mock.calls[0]!
+      expect((patch as { pushToTalkKeys: number[] }).pushToTalkKeys).toEqual([0x14, 0x05])
+      expect(deps.setRebindingId).toHaveBeenCalledWith(null)
+      cleanup()
+
+      const dinho2 = mockDinho()
+      dinho2.clipsSetConfig.mockResolvedValue({ success: true })
+      const deps2 = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x05] }) }))
+      const second = renderHook(() => useClipsActions(deps2))
+      const cleanup2 = second.result.current.setupRebindingListeners('hk-ptt')
+
+      window.dispatchEvent(new MouseEvent('mousedown', { button: 3 }))
+
+      expect(dinho2.clipsSetConfig).not.toHaveBeenCalled()
+      expect(deps2.setRebindingId).toHaveBeenCalledWith(null)
+      cleanup2()
     })
 
     it('rebinds a hotkey from a mouse button with modifiers', async () => {

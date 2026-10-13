@@ -167,6 +167,7 @@ export function useClipsState(): ClipsState {
       'replay-buffer-mode': t('replayBufferModeTooltip'),
       mic: t('tooltipMic'),
       loopback: t('tooltipLoopback'),
+      ptt: t('pushToTalkTooltip'),
       'sample-rate': t('tooltipSampleRate'),
       'game-audio': t('tooltipGameAudio'),
       'noise-suppression': t('tooltipNoiseSuppression'),

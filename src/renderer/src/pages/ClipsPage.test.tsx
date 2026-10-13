@@ -527,7 +527,7 @@ describe('ClipsPage', () => {
     expect(screen.getAllByText('gameDetection')[1]).toBeTruthy()
   })
 
-  it('offers the screenshot hotkey action and no longer offers capture/PTT', async () => {
+  it('offers the screenshot hotkey action and no longer offers capture (PTT stays)', async () => {
     mockGetConfig.mockResolvedValue({
       replayTimeSeconds: 120,
       micEnabled: true,
@@ -557,7 +557,37 @@ describe('ClipsPage', () => {
     })
     expect(await screen.findByText('actionScreenshotLabel')).toBeTruthy()
     expect(screen.queryByText('actionToggleCaptureLabel')).toBeNull()
-    expect(screen.queryByText('actionPushToTalkLabel')).toBeNull()
+    expect(await screen.findByText('actionPushToTalkLabel')).toBeTruthy()
+  })
+
+  it('still offers the Push-to-Talk section in the audio settings', async () => {
+    render(<ClipsPage />)
+    showSettings()
+    expect(await screen.findByText('pushToTalk')).toBeTruthy()
+  })
+
+  it('turns Push-to-Talk on (hold) from the single switch', async () => {
+    const store: Record<string, unknown> = { ...baseConfig, pushToTalk: 'off' }
+    mockGetConfig.mockImplementation(async () => store)
+    mockSetConfig.mockImplementation(async (partial: Record<string, unknown>) => Object.assign(store, partial))
+    render(<ClipsPage />)
+    showSettings()
+    await screen.findByText('pushToTalk')
+    fireEvent.click(screen.getByText('pushToTalk'))
+    fireEvent.click(screen.getByTestId('pushToTalk-toggle'))
+    await waitFor(() => expect(mockSetConfig).toHaveBeenCalledWith({ pushToTalk: 'hold' }))
+  })
+
+  it('turns Push-to-Talk back off from the single switch', async () => {
+    const store: Record<string, unknown> = { ...baseConfig, pushToTalk: 'hold' }
+    mockGetConfig.mockImplementation(async () => store)
+    mockSetConfig.mockImplementation(async (partial: Record<string, unknown>) => Object.assign(store, partial))
+    render(<ClipsPage />)
+    showSettings()
+    await screen.findByText('pushToTalk')
+    fireEvent.click(screen.getByText('pushToTalk'))
+    fireEvent.click(screen.getByTestId('pushToTalk-toggle'))
+    await waitFor(() => expect(mockSetConfig).toHaveBeenCalledWith({ pushToTalk: 'off' }))
   })
 
   it('renders quality presets', async () => {
