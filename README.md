@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.1.0-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.1.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.0-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,9 +47,18 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
+### 2.1.1
+
+**🎙️ Pressionar para Falar de volta.** Regressa à secção de áudio dos Clips, agora com um
+único interruptor **ligar/desligar**: ligado, o microfone só transmite enquanto seguras a
+tecla escolhida; desligado, comporta-se como sempre.
+
+**📸 Printscreen em `Screenshots/`.** As capturas passam a ser gravadas numa **subpasta
+própria** dentro do diretório dos clipes, em vez de ficarem misturadas com os vídeos.
+
 ### 2.1.0
 
-**📸 O atalho de "captura" agora tira printscreen.** O atalho que ligava/desligava a captura
+**📸 O atalho de "captura" agora tira printscreen. O atalho que ligava/desligava a captura
 passa a gravar um **PNG** do jogo (`screenshot-AAAAMMDD-HHMMSS-mmm.png`) na pasta dos clipes,
 sem custo de captura adicional. A ação `screenshot` substitui a antiga `toggleCapture`, com
 **migração automática** dos atalhos já configurados, e a app avisa por toast quando o ficheiro
@@ -62,15 +71,6 @@ reorganizado.
 **✨ Novidades por secção.** A barra lateral marca com um ponto as secções com novidades (a
 marca desaparece quando visitas a secção) e os Clips mostram um balão **"Configure os clipes
 aqui"** junto à engrenagem depois de uma atualização.
-
-### 2.0.9
-
-**🔧 Instalador e release mais robustos.** O `electron-builder` publicava os dois alvos
-(**NSIS** + **portable**) em paralelo e cada um tentava criar a release no GitHub ao mesmo
-tempo — o segundo recebia `422 already_exists` e o run abortava a meio (a release nascia só
-com o `.blockmap`). A release passa a ser criada **uma única vez, de forma idempotente**,
-antes do `electron-builder`; os publishers apenas sobem os assets. O **body** da release
-também passa a ser gerado do `CHANGELOG.md`. Sem alterações funcionais.
 
 ---
 

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 export type NewsSection = 'clips' | 'protect' | 'clean' | 'optimize'
 
 export const NEWS_BY_VERSION: Record<string, NewsSection[]> = {
+  '2.1.1': ['clips'],
   '2.1.0': ['clips'],
   '2.0.9': [],
   '2.0.8': ['clips', 'optimize'],

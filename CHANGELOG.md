@@ -5,6 +5,27 @@ as duas versões mais recentes; o histórico completo vive aqui.
 
 ---
 
+## 2.1.1
+
+### 🎙️ Push-to-Talk de volta aos Clips
+
+O **Pressionar para Falar** regressa à secção de áudio dos Clips, agora com um único
+interruptor **ligar/desligar**: ligado, o microfone só transmite enquanto seguras a tecla
+escolhida; desligado, o microfone comporta-se como sempre. Podes voltar a escolher a tecla.
+
+### 📸 Printscreen numa subpasta própria
+
+As capturas passam a ser gravadas em **`Screenshots/`** dentro do diretório dos clipes, em
+vez de ficarem misturadas com os vídeos. O nome mantém-se
+`screenshot-AAAAMMDD-HHMMSS-mmm.png`.
+
+### 🧹 Manutenção
+
+- Dependências atualizadas (Electron 44.7, Vite 8.3.4, Vitest 5.0.4, entre outras).
+- Sem alterações funcionais fora do acima.
+
+---
+
 ## 2.1.0
 
 ### 📸 O atalho de "captura" agora tira printscreen
