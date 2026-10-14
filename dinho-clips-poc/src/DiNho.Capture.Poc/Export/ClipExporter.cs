@@ -764,6 +764,13 @@ public sealed partial class ClipExporter : IDisposable
 
     internal static void GenerateThumbnail(string videoPath, bool expectedAudio = false)
     {
+        // Valida a origem ANTES de arrancar o ffmpeg: sem isto o processo nem chega a
+        // correr num ficheiro inexistente (o Process.Start rebenta primeiro com
+        // Win32Exception se o ffmpeg não estiver no PATH, tornando o teste dependente
+        // do ambiente). O contrato do chamador é "origem má => InvalidOperationException".
+        if (!File.Exists(videoPath))
+            throw new InvalidOperationException($"Thumbnail source not found: {videoPath}");
+
         var thumbPath = Path.ChangeExtension(videoPath, ".thumb.jpg");
 
         var sb = new StringBuilder();

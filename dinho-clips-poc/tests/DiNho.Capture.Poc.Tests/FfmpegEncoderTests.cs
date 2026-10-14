@@ -139,6 +139,8 @@ public sealed class FfmpegEncoderTests
     [InlineData("libx264")]
     public void CheckFfmpegEncoder_FindsKnownEncoders(string encoder)
     {
+        // A lista de encoders só existe com ffmpeg presente (pass-and-skip senão).
+        if (!TestPrerequisites.FfmpegAvailable()) return;
         var result = FfmpegEncoder.CheckFfmpegEncoder(encoder);
         Assert.True(result, $"Expected ffmpeg to have {encoder} available");
     }

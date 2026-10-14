@@ -516,7 +516,17 @@ public sealed class RamManagerTests : IDisposable
         rm.OnReduceReplay = s => steps.Add(s);
 
         rm.StartWatchdog(TimeSpan.FromMilliseconds(10));
-        Thread.Sleep(300);
+        // Espera pela CONVERGÊNCIA, não por um orçamento fixo de wall-clock: quantos
+        // ticks o Timer dispara em 300 ms depende do escalonamento do runner. Num
+        // runner de 2 núcleos sob carga o watchdog só disparava ~6 vezes e parava em
+        // 120s (Assert.Equal(30) falhava). O que este teste prova é o wiring
+        // StartWatchdog → WatchdogCheck → EvaluatePressure, não a cadência dos ticks.
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (steps.Count == 0 || steps[^1] > 30)
+        {
+            if (DateTime.UtcNow > deadline) break;
+            Thread.Sleep(10);
+        }
         rm.StopWatchdog();
 
         Assert.NotEmpty(steps);

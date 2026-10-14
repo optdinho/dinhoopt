@@ -168,6 +168,10 @@ public sealed class FfmpegEncoderNvencPresetTests
     [Fact]
     public void Initialize_ResolvesTheNvencLadder_BecauseProductionCallsTheResolver()
     {
+        // A escada só resolve com ffmpeg + GPU NVIDIA reais (o probe do NVENC corre
+        // dentro do Initialize). Pass-and-skip em runners sem GPU.
+        if (!TestPrerequisites.NvencAvailable()) return;
+
         var enc = new FfmpegEncoder();
         try
         {

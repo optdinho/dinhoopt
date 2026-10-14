@@ -751,6 +751,12 @@ public sealed class FfmpegEncoderCapacityGuardTests
         var enc = CreateGuardDegradedEncoder();
         FfmpegEncoder.SetLastProgressForTest(enc, 1.01, -1);
         SetTicksAgo(enc, "_healthySinceTicks", FfmpegEncoder.CapacityPromoteDwellSec + 10);
+        // O cooldown de promoção é medido contra Stopwatch.GetTimestamp() (uptime da
+        // MÁQUINA, não do processo) e o campo arranca a 0. Num runner recém-arrancado
+        // (uptime < 300 s) o cooldown parecia cumprido a menos — promoção bloqueada e
+        // o teste falhava só no CI. Fixar o instante de referência remove a dependência
+        // do uptime (era a causa dos dois TryPromote_* que falhavam lá).
+        SetTicksAgo(enc, "_lastCapacityPromoteTicks", FfmpegEncoder.CapacityPromoteCooldownSec + 10);
 
         Assert.True(enc.TryPromoteScaleForCapacity());
         Assert.Equal(1, enc.ScaleDivisor);
@@ -856,6 +862,9 @@ public sealed class FfmpegEncoderCapacityGuardTests
         SetField(enc, "_restartOverrideForCapacity", (Func<bool>)(() => false));
         FfmpegEncoder.SetLastProgressForTest(enc, 1.01, -1);
         SetTicksAgo(enc, "_healthySinceTicks", FfmpegEncoder.CapacityPromoteDwellSec + 10);
+        // Idem: sem isto o cooldown (300 s) depende do uptime da máquina e o estado
+        // nunca é aplicado num runner recém-arrancado.
+        SetTicksAgo(enc, "_lastCapacityPromoteTicks", FfmpegEncoder.CapacityPromoteCooldownSec + 10);
 
         Assert.False(enc.TryPromoteScaleForCapacity());
         Assert.Equal(1, enc.ScaleDivisor);

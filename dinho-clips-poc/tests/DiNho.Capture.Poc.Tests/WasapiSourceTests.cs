@@ -69,7 +69,7 @@ public sealed class WasapiSourceTests
             source.Start();
             source.Start(); // double-start must be a no-op
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("MMDevice"))
+        catch (InvalidOperationException ex) when (IsNoAudioDevice(ex))
         {
             // No audio device — acceptable in sandbox
             return;
@@ -97,7 +97,7 @@ public sealed class WasapiSourceTests
         {
             source.Start();
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("MMDevice"))
+        catch (InvalidOperationException ex) when (IsNoAudioDevice(ex))
         {
             // No audio device — acceptable in sandbox
             return;
@@ -111,4 +111,12 @@ public sealed class WasapiSourceTests
 
         source.Stop();
     }
+
+    // A ausência de endpoint de áudio chega como InvalidOperationException do ctor
+    // ("No audio capture/render devices available on this system"). A guarda antiga
+    // procurava "MMDevice" — que NÃO está nessa mensagem — por isso estes testes
+    // falhavam em runners sem placa de som em vez de fazerem pass-and-skip.
+    private static bool IsNoAudioDevice(InvalidOperationException ex) =>
+        ex.Message.Contains("No audio", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("MMDevice", StringComparison.Ordinal);
 }

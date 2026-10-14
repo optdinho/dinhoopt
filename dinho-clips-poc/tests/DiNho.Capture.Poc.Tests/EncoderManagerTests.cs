@@ -11,6 +11,7 @@ public sealed class EncoderManagerTests
     [Fact]
     public void ProbeEncoder_libx264_ReturnsSuccess()
     {
+        if (!TestPrerequisites.FfmpegAvailable()) return;
         var result = EncoderManager.ProbeEncoder("libx264");
         Assert.True(result.Success, $"Probe should succeed for libx264: {result.Error}");
         Assert.True(result.OutputBytes > 0, "Should produce output bytes");
@@ -422,6 +423,7 @@ public sealed class EncoderManagerTests
     [Fact]
     public void DetectAvailableEncoders_ReturnsAtLeastSoftware()
     {
+        if (!TestPrerequisites.FfmpegAvailable()) return;
         var available = EncoderManager.DetectAvailableEncoders();
         Assert.NotEmpty(available);
         Assert.Contains(EncoderType.Ffmpeg, available);
@@ -432,6 +434,8 @@ public sealed class EncoderManagerTests
     [Fact]
     public void CheckFfmpegAvailable_ReturnsTrue()
     {
+        // Guarda primeiro: sem ffmpeg não há nada para afirmar (pass-and-skip).
+        if (!TestPrerequisites.FfmpegAvailable()) return;
         Assert.True(EncoderManager.CheckFfmpegAvailable());
     }
 
@@ -520,6 +524,8 @@ public sealed class EncoderManagerTests
     [Fact]
     public void ProbeEncoder_h264_nvenc_SucceedsOnThisMachine()
     {
+        // Exige GPU NVIDIA real (pass-and-skip em runners sem GPU).
+        if (!TestPrerequisites.NvencAvailable()) return;
         var result = EncoderManager.ProbeEncoder("h264_nvenc");
         Assert.True(result.Success, $"NVENC probe failed: {result.Error}");
         Assert.True(result.OutputBytes > 0);
@@ -528,6 +534,8 @@ public sealed class EncoderManagerTests
     [Fact]
     public void ProbeEncoder_hevc_nvenc_SucceedsOnThisMachine()
     {
+        // Exige GPU NVIDIA real (pass-and-skip em runners sem GPU).
+        if (!TestPrerequisites.NvencAvailable()) return;
         var result = EncoderManager.ProbeEncoder("hevc_nvenc");
         Assert.True(result.Success, $"HEVC NVENC probe failed: {result.Error}");
         Assert.True(result.OutputBytes > 0);

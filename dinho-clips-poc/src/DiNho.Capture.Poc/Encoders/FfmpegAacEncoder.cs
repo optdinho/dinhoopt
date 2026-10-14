@@ -146,6 +146,16 @@ public sealed class FfmpegAacEncoder : IDisposable
         // no stdin — sem isso, batches corrompidos chegavam ao ffmpeg (race).
         lock (_writeLock)
         {
+            // Re-checa sob o lock. O pré-teste lá em cima corre ANTES de adquirir o
+            // lock: uma escrita anterior pode ter dado Timeout (TryWriteStdin faz
+            // stdin.WriteAsync + Wait(timeout) — no timeout devolve Timeout e marca
+            // _isHealthy=false, mas a WriteAsync fica EM VOO na thread pool) e saído
+            // com _isHealthy já falso. Sem esta re-checagem, esta chamada — que passou
+            // o pré-teste antes disso — voltaria a chamar WriteAsync no MESMO pipe em
+            // paralelo com a escrita em voo (duas WriteAsync concorrentes; o teste
+            // EncodeAudio_ConcurrentWriters_SerializeWrites apanha-o em runner lento).
+            if (!_isHealthy) return;
+
             if (_pcmBuf == null || _pcmBuf.Length < byteLen)
                 _pcmBuf = new byte[byteLen * 2];
 
