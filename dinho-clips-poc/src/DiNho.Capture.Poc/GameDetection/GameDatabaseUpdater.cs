@@ -6,7 +6,10 @@ namespace DiNho.Capture.Poc.GameDetection;
 
 public sealed class GameDatabaseUpdater
 {
-    public const string REMOTE_URL = "https://cdn.dinho.app/games.json";
+    // Served from the repo's raw CDN (Fastly, ~5 min cache) while the custom
+    // cdn.dinho.app host does not resolve. cdn.dinho.app is the target once its
+    // static host + CNAME are actually published (the CSP already allows it).
+    public const string REMOTE_URL = "https://raw.githubusercontent.com/optdinho/dinhoopt/main/dinho-clips-poc/src/DiNho.Capture.Poc/games.json";
     public const int CHECK_INTERVAL_DAYS = 7;
     private const string STATE_FILE = "games-update-check.json";
     private const int MAX_ATTEMPTS = 2;
@@ -95,7 +98,7 @@ public sealed class GameDatabaseUpdater
                 }
                 catch (HttpRequestException ex) when (IsClientError(ex))
                 {
-                    Log.W("GameDatabaseUpdater", $"HTTP request failed with status {(int)ex.StatusCode!.Value}: {ex.Message}");
+                    Log.D("GameDatabaseUpdater", $"HTTP request failed with status {(int)ex.StatusCode!.Value}: {ex.Message}");
                     SaveFailure(state);
                     return false;
                 }
@@ -103,7 +106,7 @@ public sealed class GameDatabaseUpdater
                 {
                     if (attempt == MAX_ATTEMPTS)
                     {
-                        Log.W("GameDatabaseUpdater", $"Update check failed after {MAX_ATTEMPTS} attempts: {ex.Message}");
+                        Log.D("GameDatabaseUpdater", $"Update check failed after {MAX_ATTEMPTS} attempts: {ex.Message}");
                         SaveFailure(state);
                         return false;
                     }

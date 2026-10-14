@@ -44,6 +44,30 @@ public sealed class GameDatabaseUpdaterTests : IDisposable
     }
 
     [Fact]
+    public void RemoteUrl_IsServable_AndNotTheDeadCdnHost()
+    {
+        var url = GameDatabaseUpdater.REMOTE_URL;
+        Assert.StartsWith("https://", url);
+        Assert.EndsWith("games.json", url);
+        // cdn.dinho.app does not resolve (Resolve-DnsName → "name does not exist");
+        // it must not be the updater's source until the CDN is actually published.
+        Assert.DoesNotContain("cdn.dinho.app", url);
+    }
+
+    [Fact]
+    public void ShipGamesJson_PassesTheUpdaterSchemaValidation()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "games.json");
+        Assert.True(File.Exists(path), $"expected ship games.json at {path}");
+
+        var db = JsonSerializer.Deserialize<GameDatabase>(File.ReadAllText(path));
+        Assert.NotNull(db);
+        Assert.True(db!.Version >= 4, $"expected schema version >= 4, got {db.Version}");
+        Assert.NotEmpty(db.Games);
+        Assert.DoesNotContain(db.Games, g => string.IsNullOrEmpty(g.ProcessName) && string.IsNullOrEmpty(g.WindowClass));
+    }
+
+    [Fact]
     public async Task ReturnsTrue_WhenRemoteVersionGreaterThanLocal()
     {
         var localVersion = GameDatabase.Instance.Version;
