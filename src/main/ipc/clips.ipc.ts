@@ -41,7 +41,7 @@ import {
   probeVideoResolution,
 } from '../services/clips-enhance'
 import { uploadClipToGofile } from '../services/clips-publish'
-import { trackChildProcess } from '../services/exec-utf8'
+import { psEncodedArgs, trackChildProcess } from '../services/exec-utf8'
 import { getFfmpegPath } from '../services/ffmpeg-path'
 import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
@@ -99,22 +99,28 @@ const _publishingControllers = new Map<string, AbortController>()
 
 const VALID_ENCODER_PRESETS = new Set(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
 
-function enumerateMicDevicesLocal(): Promise<MicDeviceInfo[]> {
+export function resetMicDevicesCache(): void {
+  _micDevicesCache = null
+  _micDevicesCacheTs = 0
+}
+
+export function enumerateMicDevicesLocal(): Promise<MicDeviceInfo[]> {
   if (_micDevicesCache && Date.now() - _micDevicesCacheTs < 10_000) {
     return Promise.resolve(_micDevicesCache)
   }
   const ps = [
     'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
-    '$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq "IAsyncOperation`1" })[0]',
+    '$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq \'IAsyncOperation`1\' })[0]',
     'function AsTask($WinRtTask, $ResultType) {',
     '  $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)',
     '  $netTask = $asTask.Invoke($null, @($WinRtTask))',
-    '  $netTask',
+    '  $netTask.Wait(-1) | Out-Null',
+    '  $netTask.Result',
     '}',
     '[Windows.Devices.Enumeration.DeviceInformation,Windows.Devices,ContentType=WindowsRuntime] | Out-Null',
     '[Windows.Devices.Enumeration.DeviceClass,Windows.Devices,ContentType=WindowsRuntime] | Out-Null',
     '$task = [Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync([Windows.Devices.Enumeration.DeviceClass]::AudioCapture)',
-    '$devices = AsTask $task ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Enumeration.DeviceInformation]]).Result',
+    '$devices = AsTask $task ([Windows.Devices.Enumeration.DeviceInformationCollection])',
     '$defaultId = ""',
     'try { $defaultId = [Windows.Devices.Enumeration.DeviceInformation]::GetDefaultAsync([Windows.Devices.Enumeration.DeviceClass]::AudioCapture).GetAwaiter().GetResult().Id } catch {}',
     'foreach ($d in $devices) {',
@@ -123,7 +129,17 @@ function enumerateMicDevicesLocal(): Promise<MicDeviceInfo[]> {
     '}',
   ].join('\r\n')
   return new Promise((resolve) => {
-    execFile('powershell', ['-NoProfile', '-Command', ps], { timeout: 15000 }, (_err, stdout) => {
+    // The old script had three defects, each of which alone broke enumerate:
+    //  1. `"IAsyncOperation`1"` in double quotes — PowerShell ate the backtick
+    //     (→ IAsyncOperation1), the AsTask filter matched 0 and `(...)[0]`
+    //     threw "cannot index into a null array". Now single-quoted.
+    //  2. $ResultType was `IReadOnlyList<DeviceInformation>` (plus a stray
+    //     `.Result`), but FindAllAsync(DeviceClass) yields an
+    //     IAsyncOperation<DeviceInformationCollection> → COM cast failed.
+    //  3. AsTask returned the Task instead of its `.Result`.
+    // -EncodedCommand passes the script verbatim (no argv re-quoting), which is
+    // extra safety given the script is full of quotes.
+    execFile('powershell', psEncodedArgs(ps), { timeout: 15000, windowsHide: true }, (_err, stdout) => {
       if (_err || !stdout) {
         getLogger().info('clips-mic', `local enumerate failed: ${_err?.message ?? 'empty output'}`)
         resolve([])

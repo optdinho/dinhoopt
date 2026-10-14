@@ -154,7 +154,7 @@ import { MAX_SHARPNESS } from '@shared/types'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { cancelAllClipJobs } from '../services/clip-encode-job'
 import { config as clipsConfig } from '../services/clips-config-manager'
-import { activePublishCount, registerClipsIpc } from './clips.ipc'
+import { activePublishCount, enumerateMicDevicesLocal, registerClipsIpc, resetMicDevicesCache } from './clips.ipc'
 import { resetClipsCache, stopEngineProcess } from './clips-engine-connection'
 
 function captureHandlers(): Map<string, (...args: any[]) => any> {
@@ -1250,6 +1250,75 @@ describe('CLIPS_GET_RUNNING_PROCESSES', () => {
     const handler = getAsyncHandler(handlers, IPC.CLIPS_GET_RUNNING_PROCESSES)
     const result = (await handler()) as Array<{ name: string; pid: number }>
     expect(result).toEqual([])
+  })
+})
+
+describe('enumerateMicDevicesLocal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMicDevicesCache()
+  })
+
+  it('parses devices and emits a PowerShell script with all three fixes', async () => {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[] | null | undefined,
+        _opts: ExecFileOptions | null | undefined,
+        cb?:
+          | ((
+              error: ExecFileException | null,
+              stdout: string | NonSharedBuffer,
+              stderr: string | NonSharedBuffer,
+            ) => void)
+          | null,
+      ) => {
+        if (cb) cb(null, 'mic-a|Microphone (A)|1\nmic-b|Webcam Mic|0\n', '')
+        return undefined as never
+      },
+    )
+    const devices = await enumerateMicDevicesLocal()
+    expect(devices).toEqual([
+      { id: 'mic-a', name: 'Microphone (A)', isDefault: true, channels: 2, sampleRate: 48000 },
+      { id: 'mic-b', name: 'Webcam Mic', isDefault: false, channels: 2, sampleRate: 48000 },
+    ])
+
+    const args = vi.mocked(execFile).mock.calls[0]?.[1] as string[]
+    expect(args).toContain('-EncodedCommand')
+    expect(args).not.toContain('-Command')
+    const script = Buffer.from(args[args.length - 1] ?? '', 'base64').toString('utf16le')
+    // Regression guard: the backtick must sit inside a PowerShell SINGLE-quoted
+    // string. In double quotes PowerShell eats it → "IAsyncOperation1", the
+    // AsTask filter matches nothing and the enumerate fails at `(...)[0]`.
+    expect(script).toContain("'IAsyncOperation`1'")
+    expect(script).not.toContain('"IAsyncOperation`1"')
+    // FindAllAsync(DeviceClass) yields IAsyncOperation<DeviceInformationCollection>;
+    // passing IReadOnlyList made the MakeGenericMethod/COM cast fail.
+    expect(script).toContain('AsTask $task ([Windows.Devices.Enumeration.DeviceInformationCollection])')
+    // AsTask must return the awaited result, not the Task object itself.
+    expect(script).toContain('$netTask.Wait(-1) | Out-Null')
+    expect(script).toContain('$netTask.Result')
+  })
+
+  it('resolves [] when the command fails', async () => {
+    vi.mocked(execFile).mockImplementation(
+      (
+        _cmd: string,
+        _args: readonly string[] | null | undefined,
+        _opts: ExecFileOptions | null | undefined,
+        cb?:
+          | ((
+              error: ExecFileException | null,
+              stdout: string | NonSharedBuffer,
+              stderr: string | NonSharedBuffer,
+            ) => void)
+          | null,
+      ) => {
+        if (cb) cb(Object.assign(new Error('powershell failed'), { cmd: '' }), '', '')
+        return undefined as never
+      },
+    )
+    await expect(enumerateMicDevicesLocal()).resolves.toEqual([])
   })
 })
 
