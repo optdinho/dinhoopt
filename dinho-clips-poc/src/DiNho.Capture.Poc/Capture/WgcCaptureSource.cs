@@ -16,8 +16,14 @@ namespace DiNho.Capture.Poc.Capture;
 public sealed class WgcCaptureSource : ICaptureSource
 {
     public string Name => "Windows Graphics Capture";
-    public int Width => _captureItem?.Size.Width ?? 0;
-    public int Height => _captureItem?.Size.Height ?? 0;
+    // Tamanho lido do cache fixado na STA do pump em Initialize — NUNCA do
+    // GraphicsCaptureItem. O item criado por interop (CreateForMonitor/
+    // CreateForPrimaryMonitor) não é agile: ler .Size fora da STA do pump lança
+    // RPC_E_WRONG_THREAD ("interface marshalled para outro thread"). Como o
+    // EngineCoordinator lê Width/Height na thread do pipe, isso abortava todo o
+    // StartCapture no caminho WGC-desktop (bug de campo 2026-10-13, v2.0.9).
+    public int Width => Volatile.Read(ref _poolW);
+    public int Height => Volatile.Read(ref _poolH);
     public ID3D11Device? Device => _device;
 
     private ID3D11Device? _device;
@@ -180,7 +186,8 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     /// <summary>
     /// Dimensões que o pipeline realmente entregou — diferente de
-    /// <see cref="Width"/>/<see cref="Height"/>, que são captureItem.Size.
+    /// <see cref="Width"/>/<see cref="Height"/>, que são o tamanho do pool
+    /// fixado em Initialize (cache, sem tocar no GraphicsCaptureItem).
     /// </summary>
     public PipelineSize PipelineSize => PipelineSize.Unpack(Interlocked.Read(ref _observedSize));
 

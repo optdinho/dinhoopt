@@ -434,6 +434,41 @@ public sealed class WgcCaptureSourceTests
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  Width/Height — cache de tamanho, SEM tocar no GraphicsCaptureItem
+    //  (bug de campo 2026-10-13 v2.0.9: o EngineCoordinator lê Width/Height
+    //   na thread do pipe; o GraphicsCaptureItem, criado por interop na STA
+    //   do pump, não é agile → .Size lança RPC_E_WRONG_THREAD. Por isso o
+    //   getter não pode voltar a ler _captureItem.Size fora do pump.)
+    // ═══════════════════════════════════════════════════════════════
+
+    private static void SetInstanceField(object target, string name, object value)
+    {
+        var field = target.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!;
+        field.SetValue(target, value);
+    }
+
+    [Fact]
+    public void WidthHeight_ReturnCachedPoolSize_WithoutTouchingCaptureItem()
+    {
+        using var source = new WgcCaptureSource();
+        // _poolW/_poolH são fixados na STA do pump durante Initialize; aqui não
+        // há Initialize (sem GPU), logo _captureItem é null e lê-lo devolveria 0.
+        SetInstanceField(source, "_poolW", 1920);
+        SetInstanceField(source, "_poolH", 1080);
+
+        Assert.Equal(1920, source.Width);
+        Assert.Equal(1080, source.Height);
+    }
+
+    [Fact]
+    public void WidthHeight_BeforeInitialize_AreZero()
+    {
+        using var source = new WgcCaptureSource();
+        Assert.Equal(0, source.Width);
+        Assert.Equal(0, source.Height);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  Latch de disponibilidade WGC por sessão (2026-10-08)
     //  IsWgcAvailableForSession gate por injecção — sem WinRT real.
     // ═══════════════════════════════════════════════════════════════
