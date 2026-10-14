@@ -60,56 +60,83 @@ public sealed class WasapiSourceTests
     [Fact]
     public void LoopbackSource_Lifecycle_NoCrashOrSkip()
     {
-        using var source = new WasapiLoopbackSource();
-        using var gotFrame = new ManualResetEventSlim();
-        source.OnAudioData += _ => gotFrame.Set();
-
+        // O CTOR é que lança quando não há endpoint (WasapiLoopbackSource.cs:32) — por
+        // isso tem de estar DENTRO do try. A versão anterior só apanhava excepções do
+        // Start() e o ctor propagava, fazendo o teste falhar em runners sem áudio.
+        WasapiLoopbackSource source;
         try
         {
-            source.Start();
-            source.Start(); // double-start must be a no-op
+            source = new WasapiLoopbackSource();
         }
         catch (InvalidOperationException ex) when (IsNoAudioDevice(ex))
         {
-            // No audio device — acceptable in sandbox
-            return;
+            return; // sem endpoint de reprodução — pass-and-skip
         }
 
-        if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500)))
+        using (source)
+        using (var gotFrame = new ManualResetEventSlim())
         {
-            // Endpoint exists but never produces a single frame in this environment —
-            // NAudio's StopRecording/Dispose would block forever. Nothing to assert.
-            try { source.Stop(); } catch { }
-            return; // treated as pass-and-skip (no usable loopback endpoint here)
-        }
+            source.OnAudioData += _ => gotFrame.Set();
 
-        source.Stop();
+            try
+            {
+                source.Start();
+                source.Start(); // double-start must be a no-op
+            }
+            catch (InvalidOperationException ex) when (IsNoAudioDevice(ex))
+            {
+                return; // sem endpoint utilizável — pass-and-skip
+            }
+
+            if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500)))
+            {
+                // Endpoint existe mas nunca produz um frame neste ambiente — o
+                // StopRecording/Dispose da NAudio bloquearia para sempre.
+                try { source.Stop(); } catch { }
+                return;
+            }
+
+            source.Stop();
+        }
     }
 
     [Fact]
     public void MicSource_StartStop_DoesNotCrashOrSkip()
     {
-        using var source = new WasapiMicSource();
-        using var gotFrame = new ManualResetEventSlim();
-        source.OnAudioData += _ => gotFrame.Set();
-
+        // Ctor dentro do try — WasapiMicSource.cs:50 é onde a ausência de endpoint
+        // lança (ver comentário no teste de loopback).
+        WasapiMicSource source;
         try
         {
-            source.Start();
+            source = new WasapiMicSource();
         }
         catch (InvalidOperationException ex) when (IsNoAudioDevice(ex))
         {
-            // No audio device — acceptable in sandbox
-            return;
+            return; // sem endpoint de captura — pass-and-skip
         }
 
-        if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500)))
+        using (source)
+        using (var gotFrame = new ManualResetEventSlim())
         {
-            try { source.Stop(); } catch { }
-            return; // treated as pass-and-skip (no usable capture endpoint here)
-        }
+            source.OnAudioData += _ => gotFrame.Set();
 
-        source.Stop();
+            try
+            {
+                source.Start();
+            }
+            catch (InvalidOperationException ex) when (IsNoAudioDevice(ex))
+            {
+                return; // sem endpoint utilizável — pass-and-skip
+            }
+
+            if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500)))
+            {
+                try { source.Stop(); } catch { }
+                return;
+            }
+
+            source.Stop();
+        }
     }
 
     // A ausência de endpoint de áudio chega como InvalidOperationException do ctor

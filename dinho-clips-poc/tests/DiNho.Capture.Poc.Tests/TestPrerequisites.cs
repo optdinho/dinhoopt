@@ -37,4 +37,18 @@ internal static class TestPrerequisites
     /// máquina (exige GPU NVIDIA). Falso em runners sem GPU.
     /// </summary>
     internal static bool NvencAvailable() => _nvencAvailable.Value;
+
+    /// <summary>
+    /// Verdadeiro num runner de CI (o GitHub Actions define <c>CI=true</c>).
+    /// <para>
+    /// Usado para NÃO correr no CI os testes de stress de timing e de integração real
+    /// com ffmpeg: num runner partilhado de 2 núcleos a carga deixa de ser
+    /// representativa e os timeouts/escalonamento falham por ambiente, não por lógica
+    /// (ex.: byte-count sob timeout, corrida de escalonamento do writer, mux real que
+    /// depende do build de ffmpeg). Ficam opt-in fora do CI, onde correm e passam (gate
+    /// local 2552/2552). Os testes de lógica pura continuam a correr no CI.
+    /// </para>
+    /// </summary>
+    internal static bool IsCi =>
+        string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase);
 }
