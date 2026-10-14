@@ -8,9 +8,16 @@ vi.mock('child_process', () => ({
   execFile: execFileMockFn,
 }))
 
-const { psUtf8, psArgs, execNativeUtf8, execTracked, killAllChildren, execFileAsync, trackChildProcess } = await import(
-  './exec-utf8'
-)
+const {
+  psUtf8,
+  psArgs,
+  psEncodedArgs,
+  execNativeUtf8,
+  execTracked,
+  killAllChildren,
+  execFileAsync,
+  trackChildProcess,
+} = await import('./exec-utf8')
 
 describe('psUtf8', () => {
   it('prepends UTF-8 preamble to a command', () => {
@@ -35,6 +42,29 @@ describe('psArgs', () => {
     expect(args[2]).toBe('-Command')
     expect(args[3]).toContain('Get-Service')
     expect(args[3]).toContain('[Console]::OutputEncoding')
+  })
+})
+
+describe('psEncodedArgs', () => {
+  it('returns -EncodedCommand (never -Command) with the UTF-8-prefixed script base64/UTF-16LE', () => {
+    const args = psEncodedArgs('Write-Output "x"')
+    expect(args).toHaveLength(4)
+    expect(args[0]).toBe('-NoProfile')
+    expect(args[1]).toBe('-NonInteractive')
+    expect(args[2]).toBe('-EncodedCommand')
+    expect(args).not.toContain('-Command')
+
+    const decoded = Buffer.from(args[3] ?? '', 'base64').toString('utf16le')
+    expect(decoded).toContain('[Console]::OutputEncoding')
+    expect(decoded).toContain('Write-Output "x"')
+  })
+
+  it('preserves PowerShell escape sequences and double quotes verbatim', () => {
+    const script = '$x = "IAsyncOperation`1"; $y = "a`t b"'
+    const args = psEncodedArgs(script)
+    const decoded = Buffer.from(args[3] ?? '', 'base64').toString('utf16le')
+    expect(decoded).toContain('IAsyncOperation`1')
+    expect(decoded).toContain('"a`t b"')
   })
 })
 

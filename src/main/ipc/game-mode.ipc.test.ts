@@ -60,6 +60,7 @@ vi.mock('../services/elevation', () => ({
 vi.mock('../services/exec-utf8', () => ({
   execFileAsync: execFileAsyncMock,
   psUtf8: (cmd: string) => cmd,
+  psEncodedArgs: (cmd: string) => ['-EncodedCommand', cmd],
 }))
 
 const mockGetDetectedGame = vi.fn()

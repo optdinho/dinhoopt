@@ -53,6 +53,22 @@ export function psArgs(script: string): string[] {
   return ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)]
 }
 
+/**
+ * Build arguments for `powershell.exe` that run a script with UTF-8 output,
+ * passing the script as a Base64/UTF-16LE `-EncodedCommand`.
+ *
+ * Unlike `-Command`, the script text reaches PowerShell verbatim: the OS argv
+ * layer never re-quotes or re-parses it. Handy for scripts littered with quotes.
+ * It does NOT change PowerShell's OWN parsing (a double-quoted `"IAsyncOperation`1"`
+ * still eats the backtick) nor the process exit code — both transports derive it
+ * from the last statement's `$?`, so a per-item error swallowed by `catch {}`
+ * still yields exit 1 unless the script ends with an explicit `exit 0`.
+ */
+export function psEncodedArgs(script: string): string[] {
+  const encoded = Buffer.from(psUtf8(script), 'utf16le').toString('base64')
+  return ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]
+}
+
 /** Regex matching tools allowed through execNativeUtf8 */
 const ALLOWED_TOOL_RE = /^(reg|netsh|pnputil|schtasks|ipconfig)(\.exe)?$/i
 

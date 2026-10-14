@@ -33,7 +33,10 @@ vi.mock('node:fs/promises', () => ({
   readdir: vi.fn(async () => []),
 }))
 
-vi.mock('../../services/exec-utf8', () => ({ execFileAsync: vi.fn(async () => ({ stdout: '[]', stderr: '' })) }))
+vi.mock('../../services/exec-utf8', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/exec-utf8')>()),
+  execFileAsync: vi.fn(async () => ({ stdout: '[]', stderr: '' })),
+}))
 vi.mock('../../services/logger.service', () => ({ getLogger: () => state.logger }))
 vi.mock('../../services/game-detector', async (importOriginal) => ({
   // `resolveGameProfile` is pure, so keep the real implementation and stub

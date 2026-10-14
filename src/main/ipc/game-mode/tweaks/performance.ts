@@ -12,9 +12,13 @@ export async function clearStandbyMemory(): Promise<void> {
         public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, int dwMinimumWorkingSetSize, int dwMaximumWorkingSetSize);
       }
 '@
-Get-Process | ForEach-Object {
-  try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
-}`,
+$ok = 0
+$fail = 0
+foreach ($p in Get-Process) {
+  try { [MemoryUtils]::SetProcessWorkingSetSize($p.Handle, -1, -1) | Out-Null; $ok++ } catch { $fail++ }
+}
+if ($ok -eq 0 -and $fail -gt 0) { exit 1 }
+exit 0`,
     30000,
   )
 }
@@ -33,11 +37,15 @@ $bgProcs = @('OneDrive','OneDriveStandaloneUpdater','Teams','ms-teams','msedgewe
   'EdgeUpdate','SkypeBackgroundHost','YourPhone','PhoneExperienceHost',
   'SecurityHealthSystray','SearchUI','SearchApp','StartMenuExperienceHost',
   'ShellExperienceHost','GameBarPresenceWriter','XboxAppServices','XboxGameOverlay')
+$ok = 0
+$fail = 0
 foreach ($name in $bgProcs) {
-  Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
-    try { [MemoryUtils]::SetProcessWorkingSetSize($_.Handle, -1, -1) } catch {}
+  foreach ($p in (Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+    try { [MemoryUtils]::SetProcessWorkingSetSize($p.Handle, -1, -1) | Out-Null; $ok++ } catch { $fail++ }
   }
-}`,
+}
+if ($ok -eq 0 -and $fail -gt 0) { exit 1 }
+exit 0`,
     30000,
   )
 }
