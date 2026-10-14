@@ -203,6 +203,10 @@ export function initGameDetector(
   startGameDetector(
     {
       onGameDetected: async (processName, displayName) => {
+        getLogger().info(
+          'game-mode',
+          `Game detected: ${processName}${displayName ? ` (window class match: ${displayName})` : ''}`,
+        )
         cancelGameExitGrace()
         if (readSnapshot() !== null) return
 

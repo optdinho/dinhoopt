@@ -102,6 +102,75 @@ export function normalizeGameName(name: string): string {
   return name.toLowerCase().replace(/\.exe$/i, '')
 }
 
+// ── Non-game processes (lowercase, no `.exe`) ──────────────────
+// Mirrors the clips engine's C# `NonGameProcesses` (EngineCoordinator.Game.cs).
+// The window-class fallback matches generic host classes — `games.json` maps
+// `ApplicationFrameWindow` to "Minecraft (Bedrock)", but that class belongs to
+// every UWP/system window, and browsers/media players host windows too — so a
+// match must never win when the owning process is a browser, a media player or
+// a UWP/system host.  Without this, opening a fullscreen video activated Game
+// Mode and started clip capture as if a game had launched.
+export const NON_GAME_PROCESSES = new Set<string>([
+  // Browsers / webview hosts
+  'chrome',
+  'msedge',
+  'firefox',
+  'brave',
+  'opera',
+  'vivaldi',
+  'chromium',
+  'iexplore',
+  'msedgewebview2',
+  'webview2',
+  'applicationframehost',
+  'duckduckgo',
+  'librewolf',
+  'floorp',
+  'waterfox',
+  'torbrowser',
+  // Media players / UWP media & video apps
+  'video.ui',
+  'microsoft.media.player',
+  'zunevideo',
+  'music.ui',
+  'spotify',
+  'netflix',
+  'vlc',
+  'wmplayer',
+  'mpv',
+  'mpc-hc64',
+  // System shell / UWP hosts / settings
+  'explorer',
+  'searchhost',
+  'shellexperiencehost',
+  'startmenuexperiencehost',
+  'runtimebroker',
+  'sihost',
+  'ctfmon',
+  'lockapp',
+  'systemsettings',
+  'calculator',
+  'photos',
+  'widgets',
+  'widgetservice',
+  // Dev tools / terminals
+  'code',
+  'devenv',
+  'notepad',
+  'notepad++',
+  'sublime_text',
+  'windowsterminal',
+  'powershell',
+  'pwsh',
+  'cmd',
+  'conhost',
+])
+
+/** True when `name` is a known non-game process (browser, media player, system host). */
+export function isNonGameProcess(name: string): boolean {
+  return NON_GAME_PROCESSES.has(normalizeGameName(name))
+}
+
 /** Lowercase process names (no `.exe`) that count as games. */
 let gameNames = new Set<string>([...KNOWN_GAME_PROCESSES].map(normalizeGameName))
 let databaseLoaded = false
@@ -244,7 +313,9 @@ async function getRunningProcessNames(): Promise<Set<string>> {
 
 export function findGame(running: Set<string>, customGameProcesses: string[]): string | null {
   for (const proc of running) {
-    if (gameNames.has(normalizeGameName(proc))) return proc
+    const normalized = normalizeGameName(proc)
+    if (isNonGameProcess(normalized)) continue
+    if (gameNames.has(normalized)) return proc
   }
   for (const custom of customGameProcesses) {
     if (running.has(custom.toLowerCase())) return custom.toLowerCase()
@@ -268,6 +339,7 @@ export function findGameWithDisplay(
   if (byName) return { processName: byName, displayName: null }
   for (const match of findGamesByWindowClass(windows, classLookup)) {
     if (!match.processName) continue
+    if (isNonGameProcess(match.processName)) continue
     if (!running.has(match.processName.toLowerCase())) continue
     return match
   }

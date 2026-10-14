@@ -21,6 +21,7 @@ import {
   getDetectedGame,
   getWindowClassLookup,
   isDetectorRunning,
+  isNonGameProcess,
   loadGameDatabase,
   normalizeGameName,
   resolveGameProfile,
@@ -58,6 +59,28 @@ describe('findGame', () => {
   it('prioritizes known games over custom', () => {
     const running = new Set(['cs2.exe', 'myapp.exe'])
     expect(findGame(running, ['myapp.exe'])).toBe('cs2.exe')
+  })
+})
+
+describe('isNonGameProcess', () => {
+  it('classifies browsers and media/UWP hosts as non-games', () => {
+    for (const name of [
+      'chrome.exe',
+      'msedge.exe',
+      'firefox.exe',
+      'ApplicationFrameHost.exe',
+      'Video.UI.exe',
+      'Microsoft.Media.Player.exe',
+      'explorer.exe',
+    ]) {
+      expect(isNonGameProcess(name), name).toBe(true)
+    }
+  })
+
+  it('does not classify a real game as a non-game', () => {
+    expect(isNonGameProcess('cs2.exe')).toBe(false)
+    expect(isNonGameProcess('FiveM_b3258_GTAProcess.exe')).toBe(false)
+    expect(isNonGameProcess('Minecraft.Windows.exe')).toBe(false)
   })
 })
 
@@ -656,7 +679,9 @@ describe('findGameWithDisplay', () => {
         version: 2,
         games: [
           { processName: 'cs2' },
+          { processName: 'chrome' },
           { processName: 'FiveM_GTAProcess', windowClass: 'grcWindow', displayName: 'FiveM (GTA V)' },
+          { windowClass: 'ApplicationFrameWindow', displayName: 'Minecraft (Bedrock)' },
         ],
       }),
     )
@@ -670,6 +695,21 @@ describe('findGameWithDisplay', () => {
   it('prefers a process-name match and reports no friendly name', () => {
     const match = findGameWithDisplay(new Set(['cs2.exe']), [], [], getWindowClassLookup())
     expect(match).toEqual({ processName: 'cs2.exe', displayName: null })
+  })
+
+  it('ignores a database name that collides with a non-game process', () => {
+    expect(findGame(new Set(['chrome.exe']), [])).toBeNull()
+  })
+
+  it('ignores a class match owned by a non-game host process', () => {
+    const windows = [{ className: 'ApplicationFrameWindow', pid: 42, processName: 'ApplicationFrameHost.exe' }]
+    expect(findGameWithDisplay(new Set(['ApplicationFrameHost.exe']), [], windows, getWindowClassLookup())).toBeNull()
+  })
+
+  it('still detects the same class when the owning process is the game itself', () => {
+    const windows = [{ className: 'ApplicationFrameWindow', pid: 42, processName: 'Minecraft.Windows.exe' }]
+    const match = findGameWithDisplay(new Set(['minecraft.windows.exe']), [], windows, getWindowClassLookup())
+    expect(match).toEqual({ processName: 'Minecraft.Windows.exe', displayName: 'Minecraft (Bedrock)' })
   })
 
   it('detects a build-stamped game by window class when the name is unknown', () => {

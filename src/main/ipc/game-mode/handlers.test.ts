@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
   const callbacks: {
-    onGameDetected: ((name: string) => Promise<void>) | null
+    onGameDetected: ((name: string, displayName?: string | null) => Promise<void>) | null
     onGameExited: (() => Promise<void>) | null
   } = {
     onGameDetected: null,
@@ -117,7 +117,7 @@ function getHandler(channel: string): (...args: unknown[]) => unknown {
 }
 
 async function setupDetector(overrides: Record<string, unknown> = {}): Promise<{
-  onGameDetected: (name: string) => Promise<void>
+  onGameDetected: (name: string, displayName?: string | null) => Promise<void>
   onGameExited: () => Promise<void>
 }> {
   setGameMode({ autoDetect: true, ...overrides })
@@ -150,7 +150,8 @@ beforeEach(() => {
   vi.mocked(isDetectorRunning).mockReset().mockReturnValue(false)
   vi.mocked(startGameDetector).mockReset()
   vi.mocked(startGameDetector).mockImplementation((cbs) => {
-    state.callbacks.onGameDetected = (name: string) => Promise.resolve(cbs.onGameDetected(name))
+    state.callbacks.onGameDetected = (name: string, displayName?: string | null) =>
+      Promise.resolve(cbs.onGameDetected(name, displayName))
     state.callbacks.onGameExited = () => Promise.resolve(cbs.onGameExited())
   })
   vi.mocked(stopGameDetector).mockReset()
@@ -466,6 +467,21 @@ describe('initGameDetector', () => {
 })
 
 describe('onGameDetected callback', () => {
+  it('logs which process triggered detection (diagnostic)', async () => {
+    const { onGameDetected } = await setupDetector()
+    await onGameDetected('chrome.exe')
+    expect(state.logger.info).toHaveBeenCalledWith('game-mode', 'Game detected: chrome.exe')
+  })
+
+  it('logs the friendly name for a window-class match (diagnostic)', async () => {
+    const { onGameDetected } = await setupDetector()
+    await onGameDetected('ApplicationFrameHost.exe', 'Minecraft (Bedrock)')
+    expect(state.logger.info).toHaveBeenCalledWith(
+      'game-mode',
+      'Game detected: ApplicationFrameHost.exe (window class match: Minecraft (Bedrock))',
+    )
+  })
+
   it('returns early when a snapshot already exists', async () => {
     vi.mocked(readSnapshot).mockReturnValue({ active: true } as never)
     const { onGameDetected } = await setupDetector()
