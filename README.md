@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.1.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.1.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.1-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,6 +47,18 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
+### 2.1.2
+
+**🎙️ Microfones de volta.** Quando o motor de captura não está a correr, a lista de
+microfones volta a aparecer — o caminho alternativo estava partido e falhava sempre.
+
+**🎮 Game Mode mais honesto.** Os ajustes de memória deixam de reportar falha quando
+limparam processos com sucesso, e a deteção deixa de disparar para aplicações que não são
+jogos.
+
+**🧩 Clips.** O pedido de microfones é feito **uma vez** em vez de duas ao abrir; a base de
+jogos passa a atualizar a partir do repositório (o antigo `cdn.dinho.app` deixou de resolver).
+
 ### 2.1.1
 
 **🎙️ Pressionar para Falar de volta.** Regressa à secção de áudio dos Clips, agora com um
@@ -55,22 +67,6 @@ tecla escolhida; desligado, comporta-se como sempre.
 
 **📸 Printscreen em `Screenshots/`.** As capturas passam a ser gravadas numa **subpasta
 própria** dentro do diretório dos clipes, em vez de ficarem misturadas com os vídeos.
-
-### 2.1.0
-
-**📸 O atalho de "captura" agora tira printscreen. O atalho que ligava/desligava a captura
-passa a gravar um **PNG** do jogo (`screenshot-AAAAMMDD-HHMMSS-mmm.png`) na pasta dos clipes,
-sem custo de captura adicional. A ação `screenshot` substitui a antiga `toggleCapture`, com
-**migração automática** dos atalhos já configurados, e a app avisa por toast quando o ficheiro
-é gravado (ou se falhar).
-
-**🎛️ Configuração dos Clips mais simples.** Removidos o **Push-to-Talk** e a **Qualidade
-Adaptativa**, e retirado o **480p** do seletor de resolução; o ecrã de configuração foi
-reorganizado.
-
-**✨ Novidades por secção.** A barra lateral marca com um ponto as secções com novidades (a
-marca desaparece quando visitas a secção) e os Clips mostram um balão **"Configure os clipes
-aqui"** junto à engrenagem depois de uma atualização.
 
 ---
 

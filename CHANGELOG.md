@@ -5,6 +5,30 @@ as duas versões mais recentes; o histórico completo vive aqui.
 
 ---
 
+## 2.1.2
+
+### 🎙️ Enumerador local de microfones corrigido
+
+Quando o motor de captura não está a correr, os Clips leem a lista de microfones por
+PowerShell. Esse caminho alternativo estava partido — uma string com aspas erradas, o tipo
+de resultado errado e a função a devolver a tarefa em vez do resultado — e falhava sempre
+com "não é possível indexar em uma matriz nula". Agora devolve os dispositivos.
+
+### 🎮 Game Mode mais honesto
+
+- Os ajustes de memória (limpar working set / standby) deixam de reportar falha quando
+  limparam processos com sucesso.
+- A deteção deixa de disparar o aviso para aplicações que não são jogos.
+
+### 🧩 Clips e base de jogos
+
+- O pedido de microfones é feito **uma vez** em vez de duas ao abrir os Clips.
+- A base de jogos passa a atualizar a partir do repositório (o antigo `cdn.dinho.app` deixou
+  de resolver); falhas de rede deixam de poluir o log.
+- Cache de `Width`/`Height` do WGC para evitar `RPC_E_WRONG_THREAD`.
+
+---
+
 ## 2.1.1
 
 ### 🎙️ Push-to-Talk de volta aos Clips
