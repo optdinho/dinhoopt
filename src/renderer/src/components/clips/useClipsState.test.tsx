@@ -312,6 +312,18 @@ describe('useClipsState', () => {
     await waitFor(() => expect(dinho.clipsGetMicDevices).toHaveBeenCalledTimes(2))
   })
 
+  it('does not request mic devices twice when the initial status is already running', async () => {
+    const dinho = makeDinho({
+      clipsGetStatus: vi.fn().mockResolvedValue(runningStatus),
+      clipsGetMicDevices: vi.fn().mockResolvedValue([]),
+    })
+    const { result } = renderHook(() => useClipsState())
+
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true))
+    await waitFor(() => expect(dinho.clipsGetMicDevices).toHaveBeenCalled())
+    expect(dinho.clipsGetMicDevices).toHaveBeenCalledTimes(1)
+  })
+
   it('loads the GPU list once', async () => {
     const dinho = makeDinho({
       clipsGetGpus: vi.fn().mockResolvedValue([{ index: 0, name: 'RX 7900', vendorId: 0x1002 }]),

@@ -241,16 +241,21 @@ export function useClipsState(): ClipsState {
     setLoadingMicDevices(false)
   }, [])
 
-  // Load mic devices after status loaded
+  // Load mic devices once the status is known, and again when the engine starts.
+  // A single effect (not one per trigger) avoids a double request when the very
+  // first status already reports the engine as running.
+  const micLoadedRef = useRef(false)
+  const prevMicRunningRef = useRef(status.running)
   useEffect(() => {
+    const wasRunning = prevMicRunningRef.current
+    prevMicRunningRef.current = status.running
     if (!statusLoaded) return
-    loadMicDevices()
-  }, [statusLoaded, loadMicDevices])
-
-  // Reload mic devices when engine starts
-  useEffect(() => {
-    if (status.running) loadMicDevices()
-  }, [status.running, loadMicDevices])
+    const engineStarted = status.running && !wasRunning
+    if (!micLoadedRef.current || engineStarted) {
+      micLoadedRef.current = true
+      loadMicDevices()
+    }
+  }, [statusLoaded, status.running, loadMicDevices])
 
   // Refresh clips when engine starts running (output directory may have changed)
   const prevRunning = useRef(status.running)
