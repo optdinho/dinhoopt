@@ -1,5 +1,35 @@
 {
   "terminal.integrated.env.windows": {
-    "PATH": "${env:PATH};C:\\Users\\Administrator\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+    "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Programs\\Microsoft VS Code\\bin"
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/out/**": true,
+    "**/coverage/**": true,
+    "**/.archive/**": true,
+    "**/logs/**": true,
+    "**/test-results/**": true,
+    "**/soak-out/**": true,
+    "**/.esbuild-tmp/**": true,
+    "**/.tmp-esbuild/**": true,
+    "**/dinho-clips-poc/**/bin/**": true,
+    "**/dinho-clips-poc/**/obj/**": true,
+    "**/resources/clips-engine-staging/**": true,
+    "**/resources/ffmpeg-custom/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/out": true,
+    "**/coverage": true,
+    "**/.archive": true,
+    "**/logs": true,
+    "**/test-results": true,
+    "**/soak-out": true,
+    "**/.esbuild-tmp": true,
+    "**/.tmp-esbuild": true,
+    "**/resources/clips-engine-staging": true,
+    "**/resources/ffmpeg-custom": true
   }
 }
