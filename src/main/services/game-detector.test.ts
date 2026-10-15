@@ -60,6 +60,11 @@ describe('findGame', () => {
     const running = new Set(['cs2.exe', 'myapp.exe'])
     expect(findGame(running, ['myapp.exe'])).toBe('cs2.exe')
   })
+
+  it('ignores a custom process that is a known non-game', () => {
+    expect(findGame(new Set(['chrome.exe']), ['chrome.exe'])).toBeNull()
+    expect(findGame(new Set(['explorer.exe']), ['explorer.exe'])).toBeNull()
+  })
 })
 
 describe('isNonGameProcess', () => {
@@ -72,6 +77,93 @@ describe('isNonGameProcess', () => {
       'Video.UI.exe',
       'Microsoft.Media.Player.exe',
       'explorer.exe',
+    ]) {
+      expect(isNonGameProcess(name), name).toBe(true)
+    }
+  })
+
+  it('classifies every known browser as a non-game', () => {
+    for (const name of [
+      // Chromium / Blink
+      'chrome.exe',
+      'msedge.exe',
+      'brave.exe',
+      'opera.exe',
+      'opera_gx.exe',
+      'vivaldi.exe',
+      'chromium.exe',
+      'duckduckgo.exe',
+      'yandex.exe',
+      'browser.exe',
+      'avastbrowser.exe',
+      'avgbrowser.exe',
+      'dragon.exe',
+      'slimjet.exe',
+      'iron.exe',
+      'maxthon.exe',
+      '360se.exe',
+      '360chrome.exe',
+      'qqbrowser.exe',
+      'ucbrowser.exe',
+      'puffin.exe',
+      'sidekick.exe',
+      'arc.exe',
+      'wavebox.exe',
+      'ghost.exe',
+      'centbrowser.exe',
+      'whale.exe',
+      'thorium.exe',
+      'iridium.exe',
+      'comodo_dragon.exe',
+      'epic.exe',
+      'naver.exe',
+      'rambox.exe',
+      'station.exe',
+      'microsoftedge.exe',
+      'chrome_proxy.exe',
+      'brave_proxy.exe',
+      'msedge_proxy.exe',
+      // Gecko
+      'firefox.exe',
+      'waterfox.exe',
+      'librewolf.exe',
+      'floorp.exe',
+      'palemoon.exe',
+      'basilisk.exe',
+      'seamonkey.exe',
+      'torbrowser.exe',
+      'tor.exe',
+      'kmeleon.exe',
+      'mercury.exe',
+      'mullvadbrowser.exe',
+      'firefox_proxy.exe',
+      'firefox-esr.exe',
+      'firefox-tor.exe',
+      // Other engines / legacy
+      'iexplore.exe',
+      'safari.exe',
+      'falkon.exe',
+      'netscape.exe',
+      'baidubrowser.exe',
+      'sogouexplorer.exe',
+      '2345explorer.exe',
+      'liebao.exe',
+      'theworld.exe',
+      'greenbrowser.exe',
+      'sleipnir.exe',
+      'lunascape.exe',
+      'avant.exe',
+      'torch.exe',
+      'icedragon.exe',
+      'qupzilla.exe',
+      'midori.exe',
+      'epiphany.exe',
+      'konqueror.exe',
+      // WebView hosts
+      'msedgewebview2.exe',
+      'webview2.exe',
+      'edgewebview2.exe',
+      'applicationframehost.exe',
     ]) {
       expect(isNonGameProcess(name), name).toBe(true)
     }
@@ -632,6 +724,42 @@ describe('games.json database loading', () => {
   })
 })
 
+describe('game database nonGames', () => {
+  const dbPath = join(tmpdir(), 'game-detector-nongames-db.json')
+
+  afterAll(() => {
+    rmSync(dbPath, { force: true })
+  })
+
+  it('classifies a database nonGame as a non-game process', async () => {
+    writeFileSync(
+      dbPath,
+      JSON.stringify({ version: 3, games: [{ processName: 'cs2' }], nonGames: ['yandex', 'Thorium', 'SomeTool'] }),
+    )
+    await loadGameDatabase(dbPath)
+
+    expect(isNonGameProcess('yandex.exe')).toBe(true)
+    expect(isNonGameProcess('Thorium.exe')).toBe(true)
+    expect(isNonGameProcess('cs2.exe')).toBe(false)
+  })
+
+  it('does not detect a process the database lists as a nonGame', async () => {
+    writeFileSync(dbPath, JSON.stringify({ version: 3, games: [{ processName: 'yandex' }], nonGames: ['yandex'] }))
+    await loadGameDatabase(dbPath)
+
+    expect(findGame(new Set(['yandex.exe']), [])).toBeNull()
+  })
+
+  it('keeps a loaded nonGame list when a later database has none', async () => {
+    writeFileSync(dbPath, JSON.stringify({ version: 3, games: [{ processName: 'cs2' }], nonGames: ['SomeTool'] }))
+    await loadGameDatabase(dbPath)
+    // A partial/older database without `nonGames` must not wipe the list.
+    await loadGameDatabase(join(tmpdir(), 'does-not-exist-games.json'))
+
+    expect(isNonGameProcess('SomeTool.exe')).toBe(true)
+  })
+})
+
 describe('resolveGameProfile', () => {
   const profiles = {
     'cs2.exe': { gameName: 'CS2', enabledOptimizations: ['sys-power-plan'] },
@@ -716,6 +844,23 @@ describe('findGameWithDisplay', () => {
     const windows = [{ className: 'grcWindow', pid: 18260, processName: 'FiveM_b3258_GTAProcess.exe' }]
     const match = findGameWithDisplay(new Set(['fivem_b3258_gtaprocess.exe']), [], windows, getWindowClassLookup())
     expect(match).toEqual({ processName: 'FiveM_b3258_GTAProcess.exe', displayName: 'FiveM (GTA V)' })
+  })
+
+  it('ignores a generic engine class owned by a non-game process', () => {
+    const windows = [{ className: 'UnityWndClass', pid: 7, processName: 'SomeUnityTool.exe' }]
+    expect(findGameWithDisplay(new Set(['someunitytool.exe']), [], windows, getWindowClassLookup())).toBeNull()
+  })
+
+  it('ignores the generic WINDOW class owned by an unknown process', () => {
+    const windows = [{ className: 'WINDOW', pid: 5, processName: 'SomeRandomApp.exe' }]
+    expect(findGameWithDisplay(new Set(['somerandomapp.exe']), [], windows, getWindowClassLookup())).toBeNull()
+  })
+
+  it('still trusts a specific class when the owning process is not known', () => {
+    // `FORTNITE` is specific, so an unknown-name process still wins via the class.
+    const windows = [{ className: 'FORTNITE', pid: 9, processName: 'Fortnite_unknown_build.exe' }]
+    const match = findGameWithDisplay(new Set(['fortnite_unknown_build.exe']), [], windows, getWindowClassLookup())
+    expect(match).toEqual({ processName: 'Fortnite_unknown_build.exe', displayName: 'Fortnite' })
   })
 
   it('rejects a class match whose process is no longer running', () => {

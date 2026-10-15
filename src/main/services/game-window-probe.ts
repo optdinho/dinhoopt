@@ -14,6 +14,9 @@ export interface WindowClassEntry {
 export interface WindowClassMatch {
   processName: string
   displayName: string
+  /** The window class that produced the match (original case), so the caller
+   *  can tell a specific class (`grcWindow`) from a generic one (`UnityWndClass`). */
+  windowClass: string
 }
 
 /**
@@ -105,7 +108,7 @@ export function findGamesByWindowClass(windows: VisibleWindow[], classLookup: Ma
   for (const window of windows) {
     const displayName = classLookup.get(window.className.toLowerCase())
     if (!displayName) continue
-    matches.push({ processName: window.processName, displayName })
+    matches.push({ processName: window.processName, displayName, windowClass: window.className })
   }
   return matches
 }

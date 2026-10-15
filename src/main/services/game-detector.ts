@@ -103,31 +103,101 @@ export function normalizeGameName(name: string): string {
 }
 
 // ── Non-game processes (lowercase, no `.exe`) ──────────────────
-// Mirrors the clips engine's C# `NonGameProcesses` (EngineCoordinator.Game.cs).
-// The window-class fallback matches generic host classes — `games.json` maps
-// `ApplicationFrameWindow` to "Minecraft (Bedrock)", but that class belongs to
-// every UWP/system window, and browsers/media players host windows too — so a
-// match must never win when the owning process is a browser, a media player or
-// a UWP/system host.  Without this, opening a fullscreen video activated Game
-// Mode and started clip capture as if a game had launched.
+// Mirrors the clips engine's C# `NonGameProcesses` (EngineCoordinator.Game.cs),
+// and is merged with the engine database's `nonGames` list (320 entries) when
+// `games.json` loads, so the two detectors share one source of truth.  The
+// database covers far more (browsers, editors, launchers, system hosts) than the
+// hardcoded subset below.  The window-class fallback matches generic host
+// classes — `games.json` maps `ApplicationFrameWindow` to "Minecraft (Bedrock)",
+// but that class belongs to every UWP/system window, and browsers/media players
+// host windows too — so a match must never win when the owning process is a
+// browser, a media player or a UWP/system host.  Without this, opening a
+// fullscreen video activated Game Mode and started clip capture as if a game
+// had launched.
 export const NON_GAME_PROCESSES = new Set<string>([
-  // Browsers / webview hosts
+  // Browsers / webview hosts.  A browser window can carry a class the database
+  // maps to a game (e.g. `ApplicationFrameWindow` → "Minecraft (Bedrock)"), so
+  // the whole family must be listed here regardless of which engine it uses.
+  // Chromium / Blink
   'chrome',
   'msedge',
-  'firefox',
   'brave',
   'opera',
+  'opera_gx',
   'vivaldi',
   'chromium',
-  'iexplore',
-  'msedgewebview2',
-  'webview2',
-  'applicationframehost',
   'duckduckgo',
+  'yandex',
+  'browser', // Yandex/Coc Coc image name
+  'avastbrowser',
+  'avgbrowser',
+  'dragon',
+  'slimjet',
+  'iron',
+  'maxthon',
+  '360se',
+  '360chrome',
+  'qqbrowser',
+  'ucbrowser',
+  'puffin',
+  'sidekick',
+  'arc',
+  'wavebox',
+  'ghost',
+  'centbrowser',
+  'whale',
+  'thorium',
+  'iridium',
+  'comodo_dragon',
+  'epic',
+  'naver',
+  'rambox',
+  'station',
+  'chrome_proxy',
+  'brave_proxy',
+  'msedge_proxy',
+  'microsoftedge',
+  // Gecko
+  'firefox',
+  'waterfox',
   'librewolf',
   'floorp',
-  'waterfox',
+  'palemoon',
+  'basilisk',
+  'seamonkey',
   'torbrowser',
+  'tor',
+  'kmeleon',
+  'mercury',
+  'mullvadbrowser',
+  'firefox_proxy',
+  'firefox-esr',
+  'firefox-tor',
+  // Other engines / legacy
+  'iexplore',
+  'safari',
+  'falkon',
+  'netscape',
+  'baidubrowser',
+  'sogouexplorer',
+  '2345explorer',
+  'liebao',
+  'theworld',
+  'greenbrowser',
+  'sleipnir',
+  'lunascape',
+  'avant',
+  'torch',
+  'icedragon',
+  'qupzilla',
+  'midori',
+  'epiphany',
+  'konqueror',
+  // WebView hosts
+  'msedgewebview2',
+  'webview2',
+  'edgewebview2',
+  'applicationframehost',
   // Media players / UWP media & video apps
   'video.ui',
   'microsoft.media.player',
@@ -166,13 +236,23 @@ export const NON_GAME_PROCESSES = new Set<string>([
   'conhost',
 ])
 
+/** Non-game processes loaded from the engine database (`games.json` → `nonGames`).
+ *  Empty until the database loads (or if it is unavailable), in which case the
+ *  hardcoded set above is the only filter. */
+let dbNonGames = new Set<string>()
+
 /** True when `name` is a known non-game process (browser, media player, system host). */
 export function isNonGameProcess(name: string): boolean {
-  return NON_GAME_PROCESSES.has(normalizeGameName(name))
+  const normalized = normalizeGameName(name)
+  return NON_GAME_PROCESSES.has(normalized) || dbNonGames.has(normalized)
 }
 
 /** Lowercase process names (no `.exe`) that count as games. */
 let gameNames = new Set<string>([...KNOWN_GAME_PROCESSES].map(normalizeGameName))
+/** The hardcoded subset, kept separate because `loadGameDatabase` replaces
+ *  `gameNames` wholesale — this survives so the generic-class guard can still
+ *  recognise a hardcoded title (e.g. `Minecraft.Windows`) after a DB load. */
+const HARDCODED_GAME_NAMES = new Set<string>([...KNOWN_GAME_PROCESSES].map(normalizeGameName))
 let databaseLoaded = false
 
 // Window class → friendly name.  `games.json` is the primary source, but these
@@ -195,6 +275,54 @@ let windowClassLookup = buildClassLookup(HARDCODED_WINDOW_CLASSES)
 /** The active window class index, for tests and the class-based match. */
 export function getWindowClassLookup(): Map<string, string> {
   return windowClassLookup
+}
+
+// ── Generic window classes (lowercase) ─────────────────────────
+// Classes that games AND non-game apps share, so a match on one is not proof of
+// a game on its own.  `ApplicationFrameWindow` belongs to every UWP window and
+// the engine classes (`UnityWndClass`, `UnrealWindow`, …) are used by countless
+// non-game tools built on those engines — a Unity/Unreal tool with an unknown
+// image name would otherwise activate Game Mode.  A match on one of these is
+// only accepted when the owning process is itself a known game; specific classes
+// (`grcWindow`, `FORTNITE`, `CEF-OSC-WIDGET`, …) stay trusted on their own,
+// which is what keeps build-stamped titles like FiveM working.
+const GENERIC_WINDOW_CLASSES = new Set<string>([
+  // Host / shell
+  'applicationframewindow',
+  'window',
+  // Engine names shared across unrelated titles
+  'unitywndclass',
+  'unrealwindow',
+  'ue4window',
+  'ue5window',
+  'sdl_app',
+  'valve001',
+  'source',
+  'frostbite',
+  'creation engine',
+  're engine',
+  'id tech',
+  'cryengine',
+  'lumberyard',
+  'essence',
+  'glacier',
+  'paradox',
+  'void',
+  'lucid',
+  'katana engine',
+  'gamebryo',
+  'redengine',
+  'redenginewindow',
+])
+
+function isGenericWindowClass(windowClass: string): boolean {
+  return GENERIC_WINDOW_CLASSES.has(windowClass.trim().toLowerCase())
+}
+
+/** True when `name` is a game known either from the database or the hardcoded list. */
+function isKnownGameName(name: string): boolean {
+  const normalized = normalizeGameName(name)
+  return gameNames.has(normalized) || HARDCODED_GAME_NAMES.has(normalized)
 }
 
 function gamesJsonCandidates(): string[] {
@@ -226,7 +354,7 @@ export async function loadGameDatabase(path?: string): Promise<void> {
   for (const candidate of candidates) {
     try {
       const raw = await readFile(candidate, 'utf8')
-      const db = JSON.parse(raw) as { games?: unknown }
+      const db = JSON.parse(raw) as { games?: unknown; nonGames?: unknown }
       const games = db?.games
       if (!Array.isArray(games) || games.length === 0) continue
       const names = new Set<string>()
@@ -247,6 +375,15 @@ export async function loadGameDatabase(path?: string): Promise<void> {
       }
       if (names.size === 0) continue
       gameNames = names
+      // Only replace the non-game set when the database actually carries one, so
+      // a partial/older database never wipes a previously loaded list.
+      if (Array.isArray(db.nonGames)) {
+        const nonGames = new Set<string>()
+        for (const entry of db.nonGames) {
+          if (typeof entry === 'string' && entry) nonGames.add(normalizeGameName(entry))
+        }
+        dbNonGames = nonGames
+      }
       // Database classes first, hardcoded last: `buildClassLookup` keeps the
       // first entry per class, so the database's richer display names win.
       windowClassLookup = buildClassLookup([...classes, ...HARDCODED_WINDOW_CLASSES])
@@ -318,6 +455,10 @@ export function findGame(running: Set<string>, customGameProcesses: string[]): s
     if (gameNames.has(normalized)) return proc
   }
   for (const custom of customGameProcesses) {
+    // A user-added process still cannot be a browser, media player or system
+    // host — otherwise adding e.g. `chrome.exe` would re-open the exact
+    // false-activation hole this filter exists to close.
+    if (isNonGameProcess(custom)) continue
     if (running.has(custom.toLowerCase())) return custom.toLowerCase()
   }
   return null
@@ -340,8 +481,9 @@ export function findGameWithDisplay(
   for (const match of findGamesByWindowClass(windows, classLookup)) {
     if (!match.processName) continue
     if (isNonGameProcess(match.processName)) continue
+    if (isGenericWindowClass(match.windowClass) && !isKnownGameName(match.processName)) continue
     if (!running.has(match.processName.toLowerCase())) continue
-    return match
+    return { processName: match.processName, displayName: match.displayName }
   }
   return null
 }

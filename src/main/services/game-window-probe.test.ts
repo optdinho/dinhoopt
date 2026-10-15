@@ -107,7 +107,9 @@ describe('findGamesByWindowClass', () => {
 
   it('resolves the real build-stamped process name plus a friendly name', () => {
     const found = findGamesByWindowClass([win('grcWindow', 18260, 'FiveM_b3258_GTAProcess.exe')], lookup)
-    expect(found).toEqual([{ processName: 'FiveM_b3258_GTAProcess.exe', displayName: 'FiveM (GTA V)' }])
+    expect(found).toEqual([
+      { processName: 'FiveM_b3258_GTAProcess.exe', displayName: 'FiveM (GTA V)', windowClass: 'grcWindow' },
+    ])
   })
 
   it('matches the class case-insensitively', () => {
