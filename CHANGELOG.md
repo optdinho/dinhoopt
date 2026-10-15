@@ -5,6 +5,30 @@ as duas versões mais recentes; o histórico completo vive aqui.
 
 ---
 
+## 2.1.3
+
+### 🎮 Deteção de jogos mais precisa
+
+O Game Mode deixa de ativar quando abres um vídeo em ecrã inteiro no navegador. A lista de
+processos que nunca contam como jogos foi alargada para cobrir praticamente todos os
+navegadores (Chromium, Gecko, WebView e derivados), e as classes de janela partilhadas por
+motores como Unity/Unreal só contam quando o próprio processo é um jogo conhecido.
+
+### 🧩 Base de jogos — navegadores
+
+A `games.json` passa a marcar **335** processos como não-jogos (antes 277), partilhando a
+mesma lista com o motor de captura.
+
+### ⬆️ Tecnologias atualizadas
+
+- Electron **44.7.2**, React/React DOM **19.3.1**, Vite **8.3.4**, Vitest **5.0.4**,
+  Playwright **1.64.1**, framer-motion **14.2.0**, lucide-react **1.57.0**, i18next
+  **26.4.5**, dotenv **18.0.8**.
+- **electron-vite 6.0.0** (estável — sai do ciclo beta).
+- Motor de clips: **CsWin32 0.3.363**.
+
+---
+
 ## 2.1.2
 
 ### 🎙️ Enumerador local de microfones corrigido

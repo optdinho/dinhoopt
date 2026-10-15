@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.1.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.1.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.2-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,6 +47,15 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
+### 2.1.3
+
+**🎮 Deteção de jogos.** O Game Mode deixa de ativar quando abres um vídeo em ecrã inteiro
+no navegador — a lista de apps que nunca contam como jogos foi alargada e as classes de
+janela partilhadas só contam para jogos conhecidos.
+
+**⬆️ Tecnologias.** Electron 44.7.2, React 19.3.1, e o `electron-vite` passa à versão
+**estável 6.0.0** (sai do beta).
+
 ### 2.1.2
 
 **🎙️ Microfones de volta.** Quando o motor de captura não está a correr, a lista de
@@ -58,15 +67,6 @@ jogos.
 
 **🧩 Clips.** O pedido de microfones é feito **uma vez** em vez de duas ao abrir; a base de
 jogos passa a atualizar a partir do repositório (o antigo `cdn.dinho.app` deixou de resolver).
-
-### 2.1.1
-
-**🎙️ Pressionar para Falar de volta.** Regressa à secção de áudio dos Clips, agora com um
-único interruptor **ligar/desligar**: ligado, o microfone só transmite enquanto seguras a
-tecla escolhida; desligado, comporta-se como sempre.
-
-**📸 Printscreen em `Screenshots/`.** As capturas passam a ser gravadas numa **subpasta
-própria** dentro do diretório dos clipes, em vez de ficarem misturadas com os vídeos.
 
 ---
 
@@ -219,8 +219,8 @@ npm run dev
 
 ```
 Cobertura: 95,6% linhas · 94,3% funções · 86,7% branches  (gate mínimo: 80%)
-TS:  7.852 testes em 288 ficheiros (Vitest) · Biome 0 · tsc 0
-C#:  2.539 testes (Release), 0 falhas, 0 ignorados
+TS:  7.936 testes em 295 ficheiros (Vitest) · Biome 0 · tsc 0
+C#:  2.552 testes (Release), 0 falhas, 0 ignorados
 ```
 
 A app eleva-se sozinha em desenvolvimento; para correr E2E sem elevação use `DINHO_E2E=1`.
