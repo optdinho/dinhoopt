@@ -13,6 +13,7 @@ import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import { getSettings } from '../services/settings-store'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 interface ChromiumBrowserDef {
   key: string
@@ -59,7 +60,8 @@ function scanCookieFiles(
 }
 
 export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.BROWSER_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.BROWSER_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('browser-cleaner', 'Starting browser scan...')
     const keepBrowserCookies = getSettings().cleaner.keepBrowserCookies !== false
     const results: ScanResult[] = []
@@ -291,7 +293,9 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.BROWSER_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.BROWSER_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('browser-cleaner', 'Starting browser clean...')
     const valid = validateStringArray(itemIds)
     if (!valid) {

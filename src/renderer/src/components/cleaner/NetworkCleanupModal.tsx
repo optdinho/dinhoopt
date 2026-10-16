@@ -1,7 +1,18 @@
 import type { NetworkCleanResult, NetworkItem } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LucideIcon } from 'lucide-react'
-import { CircleCheckBig, Globe, History, Loader2, Network, Search, Sparkles, Wifi, X } from 'lucide-react'
+import {
+  CircleCheckBig,
+  Globe,
+  History,
+  Loader2,
+  Network,
+  Search,
+  Sparkles,
+  TriangleAlert,
+  Wifi,
+  X,
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@/components/shared/Checkbox'
@@ -39,7 +50,8 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
 
   const [items, setItems] = useState<NetworkItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [status, setStatus] = useState<'idle' | 'scanning' | 'cleaning' | 'complete'>('idle')
+  const [status, setStatus] = useState<'idle' | 'scanning' | 'cleaning' | 'complete' | 'error'>('idle')
+  const [errorKey, setErrorKey] = useState<'scanFailedToast' | 'cleanupFailedToast' | null>(null)
   const [cleanResult, setCleanResult] = useState<NetworkCleanResult | null>(null)
   const [activeCategory, setActiveCategory] = useState<NetworkCategory>('dns-cache')
   const [showConfirm, setShowConfirm] = useState(false)
@@ -47,6 +59,7 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
   const handleScan = useCallback(async () => {
     scanGenRef.current++
     setStatus('scanning')
+    setErrorKey(null)
     setItems([])
     setSelectedIds(new Set())
     setCleanResult(null)
@@ -58,7 +71,10 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
       setStatus('complete')
     } catch (err) {
       logger.error('NetworkCleanupModal', 'Scan failed', err)
-      setStatus('idle')
+      // Terminal error state — NOT 'idle', otherwise the auto-scan effect would
+      // immediately re-fire and retry the same failing scan forever.
+      setErrorKey('scanFailedToast')
+      setStatus('error')
     }
   }, [])
 
@@ -115,7 +131,10 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
       }
     } catch (err) {
       logger.error('NetworkCleanupModal', 'Clean failed', err)
-      setStatus('idle')
+      // Keep the items so the user can retry; a terminal 'error' status avoids
+      // re-triggering the auto-scan effect.
+      setErrorKey('cleanupFailedToast')
+      setStatus('error')
     }
   }, [items, selectedIds, addEntry, recomputeStats])
 
@@ -149,6 +168,18 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
       handleScan()
     }
   }, [open, status, handleScan])
+
+  // Reset back to a clean slate when the modal closes so reopening starts a
+  // fresh scan instead of showing a stale error state.
+  useEffect(() => {
+    if (!open) {
+      setStatus('idle')
+      setErrorKey(null)
+      setItems([])
+      setSelectedIds(new Set())
+      setCleanResult(null)
+    }
+  }, [open])
 
   const isScanning = status === 'scanning'
   const isCleaning = status === 'cleaning'
@@ -290,8 +321,34 @@ export function NetworkCleanupModal({ open, onClose }: NetworkCleanupModalProps)
                   </div>
                 )}
 
+                {/* Error state — terminal, with an explicit retry */}
+                {status === 'error' && (
+                  <div
+                    className="mb-4 flex items-center gap-3 rounded-2xl px-5 py-4"
+                    style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}
+                  >
+                    <TriangleAlert className="h-5 w-5 shrink-0 text-red-400" strokeWidth={1.8} />
+                    <span className="flex-1 text-[13px]" style={{ color: 'var(--text-normal)' }}>
+                      {t(errorKey ?? 'scanFailedToast')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleScan}
+                      className="flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-medium transition-all"
+                      style={{
+                        background: 'var(--bg-hover)',
+                        border: '1px solid var(--border-medium)',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      <Search className="h-4 w-4" strokeWidth={1.8} />
+                      {t('scanButton')}
+                    </button>
+                  </div>
+                )}
+
                 {/* Empty state */}
-                {!hasItems && !isScanning && !isCleaning && (
+                {!hasItems && !isScanning && !isCleaning && status !== 'error' && (
                   <div className="flex flex-col items-center justify-center py-16">
                     <Search className="mb-3 h-8 w-8" strokeWidth={1.5} style={{ color: 'var(--text-muted)' }} />
                     <p className="mb-1 text-[13px] font-medium" style={{ color: 'var(--text-normal)' }}>

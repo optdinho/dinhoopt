@@ -307,3 +307,5 @@ describe('uninstall-leftovers IPC', () => {
     })
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

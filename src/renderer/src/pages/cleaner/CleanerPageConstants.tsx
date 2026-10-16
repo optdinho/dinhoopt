@@ -34,13 +34,6 @@ export const categories: CategoryDef[] = [
     group: 'groupSystem',
   },
   {
-    type: CleanerType.WinSxS,
-    labelKey: 'categoryWinSxS',
-    icon: Archive,
-    descriptionKey: 'categoryWinSxSDescription',
-    group: 'groupSystem',
-  },
-  {
     type: CleanerType.RecycleBin,
     labelKey: 'categoryRecycleBin',
     icon: Trash2,
@@ -96,7 +89,23 @@ export const categories: CategoryDef[] = [
     descriptionKey: 'categoryUninstallLeftoversDescription',
     group: 'groupMaintenance',
   },
+  {
+    type: CleanerType.WinSxS,
+    labelKey: 'categoryWinSxS',
+    icon: Archive,
+    descriptionKey: 'categoryWinSxSDescription',
+    group: 'groupMaintenance',
+  },
 ]
+
+/**
+ * Categories reserved for a full (deep) clean. They are slow — WinSxS does a
+ * DISM component-store analysis/cleanup — so the normal scan skips them and a
+ * quick clean leaves them untouched. WinSxS is placed last everywhere.
+ */
+export const DEEP_CLEAN_CATEGORIES: readonly CleanerType[] = [CleanerType.WinSxS]
+
+export const isDeepCleanCategory = (type: CleanerType): boolean => DEEP_CLEAN_CATEGORIES.includes(type)
 
 /** Check whether a path looks like an absolute filesystem path (not a label like "Recycle Bin" or "PATH → …"). */
 export const isAbsolutePath = (p: string) => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('/')

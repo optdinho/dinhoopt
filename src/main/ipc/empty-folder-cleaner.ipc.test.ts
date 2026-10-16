@@ -760,3 +760,5 @@ describe('registerEmptyFolderCleanerIpc', () => {
     })
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

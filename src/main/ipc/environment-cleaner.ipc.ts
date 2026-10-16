@@ -9,6 +9,7 @@ import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 /**
  * Expand %VAR% references in a Windows registry value.
@@ -275,7 +276,8 @@ async function broadcastWinEnvChange(): Promise<void> {
 const envEntryCache = new Map<string, EnvEntry>()
 
 export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.ENVIRONMENT_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.ENVIRONMENT_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('environment-cleaner', 'Starting environment scan')
     envEntryCache.clear()
     const results: ScanResult[] = []
@@ -374,7 +376,9 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.ENVIRONMENT_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.ENVIRONMENT_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('environment-cleaner', 'Starting environment clean')
     const valid = validateStringArray(itemIds)
     if (!valid) {
@@ -439,7 +443,9 @@ export function registerEnvironmentCleanerIpc(getWindow: WindowGetter): void {
       `Cleaned: ${filesDeleted} entries, ${filesSkipped} skipped, ${errors.length} errors`,
     )
     return {
-      totalCleaned: filesDeleted,
+      // Environment variables have no byte size, so nothing is reported as
+      // reclaimed space — `filesDeleted` carries the count instead.
+      totalCleaned: 0,
       filesDeleted,
       filesSkipped,
       errors,

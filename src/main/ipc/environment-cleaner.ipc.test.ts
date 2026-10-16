@@ -337,11 +337,15 @@ describe('registerEnvironmentCleanerIpc', () => {
 
       const cleanHandler = getHandler('cleaner:environment:clean')
       const result = (await cleanHandler(null, [id])) as {
+        totalCleaned: number
         filesDeleted: number
         filesSkipped: number
         errors: unknown[]
       }
       expect(result.filesDeleted).toBe(1)
+      // Environment variables have no byte size — the count lives in filesDeleted,
+      // so no reclaimed space is reported (regression: it used to echo the count).
+      expect(result.totalCleaned).toBe(0)
       expect(result.filesSkipped).toBe(0)
       expect(result.errors).toHaveLength(0)
     })
@@ -746,3 +750,5 @@ describe('registerEnvironmentCleanerIpc', () => {
     })
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

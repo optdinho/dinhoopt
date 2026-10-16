@@ -466,3 +466,5 @@ describe('DATABASE_CLEAN handler', () => {
     expect(result.filesDeleted).toBe(1)
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

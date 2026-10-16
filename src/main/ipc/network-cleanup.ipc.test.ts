@@ -633,3 +633,5 @@ describe('registerNetworkCleanupIpc', () => {
     })
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

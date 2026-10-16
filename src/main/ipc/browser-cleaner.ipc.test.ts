@@ -716,3 +716,5 @@ describe('BROWSER_CLEAN handler', () => {
     expect(mockSend).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

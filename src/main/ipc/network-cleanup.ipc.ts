@@ -7,6 +7,7 @@ import { execFileAsync, execNativeUtf8, psUtf8 } from '../services/exec-utf8'
 import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 async function getDnsCacheCount(): Promise<number> {
   const platform = getPlatform()
@@ -254,7 +255,8 @@ export async function cleanNetworkItems(
 const scanSessions = new Map<string, Map<string, NetworkItem>>()
 
 export function registerNetworkCleanupIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.NETWORK_SCAN, async (): Promise<NetworkItem[]> => {
+  ipcMain.handle(IPC.NETWORK_SCAN, async (event): Promise<NetworkItem[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('network-cleanup', 'IPC network scan requested')
     const items = await scanNetwork()
 
@@ -268,7 +270,8 @@ export function registerNetworkCleanupIpc(getWindow: WindowGetter): void {
     return items
   })
 
-  ipcMain.handle(IPC.NETWORK_CLEAN, async (_event, itemIds: string[]): Promise<NetworkCleanResult> => {
+  ipcMain.handle(IPC.NETWORK_CLEAN, async (event, itemIds: string[]): Promise<NetworkCleanResult> => {
+    if (!validateSender(event, getWindow())) return { cleaned: 0, failed: 0, details: [] }
     getLogger().info('network-cleanup', 'IPC network clean requested')
     const valid = validateStringArray(itemIds)
     if (!valid) {

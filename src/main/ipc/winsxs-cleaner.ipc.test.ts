@@ -68,6 +68,7 @@ vi.mock('../services/elevation', () => ({
 }))
 
 import { CleanerType } from '@shared/enums'
+import { cacheItems, clearCache } from '../services/scan-cache'
 import { registerWinSxSCleanerIpc } from './winsxs-cleaner.ipc'
 
 // ── Helpers ──
@@ -324,6 +325,7 @@ describe('WINSXS_CLEAN handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetSpawnMocks()
+    clearCache()
   })
 
   it('returns needsElevation when not admin', async () => {
@@ -340,8 +342,20 @@ describe('WINSXS_CLEAN handler', () => {
     })
   })
 
-  it('spawns DISM and returns success when admin', async () => {
+  it('spawns DISM and reports the reclaimed bytes from the scan cache', async () => {
     mockIsAdmin.mockReturnValue(true)
+    const reclaimable = 3 * 1024 * 1024 * 1024
+    cacheItems([
+      {
+        id: 'winsxs',
+        path: 'WinSxS Component Store',
+        size: reclaimable,
+        category: CleanerType.WinSxS,
+        subcategory: 'WinSxS Component Store',
+        lastModified: 0,
+        selected: true,
+      },
+    ])
     registerWinSxSCleanerIpc(() => mockWindow())
 
     const handler = getHandler('winsxs:clean')
@@ -359,9 +373,25 @@ describe('WINSXS_CLEAN handler', () => {
     const result = await promise
 
     expect(result).toMatchObject({
-      totalCleaned: 1,
+      totalCleaned: reclaimable,
       filesDeleted: 1,
       needsElevation: false,
+    })
+  })
+
+  it('reports zero reclaimed bytes when the scan cache is empty', async () => {
+    mockIsAdmin.mockReturnValue(true)
+    registerWinSxSCleanerIpc(() => mockWindow())
+
+    const handler = getHandler('winsxs:clean')
+    const promise = (handler as () => Promise<unknown>)()
+
+    if (spawnCloseCallback) spawnCloseCallback(0)
+    const result = await promise
+
+    expect(result).toMatchObject({
+      totalCleaned: 0,
+      filesDeleted: 1,
     })
   })
 
@@ -508,6 +538,18 @@ describe('WINSXS_CLEAN handler', () => {
 
   it('handles destroyed window in clean progress', async () => {
     mockIsAdmin.mockReturnValue(true)
+    const reclaimable = 512 * 1024 * 1024
+    cacheItems([
+      {
+        id: 'winsxs',
+        path: 'WinSxS Component Store',
+        size: reclaimable,
+        category: CleanerType.WinSxS,
+        subcategory: 'WinSxS Component Store',
+        lastModified: 0,
+        selected: true,
+      },
+    ])
     registerWinSxSCleanerIpc(() => mockDestroyedWindow())
 
     const handler = getHandler('winsxs:clean')
@@ -522,8 +564,10 @@ describe('WINSXS_CLEAN handler', () => {
 
     const result = await promise
     expect(result).toMatchObject({
-      totalCleaned: 1,
+      totalCleaned: reclaimable,
       filesDeleted: 1,
     })
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

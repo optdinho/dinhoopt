@@ -1527,3 +1527,5 @@ describe('sendRepairProgress with destroyed window', () => {
     expect(mockSend).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

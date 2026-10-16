@@ -1,4 +1,4 @@
-import { CleanerType, ScanStatus } from '@shared/enums'
+import { type CleanerType, ScanStatus } from '@shared/enums'
 import type { CleanSummaryData, ProgressData, ScanResult } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScanStore } from './scan-store'
@@ -31,7 +31,13 @@ function makeResult(category: string, subcategory: string, items: { id: string; 
 describe('scan-store', () => {
   beforeEach(() => {
     storage.clear()
-    useScanStore.getState().reset()
+    useScanStore.setState({
+      status: ScanStatus.Idle,
+      results: [],
+      selectedItems: new Set<string>(),
+      progress: null,
+      cleanSummary: null,
+    })
   })
 
   it('starts in idle state with empty results', () => {
@@ -129,28 +135,6 @@ describe('scan-store', () => {
     expect(useScanStore.getState().getTotalSize()).toBe(300)
   })
 
-  it('getSelectedSize sums only selected item sizes', () => {
-    useScanStore.getState().setResults([
-      makeResult('system', 'temp', [
-        { id: 'a', size: 100 },
-        { id: 'b', size: 200 },
-      ]),
-    ])
-    useScanStore.getState().toggleItem('a')
-    expect(useScanStore.getState().getSelectedSize()).toBe(200)
-  })
-
-  it('getSelectedIds returns array of selected IDs', () => {
-    useScanStore.getState().setResults([
-      makeResult('system', 'temp', [
-        { id: 'a', size: 100 },
-        { id: 'b', size: 200 },
-      ]),
-    ])
-    const ids = useScanStore.getState().getSelectedIds()
-    expect(ids.sort()).toEqual(['a', 'b'])
-  })
-
   it('excluded subcategories persist to localStorage', () => {
     const result = makeResult('system', 'temp', [{ id: 'a', size: 100 }])
     useScanStore.getState().setResults([result])
@@ -158,16 +142,6 @@ describe('scan-store', () => {
     expect(useScanStore.getState().excludedSubcategories.has('system:temp')).toBe(true)
     const stored = JSON.parse(storage.get('kudu:excluded-subcategories')!)
     expect(stored).toContain('system:temp')
-  })
-
-  it('reset clears state back to defaults', () => {
-    useScanStore.getState().setResults([makeResult('system', 'temp', [{ id: 'a', size: 100 }])])
-    useScanStore.getState().setStatus(ScanStatus.Complete)
-    useScanStore.getState().reset()
-    const state = useScanStore.getState()
-    expect(state.status).toBe(ScanStatus.Idle)
-    expect(state.results).toEqual([])
-    expect(state.selectedItems.size).toBe(0)
   })
 
   it('setProgress stores progress data', () => {
@@ -202,14 +176,6 @@ describe('scan-store', () => {
 
     useScanStore.getState().setCleanSummary(null)
     expect(useScanStore.getState().cleanSummary).toBeNull()
-  })
-
-  it('setActiveCategory stores active category', () => {
-    useScanStore.getState().setActiveCategory(CleanerType.System)
-    expect(useScanStore.getState().activeCategory).toBe(CleanerType.System)
-
-    useScanStore.getState().setActiveCategory(null)
-    expect(useScanStore.getState().activeCategory).toBeNull()
   })
 
   it('addResults does not auto-select items from excluded subcategories', () => {

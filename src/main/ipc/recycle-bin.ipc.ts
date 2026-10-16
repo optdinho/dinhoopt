@@ -1,48 +1,27 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
 import type { CleanResult, ScanResult } from '@shared/types'
 import { ipcMain } from 'electron'
-import { getPlatform } from '../platform'
 import { execFileAsync, psArgs } from '../services/exec-utf8'
-import { cleanItems, scanDirectory } from '../services/file-utils'
-import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
-import { cacheItems } from '../services/scan-cache'
+import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
-export function registerRecycleBinIpc(): void {
-  // Per-invocation state — scoped to closure so no external mutation
+function emptyCleanResult(): CleanResult {
+  return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
+}
+
+export function registerRecycleBinIpc(getWindow: WindowGetter): void {
+  // Size captured by the last scan, used to report reclaimed space. Scoped to
+  // the closure so there is no external mutation.
   let lastScannedSize = 0
-  let lastScannedItemIds: string[] = []
 
-  ipcMain.handle(IPC.RECYCLE_BIN_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.RECYCLE_BIN_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('recycle-bin', 'Scanning recycle bin')
-    const trashPath = getPlatform().paths.trashPath()
 
-    if (trashPath) {
-      // macOS / Linux: scan trash directory as real files
-      try {
-        if (!existsSync(trashPath)) {
-          getLogger().info('recycle-bin', 'Trash path does not exist')
-          return []
-        }
-        const result = await scanDirectory(trashPath, CleanerType.RecycleBin, 'Trash', 0)
-        if (result.items.length > 0) {
-          cacheItems(result.items)
-          lastScannedItemIds = result.items.map((i) => i.id)
-          getLogger().success('recycle-bin', `Found ${result.items.length} items (${result.totalSize} bytes)`)
-          return [result]
-        }
-        getLogger().info('recycle-bin', 'No items found in trash')
-        return []
-      } catch (err) {
-        getLogger().error('recycle-bin', `Scan failed: ${err}`)
-        return []
-      }
-    }
-
-    // Windows: COM-based recycle bin
+    // Windows only: the recycle bin is a shell namespace queried via COM.
     try {
       const { stdout } = await execFileAsync(
         'powershell.exe',
@@ -89,39 +68,12 @@ export function registerRecycleBinIpc(): void {
     }
   })
 
-  ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (_event, itemIds?: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.RECYCLE_BIN_CLEAN, async (event): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow())) return emptyCleanResult()
     getLogger().info('recycle-bin', 'Cleaning recycle bin')
 
-    // Validate IDs when provided (macOS/Linux path uses them)
-    if (itemIds && !validateStringArray(itemIds)) {
-      getLogger().warning('recycle-bin', 'Clean skipped — invalid item IDs')
-      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
-    }
-
-    const trashPath = getPlatform().paths.trashPath()
-
-    if (trashPath) {
-      // macOS / Linux: delete cached trash items via standard file-utils flow
-      try {
-        const ids = itemIds ?? lastScannedItemIds
-        const result = await cleanItems(ids)
-        lastScannedItemIds = []
-        getLogger().success('recycle-bin', `Cleaned ${result.totalCleaned} bytes from trash`)
-        return result
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        getLogger().error('recycle-bin', `Trash clean failed: ${message}`)
-        return {
-          totalCleaned: 0,
-          filesDeleted: 0,
-          filesSkipped: 0,
-          errors: [{ path: 'Trash', reason: message }],
-          needsElevation: false,
-        }
-      }
-    }
-
-    // Windows: SHEmptyRecycleBin Win32 API
+    // Windows only: SHEmptyRecycleBin empties the whole shell namespace, so
+    // there is no per-item selection to honour.
     const sizeBeforeClean = lastScannedSize
     try {
       getLogger().info('recycle-bin', 'Emptying recycle bin...')
@@ -167,13 +119,7 @@ export function registerRecycleBinIpc(): void {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       getLogger().error('recycle-bin', `Windows clean failed: ${message}`)
-      return {
-        totalCleaned: 0,
-        filesDeleted: 0,
-        filesSkipped: 0,
-        errors: [{ path: 'Recycle Bin', reason: message }],
-        needsElevation: false,
-      }
+      return { ...emptyCleanResult(), errors: [{ path: 'Recycle Bin', reason: message }] }
     }
   })
 }

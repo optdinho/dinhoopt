@@ -13,6 +13,7 @@ import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 // ── Shortcut target resolution ──
 
@@ -116,7 +117,8 @@ function isTargetBroken(info: ShortcutInfo): boolean {
 // ── IPC registration ──
 
 export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.SHORTCUT_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.SHORTCUT_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('shortcut-cleaner', 'Scanning for broken shortcuts...')
     const results: ScanResult[] = []
     const category = CleanerType.Shortcut
@@ -189,7 +191,9 @@ export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.SHORTCUT_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.SHORTCUT_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('shortcut-cleaner', `Cleaning ${Array.isArray(itemIds) ? itemIds.length : 0} shortcut(s)...`)
     const valid = validateStringArray(itemIds)
     if (!valid) {
@@ -208,7 +212,7 @@ export function registerShortcutCleanerIpc(getWindow: WindowGetter): void {
           sizeFound: cleanedSize,
         })
     })
-    getLogger().success('shortcut-cleaner', `Cleaned ${result.totalCleaned} shortcut(s)`)
+    getLogger().success('shortcut-cleaner', `Cleaned ${result.filesDeleted} shortcut(s)`)
     return result
   })
 }

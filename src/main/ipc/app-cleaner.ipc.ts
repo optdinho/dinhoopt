@@ -8,9 +8,11 @@ import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 export function registerAppCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.APP_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.APP_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('app-cleaner', 'Starting app scan...')
     const results: ScanResult[] = []
     const category = CleanerType.App
@@ -43,7 +45,9 @@ export function registerAppCleanerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.APP_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.APP_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('app-cleaner', 'Starting app clean...')
     const valid = validateStringArray(itemIds)
     if (!valid) {

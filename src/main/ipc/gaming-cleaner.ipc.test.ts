@@ -1187,3 +1187,5 @@ describe('GAMING_SCAN handler — redist edge cases', () => {
     expect(Array.isArray(result)).toBe(true)
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

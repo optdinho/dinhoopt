@@ -10,6 +10,7 @@ import { getLogger } from '../services/logger.service'
 import { applyContextMenu } from './context-menu-cleaner/context-menu-fix'
 import { scanContextMenu } from './context-menu-cleaner/context-menu-scan'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 // ── Re-export for tests ─────────────────────────────────────────────
 
@@ -48,7 +49,8 @@ export function registerContextMenuCleanerIpc(getWindow: WindowGetter): void {
   let scanAbort: AbortController | null = null
   const scanSession: Map<string, ContextMenuEntry> = new Map()
 
-  ipcMain.handle(IPC.CONTEXT_MENU_SCAN, async (): Promise<ContextMenuScanResult> => {
+  ipcMain.handle(IPC.CONTEXT_MENU_SCAN, async (event): Promise<ContextMenuScanResult> => {
+    if (!validateSender(event, getWindow())) return { entries: [], scanDuration: 0, scanned: 0 }
     if (process.platform !== 'win32') {
       return { entries: [], scanDuration: 0, scanned: 0 }
     }
@@ -66,12 +68,14 @@ export function registerContextMenuCleanerIpc(getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.CONTEXT_MENU_SCAN_CANCEL, async () => {
+  ipcMain.handle(IPC.CONTEXT_MENU_SCAN_CANCEL, async (event) => {
+    if (!validateSender(event, getWindow())) return
     getLogger().warning('context-menu-cleaner', 'Scan cancelled by user')
     scanAbort?.abort()
   })
 
-  ipcMain.handle(IPC.CONTEXT_MENU_APPLY, async (_event, payload: unknown): Promise<ContextMenuApplyResult> => {
+  ipcMain.handle(IPC.CONTEXT_MENU_APPLY, async (event, payload: unknown): Promise<ContextMenuApplyResult> => {
+    if (!validateSender(event, getWindow())) return { succeeded: 0, failed: 0, errors: [], updates: [] }
     getLogger().info('context-menu-cleaner', 'IPC: apply requested')
     if (process.platform !== 'win32') {
       getLogger().warning('context-menu-cleaner', 'Apply skipped — not on Windows')

@@ -9,6 +9,7 @@ import { isAdmin } from '../services/elevation'
 import { execFileAsync, psUtf8, trackChildProcess } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 const MAX_DEPTH = 3
 const FILE_TYPE_MAX_DEPTH = 4
@@ -516,9 +517,10 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
 // ── IPC registration ──
 
 export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.DISK_DRIVES, () => getDrives())
+  ipcMain.handle(IPC.DISK_DRIVES, (event) => (validateSender(event, getWindow()) ? getDrives() : []))
 
-  ipcMain.handle(IPC.DISK_FILE_TYPES, async (_event, drive: string): Promise<FileTypeInfo[]> => {
+  ipcMain.handle(IPC.DISK_FILE_TYPES, async (event, drive: string): Promise<FileTypeInfo[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('disk-analyzer', `IPC: collecting file types for ${drive}`)
     const rootPath = resolveRootPath(drive)
     if (!rootPath) {
@@ -536,7 +538,8 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.DISK_ANALYZE, async (_event, drive: string): Promise<DiskNode> => {
+  ipcMain.handle(IPC.DISK_ANALYZE, async (event, drive: string): Promise<DiskNode> => {
+    if (!validateSender(event, getWindow())) return { name: '', path: '', size: 0, children: [] }
     getLogger().info('disk-analyzer', `IPC: analyzing disk ${drive}`)
     const rootPath = resolveRootPath(drive)
     if (!rootPath) {
@@ -549,7 +552,17 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
   })
 
   // Disk repair
-  ipcMain.handle(IPC.DISK_REPAIR_SFC, async (_event, drive: unknown): Promise<DiskRepairResult> => {
+  ipcMain.handle(IPC.DISK_REPAIR_SFC, async (event, drive: unknown): Promise<DiskRepairResult> => {
+    if (!validateSender(event, getWindow()))
+      return {
+        tool: 'sfc',
+        success: false,
+        exitCode: null,
+        summary: 'Invalid sender',
+        log: '',
+        requiresReboot: false,
+        needsAdmin: false,
+      }
     const safeDrive = typeof drive === 'string' && /^[A-Za-z]$/.test(drive) ? drive : 'C'
     getLogger().info('disk-analyzer', `IPC: running SFC scan on ${safeDrive}`)
     const result = await runSfc(safeDrive, getWindow)
@@ -561,7 +574,17 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
     return result
   })
 
-  ipcMain.handle(IPC.DISK_REPAIR_DISM, async (): Promise<DiskRepairResult> => {
+  ipcMain.handle(IPC.DISK_REPAIR_DISM, async (event): Promise<DiskRepairResult> => {
+    if (!validateSender(event, getWindow()))
+      return {
+        tool: 'dism',
+        success: false,
+        exitCode: null,
+        summary: 'Invalid sender',
+        log: '',
+        requiresReboot: false,
+        needsAdmin: false,
+      }
     getLogger().info('disk-analyzer', 'IPC: running DISM RestoreHealth')
     const result = await runDism(getWindow)
     if (result.success) {
@@ -572,7 +595,17 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
     return result
   })
 
-  ipcMain.handle(IPC.DISK_REPAIR_CHKDSK, async (_event, drive: unknown): Promise<DiskRepairResult> => {
+  ipcMain.handle(IPC.DISK_REPAIR_CHKDSK, async (event, drive: unknown): Promise<DiskRepairResult> => {
+    if (!validateSender(event, getWindow()))
+      return {
+        tool: 'chkdsk',
+        success: false,
+        exitCode: null,
+        summary: 'Invalid sender',
+        log: '',
+        requiresReboot: false,
+        needsAdmin: false,
+      }
     const safeDrive = typeof drive === 'string' && /^[A-Za-z]$/.test(drive) ? drive : 'C'
     getLogger().info('disk-analyzer', `IPC: running CHKDSK on ${safeDrive}`)
     const result = await runChkdsk(safeDrive, getWindow)

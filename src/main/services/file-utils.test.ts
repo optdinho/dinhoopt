@@ -905,6 +905,38 @@ describe('scanWithFileMask', () => {
     expect(result.items[1]!.selected).toBe(true)
   })
 
+  it('does not double-count the directory size when removeSelf=true', async () => {
+    // Walk sees a.log (100 B); getDirectorySize also sees the same a.log.
+    mockedReaddir.mockResolvedValue([fileEntry('a.log')])
+    mockedStat.mockImplementation(async (p: string | Buffer | URL) =>
+      String(p) === 'C:\\temp' ? mockDirStats() : mockFileStats(100, OLD),
+    )
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'Self', true)
+
+    // The 100 B file must be counted exactly once, not as file + whole dir.
+    expect(result.totalSize).toBe(100)
+    expect(result.items.reduce((sum, i) => sum + i.size, 0)).toBe(100)
+  })
+
+  it('counts leftover directory contents not matched by the mask when removeSelf=true', async () => {
+    // A 100 B matching file plus a 50 B non-matching file inside the directory.
+    mockedReaddir
+      .mockResolvedValueOnce([fileEntry('a.log'), fileEntry('b.tmp')])
+      .mockResolvedValueOnce([fileEntry('a.log'), fileEntry('b.tmp')])
+    mockedStat.mockImplementation(async (p: string | Buffer | URL) => {
+      const name = String(p)
+      if (name === 'C:\\temp') return mockDirStats()
+      return mockFileStats(name.endsWith('a.log') ? 100 : 50, OLD)
+    })
+
+    const result = await scanWithFileMask('C:\\temp', '*.log', false, CleanerType.System, 'Self', true)
+
+    // 100 (matched file) + 50 (leftover counted on the directory item) = 150.
+    expect(result.totalSize).toBe(150)
+    expect(result.items.reduce((sum, i) => sum + i.size, 0)).toBe(150)
+  })
+
   it('does not add the directory itself when removeSelf=false', async () => {
     mockedReaddir.mockResolvedValue([fileEntry('a.log')])
     mockedStat.mockResolvedValue(mockFileStats(100, OLD))

@@ -1228,3 +1228,5 @@ describe('isApplyRequestArray (indirect via IPC handler)', () => {
     })
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

@@ -7,8 +7,9 @@ import { ipcMain } from 'electron'
 import { isAdmin } from '../services/elevation'
 import { execFileAsync } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
-import { cacheItems } from '../services/scan-cache'
+import { cacheItems, getCachedItem } from '../services/scan-cache'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 const WINSXS_SUBCATEGORY = 'WinSxS Component Store'
 
@@ -73,7 +74,15 @@ async function runAnalyze(): Promise<AnalyzeResult> {
 }
 
 export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.WINSXS_ANALYZE, async (): Promise<ScanResult> => {
+  ipcMain.handle(IPC.WINSXS_ANALYZE, async (event): Promise<ScanResult> => {
+    if (!validateSender(event, getWindow()))
+      return {
+        category: CleanerType.WinSxS,
+        subcategory: WINSXS_SUBCATEGORY,
+        items: [],
+        totalSize: 0,
+        itemCount: 0,
+      }
     const logger = getLogger()
     logger.info('winsxs-cleaner', 'Analyzing WinSxS component store...')
 
@@ -167,7 +176,9 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.WINSXS_CLEAN, async (): Promise<CleanResult> => {
+  ipcMain.handle(IPC.WINSXS_CLEAN, async (event): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     const logger = getLogger()
     logger.info('winsxs-cleaner', 'Cleaning WinSxS...')
 
@@ -180,6 +191,12 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
         needsElevation: true,
       }
     }
+
+    // The reclaimable size is measured by WINSXS_ANALYZE and cached under the
+    // stable id 'winsxs'. Reuse it so the reported "space freed" is the actual
+    // number of bytes the scan advertised — not a 1/0 success flag.
+    const cachedItem = getCachedItem('winsxs')
+    const reclaimableBytes = cachedItem?.size ?? 0
 
     return new Promise((resolve) => {
       const child = spawn(
@@ -279,12 +296,18 @@ export function registerWinSxSCleanerIpc(getWindow: WindowGetter): void {
             currentPath: 'WinSxS Component Store',
             progress: 100,
             itemsFound: 1,
-            sizeFound: success ? 1 : 0,
+            sizeFound: success ? reclaimableBytes : 0,
           })
         }
 
+        // A successful cleanup frees the advertised space; zero it in the cache
+        // so a second clean without re-scanning does not report it again.
+        if (success && cachedItem) {
+          cacheItems([{ ...cachedItem, size: 0 }])
+        }
+
         resolve({
-          totalCleaned: success ? 1 : 0,
+          totalCleaned: success ? reclaimableBytes : 0,
           filesDeleted: success ? 1 : 0,
           filesSkipped: 0,
           errors: success

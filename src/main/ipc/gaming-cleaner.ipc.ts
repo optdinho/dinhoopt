@@ -13,9 +13,11 @@ import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.GAMING_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.GAMING_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('gaming-cleaner', 'Starting gaming scan...')
     const results: ScanResult[] = []
     const category = CleanerType.Gaming
@@ -79,7 +81,9 @@ export function registerGamingCleanerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.GAMING_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.GAMING_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('gaming-cleaner', 'Starting gaming clean...')
     const valid = validateStringArray(itemIds)
     if (!valid) {

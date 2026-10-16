@@ -705,6 +705,25 @@ describe('registerShortcutCleanerIpc: SHORTCUT_CLEAN', () => {
     expect(result).toEqual(mockResult)
   })
 
+  it('logs the deleted count — not the reclaimed bytes — as the number of shortcuts', async () => {
+    const success = vi.fn()
+    mockGetLogger.mockReturnValue({ info: vi.fn(), success, warning: vi.fn() })
+    mockCleanItems.mockResolvedValue({
+      totalCleaned: 4096,
+      filesDeleted: 4,
+      filesSkipped: 0,
+      errors: [],
+      needsElevation: false,
+    } as CleanResult)
+
+    registerShortcutCleanerIpc(() => null)
+    const handler = getHandler('cleaner:shortcut:clean')
+    await handler({}, ['uuid-1', 'uuid-2'])
+
+    // totalCleaned holds bytes, so the human-readable count must come from filesDeleted.
+    expect(success).toHaveBeenCalledWith('shortcut-cleaner', 'Cleaned 4 shortcut(s)')
+  })
+
   it('sends cleaning progress to the window via cleanItems callback', async () => {
     const win = mockWindow()
     let progressCallback:
@@ -748,3 +767,5 @@ describe('registerShortcutCleanerIpc: SHORTCUT_CLEAN', () => {
     )
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

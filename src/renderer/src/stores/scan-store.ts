@@ -1,4 +1,4 @@
-import { type CleanerType, ScanStatus } from '@shared/enums'
+import { ScanStatus } from '@shared/enums'
 import type { CleanSummaryData, ProgressData, ScanResult } from '@shared/types'
 import { create } from 'zustand'
 
@@ -31,23 +31,18 @@ interface ScanState {
   excludedSubcategories: Set<string>
   progress: ProgressData | null
   cleanSummary: CleanSummaryData | null
-  activeCategory: CleanerType | null
 
   setStatus: (status: ScanStatus) => void
   setResults: (results: ScanResult[]) => void
   addResults: (results: ScanResult[]) => void
   setProgress: (progress: ProgressData | null) => void
   setCleanSummary: (summary: CleanSummaryData | null) => void
-  setActiveCategory: (cat: CleanerType | null) => void
   toggleItem: (id: string) => void
   toggleSubcategory: (result: ScanResult) => void
   selectAll: (category: string) => void
   deselectAll: (category: string) => void
   toggleCategory: (category: string) => void
-  getSelectedIds: () => string[]
   getTotalSize: () => number
-  getSelectedSize: () => number
-  reset: () => void
 }
 
 export const useScanStore = create<ScanState>((set, get) => ({
@@ -57,7 +52,6 @@ export const useScanStore = create<ScanState>((set, get) => ({
   excludedSubcategories: loadExcluded(),
   progress: null,
   cleanSummary: null,
-  activeCategory: null,
 
   setStatus: (status) => set({ status }),
   setResults: (results) => {
@@ -90,7 +84,6 @@ export const useScanStore = create<ScanState>((set, get) => ({
     }),
   setProgress: (progress) => set({ progress }),
   setCleanSummary: (cleanSummary) => set({ cleanSummary }),
-  setActiveCategory: (activeCategory) => set({ activeCategory }),
   toggleItem: (id) =>
     set((s) => {
       const next = new Set(s.selectedItems)
@@ -162,21 +155,5 @@ export const useScanStore = create<ScanState>((set, get) => ({
       state.selectAll(category)
     }
   },
-  getSelectedIds: () => Array.from(get().selectedItems),
   getTotalSize: () => get().results.reduce((sum, r) => sum + r.totalSize, 0),
-  getSelectedSize: () => {
-    const selected = get().selectedItems
-    return get().results.reduce(
-      (sum, r) => sum + r.items.filter((item) => selected.has(item.id)).reduce((s, i) => s + i.size, 0),
-      0,
-    )
-  },
-  reset: () =>
-    set({
-      status: ScanStatus.Idle,
-      results: [],
-      selectedItems: new Set(),
-      progress: null,
-      cleanSummary: null,
-    }),
 }))

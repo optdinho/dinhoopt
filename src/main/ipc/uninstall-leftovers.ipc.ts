@@ -8,9 +8,11 @@ import { getLogger } from '../services/logger.service'
 import { cacheItems } from '../services/scan-cache'
 import { scanForLeftovers } from '../services/uninstall-leftovers'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 export function registerUninstallLeftoversIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.UNINSTALL_LEFTOVERS_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.UNINSTALL_LEFTOVERS_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('uninstall-leftovers', 'Starting leftovers scan')
     try {
       const results = await scanForLeftovers(getWindow)
@@ -39,7 +41,9 @@ export function registerUninstallLeftoversIpc(getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.UNINSTALL_LEFTOVERS_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.UNINSTALL_LEFTOVERS_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('uninstall-leftovers', 'Starting leftovers clean')
     const valid = validateStringArray(itemIds)
     if (!valid) {

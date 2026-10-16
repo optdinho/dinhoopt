@@ -1,6 +1,6 @@
 import { CleanerType, ScanStatus } from '@shared/enums'
 import type { CleanResult, ScanResult } from '@shared/types'
-import { FileText, Loader2, Search, ShieldAlert, Sparkles, TriangleAlert, Wifi } from 'lucide-react'
+import { FileText, Layers, Loader2, Search, ShieldAlert, Sparkles, TriangleAlert, Wifi } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CleanSummary } from '@/components/cleaner/CleanSummary'
@@ -10,7 +10,6 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { loadReport, ReportCard, type ReportData, saveReport } from '@/components/shared/ReportCard'
 import { ScanProgress } from '@/components/shared/ScanProgress'
-import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { usePlatform } from '@/hooks/usePlatform'
 import logger from '@/lib/renderer-logger'
 import { formatBytes, formatNumber } from '@/lib/utils'
@@ -19,7 +18,9 @@ import { useScanStore } from '@/stores/scan-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useStatsStore } from '@/stores/stats-store'
 import { CategoryResultsPanel } from './cleaner/CategoryResultsPanel'
-import { CLEANER_GROUPS, categories } from './cleaner/CleanerPageConstants'
+import { CLEANER_GROUPS, categories, isDeepCleanCategory } from './cleaner/CleanerPageConstants'
+
+type CleanMode = 'quick' | 'full'
 
 export function CleanerPage() {
   const { t } = useTranslation('cleaner')
@@ -29,7 +30,16 @@ export function CleanerPage() {
   const addEntry = useHistoryStore((s) => s.addEntry)
 
   const protectRecycleBin = useSettingsStore((s) => s.settings.cleaner.protectRecycleBin)
-  const visibleCategories = protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories
+  const visibleCategories = useMemo(
+    () => (protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories),
+    [protectRecycleBin],
+  )
+  // The normal scan and the quick clean skip the deep categories (WinSxS); it
+  // is analysed and cleaned only by the full clean flow.
+  const scanCategories = useMemo(
+    () => visibleCategories.filter((c) => !isDeepCleanCategory(c.type)),
+    [visibleCategories],
+  )
   const groupedCategories = useMemo(
     () =>
       CLEANER_GROUPS.map((groupKey) => ({
@@ -40,33 +50,32 @@ export function CleanerPage() {
   )
   const [activeCategory, setActiveCategory] = useState<CleanerType>(CleanerType.System)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [cleanMode, setCleanMode] = useState<CleanMode>('quick')
   const [showNetworkModal, setShowNetworkModal] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const cleanStartRef = useRef<number>(0)
+  const cleaningRef = useRef(false)
   const [scanningCategory, setScanningCategory] = useState<CleanerType | null>(null)
   const [report, setReport] = useState<ReportData | null>(() => loadReport())
 
   const scanIndexRef = useRef(0)
   const cleanIndexRef = useRef(0)
   const cleanTotalRef = useRef(1)
-  const totalCategoriesRef = useRef(visibleCategories.length)
-  totalCategoriesRef.current = visibleCategories.length
+  const totalCategoriesRef = useRef(scanCategories.length)
+  totalCategoriesRef.current = scanCategories.length
   const setProgress = useScanStore((s) => s.setProgress)
 
   useEffect(() => {
     if (!window.dinho?.onScanProgress) return
     return window.dinho.onScanProgress((data) => {
-      if (data.phase === 'cleaning') {
-        const total = Math.max(cleanTotalRef.current, 1)
-        const base = (cleanIndexRef.current / total) * 100
-        const slice = Math.min(data.progress, 100) / total
-        setProgress({ ...data, progress: Math.min(100, base + slice) })
-      } else {
-        const total = Math.max(totalCategoriesRef.current, 1)
-        const base = (scanIndexRef.current / total) * 100
-        const slice = Math.min(data.progress, 100) / total
-        setProgress({ ...data, progress: Math.min(100, base + slice) })
-      }
+      // Branch on the page's own status rather than the event phase: the WinSxS
+      // analysis emitted during a full clean reports phase 'scanning' while the
+      // page is already cleaning, which would otherwise mix the two tracks.
+      const cleaning = useScanStore.getState().status === ScanStatus.Cleaning
+      const total = Math.max(cleaning ? cleanTotalRef.current : totalCategoriesRef.current, 1)
+      const base = ((cleaning ? cleanIndexRef.current : scanIndexRef.current) / total) * 100
+      const slice = Math.min(data.progress, 100) / total
+      setProgress({ ...data, progress: Math.min(100, base + slice) })
     })
   }, [setProgress])
 
@@ -77,18 +86,18 @@ export function CleanerPage() {
     window.dinho.elevationRelaunch()
   }, [])
 
-  const handleScan = useCallback(async () => {
+  const performScan = useCallback(async (): Promise<ScanResult[]> => {
     store.setStatus(ScanStatus.Scanning)
     store.setResults([])
     setExpandedGroups(new Set())
     setFailedCategories([])
     setElevationSkipped([])
+    const collected: ScanResult[] = []
     const failed: string[] = []
     const skippedForElevation: string[] = []
     try {
       const scanFns: Partial<Record<CleanerType, () => Promise<ScanResult[]>>> = {
         [CleanerType.System]: () => window.dinho.systemScan(),
-        [CleanerType.WinSxS]: () => window.dinho.winSxSScan(),
         [CleanerType.Browser]: () => window.dinho.browserScan(),
         [CleanerType.App]: () => window.dinho.appScan(),
         [CleanerType.Gaming]: () => window.dinho.gamingScan(),
@@ -98,8 +107,8 @@ export function CleanerPage() {
         [CleanerType.Database]: () => window.dinho.databaseScan(),
         [CleanerType.UninstallLeftovers]: () => window.dinho.uninstallLeftoversScan(),
       }
-      for (let ci = 0; ci < visibleCategories.length; ci++) {
-        const cat = visibleCategories[ci]
+      for (let ci = 0; ci < scanCategories.length; ci++) {
+        const cat = scanCategories[ci]
         if (!cat) continue
         scanIndexRef.current = ci
         setScanningCategory(cat.type)
@@ -111,8 +120,11 @@ export function CleanerPage() {
           if (elevationMarker?.group) {
             skippedForElevation.push(...elevationMarker.group.split(', '))
           }
-          store.addResults(results.filter((r) => r.subcategory !== '__elevation_required'))
-        } catch {
+          const clean = results.filter((r) => r.subcategory !== '__elevation_required')
+          store.addResults(clean)
+          collected.push(...clean)
+        } catch (err) {
+          logger.error('CleanerPage', `Scan failed for category ${cat.type}`, err)
           failed.push(t(cat.labelKey))
         }
       }
@@ -120,59 +132,119 @@ export function CleanerPage() {
       if (skippedForElevation.length > 0) setElevationSkipped(skippedForElevation)
       setScanningCategory(null)
       store.setStatus(ScanStatus.Complete)
-    } catch {
+    } catch (err) {
+      logger.error('CleanerPage', 'Scan failed', err)
       setScanningCategory(null)
       store.setStatus(ScanStatus.Error)
     }
     store.setProgress(null)
-  }, [store, visibleCategories, t])
+    return collected
+  }, [store, scanCategories, t])
 
-  const handleClean = useCallback(async () => {
-    setShowConfirm(false)
-    store.setStatus(ScanStatus.Cleaning)
-    cleanStartRef.current = Date.now()
-    try {
-      const selectedIds = store.getSelectedIds()
-      const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<CleanResult>>> = {
-        [CleanerType.System]: (ids) => window.dinho.systemClean(ids),
-        [CleanerType.WinSxS]: () => window.dinho.winSxSClean(),
-        [CleanerType.Browser]: (ids) => window.dinho.browserClean(ids),
-        [CleanerType.App]: (ids) => window.dinho.appClean(ids),
-        [CleanerType.Gaming]: (ids) => window.dinho.gamingClean(ids),
-        [CleanerType.RecycleBin]: () => window.dinho.recycleBinClean(),
-        [CleanerType.Shortcut]: (ids) => window.dinho.shortcutClean(ids),
-        [CleanerType.Environment]: (ids) => window.dinho.environmentClean(ids),
-        [CleanerType.Database]: (ids) => window.dinho.databaseClean(ids),
-        [CleanerType.UninstallLeftovers]: (ids) => window.dinho.uninstallLeftoversClean(ids),
-      }
-      let totalCleaned = 0
-      let totalFiles = 0
-      let totalSkipped = 0
-      let anyNeedsElevation = false
-      const allErrors: { path: string; reason: string }[] = []
-      const categoryBreakdown: Array<{ name: string; type: string; found: number; cleaned: number; space: number }> = []
+  const handleScan = useCallback(() => {
+    void performScan()
+  }, [performScan])
 
-      const activeCount = visibleCategories.filter((cat) => {
-        const catItems = store.results.filter((r) => r.category === cat.type).flatMap((r) => r.items)
-        return catItems.some((item) => selectedIds.includes(item.id))
-      }).length
-      cleanTotalRef.current = Math.max(activeCount, 1)
-      let activeIndex = 0
+  const requestClean = useCallback((mode: CleanMode) => {
+    setCleanMode(mode)
+    setShowConfirm(true)
+  }, [])
 
-      store.setProgress({ phase: 'cleaning', category: '', currentPath: '', progress: 0, itemsFound: 0, sizeFound: 0 })
+  const runClean = useCallback(
+    async (mode: CleanMode) => {
+      // Guard against a second run while one is in flight: the confirm button
+      // stays clickable during the dialog's exit animation.
+      if (cleaningRef.current) return
+      cleaningRef.current = true
+      setShowConfirm(false)
+      store.setStatus(ScanStatus.Cleaning)
+      cleanStartRef.current = Date.now()
+      try {
+        let results = store.results
+        if (mode === 'full') {
+          // A full clean must cover every category. If the light categories were
+          // never analysed (e.g. a machine whose only reclaimable data is WinSxS)
+          // run the normal scan first, then add the deep category.
+          if (store.status !== ScanStatus.Complete) {
+            results = await performScan()
+          }
+          try {
+            const deepRaw = await window.dinho.winSxSScan()
+            const elevationMarker = deepRaw.find((r) => r.subcategory === '__elevation_required')
+            if (elevationMarker?.group) {
+              const skipped = elevationMarker.group.split(', ')
+              setElevationSkipped((prev) => [...prev, ...skipped])
+            }
+            const deepResults = deepRaw.filter((r) => r.subcategory !== '__elevation_required')
+            store.addResults(deepResults)
+            results = [...results, ...deepResults]
+          } catch (err) {
+            logger.error('CleanerPage', 'WinSxS analyse failed', err)
+          }
+        }
 
-      for (let ci = 0; ci < visibleCategories.length; ci++) {
-        const cat = visibleCategories[ci]
-        if (!cat) continue
-        const catResults = store.results.filter((r) => r.category === cat.type)
-        const catItemsAll = catResults.flatMap((r) => r.items)
-        const catItemIds = catItemsAll.filter((item) => selectedIds.includes(item.id)).map((item) => item.id)
-        if (catItemIds.length > 0) {
+        // Merge by (category, subcategory) so a re-run full clean — whose store
+        // already holds the previous WinSxS entry — does not process it twice.
+        const byKey = new Map<string, ScanResult>()
+        for (const r of results) byKey.set(`${r.category}:${r.subcategory}`, r)
+        results = [...byKey.values()]
+
+        const cleanCategories =
+          mode === 'quick' ? visibleCategories.filter((c) => !isDeepCleanCategory(c.type)) : visibleCategories
+
+        const cleanFns: Partial<Record<CleanerType, (ids: string[]) => Promise<CleanResult>>> = {
+          [CleanerType.System]: (ids) => window.dinho.systemClean(ids),
+          [CleanerType.WinSxS]: () => window.dinho.winSxSClean(),
+          [CleanerType.Browser]: (ids) => window.dinho.browserClean(ids),
+          [CleanerType.App]: (ids) => window.dinho.appClean(ids),
+          [CleanerType.Gaming]: (ids) => window.dinho.gamingClean(ids),
+          [CleanerType.RecycleBin]: () => window.dinho.recycleBinClean(),
+          [CleanerType.Shortcut]: (ids) => window.dinho.shortcutClean(ids),
+          [CleanerType.Environment]: (ids) => window.dinho.environmentClean(ids),
+          [CleanerType.Database]: (ids) => window.dinho.databaseClean(ids),
+          [CleanerType.UninstallLeftovers]: (ids) => window.dinho.uninstallLeftoversClean(ids),
+        }
+        let totalCleaned = 0
+        let totalFiles = 0
+        let totalSkipped = 0
+        let anyNeedsElevation = false
+        const allErrors: { path: string; reason: string }[] = []
+        const categoryBreakdown: Array<{
+          name: string
+          type: string
+          found: number
+          cleaned: number
+          space: number
+        }> = []
+
+        // Clean every found item except the subcategories the user unchecked
+        // (those are persisted exclusions, shared with the Dashboard one-click
+        // clean). Per-item selection is not an opt-in list.
+        const isExcluded = (r: ScanResult) => store.excludedSubcategories.has(`${r.category}:${r.subcategory}`)
+        const activeCount = cleanCategories.filter((cat) =>
+          results.some((r) => r.category === cat.type && !isExcluded(r) && r.items.length > 0),
+        ).length
+        cleanTotalRef.current = Math.max(activeCount, 1)
+        let activeIndex = 0
+
+        store.setProgress({
+          phase: 'cleaning',
+          category: '',
+          currentPath: '',
+          progress: 0,
+          itemsFound: 0,
+          sizeFound: 0,
+        })
+
+        for (const cat of cleanCategories) {
+          const catResults = results.filter((r) => r.category === cat.type && !isExcluded(r))
+          const catItemsAll = catResults.flatMap((r) => r.items)
+          if (catItemsAll.length === 0) continue
           cleanIndexRef.current = activeIndex
           try {
             const cleanFn = cleanFns[cat.type]
             if (!cleanFn) continue
-            const result = await cleanFn(catItemIds)
+            const result = await cleanFn(catItemsAll.map((item) => item.id))
             if (result) {
               totalCleaned += result.totalCleaned || 0
               totalFiles += result.filesDeleted || 0
@@ -189,68 +261,77 @@ export function CleanerPage() {
             }
           } catch (err) {
             logger.error('CleanerPage', `Clean failed for category ${cat.type}`, err)
+            // Surface the failure instead of dropping the category silently:
+            // count it as an error and keep it in the breakdown with 0 cleaned.
+            allErrors.push({
+              path: t(cat.labelKey),
+              reason: err instanceof Error ? err.message : String(err),
+            })
+            categoryBreakdown.push({
+              name: t(cat.labelKey),
+              type: cat.type,
+              found: catItemsAll.length,
+              cleaned: 0,
+              space: 0,
+            })
           }
           activeIndex++
-        } else if (catItemsAll.length > 0) {
-          categoryBreakdown.push({
-            name: t(cat.labelKey),
-            type: cat.type,
-            found: catItemsAll.length,
-            cleaned: 0,
-            space: 0,
-          })
         }
-      }
 
-      const totalFound = store.results.reduce((s, r) => s + r.itemCount, 0)
-      const duration = Date.now() - cleanStartRef.current
-      await addEntry({
-        id: Date.now().toString(),
-        type: 'cleaner',
-        timestamp: new Date().toISOString(),
-        duration,
-        totalItemsFound: totalFound,
-        totalItemsCleaned: totalFiles,
-        totalItemsSkipped: totalSkipped,
-        totalSpaceSaved: totalCleaned,
-        categories: categoryBreakdown.map((d) => ({
-          name: d.name,
-          itemsFound: d.found,
-          itemsCleaned: d.cleaned,
-          spaceSaved: d.space,
-        })),
-        errorCount: allErrors.length,
-      })
-      recomputeStats()
+        const totalFound = results.reduce((s, r) => s + r.itemCount, 0)
+        const duration = Date.now() - cleanStartRef.current
+        await addEntry({
+          id: Date.now().toString(),
+          type: 'cleaner',
+          timestamp: new Date().toISOString(),
+          duration,
+          totalItemsFound: totalFound,
+          totalItemsCleaned: totalFiles,
+          totalItemsSkipped: totalSkipped,
+          totalSpaceSaved: totalCleaned,
+          categories: categoryBreakdown.map((d) => ({
+            name: d.name,
+            itemsFound: d.found,
+            itemsCleaned: d.cleaned,
+            spaceSaved: d.space,
+          })),
+          errorCount: allErrors.length,
+        })
+        recomputeStats()
 
-      const totalSizeBefore = store.getTotalSize()
-      store.setCleanSummary({
-        totalCleaned,
-        filesDeleted: totalFiles,
-        filesSkipped: totalSkipped,
-        errors: allErrors,
-        needsElevation: anyNeedsElevation,
-        categories: categoryBreakdown,
-        duration,
-        totalSizeBefore,
-      })
-      const reportData: ReportData = {
-        timestamp: new Date().toISOString(),
-        spaceBefore: totalSizeBefore,
-        spaceAfter: totalSizeBefore - totalCleaned,
-        spaceFreed: totalCleaned,
-        filesDeleted: totalFiles,
-        duration,
-        categories: categoryBreakdown,
+        const totalSizeBefore = store.getTotalSize()
+        store.setCleanSummary({
+          totalCleaned,
+          filesDeleted: totalFiles,
+          filesSkipped: totalSkipped,
+          errors: allErrors,
+          needsElevation: anyNeedsElevation,
+          categories: categoryBreakdown,
+          duration,
+          totalSizeBefore,
+        })
+        const reportData: ReportData = {
+          timestamp: new Date().toISOString(),
+          spaceBefore: totalSizeBefore,
+          spaceAfter: totalSizeBefore - totalCleaned,
+          spaceFreed: totalCleaned,
+          filesDeleted: totalFiles,
+          duration,
+          categories: categoryBreakdown,
+        }
+        saveReport(reportData)
+        setReport(reportData)
+        store.setStatus(ScanStatus.Complete)
+      } catch (err) {
+        logger.error('CleanerPage', 'Clean failed', err)
+        store.setStatus(ScanStatus.Error)
+      } finally {
+        cleaningRef.current = false
       }
-      saveReport(reportData)
-      setReport(reportData)
-      store.setStatus(ScanStatus.Complete)
-    } catch {
-      store.setStatus(ScanStatus.Error)
-    }
-    store.setProgress(null)
-  }, [store, t, visibleCategories, addEntry, recomputeStats])
+      store.setProgress(null)
+    },
+    [store, t, visibleCategories, addEntry, recomputeStats, performScan],
+  )
 
   const toggleGroup = (key: string) => {
     setExpandedGroups((prev) => {
@@ -264,8 +345,6 @@ export function CleanerPage() {
   const toggleSubcategorySelection = (result: ScanResult) => {
     store.toggleSubcategory(result)
   }
-
-  const selectedCount = useMemo(() => store.getSelectedIds().length, [store])
 
   const isScanning = store.status === ScanStatus.Scanning
   const isCleaning = store.status === ScanStatus.Cleaning
@@ -290,8 +369,8 @@ export function CleanerPage() {
             </button>
             <button
               type="button"
-              onClick={() => setShowConfirm(true)}
-              disabled={!hasResults || isScanning || isCleaning || store.getSelectedIds().length === 0}
+              onClick={() => requestClean('quick')}
+              disabled={!hasResults || isScanning || isCleaning}
               className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-30"
               style={{
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
@@ -300,7 +379,17 @@ export function CleanerPage() {
               }}
             >
               <Sparkles className="h-4 w-4" strokeWidth={2} />
-              {t('cleanButton')}
+              {t('quickCleanButton')}
+            </button>
+            <button
+              type="button"
+              onClick={() => requestClean('full')}
+              disabled={isScanning || isCleaning}
+              className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all disabled:opacity-40"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-medium)' }}
+            >
+              <Layers className="h-4 w-4" strokeWidth={1.8} />
+              {t('fullCleanButton')}
             </button>
           </div>
         }
@@ -321,12 +410,6 @@ export function CleanerPage() {
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                 {t('itemsCount', { count: formatNumber(store.results.reduce((s, r) => s + r.itemCount, 0)) })}
               </p>
-              <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
-                  {t('selectedLabel')}
-                </p>
-                <p className="text-[15px] font-semibold text-zinc-200">{formatBytes(store.getSelectedSize())}</p>
-              </div>
             </div>
           )}
 
@@ -500,26 +583,15 @@ export function CleanerPage() {
         </div>
       </div>
 
-      <StickyActionBar
-        selectedCount={selectedCount}
-        totalLabel={t('itemsSelected')}
-        onAction={() => setShowConfirm(true)}
-        actionLabel={t('cleanButton')}
-        actionIcon={Sparkles}
-      />
-
       <NetworkCleanupModal open={showNetworkModal} onClose={() => setShowNetworkModal(false)} />
 
       <ConfirmDialog
         open={showConfirm}
-        onConfirm={handleClean}
+        onConfirm={() => runClean(cleanMode)}
         onCancel={() => setShowConfirm(false)}
-        title={t('confirmCleanTitle')}
-        description={t('confirmCleanDescription', {
-          count: formatNumber(selectedCount),
-          size: formatBytes(store.getSelectedSize()),
-        })}
-        confirmLabel={t('confirmCleanLabel')}
+        title={t(cleanMode === 'full' ? 'confirmFullCleanTitle' : 'confirmQuickCleanTitle')}
+        description={t(cleanMode === 'full' ? 'confirmFullCleanDescription' : 'confirmQuickCleanDescription')}
+        confirmLabel={t(cleanMode === 'full' ? 'confirmFullCleanLabel' : 'confirmQuickCleanLabel')}
         variant="warning"
       />
     </div>

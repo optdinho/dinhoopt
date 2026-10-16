@@ -32,6 +32,7 @@ import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
 import { cacheItems, getCachedItem } from '../services/scan-cache'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 /** Check if a file is a valid SQLite database by reading the magic header */
 function isSqliteFile(filePath: string): boolean {
@@ -80,7 +81,8 @@ function resolveProfileDirs(basePath: string, target: DatabaseTarget): string[] 
 }
 
 export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.DATABASE_SCAN, async (): Promise<ScanResult[]> => {
+  ipcMain.handle(IPC.DATABASE_SCAN, async (event): Promise<ScanResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('database-optimizer', 'Starting database scan...')
     const results: ScanResult[] = []
     const category = CleanerType.Database
@@ -166,7 +168,9 @@ export function registerDatabaseOptimizerIpc(getWindow: WindowGetter): void {
     return results
   })
 
-  ipcMain.handle(IPC.DATABASE_CLEAN, async (_event, itemIds: string[]): Promise<CleanResult> => {
+  ipcMain.handle(IPC.DATABASE_CLEAN, async (event, itemIds: string[]): Promise<CleanResult> => {
+    if (!validateSender(event, getWindow()))
+      return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     getLogger().info('database-optimizer', 'Starting database clean...')
     const valid = validateStringArray(itemIds)
     if (!valid) {

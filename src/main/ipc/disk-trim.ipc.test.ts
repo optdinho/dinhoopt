@@ -952,3 +952,5 @@ describe('DISK_TRIM_RUN handler — mutex and progress', () => {
     expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ phase: 'done' }))
   })
 })
+
+vi.mock('./sender-validation', () => ({ validateSender: () => true }))

@@ -11,6 +11,7 @@ import type {
 import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { getLogger } from '../services/logger.service'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 let cancelled = false
 
@@ -188,7 +189,8 @@ async function findEmptyFolders(
 }
 
 export function registerEmptyFolderCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.EMPTY_FOLDERS_SELECT_DIR, async () => {
+  ipcMain.handle(IPC.EMPTY_FOLDERS_SELECT_DIR, async (event) => {
+    if (!validateSender(event, getWindow())) return null
     getLogger().info('empty-folder-cleaner', 'Opening directory selection dialog')
     const win = getWindow()
     if (!win) return null
@@ -203,18 +205,20 @@ export function registerEmptyFolderCleanerIpc(getWindow: WindowGetter): void {
   })
 
   // Cancel
-  ipcMain.handle(IPC.EMPTY_FOLDERS_CANCEL, () => {
+  ipcMain.handle(IPC.EMPTY_FOLDERS_CANCEL, (event) => {
+    if (!validateSender(event, getWindow())) return
     getLogger().warning('empty-folder-cleaner', 'Scan cancelled by user')
     cancelled = true
   })
 
   // Scan
-  ipcMain.handle(IPC.EMPTY_FOLDERS_SCAN, async (_event, options: unknown): Promise<EmptyFolderScanResult> => {
+  ipcMain.handle(IPC.EMPTY_FOLDERS_SCAN, async (event, options: unknown): Promise<EmptyFolderScanResult> => {
     cancelled = false
     const startTime = Date.now()
     const win = getWindow()
     const emptyResult: EmptyFolderScanResult = { folders: [], totalFoldersScanned: 0, duration: 0, cancelled: false }
 
+    if (!validateSender(event, getWindow())) return emptyResult
     if (!options || typeof options !== 'object') {
       getLogger().warning('empty-folder-cleaner', 'Scan called with invalid options')
       return emptyResult
@@ -276,7 +280,8 @@ export function registerEmptyFolderCleanerIpc(getWindow: WindowGetter): void {
   // Delete — always uses recycle bin for safety (rmdir only works on truly empty dirs)
   ipcMain.handle(
     IPC.EMPTY_FOLDERS_DELETE,
-    async (_event, paths: unknown, mode: unknown): Promise<EmptyFolderDeleteResult> => {
+    async (event, paths: unknown, mode: unknown): Promise<EmptyFolderDeleteResult> => {
+      if (!validateSender(event, getWindow())) return { deleted: 0, failed: 0, errors: [] }
       if (!Array.isArray(paths)) {
         getLogger().warning('empty-folder-cleaner', 'Delete called with non-array paths')
         return { deleted: 0, failed: 0, errors: [] }
@@ -331,7 +336,8 @@ export function registerEmptyFolderCleanerIpc(getWindow: WindowGetter): void {
   )
 
   // Open folder location
-  ipcMain.handle(IPC.EMPTY_FOLDERS_OPEN_LOCATION, (_event, folderPath: unknown) => {
+  ipcMain.handle(IPC.EMPTY_FOLDERS_OPEN_LOCATION, (event, folderPath: unknown) => {
+    if (!validateSender(event, getWindow())) return
     getLogger().info('empty-folder-cleaner', `Opening folder location: ${folderPath}`)
     if (typeof folderPath !== 'string' || !isAbsolute(folderPath)) return
     shell.showItemInFolder(folderPath)

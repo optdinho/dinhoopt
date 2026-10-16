@@ -481,16 +481,21 @@ export async function scanWithFileMask(
       const dirStats = await lstat(dirPath)
       if (dirStats.isDirectory()) {
         const dirSize = await getDirectorySize(dirPath, 10)
+        // The walk above already counted the matching files inside this
+        // directory. Only the remainder is not yet accounted for, so adding the
+        // full directory size here would count those bytes twice — both in
+        // `totalSize` and in the per-item sizes the renderer sums.
+        const remaining = Math.max(0, dirSize - totalSize)
         items.push({
           id: nextItemId(),
           path: dirPath,
-          size: dirSize,
+          size: remaining,
           category,
           subcategory,
           lastModified: dirStats.mtimeMs,
           selected: true,
         })
-        totalSize += dirSize
+        totalSize += remaining
       }
     } catch {
       // Directory doesn't exist — nothing to add

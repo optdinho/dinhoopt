@@ -80,7 +80,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerBrowserCleanerIpc(getWindow)
   registerAppCleanerIpc(getWindow)
   registerGamingCleanerIpc(getWindow)
-  registerRecycleBinIpc()
+  registerRecycleBinIpc(getWindow)
   registerShortcutCleanerIpc(getWindow)
   registerEnvironmentCleanerIpc(getWindow)
   registerDatabaseOptimizerIpc(getWindow)

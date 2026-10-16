@@ -8,6 +8,7 @@ import { execFileAsync, psUtf8, trackChildProcess } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
 import { getLastTrimAt, isThrottled, setLastTrimAt } from '../services/trim-history-store'
 import type { WindowGetter } from './index'
+import { validateSender } from './sender-validation'
 
 // Module-level mutex: only one TRIM batch may run at a time.
 let runningBatch = false
@@ -423,14 +424,16 @@ export async function runTrimForDrive(
 // ── IPC registration ──
 
 export function registerDiskTrimIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.DISK_TRIM_LIST, async () => {
+  ipcMain.handle(IPC.DISK_TRIM_LIST, async (event) => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('disk-trim', 'IPC: listing TRIM drives')
     const drives = await listTrimDrives()
     getLogger().success('disk-trim', `IPC: returned ${drives.length} TRIM drive(s)`)
     return drives
   })
 
-  ipcMain.handle(IPC.DISK_TRIM_RUN, async (_event, driveIds: unknown): Promise<TrimRunResult[]> => {
+  ipcMain.handle(IPC.DISK_TRIM_RUN, async (event, driveIds: unknown): Promise<TrimRunResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     if (!Array.isArray(driveIds)) {
       getLogger().warning('disk-trim', 'IPC: TRIM run called with non-array driveIds')
       return []

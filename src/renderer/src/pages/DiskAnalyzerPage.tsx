@@ -1,6 +1,6 @@
 import type { DiskNode } from '@shared/types'
 import { ChevronRight, File, FileType2, Folder, HardDrive, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -29,6 +29,10 @@ export function DiskAnalyzerPage() {
   const fileTypesLoading = useDiskStore((s) => s.fileTypesLoading)
   const store = useDiskStore()
   const [viewMode, setViewMode] = useState<ViewMode>('folders')
+  // Tracks the analyzed root for which a file-type scan was already requested,
+  // so an empty result (or a stale store identity) cannot re-trigger the effect
+  // in a loop. A new analysis replaces `data`, allowing exactly one rescan.
+  const fileTypesScannedFor = useRef<DiskNode | null>(null)
 
   useEffect(() => {
     if (drives.length === 0) {
@@ -85,12 +89,14 @@ export function DiskAnalyzerPage() {
     store.setFileTypesLoading(false)
   }, [store, t, selectedDrive, isWin])
 
-  // Auto-scan file types when switching to that view if not already loaded
+  // Auto-scan file types when switching to that view if not already loaded.
+  // Guarded by `fileTypesScannedFor` so an empty result never loops.
   useEffect(() => {
-    if (viewMode === 'filetypes' && fileTypes.length === 0 && !fileTypesLoading && data) {
+    if (viewMode === 'filetypes' && !fileTypesLoading && data && fileTypesScannedFor.current !== data) {
+      fileTypesScannedFor.current = data
       handleFileTypeScan()
     }
-  }, [viewMode, fileTypes, fileTypesLoading, data, handleFileTypeScan])
+  }, [viewMode, fileTypesLoading, data, handleFileTypeScan])
 
   const currentNode = breadcrumb[breadcrumb.length - 1] ?? data
   const treemapData = useMemo(() => {

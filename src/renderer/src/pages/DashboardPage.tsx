@@ -158,7 +158,7 @@ export function DashboardPage() {
         setPhaseLabel(t('phaseLabelScanningType', { type }))
         const results = await scan()
         const selectedIds = results
-          .filter((r) => !excludedSubcategories.has(r.subcategory))
+          .filter((r) => !excludedSubcategories.has(`${r.category}:${r.subcategory}`))
           .flatMap((r) => r.items.map((i) => i.id))
         if (selectedIds.length > 0) {
           setPhaseLabel(t('phaseLabelCleaningType', { type }))
