@@ -24,6 +24,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.cjs",
+    "test:harness": "vitest run --config vitest.harness.config.mts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
