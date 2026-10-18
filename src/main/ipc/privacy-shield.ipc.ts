@@ -28,7 +28,10 @@ function sendProgress(win: BrowserWindow | null, data: object): void {
 }
 
 export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.PRIVACY_SCAN, () => {
+  ipcMain.handle(IPC.PRIVACY_SCAN, (event) => {
+    if (!validateSender(event, getWindow())) {
+      return { settings: [], score: 0, total: 0, protected: 0 }
+    }
     getLogger().info('privacy-shield', 'Starting privacy scan...')
     return scanPrivacy((data) => {
       sendProgress(getWindow(), data)
@@ -39,16 +42,16 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
   })
 
   ipcMain.handle(IPC.PRIVACY_APPLY, async (event, ids: string[]) => {
-    if (!validateSender(event, getWindow())) return { succeeded: 0, failed: 0, errors: ['Invalid sender'] }
+    if (!validateSender(event, getWindow())) return { succeeded: 0, failed: 0, skipped: 0, errors: [] }
     getLogger().info('privacy-shield', `Starting privacy apply for ${ids.length} setting(s)...`)
     if (!isAdmin()) {
       getLogger().warning('privacy-shield', 'Admin elevation required for privacy apply')
-      return { succeeded: 0, failed: ids.length, errors: [] }
+      return { succeeded: 0, failed: ids.length, skipped: 0, errors: [] }
     }
     const valid = validateStringArray(ids, 1_000)
     if (!valid) {
       getLogger().warning('privacy-shield', 'Invalid IDs received for privacy apply')
-      return { succeeded: 0, failed: 0, errors: [] }
+      return { succeeded: 0, failed: 0, skipped: 0, errors: [] }
     }
     return applyPrivacySettings(valid).then((result) => {
       if (result.failed > 0) {
@@ -80,16 +83,17 @@ export function registerPrivacyShieldIpc(getWindow: WindowGetter): void {
     })
   })
 
-  ipcMain.handle(IPC.PRIVACY_REVERT, async (_event, ids: string[]) => {
+  ipcMain.handle(IPC.PRIVACY_REVERT, async (event, ids: string[]) => {
+    if (!validateSender(event, getWindow())) return { succeeded: 0, failed: 0, skipped: 0, errors: [] }
     getLogger().info('privacy-shield', `Starting privacy revert for ${ids.length} setting(s)...`)
     if (!isAdmin()) {
       getLogger().warning('privacy-shield', 'Admin elevation required for privacy revert')
-      return { succeeded: 0, failed: ids.length, errors: [] }
+      return { succeeded: 0, failed: ids.length, skipped: 0, errors: [] }
     }
     const valid = validateStringArray(ids, 1_000)
     if (!valid) {
       getLogger().warning('privacy-shield', 'Invalid IDs received for privacy revert')
-      return { succeeded: 0, failed: 0, errors: [] }
+      return { succeeded: 0, failed: 0, skipped: 0, errors: [] }
     }
     return revertPrivacySettings(valid).then((result) => {
       if (result.failed > 0) {

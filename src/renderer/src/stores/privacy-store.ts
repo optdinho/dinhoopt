@@ -15,9 +15,6 @@ interface PrivacyStoreState {
   toggleCategory: (id: string) => void
   setProgress: (progress: PrivacyScanProgress | null) => void
   reset: () => void
-  scan: () => Promise<void>
-  apply: (ids: string[]) => Promise<void>
-  revert: (ids: string[]) => Promise<void>
 }
 
 export const usePrivacyStore = create<PrivacyStoreState>((set) => ({
@@ -46,43 +43,4 @@ export const usePrivacyStore = create<PrivacyStoreState>((set) => ({
       expandedCategories: new Set<string>(),
       progress: null,
     }),
-
-  scan: async () => {
-    set({ status: 'scanning', progress: null })
-
-    const cleanup = window.dinho.onPrivacyProgress((data) => {
-      set({ progress: data })
-    })
-
-    try {
-      const shieldState = await window.dinho.privacyScan()
-      set({ state: shieldState, status: 'done' })
-    } catch {
-      set({ status: 'idle' })
-    } finally {
-      cleanup()
-    }
-  },
-
-  apply: async (ids) => {
-    set({ status: 'applying', applyResult: null })
-    try {
-      const result = await window.dinho.privacyApply(ids)
-      const updated = await window.dinho.privacyScan()
-      set({ state: updated, applyResult: result, status: 'done' })
-    } catch {
-      set({ status: 'done' })
-    }
-  },
-
-  revert: async (ids) => {
-    set({ status: 'applying', applyResult: null })
-    try {
-      const result = await window.dinho.privacyRevert(ids)
-      const updated = await window.dinho.privacyScan()
-      set({ state: updated, applyResult: result, status: 'done' })
-    } catch {
-      set({ status: 'done' })
-    }
-  },
 }))

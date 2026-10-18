@@ -57,7 +57,7 @@
   "optSysPowerPlan": "Plano de energia de elevado desempenho",
   "optSysPowerPlanDesc": "Muda para o perfil de energia de desempenho máximo",
   "optSysPreventSleep": "Impedir suspensão",
-  "optSysPreventSleepDesc": "Mantém o tela ligado e impede a suspensão do sistema",
+  "optSysPreventSleepDesc": "Mantém a tela ligada e impede a suspensão do sistema",
   "optSysGameBar": "Desativar Game Bar / DVR",
   "optSysGameBarDesc": "Desativa a sobreposição Xbox Game Bar e a gravação em segundo plano",
   "optSysFseOpt": "Desativar otimizações de tela inteiro",

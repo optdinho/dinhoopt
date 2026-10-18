@@ -1,9 +1,11 @@
+import type { PrivacyApplyResult, PrivacySetting } from '@shared/types'
 import { CircleCheckBig, Eye, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { PrivacyApplyResultBanner } from '@/components/privacy/PrivacyApplyResultBanner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
@@ -42,6 +44,8 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
     onError: () => {
       usePrivacyStore.getState().setStatus('idle')
     },
+    errorKey: 'privacy',
+    t,
   })
 
   // Auto-scan on first visit (empty state)
@@ -65,13 +69,35 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
     const startTime = Date.now()
     store.setStatus('applying')
     store.setApplyResult(null)
+
+    let result: PrivacyApplyResult
     try {
-      const result = await window.dinho.privacyApply(unprotectedIds)
-      usePrivacyStore.getState().setApplyResult(result)
+      result = await window.dinho.privacyApply(unprotectedIds)
+    } catch (err) {
+      logger.error('PrivacyShieldPage', 'Privacy apply failed', err)
+      usePrivacyStore.getState().setApplyResult({
+        succeeded: 0,
+        failed: unprotectedIds.length,
+        skipped: 0,
+        errors: [{ id: '', label: t('privacy.allSettingsLabel'), reason: t('privacy.ipcCallFailed') }],
+      })
+      usePrivacyStore.getState().setStatus('done')
+      return
+    }
+
+    usePrivacyStore.getState().setApplyResult(result)
+    usePrivacyStore.getState().setStatus('done')
+
+    // Everything below is best-effort: a failed refresh or history write must
+    // never overwrite the real apply result reported above.
+    try {
       const updated = await window.dinho.privacyScan()
       usePrivacyStore.getState().setState(updated)
-      usePrivacyStore.getState().setStatus('done')
+    } catch (err) {
+      logger.error('PrivacyShieldPage', 'Privacy rescan after apply failed', err)
+    }
 
+    try {
       const catMap: Record<string, { found: number; applied: number }> = {}
       for (const id of unprotectedIds) {
         const setting = store.state!.settings.find((s) => s.id === id)
@@ -107,14 +133,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
         errorCount: result.failed,
       })
     } catch (err) {
-      logger.error('PrivacyShieldPage', 'Privacy apply failed', err)
-      usePrivacyStore.getState().setApplyResult({
-        succeeded: 0,
-        failed: unprotectedIds.length,
-        skipped: 0,
-        errors: [{ id: '', label: t('privacy.allSettingsLabel'), reason: t('privacy.ipcCallFailed') }],
-      })
-      usePrivacyStore.getState().setStatus('done')
+      logger.error('PrivacyShieldPage', 'Privacy history entry failed', err)
     }
   }, [t])
 
@@ -128,25 +147,48 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
       const startTime = Date.now()
       store.setStatus('applying')
       store.setApplyResult(null)
+
+      let result: PrivacyApplyResult
       try {
-        const result = await window.dinho.privacyApply(ids)
-        usePrivacyStore.getState().setApplyResult(result)
+        result = await window.dinho.privacyApply(ids)
+      } catch (err) {
+        logger.error('PrivacyShieldPage', 'Privacy apply failed', err)
+        toast.error(t('privacy.applyFailed'), { description: t('privacy.applyFailedDescription') })
+        usePrivacyStore.getState().setApplyResult({
+          succeeded: 0,
+          failed: ids.length,
+          skipped: 0,
+          errors: [{ id: '', label: categoryId, reason: t('privacy.ipcCallFailed') }],
+        })
+        usePrivacyStore.getState().setStatus('done')
+        return
+      }
+
+      usePrivacyStore.getState().setApplyResult(result)
+      usePrivacyStore.getState().setStatus('done')
+
+      if (result.succeeded > 0)
+        toast.success(
+          t(result.succeeded > 1 ? 'privacy.settingsAppliedToastPlural' : 'privacy.settingsAppliedToast', {
+            count: result.succeeded,
+          }),
+        )
+      if (result.failed > 0)
+        toast.error(
+          t(result.failed > 1 ? 'privacy.settingsFailedToastPlural' : 'privacy.settingsFailedToast', {
+            count: result.failed,
+          }),
+        )
+
+      // Best-effort post-apply work: never overwrite the result above.
+      try {
         const updated = await window.dinho.privacyScan()
         usePrivacyStore.getState().setState(updated)
-        usePrivacyStore.getState().setStatus('done')
-        if (result.succeeded > 0)
-          toast.success(
-            t(result.succeeded > 1 ? 'privacy.settingsAppliedToastPlural' : 'privacy.settingsAppliedToast', {
-              count: result.succeeded,
-            }),
-          )
-        if (result.failed > 0)
-          toast.error(
-            t(result.failed > 1 ? 'privacy.settingsFailedToastPlural' : 'privacy.settingsFailedToast', {
-              count: result.failed,
-            }),
-          )
+      } catch (err) {
+        logger.error('PrivacyShieldPage', 'Privacy rescan after apply failed', err)
+      }
 
+      try {
         await useHistoryStore.getState().addEntry({
           id: Date.now().toString(),
           type: 'privacy',
@@ -160,15 +202,7 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
           errorCount: result.failed,
         })
       } catch (err) {
-        logger.error('PrivacyShieldPage', 'Privacy apply failed', err)
-        toast.error(t('privacy.applyFailed'), { description: t('privacy.applyFailedDescription') })
-        usePrivacyStore.getState().setApplyResult({
-          succeeded: 0,
-          failed: ids.length,
-          skipped: 0,
-          errors: [{ id: '', label: categoryId, reason: t('privacy.ipcCallFailed') }],
-        })
-        usePrivacyStore.getState().setStatus('done')
+        logger.error('PrivacyShieldPage', 'Privacy history entry failed', err)
       }
     },
     [t],
@@ -184,37 +218,50 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
       const wasEnabled = setting.enabled
       const isEnabling = !wasEnabled
       store.setStatus('applying')
+
+      let result: PrivacyApplyResult
       try {
-        const result = isEnabling
+        result = isEnabling
           ? await window.dinho.privacyApply([settingId])
           : await window.dinho.privacyRevert([settingId])
-        const updated = await window.dinho.privacyScan()
-        usePrivacyStore.getState().setState(updated)
-        usePrivacyStore.getState().setStatus('done')
-
-        const newSetting = updated.settings.find((s) => s.id === settingId)
-        const actuallyChanged = newSetting != null && newSetting.enabled !== wasEnabled
-
-        if (result.failed > 0) {
-          const reason = result.errors[0]?.reason || t('privacy.unknownError')
-          toast.error(
-            t(isEnabling ? 'privacy.settingApplyFailed' : 'privacy.settingRevertFailed', { label: setting.label }),
-            { description: reason },
-          )
-        } else if (!actuallyChanged) {
-          toast.error(
-            t(isEnabling ? 'privacy.settingApplyFailed' : 'privacy.settingRevertFailed', { label: setting.label }),
-            { description: t('privacy.adminRequired') },
-          )
-        } else {
-          toast.success(
-            t(newSetting.enabled ? 'privacy.settingEnabled' : 'privacy.settingDisabled', { label: setting.label }),
-          )
-        }
       } catch {
         toast.error(t(isEnabling ? 'privacy.settingApplyFailedGeneric' : 'privacy.settingRevertFailedGeneric'))
         usePrivacyStore.getState().setStatus('done')
+        return
       }
+
+      // The rescan is best-effort verification: if it fails we still trust the
+      // operation result instead of reporting a failure that never happened.
+      let newSetting: PrivacySetting | undefined
+      try {
+        const updated = await window.dinho.privacyScan()
+        usePrivacyStore.getState().setState(updated)
+        newSetting = updated.settings.find((s) => s.id === settingId)
+      } catch (err) {
+        logger.error('PrivacyShieldPage', 'Privacy rescan after toggle failed', err)
+      }
+      usePrivacyStore.getState().setStatus('done')
+
+      if (result.failed > 0) {
+        const reason = result.errors[0]?.reason || t('privacy.unknownError')
+        toast.error(
+          t(isEnabling ? 'privacy.settingApplyFailed' : 'privacy.settingRevertFailed', { label: setting.label }),
+          { description: reason },
+        )
+        return
+      }
+
+      // Verified but unchanged → the OS refused the change (needs admin, etc.).
+      if (newSetting && newSetting.enabled === wasEnabled) {
+        toast.error(
+          t(isEnabling ? 'privacy.settingApplyFailed' : 'privacy.settingRevertFailed', { label: setting.label }),
+          { description: t('privacy.adminRequired') },
+        )
+        return
+      }
+
+      const reportedEnabled = newSetting ? newSetting.enabled : isEnabling
+      toast.success(t(reportedEnabled ? 'privacy.settingEnabled' : 'privacy.settingDisabled', { label: setting.label }))
     },
     [t],
   )
@@ -439,40 +486,11 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
       )}
 
       {/* Apply result */}
-      {applyResult && status === 'done' && (
-        <div
-          className="mb-5 rounded-2xl p-4"
-          style={{
-            background: applyResult.failed > 0 ? 'rgba(245,158,11,0.04)' : 'rgba(34,197,94,0.06)',
-            border: `1px solid ${applyResult.failed > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)'}`,
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <CircleCheckBig className="h-5 w-5 text-green-500 shrink-0" strokeWidth={1.8} />
-            <div>
-              <p className="text-[13px] font-medium text-zinc-200">
-                {t(applyResult.succeeded !== 1 ? 'privacy.settingsAppliedPlural' : 'privacy.settingsApplied', {
-                  count: applyResult.succeeded,
-                })}
-              </p>
-              {applyResult.failed > 0 && (
-                <p className="text-[12px] mt-0.5" style={{ color: 'var(--accent)' }}>
-                  {t('privacy.settingsFailedRequireAdmin', { count: applyResult.failed })}
-                </p>
-              )}
-            </div>
-          </div>
-          {applyResult.errors.length > 0 && (
-            <div className="mt-3 ml-8 space-y-1">
-              {applyResult.errors.map((err) => (
-                <p key={err.id} className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {err.label}: {err.reason}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <PrivacyApplyResultBanner
+        applyResult={applyResult}
+        status={status}
+        onDismiss={() => usePrivacyStore.getState().setApplyResult(null)}
+      />
 
       {/* Empty state */}
       {!state && !isScanning && (
@@ -629,6 +647,9 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
 
                           <button
                             type="button"
+                            role="switch"
+                            aria-checked={setting.enabled}
+                            aria-label={setting.label}
                             onClick={() => handleToggleSingle(setting.id)}
                             disabled={toggleDisabled}
                             className="relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60"

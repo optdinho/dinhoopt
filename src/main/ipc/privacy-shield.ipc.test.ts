@@ -110,6 +110,7 @@ afterEach(() => {
 import { IPC } from '@shared/channels'
 import { ipcMain } from 'electron'
 import { validateStringArray } from '../services/ipc-validation'
+import { validateSender } from './sender-validation'
 
 let scanPrivacy: typeof import('./privacy-shield.ipc').scanPrivacy
 let applyPrivacySettings: typeof import('./privacy-shield.ipc').applyPrivacySettings
@@ -910,7 +911,7 @@ describe('input validation via IPC handlers', () => {
     const applyHandler = handlers.get(IPC.PRIVACY_APPLY)!
 
     const result = await applyHandler({}, 'not an array')
-    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })
+    expect(result).toEqual({ succeeded: 0, failed: 0, skipped: 0, errors: [] })
   })
 
   it('PRIVACY_REVERT returns empty result when validation fails', async () => {
@@ -922,7 +923,7 @@ describe('input validation via IPC handlers', () => {
     const revertHandler = handlers.get(IPC.PRIVACY_REVERT)!
 
     const result = await revertHandler({}, { not: 'an array' })
-    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })
+    expect(result).toEqual({ succeeded: 0, failed: 0, skipped: 0, errors: [] })
   })
 
   it('PRIVACY_APPLY passes maxItems=1000 to validateStringArray', async () => {
@@ -949,6 +950,56 @@ describe('input validation via IPC handlers', () => {
     await handlers.get(IPC.PRIVACY_REVERT)!({}, ['advertising-id'])
 
     expect(mockValidate).toHaveBeenCalledWith(['advertising-id'], 1_000)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════
+// SENDER VALIDATION
+// ═══════════════════════════════════════════════════════════════════
+
+describe('sender validation via IPC handlers', () => {
+  it('PRIVACY_APPLY returns a type-correct result when the sender is invalid', async () => {
+    vi.mocked(validateSender).mockReturnValueOnce(false)
+    setupExecFile(() => ({ stdout: '' }))
+
+    registerPrivacyShieldIpc(() => null)
+    const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
+    const result = (await handlers.get(IPC.PRIVACY_APPLY)!({}, ['telemetry-level'])) as any
+
+    expect(result).toEqual({ succeeded: 0, failed: 0, skipped: 0, errors: [] })
+    expect(execFileAsyncMock).not.toHaveBeenCalled()
+  })
+
+  it('PRIVACY_REVERT rejects an invalid sender without reverting', async () => {
+    vi.mocked(validateSender).mockReturnValueOnce(false)
+    setupExecFile(() => ({ stdout: '' }))
+
+    registerPrivacyShieldIpc(() => null)
+    const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
+    const result = (await handlers.get(IPC.PRIVACY_REVERT)!({}, ['advertising-id'])) as any
+
+    expect(validateSender).toHaveBeenCalled()
+    expect(result).toEqual({ succeeded: 0, failed: 0, skipped: 0, errors: [] })
+    expect(execFileAsyncMock).not.toHaveBeenCalled()
+  })
+
+  it('PRIVACY_SCAN validates the sender and returns an empty state when it is invalid', async () => {
+    const spy = vi.mocked(validateSender)
+    spy.mockReturnValueOnce(false)
+    setupExecFile(() => ({ stdout: '' }))
+
+    registerPrivacyShieldIpc(() => null)
+    const handlers = (ipcMain as any)._handlers as Map<string, (...args: unknown[]) => unknown>
+    try {
+      const result = (await handlers.get(IPC.PRIVACY_SCAN)!({})) as any
+
+      expect(spy).toHaveBeenCalled()
+      expect(result).toEqual({ settings: [], score: 0, total: 0, protected: 0 })
+      expect(execFileAsyncMock).not.toHaveBeenCalled()
+    } finally {
+      spy.mockReset()
+      spy.mockReturnValue(true)
+    }
   })
 })
 

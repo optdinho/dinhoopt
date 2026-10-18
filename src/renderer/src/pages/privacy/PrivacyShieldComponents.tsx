@@ -1,19 +1,6 @@
 import type { PrivacySetting } from '@shared/types'
 import type { LucideIcon } from 'lucide-react'
-import {
-  BrainCircuit,
-  CalendarClock,
-  CameraOff,
-  Compass,
-  Cpu,
-  Eye,
-  Globe,
-  Lock,
-  Megaphone,
-  Radio,
-  RefreshCw,
-  Search,
-} from 'lucide-react'
+import { BrainCircuit, CalendarClock, CameraOff, Compass, Eye, Megaphone, Radio, RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 export interface CategoryDef {
@@ -80,33 +67,6 @@ export const categories: CategoryDef[] = [
     color: '#a3e635',
     bg: 'rgba(163,230,53,0.08)',
     border: 'rgba(163,230,53,0.15)',
-  },
-  {
-    id: 'kernel',
-    labelKey: 'privacyCategories.kernelLabel',
-    descriptionKey: 'privacyCategories.kernelDescription',
-    icon: Cpu,
-    color: '#a855f7',
-    bg: 'rgba(168,85,247,0.08)',
-    border: 'rgba(168,85,247,0.15)',
-  },
-  {
-    id: 'network',
-    labelKey: 'privacyCategories.networkLabel',
-    descriptionKey: 'privacyCategories.networkDescription',
-    icon: Globe,
-    color: '#06b6d4',
-    bg: 'rgba(6,182,212,0.08)',
-    border: 'rgba(6,182,212,0.15)',
-  },
-  {
-    id: 'access',
-    labelKey: 'privacyCategories.accessLabel',
-    descriptionKey: 'privacyCategories.accessDescription',
-    icon: Lock,
-    color: '#f97316',
-    bg: 'rgba(249,115,22,0.08)',
-    border: 'rgba(249,115,22,0.15)',
   },
   {
     id: 'ai',
