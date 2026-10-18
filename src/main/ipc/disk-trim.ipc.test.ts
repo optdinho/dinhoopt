@@ -498,8 +498,8 @@ describe('computeStatus', () => {
     vi.clearAllMocks()
   })
 
-  it('returns not-applicable for macos-managed', () => {
-    const result = computeStatus({ trimSupport: 'macos-managed' })
+  it('returns not-applicable for HDD', () => {
+    const result = computeStatus({ mediaType: 'HDD', trimSupport: 'supported' })
     expect(result.status).toBe('not-applicable')
   })
 
@@ -513,9 +513,9 @@ describe('computeStatus', () => {
     expect(result.status).toBe('not-applicable')
   })
 
-  it('returns disabled for unsupported', () => {
+  it('returns not-applicable for unsupported filesystem', () => {
     const result = computeStatus({ trimSupport: 'unsupported' })
-    expect(result.status).toBe('disabled')
+    expect(result.status).toBe('not-applicable')
   })
 
   it('returns disabled for disabled trim', () => {
@@ -528,12 +528,13 @@ describe('computeStatus', () => {
     expect(result.status).toBe('recently-trimmed')
   })
 
-  it('returns recommended when estimatedDiscardBytes > 1 GiB', () => {
-    const result = computeStatus({ trimSupport: 'supported', estimatedDiscardBytes: 2 * 1024 * 1024 * 1024 })
+  it('returns recommended when stale (>30 days)', () => {
+    const now = Date.now()
+    const result = computeStatus({ trimSupport: 'supported', lastTrimAt: now - 31 * 24 * 60 * 60 * 1000 }, now)
     expect(result.status).toBe('recommended')
   })
 
-  it('returns recommended when lastTrimAt > 30 days', () => {
+  it('returns recommended when stale (>30 days)', () => {
     const now = Date.now()
     const result = computeStatus({ trimSupport: 'supported', lastTrimAt: now - 31 * 24 * 60 * 60 * 1000 }, now)
     expect(result.status).toBe('recommended')
@@ -953,4 +954,167 @@ describe('DISK_TRIM_RUN handler — mutex and progress', () => {
   })
 })
 
-vi.mock('./sender-validation', () => ({ validateSender: () => true }))
+vi.mock('./sender-validation', () => ({ validateSender: vi.fn(() => true) }))
+
+// ── i18n codes contract (audit 2026-10-18): capability detection + summary/reason/progress codes ──
+
+describe('i18n codes contract — capability detection (ddn/filesystem)', () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsAdmin.mockReturnValue(true)
+    mockIsThrottled.mockReturnValue(false)
+    mockGetLastTrimAt.mockReturnValue(null)
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: origPlatform.value, configurable: true })
+  })
+
+  function stubEnumeration(json: unknown): void {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...args: unknown[]) => unknown
+      if (typeof cb === 'function') cb(null, JSON.stringify(json), '')
+    })
+  }
+
+  const enumeration = (ddn: number, fs = 'NTFS') => ({
+    disks: [{ Number: 0, MediaType: '4', BusType: '11', FriendlyName: 'Samsung SSD' }],
+    volumes: [
+      {
+        Letter: 'C',
+        Label: 'Windows',
+        FS: fs,
+        Size: 256000000000,
+        Free: 128000000000,
+        DiskNumber: 0,
+        DriveType: '3',
+      },
+    ],
+    ddn,
+  })
+
+  it('ddn=1 marks the drive trimSupport=disabled with statusReasonCode=disabled', async () => {
+    stubEnumeration(enumeration(1))
+    const result = await listTrimDrives()
+    expect(result).toHaveLength(1)
+    expect(result[0]!.trimSupport).toBe('disabled')
+    expect(result[0]!.status).toBe('disabled')
+    expect(result[0]!.statusReasonCode).toBe('disabled')
+  })
+
+  it('ddn=0 + NTFS marks the drive supported and always emits a statusReasonCode', async () => {
+    stubEnumeration(enumeration(0))
+    const result = await listTrimDrives()
+    expect(result[0]!.trimSupport).toBe('supported')
+    expect(result[0]!.statusReasonCode).toBeTruthy()
+  })
+
+  it('non-discardable filesystem marks the drive unsupported with a code', async () => {
+    stubEnumeration(enumeration(0, 'FAT32'))
+    const result = await listTrimDrives()
+    expect(result[0]!.trimSupport).toBe('unsupported')
+    expect(result[0]!.statusReasonCode).toBe('unsupported')
+  })
+})
+
+describe('i18n codes contract — run path summary/reason codes', () => {
+  const baseDrive: TrimDriveInfo = {
+    id: 'C',
+    letter: 'C',
+    label: 'C:',
+    totalSize: 0,
+    freeSpace: 0,
+    mediaType: 'SSD',
+    isRemovable: false,
+    isEncrypted: false,
+    trimSupport: 'supported',
+    status: 'ok',
+    statusReason: '',
+    lastTrimAt: null,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsAdmin.mockReturnValue(true)
+    mockIsThrottled.mockReturnValue(false)
+    mockGetLastTrimAt.mockReturnValue(null)
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+  })
+
+  afterEach(resetPlatform)
+
+  it('successful run emits summaryCode=completed and progress messageCode=done', async () => {
+    mockSpawn.mockImplementation(() => makeFakeChild({ exitCode: 0 }))
+    const result = await runTrimForDrive('C', getWindow, [baseDrive])
+    expect(result.summaryCode).toBe('completed')
+    expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ messageCode: 'done' }))
+    expect(mockSetLastTrimAt).toHaveBeenCalledWith('C', undefined)
+  })
+
+  it('non-zero exit emits summaryCode=exitCode with the code in params', async () => {
+    mockSpawn.mockImplementation(() => makeFakeChild({ exitCode: 2 }))
+    const result = await runTrimForDrive('C', getWindow, [baseDrive])
+    expect(result.summaryCode).toBe('exitCode')
+    expect(result.summaryParams).toEqual({ code: '2' })
+  })
+
+  it('spawn error emits summaryCode=startFailed with error params and progress code', async () => {
+    mockSpawn.mockImplementation(() => makeFakeChild({ emitError: new Error('spawn ENOENT') }))
+    const result = await runTrimForDrive('C', getWindow, [baseDrive])
+    expect(result.summaryCode).toBe('startFailed')
+    expect(result.summaryParams?.error).toBe('spawn ENOENT')
+    expect(mockSend).toHaveBeenCalledWith('disk:trim:progress', expect.objectContaining({ messageCode: 'startFailed' }))
+  })
+
+  it('start of a run emits progress messageCode=starting', async () => {
+    mockSpawn.mockImplementation(() => makeFakeChild({ exitCode: 0 }))
+    await runTrimForDrive('C', getWindow, [baseDrive])
+    expect(mockSend).toHaveBeenCalledWith(
+      'disk:trim:progress',
+      expect.objectContaining({ phase: 'starting', messageCode: 'starting' }),
+    )
+  })
+
+  it('guard rejections all carry their summaryCode and never spawn', async () => {
+    expect((await runTrimForDrive('C', getWindow, [{ ...baseDrive, mediaType: 'HDD' }])).summaryCode).toBe('hdd')
+    expect((await runTrimForDrive('C', getWindow, [{ ...baseDrive, isRemovable: true }])).summaryCode).toBe('removable')
+    expect((await runTrimForDrive('C', getWindow, [{ ...baseDrive, trimSupport: 'unsupported' }])).summaryCode).toBe(
+      'unsupported',
+    )
+    expect((await runTrimForDrive('C', getWindow, [{ ...baseDrive, trimSupport: 'disabled' }])).summaryCode).toBe(
+      'disabled',
+    )
+
+    mockIsThrottled.mockReturnValue(true)
+    expect((await runTrimForDrive('C', getWindow, [baseDrive])).summaryCode).toBe('throttled')
+
+    mockIsThrottled.mockReturnValue(false)
+    mockIsAdmin.mockReturnValue(false)
+    expect((await runTrimForDrive('C', getWindow, [baseDrive])).summaryCode).toBe('needsAdmin')
+
+    mockIsAdmin.mockReturnValue(true)
+    expect((await runTrimForDrive('ZZ', getWindow, [baseDrive])).summaryCode).toBe('unknownDrive')
+
+    expect(mockSpawn).not.toHaveBeenCalled()
+  })
+
+  it('batchBusy rejection carries summaryCode=batchBusy', async () => {
+    // Drives enumeration answers with a parse failure ([] drives), so the first
+    // batch fails fast on an unknown drive while still holding the mutex.
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...args: unknown[]) => unknown
+      if (typeof cb === 'function') cb(null, { stdout: '' })
+    })
+    registerDiskTrimIpc(getWindow)
+    const handler = getHandler('disk:trim:run')
+    const p1 = handler({}, ['Z'])
+    const results2 = (await handler({}, ['C'])) as Array<{ summaryCode?: string; success: boolean }>
+    expect(results2).toHaveLength(1)
+    expect(results2[0]!.success).toBe(false)
+    expect(results2[0]!.summaryCode).toBe('batchBusy')
+    await p1
+  })
+})

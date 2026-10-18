@@ -78,7 +78,6 @@ export const useDiskMaintenanceStore = create<DiskMaintenanceState>((set) => ({
 
 export function isSelectable(drive: TrimDriveInfo): boolean {
   if (drive.mediaType === 'HDD') return false
-  if (drive.trimSupport === 'macos-managed') return false
   if (drive.trimSupport === 'unsupported' || drive.trimSupport === 'disabled') return false
   if (drive.isRemovable) return false
   return true

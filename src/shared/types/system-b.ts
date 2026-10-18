@@ -79,18 +79,51 @@ export interface FirewallScanProgress {
 export type FirewallAction = 'disable' | 'delete'
 
 // ─── Disk Repair ───────────────────────────────────────────
+
+/**
+ * Stable codes for the human-readable repair summaries. The main process is
+ * locale-agnostic (it returns English in `summary` for the log) — the renderer
+ * translates `summaryCode` so pt/en/es users never see English prose.
+ */
+export type DiskRepairSummaryCode =
+  | 'adminRequired'
+  | 'invalidSender'
+  | 'startFailed'
+  | 'sfcNoViolations'
+  | 'sfcRepaired'
+  | 'sfcRepairIncomplete'
+  | 'sfcCompleted'
+  | 'sfcExitCode'
+  | 'dismRepaired'
+  | 'dismHealthy'
+  | 'dismCompleted'
+  | 'dismExitCode'
+  | 'chkdskHealthy'
+  | 'chkdskFixed'
+  | 'chkdskCleanup'
+  | 'chkdskCompleted'
+  | 'chkdskExitCode'
+
+export type DiskRepairProgressCode = 'percent' | 'startFailed'
+
 export interface DiskRepairProgress {
   tool: 'sfc' | 'dism' | 'chkdsk'
   phase: 'running' | 'done' | 'failed'
   percent: number
   message: string
+  /** Locale key for the message; renderers fall back to `message` when absent. */
+  messageCode?: DiskRepairProgressCode
+  messageParams?: Record<string, string | number>
 }
 
 export interface DiskRepairResult {
   tool: 'sfc' | 'dism' | 'chkdsk'
   success: boolean
   exitCode: number | null
+  /** English fallback (also written to the log). UI should prefer `summaryCode`. */
   summary: string
+  summaryCode?: DiskRepairSummaryCode
+  summaryParams?: Record<string, string | number>
   log: string
   requiresReboot: boolean
   needsAdmin: boolean
@@ -98,12 +131,40 @@ export interface DiskRepairResult {
 
 // ─── Disk Maintenance (SSD TRIM) ───────────────────────────
 export type TrimMediaType = 'SSD' | 'NVMe' | 'HDD' | 'Unknown'
-export type TrimSupport = 'supported' | 'disabled' | 'unsupported' | 'macos-managed'
+/** Windows-only app: TRIM is either supported, globally disabled by the OS, or the volume's filesystem rejects DISCARD. */
+export type TrimSupport = 'supported' | 'disabled' | 'unsupported'
 export type TrimStatus = 'recently-trimmed' | 'ok' | 'recommended' | 'not-applicable' | 'disabled' | 'unknown'
+
+export type TrimReasonCode =
+  | 'hdd'
+  | 'removable'
+  | 'unsupported'
+  | 'disabled'
+  | 'recentlyTrimmed'
+  | 'recommendedStale'
+  | 'unknown'
+  | 'ok'
+
+export type TrimSummaryCode =
+  | 'unknownDrive'
+  | 'hdd'
+  | 'removable'
+  | 'unsupported'
+  | 'disabled'
+  | 'throttled'
+  | 'needsAdmin'
+  | 'missingLetter'
+  | 'unsupportedPlatform'
+  | 'startFailed'
+  | 'completed'
+  | 'exitCode'
+  | 'batchBusy'
+
+export type TrimProgressCode = 'starting' | 'done' | 'startFailed'
 
 /**
  * One row in the Disk Maintenance UI.
- * `id` is the stable key — Windows: drive letter ('C'); Linux: mountpoint; macOS: BSD name.
+ * `id` is the stable key — Windows: drive letter ('C').
  */
 export interface TrimDriveInfo {
   id: string
@@ -119,9 +180,11 @@ export interface TrimDriveInfo {
   isEncrypted: boolean
   trimSupport: TrimSupport
   status: TrimStatus
+  /** English fallback (also written to the log). UI should prefer `statusReasonCode`. */
   statusReason: string
+  statusReasonCode?: TrimReasonCode
+  statusReasonParams?: Record<string, string | number>
   lastTrimAt: number | null
-  estimatedDiscardBytes?: number
 }
 
 export interface TrimRunResult {
@@ -132,7 +195,10 @@ export interface TrimRunResult {
   bytesDiscarded?: number
   durationMs: number
   exitCode: number | null
+  /** English fallback (also written to the log). UI should prefer `summaryCode`. */
   summary: string
+  summaryCode?: TrimSummaryCode
+  summaryParams?: Record<string, string | number>
   log: string
   timestamp: number
 }
@@ -142,7 +208,11 @@ export interface TrimProgress {
   phase: 'starting' | 'running' | 'done' | 'failed'
   /** -1 = indeterminate (Windows Optimize-Volume doesn't report clean percentages) */
   percent: number
+  /** Raw Optimize-Volume output line (untranslatable). */
   message: string
+  /** Locale key for the fixed messages; renderers fall back to `message` when absent. */
+  messageCode?: TrimProgressCode
+  messageParams?: Record<string, string | number>
 }
 
 // ─── Context Menu Cleaner ──────────────────────────────────────────────

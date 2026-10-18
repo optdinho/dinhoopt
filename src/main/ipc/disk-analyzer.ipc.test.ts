@@ -42,6 +42,7 @@ vi.mock('../services/elevation', () => ({
   isAdmin: () => mockIsAdmin(),
 }))
 
+import { getLogger } from '../services/logger.service'
 import { analyzeDisk, getDrives, getFileTypes, registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
 
 // ── Helpers ──
@@ -540,14 +541,22 @@ describe('analyzeDisk error handling', () => {
     expect(result.size).toBe(0)
   })
 
-  it('handles readdir error on subdirectory — child still added with size 0', async () => {
+  it('handles readdir error on subdirectory — child still added with size 0 and counted as skipped', async () => {
     if (process.platform !== 'win32') return
     mockReaddir.mockReset()
     mockReaddir.mockResolvedValueOnce([makeEntry('sub', true)]).mockRejectedValueOnce(new Error('access denied'))
-    const result = await analyzeDisk('C')
-    expect(result.children).toHaveLength(1)
-    expect(result.children![0]!.name).toBe('sub')
-    expect(result.children![0]!.size).toBe(0)
+    const warnSpy = vi.spyOn(getLogger(), 'warning')
+    try {
+      const result = await analyzeDisk('C')
+      expect(result.children).toHaveLength(1)
+      expect(result.children![0]!.name).toBe('sub')
+      expect(result.children![0]!.size).toBe(0)
+      // D1: swallowed FS errors are not silent — exactly one warning per scan.
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith('disk-analyzer', expect.stringContaining('skipped 1 inaccessible item(s)'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })
 
@@ -652,10 +661,16 @@ describe('DISK_REPAIR admin checks', () => {
 
     registerDiskAnalyzerIpc(() => null)
     const handler = getHandler('disk:repair:sfc')
-    const result = (await handler({}, 'C')) as { tool: string; success: boolean; needsAdmin: boolean }
+    const result = (await handler({}, 'C')) as {
+      tool: string
+      success: boolean
+      needsAdmin: boolean
+      summaryCode?: string
+    }
     expect(result.tool).toBe('sfc')
     expect(result.success).toBe(false)
     expect(result.needsAdmin).toBe(true)
+    expect(result.summaryCode).toBe('adminRequired')
   })
 
   it('DISM returns needsAdmin when not admin (Windows only)', async () => {
@@ -664,10 +679,16 @@ describe('DISK_REPAIR admin checks', () => {
 
     registerDiskAnalyzerIpc(() => null)
     const handler = getHandler('disk:repair:dism')
-    const result = (await handler()) as { tool: string; success: boolean; needsAdmin: boolean }
+    const result = (await handler()) as {
+      tool: string
+      success: boolean
+      needsAdmin: boolean
+      summaryCode?: string
+    }
     expect(result.tool).toBe('dism')
     expect(result.success).toBe(false)
     expect(result.needsAdmin).toBe(true)
+    expect(result.summaryCode).toBe('adminRequired')
   })
 
   it('CHKDSK returns needsAdmin when not admin (Windows only)', async () => {
@@ -676,10 +697,16 @@ describe('DISK_REPAIR admin checks', () => {
 
     registerDiskAnalyzerIpc(() => null)
     const handler = getHandler('disk:repair:chkdsk')
-    const result = (await handler({}, 'C')) as { tool: string; success: boolean; needsAdmin: boolean }
+    const result = (await handler({}, 'C')) as {
+      tool: string
+      success: boolean
+      needsAdmin: boolean
+      summaryCode?: string
+    }
     expect(result.tool).toBe('chkdsk')
     expect(result.success).toBe(false)
     expect(result.needsAdmin).toBe(true)
+    expect(result.summaryCode).toBe('adminRequired')
   })
 })
 
@@ -722,10 +749,18 @@ describe('disk:repair:sfc spawn event handling', () => {
     stdout.emit('data', Buffer.from('Windows Resource Protection did not find any integrity violations.'))
     child.emit('close', 0)
 
-    const result = (await promise) as { tool: string; success: boolean; summary: string }
+    const result = (await promise) as {
+      tool: string
+      success: boolean
+      summary: string
+      summaryCode?: string
+      summaryParams?: Record<string, string>
+    }
     expect(result.tool).toBe('sfc')
     expect(result.success).toBe(true)
     expect(result.summary).toContain('No integrity violations found')
+    expect(result.summaryCode).toBe('sfcNoViolations')
+    expect(result.summaryParams).toBeUndefined()
   })
 
   it('handles stdout with successful repair', async () => {
@@ -792,10 +827,18 @@ describe('disk:repair:sfc spawn event handling', () => {
 
     child.emit('error', new Error('spawn failed'))
 
-    const result = (await promise) as { tool: string; success: boolean; summary: string }
+    const result = (await promise) as {
+      tool: string
+      success: boolean
+      summary: string
+      summaryCode?: string
+      summaryParams?: Record<string, string>
+    }
     expect(result.tool).toBe('sfc')
     expect(result.success).toBe(false)
     expect(result.summary).toContain('spawn failed')
+    expect(result.summaryCode).toBe('startFailed')
+    expect(result.summaryParams?.error).toBe('spawn failed')
   })
 
   it('sends progress during SFC stdout', async () => {
@@ -816,6 +859,8 @@ describe('disk:repair:sfc spawn event handling', () => {
       expect.objectContaining({
         tool: 'sfc',
         percent: 42,
+        messageCode: 'percent',
+        messageParams: { percent: 42 },
       }),
     )
   })
@@ -899,10 +944,11 @@ describe('disk:repair:dism spawn event handling', () => {
     stdout.emit('data', Buffer.from('The operation completed successfully.'))
     child.emit('close', 0)
 
-    const result = (await promise) as { tool: string; success: boolean; summary: string }
+    const result = (await promise) as { tool: string; success: boolean; summary: string; summaryCode?: string }
     expect(result.tool).toBe('dism')
     expect(result.success).toBe(true)
     expect(result.summary).toContain('completed successfully')
+    expect(result.summaryCode).toBe('dismCompleted')
   })
 
   it('handles DISM progress parsing', async () => {
@@ -937,10 +983,18 @@ describe('disk:repair:dism spawn event handling', () => {
 
     child.emit('error', new Error('DISM not found'))
 
-    const result = (await promise) as { tool: string; success: boolean; summary: string }
+    const result = (await promise) as {
+      tool: string
+      success: boolean
+      summary: string
+      summaryCode?: string
+      summaryParams?: Record<string, string>
+    }
     expect(result.tool).toBe('dism')
     expect(result.success).toBe(false)
     expect(result.summary).toContain('DISM not found')
+    expect(result.summaryCode).toBe('startFailed')
+    expect(result.summaryParams?.error).toBe('DISM not found')
   })
 
   it('handles DISM non-zero exit code', async () => {
@@ -954,11 +1008,20 @@ describe('disk:repair:dism spawn event handling', () => {
     stdout.emit('data', Buffer.from('Error: 0x800f081f'))
     child.emit('close', 2)
 
-    const result = (await promise) as { tool: string; success: boolean; exitCode: number; log: string }
+    const result = (await promise) as {
+      tool: string
+      success: boolean
+      exitCode: number
+      log: string
+      summaryCode?: string
+      summaryParams?: Record<string, string>
+    }
     expect(result.tool).toBe('dism')
     expect(result.success).toBe(false)
     expect(result.exitCode).toBe(2)
     expect(result.log).toContain('0x800f081f')
+    expect(result.summaryCode).toBe('dismExitCode')
+    expect(result.summaryParams).toEqual({ code: '2' })
   })
 
   it('collects DISM stderr', async () => {
@@ -1002,10 +1065,11 @@ describe('disk:repair:chkdsk spawn event handling', () => {
     stdout.emit('data', Buffer.from('Windows has scanned the file system and found no problems.'))
     child.emit('close', 0)
 
-    const result = (await promise) as { tool: string; success: boolean; summary: string }
+    const result = (await promise) as { tool: string; success: boolean; summary: string; summaryCode?: string }
     expect(result.tool).toBe('chkdsk')
     expect(result.success).toBe(true)
     expect(result.summary).toContain('No file system errors found')
+    expect(result.summaryCode).toBe('chkdskHealthy')
   })
 
   it('handles CHKDSK with corrections made', async () => {
@@ -1528,4 +1592,67 @@ describe('sendRepairProgress with destroyed window', () => {
   })
 })
 
-vi.mock('./sender-validation', () => ({ validateSender: () => true }))
+vi.mock('./sender-validation', () => ({ validateSender: vi.fn(() => true) }))
+
+describe('i18n codes contract — invalidSender + settled guard (audit 2026-10-18)', () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    mockIsAdmin.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: origPlatform.value, configurable: true })
+  })
+
+  it('invalid sender returns invalidSender code without spawning (all 3 tools)', async () => {
+    const { validateSender } = await import('./sender-validation')
+    vi.mocked(validateSender).mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValueOnce(false)
+
+    registerDiskAnalyzerIpc(() => null)
+    const sfc = (await getHandler('disk:repair:sfc')({}, 'C')) as { summaryCode?: string }
+    const dism = (await getHandler('disk:repair:dism')()) as { summaryCode?: string }
+    const chkdsk = (await getHandler('disk:repair:chkdsk')({}, 'C')) as { summaryCode?: string }
+    expect(sfc.summaryCode).toBe('invalidSender')
+    expect(dism.summaryCode).toBe('invalidSender')
+    expect(chkdsk.summaryCode).toBe('invalidSender')
+    expect(mockSpawn).not.toHaveBeenCalled()
+  })
+
+  it('settles exactly once when error fires before close (settled guard)', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:sfc')
+    const promise = handler({}, 'C')
+
+    child.emit('error', new Error('first failure'))
+    stdout.emit('data', Buffer.from('Windows Resource Protection did not find any integrity violations.'))
+    child.emit('close', 0)
+
+    const result = (await promise) as { success: boolean; summaryCode?: string }
+    // The first settle (error) wins; the later close must not overwrite it.
+    expect(result.success).toBe(false)
+    expect(result.summaryCode).toBe('startFailed')
+  })
+
+  it('settles with close when close fires before a late error (settled guard)', async () => {
+    const { child, stdout } = createMockChildProcess()
+    mockSpawn.mockReturnValue(child)
+
+    registerDiskAnalyzerIpc(() => null)
+    const handler = getHandler('disk:repair:sfc')
+    const promise = handler({}, 'C')
+
+    stdout.emit('data', Buffer.from('Windows Resource Protection did not find any integrity violations.'))
+    child.emit('close', 0)
+    child.emit('error', new Error('late failure'))
+
+    const result = (await promise) as { success: boolean; summaryCode?: string }
+    expect(result.success).toBe(true)
+    expect(result.summaryCode).toBe('sfcNoViolations')
+  })
+})

@@ -1,3 +1,4 @@
+import type { DiskRepairProgressCode, DiskRepairSummaryCode } from '@shared/types'
 import {
   CircleCheckBig,
   CircleX,
@@ -26,79 +27,115 @@ export function DiskRepairPage() {
   const sfcResult = useDiskStore((s) => s.sfcResult)
   const dismResult = useDiskStore((s) => s.dismResult)
   const chkdskResult = useDiskStore((s) => s.chkdskResult)
-  const store = useDiskStore()
+  // Actions selected individually: `useDiskStore()` (whole store) returned a
+  // fresh object per state change, which re-ran the listener effect needlessly.
+  const setRepairRunning = useDiskStore((s) => s.setRepairRunning)
+  const setRepairProgress = useDiskStore((s) => s.setRepairProgress)
+  const setSfcResult = useDiskStore((s) => s.setSfcResult)
+  const setDismResult = useDiskStore((s) => s.setDismResult)
+  const setChkdskResult = useDiskStore((s) => s.setChkdskResult)
   const [showRepairLog, setShowRepairLog] = useState<'sfc' | 'dism' | 'chkdsk' | null>(null)
 
-  // Listen for disk repair progress events
+  /**
+   * Lote 1 (i18n): the main process is locale-agnostic — it returns a stable
+   * code + params and keeps the English prose for logs. A missing/unknown code
+   * falls back to that English text instead of showing a raw key.
+   */
+  const summaryText = (result: {
+    summary: string
+    summaryCode?: DiskRepairSummaryCode
+    summaryParams?: Record<string, string | number>
+  }): string =>
+    result.summaryCode
+      ? t(`repairCode.${result.summaryCode}`, {
+          ...(result.summaryParams ?? {}),
+          defaultValue: result.summary,
+        })
+      : result.summary
+
+  const progressText = (progress: {
+    message: string
+    messageCode?: DiskRepairProgressCode
+    messageParams?: Record<string, string | number>
+  }): string =>
+    progress.messageCode
+      ? t(`repairProgress.${progress.messageCode}`, {
+          ...(progress.messageParams ?? {}),
+          defaultValue: progress.message,
+        })
+      : progress.message
+
+  // Listen for disk repair progress events. The action has a stable identity,
+  // so the effect subscribes once instead of on every store update.
   useEffect(() => {
     if (!window.dinho?.onDiskRepairProgress) return
-    return window.dinho.onDiskRepairProgress((data) => store.setRepairProgress(data))
-  }, [store])
+    return window.dinho.onDiskRepairProgress(setRepairProgress)
+  }, [setRepairProgress])
 
   const handleRunSfc = async () => {
-    store.setRepairRunning(true)
-    store.setSfcResult(null)
-    store.setRepairProgress({ tool: 'sfc', phase: 'running', percent: 0, message: t('startingSfc') })
+    setRepairRunning(true)
+    setSfcResult(null)
+    setRepairProgress({ tool: 'sfc', phase: 'running', percent: 0, message: t('startingSfc') })
     try {
       const result = await window.dinho.diskRepairSfc('C')
-      store.setSfcResult(result)
+      setSfcResult(result)
       if (result.needsAdmin) {
         toast.error(t('adminRequiredToast'), { description: t('adminRequiredSfcDesc') })
       } else if (result.success) {
-        toast.success(t('sfcCompletedToast'), { description: result.summary })
+        toast.success(t('sfcCompletedToast'), { description: summaryText(result) })
       } else {
-        toast.error(t('sfcFinishedWithIssuesToast'), { description: result.summary })
+        toast.error(t('sfcFinishedWithIssuesToast'), { description: summaryText(result) })
       }
     } catch (err) {
       logger.error('DiskRepairPage', 'SFC failed', err)
       toast.error(t('sfcFailedToast'))
     }
-    store.setRepairRunning(false)
-    store.setRepairProgress(null)
+    setRepairRunning(false)
+    setRepairProgress(null)
   }
 
   const handleRunDism = async () => {
-    store.setRepairRunning(true)
-    store.setDismResult(null)
-    store.setRepairProgress({ tool: 'dism', phase: 'running', percent: 0, message: t('startingDism') })
+    setRepairRunning(true)
+    setDismResult(null)
+    setRepairProgress({ tool: 'dism', phase: 'running', percent: 0, message: t('startingDism') })
     try {
       const result = await window.dinho.diskRepairDism()
-      store.setDismResult(result)
+      setDismResult(result)
       if (result.needsAdmin) {
         toast.error(t('adminRequiredToast'), { description: t('adminRequiredDismDesc') })
       } else if (result.success) {
-        toast.success(t('dismCompletedToast'), { description: result.summary })
+        toast.success(t('dismCompletedToast'), { description: summaryText(result) })
       } else {
-        toast.error(t('dismFinishedWithIssuesToast'), { description: result.summary })
+        toast.error(t('dismFinishedWithIssuesToast'), { description: summaryText(result) })
       }
     } catch (err) {
       logger.error('DiskRepairPage', 'DISM failed', err)
       toast.error(t('dismFailedToast'))
     }
-    store.setRepairRunning(false)
-    store.setRepairProgress(null)
+    setRepairRunning(false)
+    setRepairProgress(null)
   }
 
   const handleRunChkdsk = async () => {
-    store.setRepairRunning(true)
-    store.setChkdskResult(null)
-    store.setRepairProgress({ tool: 'chkdsk', phase: 'running', percent: 0, message: t('startingChkdsk') })
+    setRepairRunning(true)
+    setChkdskResult(null)
+    setRepairProgress({ tool: 'chkdsk', phase: 'running', percent: 0, message: t('startingChkdsk') })
     try {
       const result = await window.dinho.diskRepairChkdsk('C')
-      store.setChkdskResult(result)
+      setChkdskResult(result)
       if (result.needsAdmin) {
         toast.error(t('adminRequiredToast'), { description: t('adminRequiredChkdskDesc') })
       } else if (result.success) {
-        toast.success(t('chkdskCompletedToast'), { description: result.summary })
+        toast.success(t('chkdskCompletedToast'), { description: summaryText(result) })
       } else {
-        toast.error(t('chkdskFinishedWithIssuesToast'), { description: result.summary })
+        toast.error(t('chkdskFinishedWithIssuesToast'), { description: summaryText(result) })
       }
     } catch (err) {
       logger.error('DiskRepairPage', 'CHKDSK failed', err)
       toast.error(t('chkdskFailedToast'))
     }
-    store.setRepairRunning(false)
-    store.setRepairProgress(null)
+    setRepairRunning(false)
+    setRepairProgress(null)
   }
 
   if (!isWin) {
@@ -159,7 +196,7 @@ export function DiskRepairPage() {
             />
           </div>
           <p className="mt-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-            {repairProgress.message}
+            {progressText(repairProgress)}
           </p>
         </div>
       )}
@@ -226,7 +263,7 @@ export function DiskRepairPage() {
                 ) : (
                   <CircleX className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
                 )}
-                <p className="text-[12px] text-zinc-300">{dismResult.summary}</p>
+                <p className="text-[12px] text-zinc-300">{summaryText(dismResult)}</p>
               </div>
               {dismResult.requiresReboot && (
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
@@ -314,7 +351,7 @@ export function DiskRepairPage() {
                 ) : (
                   <CircleX className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
                 )}
-                <p className="text-[12px] text-zinc-300">{sfcResult.summary}</p>
+                <p className="text-[12px] text-zinc-300">{summaryText(sfcResult)}</p>
               </div>
               {sfcResult.requiresReboot && (
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
@@ -402,7 +439,7 @@ export function DiskRepairPage() {
                 ) : (
                   <CircleX className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.8} />
                 )}
-                <p className="text-[12px] text-zinc-300">{chkdskResult.summary}</p>
+                <p className="text-[12px] text-zinc-300">{summaryText(chkdskResult)}</p>
               </div>
               {chkdskResult.requiresReboot && (
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">

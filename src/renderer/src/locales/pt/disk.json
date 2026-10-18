@@ -77,6 +77,29 @@
   "chkdskFinishedWithIssuesToast": "CHKDSK concluído com problemas",
   "chkdskFailedToast": "Falha ao executar o CHKDSK",
   "startingChkdsk": "Iniciando a análise CHKDSK...",
+  "repairCode": {
+    "adminRequired": "São necessários privilégios de administrador para executar a reparação.",
+    "invalidSender": "Remetente inválido — o pedido foi rejeitado.",
+    "startFailed": "Falha ao iniciar a ferramenta: {{error}}",
+    "sfcNoViolations": "Não foram encontradas violações de integridade — os ficheiros do sistema estão saudáveis.",
+    "sfcRepaired": "O Windows encontrou e reparou ficheiros de sistema corrompidos.",
+    "sfcRepairIncomplete": "Foram encontrados ficheiros corrompidos que não puderam ser reparados. Execute primeiro o DISM e depois o SFC novamente.",
+    "sfcCompleted": "O SFC foi concluído com sucesso.",
+    "sfcExitCode": "O SFC terminou com o código {{code}}.",
+    "dismRepaired": "O DISM reparou com sucesso o arquivo de componentes do Windows.",
+    "dismHealthy": "Não foi detetada corrupção no arquivo de componentes — a imagem está saudável.",
+    "dismCompleted": "O DISM foi concluído com sucesso.",
+    "dismExitCode": "O DISM terminou com o código {{code}}. Consulte o registo para mais detalhes.",
+    "chkdskHealthy": "Não foram encontrados erros de sistema de arquivos — o disco está saudável.",
+    "chkdskFixed": "Foram encontrados erros de sistema de arquivos e reparados.",
+    "chkdskCleanup": "O CHKDSK concluíu a limpeza do disco.",
+    "chkdskCompleted": "O CHKDSK foi concluído com sucesso.",
+    "chkdskExitCode": "O CHKDSK terminou com o código {{code}}. Consulte o registo para mais detalhes."
+  },
+  "repairProgress": {
+    "percent": "{{percent}}% concluído",
+    "startFailed": "Falha ao iniciar a ferramenta: {{error}}"
+  },
   "maintenanceTitle": "Manutenção do Disco",
   "maintenanceDescription": "Execute TRIM em SSDs para manter o desempenho de escrita e a vida útil em bom estado.",
   "refresh": "Atualizar",
@@ -118,5 +141,48 @@
   "statusUnknown": "Desconhecido",
   "selectDrive": "Selecionar {{drive}}",
   "systemDrive": "Sistema",
-  "runButton": "Executar"
+  "runButton": "Executar",
+  "trimNoResultsToast": "O backend não devolveu resultados do TRIM",
+  "trimCode": {
+    "unknownDrive": "Unidade desconhecida.",
+    "hdd": "O TRIM não se aplica a HDDs.",
+    "removable": "O TRIM não é executado em unidades removíveis.",
+    "unsupported": "O sistema de ficheiros ou o dispositivo não suporta TRIM/DISCARD.",
+    "disabled": "O TRIM está desativado ao nível do sistema (DisableDeleteNotify).",
+    "throttled": "Limitado — esta unidade foi submetida a TRIM há menos de 24 horas.",
+    "needsAdmin": "São necessários privilégios de administrador para executar o TRIM.",
+    "missingLetter": "Letra da unidade em falta.",
+    "unsupportedPlatform": "Plataforma não suportada.",
+    "startFailed": "Falha ao iniciar o Optimize-Volume: {{error}}",
+    "completed": "TRIM concluído com sucesso.",
+    "exitCode": "O Optimize-Volume terminou com o código {{code}}.",
+    "batchBusy": "Já existe um lote de TRIM em execução."
+  },
+  "trimProgress": {
+    "starting": "A iniciar o TRIM...",
+    "done": "TRIM concluído.",
+    "startFailed": "O TRIM falhou — veja o resultado."
+  },
+  "reasonCode": {
+    "hdd": "Os HDDs não se beneficiam do TRIM.",
+    "removable": "Unidade removível — não é recomendado o TRIM.",
+    "unsupported": "O sistema de ficheiros ou o dispositivo não suporta TRIM/DISCARD.",
+    "disabled": "O TRIM está desativado ao nível do sistema (DisableDeleteNotify).",
+    "recentlyTrimmed": "Submetido a TRIM há {{days}} dia(s) — nenhuma ação necessária.",
+    "recommendedStale": "O último TRIM foi há mais de 30 dias.",
+    "unknown": "Sem histórico de TRIM registado — o sistema operativo pode já o estar a executar em agendamento.",
+    "ok": "Saudável — o último TRIM é recente o suficiente."
+  },
+  "timeAgo": {
+    "justNow": "Agora mesmo",
+    "yesterday": "Ontem",
+    "hours_one": "há {{count}} hora",
+    "hours_other": "há {{count}} horas",
+    "days_one": "há {{count}} dia",
+    "days_other": "há {{count}} dias",
+    "months_one": "há {{count}} mês",
+    "months_other": "há {{count}} meses",
+    "years_one": "há {{count}} ano",
+    "years_other": "há {{count}} anos"
+  }
 }

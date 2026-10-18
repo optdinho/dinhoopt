@@ -68,6 +68,8 @@ export const useDiskStore = create<DiskState>((set) => ({
   setChkdskResult: (chkdskResult) => set({ chkdskResult }),
   reset: () =>
     set({
+      drives: [],
+      selectedDrive: 'C',
       data: null,
       analyzing: false,
       breadcrumb: [],

@@ -159,10 +159,6 @@ describe('isSelectable', () => {
     expect(isSelectable(makeDrive('C:', { mediaType: 'HDD' }))).toBe(false)
   })
 
-  it('returns false for macos-managed trim', () => {
-    expect(isSelectable(makeDrive('C:', { trimSupport: 'macos-managed' }))).toBe(false)
-  })
-
   it('returns false for unsupported trim', () => {
     expect(isSelectable(makeDrive('C:', { trimSupport: 'unsupported' }))).toBe(false)
   })

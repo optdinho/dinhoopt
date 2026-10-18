@@ -1,4 +1,4 @@
-import type { DiskNode } from '@shared/types'
+import type { DiskNode, ProgressData } from '@shared/types'
 import { ChevronRight, File, FileType2, Folder, HardDrive, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,34 +27,62 @@ export function DiskAnalyzerPage() {
   const error = useDiskStore((s) => s.error)
   const fileTypes = useDiskStore((s) => s.fileTypes)
   const fileTypesLoading = useDiskStore((s) => s.fileTypesLoading)
-  const store = useDiskStore()
+  // Actions are selected individually: `useDiskStore()` (whole store) returns a
+  // fresh object on every state change, which re-ran the effects below needlessly.
+  const setDrives = useDiskStore((s) => s.setDrives)
+  const setSelectedDrive = useDiskStore((s) => s.setSelectedDrive)
+  const setData = useDiskStore((s) => s.setData)
+  const setAnalyzing = useDiskStore((s) => s.setAnalyzing)
+  const setBreadcrumb = useDiskStore((s) => s.setBreadcrumb)
+  const pushBreadcrumb = useDiskStore((s) => s.pushBreadcrumb)
+  const sliceBreadcrumb = useDiskStore((s) => s.sliceBreadcrumb)
+  const setError = useDiskStore((s) => s.setError)
+  const setFileTypes = useDiskStore((s) => s.setFileTypes)
+  const setFileTypesLoading = useDiskStore((s) => s.setFileTypesLoading)
   const [viewMode, setViewMode] = useState<ViewMode>('folders')
   // Tracks the analyzed root for which a file-type scan was already requested,
   // so an empty result (or a stale store identity) cannot re-trigger the effect
   // in a loop. A new analysis replaces `data`, allowing exactly one rescan.
   const fileTypesScannedFor = useRef<DiskNode | null>(null)
 
+  // A4: live per-entry progress from the main process. The SCAN_PROGRESS channel
+  // is shared by every cleaner page, so only this section's categories count.
+  const [scanProgress, setScanProgress] = useState<ProgressData | null>(null)
+  useEffect(() => {
+    if (!window.dinho?.onScanProgress) return
+    return window.dinho.onScanProgress((data) => {
+      if (data.category !== 'disk' && data.category !== 'disk-file-types') return
+      setScanProgress(data)
+    })
+  }, [])
+
   useEffect(() => {
     if (drives.length === 0) {
       window.dinho
         ?.diskDrives?.()
-        .then(store.setDrives)
+        .then(setDrives)
         .catch((err) => {
           logger.error('DiskAnalyzerPage', 'Failed to load drives', err)
         })
     }
-  }, [drives, store])
+  }, [drives, setDrives])
 
   const handleAnalyze = async () => {
-    store.setAnalyzing(true)
-    store.setData(null)
-    store.setBreadcrumb([])
-    store.setError(null)
-    store.setFileTypes([])
+    setAnalyzing(true)
+    setData(null)
+    setBreadcrumb([])
+    setError(null)
+    setFileTypes([])
+    setScanProgress(null)
     try {
       const result = await window.dinho.diskAnalyze(selectedDrive)
-      store.setData(result)
-      store.setBreadcrumb([result])
+      // A5: an empty node means the backend refused (invalid drive / rejected
+      // sender) — a failure, never a successful "empty disk".
+      if (!result || result.path === '') {
+        throw new Error(`Disk analysis returned no data for drive ${selectedDrive}`)
+      }
+      setData(result)
+      setBreadcrumb([result])
     } catch (err) {
       logger.error('DiskAnalyzerPage', 'Disk analysis failed', err)
       toast.error(
@@ -63,31 +91,32 @@ export function DiskAnalyzerPage() {
           : t('failedToAnalyzeToastOther', { drive: selectedDrive }),
         { description: t('failedToAnalyzeDescMakeAccessible') },
       )
-      store.setError(
+      setError(
         isWin
           ? t('failedToAnalyzeErrorWindows', { drive: selectedDrive })
           : t('failedToAnalyzeErrorOther', { drive: selectedDrive }),
       )
     }
-    store.setAnalyzing(false)
+    setAnalyzing(false)
+    setScanProgress(null)
   }
 
   const handleFileTypeScan = useCallback(async () => {
-    store.setFileTypesLoading(true)
-    store.setError(null)
+    setFileTypesLoading(true)
+    setError(null)
     try {
       const result = await window.dinho.diskFileTypes(selectedDrive)
-      store.setFileTypes(result)
+      setFileTypes(result)
     } catch (err) {
       logger.error('DiskAnalyzerPage', 'File type scan failed', err)
-      store.setError(
+      setError(
         isWin
           ? t('failedToScanFileTypesWindows', { drive: selectedDrive })
           : t('failedToScanFileTypesOther', { drive: selectedDrive }),
       )
     }
-    store.setFileTypesLoading(false)
-  }, [store, t, selectedDrive, isWin])
+    setFileTypesLoading(false)
+  }, [setFileTypesLoading, setError, setFileTypes, t, selectedDrive, isWin])
 
   // Auto-scan file types when switching to that view if not already loaded.
   // Guarded by `fileTypesScannedFor` so an empty result never loops.
@@ -109,7 +138,7 @@ export function DiskAnalyzerPage() {
   const fileTypesTotal = useMemo(() => fileTypes.reduce((s, ft) => s + ft.totalSize, 0), [fileTypes])
 
   const drillDown = (node: DiskNode) => {
-    if (node.children?.length) store.pushBreadcrumb(node)
+    if (node.children?.length) pushBreadcrumb(node)
   }
 
   return (
@@ -121,7 +150,7 @@ export function DiskAnalyzerPage() {
           <div className="flex items-center gap-2.5">
             <select
               value={selectedDrive}
-              onChange={(e) => store.setSelectedDrive(e.target.value)}
+              onChange={(e) => setSelectedDrive(e.target.value)}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
             >
@@ -155,17 +184,20 @@ export function DiskAnalyzerPage() {
         }
       />
 
-      {error && <ErrorAlert message={error} onDismiss={() => store.setError(null)} className="mb-5" />}
+      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} className="mb-5" />}
 
       {analyzing && (
         <ScanProgress
           status="scanning"
-          progress={0}
+          progress={scanProgress?.progress ?? 0}
           currentPath={
-            isWin
+            scanProgress?.currentPath ??
+            (isWin
               ? t('analyzingProgressWindows', { drive: selectedDrive })
-              : t('analyzingProgressOther', { drive: selectedDrive })
+              : t('analyzingProgressOther', { drive: selectedDrive }))
           }
+          itemsFound={scanProgress?.itemsFound ?? 0}
+          sizeFound={scanProgress?.sizeFound ?? 0}
           className="mb-5"
         />
       )}
@@ -216,7 +248,7 @@ export function DiskAnalyzerPage() {
                     {i > 0 && <ChevronRight className="mx-1 h-3 w-3" style={{ color: 'var(--text-faint)' }} />}
                     <button
                       type="button"
-                      onClick={() => store.sliceBreadcrumb(i)}
+                      onClick={() => sliceBreadcrumb(i)}
                       className="rounded-md px-2 py-1 font-mono text-[12px] transition-colors"
                       style={{ color: i === breadcrumb.length - 1 ? 'var(--accent)' : 'var(--text-secondary)' }}
                     >
@@ -333,12 +365,15 @@ export function DiskAnalyzerPage() {
               {fileTypesLoading && (
                 <ScanProgress
                   status="scanning"
-                  progress={0}
+                  progress={scanProgress?.progress ?? 0}
                   currentPath={
-                    isWin
+                    scanProgress?.currentPath ??
+                    (isWin
                       ? t('scanningFileTypesWindows', { drive: selectedDrive })
-                      : t('scanningFileTypesOther', { drive: selectedDrive })
+                      : t('scanningFileTypesOther', { drive: selectedDrive }))
                   }
+                  itemsFound={scanProgress?.itemsFound ?? 0}
+                  sizeFound={scanProgress?.sizeFound ?? 0}
                   className="mb-5"
                 />
               )}

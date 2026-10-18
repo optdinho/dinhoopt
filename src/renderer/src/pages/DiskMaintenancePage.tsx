@@ -1,4 +1,5 @@
-import type { TrimDriveInfo, TrimMediaType, TrimStatus } from '@shared/types'
+import type { TrimDriveInfo, TrimMediaType, TrimProgress, TrimRunResult, TrimStatus } from '@shared/types'
+import type { TFunction } from 'i18next'
 import {
   CircleCheckBig,
   CircleX,
@@ -25,19 +26,58 @@ import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
 import { applyFilter, type DriveFilter, isSelectable, useDiskMaintenanceStore } from '@/stores/disk-maintenance-store'
 
-function formatRelativeTime(ts: number | null, never: string): string {
-  if (!ts) return never
+/**
+ * A2: the relative timestamps used to be hardcoded English ("3 days ago").
+ * They now go through `t` so pt/en/es users see their own language.
+ */
+function formatRelativeTime(ts: number | null, t: TFunction<'disk'>): string {
+  if (!ts) return t('trimNeverRecorded')
   const diff = Date.now() - ts
   const days = Math.floor(diff / (24 * 60 * 60 * 1000))
   if (days <= 0) {
     const hours = Math.floor(diff / (60 * 60 * 1000))
-    if (hours <= 0) return 'Just now'
-    return `${hours} hour${hours === 1 ? '' : 's'} ago`
+    if (hours <= 0) return t('timeAgo.justNow')
+    return t('timeAgo.hours', { count: hours })
   }
-  if (days === 1) return 'Yesterday'
-  if (days < 30) return `${days} days ago`
-  if (days < 365) return `${Math.round(days / 30)} months ago`
-  return `${Math.round(days / 365)} years ago`
+  if (days === 1) return t('timeAgo.yesterday')
+  if (days < 30) return t('timeAgo.days', { count: days })
+  if (days < 365) return t('timeAgo.months', { count: Math.round(days / 30) })
+  return t('timeAgo.years', { count: Math.round(days / 365) })
+}
+
+/**
+ * Lote 1 (i18n): the main process is locale-agnostic — it returns a stable
+ * code + params and keeps the English prose for the log. A missing/unknown
+ * code falls back to that English text instead of showing a raw key.
+ */
+function summaryText(
+  result: Pick<TrimRunResult, 'summary' | 'summaryCode' | 'summaryParams'>,
+  t: TFunction<'disk'>,
+): string {
+  if (!result.summaryCode) return result.summary
+  return t(`trimCode.${result.summaryCode}`, {
+    ...(result.summaryParams ?? {}),
+    defaultValue: result.summary,
+  })
+}
+
+function reasonText(
+  drive: Pick<TrimDriveInfo, 'statusReason' | 'statusReasonCode' | 'statusReasonParams'>,
+  t: TFunction<'disk'>,
+): string {
+  if (!drive.statusReasonCode) return drive.statusReason
+  return t(`reasonCode.${drive.statusReasonCode}`, {
+    ...(drive.statusReasonParams ?? {}),
+    defaultValue: drive.statusReason,
+  })
+}
+
+function progressText(progress: TrimProgress, t: TFunction<'disk'>): string {
+  if (!progress.messageCode) return progress.message
+  return t(`trimProgress.${progress.messageCode}`, {
+    ...(progress.messageParams ?? {}),
+    defaultValue: progress.message,
+  })
 }
 
 function MediaIcon({ type }: { type: TrimMediaType }) {
@@ -79,20 +119,32 @@ export function DiskMaintenancePage() {
   const results = useDiskMaintenanceStore((s) => s.results)
   const progress = useDiskMaintenanceStore((s) => s.progress)
   const batchRunning = useDiskMaintenanceStore((s) => s.batchRunning)
-  const store = useDiskMaintenanceStore()
+  // Actions selected individually: `useDiskMaintenanceStore()` (whole store)
+  // returned a fresh object per state change, re-running dependent effects.
+  const setDrives = useDiskMaintenanceStore((s) => s.setDrives)
+  const setLoading = useDiskMaintenanceStore((s) => s.setLoading)
+  const setError = useDiskMaintenanceStore((s) => s.setError)
+  const setFilter = useDiskMaintenanceStore((s) => s.setFilter)
+  const toggleSelect = useDiskMaintenanceStore((s) => s.toggleSelect)
+  const clearSelection = useDiskMaintenanceStore((s) => s.clearSelection)
+  const setRunState = useDiskMaintenanceStore((s) => s.setRunState)
+  const setResult = useDiskMaintenanceStore((s) => s.setResult)
+  const setProgress = useDiskMaintenanceStore((s) => s.setProgress)
+  const setBatchRunning = useDiskMaintenanceStore((s) => s.setBatchRunning)
 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [showLog, setShowLog] = useState<string | null>(null)
 
-  useProgressListener(window.dinho.onDiskTrimProgress, (data) => store.setProgress(data))
+  // The action has a stable identity → the listener subscribes once (E2).
+  useProgressListener(window.dinho.onDiskTrimProgress, setProgress)
 
   const { scan: handleRefresh } = useIpcScan({
     scanFn: () => window.dinho.diskTrimList(),
-    setLoading: (v) => store.setLoading(v),
-    resetState: () => store.setError(null),
-    onResult: (list) => store.setDrives(list),
+    setLoading,
+    resetState: () => setError(null),
+    onResult: setDrives,
     onError: (err) => {
-      store.setError(err instanceof Error ? err.message : t('trimListFailed'))
+      setError(err instanceof Error ? err.message : t('trimListFailed'))
     },
   })
 
@@ -115,19 +167,27 @@ export function DiskMaintenancePage() {
   async function handleRun(): Promise<void> {
     if (selectableSelected.length === 0) return
     setConfirmOpen(false)
-    store.setBatchRunning(true)
+    setBatchRunning(true)
     for (const id of selectableSelected) {
-      store.setRunState(id, 'running')
+      setRunState(id, 'running')
     }
     try {
       const results = await window.dinho.diskTrimRun(selectableSelected)
+      // A6: an empty array means the backend answered nothing (rejected sender
+      // / bad payload) — without this the rows stayed "running" forever.
+      if (results.length === 0) {
+        toast.error(t('trimNoResultsToast'))
+        for (const id of selectableSelected) {
+          setRunState(id, 'failed')
+        }
+      }
       let needsAdmin = false
       let throttled = 0
       let success = 0
       let failed = 0
       for (const r of results) {
-        store.setResult(r.driveId, r)
-        store.setRunState(r.driveId, r.success ? 'done' : 'failed')
+        setResult(r.driveId, r)
+        setRunState(r.driveId, r.success ? 'done' : 'failed')
         if (r.needsAdmin) needsAdmin = true
         if (r.throttled) throttled++
         if (r.success) success++
@@ -149,11 +209,11 @@ export function DiskMaintenancePage() {
       logger.error('DiskMaintenancePage', 'Trim batch failed', err)
       toast.error(t('trimBatchFailed'))
       for (const id of selectableSelected) {
-        store.setRunState(id, 'failed')
+        setRunState(id, 'failed')
       }
     } finally {
-      store.setBatchRunning(false)
-      store.clearSelection()
+      setBatchRunning(false)
+      clearSelection()
     }
   }
 
@@ -202,7 +262,7 @@ export function DiskMaintenancePage() {
         </div>
       </div>
 
-      {error && <ErrorAlert message={error} onDismiss={() => store.setError(null)} />}
+      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
 
       {/* Filter pills + run button */}
       <div className="mb-4 flex items-center gap-2">
@@ -214,7 +274,7 @@ export function DiskMaintenancePage() {
             <button
               type="button"
               key={p.key}
-              onClick={() => store.setFilter(p.key)}
+              onClick={() => setFilter(p.key)}
               className="rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors"
               style={{
                 background: filter === p.key ? 'var(--bg-subtle-2)' : 'transparent',
@@ -271,8 +331,8 @@ export function DiskMaintenancePage() {
               drive={drive}
               selected={selected.has(drive.id)}
               runState={runStates[drive.id] ?? 'idle'}
-              {...(progress[drive.id]?.message !== undefined ? { progressMessage: progress[drive.id]!.message } : {})}
-              onToggle={() => store.toggleSelect(drive.id)}
+              {...(progress[drive.id] ? { progressMessage: progressText(progress[drive.id]!, t) } : {})}
+              onToggle={() => toggleSelect(drive.id)}
               showLog={showLog === drive.id}
               onToggleLog={() => setShowLog(showLog === drive.id ? null : drive.id)}
               {...(results[drive.id] !== undefined ? { result: results[drive.id] } : {})}
@@ -303,7 +363,7 @@ interface DriveRowProps {
   onToggle: () => void
   showLog: boolean
   onToggleLog: () => void
-  result?: import('@shared/types').TrimRunResult
+  result?: TrimRunResult
 }
 
 function DriveRow({
@@ -366,11 +426,11 @@ function DriveRow({
             <span>{formatBytes(drive.totalSize, 0)} total</span>
             <span>·</span>
             <span>
-              {t('trimLastTrimmed')}: {formatRelativeTime(drive.lastTrimAt, t('trimNeverRecorded'))}
+              {t('trimLastTrimmed')}: {formatRelativeTime(drive.lastTrimAt, t)}
             </span>
           </div>
         </div>
-        <StatusPill status={drive.status} reason={drive.statusReason} />
+        <StatusPill status={drive.status} reason={reasonText(drive, t)} />
       </div>
 
       {runState === 'running' && (
@@ -398,7 +458,7 @@ function DriveRow({
             ) : (
               <CircleX className="h-4 w-4 shrink-0 text-red-400" strokeWidth={1.8} />
             )}
-            <p className="text-[12px] text-zinc-300">{result.summary}</p>
+            <p className="text-[12px] text-zinc-300">{summaryText(result, t)}</p>
           </div>
           {result.log && (
             <button

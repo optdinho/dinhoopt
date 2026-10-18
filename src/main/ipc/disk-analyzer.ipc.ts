@@ -3,7 +3,14 @@ import { readdir, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { IPC } from '@shared/channels'
-import type { DiskNode, DiskRepairProgress, DiskRepairResult, DriveInfo, FileTypeInfo } from '@shared/types'
+import type {
+  DiskNode,
+  DiskRepairProgress,
+  DiskRepairResult,
+  DiskRepairSummaryCode,
+  DriveInfo,
+  FileTypeInfo,
+} from '@shared/types'
 import { type BrowserWindow, ipcMain } from 'electron'
 import { isAdmin } from '../services/elevation'
 import { execFileAsync, psUtf8, trackChildProcess } from '../services/exec-utf8'
@@ -14,9 +21,19 @@ import { validateSender } from './sender-validation'
 const MAX_DEPTH = 3
 const FILE_TYPE_MAX_DEPTH = 4
 
+/** Mutable per-scan counter so swallowed FS errors still leave a trace in the log. */
+interface ScanStats {
+  skipped: number
+}
+
 // ── Internal helpers ──
 
-async function analyzeDirectory(dirPath: string, depth: number, mainWindow: BrowserWindow | null): Promise<DiskNode> {
+async function analyzeDirectory(
+  dirPath: string,
+  depth: number,
+  mainWindow: BrowserWindow | null,
+  stats: ScanStats,
+): Promise<DiskNode> {
   const node: DiskNode = {
     name: basename(dirPath) || dirPath,
     path: dirPath,
@@ -25,18 +42,18 @@ async function analyzeDirectory(dirPath: string, depth: number, mainWindow: Brow
   }
 
   if (depth >= MAX_DEPTH) {
-    node.size = await quickSize(dirPath)
+    node.size = await quickSize(dirPath, stats)
     return node
   }
 
   try {
     const entries = await readdir(dirPath, { withFileTypes: true })
 
-    for (const entry of entries) {
+    for (const [index, entry] of entries.entries()) {
       const fullPath = join(dirPath, entry.name)
       try {
         if (entry.isDirectory()) {
-          const child = await analyzeDirectory(fullPath, depth + 1, mainWindow)
+          const child = await analyzeDirectory(fullPath, depth + 1, mainWindow, stats)
           node.children!.push(child)
           node.size += child.size
         } else {
@@ -44,22 +61,36 @@ async function analyzeDirectory(dirPath: string, depth: number, mainWindow: Brow
           node.size += s.size
         }
       } catch {
-        // Skip inaccessible
+        // Skip inaccessible entry — counted in `stats` and reported once per scan.
+        stats.skipped += 1
+      }
+
+      // Real, per-entry progress for the top level (the UI shows a live bar).
+      if (depth === 0 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'scanning',
+          category: 'disk',
+          currentPath: fullPath,
+          progress: Math.round(((index + 1) / Math.max(entries.length, 1)) * 100),
+          itemsFound: node.children!.length,
+          sizeFound: node.size,
+        })
       }
     }
 
-    if (depth === 0 && mainWindow && !mainWindow.isDestroyed()) {
+    if (depth === 0 && entries.length === 0 && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
         phase: 'scanning',
         category: 'disk',
         currentPath: dirPath,
-        progress: 50,
-        itemsFound: node.children!.length,
-        sizeFound: node.size,
+        progress: 100,
+        itemsFound: 0,
+        sizeFound: 0,
       })
     }
   } catch {
-    // Inaccessible directory
+    // Inaccessible root/subdirectory — counted, not logged per directory.
+    stats.skipped += 1
   }
 
   node.children?.sort((a, b) => b.size - a.size)
@@ -71,15 +102,16 @@ async function collectFileTypes(
   depth: number,
   extMap: Map<string, { size: number; count: number }>,
   mainWindow: BrowserWindow | null,
+  stats: ScanStats,
 ): Promise<void> {
   if (depth >= FILE_TYPE_MAX_DEPTH) return
   try {
     const entries = await readdir(dirPath, { withFileTypes: true })
-    for (const entry of entries) {
+    for (const [index, entry] of entries.entries()) {
       const fullPath = join(dirPath, entry.name)
       try {
         if (entry.isDirectory()) {
-          await collectFileTypes(fullPath, depth + 1, extMap, mainWindow)
+          await collectFileTypes(fullPath, depth + 1, extMap, mainWindow, stats)
         } else {
           const s = await stat(fullPath)
           const ext = (extname(entry.name) || '(no extension)').toLowerCase()
@@ -92,25 +124,33 @@ async function collectFileTypes(
           }
         }
       } catch {
-        // Skip inaccessible
+        // Skip inaccessible entry (counted for the end-of-scan warning).
+        stats.skipped += 1
+      }
+      if (depth === 0 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
+          phase: 'scanning',
+          category: 'disk-file-types',
+          currentPath: dirPath,
+          progress: Math.round(((index + 1) / Math.max(entries.length, 1)) * 100),
+          itemsFound: extMap.size,
+          sizeFound: 0,
+        })
       }
     }
-    if (depth === 0 && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC.SCAN_PROGRESS, {
-        phase: 'scanning',
-        category: 'disk-file-types',
-        currentPath: dirPath,
-        progress: 50,
-        itemsFound: extMap.size,
-        sizeFound: 0,
-      })
-    }
   } catch {
-    // Inaccessible directory
+    // Inaccessible directory (counted for the end-of-scan warning).
+    stats.skipped += 1
   }
 }
 
-async function quickSize(dirPath: string): Promise<number> {
+/**
+ * Shallow size of a directory: sums only the files directly inside it.
+ * Intentional (tested: "skips subdirectories in quickSize calculation") — used to
+ * cap the cost of the depth-3 frontier, where listing children would be unbounded.
+ * Consequence: a depth-3 node's `size` excludes its own subdirectories.
+ */
+async function quickSize(dirPath: string, stats: ScanStats): Promise<number> {
   let size = 0
   try {
     const entries = await readdir(dirPath, { withFileTypes: true })
@@ -119,11 +159,13 @@ async function quickSize(dirPath: string): Promise<number> {
         const s = await stat(join(dirPath, entry.name))
         size += s.isDirectory() ? 0 : s.size
       } catch {
-        // Skip
+        // Skip unreadable entry.
+        stats.skipped += 1
       }
     }
   } catch {
-    // Skip
+    // Unreadable directory.
+    stats.skipped += 1
   }
   return size
 }
@@ -133,7 +175,7 @@ async function quickSize(dirPath: string): Promise<number> {
 export async function getDrives(): Promise<DriveInfo[]> {
   getLogger().info('disk-analyzer', 'Fetching drive list...')
   try {
-    const driveScript = `$fixed = (Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }).DeviceID -replace ':',''; Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null -and $fixed -contains $_.Name } | ForEach-Object { "$($_.Name)|$($_.Description)|$($_.Used)|$($_.Free)" }`
+    const driveScript = `$fixed = (Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }).DeviceID -replace ':',''; Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null -and $fixed -contains $_.Name } | ForEach-Object { "$($_.Name)|$($_.Description)|$($_.Used)|$($_.Free)" }`
     const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(driveScript)], {
       timeout: 10000,
       windowsHide: true,
@@ -156,8 +198,12 @@ export async function getDrives(): Promise<DriveInfo[]> {
     }
     getLogger().success('disk-analyzer', `Found ${drives.length} drive(s) on Windows`)
     return drives
-  } catch {
-    getLogger().error('disk-analyzer', 'Failed to fetch drives via WMI')
+  } catch (err) {
+    getLogger().error(
+      'disk-analyzer',
+      'Failed to fetch drives via CIM',
+      err instanceof Error ? err.message : String(err),
+    )
     return []
   }
 }
@@ -169,14 +215,18 @@ function resolveRootPath(drive: string): string | null {
   return null
 }
 
-export async function analyzeDisk(drive: string): Promise<DiskNode> {
+export async function analyzeDisk(drive: string, mainWindow: BrowserWindow | null = null): Promise<DiskNode> {
   getLogger().info('disk-analyzer', `Analyzing disk: ${drive}`)
   const rootPath = resolveRootPath(drive)
   if (!rootPath) {
     getLogger().warning('disk-analyzer', `Invalid drive identifier: ${drive}`)
     return { name: '', path: '', size: 0, children: [] }
   }
-  const node = await analyzeDirectory(rootPath, 0, null)
+  const stats: ScanStats = { skipped: 0 }
+  const node = await analyzeDirectory(rootPath, 0, mainWindow, stats)
+  if (stats.skipped > 0) {
+    getLogger().warning('disk-analyzer', `Disk analysis skipped ${stats.skipped} inaccessible item(s) on ${drive}`)
+  }
   getLogger().success(
     'disk-analyzer',
     `Disk analysis complete for ${drive}: ${node.size} bytes in ${node.children?.length ?? 0} items`,
@@ -184,7 +234,7 @@ export async function analyzeDisk(drive: string): Promise<DiskNode> {
   return node
 }
 
-export async function getFileTypes(drive: string): Promise<FileTypeInfo[]> {
+export async function getFileTypes(drive: string, mainWindow: BrowserWindow | null = null): Promise<FileTypeInfo[]> {
   getLogger().info('disk-analyzer', `Collecting file types for: ${drive}`)
   const rootPath = resolveRootPath(drive)
   if (!rootPath) {
@@ -192,7 +242,11 @@ export async function getFileTypes(drive: string): Promise<FileTypeInfo[]> {
     return []
   }
   const extMap = new Map<string, { size: number; count: number }>()
-  await collectFileTypes(rootPath, 0, extMap, null)
+  const stats: ScanStats = { skipped: 0 }
+  await collectFileTypes(rootPath, 0, extMap, mainWindow, stats)
+  if (stats.skipped > 0) {
+    getLogger().warning('disk-analyzer', `File-type scan skipped ${stats.skipped} inaccessible path(s) on ${drive}`)
+  }
   const results: FileTypeInfo[] = []
   for (const [ext, info] of extMap) {
     results.push({ extension: ext, totalSize: info.size, fileCount: info.count })
@@ -222,6 +276,7 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
       success: false,
       exitCode: null,
       summary: 'Administrator privileges required to run SFC',
+      summaryCode: 'adminRequired',
       log: '',
       requiresReboot: false,
       needsAdmin: true,
@@ -232,6 +287,14 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
   const safeDrive = /^[A-Za-z]$/.test(drive) ? drive.toUpperCase() : 'C'
 
   return new Promise((resolve) => {
+    // `spawn` can emit both 'error' and 'close'; resolve exactly once.
+    let settled = false
+    const settle = (result: DiskRepairResult): void => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+
     const args = ['/scannow']
     // If a non-system drive is specified, use /offbootdir and /offwindir
     if (safeDrive !== 'C') {
@@ -259,6 +322,8 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
             phase: 'running',
             percent: pct,
             message: `System File Checker: ${pct}% complete`,
+            messageCode: 'percent',
+            messageParams: { percent: pct },
           })
         }
       }
@@ -274,12 +339,16 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
         phase: 'failed',
         percent: 0,
         message: `SFC failed to start: ${err.message}`,
+        messageCode: 'startFailed',
+        messageParams: { error: err.message },
       })
-      resolve({
+      settle({
         tool: 'sfc',
         success: false,
         exitCode: null,
         summary: `Failed to start SFC: ${err.message}`,
+        summaryCode: 'startFailed',
+        summaryParams: { error: err.message },
         log: stdout,
         requiresReboot: false,
         needsAdmin: false,
@@ -289,16 +358,22 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
     child.on('close', (code) => {
       const success = code === 0
       let summary: string
+      let summaryCode: DiskRepairSummaryCode
       if (stdout.includes('did not find any integrity violations')) {
         summary = 'No integrity violations found — your system files are healthy.'
+        summaryCode = 'sfcNoViolations'
       } else if (stdout.includes('successfully repaired')) {
         summary = 'Windows found and repaired corrupted system files.'
+        summaryCode = 'sfcRepaired'
       } else if (stdout.includes('found corrupt files but was unable to fix')) {
         summary = 'Corrupted files were found but could not be repaired. Try running DISM first, then SFC again.'
+        summaryCode = 'sfcRepairIncomplete'
       } else if (success) {
         summary = 'SFC completed successfully.'
+        summaryCode = 'sfcCompleted'
       } else {
         summary = `SFC exited with code ${code}.`
+        summaryCode = 'sfcExitCode'
       }
 
       // Check for reboot indicators — use specific phrases, not generic words
@@ -309,7 +384,17 @@ async function runSfc(drive: string, getWindow: WindowGetter): Promise<DiskRepai
         percent: 100,
         message: summary,
       })
-      resolve({ tool: 'sfc', success, exitCode: code, summary, log: stdout, requiresReboot, needsAdmin: false })
+      settle({
+        tool: 'sfc',
+        success,
+        exitCode: code,
+        summary,
+        summaryCode,
+        ...(summaryCode === 'sfcExitCode' ? { summaryParams: { code: String(code) } } : {}),
+        log: stdout,
+        requiresReboot,
+        needsAdmin: false,
+      })
     })
   })
 }
@@ -326,6 +411,7 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
       success: false,
       exitCode: null,
       summary: 'Administrator privileges required to run DISM',
+      summaryCode: 'adminRequired',
       log: '',
       requiresReboot: false,
       needsAdmin: true,
@@ -333,6 +419,13 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
   }
 
   return new Promise((resolve) => {
+    let settled = false
+    const settle = (result: DiskRepairResult): void => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+
     const child = spawn(
       'cmd',
       ['/c', 'chcp 65001 >nul & DISM', '/English', '/Online', '/Cleanup-Image', '/RestoreHealth'],
@@ -359,6 +452,8 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
             phase: 'running',
             percent: pct,
             message: `DISM RestoreHealth: ${pct}% complete`,
+            messageCode: 'percent',
+            messageParams: { percent: pct },
           })
         }
       }
@@ -374,12 +469,16 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
         phase: 'failed',
         percent: 0,
         message: `DISM failed to start: ${err.message}`,
+        messageCode: 'startFailed',
+        messageParams: { error: err.message },
       })
-      resolve({
+      settle({
         tool: 'dism',
         success: false,
         exitCode: null,
         summary: `Failed to start DISM: ${err.message}`,
+        summaryCode: 'startFailed',
+        summaryParams: { error: err.message },
         log: stdout,
         requiresReboot: false,
         needsAdmin: false,
@@ -389,14 +488,19 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
     child.on('close', (code) => {
       const success = code === 0
       let summary: string
+      let summaryCode: DiskRepairSummaryCode
       if (stdout.includes('The restore operation completed successfully')) {
         summary = 'DISM successfully repaired the Windows component store.'
+        summaryCode = 'dismRepaired'
       } else if (stdout.includes('No component store corruption detected')) {
         summary = 'No component store corruption detected — image is healthy.'
+        summaryCode = 'dismHealthy'
       } else if (success) {
         summary = 'DISM completed successfully.'
+        summaryCode = 'dismCompleted'
       } else {
         summary = `DISM exited with code ${code}. Check the log for details.`
+        summaryCode = 'dismExitCode'
       }
 
       // Check for reboot indicators — use specific phrases to avoid false positives
@@ -407,7 +511,17 @@ async function runDism(getWindow: WindowGetter): Promise<DiskRepairResult> {
         percent: 100,
         message: summary,
       })
-      resolve({ tool: 'dism', success, exitCode: code, summary, log: stdout, requiresReboot, needsAdmin: false })
+      settle({
+        tool: 'dism',
+        success,
+        exitCode: code,
+        summary,
+        summaryCode,
+        ...(summaryCode === 'dismExitCode' ? { summaryParams: { code: String(code) } } : {}),
+        log: stdout,
+        requiresReboot,
+        needsAdmin: false,
+      })
     })
   })
 }
@@ -424,6 +538,7 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
       success: false,
       exitCode: null,
       summary: 'Administrator privileges required to run CHKDSK',
+      summaryCode: 'adminRequired',
       log: '',
       requiresReboot: false,
       needsAdmin: true,
@@ -433,6 +548,13 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
   const safeDrive = /^[A-Za-z]$/.test(drive) ? drive.toUpperCase() : 'C'
 
   return new Promise((resolve) => {
+    let settled = false
+    const settle = (result: DiskRepairResult): void => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+
     const child = spawn('cmd', ['/c', `chcp 65001 >nul & chkdsk ${safeDrive}: /scan`], { windowsHide: true })
     let stdout = ''
     let lastPercent = 0
@@ -453,6 +575,8 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
             phase: 'running',
             percent: pct,
             message: `CHKDSK: ${pct}% complete`,
+            messageCode: 'percent',
+            messageParams: { percent: pct },
           })
         }
       }
@@ -468,12 +592,16 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
         phase: 'failed',
         percent: 0,
         message: `CHKDSK failed to start: ${err.message}`,
+        messageCode: 'startFailed',
+        messageParams: { error: err.message },
       })
-      resolve({
+      settle({
         tool: 'chkdsk',
         success: false,
         exitCode: null,
         summary: `Failed to start CHKDSK: ${err.message}`,
+        summaryCode: 'startFailed',
+        summaryParams: { error: err.message },
         log: stdout,
         requiresReboot: false,
         needsAdmin: false,
@@ -486,20 +614,28 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
       // Codes 0–2 are successful completions.
       const success = code !== null && code <= 2
       let summary: string
+      let summaryCode: DiskRepairSummaryCode
       if (stdout.includes('Windows has scanned the file system and found no problems')) {
         summary = 'No file system errors found — disk is healthy.'
+        summaryCode = 'chkdskHealthy'
       } else if (stdout.includes('Windows has made corrections to the file system')) {
         summary = 'File system errors were found and repaired.'
+        summaryCode = 'chkdskFixed'
       } else if (stdout.includes('no further action is required')) {
         summary = 'CHKDSK completed — no further action required.'
+        summaryCode = 'chkdskCompleted'
       } else if (code === 1) {
         summary = 'Errors were found and fixed successfully.'
+        summaryCode = 'chkdskFixed'
       } else if (code === 2) {
         summary = 'CHKDSK completed disk cleanup.'
+        summaryCode = 'chkdskCleanup'
       } else if (code === 0) {
         summary = 'CHKDSK completed successfully.'
+        summaryCode = 'chkdskCompleted'
       } else {
         summary = `CHKDSK exited with code ${code}. Check the log for details.`
+        summaryCode = 'chkdskExitCode'
       }
 
       const requiresReboot = /restart your computer|schedule.*check.*restart|cannot run.*volume is in use/i.test(stdout)
@@ -509,7 +645,17 @@ async function runChkdsk(drive: string, getWindow: WindowGetter): Promise<DiskRe
         percent: 100,
         message: summary,
       })
-      resolve({ tool: 'chkdsk', success, exitCode: code, summary, log: stdout, requiresReboot, needsAdmin: false })
+      settle({
+        tool: 'chkdsk',
+        success,
+        exitCode: code,
+        summary,
+        summaryCode,
+        ...(summaryCode === 'chkdskExitCode' ? { summaryParams: { code: String(code) } } : {}),
+        log: stdout,
+        requiresReboot,
+        needsAdmin: false,
+      })
     })
   })
 }
@@ -521,34 +667,12 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
 
   ipcMain.handle(IPC.DISK_FILE_TYPES, async (event, drive: string): Promise<FileTypeInfo[]> => {
     if (!validateSender(event, getWindow())) return []
-    getLogger().info('disk-analyzer', `IPC: collecting file types for ${drive}`)
-    const rootPath = resolveRootPath(drive)
-    if (!rootPath) {
-      getLogger().warning('disk-analyzer', `IPC: invalid drive for file types: ${drive}`)
-      return []
-    }
-    const extMap = new Map<string, { size: number; count: number }>()
-    await collectFileTypes(rootPath, 0, extMap, getWindow())
-    const results: FileTypeInfo[] = []
-    for (const [ext, info] of extMap) {
-      results.push({ extension: ext, totalSize: info.size, fileCount: info.count })
-    }
-    results.sort((a, b) => b.totalSize - a.totalSize)
-    getLogger().success('disk-analyzer', `IPC: collected ${results.length} file type(s) for ${drive}`)
-    return results
+    return getFileTypes(drive, getWindow())
   })
 
   ipcMain.handle(IPC.DISK_ANALYZE, async (event, drive: string): Promise<DiskNode> => {
     if (!validateSender(event, getWindow())) return { name: '', path: '', size: 0, children: [] }
-    getLogger().info('disk-analyzer', `IPC: analyzing disk ${drive}`)
-    const rootPath = resolveRootPath(drive)
-    if (!rootPath) {
-      getLogger().warning('disk-analyzer', `IPC: invalid drive for analyze: ${drive}`)
-      return { name: '', path: '', size: 0, children: [] }
-    }
-    const node = await analyzeDirectory(rootPath, 0, getWindow())
-    getLogger().success('disk-analyzer', `IPC: analysis complete for ${drive}: ${node.size} bytes`)
-    return node
+    return analyzeDisk(drive, getWindow())
   })
 
   // Disk repair
@@ -559,6 +683,7 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
         success: false,
         exitCode: null,
         summary: 'Invalid sender',
+        summaryCode: 'invalidSender',
         log: '',
         requiresReboot: false,
         needsAdmin: false,
@@ -581,6 +706,7 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
         success: false,
         exitCode: null,
         summary: 'Invalid sender',
+        summaryCode: 'invalidSender',
         log: '',
         requiresReboot: false,
         needsAdmin: false,
@@ -602,6 +728,7 @@ export function registerDiskAnalyzerIpc(getWindow: WindowGetter): void {
         success: false,
         exitCode: null,
         summary: 'Invalid sender',
+        summaryCode: 'invalidSender',
         log: '',
         requiresReboot: false,
         needsAdmin: false,

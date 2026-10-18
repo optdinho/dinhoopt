@@ -1,7 +1,16 @@
 import { spawn } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
 import { IPC } from '@shared/channels'
-import type { TrimDriveInfo, TrimMediaType, TrimProgress, TrimRunResult, TrimStatus } from '@shared/types'
+import type {
+  TrimDriveInfo,
+  TrimMediaType,
+  TrimProgress,
+  TrimReasonCode,
+  TrimRunResult,
+  TrimStatus,
+  TrimSummaryCode,
+  TrimSupport,
+} from '@shared/types'
 import { ipcMain } from 'electron'
 import { isAdmin } from '../services/elevation'
 import { execFileAsync, psUtf8, trackChildProcess } from '../services/exec-utf8'
@@ -15,41 +24,70 @@ let runningBatch = false
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
-const RECOMMEND_DISCARD_BYTES = 1024 * 1024 * 1024 // 1 GiB
 
 // ── Status heuristic ──
 
-export function computeStatus(drive: Partial<TrimDriveInfo>, now = Date.now()): { status: TrimStatus; reason: string } {
-  if (drive.trimSupport === 'macos-managed') {
-    return { status: 'not-applicable', reason: 'Managed by macOS — TRIM runs automatically on Apple SSDs.' }
-  }
+export interface TrimStatusInfo {
+  status: TrimStatus
+  reason: string
+  reasonCode: TrimReasonCode
+  reasonParams?: Record<string, string | number>
+}
+
+export function computeStatus(drive: Partial<TrimDriveInfo>, now = Date.now()): TrimStatusInfo {
   if (drive.mediaType === 'HDD') {
-    return { status: 'not-applicable', reason: 'HDDs do not benefit from TRIM.' }
+    return { status: 'not-applicable', reason: 'HDDs do not benefit from TRIM.', reasonCode: 'hdd' }
   }
   if (drive.isRemovable) {
-    return { status: 'not-applicable', reason: 'Removable drive — TRIM is not recommended.' }
+    return {
+      status: 'not-applicable',
+      reason: 'Removable drive — TRIM is not recommended.',
+      reasonCode: 'removable',
+    }
   }
   if (drive.trimSupport === 'unsupported') {
-    return { status: 'disabled', reason: 'The filesystem or device does not support TRIM/DISCARD.' }
+    return {
+      status: 'not-applicable',
+      reason: 'The filesystem or device does not support TRIM/DISCARD.',
+      reasonCode: 'unsupported',
+    }
   }
   if (drive.trimSupport === 'disabled') {
-    return { status: 'disabled', reason: 'TRIM is disabled on this drive.' }
+    return {
+      status: 'disabled',
+      reason: 'TRIM is disabled at the system level (DisableDeleteNotify).',
+      reasonCode: 'disabled',
+    }
   }
   if (drive.lastTrimAt && now - drive.lastTrimAt < SEVEN_DAYS) {
     const days = Math.max(1, Math.round((now - drive.lastTrimAt) / (24 * 60 * 60 * 1000)))
-    return { status: 'recently-trimmed', reason: `Trimmed ${days} day${days === 1 ? '' : 's'} ago — no action needed.` }
-  }
-  if (drive.estimatedDiscardBytes && drive.estimatedDiscardBytes > RECOMMEND_DISCARD_BYTES) {
-    const gb = (drive.estimatedDiscardBytes / (1024 * 1024 * 1024)).toFixed(1)
-    return { status: 'recommended', reason: `${gb} GiB of unused blocks waiting to be trimmed.` }
+    return {
+      status: 'recently-trimmed',
+      reason: `Trimmed ${days} day${days === 1 ? '' : 's'} ago — no action needed.`,
+      reasonCode: 'recentlyTrimmed',
+      reasonParams: { days },
+    }
   }
   if (drive.lastTrimAt && now - drive.lastTrimAt > THIRTY_DAYS) {
-    return { status: 'recommended', reason: 'Last TRIM was over 30 days ago.' }
+    return { status: 'recommended', reason: 'Last TRIM was over 30 days ago.', reasonCode: 'recommendedStale' }
   }
   if (!drive.lastTrimAt) {
-    return { status: 'unknown', reason: 'No TRIM history recorded — the OS may already be handling it on a schedule.' }
+    return {
+      status: 'unknown',
+      reason: 'No TRIM history recorded — the OS may already be handling it on a schedule.',
+      reasonCode: 'unknown',
+    }
   }
-  return { status: 'ok', reason: 'Healthy — last TRIM is recent enough.' }
+  return { status: 'ok', reason: 'Healthy — last TRIM is recent enough.', reasonCode: 'ok' }
+}
+
+/**
+ * DISCARD needs a filesystem that understands it — NTFS and ReFS on Windows.
+ * An unreadable/absent filesystem cannot be trimmed, so it counts as unsupported.
+ */
+function isDiscardCapableFilesystem(fs: string | null | undefined): boolean {
+  const s = (fs ?? '').trim().toUpperCase()
+  return s === 'NTFS' || s === 'REFS'
 }
 
 // ── Windows ──
@@ -69,7 +107,7 @@ interface WinVolume {
   Size?: number
   Free?: number
   DiskNumber?: number
-  DriveType?: number | string // 1=Removable, 2=Fixed, 3=Network on Get-Volume
+  DriveType?: number | string // Get-Volume DriveType is stringified by PS: 'Fixed' | 'Removable' | 'Network' | 'CD-ROM' | 'RAM Disk'
   BitLockerStatus?: string | null
 }
 
@@ -117,6 +155,10 @@ async function listDrivesWindows(): Promise<TrimDriveInfo[]> {
   const script = `
 $ErrorActionPreference = 'SilentlyContinue'
 $disks = Get-PhysicalDisk | Select-Object DeviceId, Number, MediaType, BusType, FriendlyName
+$ddn = 0
+$ddnOut = @()
+try { $ddnOut = fsutil behavior query DisableDeleteNotify 2>$null } catch {}
+if (($ddnOut -join [char]10) -match 'DisableDeleteNotify\\s*=\\s*(\\d+)') { $ddn = [int]$Matches[1] }
 $volumes = @()
 Get-Partition | ForEach-Object {
   $p = $_
@@ -136,19 +178,37 @@ Get-Partition | ForEach-Object {
     }
   }
 }
-@{ disks = $disks; volumes = $volumes } | ConvertTo-Json -Depth 4 -Compress
+@{ disks = $disks; volumes = $volumes; ddn = $ddn } | ConvertTo-Json -Depth 4 -Compress
 `
-  const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(script)], {
-    timeout: 15000,
-    windowsHide: true,
-    maxBuffer: 4 * 1024 * 1024,
-  })
-
-  let parsed: { disks?: WinPhysicalDisk[] | WinPhysicalDisk; volumes?: WinVolume[] | WinVolume } = {}
+  let stdout = ''
   try {
-    parsed = JSON.parse(String(stdout))
-  } catch {
+    const res = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psUtf8(script)], {
+      timeout: 15000,
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    stdout = String(res.stdout)
+  } catch (err) {
+    getLogger().error('disk-trim', 'Failed to enumerate volumes', err instanceof Error ? err.message : String(err))
     return []
+  }
+
+  let parsed: {
+    disks?: WinPhysicalDisk[] | WinPhysicalDisk
+    volumes?: WinVolume[] | WinVolume
+    ddn?: number | string
+  } = {}
+  try {
+    parsed = JSON.parse(stdout)
+  } catch {
+    getLogger().error('disk-trim', 'Failed to parse volume enumeration output')
+    return []
+  }
+
+  // DisableDeleteNotify: 0 = TRIM enabled (default), 1 = disabled at the OS level.
+  const trimDisabledSystemWide = Number(parsed.ddn) === 1
+  if (trimDisabledSystemWide) {
+    getLogger().warning('disk-trim', 'TRIM is disabled system-wide (DisableDeleteNotify = 1)')
   }
 
   const disks = Array.isArray(parsed.disks) ? parsed.disks : parsed.disks ? [parsed.disks] : []
@@ -159,30 +219,34 @@ Get-Partition | ForEach-Object {
     if (!Number.isNaN(num)) diskByNumber.set(num, d)
   }
 
-  const lastTrims = readWindowsLastTrim()
+  const lastTrims = readWindowsLastTrimCache()
   const now = Date.now()
 
   const result: TrimDriveInfo[] = []
   for (const v of volumes) {
     if (!v.Letter || !isLetterSafe(v.Letter)) continue
-    if (String(v.DriveType).toLowerCase() === 'network' || v.DriveType === 4) continue
+    // Network shares are not physical media and never support DISCARD.
+    if (String(v.DriveType).toLowerCase() === 'network') continue
 
     const phys = v.DiskNumber != null ? diskByNumber.get(v.DiskNumber) : undefined
     const mediaType = mapMediaType(phys?.MediaType, phys?.BusType)
     const busType = mapBusType(phys?.BusType)
-    const isRemovable =
-      String(v.DriveType).toLowerCase() === 'removable' || v.DriveType === 2 || (busType ?? '').toUpperCase() === 'USB'
+    const isRemovable = String(v.DriveType).toLowerCase() === 'removable' || (busType ?? '').toUpperCase() === 'USB'
 
     const id = v.Letter.toUpperCase()
     const lastTrimAt = lastTrims[id] ?? getLastTrimAt(id) ?? null
 
-    const partial: Partial<TrimDriveInfo> = {
-      mediaType,
-      isRemovable,
-      trimSupport: 'supported',
-      lastTrimAt,
-    }
-    const { status, reason } = computeStatus(partial, now)
+    // Real capability, no guessing: OS-level toggle wins, then the filesystem.
+    const trimSupport: TrimSupport = trimDisabledSystemWide
+      ? 'disabled'
+      : isDiscardCapableFilesystem(v.FS)
+        ? 'supported'
+        : 'unsupported'
+
+    const { status, reason, reasonCode, reasonParams } = computeStatus(
+      { mediaType, isRemovable, trimSupport, lastTrimAt },
+      now,
+    )
 
     result.push({
       id,
@@ -195,9 +259,11 @@ Get-Partition | ForEach-Object {
       ...(v.FS ? { filesystem: v.FS } : {}),
       isRemovable,
       isEncrypted: !!v.BitLockerStatus && v.BitLockerStatus !== 'Off',
-      trimSupport: 'supported',
+      trimSupport,
       status,
       statusReason: reason,
+      statusReasonCode: reasonCode,
+      ...(reasonParams ? { statusReasonParams: reasonParams } : {}),
       lastTrimAt,
     })
   }
@@ -205,12 +271,11 @@ Get-Partition | ForEach-Object {
 }
 
 /**
- * Best-effort scan of the Defrag operational log for the most-recent retrim
- * event per drive letter. Returns { 'C': epochMs, ... } — empty if log is missing.
+ * Last-retrim timestamps per drive letter, populated by {@link refreshWindowsLastTrim}.
+ * Pure cache read (no I/O) so the synchronous volume-mapping loop can use it;
+ * `listTrimDrives` refreshes the cache before listing.
  */
-function readWindowsLastTrim(): Record<string, number> {
-  // Synchronous wrapper kept simple: this runs from listDrivesWindows()
-  // which is async; we attempt the read in-line and swallow errors.
+function readWindowsLastTrimCache(): Record<string, number> {
   return _winLastTrimCache
 }
 
@@ -246,8 +311,10 @@ $events | ConvertTo-Json -Depth 2 -Compress
     for (const ev of data) {
       const t = Date.parse(ev.When)
       if (!Number.isFinite(t)) continue
-      // Defrag event messages embed the volume identifier; pull the first letter we can find.
-      const m = ev.Msg?.match(/(?:Volume|Drive)\s+([A-Za-z])\s*:/)
+      // Event 258 reads "The storage optimizer successfully completed retrim
+      // on (C:)". The "(X:)" token is not localized, so match it directly and
+      // fall back to a bare "X:" for other message shapes/OS builds.
+      const m = ev.Msg?.match(/\(\s*([A-Za-z])\s*:\s*\)/) ?? ev.Msg?.match(/\b([A-Za-z]):/)
       const letter = m?.[1] ? m[1].toUpperCase() : null
       if (letter && (out[letter] ?? 0) < t) out[letter] = t
     }
@@ -266,6 +333,12 @@ async function runTrimWindows(letter: string, getWindow: WindowGetter): Promise<
   }
   getLogger().info('disk-trim', `Starting Windows TRIM on ${id}:...`)
   return new Promise((resolve) => {
+    let settled = false
+    const settle = (result: TrimRunResult): void => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
     const psCmd = `Optimize-Volume -DriveLetter ${id} -ReTrim -Verbose`
     const child = spawn('cmd', ['/c', `chcp 65001 >nul & powershell.exe -NoProfile -Command "${psCmd}"`], {
       windowsHide: true,
@@ -275,7 +348,13 @@ async function runTrimWindows(letter: string, getWindow: WindowGetter): Promise<
     const out = new StringDecoder('utf-8')
     const err = new StringDecoder('utf-8')
 
-    sendProgress(getWindow, { driveId: id, phase: 'starting', percent: -1, message: `Starting TRIM on ${id}:...` })
+    sendProgress(getWindow, {
+      driveId: id,
+      phase: 'starting',
+      percent: -1,
+      message: `Starting TRIM on ${id}:...`,
+      messageCode: 'starting',
+    })
 
     child.stdout?.on('data', (chunk: Buffer) => {
       const text = out.write(chunk)
@@ -294,13 +373,22 @@ async function runTrimWindows(letter: string, getWindow: WindowGetter): Promise<
       }
     })
     child.on('error', (e) => {
-      sendProgress(getWindow, { driveId: id, phase: 'failed', percent: -1, message: e.message })
-      resolve({
+      sendProgress(getWindow, {
+        driveId: id,
+        phase: 'failed',
+        percent: -1,
+        message: e.message,
+        messageCode: 'startFailed',
+        messageParams: { error: e.message },
+      })
+      settle({
         driveId: id,
         success: false,
         durationMs: Date.now() - start,
         exitCode: null,
         summary: `Failed to start Optimize-Volume: ${e.message}`,
+        summaryCode: 'startFailed',
+        summaryParams: { error: e.message },
         log,
         timestamp: Date.now(),
       })
@@ -308,14 +396,22 @@ async function runTrimWindows(letter: string, getWindow: WindowGetter): Promise<
     child.on('close', (code) => {
       const success = code === 0
       const summary = success ? `TRIM completed successfully on ${id}.` : `Optimize-Volume exited with code ${code}.`
-      sendProgress(getWindow, { driveId: id, phase: success ? 'done' : 'failed', percent: 100, message: summary })
+      sendProgress(getWindow, {
+        driveId: id,
+        phase: success ? 'done' : 'failed',
+        percent: 100,
+        message: summary,
+        messageCode: success ? 'done' : 'startFailed',
+      })
       if (success) setLastTrimAt(id)
-      resolve({
+      settle({
         driveId: id,
         success,
         durationMs: Date.now() - start,
         exitCode: code,
         summary,
+        summaryCode: success ? 'completed' : 'exitCode',
+        ...(success ? {} : { summaryParams: { code: String(code) } }),
         log,
         timestamp: Date.now(),
       })
@@ -332,13 +428,14 @@ function sendProgress(getWindow: WindowGetter, data: TrimProgress): void {
   }
 }
 
-function failResult(driveId: string, start: number, summary: string): TrimRunResult {
+function failResult(driveId: string, start: number, summary: string, summaryCode?: TrimSummaryCode): TrimRunResult {
   return {
     driveId,
     success: false,
     durationMs: Date.now() - start,
     exitCode: null,
     summary,
+    ...(summaryCode ? { summaryCode } : {}),
     log: '',
     timestamp: Date.now(),
   }
@@ -369,19 +466,24 @@ export async function runTrimForDrive(
   const drive = drives.find((d) => d.id === driveId)
   if (!drive) {
     getLogger().warning('disk-trim', `TRIM skipped: unknown drive ${driveId}`)
-    return failResult(driveId, start, `Unknown drive: ${driveId}`)
+    return failResult(driveId, start, `Unknown drive: ${driveId}`, 'unknownDrive')
   }
   if (drive.mediaType === 'HDD') {
     getLogger().warning('disk-trim', `TRIM skipped for ${driveId}: HDD`)
-    return failResult(driveId, start, 'TRIM is not applicable to HDDs.')
+    return failResult(driveId, start, 'TRIM is not applicable to HDDs.', 'hdd')
   }
   if (drive.isRemovable) {
     getLogger().warning('disk-trim', `TRIM skipped for ${driveId}: removable drive`)
-    return failResult(driveId, start, 'TRIM is not run on removable drives.')
+    return failResult(driveId, start, 'TRIM is not run on removable drives.', 'removable')
   }
   if (drive.trimSupport === 'unsupported' || drive.trimSupport === 'disabled') {
     getLogger().warning('disk-trim', `TRIM skipped for ${driveId}: ${drive.statusReason || 'unsupported'}`)
-    return failResult(driveId, start, drive.statusReason || 'TRIM is not supported on this drive.')
+    return failResult(
+      driveId,
+      start,
+      drive.statusReason || 'TRIM is not supported on this drive.',
+      drive.trimSupport === 'disabled' ? 'disabled' : 'unsupported',
+    )
   }
   if (isThrottled(driveId)) {
     getLogger().warning('disk-trim', `TRIM throttled for ${driveId}: trimmed less than 24h ago`)
@@ -392,6 +494,7 @@ export async function runTrimForDrive(
       durationMs: 0,
       exitCode: null,
       summary: 'Throttled — this drive was trimmed less than 24 hours ago.',
+      summaryCode: 'throttled',
       log: '',
       timestamp: Date.now(),
     }
@@ -405,6 +508,7 @@ export async function runTrimForDrive(
       durationMs: 0,
       exitCode: null,
       summary: 'Administrator privileges are required to run TRIM.',
+      summaryCode: 'needsAdmin',
       log: '',
       timestamp: Date.now(),
     }
@@ -413,12 +517,12 @@ export async function runTrimForDrive(
   if (process.platform === 'win32') {
     if (!drive.letter) {
       getLogger().warning('disk-trim', `TRIM failed for ${driveId}: missing drive letter`)
-      return failResult(driveId, start, 'Missing drive letter')
+      return failResult(driveId, start, 'Missing drive letter', 'missingLetter')
     }
     return runTrimWindows(drive.letter, getWindow)
   }
   getLogger().error('disk-trim', `TRIM failed for ${driveId}: unsupported platform ${process.platform}`)
-  return failResult(driveId, start, `Unsupported platform: ${process.platform}`)
+  return failResult(driveId, start, `Unsupported platform: ${process.platform}`, 'unsupportedPlatform')
 }
 
 // ── IPC registration ──
@@ -426,10 +530,7 @@ export async function runTrimForDrive(
 export function registerDiskTrimIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.DISK_TRIM_LIST, async (event) => {
     if (!validateSender(event, getWindow())) return []
-    getLogger().info('disk-trim', 'IPC: listing TRIM drives')
-    const drives = await listTrimDrives()
-    getLogger().success('disk-trim', `IPC: returned ${drives.length} TRIM drive(s)`)
-    return drives
+    return listTrimDrives()
   })
 
   ipcMain.handle(IPC.DISK_TRIM_RUN, async (event, driveIds: unknown): Promise<TrimRunResult[]> => {
@@ -443,7 +544,6 @@ export function registerDiskTrimIpc(getWindow: WindowGetter): void {
       getLogger().warning('disk-trim', 'IPC: TRIM run called with empty drive list')
       return []
     }
-    getLogger().info('disk-trim', `IPC: starting TRIM batch for ${ids.length} drive(s): ${ids.join(', ')}`)
 
     if (runningBatch) {
       getLogger().warning('disk-trim', 'IPC: TRIM batch rejected — another batch already running')
@@ -453,6 +553,7 @@ export function registerDiskTrimIpc(getWindow: WindowGetter): void {
         durationMs: 0,
         exitCode: null,
         summary: 'Another TRIM batch is already running.',
+        summaryCode: 'batchBusy',
         log: '',
         timestamp: Date.now(),
       }))
@@ -460,7 +561,6 @@ export function registerDiskTrimIpc(getWindow: WindowGetter): void {
     runningBatch = true
     try {
       // Re-list drives once per batch so we have authoritative metadata
-      // (mediaType, isRemovable, etc.) — never trust the renderer.
       const drives = await listTrimDrives()
       const results: TrimRunResult[] = []
       for (const id of ids) {

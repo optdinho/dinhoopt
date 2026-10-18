@@ -183,12 +183,16 @@ describe('disk-store', () => {
     })
   })
 
-  it('reset restores initial state except drives and selectedDrive', () => {
+  it('reset restores the full initial state, including drives and selectedDrive', () => {
+    useDiskStore.getState().setDrives([{ letter: 'D', label: 'Data', totalSize: 0, freeSpace: 0, usedSpace: 0 }])
+    useDiskStore.getState().setSelectedDrive('D')
     useDiskStore.getState().pushBreadcrumb(makeNode('C:\\Windows'))
     useDiskStore.getState().setAnalyzing(true)
     useDiskStore.getState().setRepairRunning(true)
     useDiskStore.getState().reset()
     const s = useDiskStore.getState()
+    expect(s.drives).toEqual([])
+    expect(s.selectedDrive).toBe('C')
     expect(s.data).toBeNull()
     expect(s.analyzing).toBe(false)
     expect(s.breadcrumb).toEqual([])

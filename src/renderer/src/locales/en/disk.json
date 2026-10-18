@@ -77,6 +77,29 @@
   "chkdskFinishedWithIssuesToast": "CHKDSK finished with issues",
   "chkdskFailedToast": "CHKDSK failed to run",
   "startingChkdsk": "Starting CHKDSK scan...",
+  "repairCode": {
+    "adminRequired": "Administrator privileges are required to run the repair.",
+    "invalidSender": "Invalid sender — the request was rejected.",
+    "startFailed": "Failed to start the tool: {{error}}",
+    "sfcNoViolations": "No integrity violations found — your system files are healthy.",
+    "sfcRepaired": "Windows found and repaired corrupted system files.",
+    "sfcRepairIncomplete": "Corrupted files were found but could not be repaired. Try running DISM first, then SFC again.",
+    "sfcCompleted": "SFC completed successfully.",
+    "sfcExitCode": "SFC exited with code {{code}}.",
+    "dismRepaired": "DISM successfully repaired the Windows component store.",
+    "dismHealthy": "No component store corruption detected — image is healthy.",
+    "dismCompleted": "DISM completed successfully.",
+    "dismExitCode": "DISM exited with code {{code}}. Check the log for details.",
+    "chkdskHealthy": "No file system errors found — disk is healthy.",
+    "chkdskFixed": "File system errors were found and repaired.",
+    "chkdskCleanup": "CHKDSK completed disk cleanup.",
+    "chkdskCompleted": "CHKDSK completed successfully.",
+    "chkdskExitCode": "CHKDSK exited with code {{code}}. Check the log for details."
+  },
+  "repairProgress": {
+    "percent": "{{percent}}% complete",
+    "startFailed": "Failed to start the tool: {{error}}"
+  },
   "maintenanceTitle": "Disk Maintenance",
   "maintenanceDescription": "Run TRIM on SSDs to keep write performance and lifespan healthy.",
   "refresh": "Refresh",
@@ -118,5 +141,48 @@
   "statusUnknown": "Unknown",
   "selectDrive": "Select {{drive}}",
   "systemDrive": "System",
-  "runButton": "Run"
+  "runButton": "Run",
+  "trimNoResultsToast": "The backend returned no TRIM results",
+  "trimCode": {
+    "unknownDrive": "Unknown drive.",
+    "hdd": "TRIM is not applicable to HDDs.",
+    "removable": "TRIM is not run on removable drives.",
+    "unsupported": "The filesystem or device does not support TRIM/DISCARD.",
+    "disabled": "TRIM is disabled at the system level (DisableDeleteNotify).",
+    "throttled": "Throttled — this drive was trimmed less than 24 hours ago.",
+    "needsAdmin": "Administrator privileges are required to run TRIM.",
+    "missingLetter": "Missing drive letter.",
+    "unsupportedPlatform": "Unsupported platform.",
+    "startFailed": "Failed to start Optimize-Volume: {{error}}",
+    "completed": "TRIM completed successfully.",
+    "exitCode": "Optimize-Volume exited with code {{code}}.",
+    "batchBusy": "Another TRIM batch is already running."
+  },
+  "trimProgress": {
+    "starting": "Starting TRIM...",
+    "done": "TRIM completed.",
+    "startFailed": "TRIM failed — see the result."
+  },
+  "reasonCode": {
+    "hdd": "HDDs do not benefit from TRIM.",
+    "removable": "Removable drive — TRIM is not recommended.",
+    "unsupported": "The filesystem or device does not support TRIM/DISCARD.",
+    "disabled": "TRIM is disabled at the system level (DisableDeleteNotify).",
+    "recentlyTrimmed": "Trimmed {{days}} day(s) ago — no action needed.",
+    "recommendedStale": "Last TRIM was over 30 days ago.",
+    "unknown": "No TRIM history recorded — the OS may already be handling it on a schedule.",
+    "ok": "Healthy — last TRIM is recent enough."
+  },
+  "timeAgo": {
+    "justNow": "Just now",
+    "yesterday": "Yesterday",
+    "hours_one": "{{count}} hour ago",
+    "hours_other": "{{count}} hours ago",
+    "days_one": "{{count}} day ago",
+    "days_other": "{{count}} days ago",
+    "months_one": "{{count}} month ago",
+    "months_other": "{{count}} months ago",
+    "years_one": "{{count}} year ago",
+    "years_other": "{{count}} years ago"
+  }
 }
