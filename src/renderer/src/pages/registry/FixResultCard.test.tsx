@@ -60,3 +60,32 @@ describe('FixResultCard backup warning (A1)', () => {
     expect(screen.queryByTestId('backup-failed-warning')).toBeNull()
   })
 })
+
+describe('FixResultCard honest outcome', () => {
+  beforeEach(() => {
+    useRegistryStore.setState({ fixResult: null, showFailures: false })
+  })
+
+  it('shows a failure icon and title when every selected entry failed', () => {
+    seed({ fixed: 0, failed: 3, failures: [{ issue: 'a', reason: 'b' }], backupFailed: false })
+    render(<FixResultCard />)
+    expect(screen.getByTestId('fix-failure-icon')).not.toBeNull()
+    expect(screen.queryByTestId('fix-success-icon')).toBeNull()
+    expect(screen.getByText('fixFailedTitle')).not.toBeNull()
+    expect(screen.getByRole('button', { name: /failedCount/ })).not.toBeNull()
+  })
+
+  it('keeps the success icon for a partial success', () => {
+    seed({ fixed: 2, failed: 1, failures: [], backupFailed: false })
+    render(<FixResultCard />)
+    expect(screen.getByTestId('fix-success-icon')).not.toBeNull()
+    expect(screen.queryByTestId('fix-failure-icon')).toBeNull()
+  })
+
+  it('keeps the success icon when everything was fixed', () => {
+    seed({ fixed: 5, failed: 0, failures: [], backupFailed: false })
+    render(<FixResultCard />)
+    expect(screen.getByTestId('fix-success-icon')).not.toBeNull()
+    expect(screen.queryByTestId('fix-failure-icon')).toBeNull()
+  })
+})

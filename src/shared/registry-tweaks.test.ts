@@ -17,7 +17,7 @@ function entry(over: Partial<RegistryEntry>): RegistryEntry {
 
 describe('isPersistentTweak', () => {
   it('remembers advisory recommendation types', () => {
-    for (const t of ['vulnerability', 'privacy', 'performance', 'network', 'service', 'task'] as const) {
+    for (const t of ['vulnerability', 'performance', 'network', 'service', 'task'] as const) {
       expect(isPersistentTweak(t)).toBe(true)
     }
   })

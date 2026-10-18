@@ -16,7 +16,11 @@ import { cleanupScanSessions, state } from './state'
 export { collectBackupTargets, fixRegistryEntries, scanRegistry }
 
 export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.REGISTRY_SCAN, async (): Promise<RegistryEntry[]> => {
+  ipcMain.handle(IPC.REGISTRY_SCAN, async (event): Promise<RegistryEntry[]> => {
+    if (!validateSender(event, getWindow())) {
+      getLogger().warning('registry-cleaner', 'Registry scan rejected — invalid sender')
+      return []
+    }
     if (process.platform !== 'win32') {
       getLogger().warning('registry-cleaner', 'Registry scan skipped — not Windows')
       return []
@@ -146,7 +150,11 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
     },
   )
 
-  ipcMain.handle(IPC.REGISTRY_RESTORE_LIST, (): RegistryBackupInfo[] => {
+  ipcMain.handle(IPC.REGISTRY_RESTORE_LIST, (event): RegistryBackupInfo[] => {
+    if (!validateSender(event, getWindow())) {
+      getLogger().warning('registry-restore', 'Backup list rejected — invalid sender')
+      return []
+    }
     if (process.platform !== 'win32') return []
     return listRegistryBackups()
   })
@@ -176,18 +184,30 @@ export function registerRegistryCleanerIpc(getWindow: WindowGetter): void {
     },
   )
 
-  ipcMain.handle(IPC.REGISTRY_SET_TWEAK_IGNORED, (_event, signatures: string[], ignored: boolean) => {
+  ipcMain.handle(IPC.REGISTRY_SET_TWEAK_IGNORED, (event, signatures: string[], ignored: boolean) => {
+    if (!validateSender(event, getWindow())) {
+      getLogger().warning('registry-cleaner', 'Tweak ignore update rejected — invalid sender')
+      return
+    }
     const valid = validateStringArray(signatures, 200, 1024)
     if (!valid || typeof ignored !== 'boolean') return
     updateRegistryIgnoredTweaks(valid, ignored)
   })
 
-  ipcMain.handle(IPC.REGISTRY_SCAN_CANCEL, () => {
+  ipcMain.handle(IPC.REGISTRY_SCAN_CANCEL, (event) => {
+    if (!validateSender(event, getWindow())) {
+      getLogger().warning('registry-cleaner', 'Scan cancel rejected — invalid sender')
+      return
+    }
     state.scanAbort?.abort()
     state.scanAbort = null
   })
 
-  ipcMain.handle(IPC.REGISTRY_FIX_CANCEL, () => {
+  ipcMain.handle(IPC.REGISTRY_FIX_CANCEL, (event) => {
+    if (!validateSender(event, getWindow())) {
+      getLogger().warning('registry-cleaner', 'Fix cancel rejected — invalid sender')
+      return
+    }
     state.fixAbort?.abort()
     state.fixAbort = null
   })

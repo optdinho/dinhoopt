@@ -2594,3 +2594,186 @@ describe('additional edge cases', () => {
     expect(Array.isArray(results)).toBe(true)
   })
 })
+
+// ----------------------------------------------------------------
+// Localized reg.exe output (non-English Windows)
+// ----------------------------------------------------------------
+// reg.exe localizes the default-value label: "(padrão)" on pt Windows,
+// "(Standardwert)" on de, "(Predeterminado)" on es. `chcp 65001` switches the
+// code page but NOT the language, so a literal "(Default)" match finds nothing
+// and every detection built on it is silently dead in production — while
+// English-only fixtures keep the whole suite green.
+describe('localized reg.exe output (pt Windows)', () => {
+  it('marks App Paths pointing to missing files when the default label is "(padrão)"', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => !String(p).includes('test.exe'))
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1]?.includes('App Paths')) {
+        return {
+          stdout:
+            '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\test.exe\r\n    (padrão)    REG_SZ    C:\\Program Files\\TestApp\\test.exe\r\n',
+          stderr: '',
+        }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const invalidPaths = results.filter((r) => r.type === 'invalid' && r.keyPath?.includes('App Paths'))
+    expect(invalidPaths.length).toBeGreaterThanOrEqual(1)
+    expect(invalidPaths[0]!.issue).toContain('test.exe')
+  })
+
+  it('does not flag an App Paths default value without a path separator (bare executable name)', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1]?.includes('App Paths')) {
+        return {
+          stdout:
+            '\r\n\r\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\bare.exe\r\n    (padrão)    REG_SZ    bare.exe\r\n',
+          stderr: '',
+        }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const appPathEntries = results.filter((r) => r.keyPath?.includes('App Paths'))
+    expect(appPathEntries).toHaveLength(0)
+  })
+
+  it('findMissingClsidDll returns the DLL when InprocServer32 uses the "(padrão)" label', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false)
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1]?.includes('InprocServer32')) {
+        return { stdout: '    (padrão)    REG_SZ    C:\\Missing\\pt-view.dll', stderr: '' }
+      }
+      if (args[0] === 'query' && args[1]?.includes('LocalServer32')) {
+        throw new Error('no LocalServer32')
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const missing = await findMissingClsidDll('{A0000000-0000-0000-C000-000000000099}')
+    expect(missing).toBe('C:\\Missing\\pt-view.dll')
+  })
+
+  it('detects a missing context-menu handler DLL when the handler label is "(padrão)"', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => !String(p).includes('com.dll'))
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1]?.includes('ContextMenuHandlers')) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\*\\shellex\\ContextMenuHandlers\\PtHandler\r\n    (padrão)    REG_SZ    {A0000000-0000-0000-C000-000000000010}\r\n',
+          stderr: '',
+        }
+      }
+      if (args[0] === 'query' && args[1]?.includes('InprocServer32')) {
+        return { stdout: '    (padrão)    REG_SZ    C:\\Missing\\com.dll', stderr: '' }
+      }
+      if (args[0] === 'query' && args[1]?.includes('LocalServer32')) {
+        throw new Error('no LocalServer32')
+      }
+      return { stdout: '    (padrão)    REG_SZ    COM Object', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const entry = results.find((r) => r.keyPath?.includes('PtHandler'))
+    expect(entry).toBeDefined()
+    expect(entry!.issue).toContain('C:\\Missing\\com.dll')
+  })
+
+  it('detects missing COM DLLs in the CLSID InprocServer32 search when the label is "(padrão)"', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => !String(p).includes('Ghost'))
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1] === 'HKCR\\CLSID' && args.includes('/f')) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\CLSID\\{B0000000-0000-0000-C000-000000000001}\\InprocServer32\r\n    (padrão)    REG_SZ    C:\\Ghost\\ghost.dll\r\n',
+          stderr: '',
+        }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const entry = results.find((r) => r.issue?.includes('COM object DLL missing'))
+    expect(entry).toBeDefined()
+    expect(entry!.issue).toContain('C:\\Ghost\\ghost.dll')
+  })
+
+  it('detects missing type libraries when the label is "(padrão)"', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => !String(p).includes('ghost.tlb'))
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1] === 'HKCR\\TypeLib' && args.includes('/f')) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\TypeLib\\{C0000000-0000-0000-C000-000000000001}\\1.0\\0\\win32\r\n    (padrão)    REG_SZ    C:\\Ghost\\ghost.tlb\r\n',
+          stderr: '',
+        }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const entry = results.find((r) => r.issue?.includes('Type library file missing'))
+    expect(entry).toBeDefined()
+    expect(entry!.issue).toContain('C:\\Ghost\\ghost.tlb')
+  })
+
+  it('detects missing proxy stubs when the label is "(padrão)"', async () => {
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'query' && args[1] === 'HKCR\\Interface' && args.includes('ProxyStubClsid32')) {
+        return {
+          stdout:
+            '\r\n\r\nHKCR\\Interface\\{D0000000-0000-0000-C000-000000000001}\\ProxyStubClsid32\r\n    (padrão)    REG_SZ    {E0000000-0000-0000-C000-000000000001}\r\n',
+          stderr: '',
+        }
+      }
+      if (args[0] === 'query' && args[1]?.includes('\\CLSID')) {
+        throw new Error('missing COM object')
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const entry = results.find((r) => r.issue?.includes('missing proxy stub'))
+    expect(entry).toBeDefined()
+    expect(entry!.valueName).toBe('{E0000000-0000-0000-C000-000000000001}')
+  })
+
+  it('detects registered clients pointing to a missing executable when the label is "(padrão)"', async () => {
+    const { existsSync } = await import('node:fs')
+    ;(existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => !String(p).includes('GhostMail'))
+
+    mockExecNativeUtf8.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (
+        args[0] === 'query' &&
+        args[1]?.startsWith('HKLM\\SOFTWARE\\Clients\\Mail') &&
+        !args[1]?.includes('\\shell\\')
+      ) {
+        return { stdout: 'HKEY_LOCAL_MACHINE\\SOFTWARE\\Clients\\Mail\\GhostMail\r\n', stderr: '' }
+      }
+      if (args[0] === 'query' && args[1]?.includes('\\shell\\open\\command')) {
+        return { stdout: '    (padrão)    REG_SZ    "C:\\Ghost\\GhostMail.exe"\r\n', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const results = await scanRegistry()
+    const entry = results.find((r) => r.issue?.includes('points to missing executable'))
+    expect(entry).toBeDefined()
+    expect(entry!.issue).toContain('GhostMail')
+  })
+})

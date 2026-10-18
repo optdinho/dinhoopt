@@ -4,6 +4,7 @@ import { Archive, Clock, Database, FileWarning, FolderClock, History, Loader2, S
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
 
 interface RestoreBackupDialogProps {
@@ -20,10 +21,7 @@ const KIND_ICONS: Record<RegistryBackupInfo['kind'], typeof Archive> = {
 }
 
 function formatTimestamp(timestamp: string): string {
-  return timestamp
-    .replace('T', ' ')
-    .replace(/-000Z$/, '')
-    .slice(0, 16)
+  return timestamp.replace('T', ' ').slice(0, 16)
 }
 
 export function RestoreBackupDialog({ open, onClose }: RestoreBackupDialogProps) {
@@ -45,7 +43,10 @@ export function RestoreBackupDialog({ open, onClose }: RestoreBackupDialogProps)
     window.dinho
       .registryRestoreList()
       .then((list) => setBackups(Array.isArray(list) ? list : []))
-      .catch(() => setBackups([]))
+      .catch((err: unknown) => {
+        logger.error('RestoreBackupDialog', 'Failed to load registry backups', err)
+        setBackups([])
+      })
       .finally(() => setLoading(false))
 
     const dialog = dialogRef.current

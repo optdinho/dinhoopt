@@ -1,4 +1,6 @@
+import { applyIgnoredTweaks } from '@shared/registry-tweaks'
 import { fixRegistryEntries, scanRegistry } from '../../ipc/registry-cleaner.ipc'
+import { getSettings } from '../../services/settings-store'
 import type { CliContext } from '../types'
 import { ExitCode } from '../types'
 import { cliLog, cliOut, cliUsage, cliVerbose, log, showProgress } from '../utils'
@@ -20,11 +22,15 @@ export async function handleRegistry(args: string[], ctx: CliContext): Promise<n
   } else if (sub === 'fix') {
     cliLog(ctx, 'Scanning registry...')
     const entries = await scanRegistry()
+    // Mirror the IPC scan path: honour the user's persistent "ignore this tweak"
+    // list so `registry fix` never re-applies something they chose to skip.
+    applyIgnoredTweaks(entries, getSettings().registryIgnoredTweaks ?? [])
     if (entries.length === 0) {
       cliOut(ctx, ctx.json ? { message: 'No issues found' } : 'No registry issues found.')
       return
     }
-    const toFix = args.includes('--all') ? entries : entries.filter((e) => e.risk === 'high')
+    const requested = args.includes('--all') ? entries : entries.filter((e) => e.risk === 'high')
+    const toFix = requested.filter((e) => e.selected)
     cliLog(ctx, `Fixing ${toFix.length} of ${entries.length} issues...`)
     const result = await fixRegistryEntries(toFix, (current, total) => {
       if (showProgress(ctx)) process.stdout.write(`\r  Progress: ${current}/${total}`)

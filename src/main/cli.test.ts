@@ -211,8 +211,22 @@ vi.mock('./ipc/startup-manager.ipc', () => ({
 
 vi.mock('./ipc/registry-cleaner.ipc', () => ({
   scanRegistry: vi.fn().mockResolvedValue([
-    { risk: 'high', keyPath: 'HKLM\\Software\\Test', issue: 'Invalid entry' },
-    { risk: 'low', keyPath: 'HKCU\\Software\\Test', issue: 'Orphaned key' },
+    {
+      type: 'invalid',
+      risk: 'high',
+      keyPath: 'HKLM\\Software\\Test',
+      valueName: 'V',
+      issue: 'Invalid entry',
+      selected: true,
+    },
+    {
+      type: 'orphaned',
+      risk: 'low',
+      keyPath: 'HKCU\\Software\\Test',
+      valueName: 'V',
+      issue: 'Orphaned key',
+      selected: true,
+    },
   ]),
   fixRegistryEntries: vi.fn().mockResolvedValue({ fixed: 1, failed: 0, errors: [] }),
 }))

@@ -1,6 +1,7 @@
 import type { RegistryEntry } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { validateSender } from '../sender-validation'
 import { collectBackupTargets, fixRegistryEntries, registerRegistryCleanerIpc, scanRegistry } from './handlers'
 
 const mockState = {
@@ -119,6 +120,9 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockHandlers.clear()
+    // clearAllMocks does not drain mockReturnValue — restore the permissive default
+    // so a `mockReturnValue(false)` from a sender-validation test cannot leak.
+    vi.mocked(validateSender).mockReturnValue(true)
     savedPlatform = process.platform
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
 
@@ -703,6 +707,53 @@ describe('registry-cleaner/handlers.ts — registerRegistryCleanerIpc', () => {
       mockState.fixAbort = null
       callHandler('cleaner:registry:fix:cancel')
       expect(mockState.fixAbort).toBeNull()
+    })
+  })
+
+  describe('sender validation', () => {
+    // Every registry handler must validate the sender — these are the destructive
+    // ones (fix/restore already did; scan/list/cancels/tweak-ignored did not).
+    it('REGISTRY_SCAN returns [] and does not scan when the sender is invalid', async () => {
+      vi.mocked(validateSender).mockReturnValue(false)
+      const result = await callHandler<RegistryEntry[]>('cleaner:registry:scan')
+      expect(result).toEqual([])
+      expect(mockScanRegistry).not.toHaveBeenCalled()
+    })
+
+    it('REGISTRY_RESTORE_LIST returns [] and does not list backups when the sender is invalid', async () => {
+      vi.mocked(validateSender).mockReturnValue(false)
+      const result = await callHandler<unknown[]>('cleaner:registry:restore:list')
+      expect(result).toEqual([])
+      expect(mockListRegistryBackups).not.toHaveBeenCalled()
+    })
+
+    it('REGISTRY_SET_TWEAK_IGNORED does not persist when the sender is invalid', async () => {
+      vi.mocked(validateSender).mockReturnValue(false)
+      mockValidateStringArray.mockReturnValue(['sig1'])
+      await callHandler('cleaner:registry:tweak:set-ignored', ['sig1'], true)
+      expect(mockUpdateRegistryIgnoredTweaks).not.toHaveBeenCalled()
+    })
+
+    it('REGISTRY_SCAN_CANCEL does not abort when the sender is invalid', async () => {
+      const abortCtrl = new AbortController()
+      mockState.scanAbort = abortCtrl
+      const abortSpy = vi.spyOn(abortCtrl, 'abort')
+      vi.mocked(validateSender).mockReturnValue(false)
+
+      await callHandler('cleaner:registry:scan:cancel')
+      expect(abortSpy).not.toHaveBeenCalled()
+      expect(mockState.scanAbort).not.toBeNull()
+    })
+
+    it('REGISTRY_FIX_CANCEL does not abort when the sender is invalid', async () => {
+      const abortCtrl = new AbortController()
+      mockState.fixAbort = abortCtrl
+      const abortSpy = vi.spyOn(abortCtrl, 'abort')
+      vi.mocked(validateSender).mockReturnValue(false)
+
+      await callHandler('cleaner:registry:fix:cancel')
+      expect(abortSpy).not.toHaveBeenCalled()
+      expect(mockState.fixAbort).not.toBeNull()
     })
   })
 

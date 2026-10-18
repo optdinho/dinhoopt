@@ -20,7 +20,6 @@ import type { RegistryEntry } from './types'
 /** Entry types that represent recurring, deterministic recommendations. */
 export const PERSISTENT_TWEAK_TYPES: ReadonlySet<RegistryEntry['type']> = new Set([
   'vulnerability',
-  'privacy',
   'performance',
   'network',
   'service',

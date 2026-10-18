@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import type { RegistryEntry } from '@shared/types'
-import { clsidExists, execReg, extractExePath, findMissingClsidDll } from './utils'
+import { clsidExists, DEFAULT_VALUE_SZ_RE, execReg, extractExePath, findMissingClsidDll } from './utils'
 
 export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]> {
   const entries: RegistryEntry[] = []
@@ -16,7 +16,7 @@ export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]>
       const { stdout } = await execReg(['query', shellKey, '/s'], { timeout: 10000, ...(signal ? { signal } : {}) })
       const blocks = stdout.split(/\r?\n\r?\n/)
       for (const block of blocks) {
-        const clsidMatch = block.match(/\(Default\)\s+REG_SZ\s+(\{[0-9A-Fa-f-]+\})/i)
+        const clsidMatch = block.match(DEFAULT_VALUE_SZ_RE)
         if (clsidMatch) {
           const clsid = clsidMatch[1]
           if (!clsid) continue
@@ -67,7 +67,7 @@ export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]>
     for (const block of blocks) {
       if (comCount >= 50) break
       const keyMatch = block.match(/^(HKCR\\CLSID\\(\{[^}]+\})\\InprocServer32)/m)
-      const dllMatch = block.match(/\(Default\)\s+REG_SZ\s+(.+)/i)
+      const dllMatch = block.match(DEFAULT_VALUE_SZ_RE)
       if (keyMatch && dllMatch) {
         const dllPath = (dllMatch[1] ?? '').trim().replace(/"/g, '')
         if (dllPath?.includes('\\') && !dllPath.startsWith('%') && !existsSync(dllPath)) {
@@ -100,7 +100,7 @@ export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]>
     for (const block of blocks) {
       if (tlbCount >= 30) break
       const keyMatch = block.match(/^(HKCR\\TypeLib\\(\{[^}]+\})[^\r\n]*)/m)
-      const valMatch = block.match(/\(Default\)\s+REG_SZ\s+(.+)/i)
+      const valMatch = block.match(DEFAULT_VALUE_SZ_RE)
       if (keyMatch && valMatch) {
         const tlbPath = (valMatch[1] ?? '').trim().replace(/"/g, '')
         if (tlbPath?.includes('\\') && !tlbPath.startsWith('%') && !existsSync(tlbPath)) {
@@ -250,7 +250,7 @@ export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]>
     for (const block of blocks) {
       if (ifaceCount >= 30) break
       const keyMatch = block.match(/^(HKCR\\Interface\\(\{[^}]+\})\\ProxyStubClsid32)/m)
-      const valMatch = block.match(/\(Default\)\s+REG_SZ\s+(\{[0-9A-Fa-f-]+\})/i)
+      const valMatch = block.match(DEFAULT_VALUE_SZ_RE)
       if (keyMatch && valMatch) {
         const proxyClsid = valMatch[1]
         if (!proxyClsid) continue
@@ -440,7 +440,7 @@ export async function scanComOle(signal?: AbortSignal): Promise<RegistryEntry[]>
             timeout: 5000,
             ...(signal ? { signal } : {}),
           })
-          const rawValMatch = cmdOut.match(/\(Default\)\s+REG_SZ\s+(.+)/i)
+          const rawValMatch = cmdOut.match(DEFAULT_VALUE_SZ_RE)
           const exePath = rawValMatch ? extractExePath(rawValMatch[1]!.trim()) : null
           if (exePath?.includes('\\') && !exePath.startsWith('%') && !existsSync(exePath)) {
             entries.push({

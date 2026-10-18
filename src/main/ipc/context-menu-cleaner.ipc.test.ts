@@ -262,6 +262,18 @@ describe('parseRegQueryBlocks', () => {
     expect(blocks[0]!.values['(Default)']!.data).toBe('{23170F69-40C1-2702-2401-000100020000}')
   })
 
+  // reg.exe localizes the default-value label: "(padrão)" on pt Windows,
+  // "(Standardwert)" on de, "(Predeterminado)" on es. `chcp 65001` switches the
+  // code page but NOT the language, so on a non-English machine the label is
+  // never "(Default)" and every consumer of values['(Default)'] reads undefined.
+  it('canonicalizes a localized default label ("(padrão)") to (Default)', () => {
+    const stdout = ['HKEY_CLASSES_ROOT\\*\\shell\\Abrir', '    (padrão)    REG_SZ    Abrir com o Leitor', ''].join('\n')
+
+    const blocks = parseRegQueryBlocks(stdout)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]!.values['(Default)']).toEqual({ type: 'REG_SZ', data: 'Abrir com o Leitor' })
+  })
+
   it('ignores junk lines without REG_<TYPE>', () => {
     const stdout = [
       'HKEY_CLASSES_ROOT\\*\\shell\\Foo',
@@ -436,6 +448,35 @@ describe('scanContextMenu', () => {
     const openVerb = verbs.find((v) => v.name === 'open')
     expect(openVerb).toBeDefined()
     expect(openVerb!.protected).toBe(true)
+  })
+
+  it('extracts verb commands and handler CLSIDs when reg.exe localizes the default label (pt)', async () => {
+    const shellBlock = [
+      'HKEY_CLASSES_ROOT\\*\\shell\\7-Zip',
+      '    (padrão)    REG_SZ    7-Zip',
+      '',
+      'HKEY_CLASSES_ROOT\\*\\shell\\7-Zip\\command',
+      '    (padrão)    REG_SZ    "C:\\Program Files\\7-Zip\\7zG.exe" "%1"',
+      '',
+    ].join('\n')
+    const shellexBlock = [
+      'HKEY_CLASSES_ROOT\\*\\shellex\\ContextMenuHandlers\\7-Zip',
+      '    (padrão)    REG_SZ    {23170F69-40C1-2702-2401-000100020000}',
+      '',
+    ].join('\n')
+    vi.mocked(execNativeUtf8)
+      .mockResolvedValueOnce({ stdout: shellBlock, stderr: '' })
+      .mockResolvedValueOnce({ stdout: shellexBlock, stderr: '' })
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: 1, entries: {} }))
+
+    const result = await scanContextMenu(new AbortController().signal)
+    const zipVerb = result.entries.find((e) => e.kind === 'verb' && e.name === '7-Zip')
+    expect(zipVerb).toBeDefined()
+    expect(zipVerb!.command).toBe('"C:\\Program Files\\7-Zip\\7zG.exe" "%1"')
+    expect(zipVerb!.displayName).toBe('7-Zip')
+    const zipHandler = result.entries.find((e) => e.kind === 'handler')
+    expect(zipHandler).toBeDefined()
+    expect(zipHandler!.clsid).toBe('{23170F69-40C1-2702-2401-000100020000}')
   })
 
   it('respects abort signal', async () => {

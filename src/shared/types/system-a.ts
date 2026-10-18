@@ -15,7 +15,6 @@ export interface RegistryEntry {
     | 'orphaned'
     | 'broken'
     | 'vulnerability'
-    | 'privacy'
     | 'performance'
     | 'network'
     | 'service'

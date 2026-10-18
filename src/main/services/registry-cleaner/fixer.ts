@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 import type { RegistryEntry } from '@shared/types'
 import { getBackupDir } from '../backup-dir'
 import { execTracked, psUtf8 } from '../exec-utf8'
+import { getLogger } from '../logger.service'
 import { getSettings } from '../settings-store'
 import { createFullBackup, createTargetedBackup, pruneOldBackups } from './backup'
 import { execReg, splitTaskPath } from './utils'
@@ -36,8 +37,10 @@ export async function fixRegistryEntries(
         : await createTargetedBackup(entries, backupDir, timestamp, signal)
     if (!ok) backupFailed = true
     pruneOldBackups(backupDir, 3)
-  } catch {
+  } catch (err: unknown) {
     backupFailed = true
+    const message = err instanceof Error ? err.message : String(err)
+    getLogger().warning('registry-backup', `Registry backup failed: ${message}`)
   }
 
   for (let i = 0; i < entries.length; i++) {

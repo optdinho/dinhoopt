@@ -32,11 +32,6 @@ interface RegistryState {
   setError: (error: string | null) => void
   toggleEntry: (id: string) => void
   toggleCardAll: (types: string[]) => void
-  reset: () => void
-  scan: () => Promise<void>
-  fix: (entryIds: string[]) => Promise<void>
-  cancelScan: () => Promise<void>
-  cancelFix: () => Promise<void>
 }
 
 /**
@@ -105,62 +100,5 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
       entries: s.entries.map((e) => (types.includes(e.type) ? { ...e, selected: selectedNow } : e)),
     }))
     persistTweakChoice(cardEntries, selectedNow)
-  },
-  reset: () =>
-    set({
-      entries: [],
-      scanning: false,
-      scanned: false,
-      fixing: false,
-      fixProgress: null,
-      fixResult: null,
-      showFailures: false,
-      error: null,
-    }),
-
-  scan: async () => {
-    set({ scanning: true, error: null })
-    try {
-      const results = await window.dinho.registryScan()
-      set({ entries: Array.isArray(results) ? results : [], scanned: true, scanning: false })
-    } catch {
-      set({ scanning: false })
-    }
-  },
-
-  fix: async (entryIds) => {
-    if (entryIds.length === 0) return
-    set({ fixing: true, fixProgress: { current: 0, total: entryIds.length, currentEntry: '' }, fixResult: null })
-
-    const cleanup = window.dinho.onRegistryFixProgress((data) => {
-      set({ fixProgress: data })
-    })
-
-    try {
-      const result = await window.dinho.registryFix(entryIds)
-      set({ fixResult: result, fixing: false, entries: get().entries.filter((e) => !entryIds.includes(e.id)) })
-    } catch {
-      set({ fixing: false })
-    } finally {
-      cleanup()
-    }
-  },
-
-  cancelScan: async () => {
-    try {
-      await window.dinho.registryScanCancel()
-    } catch {
-      /* ignore */
-    }
-    set({ scanning: false })
-  },
-
-  cancelFix: async () => {
-    try {
-      await window.dinho.registryFixCancel()
-    } catch {
-      /* ignore */
-    }
-    set({ fixing: false, fixProgress: null })
   },
 }))

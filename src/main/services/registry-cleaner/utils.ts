@@ -10,6 +10,15 @@ export function execReg(
 
 export const SAFE_TASK_PATH_RE = /^[\\\p{L}\p{N}\s\-._(){},]+$/u
 
+/**
+ * Matches the default-value line of `reg query` output regardless of the reg.exe UI language.
+ * reg.exe localizes the label — "(Default)" (en), "(padrão)" (pt), "(Standardwert)" (de),
+ * "(Predeterminado)" (es) — so a literal "(Default)" match finds nothing on non-English
+ * Windows. `chcp 65001` switches the code page but NOT the language. Anchored at the line
+ * start and restricted to a parenthesis-free label so data containing parentheses cannot match.
+ */
+export const DEFAULT_VALUE_SZ_RE = /^\s*\([^()]+\)\s+REG_SZ\s+(.+)$/im
+
 export function splitTaskPath(fullPath: string): { path: string; name: string } | null {
   const normalized = fullPath.replace(/\//g, '\\')
   if (!SAFE_TASK_PATH_RE.test(normalized)) return null
@@ -92,7 +101,7 @@ export async function findMissingClsidDll(clsid: string, signal?: AbortSignal): 
         ...(signal ? { signal } : {}),
       })
       foundAnyServer = true
-      const dllMatch = stdout.match(/\(Default\)\s+REG_SZ\s+(.+)/i)
+      const dllMatch = stdout.match(DEFAULT_VALUE_SZ_RE)
       if (dllMatch) {
         const dllPath = (dllMatch[1] ?? '').trim().replace(/"/g, '')
         if (dllPath?.includes('\\') && !dllPath.startsWith('%')) {

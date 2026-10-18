@@ -33,7 +33,17 @@ function mockKudu() {
 
 describe('registry-store', () => {
   beforeEach(() => {
-    useRegistryStore.getState().reset()
+    useRegistryStore.setState({
+      entries: [],
+      scanning: false,
+      scanned: false,
+      fixing: false,
+      fixProgress: null,
+      expandedCards: new Set<number>(),
+      fixResult: null,
+      showFailures: false,
+      error: null,
+    })
   })
 
   it('starts in clean state', () => {
@@ -137,20 +147,6 @@ describe('registry-store', () => {
     expect(useRegistryStore.getState().fixProgress).toEqual({ current: 3, total: 10, currentEntry: 'HKCR\\.xyz' })
   })
 
-  it('reset clears all state', () => {
-    useRegistryStore.getState().setEntries([makeEntry()])
-    useRegistryStore.getState().setScanning(true)
-    useRegistryStore.getState().setError('err')
-
-    useRegistryStore.getState().reset()
-
-    const state = useRegistryStore.getState()
-    expect(state.entries).toEqual([])
-    expect(state.scanning).toBe(false)
-    expect(state.error).toBeNull()
-    expect(state.fixResult).toBeNull()
-  })
-
   it('setFixing updates fixing flag', () => {
     useRegistryStore.getState().setFixing(true)
     expect(useRegistryStore.getState().fixing).toBe(true)
@@ -242,130 +238,5 @@ describe('registry-store', () => {
     useRegistryStore.getState().toggleCardAll(['performance'])
 
     expect(kudu.registrySetTweakIgnored).toHaveBeenCalled()
-  })
-
-  describe('async actions', () => {
-    it('scan calls kudu.registryScan and stores entries', async () => {
-      const kudu = mockKudu()
-      kudu.registryScan.mockResolvedValue([{ id: 'r1', type: 'broken' }])
-      const store = useRegistryStore.getState()
-
-      await store.scan()
-
-      expect(kudu.registryScan).toHaveBeenCalled()
-      expect(useRegistryStore.getState().scanning).toBe(false)
-      expect(useRegistryStore.getState().scanned).toBe(true)
-      expect(useRegistryStore.getState().entries).toHaveLength(1)
-    })
-
-    it('scan handles non-array result', async () => {
-      const kudu = mockKudu()
-      kudu.registryScan.mockResolvedValue(null)
-      const store = useRegistryStore.getState()
-
-      await store.scan()
-
-      expect(useRegistryStore.getState().entries).toEqual([])
-      expect(useRegistryStore.getState().scanned).toBe(true)
-    })
-
-    it('scan sets scanning false on error', async () => {
-      const kudu = mockKudu()
-      kudu.registryScan.mockRejectedValue(new Error('fail'))
-      const store = useRegistryStore.getState()
-
-      await store.scan()
-
-      expect(useRegistryStore.getState().scanning).toBe(false)
-    })
-
-    it('fix skips when entryIds is empty', async () => {
-      const kudu = mockKudu()
-      const store = useRegistryStore.getState()
-
-      await store.fix([])
-
-      expect(kudu.registryFix).not.toHaveBeenCalled()
-    })
-
-    it('fix calls kudu.registryFix and removes fixed entries', async () => {
-      const kudu = mockKudu()
-      kudu.registryFix.mockResolvedValue({ fixed: 2, failed: 0, failures: [] })
-      const store = useRegistryStore.getState()
-      store.setEntries([makeEntry({ id: 'a' }), makeEntry({ id: 'b' })])
-
-      await store.fix(['a'])
-
-      expect(kudu.onRegistryFixProgress).toHaveBeenCalled()
-      expect(kudu.registryFix).toHaveBeenCalledWith(['a'])
-      expect(useRegistryStore.getState().fixing).toBe(false)
-      expect(useRegistryStore.getState().fixResult).toEqual({ fixed: 2, failed: 0, failures: [] })
-      expect(useRegistryStore.getState().entries).toHaveLength(1)
-    })
-
-    it('fix preserves backupFailed so the UI can warn (A1)', async () => {
-      const kudu = mockKudu()
-      kudu.registryFix.mockResolvedValue({ fixed: 2, failed: 0, failures: [], backupFailed: true })
-      const store = useRegistryStore.getState()
-      store.setEntries([makeEntry({ id: 'a' })])
-
-      await store.fix(['a'])
-
-      expect(useRegistryStore.getState().fixResult?.backupFailed).toBe(true)
-    })
-
-    it('fix sets fixing false on error', async () => {
-      const kudu = mockKudu()
-      kudu.registryFix.mockRejectedValue(new Error('fail'))
-      const store = useRegistryStore.getState()
-      store.setEntries([makeEntry({ id: 'a' })])
-
-      await store.fix(['a'])
-
-      expect(useRegistryStore.getState().fixing).toBe(false)
-    })
-
-    it('cancelScan calls kudu.registryScanCancel and sets scanning false', async () => {
-      const kudu = mockKudu()
-      kudu.registryScanCancel.mockResolvedValue(undefined)
-      const store = useRegistryStore.getState()
-
-      await store.cancelScan()
-
-      expect(kudu.registryScanCancel).toHaveBeenCalled()
-      expect(useRegistryStore.getState().scanning).toBe(false)
-    })
-
-    it('cancelScan ignores error', async () => {
-      const kudu = mockKudu()
-      kudu.registryScanCancel.mockRejectedValue(new Error('fail'))
-      const store = useRegistryStore.getState()
-
-      await store.cancelScan()
-
-      expect(useRegistryStore.getState().scanning).toBe(false)
-    })
-
-    it('cancelFix calls kudu.registryFixCancel and sets fixing false', async () => {
-      const kudu = mockKudu()
-      kudu.registryFixCancel.mockResolvedValue(undefined)
-      const store = useRegistryStore.getState()
-
-      await store.cancelFix()
-
-      expect(kudu.registryFixCancel).toHaveBeenCalled()
-      expect(useRegistryStore.getState().fixing).toBe(false)
-      expect(useRegistryStore.getState().fixProgress).toBeNull()
-    })
-
-    it('cancelFix ignores error', async () => {
-      const kudu = mockKudu()
-      kudu.registryFixCancel.mockRejectedValue(new Error('fail'))
-      const store = useRegistryStore.getState()
-
-      await store.cancelFix()
-
-      expect(useRegistryStore.getState().fixing).toBe(false)
-    })
   })
 })

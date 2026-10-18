@@ -1,4 +1,4 @@
-import { CircleCheckBig, TriangleAlert } from 'lucide-react'
+import { CircleCheckBig, CircleX, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useRegistryStore } from '@/stores/registry-store'
 
@@ -8,6 +8,9 @@ export function FixResultCard() {
   const showFailures = useRegistryStore((s) => s.showFailures)
 
   if (!result) return null
+
+  // Honest outcome: nothing was fixed and at least one entry failed.
+  const allFailed = result.fixed === 0 && result.failed > 0
 
   return (
     <div
@@ -19,9 +22,13 @@ export function FixResultCard() {
         className="flex items-center gap-3 p-4"
         style={{ background: result.failed > 0 ? 'rgba(239,68,68,0.04)' : 'rgba(34,197,94,0.06)' }}
       >
-        <CircleCheckBig className="h-5 w-5 text-green-500" strokeWidth={1.8} />
+        {allFailed ? (
+          <CircleX className="h-5 w-5 text-red-500" data-testid="fix-failure-icon" strokeWidth={1.8} />
+        ) : (
+          <CircleCheckBig className="h-5 w-5 text-green-500" data-testid="fix-success-icon" strokeWidth={1.8} />
+        )}
         <p className="flex-1 text-[13px] text-zinc-200">
-          {t('fixedEntries', { count: result.fixed })}
+          {allFailed ? t('fixFailedTitle') : t('fixedEntries', { count: result.fixed })}
           {result.failed > 0 && (
             <button
               type="button"

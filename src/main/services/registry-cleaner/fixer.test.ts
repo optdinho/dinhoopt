@@ -10,7 +10,12 @@ const mocks = {
   createFullBackup: vi.fn(),
   createTargetedBackup: vi.fn(),
   pruneOldBackups: vi.fn(),
+  loggerWarning: vi.fn(),
 }
+
+vi.mock('../logger.service', () => ({
+  getLogger: () => ({ warning: (...a: unknown[]) => mocks.loggerWarning(...a) }),
+}))
 
 vi.mock('node:fs', () => ({
   mkdirSync: (...a: unknown[]) => mocks.mkdirSync(...a),
@@ -174,6 +179,15 @@ describe('fixRegistryEntries', () => {
       const result = await fixRegistryEntries([deleteEntry as never])
       expect(result.backupFailed).toBe(true)
       expect(result.fixed).toBe(1)
+    })
+
+    it('logs a warning instead of silently swallowing the backup error', async () => {
+      mocks.execReg.mockResolvedValue({ stdout: '', stderr: '' })
+      mocks.mkdirSync.mockImplementation(() => {
+        throw new Error('EACCES')
+      })
+      await fixRegistryEntries([deleteEntry as never])
+      expect(mocks.loggerWarning).toHaveBeenCalledWith('registry-backup', expect.stringContaining('EACCES'))
     })
 
     it('sets backupFailed=true when the targeted backup reports failure (returns false)', async () => {

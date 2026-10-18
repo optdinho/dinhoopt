@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RegistryEntry } from '@shared/types'
-import { execReg, expandEnvVars, extractExePath } from './utils'
+import { DEFAULT_VALUE_SZ_RE, execReg, expandEnvVars, extractExePath } from './utils'
 
 export async function scanSystemHealth(signal?: AbortSignal): Promise<RegistryEntry[]> {
   const entries: RegistryEntry[] = []
@@ -20,10 +20,12 @@ export async function scanSystemHealth(signal?: AbortSignal): Promise<RegistryEn
     const blocks = stdout.split(/\r?\n\r?\n/)
     for (const block of blocks) {
       const keyMatch = block.match(/^(HKLM\\[^\r\n]+)/m)
-      const valMatch = block.match(/\(Default\)\s+REG_SZ\s+(.+)/i)
+      const valMatch = block.match(DEFAULT_VALUE_SZ_RE)
       if (valMatch) {
         const exePath = (valMatch[1] ?? '').trim().replace(/"/g, '')
-        if (exePath && !existsSync(expandEnvVars(exePath))) {
+        // Bare executable names ("notepad.exe") are resolved through App Paths by the shell
+        // itself — only full paths can be checked against the disk.
+        if (exePath?.includes('\\') && !existsSync(expandEnvVars(exePath))) {
           entries.push({
             id: randomUUID(),
             type: 'invalid',

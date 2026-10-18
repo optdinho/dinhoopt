@@ -98,6 +98,10 @@ export function inferSource(dllPath: string | null, keyName: string): ContextMen
 
 /**
  * Parse `reg query <root> /s` output into a list of keys with their values.
+ *
+ * reg.exe localizes the default-value label ("(padrão)" on pt Windows, "(Standardwert)"
+ * on de, …), so any parenthesized label is canonicalized to "(Default)" — otherwise
+ * every consumer of `values['(Default)']` reads undefined on non-English Windows.
  */
 export function parseRegQueryBlocks(stdout: string): ParsedKey[] {
   const out: ParsedKey[] = []
@@ -126,7 +130,8 @@ export function parseRegQueryBlocks(stdout: string): ParsedKey[] {
     const m = line.match(/^\s{4}(.+?)\s{4}(REG_[A-Z_]+)\s{4}(.*)$/)
     if (m) {
       const [, name, type, data] = m
-      current.values[name!] = { type: type!, data: data! }
+      const canonicalName = /^\([^()]+\)$/.test(name!.trim()) ? '(Default)' : name!
+      current.values[canonicalName] = { type: type!, data: data! }
     }
   }
   if (current) out.push(current)

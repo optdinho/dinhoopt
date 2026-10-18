@@ -28,6 +28,11 @@ vi.mock('sonner', () => ({
   toast: toastMocks,
 }))
 
+const loggerMock = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }))
+vi.mock('@/lib/renderer-logger', () => ({
+  default: loggerMock,
+}))
+
 vi.mock('@/lib/utils', () => ({
   formatBytes: (bytes: number) => `${bytes} B`,
 }))
@@ -78,6 +83,26 @@ describe('RestoreBackupDialog', () => {
     restoreList.mockResolvedValue([])
     render(<RestoreBackupDialog open onClose={() => {}} />)
     expect(await screen.findByText('restoreNoBackups')).toBeTruthy()
+  })
+
+  it('logs when the backup list fails to load instead of silently showing empty', async () => {
+    restoreList.mockRejectedValue(new Error('boom'))
+    render(<RestoreBackupDialog open onClose={() => {}} />)
+    await waitFor(() =>
+      expect(loggerMock.error).toHaveBeenCalledWith(
+        'RestoreBackupDialog',
+        'Failed to load registry backups',
+        expect.any(Error),
+      ),
+    )
+    expect(await screen.findByText('restoreNoBackups')).toBeTruthy()
+  })
+
+  it('formats the backup timestamp without trailing millis', async () => {
+    restoreList.mockResolvedValue(backups)
+    render(<RestoreBackupDialog open onClose={() => {}} />)
+    await screen.findByTestId('restore-entry-targeted')
+    expect(screen.getByText(/2026-10-06 10-00/)).toBeTruthy()
   })
 
   it('lists the backups classified by kind', async () => {
