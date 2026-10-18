@@ -80,6 +80,7 @@
     "toastUpdateFailedPlural": "{{count}} atualizações falharam",
     "errorCheckFailed": "Falha ao verificar atualizações.",
     "errorUpdateFailed": "A operação de atualização falhou inesperadamente.",
+    "settingsSaveFailed": "Falha ao guardar a definição.",
     "autoInstallLabel": "Instalação automática",
     "autoInstallScheduleLabel": "Agendamento",
     "scheduleDaily": "Diariamente",

@@ -22,6 +22,18 @@ async function checkForUpdatesWindows(): Promise<UpdateCheckResult> {
   return checkForUpdatesWinget()
 }
 
+/**
+ * Display names for the ids we are about to update, taken from the most recent
+ * check. Lets a failed upgrade report "Google Chrome" instead of the raw id.
+ */
+function namesFromLastCheck(appIds: string[]): Map<string, string> {
+  const names = new Map<string, string>()
+  for (const app of cachedResult?.apps ?? []) {
+    if (app.name && appIds.includes(app.id)) names.set(app.id, app.name)
+  }
+  return names
+}
+
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const now = Date.now()
   if (cachedResult && now - cachedAt < CACHE_TTL_MS) {
@@ -51,7 +63,10 @@ export async function runUpdates(
     }
   }
 
-  return runUpdatesWinget(appIds, onProgress)
+  const result = await runUpdatesWinget(appIds, onProgress, namesFromLastCheck(appIds))
+  // The world changed: drop the cached check so the next one reflects reality.
+  clearUpdateCache()
+  return result
 }
 
 export function isValidAppId(id: string): boolean {

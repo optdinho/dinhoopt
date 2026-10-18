@@ -40,17 +40,25 @@ interface SoftwareUpdaterState {
   removeApps: (ids: string[]) => void
   /** Load the persisted ignore list from settings (call once at init) */
   loadIgnoredIds: (ids: string[]) => void
-  /** Move an app from the updates list to the ignored list and persist */
-  ignoreApp: (id: string) => void
-  /** Move an app from the ignored list back to the updates list and persist */
-  unignoreApp: (id: string) => void
+  /** Move an app from the updates list to the ignored list and persist. Resolves false if persistence failed (state is reverted). */
+  ignoreApp: (id: string) => Promise<boolean>
+  /** Move an app from the ignored list back to the updates list and persist. Resolves false if persistence failed (state is reverted). */
+  unignoreApp: (id: string) => Promise<boolean>
   reset: () => void
 }
 
 const severityOrder = { major: 0, minor: 1, patch: 2, unknown: 3 }
 
-function persistIgnoredIds(ids: Set<string>): void {
-  window.dinho?.settingsSet?.({ ignoredSoftwareUpdates: [...ids] }).catch(() => {})
+/** Persist the ignore list; resolves false if the main process rejected it or the call threw. */
+async function persistIgnoredIds(ids: Set<string>): Promise<boolean> {
+  const pending = window.dinho?.settingsSet?.({ ignoredSoftwareUpdates: [...ids] })
+  if (!pending) return true
+  try {
+    const result = await pending
+    return result?.success !== false
+  } catch {
+    return false
+  }
 }
 
 export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
@@ -121,30 +129,43 @@ export const useUpdaterStore = create<SoftwareUpdaterState>((set, get) => ({
       }
     })
   },
-  ignoreApp: (id) =>
+  ignoreApp: (id) => {
+    const previous = { apps: get().apps, ignoredApps: get().ignoredApps, ignoredIds: get().ignoredIds }
     set((state) => {
       const app = state.apps.find((a) => a.id === id)
-      const newIds = new Set(state.ignoredIds)
-      newIds.add(id)
-      persistIgnoredIds(newIds)
+      const ignoredIds = new Set(state.ignoredIds)
+      ignoredIds.add(id)
       return {
-        ignoredIds: newIds,
+        ignoredIds,
         apps: state.apps.filter((a) => a.id !== id),
         ignoredApps: app ? [...state.ignoredApps, app] : state.ignoredApps,
       }
-    }),
-  unignoreApp: (id) =>
+    })
+    const updatedIds = get().ignoredIds
+    return persistIgnoredIds(updatedIds).then((ok) => {
+      // Only revert if no newer action replaced the ignore list in the meantime.
+      if (!ok && get().ignoredIds === updatedIds) set(previous)
+      return ok
+    })
+  },
+  unignoreApp: (id) => {
+    const previous = { apps: get().apps, ignoredApps: get().ignoredApps, ignoredIds: get().ignoredIds }
     set((state) => {
       const app = state.ignoredApps.find((a) => a.id === id)
-      const newIds = new Set(state.ignoredIds)
-      newIds.delete(id)
-      persistIgnoredIds(newIds)
+      const ignoredIds = new Set(state.ignoredIds)
+      ignoredIds.delete(id)
       return {
-        ignoredIds: newIds,
+        ignoredIds,
         ignoredApps: state.ignoredApps.filter((a) => a.id !== id),
         apps: app ? [...state.apps, app] : state.apps,
       }
-    }),
+    })
+    const updatedIds = get().ignoredIds
+    return persistIgnoredIds(updatedIds).then((ok) => {
+      if (!ok && get().ignoredIds === updatedIds) set(previous)
+      return ok
+    })
+  },
   reset: () =>
     set({
       apps: [],

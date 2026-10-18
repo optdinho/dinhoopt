@@ -78,6 +78,9 @@ export function AppInstallerPage() {
         s.setApps(result.apps)
         s.setWingetAvailable(result.wingetAvailable)
         s.setHasLoaded(true)
+        if (result.failure) {
+          s.setError(t('listFailed'))
+        }
       })
       .catch((err) => {
         logger.error('AppInstallerPage', 'List apps failed', err)
@@ -299,7 +302,7 @@ export function AppInstallerPage() {
       </div>
 
       {/* winget not available */}
-      {hasLoaded && !wingetAvailable && (
+      {hasLoaded && !wingetAvailable && !error && (
         <div
           className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
           style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.1)' }}

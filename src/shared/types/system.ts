@@ -145,6 +145,12 @@ export interface UpdateCheckResult {
   patchCount: number
   packageManagerAvailable: boolean
   packageManagerName: 'winget' | null
+  /**
+   * Set when the scan itself could not complete (e.g. winget threw). Distinguishes
+   * "no updates available" from "could not check" so the UI never claims the
+   * system is up to date after a failed check.
+   */
+  failure?: 'check-failed'
 }
 
 export interface UpdateProgress {

@@ -135,7 +135,8 @@ vi.mock('@/components/shared/StatCard', () => ({
   ),
 }))
 
-const mockListAvailable = vi.fn<() => Promise<{ apps: AppInstallerApp[]; wingetAvailable: boolean }>>()
+const mockListAvailable =
+  vi.fn<() => Promise<{ apps: AppInstallerApp[]; wingetAvailable: boolean; failure?: 'list-failed' }>>()
 const mockInstall = vi.fn<(ids: string[]) => Promise<AppInstallResult>>()
 const mockCancel = vi.fn<() => Promise<unknown>>()
 const mockOnProgress = vi.fn<(cb: (p: AppInstallProgress) => void) => () => void>(() => vi.fn())
@@ -202,6 +203,24 @@ describe('AppInstallerPage', () => {
     mockStore.error = 'listFailed'
     render(<AppInstallerPage />)
     expect(screen.getByTestId('error-alert').textContent).toContain('listFailed')
+  })
+
+  it('shows the error alert instead of the winget warning when both apply', () => {
+    mockStore.hasLoaded = true
+    mockStore.wingetAvailable = false
+    mockStore.error = 'listFailed'
+    render(<AppInstallerPage />)
+    expect(screen.queryByText('wingetNotFound')).toBeNull()
+    expect(screen.getByTestId('error-alert').textContent).toContain('listFailed')
+  })
+
+  it('sets an error when the list result reports a failure', async () => {
+    mockListAvailable.mockResolvedValue({ apps: [], wingetAvailable: false, failure: 'list-failed' })
+    render(<AppInstallerPage />)
+    await vi.waitFor(() => {
+      expect(mockStore.setError).toHaveBeenCalledWith('listFailed')
+    })
+    expect(mockStore.setWingetAvailable).toHaveBeenCalledWith(false)
   })
 
   it('renders stat cards after load', () => {

@@ -14,6 +14,11 @@ vi.mock('@/stores/updater-store', () => ({
   useUpdaterStore: { getState: () => mockStore },
 }))
 
+vi.mock('@/lib/renderer-logger', () => ({
+  default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}))
+
+import logger from '@/lib/renderer-logger'
 import { useInitialLoader } from './useIgnoredUpdatesLoader'
 
 describe('useInitialLoader', () => {
@@ -85,7 +90,7 @@ describe('useInitialLoader', () => {
     expect(onAutoCheck).not.toHaveBeenCalled()
   })
 
-  it('handles settingsGet error gracefully', async () => {
+  it('logs and still auto-checks when settingsGet fails', async () => {
     window.dinho = {
       settingsGet: vi.fn().mockRejectedValue(new Error('fail')),
     } as never
@@ -96,9 +101,10 @@ describe('useInitialLoader', () => {
     }).not.toThrow()
 
     await vi.waitFor(() => {
-      expect(window.dinho.settingsGet).toHaveBeenCalledTimes(1)
+      expect(logger.error).toHaveBeenCalledWith('SoftwareUpdater', 'Failed to load ignored updates', expect.any(Error))
     })
 
-    expect(onAutoCheck).not.toHaveBeenCalled()
+    expect(mockStore.loadIgnoredIds).not.toHaveBeenCalled()
+    expect(onAutoCheck).toHaveBeenCalledTimes(1)
   })
 })

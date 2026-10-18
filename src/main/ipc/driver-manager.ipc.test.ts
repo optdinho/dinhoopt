@@ -14,6 +14,10 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (...args: unknown[]) => mocks.ipcHandle(...args) },
 }))
 
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
+}))
+
 vi.mock('node:fs', () => ({
   readdirSync: (...args: unknown[]) => mocks.readdirSync(...args),
   statSync: (...args: unknown[]) => mocks.statSync(...args),
@@ -40,6 +44,7 @@ import {
   scanDrivers,
   scanDriverUpdates,
 } from './driver-manager.ipc'
+import { validateSender } from './sender-validation'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
   const call = mocks.ipcHandle.mock.calls.find((c) => c[0] === channel)
@@ -91,6 +96,7 @@ function dirSize(dirPath: string): number {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(validateSender).mockReturnValue(true)
   mocks.createHash.mockReturnValue({
     update: vi.fn().mockReturnThis(),
     digest: vi.fn().mockReturnValue('a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8'),
@@ -339,6 +345,40 @@ describe('registerDriverManagerIpc', () => {
       const handler = getHandler('driver:clean')
       const result = await handler({} as unknown[], [])
       expect(result).toEqual({ removed: 0, failed: 0, spaceRecovered: 0, errors: [] })
+    })
+  })
+
+  describe('invalid sender', () => {
+    it('DRIVER_SCAN returns an empty result without scanning', async () => {
+      vi.mocked(validateSender).mockReturnValueOnce(false)
+      registerDriverManagerIpc(() => null)
+      const result = await getHandler('driver:scan')()
+      expect(result).toEqual({ packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 })
+      expect(mocks.execFileAsync).not.toHaveBeenCalled()
+    })
+
+    it('DRIVER_CLEAN returns an empty result without cleaning', async () => {
+      vi.mocked(validateSender).mockReturnValueOnce(false)
+      registerDriverManagerIpc(() => null)
+      const result = await getHandler('driver:clean')({} as unknown[], ['oem0.inf'])
+      expect(result).toEqual({ removed: 0, failed: 0, spaceRecovered: 0, errors: [] })
+      expect(mocks.execNativeUtf8).not.toHaveBeenCalled()
+    })
+
+    it('DRIVER_UPDATE_SCAN returns an empty result without scanning', async () => {
+      vi.mocked(validateSender).mockReturnValueOnce(false)
+      registerDriverManagerIpc(() => null)
+      const result = await getHandler('driver:update:scan')()
+      expect(result).toEqual({ updates: [], allDrivers: [], totalAvailable: 0, scanDuration: 0 })
+      expect(mocks.execFileAsync).not.toHaveBeenCalled()
+    })
+
+    it('DRIVER_UPDATE_INSTALL returns an empty result without installing', async () => {
+      vi.mocked(validateSender).mockReturnValueOnce(false)
+      registerDriverManagerIpc(() => null)
+      const result = await getHandler('driver:update:install')({} as unknown[], ['upd-001'])
+      expect(result).toEqual({ installed: 0, failed: 0, rebootRequired: false, errors: [] })
+      expect(mocks.execFileAsync).not.toHaveBeenCalled()
     })
   })
 })

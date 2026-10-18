@@ -3,6 +3,7 @@ import { ipcMain } from 'electron'
 import { validateStringArray } from '../../services/ipc-validation'
 import { getLogger } from '../../services/logger.service'
 import type { WindowGetter } from '../index'
+import { validateSender } from '../sender-validation'
 import { cleanDrivers, scanDrivers } from './scan'
 import { installDriverUpdates, scanDriverUpdates } from './updates'
 
@@ -20,9 +21,17 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
     if (win && !win.isDestroyed()) win.webContents.send(IPC.DRIVER_UPDATE_PROGRESS, data)
   }
 
-  ipcMain.handle(IPC.DRIVER_SCAN, () => scanDrivers(sendProgress))
+  ipcMain.handle(IPC.DRIVER_SCAN, (event) => {
+    if (!validateSender(event, getWindow())) {
+      return { packages: [], totalStaleSize: 0, totalStaleCount: 0, totalCurrentCount: 0 }
+    }
+    return scanDrivers(sendProgress)
+  })
 
-  ipcMain.handle(IPC.DRIVER_CLEAN, async (_event, publishedNames: string[]) => {
+  ipcMain.handle(IPC.DRIVER_CLEAN, async (event, publishedNames: string[]) => {
+    if (!validateSender(event, getWindow())) {
+      return { removed: 0, failed: 0, spaceRecovered: 0, errors: [] }
+    }
     const valid = validateStringArray(publishedNames, 500)
     if (!valid) {
       getLogger().warning('driver-manager', 'Invalid published names received for driver clean')
@@ -31,9 +40,17 @@ export function registerDriverManagerIpc(getWindow: WindowGetter): void {
     return cleanDrivers(valid)
   })
 
-  ipcMain.handle(IPC.DRIVER_UPDATE_SCAN, () => scanDriverUpdates(sendUpdateProgress))
+  ipcMain.handle(IPC.DRIVER_UPDATE_SCAN, (event) => {
+    if (!validateSender(event, getWindow())) {
+      return { updates: [], allDrivers: [], totalAvailable: 0, scanDuration: 0 }
+    }
+    return scanDriverUpdates(sendUpdateProgress)
+  })
 
-  ipcMain.handle(IPC.DRIVER_UPDATE_INSTALL, async (_event, wuUpdateIds: string[]) => {
+  ipcMain.handle(IPC.DRIVER_UPDATE_INSTALL, async (event, wuUpdateIds: string[]) => {
+    if (!validateSender(event, getWindow())) {
+      return { installed: 0, failed: 0, rebootRequired: false, errors: [] }
+    }
     const valid = validateStringArray(wuUpdateIds, 500)
     if (!valid) {
       getLogger().warning('driver-manager', 'Invalid update IDs received for driver update install')

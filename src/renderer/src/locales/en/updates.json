@@ -80,6 +80,7 @@
     "toastUpdateFailedPlural": "{{count}} updates failed",
     "errorCheckFailed": "Failed to check for updates.",
     "errorUpdateFailed": "Update operation failed unexpectedly.",
+    "settingsSaveFailed": "Failed to save the setting.",
     "autoInstallLabel": "Auto-install",
     "autoInstallScheduleLabel": "Check schedule",
     "scheduleDaily": "Daily",

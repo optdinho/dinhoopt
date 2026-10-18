@@ -99,7 +99,7 @@ describe('runUpdates', () => {
     runUpdatesWingetMock.mockResolvedValue({ succeeded: 2, failed: 0, errors: [] })
 
     const result = await runUpdates(['app'], noopProgress)
-    expect(runUpdatesWingetMock).toHaveBeenCalledWith(['app'], noopProgress)
+    expect(runUpdatesWingetMock).toHaveBeenCalledWith(['app'], noopProgress, new Map())
     expect(result.succeeded).toBe(2)
   })
 
@@ -127,6 +127,55 @@ describe('runUpdates', () => {
     const result = await runUpdates([], noopProgress)
     expect(result.succeeded).toBe(0)
     expect(result.failed).toBe(0)
+  })
+
+  it('passes the app names from the last check so errors carry a human name', async () => {
+    isWingetAvailableMock.mockResolvedValue(true)
+    checkForUpdatesWingetMock.mockResolvedValue({
+      apps: [
+        {
+          id: 'app1',
+          name: 'App One',
+          currentVersion: '1.0',
+          availableVersion: '2.0',
+          source: 'winget',
+          severity: 'major',
+          selected: true,
+        },
+      ],
+      totalCount: 1,
+      majorCount: 1,
+      minorCount: 0,
+      patchCount: 0,
+      packageManagerAvailable: true,
+      packageManagerName: 'winget',
+    })
+    runUpdatesWingetMock.mockResolvedValue({ succeeded: 0, failed: 1, errors: [] })
+
+    await checkForUpdates()
+    await runUpdates(['app1'], noopProgress)
+
+    expect(runUpdatesWingetMock).toHaveBeenCalledWith(['app1'], noopProgress, new Map([['app1', 'App One']]))
+  })
+
+  it('invalidates the check cache after a run so the next check is fresh', async () => {
+    isWingetAvailableMock.mockResolvedValue(true)
+    checkForUpdatesWingetMock.mockResolvedValue({
+      apps: [],
+      totalCount: 0,
+      majorCount: 0,
+      minorCount: 0,
+      patchCount: 0,
+      packageManagerAvailable: true,
+      packageManagerName: 'winget',
+    })
+    runUpdatesWingetMock.mockResolvedValue({ succeeded: 1, failed: 0, errors: [] })
+
+    await checkForUpdates()
+    await runUpdates(['app'], noopProgress)
+    await checkForUpdates()
+
+    expect(checkForUpdatesWingetMock).toHaveBeenCalledTimes(2)
   })
 })
 

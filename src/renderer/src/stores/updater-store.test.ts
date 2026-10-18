@@ -211,6 +211,48 @@ describe('updater-store', () => {
     expect(useUpdaterStore.getState().ignoredApps).toHaveLength(1)
   })
 
+  it('ignoreApp resolves true when persistence succeeds', async () => {
+    useUpdaterStore.getState().setApps([makeApp('1'), makeApp('2')])
+    const ok = await useUpdaterStore.getState().ignoreApp('1')
+    expect(ok).toBe(true)
+    expect(useUpdaterStore.getState().ignoredIds.has('1')).toBe(true)
+  })
+
+  it('ignoreApp reverts state when persistence resolves success:false', async () => {
+    vi.mocked(window.dinho.settingsSet).mockResolvedValueOnce({ success: false, error: 'rejected' })
+    useUpdaterStore.getState().setApps([makeApp('1'), makeApp('2')])
+
+    const ok = await useUpdaterStore.getState().ignoreApp('1')
+
+    expect(ok).toBe(false)
+    expect(useUpdaterStore.getState().ignoredIds.has('1')).toBe(false)
+    expect(useUpdaterStore.getState().apps).toHaveLength(2)
+    expect(useUpdaterStore.getState().ignoredApps).toHaveLength(0)
+  })
+
+  it('ignoreApp reverts state when persistence rejects', async () => {
+    vi.mocked(window.dinho.settingsSet).mockRejectedValueOnce(new Error('boom'))
+    useUpdaterStore.getState().setApps([makeApp('1'), makeApp('2')])
+
+    const ok = await useUpdaterStore.getState().ignoreApp('1')
+
+    expect(ok).toBe(false)
+    expect(useUpdaterStore.getState().apps).toHaveLength(2)
+    expect(useUpdaterStore.getState().ignoredIds.has('1')).toBe(false)
+  })
+
+  it('unignoreApp reverts state when persistence rejects', async () => {
+    vi.mocked(window.dinho.settingsSet).mockRejectedValueOnce(new Error('boom'))
+    useUpdaterStore.setState({ apps: [makeApp('2')], ignoredApps: [makeApp('1')], ignoredIds: new Set(['1']) })
+
+    const ok = await useUpdaterStore.getState().unignoreApp('1')
+
+    expect(ok).toBe(false)
+    expect(useUpdaterStore.getState().ignoredIds.has('1')).toBe(true)
+    expect(useUpdaterStore.getState().apps).toHaveLength(1)
+    expect(useUpdaterStore.getState().ignoredApps).toHaveLength(1)
+  })
+
   it('reset restores initial state', () => {
     useUpdaterStore.setState({ apps: [makeApp('1')], hasChecked: true, loading: true })
     useUpdaterStore.getState().reset()

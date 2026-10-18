@@ -241,7 +241,7 @@ export async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
       if (e?.stdout) {
         stdout = e.stdout
       } else {
-        return emptyResult(true, 'winget')
+        return { ...emptyResult(true, 'winget'), failure: 'check-failed' }
       }
     }
 
@@ -257,7 +257,7 @@ export async function checkForUpdatesWinget(): Promise<UpdateCheckResult> {
       packageManagerName: 'winget',
     }
   } catch {
-    return emptyResult(true, 'winget')
+    return { ...emptyResult(true, 'winget'), failure: 'check-failed' }
   }
 }
 
@@ -426,6 +426,7 @@ async function upgradeAppWinget(appId: string, alreadyAdmin: boolean): Promise<{
 export async function runUpdatesWinget(
   appIds: string[],
   onProgress: (progress: UpdateProgress) => void,
+  names?: ReadonlyMap<string, string>,
 ): Promise<UpdateResult> {
   let succeeded = 0
   let failed = 0
@@ -472,7 +473,7 @@ export async function runUpdatesWinget(
           settled.status === 'fulfilled'
             ? settled.value.error || 'Upgrade failed'
             : settled.reason?.message || 'Unknown error'
-        errors.push({ appId, name: appId ?? 'unknown', reason })
+        errors.push({ appId, name: names?.get(appId) ?? appId, reason })
         onProgress({
           phase: 'updating',
           current: completed,

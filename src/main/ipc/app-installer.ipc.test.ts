@@ -16,6 +16,10 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (...args: unknown[]) => mocks.ipcHandle(...args) },
 }))
 
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
+}))
+
 vi.mock('../services/logger.service', () => ({
   getLogger: () => mocks.logger,
 }))
@@ -29,6 +33,7 @@ vi.mock('../services/app-installer', () => ({
 
 import { IPC } from '@shared/channels'
 import { registerAppInstallerIpc } from './app-installer.ipc'
+import { validateSender } from './sender-validation'
 
 function getHandler(channel: string): (...args: unknown[]) => unknown {
   const call = mocks.ipcHandle.mock.calls.find((c) => c[0] === channel)
@@ -44,6 +49,7 @@ function mockWindow(): void {
 describe('registerAppInstallerIpc', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(validateSender).mockReturnValue(true)
     mockWindow()
   })
 
@@ -60,6 +66,7 @@ describe('registerAppInstallerIpc', () => {
 describe('APP_INSTALLER_LIST_AVAILABLE handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(validateSender).mockReturnValue(true)
     mockWindow()
     registerAppInstallerIpc(mocks.getWindow)
   })
@@ -79,17 +86,25 @@ describe('APP_INSTALLER_LIST_AVAILABLE handler', () => {
     expect(mocks.logger.info).toHaveBeenCalledWith('app-installer', 'Found 1 apps, winget available: true')
   })
 
-  it('returns empty result on failure', async () => {
+  it('returns empty result with failure flag on failure', async () => {
     mocks.listAvailableApps.mockRejectedValue(new Error('boom'))
     const result = await getHandler(IPC.APP_INSTALLER_LIST_AVAILABLE)()
-    expect(result).toEqual({ apps: [], wingetAvailable: false })
+    expect(result).toEqual({ apps: [], wingetAvailable: false, failure: 'list-failed' })
     expect(mocks.logger.error).toHaveBeenCalledWith('app-installer', 'List failed: boom')
+  })
+
+  it('returns a failed result when the sender is invalid', async () => {
+    vi.mocked(validateSender).mockReturnValueOnce(false)
+    const result = await getHandler(IPC.APP_INSTALLER_LIST_AVAILABLE)()
+    expect(result).toEqual({ apps: [], wingetAvailable: false, failure: 'list-failed' })
+    expect(mocks.listAvailableApps).not.toHaveBeenCalled()
   })
 })
 
 describe('APP_INSTALLER_INSTALL handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(validateSender).mockReturnValue(true)
     mockWindow()
     registerAppInstallerIpc(mocks.getWindow)
   })
@@ -146,11 +161,19 @@ describe('APP_INSTALLER_INSTALL handler', () => {
     await getHandler(IPC.APP_INSTALLER_INSTALL)(undefined, ['Mozilla.Firefox', 'Google.Chrome'])
     expect(mocks.logger.success).toHaveBeenCalledWith('app-installer', 'Install complete: 1 succeeded, 1 failed')
   })
+
+  it('returns a safe empty result when the sender is invalid', async () => {
+    vi.mocked(validateSender).mockReturnValueOnce(false)
+    const result = await getHandler(IPC.APP_INSTALLER_INSTALL)(undefined, ['Mozilla.Firefox'])
+    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })
+    expect(mocks.installApps).not.toHaveBeenCalled()
+  })
 })
 
 describe('APP_INSTALLER_CANCEL handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(validateSender).mockReturnValue(true)
     mockWindow()
     registerAppInstallerIpc(mocks.getWindow)
   })
@@ -159,5 +182,12 @@ describe('APP_INSTALLER_CANCEL handler', () => {
     getHandler(IPC.APP_INSTALLER_CANCEL)()
     expect(mocks.cancelAppInstall).toHaveBeenCalled()
     expect(mocks.resetAppInstallCancel).toHaveBeenCalled()
+  })
+
+  it('does nothing when the sender is invalid', () => {
+    vi.mocked(validateSender).mockReturnValueOnce(false)
+    getHandler(IPC.APP_INSTALLER_CANCEL)()
+    expect(mocks.cancelAppInstall).not.toHaveBeenCalled()
+    expect(mocks.resetAppInstallCancel).not.toHaveBeenCalled()
   })
 })

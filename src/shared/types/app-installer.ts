@@ -24,6 +24,11 @@ export interface AppInstallerApp {
 export interface AppInstallerListResult {
   apps: AppInstallerApp[]
   wingetAvailable: boolean
+  /**
+   * Set when listing failed (e.g. the service threw). Distinguishes "winget is
+   * not installed" (a valid state) from "could not list apps at all".
+   */
+  failure?: 'list-failed'
 }
 
 export interface AppInstallProgress {

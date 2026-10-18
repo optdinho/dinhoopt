@@ -13,6 +13,7 @@ import {
   Search,
   Sparkles,
   TriangleAlert,
+  X,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -176,6 +177,11 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
         s.setPackageManagerName(result.packageManagerName)
         s.setHasChecked(true)
 
+        if (result.failure) {
+          s.setError(t('softwareUpdater.errorCheckFailed'))
+          return
+        }
+
         const visibleCount = useUpdaterStore.getState().apps.length
         if (
           result.packageManagerAvailable &&
@@ -249,8 +255,16 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             type="button"
             onClick={async () => {
               const next = !autoInstallUpdates
+              const previous = autoInstallUpdates
               useSettingsStore.getState().updateSettings({ autoInstallUpdates: next })
-              await window.dinho.settingsSet({ autoInstallUpdates: next })
+              try {
+                const result = await window.dinho.settingsSet({ autoInstallUpdates: next })
+                if (result && result.success === false) throw new Error(result.error || 'settings-failed')
+              } catch (err) {
+                logger.error('SoftwareUpdaterPage', 'Failed to persist autoInstallUpdates', err)
+                useSettingsStore.getState().updateSettings({ autoInstallUpdates: previous })
+                toast.error(t('softwareUpdater.settingsSaveFailed'))
+              }
             }}
             disabled={isBusy}
             className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium transition-all disabled:opacity-40"
@@ -269,8 +283,16 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
               value={autoInstallSchedule ?? 'daily'}
               onChange={async (e) => {
                 const value = e.target.value as 'daily' | 'weekly'
+                const previous = autoInstallSchedule
                 useSettingsStore.getState().updateSettings({ autoInstallSchedule: value })
-                await window.dinho.settingsSet({ autoInstallSchedule: value })
+                try {
+                  const result = await window.dinho.settingsSet({ autoInstallSchedule: value })
+                  if (result && result.success === false) throw new Error(result.error || 'settings-failed')
+                } catch (err) {
+                  logger.error('SoftwareUpdaterPage', 'Failed to persist autoInstallSchedule', err)
+                  useSettingsStore.getState().updateSettings({ autoInstallSchedule: previous })
+                  toast.error(t('softwareUpdater.settingsSaveFailed'))
+                }
               }}
               disabled={isBusy}
               aria-label={t('softwareUpdater.autoInstallScheduleLabel')}
@@ -408,7 +430,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       </div>
 
       {/* Package manager not available warning */}
-      {hasChecked && !packageManagerAvailable && (
+      {hasChecked && !packageManagerAvailable && !error && (
         <div
           className="mb-5 flex items-center gap-3 rounded-2xl px-5 py-4"
           style={{
@@ -552,6 +574,14 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
               </div>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => useUpdaterStore.getState().setUpdateResult(null)}
+            aria-label={t('common:dismiss')}
+            className="ml-auto shrink-0 rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-300"
+          >
+            <X className="h-4 w-4" strokeWidth={1.8} aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -642,7 +672,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
       )}
 
       {/* All up to date */}
-      {hasChecked && !loading && apps.length === 0 && ignoredApps.length === 0 && packageManagerAvailable && (
+      {hasChecked && !loading && apps.length === 0 && ignoredApps.length === 0 && packageManagerAvailable && !error && (
         <EmptyState
           icon={Sparkles}
           title={t('softwareUpdater.allUpToDateTitle')}
@@ -669,7 +699,10 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
                 updating={updating}
                 onToggle={() => useUpdaterStore.getState().toggleAppSelected(app.id)}
                 onUpdate={() => handleUpdate([app.id])}
-                onIgnore={() => useUpdaterStore.getState().ignoreApp(app.id)}
+                onIgnore={async () => {
+                  const ok = await useUpdaterStore.getState().ignoreApp(app.id)
+                  if (!ok) toast.error(t('softwareUpdater.settingsSaveFailed'))
+                }}
               />
             ))}
           </div>
@@ -696,7 +729,14 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
           {showIgnored && (
             <div className="grid grid-cols-1 gap-1.5">
               {ignoredApps.map((app) => (
-                <IgnoredRow key={app.id} app={app} onUnignore={() => useUpdaterStore.getState().unignoreApp(app.id)} />
+                <IgnoredRow
+                  key={app.id}
+                  app={app}
+                  onUnignore={async () => {
+                    const ok = await useUpdaterStore.getState().unignoreApp(app.id)
+                    if (!ok) toast.error(t('softwareUpdater.settingsSaveFailed'))
+                  }}
+                />
               ))}
             </div>
           )}

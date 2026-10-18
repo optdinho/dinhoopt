@@ -446,6 +446,7 @@ describe('checkForUpdatesWinget', () => {
     const result = await checkForUpdatesWinget()
     expect(result.packageManagerAvailable).toBe(true)
     expect(result.apps).toEqual([])
+    expect(result.failure).toBe('check-failed')
   })
 })
 
@@ -617,6 +618,26 @@ describe('runUpdatesWinget', () => {
     const result = await runUpdatesWinget(['Some.App'], noopProgress)
     expect(result.succeeded).toBe(1)
     expect(result.failed).toBe(0)
+  })
+
+  it('reports the human app name in errors when a name map is given', async () => {
+    isAdminMock.mockReturnValue(true)
+    execFileAsyncMock.mockRejectedValue(new Error('winget crashed'))
+
+    const result = await runUpdatesWinget(['Some.App'], noopProgress, new Map([['Some.App', 'Some App']]))
+
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]?.appId).toBe('Some.App')
+    expect(result.errors[0]?.name).toBe('Some App')
+  })
+
+  it('falls back to the app id as the name when the map has no entry', async () => {
+    isAdminMock.mockReturnValue(true)
+    execFileAsyncMock.mockRejectedValue(new Error('winget crashed'))
+
+    const result = await runUpdatesWinget(['Some.App'], noopProgress, new Map([['Other.App', 'Other App']]))
+
+    expect(result.errors[0]?.name).toBe('Some.App')
   })
 })
 

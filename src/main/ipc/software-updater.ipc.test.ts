@@ -20,6 +20,10 @@ vi.mock('@shared/channels', () => ({
   },
 }))
 
+vi.mock('./sender-validation', () => ({
+  validateSender: vi.fn(() => true),
+}))
+
 const mockCheckForUpdates = vi.fn()
 const mockRunUpdates = vi.fn()
 
@@ -29,6 +33,7 @@ vi.mock('../services/software-updater', () => ({
 }))
 
 import type { BrowserWindow } from 'electron'
+import { validateSender } from './sender-validation'
 import { registerSoftwareUpdaterIpc } from './software-updater.ipc'
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -52,6 +57,7 @@ describe('software-updater IPC', () => {
   beforeEach(() => {
     handleMap.clear()
     vi.clearAllMocks()
+    vi.mocked(validateSender).mockReturnValue(true)
   })
 
   it('registers both IPC handlers', () => {
@@ -83,7 +89,7 @@ describe('software-updater IPC', () => {
       expect(mockCheckForUpdates).toHaveBeenCalledOnce()
     })
 
-    it('returns empty result when checkForUpdates throws', async () => {
+    it('returns empty result with failure flag when checkForUpdates throws', async () => {
       mockCheckForUpdates.mockRejectedValue(new Error('network failure'))
 
       registerSoftwareUpdaterIpc(() => makeWindow())
@@ -96,7 +102,26 @@ describe('software-updater IPC', () => {
         patchCount: 0,
         packageManagerAvailable: false,
         packageManagerName: null,
+        failure: 'check-failed',
       })
+    })
+
+    it('returns a safe failed result when the sender is invalid', async () => {
+      vi.mocked(validateSender).mockReturnValueOnce(false)
+      registerSoftwareUpdaterIpc(() => makeWindow())
+
+      const result = await invoke('software-update:check')
+      expect(result).toEqual({
+        apps: [],
+        totalCount: 0,
+        majorCount: 0,
+        minorCount: 0,
+        patchCount: 0,
+        packageManagerAvailable: false,
+        packageManagerName: null,
+        failure: 'check-failed',
+      })
+      expect(mockCheckForUpdates).not.toHaveBeenCalled()
     })
   })
 
@@ -206,6 +231,15 @@ describe('software-updater IPC', () => {
       registerSoftwareUpdaterIpc(() => win)
       await expect(invoke('software-update:run', ['x'])).resolves.toBeDefined()
       expect(win.webContents.send).not.toHaveBeenCalled()
+    })
+
+    it('returns a safe empty result when the sender is invalid', async () => {
+      vi.mocked(validateSender).mockReturnValueOnce(false)
+      registerSoftwareUpdaterIpc(() => makeWindow())
+
+      const result = await invoke('software-update:run', ['app1'])
+      expect(result).toEqual({ succeeded: 0, failed: 0, errors: [] })
+      expect(mockRunUpdates).not.toHaveBeenCalled()
     })
 
     it('propagates errors from runUpdates', async () => {
