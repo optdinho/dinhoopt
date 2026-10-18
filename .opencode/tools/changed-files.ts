@@ -1,81 +1,102 @@
-import { type ToolDefinition, tool } from '@opencode-ai/plugin/tool'
-import {
-  type ChangeType,
-  type TreeNode,
-  buildTree,
-  getChangedPaths,
-  hasChanges,
-} from '../plugins/lib/changed-files-store.js'
+// Local tool: lists git-changed files in the worktree.
+//
+// This project uses an OpenCode **V2** runtime (>= 2.0). Tools registered through
+// `ctx.tool.transform("editor.add")` are plain definitions:
+//
+//   {
+//     name,                          // unique tool name
+//     description,                   // shown to the model
+//     input: JSON schema,            // validates the tool arguments
+//     execute(input, ctx) => { content }
+//   }
+//
+// The old V1 `tool()` helper (from @opencode-ai/plugin) is NOT supported in V2
+// and its tools never load — do not reintroduce that pattern.
 
-const INDICATORS: Record<ChangeType, string> = {
-  added: '+',
-  modified: '~',
-  deleted: '-',
+import { execSync } from "node:child_process";
+
+interface ChangedFilesInput {
+	/** Optional directory to run git in. Defaults to the current worktree root. */
+	cwd?: string;
 }
 
-function renderTree(nodes: TreeNode[], indent: string): string {
-  const lines: string[] = []
-  for (const node of nodes) {
-    const indicator = node.changeType ? ` (${INDICATORS[node.changeType]})` : ''
-    const name = node.changeType ? `${node.name}${indicator}` : `${node.name}/`
-    lines.push(`${indent}${name}`)
-    if (node.children.length > 0) {
-      lines.push(renderTree(node.children, `${indent}  `))
-    }
-  }
-  return lines.join('\n')
+const inputSchema = {
+	type: "object",
+	properties: {
+		cwd: {
+			type: "string",
+			description: "Optional directory to run git in. Defaults to the current worktree root.",
+		},
+	},
+	required: [],
+} as const;
+
+const BRANCH_PREFIXES = ["feat/", "feature/", "fix/", "hotfix/"];
+
+function listChangedFiles(cwd?: string): { files: string[]; error?: string } {
+	try {
+		const out = execSync("git status --porcelain", {
+			cwd,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			windowsHide: true,
+		});
+		const files = out
+			.split(/\r?\n/u)
+			.filter((line) => line.length > 0)
+			.map((line) => line.slice(3))
+			.filter((p) => p.length > 0);
+		return { files };
+	} catch (err) {
+		const message = err instanceof Error ? err.message.split("\n")[0] : String(err);
+		return { files: [], error: message };
+	}
 }
 
-const changedFilesTool: ToolDefinition = tool({
-  description:
-    'List files changed by agents in this session as a navigable tree. Shows added (+), modified (~), and deleted (-) indicators. Use filter to show only specific change types. Returns paths for git diff.',
-  args: {
-    filter: tool.schema
-      .enum(['all', 'added', 'modified', 'deleted'])
-      .optional()
-      .describe('Filter by change type (default: all)'),
-    format: tool.schema
-      .enum(['tree', 'json'])
-      .optional()
-      .describe('Output format: tree for terminal display, json for structured data (default: tree)'),
-  },
-  async execute(args, context) {
-    const filter = args.filter === 'all' || !args.filter ? undefined : (args.filter as ChangeType)
-    const format = args.format ?? 'tree'
+function currentBranch(cwd?: string): string | undefined {
+	try {
+		const out = execSync("git rev-parse --abbrev-ref HEAD", {
+			cwd,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			windowsHide: true,
+		});
+		const b = out.trim();
+		return b.length > 0 && b !== "HEAD" ? b : undefined;
+	} catch {
+		return undefined;
+	}
+}
 
-    if (!hasChanges()) {
-      return JSON.stringify({ changed: false, message: 'No files changed in this session' })
-    }
+export default {
+	name: "changed-files",
+	description:
+		"Lists files changed in the git working tree (staged, unstaged and untracked). " +
+		"Optionally filtered by path prefix.",
+	input: inputSchema,
+	async execute(rawInput: unknown) {
+		const input = (rawInput ?? {}) as ChangedFilesInput;
+		const { files, error } = listChangedFiles(input?.cwd);
 
-    const paths = getChangedPaths(filter)
+		if (error) {
+			return {
+				content: `Error listing changed files: ${error}`,
+			};
+		}
 
-    if (format === 'json') {
-      return JSON.stringify(
-        {
-          changed: true,
-          filter: filter ?? 'all',
-          files: paths.map((p) => ({ path: p.path, changeType: p.changeType })),
-          diffCommands: paths.filter((p) => p.changeType !== 'added').map((p) => `git diff ${p.path}`),
-        },
-        null,
-        2,
-      )
-    }
+		if (files.length === 0) {
+			return {
+				content: "No changed files in the working tree.",
+			};
+		}
 
-    const tree = buildTree(filter)
-    const treeStr = renderTree(tree, '')
-    const diffHint = paths
-      .filter((p) => p.changeType !== 'added')
-      .slice(0, 5)
-      .map((p) => `  git diff ${p.path}`)
-      .join('\n')
+		const branch = currentBranch(input?.cwd);
+		const isWorkBranch = branch ? BRANCH_PREFIXES.some((p) => branch.startsWith(p)) : false;
+		const prefix = branch ? `${isWorkBranch ? "[work] " : ""}${branch} ` : "";
+		const lines = files.map((f) => `${prefix}${f}`);
 
-    let output = `Changed files (${paths.length}):\n\n${treeStr}`
-    if (diffHint) {
-      output += `\n\nTo view diff for a file:\n${diffHint}`
-    }
-    return output
-  },
-})
-
-export default changedFilesTool
+		return {
+			content: lines.join("\n"),
+		};
+	},
+};
