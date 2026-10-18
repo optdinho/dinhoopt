@@ -50,15 +50,19 @@ vi.mock('../services/hwid', () => ({
   getHwidSync: (): string => 'machine-1',
 }))
 
+const mockValidateSender = vi.fn((..._args: unknown[]) => true)
+vi.mock('./sender-validation', () => ({
+  validateSender: (...args: unknown[]) => mockValidateSender(...args),
+}))
+
+beforeEach(() => {
+  // `clearAllMocks` não drena `mockReturnValueOnce`; restaurar sempre o default.
+  mockValidateSender.mockReturnValue(true)
+})
+
 import type { WindowsTweakCategory } from '@shared/types'
 import { saveSnapshotEntry } from '../services/windows-tweaks/snapshot-store'
-import {
-  DNS_PRESETS,
-  getCatalog,
-  getCatalogByCategory,
-  REG_TYPE_RE,
-  registerWindowsTweaksIpc,
-} from './windows-tweaks.ipc'
+import { DNS_PRESETS, getCatalog, REG_TYPE_RE, registerWindowsTweaksIpc } from './windows-tweaks.ipc'
 
 const CATEGORY_EXPECTED_COUNTS: Record<WindowsTweakCategory, number> = {
   mouse: 4,
@@ -121,10 +125,10 @@ describe('getCatalog', () => {
   })
 })
 
-describe('getCatalogByCategory', () => {
+describe('catalog by category', () => {
   for (const [cat, expectedCount] of Object.entries(CATEGORY_EXPECTED_COUNTS)) {
     it(`returns ${expectedCount} tweaks for category '${cat}'`, () => {
-      const items = getCatalogByCategory(cat as WindowsTweakCategory)
+      const items = getCatalog().filter((t) => t.category === cat)
       expect(items.length).toBe(expectedCount)
       for (const item of items) {
         expect(item.category).toBe(cat)
@@ -133,7 +137,7 @@ describe('getCatalogByCategory', () => {
   }
 
   it('returns empty array for unknown category', () => {
-    const items = getCatalogByCategory('unknown' as WindowsTweakCategory)
+    const items = getCatalog().filter((t) => t.category === ('unknown' as WindowsTweakCategory))
     expect(items.length).toBe(0)
   })
 })
@@ -310,10 +314,9 @@ describe('registerWindowsTweaksIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 17 IPC handlers', () => {
+  it('registers all 16 IPC handlers', () => {
     registerWindowsTweaksIpc(() => null)
     const channels = mockHandle.mock.calls.map((c) => c[0])
-    expect(channels).toContain('windows-tweaks:list')
     expect(channels).toContain('windows-tweaks:apply')
     expect(channels).toContain('windows-tweaks:revert')
     expect(channels).toContain('windows-tweaks:status')
@@ -330,7 +333,8 @@ describe('registerWindowsTweaksIpc', () => {
     expect(channels).toContain('windows-tweaks:current-dns')
     expect(channels).toContain('windows-tweaks:gaming-hags-get')
     expect(channels).toContain('windows-tweaks:gaming-hags-set')
-    expect(channels.length).toBe(17)
+    expect(channels).not.toContain('windows-tweaks:list')
+    expect(channels.length).toBe(16)
   })
 })
 
@@ -387,9 +391,9 @@ describe('WINDOWS_TWEAKS_CURRENT_DNS handler', () => {
   })
 })
 
-// ── LIST handler ──
+// ── STATUS handler ──
 
-describe('WINDOWS_TWEAKS_LIST handler', () => {
+describe('WINDOWS_TWEAKS_STATUS handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -397,7 +401,7 @@ describe('WINDOWS_TWEAKS_LIST handler', () => {
   it('returns status array when exec succeeds', async () => {
     stubExecFile({ stdout: '' })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
     expect(Array.isArray(result)).toBe(true)
     expect(result.length).toBeGreaterThan(0)
@@ -408,7 +412,7 @@ describe('WINDOWS_TWEAKS_LIST handler', () => {
   it('handles exec failure gracefully (all return applied=false)', async () => {
     stubExecFile('', new Error('reg query failed'))
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
     expect(result.every((r) => r.applied === false)).toBe(true)
   })
@@ -434,7 +438,7 @@ describe('WINDOWS_TWEAKS_LIST handler', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
 
     const pcie = result.find((r) => r.tweak.id === 'pcie-aspm-off')
@@ -457,7 +461,7 @@ describe('WINDOWS_TWEAKS_LIST handler', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
 
     const pcie = result.find((r) => r.tweak.id === 'pcie-aspm-off')
@@ -492,7 +496,7 @@ describe('checkTweakApplied reg query parsing', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
 
     const t = result.find((r) => r.tweak.id === 'explorer-delay')
@@ -519,7 +523,7 @@ describe('checkTweakApplied reg query parsing', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
 
     const t = result.find((r) => r.tweak.id === 'explorer-delay')
@@ -541,7 +545,7 @@ describe('checkTweakApplied reg query parsing', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
 
     const t = result.find((r) => r.tweak.id === 'mouse-speed')
@@ -569,7 +573,7 @@ describe('checkInterfaceTweakApplied returns true', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
 
     const t = result.find((r) => r.tweak.id === 'tcp-ack-freq')
@@ -1075,7 +1079,7 @@ describe('WINDOWS_TWEAKS_NETSH_TCP handler', () => {
     registerWindowsTweaksIpc(() => null)
     const handler = getHandler('windows-tweaks:netsh-tcp')
     await handler({}, 'apply')
-    const script = mockExecFile.mock.calls[0]?.[1]?.[3] as string
+    const script = (mockExecFile.mock.calls[0]![1] as string[]).at(-1) as string
     expect(script).toContain('$LASTEXITCODE')
   })
 
@@ -1084,9 +1088,27 @@ describe('WINDOWS_TWEAKS_NETSH_TCP handler', () => {
     registerWindowsTweaksIpc(() => null)
     const handler = getHandler('windows-tweaks:netsh-tcp')
     await handler({}, 'revert')
-    const script = mockExecFile.mock.calls[0]?.[1]?.[3] as string
+    const script = (mockExecFile.mock.calls[0]![1] as string[]).at(-1) as string
     expect(script).toContain('$LASTEXITCODE')
     expect(script).toContain('if ($errs.Count -gt 0) { Write-Output "ERROR')
+  })
+
+  it('runs the script with -ExecutionPolicy Bypass', async () => {
+    stubExecFile({ stdout: 'OK' })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:netsh-tcp')
+    await handler({}, 'apply')
+    const args = mockExecFile.mock.calls[0]?.[1] as string[]
+    expect(args).toContain('-ExecutionPolicy')
+    expect(args).toContain('Bypass')
+  })
+
+  it('does not treat an unrelated ERROR mention as a failure', async () => {
+    stubExecFile({ stdout: 'The interface reported ERRORSTATE but netsh succeeded' })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:netsh-tcp')
+    const result = await handler({}, 'apply')
+    expect(result).toEqual({ success: true })
   })
 
   it('reports error when netsh output contains ERROR', async () => {
@@ -1096,6 +1118,16 @@ describe('WINDOWS_TWEAKS_NETSH_TCP handler', () => {
     const result = (await handler({}, 'apply')) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
     expect(result.error).toBe('Access denied')
+  })
+
+  it('rejects an invalid sender', async () => {
+    stubExecFile({ stdout: 'OK' })
+    registerWindowsTweaksIpc(() => null)
+    mockValidateSender.mockReturnValueOnce(false)
+    const handler = getHandler('windows-tweaks:netsh-tcp')
+    const result = (await handler({}, 'apply')) as { success: boolean; error?: string }
+    expect(result.success).toBe(false)
+    expect(mockExecFile).not.toHaveBeenCalled()
   })
 
   it('reports error when netsh command throws', async () => {
@@ -1215,7 +1247,7 @@ describe('checkPowerCfgTweak failure modes', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
     // All tweaks should return applied=false because reg query fails
     expect(result.every((r) => r.applied === false)).toBe(true)
@@ -1236,7 +1268,7 @@ describe('checkPowerCfgTweak failure modes', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
     const pcie = result.find((r) => r.tweak.id === 'pcie-aspm-off')
     expect(pcie!.applied).toBe(false)
@@ -1254,7 +1286,7 @@ describe('checkPowerCfgTweak failure modes', () => {
       }
     })
     registerWindowsTweaksIpc(() => null)
-    const handler = getHandler('windows-tweaks:list')
+    const handler = getHandler('windows-tweaks:status')
     const result = (await handler()) as Array<{ tweak: { id: string }; applied: boolean }>
     const pcie = result.find((r) => r.tweak.id === 'pcie-aspm-off')
     expect(pcie!.applied).toBe(false)
@@ -1289,5 +1321,131 @@ describe('applyPowerCfgTweak without active GUID', () => {
     expect(result.succeeded).toBe(1)
     // Should NOT call /SETACTIVE since there's no active GUID
     expect(cmds.some((c) => c.includes('/SETACTIVE'))).toBe(false)
+  })
+})
+
+// ── validateSender guards (W1) ──
+
+describe('windows-tweaks sender validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockValidateSender.mockReturnValue(true)
+  })
+
+  it('apply returns an empty result for an invalid sender', async () => {
+    stubExecFile({ stdout: '' })
+    registerWindowsTweaksIpc(() => null)
+    mockValidateSender.mockReturnValueOnce(false)
+    const handler = getHandler('windows-tweaks:apply')
+    const result = await handler({}, ['mouse-speed'])
+    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [], rebootRequired: [], logoffRequired: [] })
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+
+  it('revert returns an empty result for an invalid sender', async () => {
+    stubExecFile({ stdout: '' })
+    registerWindowsTweaksIpc(() => null)
+    mockValidateSender.mockReturnValueOnce(false)
+    const handler = getHandler('windows-tweaks:revert')
+    const result = await handler({}, ['mouse-speed'])
+    expect(result).toEqual({ succeeded: 0, failed: 0, errors: [], rebootRequired: [], logoffRequired: [] })
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+
+  it('status returns an empty array for an invalid sender', async () => {
+    stubExecFile({ stdout: '' })
+    registerWindowsTweaksIpc(() => null)
+    mockValidateSender.mockReturnValueOnce(false)
+    const handler = getHandler('windows-tweaks:status')
+    const result = await handler({})
+    expect(result).toEqual([])
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+
+  it('DNS handlers return safe empties for an invalid sender', async () => {
+    stubExecFile({ stdout: '' })
+    registerWindowsTweaksIpc(() => null)
+    mockValidateSender.mockReturnValue(false)
+    expect(await getHandler('windows-tweaks:get-dns')({})).toEqual([])
+    expect(await getHandler('windows-tweaks:current-dns')({})).toEqual({
+      primary: null,
+      secondary: null,
+      source: 'none',
+    })
+    expect(await getHandler('windows-tweaks:benchmark-dns')({})).toEqual([])
+    expect(await getHandler('windows-tweaks:set-dns')({}, '1.1.1.1')).toBe(false)
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+
+  it('gaming handlers reject an invalid sender', async () => {
+    stubExecFile({ stdout: '' })
+    registerWindowsTweaksIpc(() => null)
+    mockValidateSender.mockReturnValue(false)
+    expect(await getHandler('windows-tweaks:gaming-timer-get')({})).toEqual({
+      hpetOff: false,
+      tscSyncPolicy: 'default',
+      dynamicTickDisabled: false,
+      autoTuningDisabled: false,
+    })
+    expect(await getHandler('windows-tweaks:gaming-timer-set')({}, { hpetOff: true })).toEqual({
+      success: false,
+      errors: ['Invalid sender'],
+    })
+    expect(await getHandler('windows-tweaks:gaming-timer-revert')({})).toEqual({
+      success: false,
+      errors: ['Invalid sender'],
+    })
+    expect(await getHandler('windows-tweaks:gaming-autotuning')({}, 'apply')).toEqual({
+      success: false,
+      error: 'Invalid sender',
+    })
+    expect(await getHandler('windows-tweaks:gaming-vbs-get')({})).toEqual({ enabled: true })
+    expect(await getHandler('windows-tweaks:gaming-vbs-set')({}, true)).toEqual({
+      success: false,
+      error: 'Invalid sender',
+    })
+    expect(await getHandler('windows-tweaks:gaming-hags-get')({})).toEqual({ enabled: true })
+    expect(await getHandler('windows-tweaks:gaming-hags-set')({}, true)).toEqual({
+      success: false,
+      error: 'Invalid sender',
+    })
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+})
+
+// ── hibernate-off actually runs powercfg /h (W2) ──
+
+describe('hibernate-off powercfg integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsAdmin.mockReturnValue(true)
+  })
+
+  it('runs powercfg /h off on apply', async () => {
+    const cmds: string[] = []
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      cmds.push(`${args[0]} ${(args[1] as string[]).join(' ')}`)
+      if (typeof callback === 'function') callback(null, { stdout: '' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:apply')
+    const result = (await handler({}, ['hibernate-off'])) as { succeeded: number }
+    expect(result.succeeded).toBe(1)
+    expect(cmds.some((c) => c === 'powercfg /h off')).toBe(true)
+  })
+
+  it('runs powercfg /h on on revert', async () => {
+    const cmds: string[] = []
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const callback = args[args.length - 1] as (...a: unknown[]) => unknown
+      cmds.push(`${args[0]} ${(args[1] as string[]).join(' ')}`)
+      if (typeof callback === 'function') callback(null, { stdout: '' })
+    })
+    registerWindowsTweaksIpc(() => null)
+    const handler = getHandler('windows-tweaks:revert')
+    const result = (await handler({}, ['hibernate-off'])) as { succeeded: number }
+    expect(result.succeeded).toBe(1)
+    expect(cmds.some((c) => c === 'powercfg /h on')).toBe(true)
   })
 })

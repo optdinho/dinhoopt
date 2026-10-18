@@ -36,6 +36,10 @@ const mockStore = {
   setGamingTimer: vi.fn(),
   revertGamingTimer: vi.fn(),
   setAutoTuning: vi.fn(),
+  loadError: false,
+  dnsPresetsError: false,
+  dnsBenchmarkError: false,
+  currentDnsError: false,
 }
 
 vi.mock('@/stores/windows-tweaks-store', () => ({
@@ -57,6 +61,7 @@ vi.mock('lucide-react', () => {
   const icons = [
     'Accessibility',
     'TriangleAlert',
+    'CircleAlert',
     'CircleCheckBig',
     'ChevronDown',
     'Cpu',
@@ -114,6 +119,10 @@ describe('WindowsTweaksPage', () => {
   beforeEach(() => {
     mockStore.tweaks = []
     mockStore.scanning = false
+    mockStore.loadError = false
+    mockStore.dnsPresetsError = false
+    mockStore.dnsBenchmarkError = false
+    mockStore.currentDnsError = false
     vi.clearAllMocks()
   })
 
@@ -265,5 +274,99 @@ describe('WindowsTweaksPage apply/revert feedback', () => {
     fireEvent.click(within(screen.getByTestId('toolbar-actions')).getByRole('button', { name: 'revert' }))
     await waitFor(() => expect(toast.error).toHaveBeenCalled())
     expect(toast.success).not.toHaveBeenCalled()
+  })
+})
+
+describe('WindowsTweaksPage honest failure states', () => {
+  const presets = [{ name: 'Cloudflare', primary: '1.1.1.1', secondary: '1.0.0.1' }]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockStore.tweaks = [
+      { applied: false, tweak: { id: 't1', name: 'Tweak 1', description: '', category: 'system', level: 'basico' } },
+    ] as never
+    mockStore.scanning = false
+    mockStore.loadError = false
+    mockStore.dnsPresetsError = false
+    mockStore.dnsBenchmarkError = false
+    mockStore.currentDnsError = false
+    mockStore.dnsPresets = [] as never
+    mockStore.dnsBenchmark = [] as never
+    mockStore.currentDns = { primary: null, secondary: null, source: 'none' } as never
+    mockStore.gamingTimer = null
+    mockStore.gamingTimerLoading = false
+    mockStore.lastResult = null
+    mockStore.revertResult = null
+    mockStore.applying = false
+    mockStore.selectedIds = new Set<string>()
+  })
+
+  it('shows the failure state instead of the empty state when the catalog read failed', () => {
+    mockStore.tweaks = [] as never
+    mockStore.loadError = true
+    render(<WindowsTweaksPage />)
+    expect(screen.getByTestId('load-failed-state')).toBeTruthy()
+    expect(screen.getByText('loadFailedTitle')).toBeTruthy()
+    expect(screen.queryByTestId('empty-state')).toBeNull()
+  })
+
+  it('still shows the empty state when the read succeeded but returned nothing', () => {
+    mockStore.tweaks = [] as never
+    render(<WindowsTweaksPage />)
+    expect(screen.getByTestId('empty-state')).toBeTruthy()
+    expect(screen.queryByTestId('load-failed-state')).toBeNull()
+  })
+
+  it('warns when the DNS presets failed to load', () => {
+    mockStore.dnsPresetsError = true
+    render(<WindowsTweaksPage />)
+    expect(screen.getByTestId('dns-presets-failed')).toBeTruthy()
+    expect(screen.getByText('dnsPresetsFailed')).toBeTruthy()
+  })
+
+  it('shows the DNS benchmark failure instead of the manual hint', () => {
+    mockStore.dnsPresets = presets as never
+    mockStore.dnsBenchmarkError = true
+    render(<WindowsTweaksPage />)
+    expect(screen.getByText('dnsBenchmarkFailed')).toBeTruthy()
+    expect(screen.queryByText('dnsManualHint')).toBeNull()
+  })
+
+  it('marks the DNS as unreadable when the read failed', () => {
+    mockStore.dnsPresets = presets as never
+    mockStore.currentDnsError = true
+    render(<WindowsTweaksPage />)
+    expect(screen.getByText('dnsCurrentFailed')).toBeTruthy()
+    expect(screen.queryByText('dnsCurrentUnknown')).toBeNull()
+  })
+
+  it('does not paint a green banner when every tweak failed to apply', () => {
+    mockStore.tweaks = [
+      { applied: false, tweak: { id: 't1', name: 'Tweak 1', description: '', category: 'system', level: 'basico' } },
+    ] as never
+    mockStore.lastResult = {
+      succeeded: 0,
+      failed: 2,
+      errors: [{ id: 't1', name: 'T', reason: 'R' }],
+      rebootRequired: [],
+      logoffRequired: [],
+    } as never
+    render(<WindowsTweaksPage />)
+    expect(screen.getByTestId('apply-result-banner').className).toContain('border-red-800')
+  })
+
+  it('keeps the partial-failure banner green', () => {
+    mockStore.tweaks = [
+      { applied: false, tweak: { id: 't1', name: 'Tweak 1', description: '', category: 'system', level: 'basico' } },
+    ] as never
+    mockStore.lastResult = {
+      succeeded: 1,
+      failed: 1,
+      errors: [],
+      rebootRequired: [],
+      logoffRequired: [],
+    } as never
+    render(<WindowsTweaksPage />)
+    expect(screen.getByTestId('apply-result-banner').className).toContain('border-green-800')
   })
 })

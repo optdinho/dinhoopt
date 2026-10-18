@@ -2,22 +2,8 @@
   "advancedTools": "Herramientas avanzadas",
   "pageTitle": "Windows Tweaks",
   "pageDescription": "Catálogo de optimizaciones para Windows",
-  "applied": "Aplicado",
-  "notApplied": "No aplicado",
-  "apply": "Aplicar",
   "revert": "Revertir",
-  "selectAll": "Seleccionar todos no aplicados",
   "deselectAll": "Deseleccionar todos",
-  "categoryMouse": "Mouse",
-  "categoryKeyboard": "Teclado",
-  "categoryAccessibility": "Accesibilidad",
-  "categoryNetwork": "Red",
-  "categoryGpu": "GPU",
-  "categorySystem": "Sistema",
-  "categoryGaming": "Videojuegos",
-  "categoryPrivacy": "Privacidad",
-  "categoryMmcss": "MMCSS",
-  "categoryEnergy": "Energía",
   "categories": {
     "mouse": "Mouse",
     "keyboard": "Teclado",
@@ -93,5 +79,331 @@
   "learnMore": "Saber más",
   "tcpIpDescription": "Ajusta chimney, timestamps y el tiempo de espera inicial (RTO) de la pila TCP. Reduce la latencia en uso general, pero desactiva recursos que ayudan en redes inestables.",
   "timerCaution": "Microsoft documenta HPET, TSC Sync Policy y Dynamic Tick como opciones de depuración. En algunos sistemas pueden desestabilizar: si notas tirones, revierte.",
-  "dnsChangedSuccess": "¡DNS cambiado con éxito!"
+  "loadFailedTitle": "No se pudieron cargar las optimizaciones",
+  "loadFailedDescription": "El análisis del sistema falló. Vuelve a intentarlo.",
+  "dnsPresetsFailed": "No se pudieron cargar los preajustes de DNS.",
+  "dnsBenchmarkFailed": "No se pudo medir la velocidad de los servidores DNS.",
+  "dnsCurrentFailed": "no se pudo leer",
+  "tweaks": {
+    "sticky-keys-off": {
+      "name": "Sticky Keys — OFF",
+      "description": "Desactiva Sticky Keys (atajos fijos de Windows)"
+    },
+    "toggle-keys-off": {
+      "name": "Toggle Keys — OFF",
+      "description": "Desactiva Toggle Keys (aviso sonoro al bloquear teclas)"
+    },
+    "filter-keys-off": {
+      "name": "Filter Keys — OFF",
+      "description": "Desactiva Filter Keys (ignora teclas repetidas rápidas)"
+    },
+    "mouse-keys-off": {
+      "name": "Mouse Keys — OFF",
+      "description": "Desactiva Mouse Keys (control del ratón con el teclado)"
+    },
+    "menu-show-delay": {
+      "name": "Retardo de Menús — 0ms",
+      "description": "Elimina el retardo al abrir menús en Windows"
+    },
+    "explorer-delay": {
+      "name": "Retardo de Inicio del Explorador — 0ms",
+      "description": "Elimina el retardo de inicio del Explorador"
+    },
+    "transparency-off": {
+      "name": "Transparencia — OFF",
+      "description": "Desactiva la transparencia de Windows (leve ganancia de FPS)"
+    },
+    "widgets-off": {
+      "name": "Widgets (Win11) — OFF",
+      "description": "Quita el botón de Widgets de la barra de tareas (Win11)"
+    },
+    "news-interest-off": {
+      "name": "Noticias e Intereses — OFF",
+      "description": "Quita Noticias e Intereses de la barra de tareas"
+    },
+    "min-animate-off": {
+      "name": "Animación de Ventanas — OFF",
+      "description": "Desactiva la animación de minimizar/maximizar ventanas"
+    },
+    "start-suggested-content-off": {
+      "name": "Contenido Sugerido en Inicio — OFF",
+      "description": "Quita el contenido sugerido del Menú Inicio"
+    },
+    "recent-files-off": {
+      "name": "Archivos Recientes en Inicio — OFF",
+      "description": "Quita los archivos recientes del Menú Inicio"
+    },
+    "lock-screen-ads-off": {
+      "name": "Anuncios de Pantalla de Bloqueo — OFF",
+      "description": "Desactiva anuncios y consejos en la pantalla de bloqueo"
+    },
+    "telemetria-off": {
+      "name": "Telemetría — OFF",
+      "description": "Desactiva la recogida de datos de telemetría de Microsoft"
+    },
+    "background-apps": {
+      "name": "Apps en Segundo Plano — OFF",
+      "description": "Desactiva la ejecución de apps en segundo plano"
+    },
+    "allow-cortana-off": {
+      "name": "Cortana — OFF",
+      "description": "Desactiva el asistente Cortana"
+    },
+    "vbs-hvci": {
+      "name": "VBS Hypervisor Code Integrity — OFF",
+      "description": "Desactiva la integridad de código HVCI (Virtualization-Based Security)"
+    },
+    "vbs-lsa-cfg": {
+      "name": "VBS LSA Credential Guard — OFF",
+      "description": "Desactiva Credential Guard (LSA) de VBS"
+    },
+    "vbs-enable": {
+      "name": "VBS Virtualization — OFF",
+      "description": "Desactiva Virtualization Based Security (recupera rendimiento)"
+    },
+    "mouse-speed": {
+      "name": "Ratón 1:1 — Sin aceleración",
+      "description": "Desactiva la aceleración del ratón para movimiento 1:1"
+    },
+    "mouse-threshold1": {
+      "name": "Umbral de Ratón 1 — Cero",
+      "description": "Pone a cero el umbral de aceleración del ratón"
+    },
+    "mouse-threshold2": {
+      "name": "Umbral de Ratón 2 — Cero",
+      "description": "Pone a cero el umbral secundario de aceleración del ratón"
+    },
+    "mouse-hover-time": {
+      "name": "Tiempo de Hover del Ratón — 0ms",
+      "description": "Elimina el retardo de hover y tooltips del ratón"
+    },
+    "hags-on": {
+      "name": "Planificación GPU por Hardware — ON",
+      "description": "Activa la planificación por hardware de la GPU (reduce latencia)"
+    },
+    "mpo-overlay-minfps": {
+      "name": "MPO Overlay Min FPS — 0",
+      "description": "Quita el FPS mínimo de los overlays MPO (experimental)"
+    },
+    "vsync-global-off": {
+      "name": "VSync Global — OFF",
+      "description": "Fuerza VSync desactivado globalmente en juegos DirectX"
+    },
+    "hw-accel-wpf": {
+      "name": "Aceleración HW WPF — ON",
+      "description": "Activa la aceleración por hardware en apps WPF (más rendimiento)"
+    },
+    "gpu-tdr-level": {
+      "name": "GPU TDR Level — 0 (desactivado)",
+      "description": "Desactiva la detección de Timeout/Recovery de la GPU"
+    },
+    "gpu-tdr-delay": {
+      "name": "GPU TDR Delay — 8s",
+      "description": "Aumenta el timeout de recuperación de la GPU a 8s (evita cierres)"
+    },
+    "gpu-panel-self-refresh": {
+      "name": "Panel Self Refresh — OFF",
+      "description": "Desactiva el refresco selectivo del panel (evita micro-stutters)"
+    },
+    "mmcss-gpu-priority": {
+      "name": "MMCSS GPU Priority — 8",
+      "description": "Prioridad de la GPU en juegos mediante MMCSS"
+    },
+    "mmcss-priority": {
+      "name": "MMCSS CPU Priority — 6",
+      "description": "Prioridad de la CPU en juegos mediante MMCSS"
+    },
+    "mmcss-sched-cat": {
+      "name": "MMCSS Scheduling Category — High",
+      "description": "Categoría de planificación Alta para juegos"
+    },
+    "mmcss-sfio": {
+      "name": "MMCSS SFIO Priority — High",
+      "description": "Prioridad de E/S Alta para juegos"
+    },
+    "mmcss-background": {
+      "name": "MMCSS Background Only — False",
+      "description": "Evita que los juegos se traten como tarea en segundo plano"
+    },
+    "mmcss-affinity": {
+      "name": "MMCSS Affinity — 0 (todos los núcleos)",
+      "description": "Permite que los juegos usen todos los núcleos de la CPU"
+    },
+    "mmcss-clock-rate": {
+      "name": "MMCSS Clock Rate — 10000 (1ms)",
+      "description": "Clock rate de 1ms para juegos (temporizador más preciso)"
+    },
+    "mmcss-nolazymode": {
+      "name": "MMCSS NoLazyMode — ON",
+      "description": "Desactiva el modo lazy de MMCSS (los hilos de juego nunca duermen)"
+    },
+    "power-throttling-off": {
+      "name": "Power Throttling — OFF",
+      "description": "Desactiva el throttling de energía de Windows para procesos"
+    },
+    "hibernate-off": {
+      "name": "Hibernación — OFF",
+      "description": "Desactiva la hibernación y elimina el archivo hiberfil.sys"
+    },
+    "pcie-aspm-off": {
+      "name": "PCIe ASPM — OFF",
+      "description": "Desactiva el ahorro de energía PCIe (GPU y NVMe siempre activos)"
+    },
+    "usb-selective-suspend-off": {
+      "name": "Suspensión Selectiva USB — OFF",
+      "description": "Desactiva la suspensión selectiva de dispositivos USB"
+    },
+    "processor-min-max": {
+      "name": "CPU Mín/Máx — 100%",
+      "description": "Fija la CPU siempre al 100% mínimo y máximo (quita el ahorro de energía)"
+    },
+    "gamedvr-fse": {
+      "name": "Game DVR FSE Behavior — 2",
+      "description": "Activa el modo exclusivo a pantalla completa para juegos"
+    },
+    "gamedvr-honor-fse": {
+      "name": "Game DVR Honor FSE — 1",
+      "description": "Respeta la elección de pantalla completa exclusiva del usuario"
+    },
+    "gamedvr-dxgi": {
+      "name": "Game DVR DXGI FSE — 1",
+      "description": "Permite DXGI en modo exclusivo a pantalla completa"
+    },
+    "gamedvr-efse": {
+      "name": "Game DVR EFSE Flags — 0",
+      "description": "Desactiva los flags experimentales del Game DVR"
+    },
+    "auto-game-mode": {
+      "name": "Auto Game Mode — ON",
+      "description": "Activa el Game Mode automático de Windows"
+    },
+    "allow-auto-game-mode": {
+      "name": "Allow Auto Game Mode — ON",
+      "description": "Permite la activación automática del Game Mode"
+    },
+    "perfopt-csgo": {
+      "name": "CPU Priority — CS2 (High)",
+      "description": "Fuerza prioridad Alta para el proceso CS2.exe"
+    },
+    "perfopt-fivem": {
+      "name": "CPU Priority — FiveM (High)",
+      "description": "Fuerza prioridad Alta para el proceso FiveM.exe"
+    },
+    "win32-priority-sep": {
+      "name": "Win32 Priority Separation — 38",
+      "description": "Ajusta la separación de prioridad para mejor rendimiento en juegos"
+    },
+    "system-responsiveness": {
+      "name": "System Responsiveness — 0",
+      "description": "Quita la reserva de CPU para tareas secundarias"
+    },
+    "disable-paging-exec": {
+      "name": "Disable Paging Executive — 1",
+      "description": "Mantiene los drivers del kernel fijos en RAM (sin swap a disco)"
+    },
+    "svchost-threshold": {
+      "name": "SvcHost Split Threshold — 64MB",
+      "description": "Aumenta el límite de split de servicios a 64MB"
+    },
+    "ntfs-last-access-off": {
+      "name": "NTFS Last Access Update — OFF",
+      "description": "Desactiva la actualización de fecha de último acceso en NTFS"
+    },
+    "wait-to-kill-timeout": {
+      "name": "WaitToKillServiceTimeout — 2000ms",
+      "description": "Reduce el timeout de cierre de servicios a 2s (apaga más rápido)"
+    },
+    "pool-usage-maximum": {
+      "name": "PoolUsageMaximum — 80%",
+      "description": "Aumenta el pool del kernel al 80% (más drivers en RAM, menos swap)"
+    },
+    "large-system-cache": {
+      "name": "LargeSystemCache — ON",
+      "description": "Activa la caché grande del sistema (más recursos en RAM)"
+    },
+    "hid-power-management": {
+      "name": "HID Power Save — OFF",
+      "description": "Desactiva el ahorro de energía del ratón/teclado USB"
+    },
+    "ntfs-8dot3-disable": {
+      "name": "NTFS 8.3 Names — OFF",
+      "description": "Desactiva la creación de nombres 8.3 en NTFS (menos E/S)"
+    },
+    "ntfs-mft-zone": {
+      "name": "NTFS MFT Zone — 400MB",
+      "description": "Aumenta la reserva de la MFT a 400MB (menos fragmentación)"
+    },
+    "ntfs-tunnel-off": {
+      "name": "NTFS Tunneling — OFF",
+      "description": "Desactiva la tunelización NTFS (quita metadatos innecesarios)"
+    },
+    "tcp-no-delay": {
+      "name": "TCP No Delay — ON",
+      "description": "Desactiva el algoritmo Nagle (envío inmediato de paquetes TCP)"
+    },
+    "tcp-ack-freq": {
+      "name": "TCP Ack Frequency — 1",
+      "description": "Reduce los ACKs a 1 por paquete (menor latencia de red)"
+    },
+    "tcp-no-delay-iface": {
+      "name": "TCP No Delay (Interfaces)",
+      "description": "Desactiva Nagle en cada interfaz de red individualmente"
+    },
+    "default-ttl": {
+      "name": "Default TTL — 64",
+      "description": "Ajusta el TTL de los paquetes a 64 saltos"
+    },
+    "max-user-port": {
+      "name": "Max User Port — 65534",
+      "description": "Amplía los puertos disponibles a 65534 (más conexiones simultáneas)"
+    },
+    "tcp-1323-opts": {
+      "name": "TCP Window Scaling — ON",
+      "description": "Activa TCP Window Scaling (mejor throughput en alta latencia)"
+    },
+    "tcp-max-dup-acks": {
+      "name": "TCP Max Dup Acks — 2",
+      "description": "Reduce los ACKs duplicados a 2 (recuperación más rápida)"
+    },
+    "tcp-timed-wait-delay": {
+      "name": "TCP Timed Wait Delay — 30s",
+      "description": "Reduce la espera de puertos en TIME_WAIT a 30 segundos"
+    },
+    "network-throttling": {
+      "name": "Network Throttling Index — OFF",
+      "description": "Quita el límite de throttle de red de Windows"
+    },
+    "tcp-window-size": {
+      "name": "TCP Window Size — 65535",
+      "description": "Aumenta la ventana TCP a 65535 bytes (mejor throughput)"
+    },
+    "global-max-tcp-window-size": {
+      "name": "Global Max TCP Window — 65535",
+      "description": "Fija la ventana TCP máxima global en 65535 bytes"
+    },
+    "tcp-del-ack-ticks": {
+      "name": "TCP Delayed Ack Ticks — 0 (desactivado)",
+      "description": "Desactiva el ACK retardado del TCP (ACK inmediato)"
+    },
+    "delivery-opt-off": {
+      "name": "Delivery Optimization (P2P) — OFF",
+      "description": "Desactiva el uso compartido P2P de actualizaciones de Windows"
+    },
+    "qos-reservable-bw": {
+      "name": "QoS Reservable Bandwidth — 0% (desactivado)",
+      "description": "Libera el 100% del ancho de banda (quita la reserva QoS del 20%)"
+    },
+    "ecn-capability": {
+      "name": "ECN — ON (ambos lados)",
+      "description": "Activa Explicit Congestion Notification (menos pérdida de paquetes)"
+    },
+    "fast-send-datagram-threshold": {
+      "name": "UDP Fast Path — 65536 bytes",
+      "description": "Aumenta el límite del fast path UDP (menos latencia en juegos/VoIP)"
+    },
+    "disable-ipv6": {
+      "name": "IPv6 — OFF (todas las interfaces)",
+      "description": "Desactiva IPv6 en todas las interfaces de red"
+    }
+  }
 }

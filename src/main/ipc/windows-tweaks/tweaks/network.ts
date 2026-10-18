@@ -6,6 +6,7 @@ import { benchmarkResolvers, rankResults } from '../../../services/dns-benchmark
 import { execFileAsync, psUtf8 } from '../../../services/exec-utf8'
 import { getLogger } from '../../../services/logger.service'
 import type { WindowGetter } from '../../index'
+import { validateSender } from '../../sender-validation'
 import { CURRENT_DNS_SCRIPT, parseCurrentDns } from '../current-dns'
 
 export const DNS_PRESETS: DnsPreset[] = [
@@ -245,13 +246,15 @@ export const NETWORK_TWEAKS: WindowsTweakDef[] = [
   },
 ]
 
-export function registerNetworkTweaks(_getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_GET_DNS, async () => {
+export function registerNetworkTweaks(getWindow: WindowGetter): void {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_GET_DNS, async (event): Promise<DnsPreset[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('windows-tweaks', 'DNS presets requested')
     return DNS_PRESETS
   })
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_CURRENT_DNS, async (): Promise<CurrentDns> => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_CURRENT_DNS, async (event): Promise<CurrentDns> => {
+    if (!validateSender(event, getWindow())) return { primary: null, secondary: null, source: 'none' }
     try {
       const { stdout } = await execFileAsync(
         'powershell.exe',
@@ -265,7 +268,8 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_BENCHMARK_DNS, async (): Promise<DnsBenchmarkResult[]> => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_BENCHMARK_DNS, async (event): Promise<DnsBenchmarkResult[]> => {
+    if (!validateSender(event, getWindow())) return []
     const targets = DNS_PRESETS.flatMap((p) => [p.primary, p.secondary])
     getLogger().info('windows-tweaks', `Benchmarking ${targets.length} DNS resolvers`)
     try {
@@ -279,7 +283,8 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
     }
   })
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_SET_DNS, async (_event, primary: string, secondary?: string) => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_SET_DNS, async (event, primary: string, secondary?: string): Promise<boolean> => {
+    if (!validateSender(event, getWindow())) return false
     getLogger().info('windows-tweaks', `Setting DNS: ${primary}${secondary ? ` / ${secondary}` : ''}`)
     try {
       const plat = getPlatform()
@@ -299,7 +304,8 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
 
   ipcMain.handle(
     IPC.WINDOWS_TWEAKS_NETSH_TCP,
-    async (_event, action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> => {
+    async (event, action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> => {
+      if (!validateSender(event, getWindow())) return { success: false, error: 'Invalid sender' }
       getLogger().info('windows-tweaks', `netsh TCP global: ${action}`)
       try {
         const script =
@@ -322,13 +328,16 @@ export function registerNetworkTweaks(_getWindow: WindowGetter): void {
         `
         const { stdout } = await execFileAsync(
           'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)],
+          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psUtf8(script)],
           { timeout: 30000, windowsHide: true },
         )
 
-        if (stdout.includes('ERROR')) {
-          getLogger().error('windows-tweaks', `netsh TCP failed: ${stdout}`)
-          return { success: false, error: String(stdout).replace('ERROR: ', '').trim() }
+        // O script imprime exactamente "OK" ou "ERROR: …"; ancorar no início evita
+        // falsos positivos por a palavra "ERROR" aparecer noutra mensagem do netsh.
+        const out = String(stdout).trim()
+        if (out.startsWith('ERROR:')) {
+          getLogger().error('windows-tweaks', `netsh TCP failed: ${out}`)
+          return { success: false, error: out.replace(/^ERROR:\s*/, '') }
         }
         getLogger().success('windows-tweaks', `netsh TCP ${action} concluído`)
         return { success: true }

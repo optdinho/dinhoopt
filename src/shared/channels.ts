@@ -278,7 +278,6 @@ export const IPC = {
   WINDOW_CLOSE: 'window:close',
 
   // Windows Tweaks
-  WINDOWS_TWEAKS_LIST: 'windows-tweaks:list',
   WINDOWS_TWEAKS_APPLY: 'windows-tweaks:apply',
   WINDOWS_TWEAKS_APPLY_PROGRESS: 'windows-tweaks:apply:progress',
   WINDOWS_TWEAKS_REVERT: 'windows-tweaks:revert',

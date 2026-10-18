@@ -8,6 +8,7 @@ import type {
   WindowsTweakState,
 } from '@shared/types'
 import { create } from 'zustand'
+import logger from '@/lib/renderer-logger'
 
 interface WindowsTweaksStoreState {
   tweaks: WindowsTweakState[]
@@ -24,6 +25,14 @@ interface WindowsTweaksStoreState {
   expandedCategories: Set<string>
   gamingTimer: GamingTimerStatus | null
   gamingTimerLoading: boolean
+  /** A leitura do catálogo falhou (a lista vazia não significa "sem tweaks"). */
+  loadError: boolean
+  /** A leitura das predefinições DNS falhou. */
+  dnsPresetsError: boolean
+  /** A medição DNS falhou (lista vazia seria enganadora). */
+  dnsBenchmarkError: boolean
+  /** A leitura do DNS em uso falhou. */
+  currentDnsError: boolean
 
   load: () => Promise<void>
   loadDnsPresets: () => Promise<void>
@@ -63,23 +72,29 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
   expandedCategories: new Set(),
   gamingTimer: null,
   gamingTimerLoading: false,
+  loadError: false,
+  dnsPresetsError: false,
+  dnsBenchmarkError: false,
+  currentDnsError: false,
 
   load: async () => {
     set({ scanning: true })
     try {
       const tweaks = await window.dinho.windowsTweaksStatus()
-      set({ tweaks, scanning: false })
-    } catch {
-      set({ scanning: false })
+      set({ tweaks, scanning: false, loadError: false })
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to load tweaks', err)
+      set({ scanning: false, loadError: true })
     }
   },
 
   loadDnsPresets: async () => {
     try {
       const dnsPresets = await window.dinho.windowsTweaksGetDnsPresets()
-      set({ dnsPresets })
-    } catch {
-      /* ignore */
+      set({ dnsPresets, dnsPresetsError: false })
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to load DNS presets', err)
+      set({ dnsPresetsError: true })
     }
   },
 
@@ -88,9 +103,10 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
     set({ dnsBenchmarking: true })
     try {
       const results = await window.dinho.windowsTweaksBenchmarkDns()
-      set({ dnsBenchmark: results })
-    } catch {
-      set({ dnsBenchmark: [] })
+      set({ dnsBenchmark: results, dnsBenchmarkError: false })
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to benchmark DNS', err)
+      set({ dnsBenchmark: [], dnsBenchmarkError: true })
     } finally {
       set({ dnsBenchmarking: false })
     }
@@ -99,9 +115,10 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
   loadCurrentDns: async () => {
     try {
       const currentDns = await window.dinho.windowsTweaksCurrentDns()
-      set({ currentDns })
-    } catch {
-      /* ignore */
+      set({ currentDns, currentDnsError: false })
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to read current DNS', err)
+      set({ currentDnsError: true })
     }
   },
 
@@ -183,16 +200,18 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
   netshTcpApply: async () => {
     try {
       return await window.dinho.windowsTweaksNetshTcp('apply')
-    } catch {
-      return { success: false, error: 'Failed to apply netsh TCP tweaks' }
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to apply netsh TCP tweaks', err)
+      return { success: false }
     }
   },
 
   netshTcpRevert: async () => {
     try {
       return await window.dinho.windowsTweaksNetshTcp('revert')
-    } catch {
-      return { success: false, error: 'Failed to revert netsh TCP tweaks' }
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to revert netsh TCP tweaks', err)
+      return { success: false }
     }
   },
 
@@ -201,16 +220,11 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
     try {
       const gamingTimer = await window.dinho.gamingTimerGet()
       set({ gamingTimer, gamingTimerLoading: false })
-    } catch {
-      set({
-        gamingTimer: {
-          hpetOff: false,
-          tscSyncPolicy: 'default',
-          dynamicTickDisabled: false,
-          autoTuningDisabled: false,
-        },
-        gamingTimerLoading: false,
-      })
+    } catch (err) {
+      // Não fabricar um estado "saudável": a UI mostra a falha (timerLoadFailed)
+      // em vez de sugerir que o timer já está no default.
+      logger.error('windows-tweaks-store', 'Failed to load gaming timer status', err)
+      set({ gamingTimer: null, gamingTimerLoading: false })
     }
   },
 
@@ -219,8 +233,9 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
       const result = await window.dinho.gamingTimerSet(settings)
       if (result.success) get().loadGamingTimer()
       return result
-    } catch {
-      return { success: false, errors: ['IPC call failed'] }
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to set gaming timer settings', err)
+      return { success: false, errors: [] }
     }
   },
 
@@ -229,8 +244,9 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
       const result = await window.dinho.gamingTimerRevert()
       if (result.success) get().loadGamingTimer()
       return result
-    } catch {
-      return { success: false, errors: ['IPC call failed'] }
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to revert gaming timer settings', err)
+      return { success: false, errors: [] }
     }
   },
 
@@ -239,8 +255,9 @@ export const useWindowsTweaksStore = create<WindowsTweaksStoreState>((set, get) 
       const result = await window.dinho.gamingAutoTuning(action)
       if (result.success) get().loadGamingTimer()
       return result
-    } catch {
-      return { success: false, error: 'IPC call failed' }
+    } catch (err) {
+      logger.error('windows-tweaks-store', 'Failed to set TCP auto-tuning', err)
+      return { success: false }
     }
   },
 }))

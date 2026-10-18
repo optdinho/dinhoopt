@@ -26,6 +26,9 @@ export interface AdvancedToolsProps {
   currentDns: CurrentDns
   gamingTimer: GamingTimerStatus | null
   gamingTimerLoading: boolean
+  dnsPresetsError: boolean
+  dnsBenchmarkError: boolean
+  currentDnsError: boolean
   onBenchmarkDns: () => void
   onApplyTcp: () => void
   onRevertTcp: () => void
@@ -106,6 +109,9 @@ export function AdvancedTools(props: AdvancedToolsProps) {
     currentDns,
     gamingTimer,
     gamingTimerLoading,
+    dnsPresetsError,
+    dnsBenchmarkError,
+    currentDnsError,
     onBenchmarkDns,
     onApplyTcp,
     onRevertTcp,
@@ -329,6 +335,19 @@ export function AdvancedTools(props: AdvancedToolsProps) {
         )}
       </ToolCard>
 
+      {dnsPresetsError && (
+        <div
+          data-testid="dns-presets-failed"
+          className="flex items-start gap-2.5 rounded-xl px-3.5 py-2.5"
+          style={{ background: 'rgba(251,146,60,0.07)', border: '1px solid rgba(251,146,60,0.18)' }}
+        >
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-400" strokeWidth={1.8} />
+          <p className="text-[11.5px] leading-relaxed text-orange-200/70">
+            {t('dnsPresetsFailed', 'Não foi possível carregar as predefinições de DNS.')}
+          </p>
+        </div>
+      )}
+
       {dnsPresets.length > 0 && (
         <ToolCard
           testId="section-dns"
@@ -384,7 +403,11 @@ export function AdvancedTools(props: AdvancedToolsProps) {
                 )}
               </span>
             ) : (
-              <span className="text-zinc-600">{t('dnsCurrentUnknown', 'não detetado')}</span>
+              <span className="text-zinc-600" data-testid="dns-current-unknown">
+                {currentDnsError
+                  ? t('dnsCurrentFailed', 'não foi possível ler')
+                  : t('dnsCurrentUnknown', 'não detetado')}
+              </span>
             )}
           </div>
 
@@ -474,8 +497,13 @@ export function AdvancedTools(props: AdvancedToolsProps) {
           </div>
 
           {dnsBenchmark.length === 0 && (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-zinc-600">
-              {t('dnsManualHint', 'Pode usar qualquer uma das opções. Testar apenas ordena a lista pela velocidade.')}
+            <p data-testid="dns-benchmark-hint" className="mt-3 text-[11.5px] leading-relaxed text-zinc-600">
+              {dnsBenchmarkError
+                ? t('dnsBenchmarkFailed', 'Não foi possível medir a velocidade dos servidores DNS.')
+                : t(
+                    'dnsManualHint',
+                    'Pode usar qualquer uma das opções. Testar apenas ordena a lista pela velocidade.',
+                  )}
             </p>
           )}
 

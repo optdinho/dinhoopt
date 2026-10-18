@@ -367,7 +367,6 @@ export const systemMethods = {
   shredderOpenLocation: (filePath: string): Promise<void> => ipcRenderer.invoke(IPC.SHREDDER_OPEN_LOCATION, filePath),
   onShredderProgress: (callback: (data: ShredderProgress) => void) => onEvent(IPC.SHREDDER_PROGRESS, callback),
 
-  windowsTweaksList: (): Promise<WindowsTweakState[]> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_LIST),
   windowsTweaksApply: (ids: string[]): Promise<WindowsTweakResult> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_APPLY, ids),
   windowsTweaksRevert: (ids: string[]): Promise<WindowsTweakResult> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_REVERT, ids),

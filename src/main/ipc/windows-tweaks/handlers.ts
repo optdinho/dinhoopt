@@ -1,24 +1,17 @@
 import { IPC } from '@shared/channels'
-import type {
-  WindowsTweakApplyProgress,
-  WindowsTweakCategory,
-  WindowsTweakDef,
-  WindowsTweakResult,
-  WindowsTweakState,
-} from '@shared/types'
+import type { WindowsTweakApplyProgress, WindowsTweakDef, WindowsTweakResult, WindowsTweakState } from '@shared/types'
 import { ipcMain } from 'electron'
 import { isAdmin } from '../../services/elevation'
 import { execFileAsync, psUtf8 } from '../../services/exec-utf8'
 import { getLogger } from '../../services/logger.service'
 import { getSnapshotEntry, saveSnapshotEntry } from '../../services/windows-tweaks/snapshot-store'
 import type { WindowGetter } from '../index'
+import { validateSender } from '../sender-validation'
 import { POWERCFG_SETTINGS, parsePowerCfgAcIndex } from './powercfg-settings'
-import { CONTEXT_MENU_TWEAKS, registerContextMenuTweaks } from './tweaks/context-menu'
 import { registerGamingTweaks } from './tweaks/gaming'
 import { NETWORK_TWEAKS, registerNetworkTweaks } from './tweaks/network'
-import { PERFORMANCE_TWEAKS, registerPerformanceTweaks } from './tweaks/performance'
+import { PERFORMANCE_TWEAKS } from './tweaks/performance'
 import { registerSecurityTweaks, SECURITY_TWEAKS } from './tweaks/security'
-import { registerSystemTweaks, SYSTEM_TWEAKS } from './tweaks/system'
 import { registerVisualTweaks, VISUAL_TWEAKS } from './tweaks/visual'
 
 const TWEAK_CATALOG: WindowsTweakDef[] = [
@@ -26,16 +19,18 @@ const TWEAK_CATALOG: WindowsTweakDef[] = [
   ...NETWORK_TWEAKS,
   ...PERFORMANCE_TWEAKS,
   ...SECURITY_TWEAKS,
-  ...CONTEXT_MENU_TWEAKS,
-  ...SYSTEM_TWEAKS,
 ]
 
 export function getCatalog(): WindowsTweakDef[] {
   return TWEAK_CATALOG
 }
 
-export function getCatalogByCategory(cat: WindowsTweakCategory): WindowsTweakDef[] {
-  return TWEAK_CATALOG.filter((t) => t.category === cat)
+const EMPTY_RESULT: WindowsTweakResult = {
+  succeeded: 0,
+  failed: 0,
+  errors: [],
+  rebootRequired: [],
+  logoffRequired: [],
 }
 
 async function runPsScript(script: string): Promise<string> {
@@ -48,6 +43,10 @@ async function runPsScript(script: string): Promise<string> {
 }
 
 const POWERCFG_TWEAKS = new Set(Object.keys(POWERCFG_SETTINGS))
+
+// Escrever HibernateEnabled=0 no registro não desliga a hibernação nem apaga o
+// hiberfil.sys — isso exige `powercfg /h off`. O tweak passa a fazer as duas coisas.
+const HIBERNATE_TWEAK_ID = 'hibernate-off'
 
 async function applyPowerCfgTweak(tweakId: string, action: 'apply' | 'revert'): Promise<void> {
   const settings = POWERCFG_SETTINGS[tweakId]
@@ -201,7 +200,13 @@ async function captureSnapshotForKey(tweak: WindowsTweakDef, baseKey: 'HKLM' | '
     const parsed = parseRegValueOutput(String(stdout), tweak.key)
     if (parsed) saveSnapshotEntry(tweak.id, { exists: true, data: parsed.data, regType: parsed.regType })
   } catch (err) {
-    if (isRegNotFound(err)) saveSnapshotEntry(tweak.id, { exists: false })
+    if (isRegNotFound(err)) {
+      saveSnapshotEntry(tweak.id, { exists: false })
+      return
+    }
+    // Falha inesperada (permissões, reg.exe ausente, …): sem snapshot o revert
+    // recairia no valor de fábrica, possivelmente sobrepondo a configuração real.
+    getLogger().warning('windows-tweaks', `Snapshot capture failed for ${tweak.id}: ${regErrorText(err).trim()}`)
   }
 }
 
@@ -237,6 +242,10 @@ async function applyRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolean
         timeout: 10000,
         windowsHide: true,
       })
+    }
+
+    if (tweak.id === HIBERNATE_TWEAK_ID) {
+      await execFileAsync('powercfg', ['/h', 'off'], { timeout: 15000, windowsHide: true })
     }
 
     return { ok: true }
@@ -312,6 +321,10 @@ async function revertRegistryTweak(tweak: WindowsTweakDef): Promise<{ ok: boolea
       })
     }
 
+    if (tweak.id === HIBERNATE_TWEAK_ID) {
+      await execFileAsync('powercfg', ['/h', 'on'], { timeout: 15000, windowsHide: true })
+    }
+
     return { ok: true }
   } catch (err) {
     getLogger().error('windows-tweaks', `Revert failed: ${tweak.id} — ${mapRegError(err, tweak)}`)
@@ -335,18 +348,10 @@ async function checkTweakApplied(tweak: WindowsTweakDef): Promise<boolean> {
       windowsHide: true,
     })
 
-    const lines = String(stdout)
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
-    const dataLine = lines.find((l) => l.includes(tweak.key))
-    if (!dataLine) return false
-
-    const match = dataLine.match(REG_TYPE_RE)
-    if (!match) return false
-    const valueStr = match[2]
-    if (!valueStr) return false
-    const trimmedValue = valueStr.trim()
+    const parsed = parseRegValueOutput(String(stdout), tweak.key)
+    if (!parsed) return false
+    const trimmedValue = parsed.data
+    if (!trimmedValue) return false
 
     if (tweak.kind === 'DWord') {
       const actual = trimmedValue.startsWith('0x')
@@ -376,12 +381,8 @@ async function listTweakStatuses(): Promise<WindowsTweakState[]> {
 }
 
 export function registerWindowsTweaksIpc(getWindow: WindowGetter): void {
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_LIST, async () => {
-    getLogger().info('windows-tweaks', 'Listing tweak statuses')
-    return listTweakStatuses()
-  })
-
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_APPLY, async (_event, ids: string[]) => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_APPLY, async (event, ids: string[]): Promise<WindowsTweakResult> => {
+    if (!validateSender(event, getWindow())) return EMPTY_RESULT
     getLogger().info('windows-tweaks', `Applying ${ids.length} tweaks`)
     const win = getWindow()
     const selected = TWEAK_CATALOG.filter((t) => ids.includes(t.id))
@@ -415,7 +416,8 @@ export function registerWindowsTweaksIpc(getWindow: WindowGetter): void {
     return { succeeded, failed: errors.length, errors, rebootRequired, logoffRequired } satisfies WindowsTweakResult
   })
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_REVERT, async (_event, ids: string[]) => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_REVERT, async (event, ids: string[]): Promise<WindowsTweakResult> => {
+    if (!validateSender(event, getWindow())) return EMPTY_RESULT
     getLogger().info('windows-tweaks', `Reverting ${ids.length} tweaks`)
     const win = getWindow()
     const selected = TWEAK_CATALOG.filter((t) => ids.includes(t.id))
@@ -449,16 +451,14 @@ export function registerWindowsTweaksIpc(getWindow: WindowGetter): void {
     return { succeeded, failed: errors.length, errors, rebootRequired, logoffRequired } satisfies WindowsTweakResult
   })
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_STATUS, async () => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_STATUS, async (event): Promise<WindowsTweakState[]> => {
+    if (!validateSender(event, getWindow())) return []
     getLogger().info('windows-tweaks', 'Status requested via IPC')
     return listTweakStatuses()
   })
 
   registerVisualTweaks(getWindow)
   registerNetworkTweaks(getWindow)
-  registerPerformanceTweaks(getWindow)
   registerSecurityTweaks(getWindow)
-  registerContextMenuTweaks(getWindow)
-  registerSystemTweaks(getWindow)
   registerGamingTweaks(getWindow)
 }

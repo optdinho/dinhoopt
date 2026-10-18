@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { execFileAsyncMock, mockHandlers, mockLogger } = vi.hoisted(() => {
+const { execFileAsyncMock, mockHandlers, mockLogger, validateSenderMock } = vi.hoisted(() => {
   const execFileAsyncMock = vi.fn().mockResolvedValue({ stdout: '', stderr: '' })
   const mockHandlers = new Map<string, (...args: unknown[]) => unknown>()
   const mockLogger = { info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn(), debug: vi.fn() }
-  return { execFileAsyncMock, mockHandlers, mockLogger }
+  const validateSenderMock = vi.fn((..._args: unknown[]) => true)
+  return { execFileAsyncMock, mockHandlers, mockLogger, validateSenderMock }
 })
 
 vi.mock('electron', () => ({
@@ -14,6 +15,10 @@ vi.mock('electron', () => ({
       return handler
     }),
   },
+}))
+
+vi.mock('../../sender-validation', () => ({
+  validateSender: (...args: unknown[]) => validateSenderMock(...args),
 }))
 
 vi.mock('../../../services/exec-utf8', () => ({
@@ -41,6 +46,8 @@ function key(file: string, args: string[]): string {
 beforeEach(() => {
   mockHandlers.clear()
   execFileAsyncMock.mockReset()
+  validateSenderMock.mockReset()
+  validateSenderMock.mockReturnValue(true)
   bcdOut = ''
   netshOut = ''
   vbsOut = ''
@@ -439,5 +446,72 @@ describe('HAGS_SET', () => {
     }
     expect(res.success).toBe(false)
     expect(res.error).toContain('command failed')
+  })
+})
+
+describe('invalid sender', () => {
+  it('rejects every gaming handler without touching the system', async () => {
+    registerGamingTweaks(() => null)
+    validateSenderMock.mockReturnValue(false)
+
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_TIMER_GET)(null)).toEqual({
+      hpetOff: false,
+      tscSyncPolicy: 'default',
+      dynamicTickDisabled: false,
+      autoTuningDisabled: false,
+    })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_TIMER_SET)(null, { hpetOff: true })).toEqual({
+      success: false,
+      errors: ['Invalid sender'],
+    })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_TIMER_REVERT)(null)).toEqual({
+      success: false,
+      errors: ['Invalid sender'],
+    })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_AUTOTUNING)(null, 'apply')).toEqual({
+      success: false,
+      error: 'Invalid sender',
+    })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_VBS_GET)(null)).toEqual({ enabled: true })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_VBS_SET)(null, true)).toEqual({
+      success: false,
+      error: 'Invalid sender',
+    })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)(null)).toEqual({ enabled: true })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET)(null, true)).toEqual({
+      success: false,
+      error: 'Invalid sender',
+    })
+    expect(execFileAsyncMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('status probes log failures (W16)', () => {
+  it('logs a warning when the VBS query fails', async () => {
+    registerGamingTweaks(() => null)
+    failArgs.add(
+      key('reg.exe', [
+        'query',
+        'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard',
+        '/v',
+        'EnableVirtualizationBasedSecurity',
+      ]),
+    )
+    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_VBS_GET)(null)) as {
+      enabled: boolean
+      requirePlatformSecurity: number
+    }
+    expect(res).toEqual({ enabled: true, requirePlatformSecurity: 1 })
+    expect(mockLogger.warning).toHaveBeenCalledWith('windows-tweaks', expect.stringContaining('getVbsStatus failed'))
+  })
+
+  it('logs a warning when the HAGS query fails', async () => {
+    registerGamingTweaks(() => null)
+    failArgs.add(
+      key('reg.exe', ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', '/v', 'HwSchMode']),
+    )
+    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)(null)) as { enabled: boolean }
+    expect(res).toEqual({ enabled: true })
+    expect(mockLogger.warning).toHaveBeenCalledWith('windows-tweaks', expect.stringContaining('getHagsStatus failed'))
   })
 })

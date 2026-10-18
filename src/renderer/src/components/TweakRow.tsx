@@ -32,9 +32,13 @@ export const TweakRow = memo(function TweakRow({
       }}
       onClick={() => onToggle(tweak.id)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onToggle(tweak.id)
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onToggle(tweak.id)
+        }
       }}
       role="button"
+      aria-pressed={selected}
       tabIndex={0}
     >
       {/* Colored accent bar */}
@@ -67,7 +71,7 @@ export const TweakRow = memo(function TweakRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-zinc-200 transition-colors group-hover:text-white">
-            {tweak.name}
+            {t(`tweaks.${tweak.id}.name`, tweak.name)}
           </span>
           {tweak.experimental && (
             <span className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-[10px] font-medium text-yellow-500">
@@ -76,7 +80,7 @@ export const TweakRow = memo(function TweakRow({
           )}
         </div>
         <div className="mt-0.5 text-[12px] leading-relaxed text-zinc-400 transition-colors group-hover:text-zinc-300">
-          {tweak.description}
+          {t(`tweaks.${tweak.id}.description`, tweak.description)}
         </div>
         <div className="mt-0.5 truncate text-[11px] text-zinc-600">
           {tweak.hive}\\{tweak.path} • {tweak.key}

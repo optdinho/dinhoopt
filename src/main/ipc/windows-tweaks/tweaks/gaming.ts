@@ -4,6 +4,7 @@ import { ipcMain } from 'electron'
 import { execFileAsync } from '../../../services/exec-utf8'
 import { getLogger } from '../../../services/logger.service'
 import type { WindowGetter } from '../../index'
+import { validateSender } from '../../sender-validation'
 
 async function queryBcdEditEnum(): Promise<string> {
   try {
@@ -149,7 +150,10 @@ async function getVbsStatus(): Promise<{ enabled: boolean; requirePlatformSecuri
     const requirePlatformSecurity = pfsMatch ? Number.parseInt(pfsMatch[1] ?? '1', 16) : 1
 
     return { enabled, requirePlatformSecurity }
-  } catch {
+  } catch (err) {
+    // Sem leitura fiável não se pode afirmar que o VBS está ligado: registar a
+    // falha evita que a UI mostre "activo" quando o reg.exe simplesmente falhou.
+    getLogger().warning('windows-tweaks', `getVbsStatus failed: ${err}`)
     return { enabled: true, requirePlatformSecurity: 1 }
   }
 }
@@ -205,7 +209,8 @@ async function getHagsStatus(): Promise<{ enabled: boolean }> {
     const match = String(stdout).match(/HwSchMode\s+REG_DWORD\s+0x([0-9a-fA-F]+)/i)
     const enabled = match ? Number.parseInt(match[1] ?? '0', 16) === 2 : true
     return { enabled }
-  } catch {
+  } catch (err) {
+    getLogger().warning('windows-tweaks', `getHagsStatus failed: ${err}`)
     return { enabled: true }
   }
 }
@@ -234,10 +239,13 @@ async function setHagsEnabled(enabled: boolean): Promise<{ success: boolean; err
   }
 }
 
-export function registerGamingTweaks(_getWindow: WindowGetter): void {
+export function registerGamingTweaks(getWindow: WindowGetter): void {
   getLogger().info('windows-tweaks', 'Registering gaming/timer tweak handlers')
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_TIMER_GET, async (): Promise<GamingTimerStatus> => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_TIMER_GET, async (event): Promise<GamingTimerStatus> => {
+    if (!validateSender(event, getWindow())) {
+      return { hpetOff: false, tscSyncPolicy: 'default', dynamicTickDisabled: false, autoTuningDisabled: false }
+    }
     getLogger().info('windows-tweaks', 'Gaming timer status requested')
     return getTimerStatus()
   })
@@ -245,9 +253,10 @@ export function registerGamingTweaks(_getWindow: WindowGetter): void {
   ipcMain.handle(
     IPC.WINDOWS_TWEAKS_GAMING_TIMER_SET,
     async (
-      _event,
+      event,
       settings: Partial<Pick<GamingTimerStatus, 'hpetOff' | 'tscSyncPolicy' | 'dynamicTickDisabled'>>,
     ): Promise<{ success: boolean; errors: string[] }> => {
+      if (!validateSender(event, getWindow())) return { success: false, errors: ['Invalid sender'] }
       getLogger().info('windows-tweaks', `Gaming timer set: ${JSON.stringify(settings)}`)
       const errors: string[] = []
 
@@ -273,59 +282,68 @@ export function registerGamingTweaks(_getWindow: WindowGetter): void {
     },
   )
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_TIMER_REVERT, async (): Promise<{ success: boolean; errors: string[] }> => {
-    getLogger().info('windows-tweaks', 'Gaming timer revert requested')
-    const errors: string[] = []
+  ipcMain.handle(
+    IPC.WINDOWS_TWEAKS_GAMING_TIMER_REVERT,
+    async (event): Promise<{ success: boolean; errors: string[] }> => {
+      if (!validateSender(event, getWindow())) return { success: false, errors: ['Invalid sender'] }
+      getLogger().info('windows-tweaks', 'Gaming timer revert requested')
+      const errors: string[] = []
 
-    const r1 = await setHpetOff(false)
-    if (!r1.success) errors.push(`HPET revert: ${r1.error}`)
+      const r1 = await setHpetOff(false)
+      if (!r1.success) errors.push(`HPET revert: ${r1.error}`)
 
-    const r2 = await setTscSyncPolicy('default')
-    if (!r2.success) errors.push(`TSC Sync revert: ${r2.error}`)
+      const r2 = await setTscSyncPolicy('default')
+      if (!r2.success) errors.push(`TSC Sync revert: ${r2.error}`)
 
-    const r3 = await setDynamicTick(false)
-    if (!r3.success) errors.push(`Dynamic Tick revert: ${r3.error}`)
+      const r3 = await setDynamicTick(false)
+      if (!r3.success) errors.push(`Dynamic Tick revert: ${r3.error}`)
 
-    const r4 = await setAutoTuning(false)
-    if (!r4.success) errors.push(`TCP AutoTuning revert: ${r4.error}`)
+      const r4 = await setAutoTuning(false)
+      if (!r4.success) errors.push(`TCP AutoTuning revert: ${r4.error}`)
 
-    if (errors.length > 0) {
-      getLogger().error('windows-tweaks', `Gaming timer revert errors: ${errors.join('; ')}`)
-      return { success: false, errors }
-    }
-    getLogger().success('windows-tweaks', 'Gaming timer reverted to defaults')
-    return { success: true, errors: [] }
-  })
+      if (errors.length > 0) {
+        getLogger().error('windows-tweaks', `Gaming timer revert errors: ${errors.join('; ')}`)
+        return { success: false, errors }
+      }
+      getLogger().success('windows-tweaks', 'Gaming timer reverted to defaults')
+      return { success: true, errors: [] }
+    },
+  )
 
   ipcMain.handle(
     IPC.WINDOWS_TWEAKS_GAMING_AUTOTUNING,
-    async (_event, action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> => {
+    async (event, action: 'apply' | 'revert'): Promise<{ success: boolean; error?: string }> => {
+      if (!validateSender(event, getWindow())) return { success: false, error: 'Invalid sender' }
       getLogger().info('windows-tweaks', `AutoTuning ${action}`)
       return setAutoTuning(action === 'apply')
     },
   )
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_VBS_GET, async (): Promise<{ enabled: boolean }> => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_VBS_GET, async (event): Promise<{ enabled: boolean }> => {
+    if (!validateSender(event, getWindow())) return { enabled: true }
     getLogger().info('windows-tweaks', 'VBS status requested')
     return getVbsStatus()
   })
 
   ipcMain.handle(
     IPC.WINDOWS_TWEAKS_GAMING_VBS_SET,
-    async (_event, enabled: boolean): Promise<{ success: boolean; error?: string }> => {
+    async (event, enabled: boolean): Promise<{ success: boolean; error?: string }> => {
+      if (!validateSender(event, getWindow())) return { success: false, error: 'Invalid sender' }
       getLogger().info('windows-tweaks', `VBS set: ${enabled}`)
       return setVbsEnabled(enabled)
     },
   )
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET, async (): Promise<{ enabled: boolean }> => {
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET, async (event): Promise<{ enabled: boolean }> => {
+    if (!validateSender(event, getWindow())) return { enabled: true }
     getLogger().info('windows-tweaks', 'HAGS status requested')
     return getHagsStatus()
   })
 
   ipcMain.handle(
     IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET,
-    async (_event, enabled: boolean): Promise<{ success: boolean; error?: string }> => {
+    async (event, enabled: boolean): Promise<{ success: boolean; error?: string }> => {
+      if (!validateSender(event, getWindow())) return { success: false, error: 'Invalid sender' }
       getLogger().info('windows-tweaks', `HAGS set: ${enabled}`)
       return setHagsEnabled(enabled)
     },

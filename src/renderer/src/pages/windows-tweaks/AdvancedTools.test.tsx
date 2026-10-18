@@ -51,6 +51,9 @@ function renderTools(overrides: Partial<AdvancedToolsProps> = {}) {
     currentDns: { primary: null, secondary: null, source: 'none' },
     gamingTimer: TIMER,
     gamingTimerLoading: false,
+    dnsPresetsError: false,
+    dnsBenchmarkError: false,
+    currentDnsError: false,
     onBenchmarkDns: noop,
     onApplyTcp: noop,
     onRevertTcp: noop,
@@ -229,6 +232,28 @@ describe('DNS benchmark', () => {
       dnsBenchmark: [{ server: '8.8.8.8', ok: false, avgMs: null, bestMs: null, samples: 0, error: 'timeout' }],
     })
     expect(screen.queryByTestId('dns-apply-best')).toBeNull()
+  })
+})
+
+describe('DNS failure states (W4)', () => {
+  it('warns when the presets could not be loaded', () => {
+    renderTools({ dnsPresetsError: true })
+    expect(screen.getByTestId('dns-presets-failed').textContent).toContain('predefinições de DNS')
+  })
+
+  it('says the benchmark failed instead of implying it was never run', () => {
+    renderTools({ dnsBenchmarkError: true })
+    expect(screen.getByTestId('dns-benchmark-hint').textContent).toContain('medir a velocidade')
+  })
+
+  it('distinguishes an unreadable current DNS from a missing one', () => {
+    renderTools({ currentDnsError: true })
+    expect(screen.getByTestId('dns-current-unknown').textContent).toContain('não foi possível ler')
+  })
+
+  it('still says "not detected" when no failure was reported', () => {
+    renderTools()
+    expect(screen.getByTestId('dns-current-unknown').textContent).toContain('não detetado')
   })
 })
 

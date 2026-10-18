@@ -584,7 +584,6 @@ describe('preload API bridge', () => {
 
   describe('windows tweaks', () => {
     for (const m of [
-      'windowsTweaksList',
       'windowsTweaksApply',
       'windowsTweaksRevert',
       'windowsTweaksStatus',

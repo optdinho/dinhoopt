@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Accessibility,
   ChevronDown,
+  CircleAlert,
   CircleCheckBig,
   CircleX,
   Cpu,
@@ -54,6 +55,10 @@ export function WindowsTweaksPage() {
     expandedCategories,
     gamingTimer,
     gamingTimerLoading,
+    loadError,
+    dnsPresetsError,
+    dnsBenchmarkError,
+    currentDnsError,
   } = useWindowsTweaksStore(
     useShallow((s) => ({
       tweaks: s.tweaks,
@@ -70,6 +75,10 @@ export function WindowsTweaksPage() {
       expandedCategories: s.expandedCategories,
       gamingTimer: s.gamingTimer,
       gamingTimerLoading: s.gamingTimerLoading,
+      loadError: s.loadError,
+      dnsPresetsError: s.dnsPresetsError,
+      dnsBenchmarkError: s.dnsBenchmarkError,
+      currentDnsError: s.currentDnsError,
     })),
   )
 
@@ -271,6 +280,29 @@ export function WindowsTweaksPage() {
     )
   }
 
+  if (tweaks.length === 0 && loadError) {
+    return (
+      <div className="animate-fade-in">
+        <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
+        <div
+          data-testid="load-failed-state"
+          className="flex items-start gap-3 rounded-2xl px-5 py-4"
+          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-400" strokeWidth={1.8} />
+          <div>
+            <div className="text-sm font-medium text-red-300">
+              {t('loadFailedTitle', 'Não foi possível carregar as otimizações')}
+            </div>
+            <div className="mt-0.5 text-[12px] leading-relaxed text-zinc-400">
+              {t('loadFailedDescription', 'A verificação do sistema falhou. Volte a tentar.')}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (tweaks.length === 0) {
     return (
       <div className="animate-fade-in">
@@ -376,8 +408,19 @@ export function WindowsTweaksPage() {
       {/* Results */}
       {lastResult && (
         <div className="mb-6 space-y-2">
-          <div className="flex items-center gap-2 rounded-lg border border-green-800 bg-green-900/10 px-4 py-3 text-sm text-green-400">
-            <CircleCheckBig className="h-4 w-4 shrink-0" />
+          <div
+            data-testid="apply-result-banner"
+            className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+              lastResult.succeeded === 0 && lastResult.failed > 0
+                ? 'border-red-800 bg-red-900/10 text-red-400'
+                : 'border-green-800 bg-green-900/10 text-green-400'
+            }`}
+          >
+            {lastResult.succeeded === 0 && lastResult.failed > 0 ? (
+              <CircleAlert className="h-4 w-4 shrink-0" />
+            ) : (
+              <CircleCheckBig className="h-4 w-4 shrink-0" />
+            )}
             {t('tweaksAppliedResult', { count: lastResult.succeeded })}
             {lastResult.failed > 0 && `, ${t('tweaksFailedResult', { count: lastResult.failed })}`}
           </div>
@@ -453,6 +496,9 @@ export function WindowsTweaksPage() {
         currentDns={currentDns}
         gamingTimer={gamingTimer}
         gamingTimerLoading={gamingTimerLoading}
+        dnsPresetsError={dnsPresetsError}
+        dnsBenchmarkError={dnsBenchmarkError}
+        currentDnsError={currentDnsError}
         onBenchmarkDns={handleBenchmarkDns}
         onApplyTcp={handleTcpApply}
         onRevertTcp={handleTcpRevert}

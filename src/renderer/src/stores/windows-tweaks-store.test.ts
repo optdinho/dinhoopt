@@ -2,6 +2,11 @@ import type { DnsPreset, WindowsTweakDef, WindowsTweakState } from '@shared/type
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWindowsTweaksStore } from './windows-tweaks-store'
 
+const { loggerMock } = vi.hoisted(() => ({
+  loggerMock: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}))
+vi.mock('@/lib/renderer-logger', () => ({ default: loggerMock }))
+
 function mockKudu() {
   const mock = {
     windowsTweaksStatus: vi.fn(),
@@ -12,6 +17,10 @@ function mockKudu() {
     windowsTweaksBenchmarkDns: vi.fn(),
     windowsTweaksCurrentDns: vi.fn(),
     windowsTweaksNetshTcp: vi.fn(),
+    gamingTimerGet: vi.fn(),
+    gamingTimerSet: vi.fn(),
+    gamingTimerRevert: vi.fn(),
+    gamingAutoTuning: vi.fn(),
     onWindowsTweaksApplyProgress: vi.fn(() => vi.fn()),
     onWindowsTweaksRevertProgress: vi.fn(() => vi.fn()),
   }
@@ -58,6 +67,7 @@ function makeDnsPreset(overrides: Partial<DnsPreset> = {}): DnsPreset {
 
 describe('windows-tweaks-store', () => {
   beforeEach(() => {
+    loggerMock.error.mockClear()
     useWindowsTweaksStore.setState({
       tweaks: [],
       dnsPresets: [],
@@ -70,6 +80,12 @@ describe('windows-tweaks-store', () => {
       expandedCategories: new Set(),
       dnsBenchmark: [],
       dnsBenchmarking: false,
+      gamingTimer: null,
+      gamingTimerLoading: false,
+      loadError: false,
+      dnsPresetsError: false,
+      dnsBenchmarkError: false,
+      currentDnsError: false,
     })
   })
 
@@ -100,6 +116,8 @@ describe('windows-tweaks-store', () => {
     kudu.windowsTweaksStatus.mockRejectedValue(new Error('fail'))
     await useWindowsTweaksStore.getState().load()
     expect(useWindowsTweaksStore.getState().scanning).toBe(false)
+    expect(useWindowsTweaksStore.getState().loadError).toBe(true)
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 
   it('loadDnsPresets fetches DNS presets', async () => {
@@ -114,6 +132,8 @@ describe('windows-tweaks-store', () => {
     const kudu = mockKudu()
     kudu.windowsTweaksGetDnsPresets.mockRejectedValue(new Error('fail'))
     await useWindowsTweaksStore.getState().loadDnsPresets()
+    expect(useWindowsTweaksStore.getState().dnsPresetsError).toBe(true)
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 
   it('loadCurrentDns stores the DNS in use', async () => {
@@ -122,6 +142,7 @@ describe('windows-tweaks-store', () => {
     kudu.windowsTweaksCurrentDns.mockResolvedValue(current)
     await useWindowsTweaksStore.getState().loadCurrentDns()
     expect(useWindowsTweaksStore.getState().currentDns).toEqual(current)
+    expect(useWindowsTweaksStore.getState().currentDnsError).toBe(false)
   })
 
   it('loadCurrentDns keeps the previous value when the read fails', async () => {
@@ -131,6 +152,8 @@ describe('windows-tweaks-store', () => {
     kudu.windowsTweaksCurrentDns.mockRejectedValue(new Error('fail'))
     await useWindowsTweaksStore.getState().loadCurrentDns()
     expect(useWindowsTweaksStore.getState().currentDns).toEqual(current)
+    expect(useWindowsTweaksStore.getState().currentDnsError).toBe(true)
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 
   it('benchmarkDns stores the measured latencies', async () => {
@@ -151,6 +174,8 @@ describe('windows-tweaks-store', () => {
     await useWindowsTweaksStore.getState().benchmarkDns()
     expect(useWindowsTweaksStore.getState().dnsBenchmark).toEqual([])
     expect(useWindowsTweaksStore.getState().dnsBenchmarking).toBe(false)
+    expect(useWindowsTweaksStore.getState().dnsBenchmarkError).toBe(true)
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 
   it('benchmarkDns ignores a second concurrent run', async () => {
@@ -291,7 +316,9 @@ describe('windows-tweaks-store', () => {
     kudu.windowsTweaksNetshTcp.mockRejectedValue(new Error('fail'))
     const result = await useWindowsTweaksStore.getState().netshTcpApply()
     expect(result.success).toBe(false)
-    expect(result.error).toBeDefined()
+    // O store não fabrica Inglês: a página cai no texto localizado (t('failed')).
+    expect(result.error).toBeUndefined()
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 
   it('netshTcpRevert calls netsh TCP revert', async () => {
@@ -307,7 +334,8 @@ describe('windows-tweaks-store', () => {
     kudu.windowsTweaksNetshTcp.mockRejectedValue(new Error('fail'))
     const result = await useWindowsTweaksStore.getState().netshTcpRevert()
     expect(result.success).toBe(false)
-    expect(result.error).toBeDefined()
+    expect(result.error).toBeUndefined()
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 
   it('setDns refreshes currentDns so the "Atual" badge does not go stale', async () => {
@@ -350,5 +378,56 @@ describe('windows-tweaks-store', () => {
     const ok = await useWindowsTweaksStore.getState().setDns('1.1.1.1')
 
     expect(ok).toBe(true)
+  })
+
+  it('loadGamingTimer stores the timer status', async () => {
+    const kudu = mockKudu()
+    const status = {
+      hpetOff: true,
+      tscSyncPolicy: 'enhanced',
+      dynamicTickDisabled: false,
+      autoTuningDisabled: true,
+    }
+    kudu.gamingTimerGet.mockResolvedValue(status)
+    await useWindowsTweaksStore.getState().loadGamingTimer()
+    expect(useWindowsTweaksStore.getState().gamingTimer).toEqual(status)
+    expect(useWindowsTweaksStore.getState().gamingTimerLoading).toBe(false)
+  })
+
+  it('loadGamingTimer leaves the status null when the read fails', async () => {
+    const kudu = mockKudu()
+    kudu.gamingTimerGet.mockRejectedValue(new Error('fail'))
+    await useWindowsTweaksStore.getState().loadGamingTimer()
+    // Não inventar um estado "no default": a UI mostra timerLoadFailed.
+    expect(useWindowsTweaksStore.getState().gamingTimer).toBeNull()
+    expect(useWindowsTweaksStore.getState().gamingTimerLoading).toBe(false)
+    expect(loggerMock.error).toHaveBeenCalled()
+  })
+
+  it('setGamingTimer returns no fabricated English error when the IPC throws', async () => {
+    const kudu = mockKudu()
+    kudu.gamingTimerSet.mockRejectedValue(new Error('fail'))
+    const result = await useWindowsTweaksStore.getState().setGamingTimer({ hpetOff: true })
+    expect(result.success).toBe(false)
+    expect(result.errors).toEqual([])
+    expect(loggerMock.error).toHaveBeenCalled()
+  })
+
+  it('revertGamingTimer returns no fabricated English error when the IPC throws', async () => {
+    const kudu = mockKudu()
+    kudu.gamingTimerRevert.mockRejectedValue(new Error('fail'))
+    const result = await useWindowsTweaksStore.getState().revertGamingTimer()
+    expect(result.success).toBe(false)
+    expect(result.errors).toEqual([])
+    expect(loggerMock.error).toHaveBeenCalled()
+  })
+
+  it('setAutoTuning returns no error string when the IPC throws', async () => {
+    const kudu = mockKudu()
+    kudu.gamingAutoTuning.mockRejectedValue(new Error('fail'))
+    const result = await useWindowsTweaksStore.getState().setAutoTuning('apply')
+    expect(result.success).toBe(false)
+    expect(result.error).toBeUndefined()
+    expect(loggerMock.error).toHaveBeenCalled()
   })
 })

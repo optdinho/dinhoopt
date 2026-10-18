@@ -1,7 +1,1 @@
-export {
-  DNS_PRESETS,
-  getCatalog,
-  getCatalogByCategory,
-  REG_TYPE_RE,
-  registerWindowsTweaksIpc,
-} from './windows-tweaks/index'
+export { DNS_PRESETS, getCatalog, REG_TYPE_RE, registerWindowsTweaksIpc } from './windows-tweaks/index'
