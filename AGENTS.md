@@ -541,6 +541,37 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
 
 **Gates (2026-10-18):** vitest **8 137 / 313 ficheiros, 8 137 verdes, 0 falhas** (baseline 311/8 116 → **+2 ficheiros / +21 testes**) · `tsc --noEmit` **0** · biome **0 / 902** · `npm run build` ok (836 ms) · **C# intocado** (0 ficheiros `.cs`/`.csproj` no `git status`; referência 2528/0/0). **Sem commit.**
 
+## Sessão 2026-10-18 — Secção "Otimizações do Windows" (`/windows-tweaks`): auditoria + correcções
+
+**Âmbito:** `WindowsTweaksPage` + `pages/windows-tweaks/AdvancedTools` + `components/TweakRow` + `stores/windows-tweaks-store` + `ipc/windows-tweaks/**` + `services/windows-tweaks/` + locale `windowsTweaks.json`. **Decisão do utilizador (question tool): «Tudo + localizar o catálogo (W17)».** **TDD RED→GREEN por item, sem commit.** 17 achados (W1–W17).
+
+**ALTO**
+- **W1 — `validateSender` ausente em todos os handlers desta secção** (16 canais; 17 antes de W8): `handlers.ts` (apply/revert/status), `network.ts` (get-dns/current-dns/benchmark-dns/set-dns/netsh-tcp), `gaming.ts` (8). Todos passaram a `if (!validateSender(event, getWindow())) return <vazio seguro>` (leitura devolve estado neutro `{enabled:true}`/`[]`/`{primary:null,…}`). Mock de `sender-validation` em 3 ficheiros de teste (com `mockReturnValue(true)` no `beforeEach` — `clearAllMocks` **não** drena a fila de `once`).
+- **W2 — `hibernate-off` só escrevia `HibernateEnabled=0` e nunca corria `powercfg /h off`** (não apagava o `hiberfil.sys`, ao contrário do que o nome promete). Caso especial como `ntfs-last-access-off`: `applyRegistryTweak` corre `powercfg /h off` e `revertRegistryTweak` corre `powercfg /h on`. 2 testes capturam os comandos.
+- **W3 — `loadGamingTimer` fabricava `{hpetOff:false,…}` no `catch`** ⇒ o ramo `timerLoadFailed` era inalcançável. Passa a `gamingTimer: null` + log; a UI mostra a falha em vez de sugerir "já está no default".
+- **W4 — cluster de falhas silenciosas no store (`catch {}`):** `load`, `loadCurrentDns`, `loadDnsPresets`, `benchmarkDns`. Flags explícitas (`loadError`, `dnsPresetsError`, `dnsBenchmarkError`, `currentDnsError`) + `logger.error`; UI honesta: `load-failed-state` (cartão vermelho, **distinto** do `empty-state`), aviso `dns-presets-failed`, `dns-benchmark-hint` mostra `dnsBenchmarkFailed` e `dns-current-unknown` mostra `dnsCurrentFailed`. 5 chaves novas × 3 locales.
+
+**MÉDIO**
+- **W5 — banner de apply sempre verde** mesmo com `succeeded===0 && failed>0`: passa a vermelho (`border-red-800` + `CircleAlert`) nesse caso; parcial continua verde. `data-testid="apply-result-banner"`.
+- **W6 — Inglês hardcoded no store** (`'Failed to apply netsh TCP tweaks'` …): deixa de fabricar texto — devolve `{success:false}` / `{success:false, errors:[]}` e regista no logger; a página cai em `t('failed')`.
+- **W7 — 15 chaves i18n mortas × 3 locales = 45 strings** (provado: só `TweakRow`/`WindowsTweaksPage`/`AdvancedTools` usam o namespace) removidas.
+
+**BAIXO / modernização**
+- **W8** — `WINDOWS_TWEAKS_LIST` era superfície morta (duplicado de STATUS): canal + handler + preload `windowsTweaksList` removidos (17→16 canais).
+- **W9** — `getCatalogByCategory` sem uso em produção removido (barrel + teste).
+- **W10** — módulos no-op removidos: `registerPerformanceTweaks`, `tweaks/context-menu.ts` (`CONTEXT_MENU_TWEAKS=[]`) e `tweaks/system.ts` (`SYSTEM_TWEAKS=[]`) apagados.
+- **W11** — `TweakRow`: Space sem `preventDefault` (fazia scroll) + `aria-pressed` ausente → corrigidos.
+- **W12** — `captureSnapshotForKey` engolia erros ≠ "not found" (revert podia sobrepor a config real sem rasto): passa a `getLogger().warning`.
+- **W13** — `snapshot-store`: catch silencioso + mismatch de `machineId` silencioso → ambos registados; `saveSnapshotEntry` passa a escrita atómica (`writeFileSync` + `renameSync`) para não truncar o snapshot a meio.
+- **W14** — `checkTweakApplied` duplicava `parseRegValueOutput` → reutiliza-o.
+- **W15** — `NETSH_TCP` usava `stdout.includes('ERROR')` (falso positivo em qualquer menção) → `out.startsWith('ERROR:')`; acrescentado `-ExecutionPolicy Bypass` à invocação PowerShell.
+- **W16** — `getVbsStatus`/`getHagsStatus` fabricavam `enabled:true` no catch **em silêncio** → mantida a forma `{enabled:boolean}` (Game Mode depende dela) e acrescentado `getLogger().warning`.
+- **W17 — catálogo (80 tweaks) não localizado:** `name`/`description` hardcoded pt, renderizados crus. Chave derivada do id no renderer (`t(\`tweaks.${tweak.id}.name\`, tweak.name)` / `.description`), **sem tocar em `@shared/types`/IPC**. 80×2 strings × 3 locales. **Barreira nova** `catalog-locales.test.ts` (9 testes): catálogo = 80 ids únicos; cada id tem `name`+`description` nos 3 idiomas; sem órfãos; en/es não ficam iguais ao pt (só en/es — pt é a língua de origem).
+
+**Decisão documentada (não-mudança):** o `main` devolve texto cru em `errors[].reason`/`error` (convenção da app); store/renderer é que localizam.
+
+**Gates (2026-10-18):** vitest **8 181 / 315 ficheiros, 8 181 verdes, 0 falhas** (baseline 313/8 137 → **+2 ficheiros / +44 testes**) · `tsc --noEmit` **0** · biome **0 / 902** · `npm run build` ok (825 ms) · **C# intocado** (0 ficheiros `.cs`/`.csproj` no `git status`; referência 2528/0/0). **Sem commit.**
+
 ## Itens fechados por decisão (2026-10-03 23:45) — não reabrir sem sintoma novo
 
 | Item | Decisão | Razão |
