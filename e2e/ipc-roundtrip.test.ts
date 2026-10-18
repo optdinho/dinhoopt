@@ -133,7 +133,6 @@ const ARGS: Record<string, unknown[]> = {
   windowsTweaksRevert: [[]],
   windowsTweaksSetDns: ['', ''],
   watcherStart: [[]],
-  setScanProfile: [''],
   powerPlansActivate: ['00000000-0000-0000-0000-000000000000'],
   powerPlansCreate: [''],
   powerPlansDelete: ['00000000-0000-0000-0000-000000000000'],

@@ -101,6 +101,7 @@ describe('CloudBackupService', () => {
   })
 
   it('backupAll backs up all .quarantined files', async () => {
+    service.updateConfig({ enabled: true })
     mockReaddirSync.mockReturnValue(['file1.exe.quarantined', 'file2.exe.quarantined', 'readme.txt'])
     mockReadFileSync.mockReturnValue(Buffer.from('data'))
     mockWriteFileSync.mockImplementation(() => {})
@@ -111,6 +112,36 @@ describe('CloudBackupService', () => {
     const result = await service.backupAll('/quarantine/dir')
     expect(result.success).toBe(true)
     expect(result.filesCount).toBe(2)
+  })
+
+  it('backupAll reports failure and an error when backup is disabled', async () => {
+    mockReaddirSync.mockReturnValue(['file1.exe.quarantined', 'file2.exe.quarantined'])
+    mockReadFileSync.mockReturnValue(Buffer.from('data'))
+    mockWriteFileSync.mockImplementation(() => {})
+    mockExistsSync.mockReturnValue(true)
+
+    const result = await service.backupAll('/quarantine/dir')
+    expect(result.success).toBe(false)
+    expect(result.filesCount).toBe(0)
+    expect(result.error).toBe('Cloud backup is disabled')
+  })
+
+  it('backupAll does not count files that fail to back up', async () => {
+    service.updateConfig({ enabled: true })
+    mockReaddirSync.mockReturnValue(['good.quarantined', 'bad.quarantined'])
+    mockReadFileSync.mockReturnValue(Buffer.from('data'))
+    mockExistsSync.mockReturnValue(true)
+    let writeCall = 0
+    mockWriteFileSync.mockImplementation((dest: string) => {
+      writeCall++
+      if (typeof dest === 'string' && dest.endsWith('bad.quarantined')) {
+        throw new Error('disk full')
+      }
+    })
+
+    const result = await service.backupAll('/quarantine/dir')
+    expect(result.filesCount).toBe(1)
+    expect(writeCall).toBeGreaterThan(0)
   })
 
   it('restoreBackup restores file to destination', async () => {

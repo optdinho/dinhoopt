@@ -244,8 +244,8 @@ export const systemMethods = {
   onVulnerabilityProgress: (callback: (data: VulnerabilityScanProgress) => void) =>
     onEvent(IPC.VULN_PROGRESS, callback),
 
-  malwareScan: (scanId?: string, profileId?: string): Promise<MalwareScanResult> =>
-    ipcRenderer.invoke(IPC.MALWARE_SCAN, scanId, profileId),
+  malwareScan: (scanId?: string, profileId?: string, exploitEnabled?: boolean): Promise<MalwareScanResult> =>
+    ipcRenderer.invoke(IPC.MALWARE_SCAN, scanId, profileId, exploitEnabled),
   malwareCancelScan: (scanId: string): Promise<boolean> => ipcRenderer.invoke(IPC.MALWARE_CANCEL_SCAN, scanId),
   malwareQuarantine: (paths: string[], meta?: QuarantineMeta[]): Promise<MalwareActionResult> =>
     ipcRenderer.invoke(IPC.MALWARE_QUARANTINE, paths, meta),
@@ -425,7 +425,6 @@ export const systemMethods = {
     ipcRenderer.invoke(IPC.MALWARE_WATCHER_STATUS),
 
   getScanProfiles: (): Promise<import('@shared/types').ScanProfile[]> => ipcRenderer.invoke(IPC.MALWARE_GET_PROFILES),
-  setScanProfile: (profileId: string): Promise<boolean> => ipcRenderer.invoke(IPC.MALWARE_SET_PROFILE, profileId),
 
   licenseActivate: (key: string): Promise<LicenseResult> => ipcRenderer.invoke(IPC.LICENSE_ACTIVATE, key),
   licenseStatus: (): Promise<LicenseResult> => ipcRenderer.invoke(IPC.LICENSE_STATUS),

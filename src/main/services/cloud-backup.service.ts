@@ -112,19 +112,22 @@ export class CloudBackupService {
       const fullPath = path.join(quarantineDir, file)
       try {
         const content = readFileSync(fullPath)
+        const backedUp = await this.backupFile(fullPath, file)
+        if (!backedUp) continue
         totalSize += content.length
-        await this.backupFile(fullPath, file)
         successCount++
       } catch (err) {
         getLogger().error('cloud-backup', `Failed to backup ${file}`, String(err))
       }
     }
 
+    const success = successCount > 0
     return {
-      success: successCount > 0,
+      success,
       filesCount: successCount,
       totalSize,
       timestamp: new Date().toISOString(),
+      ...(success ? {} : { error: this.config.enabled ? 'No files were backed up' : 'Cloud backup is disabled' }),
     }
   }
 

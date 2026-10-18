@@ -678,14 +678,6 @@ describe('preload API bridge', () => {
     }
   })
 
-  describe('scan profiles', () => {
-    it('setScanProfile calls invoke', async () => {
-      mockIpc.invoke.mockResolvedValueOnce(true)
-      await (api.setScanProfile as (id: string) => Promise<boolean>)('full')
-      expect(mockIpc.invoke).toHaveBeenCalled()
-    })
-  })
-
   describe('features A-F', () => {
     const methods = [
       'memoryScan',

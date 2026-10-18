@@ -196,4 +196,30 @@ describe('CustomYaraService', () => {
     expect(result).toBe(false)
     expect(service.getRuleCount()).toBe(100)
   })
+
+  it('addRule rejects a name with path traversal', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    const escapeTarget = join(currentTmpDir, 'escaped.yar')
+    expect(service.addRule('..\\..\\escaped.yar', 'rule Escape { condition: true }')).toBe(false)
+    expect(service.addRule('../escaped.yar', 'rule Escape { condition: true }')).toBe(false)
+    expect(existsSync(escapeTarget)).toBe(false)
+    expect(service.getRuleCount()).toBe(0)
+  })
+
+  it('addRule rejects an absolute path name', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    const absolute = join(tmpdir(), 'absolute-escape.yar')
+    expect(service.addRule(absolute, 'rule Abs { condition: true }')).toBe(false)
+    expect(existsSync(absolute)).toBe(false)
+    expect(service.getRuleCount()).toBe(0)
+  })
+
+  it('removeRule refuses traversal and leaves rules intact', async () => {
+    const { customYaraService: service } = await getCustomYaraService()
+    service.addRule('keep.yar', 'rule Keep { condition: true }')
+    expect(service.removeRule('..\\keep.yar')).toBe(false)
+    expect(service.removeRule('../keep.yar')).toBe(false)
+    expect(service.removeRule('..')).toBe(false)
+    expect(service.getRuleCount()).toBe(1)
+  })
 })

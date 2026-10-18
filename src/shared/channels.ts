@@ -147,7 +147,6 @@ export const IPC = {
 
   // Scan profiles
   MALWARE_GET_PROFILES: 'malware:get-profiles',
-  MALWARE_SET_PROFILE: 'malware:set-profile',
 
   // Compliance Auditor
   COMPLIANCE_SCAN: 'compliance:scan',
