@@ -572,6 +572,27 @@ Nota de produto: `dup` de 3-6% com o jogo acima de 60 fps está **abaixo** do li
 
 **Gates (2026-10-18):** vitest **8 181 / 315 ficheiros, 8 181 verdes, 0 falhas** (baseline 313/8 137 → **+2 ficheiros / +44 testes**) · `tsc --noEmit` **0** · biome **0 / 902** · `npm run build` ok (825 ms) · **C# intocado** (0 ficheiros `.cs`/`.csproj` no `git status`; referência 2528/0/0). **Sem commit.**
 
+## Sessão 2026-10-18 — Secção "Otimizador de Memória" (`/memory`): auditoria + correcções (M1–M10)
+
+**Âmbito:** `MemoryOptimizerPage` + `stores/memory-store` + `ipc/index.ts` (handlers `MEMORY_INFO`/`MEMORY_OPTIMIZE`) + `services/memory-optimizer` + `shared/types/performance.ts` + locale `memory.json`. **Decisão do utilizador (question tool): «Corrigir tudo (M1–M10)».** **TDD RED→GREEN por item.** 10 achados (M1–M10). Plano local: `docs/plans/memory-optimizer-audit-corrections-2026-10-18.md` (`docs/` é gitignored).
+
+**ALTO**
+- **M1 — store fabricava strings em inglês** (`'Failed to load memory info'` …) e o `error` era cru. Passa a `errorKind: 'load' | 'optimize' | null` (sem texto) e `success: { freedBytes, partial } | null`; a página localiza com `t('loadError')`/`t('optimizeError')`/`t('optimizeSuccess', { mb })`/`t('optimizePartial', { mb })`. (Mesmo padrão do W6.)
+- **M2 — `validateSender` ausente nos 2 handlers:** `MEMORY_INFO` e `MEMORY_OPTIMIZE` (`ipc/index.ts`) passam a `if (!validateSender(event, getWindow())) return <vazio seguro>` — `{ info: null, processes: [] }` (preload `memoryInfo.info` tipado `MemoryInfo | null`) e `{ success: false, freedBytes: 0, steps: [] }`. Testes RED com mock de `sender-validation`.
+- **M3 — progresso com `detail` em inglês cru:** `MemoryOptimizeProgress` perde `detail`; o serviço notifica `notify(step, totalSteps, label)` e a página localiza por id (`t(\`step_${label}\`, label)` / `t(\`progress_${label}\`)`).
+- **M4/M5 — parcial vs falha confundidos + refresh pós-optimize a competir com o resultado:** `partial = res.steps.some(s => !s.success)` no store; o refresh de `memoryInfo()` depois do optimize é **silencioso** (só `logger.error`), para uma falha de leitura nunca sobrepor o banner da operação.
+- **M6 — `catch {}` silenciosos no store:** `load`/`optimize` passam a `logger.error('memory-store', …)`.
+
+**MÉDIO / BAIXO**
+- **M7** — falha do passo GC passa a `getLogger().error('memory', 'Garbage collection failed: …')`.
+- **M8 — UX/higiene:** botão de dispensar ligado ao `clearSuccess` (aria-label `t('dismiss')`); `reset` removido da API do store; `getHealthScore(usedPercent)` extraído como `export function` (`Math.max(10, 100 - usedPercent)`) e unit-testado; `cachedBytes` passa a mostrar `t('cached')`; campo morto `MemoryOptimizeResult.error` removido.
+- **M9 — robustez:** tabela de resultados com `key={s.name}` (não índice); `runPs` com `-NoProfile`, `-NonInteractive`, `-ExecutionPolicy Bypass`, `-Command`.
+- **M10 — testes novos:** `MemoryOptimizerPage.test.tsx` de raiz (7 testes: erros de load/optimize, banners de sucesso total/parcial com dispensa, progresso localizado, tabela de resultados, `getHealthScore`). ⚠️ **Armadilha de teste:** `load()` começa por `set({ loading: true, errorKind: null })`, portanto o load automático do mount apagava o `errorKind` semeado antes de `findByText` observar — resolver com `setState({ errorKind: 'optimize', load: vi.fn() })` + restauração das acções pristine em `resetStore()` (o estado zustand partilha-se entre testes).
+
+**Decisão documentada (não-mudança):** o `main` devolve texto cru nos `step.error` (convenção da app); store/renderer é que localizam.
+
+**Gates (2026-10-18):** vitest **8 194 / 316 ficheiros, 8 194 verdes, 0 falhas** (baseline 315/8 181 → **+1 ficheiro / +13 testes**) · `tsc --noEmit` **0** · biome **0 / 903** · `npm run build` ok (836 ms, exit 0 verificado por `cmd /c`) · **C# intocado** (0 ficheiros `.cs`/`.csproj` no `git status`; referência 2528/0/0). **Commit `c9fda6b`** (13 ficheiros, +452/−139).
+
 ## Itens fechados por decisão (2026-10-03 23:45) — não reabrir sem sintoma novo
 
 | Item | Decisão | Razão |
