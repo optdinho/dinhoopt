@@ -222,7 +222,7 @@ public class FfmpegEncoderFrameWriterTests
             () => never, () => 50, _ => { }, (c, _) => { cause = c; failed.Set(); });
 
         Assert.True(w.TryEnqueue(Data(1), Pts(1)));
-        Assert.True(failed.Wait(2000), "writer should report the timeout");
+        Assert.True(failed.Wait(2000, TestContext.Current.CancellationToken), "writer should report the timeout");
 
         Assert.Equal("encoder:stdin_timeout", cause);
         w.Stop(abort: true, joinMs: 1000);
@@ -239,7 +239,7 @@ public class FfmpegEncoderFrameWriterTests
             () => fault, () => 2000, _ => { }, (c, f) => { cause = c; faultEx = f; failed.Set(); });
 
         Assert.True(w.TryEnqueue(Data(1), Pts(1)));
-        Assert.True(failed.Wait(2000), "writer should report the io error");
+        Assert.True(failed.Wait(2000, TestContext.Current.CancellationToken), "writer should report the io error");
 
         Assert.Equal("encoder:stdin_io_error", cause);
         Assert.Equal("pipe closed", faultEx?.Message);

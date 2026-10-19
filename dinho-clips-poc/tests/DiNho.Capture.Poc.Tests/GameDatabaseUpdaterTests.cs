@@ -374,7 +374,7 @@ public sealed class GameDatabaseUpdaterTests : IDisposable
 
         // Verify the file was written in temp directory
         var targetPath = Path.Combine(_tempDir, "games.json");
-        var savedJson2 = await File.ReadAllTextAsync(targetPath);
+        var savedJson2 = await File.ReadAllTextAsync(targetPath, TestContext.Current.CancellationToken);
         var savedDb = JsonSerializer.Deserialize<GameDatabase>(savedJson2);
         Assert.NotNull(savedDb);
         Assert.Equal(remoteVersion, savedDb.Version);

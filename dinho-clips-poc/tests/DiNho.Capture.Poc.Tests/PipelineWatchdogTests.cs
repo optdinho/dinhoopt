@@ -25,7 +25,7 @@ public sealed class PipelineWatchdogTests
                 if (i++ % 3 == 0)
                     wd.ReportDroppedFrame(PipelineIssue.NoFrame);
             }
-        });
+        }, TestContext.Current.CancellationToken);
 
         var reader = Task.Run(() =>
         {
@@ -43,7 +43,7 @@ public sealed class PipelineWatchdogTests
                     exceptions.Enqueue(ex);
                 }
             }
-        });
+        }, TestContext.Current.CancellationToken);
 
         await Task.WhenAll(writer, reader);
 

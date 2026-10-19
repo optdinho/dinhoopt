@@ -1622,7 +1622,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
             calls++;
             return calls < 3;
         }
-        await EngineCoordinator.WaitAbortableAsync(1000, condition, sliceMs: 10);
+        await EngineCoordinator.WaitAbortableAsync(1000, condition, sliceMs: 10, ct: TestContext.Current.CancellationToken);
         Assert.Equal(3, calls);
     }
 
@@ -1632,7 +1632,7 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         var calls = 0;
         bool condition() { calls++; return true; }
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        await EngineCoordinator.WaitAbortableAsync(60, condition, sliceMs: 10);
+        await EngineCoordinator.WaitAbortableAsync(60, condition, sliceMs: 10, ct: TestContext.Current.CancellationToken);
         sw.Stop();
         Assert.True(sw.ElapsedMilliseconds >= 40, $"elapsed={sw.ElapsedMilliseconds}ms");
         Assert.True(calls >= 3, $"calls={calls}");

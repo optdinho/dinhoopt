@@ -58,12 +58,12 @@ public sealed class FfmpegAacEncoderTests
         {
             gate.Wait();
             for (int i = 0; i < iterations; i++) encoder.EncodeAudio(samplesA);
-        });
+        }, TestContext.Current.CancellationToken);
         var t2 = Task.Run(() =>
         {
             gate.Wait();
             for (int i = 0; i < iterations; i++) encoder.EncodeAudio(samplesB);
-        });
+        }, TestContext.Current.CancellationToken);
 
         gate.Set();
         await Task.WhenAll(t1, t2);
@@ -81,8 +81,8 @@ public sealed class FfmpegAacEncoderTests
         var encoder = new FfmpegAacEncoder(new StuckPipeStream(), writeTimeoutMs: 100);
 
         var sw = Stopwatch.StartNew();
-        await Task.Run(() => encoder.EncodeAudio(new float[480]))
-            .WaitAsync(TimeSpan.FromSeconds(3));
+        await Task.Run(() => encoder.EncodeAudio(new float[480]), TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         sw.Stop();
 
         Assert.True(sw.ElapsedMilliseconds < 2000,

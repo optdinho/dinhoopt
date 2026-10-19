@@ -88,7 +88,7 @@ public sealed class WasapiSourceTests
                 return; // sem endpoint utilizável — pass-and-skip
             }
 
-            if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500)))
+            if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken))
             {
                 // Endpoint existe mas nunca produz um frame neste ambiente — o
                 // StopRecording/Dispose da NAudio bloquearia para sempre.
@@ -129,7 +129,7 @@ public sealed class WasapiSourceTests
                 return; // sem endpoint utilizável — pass-and-skip
             }
 
-            if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500)))
+            if (!gotFrame.Wait(TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken))
             {
                 try { source.Stop(); } catch { }
                 return;

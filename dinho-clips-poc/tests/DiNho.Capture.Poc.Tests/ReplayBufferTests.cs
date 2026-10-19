@@ -1145,7 +1145,7 @@ public sealed class ReplayBufferTests
                     buf.AddAudio(MakeAudio(TimeSpan.FromSeconds(i * 0.01), 100));
                 }
                 done = true;
-            });
+            }, TestContext.Current.CancellationToken);
 
             var reads = 0;
             while (!done)

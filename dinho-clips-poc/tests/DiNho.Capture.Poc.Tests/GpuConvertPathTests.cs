@@ -233,7 +233,7 @@ public sealed class GpuConvertPathTests
                 Interlocked.Exchange(ref current, Capture.PipelineSize.Pack(next));
                 next = next == writer ? other : writer;
             }
-        });
+        }, TestContext.Current.CancellationToken);
 
         var readLoops = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
         {
@@ -247,7 +247,7 @@ public sealed class GpuConvertPathTests
         {
             await Task.Delay(TimeSpan.FromMilliseconds(300), cts.Token);
             cts.Cancel();
-        });
+        }, TestContext.Current.CancellationToken);
         await Task.WhenAll(readLoops.Append(writeLoop).Append(reads));
 
         Assert.NotEmpty(seen);

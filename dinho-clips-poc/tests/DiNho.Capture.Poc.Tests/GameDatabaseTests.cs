@@ -223,7 +223,7 @@ public sealed class GameDatabaseTests
                     try { db.Reload(pathB); } catch (Exception ex) { exceptions.Enqueue(ex); }
                     try { db.Reload(pathA); } catch (Exception ex) { exceptions.Enqueue(ex); }
                 }
-            });
+            }, TestContext.Current.CancellationToken);
 
             var reader = Task.Run(() =>
             {
@@ -238,7 +238,7 @@ public sealed class GameDatabaseTests
                     }
                     catch (Exception ex) { exceptions.Enqueue(ex); }
                 }
-            });
+            }, TestContext.Current.CancellationToken);
 
             await Task.WhenAll(reloader, reader);
 

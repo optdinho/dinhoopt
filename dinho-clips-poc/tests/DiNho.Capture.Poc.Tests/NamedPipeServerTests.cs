@@ -915,7 +915,7 @@ public void ClientResponseRouter_NullRequestId_IsNotRegistered()
             .GetValue(server)!;
 
         // Simula o registro feito pelo listener: task que finaliza rápido.
-        var fake = Task.Run(() => Thread.SpinWait(100));
+        var fake = Task.Run(() => Thread.SpinWait(100), TestContext.Current.CancellationToken);
         clientTasks.TryAdd(fake.Id, fake);
         Assert.True(clientTasks.ContainsKey(fake.Id));
 
@@ -948,7 +948,7 @@ public void ClientResponseRouter_NullRequestId_IsNotRegistered()
         try
         {
             using var client = new NamedPipeClientStream(".", TestPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await client.ConnectAsync(2000);
+            await client.ConnectAsync(2000, TestContext.Current.CancellationToken);
 
             // Node-mirror: NO client StreamWriter{AutoFlush} (BOM write no ctor deadloca
             // contra o writer AutoFlush do server). Raw bytes como o cliente Electron real.
@@ -961,7 +961,7 @@ public void ClientResponseRouter_NullRequestId_IsNotRegistered()
                 RequestId = "req-77",
                 Payload = JsonSerializer.SerializeToElement(new { hello = "world" })
             }) + "\n");
-            await client.WriteAsync(payload);
+            await client.WriteAsync(payload, TestContext.Current.CancellationToken);
 
             var line = await ReadLineWithTimeoutAsync(reader);
             var env = JsonSerializer.Deserialize<IpcEnvelope>(line);
@@ -985,7 +985,7 @@ public void ClientResponseRouter_NullRequestId_IsNotRegistered()
         try
         {
             using var client = new NamedPipeClientStream(".", TestPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await client.ConnectAsync(2000);
+            await client.ConnectAsync(2000, TestContext.Current.CancellationToken);
 
             using var reader = new StreamReader(client, Encoding.UTF8, false, 4096, leaveOpen: true);
             using var writer = new StreamWriter(client, Encoding.UTF8, 4096, leaveOpen: true) { AutoFlush = true };
@@ -1014,7 +1014,7 @@ public void ClientResponseRouter_NullRequestId_IsNotRegistered()
         try
         {
             using var client = new NamedPipeClientStream(".", TestPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await client.ConnectAsync(2000);
+            await client.ConnectAsync(2000, TestContext.Current.CancellationToken);
 
             using var reader = new StreamReader(client, Encoding.UTF8, false, 4096, leaveOpen: true);
             using var writer = new StreamWriter(client, Encoding.UTF8, 4096, leaveOpen: true) { AutoFlush = true };

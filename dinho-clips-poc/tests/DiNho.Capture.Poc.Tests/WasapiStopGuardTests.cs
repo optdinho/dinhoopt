@@ -62,13 +62,30 @@ public sealed class WasapiStopGuardTests : IDisposable
     [Fact]
     public void SweepOnce_BlockedItem_IsReEnqueuedForNextRound()
     {
+        // A fila de retry é estática (partilhada pelo processo) e a ordem intra-classe não é
+        // garantida: se este teste corresse depois de DeferRetry_SweepOnce_DrainsQueue sem
+        // limpar o pendente, deixava um item bloqueante permanente que fazia o outro teste
+        // encontrar a fila ocupada. O bloqueio é, por isso, levantável e drenado no fim.
         int runCount = 0;
-        WasapiStopGuard.DeferRetry(() => { runCount++; Thread.Sleep(30_000); }, "Test");
+        int block = 1;
+        WasapiStopGuard.DeferRetry(
+            () =>
+            {
+                runCount++;
+                if (Volatile.Read(ref block) == 1)
+                    Thread.Sleep(30_000);
+            },
+            "Test");
 
         bool drained = WasapiStopGuard.SweepOnce();
 
         Assert.False(drained);
         Assert.True(WasapiStopGuard.PendingRetryCount >= 1, "item que voltou a estourar o tempo deve ser reenfileirado");
         Assert.Equal(1, runCount);
+
+        // Levanta o bloqueio e drena o item reenfileirado (a 2.ª passagem conclui).
+        Volatile.Write(ref block, 0);
+        Assert.True(WasapiStopGuard.SweepOnce(), "sem bloqueio, a varredura seguinte tem de drenar a fila");
+        Assert.Equal(0, WasapiStopGuard.PendingRetryCount);
     }
 }

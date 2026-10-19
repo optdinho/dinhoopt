@@ -206,7 +206,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
     {
         var clock = new FakeClock();
 
-        var samples = PostSaveMemoryWatch.RunCycle(clock.Now, clock.Sleep, s => Sample(s));
+        var samples = PostSaveMemoryWatch.RunCycle(clock.Now, clock.Sleep, s => Sample(s), ct: TestContext.Current.CancellationToken);
 
         // baseline + 60/5 = 13 amostras.
         Assert.Equal(13, samples.Count);
@@ -224,7 +224,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
         PostSaveMemoryWatch.RunCycle(
             clock.Now,
             d => { realSleeps++; clock.Sleep(d); },
-            s => Sample(s));
+            s => Sample(s), ct: TestContext.Current.CancellationToken);
 
         // 12 esperas de 5s = 60s de janela, mas o relógio real não andou nada.
         Assert.Equal(12, realSleeps);
@@ -253,7 +253,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
             clock.Now,
             clock.Sleep,
             seconds => { order.Add($"cap{seconds:F0}"); return Sample(seconds); },
-            sample => order.Add($"emit{sample.SecondsSinceSave:F0}"));
+            sample => order.Add($"emit{sample.SecondsSinceSave:F0}"), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("cap0", order[0]);
         Assert.Equal("emit0", order[1]);
@@ -265,7 +265,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
     {
         var clock = new FakeClock();
 
-        var samples = PostSaveMemoryWatch.RunCycle(clock.Now, clock.Sleep, s => Sample(s), onSample: null);
+        var samples = PostSaveMemoryWatch.RunCycle(clock.Now, clock.Sleep, s => Sample(s), onSample: null, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(13, samples.Count);
     }
@@ -278,7 +278,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
         var samples = PostSaveMemoryWatch.RunCycle(
             clock.Now,
             clock.Sleep,
-            s => Sample(s, proc: (long)(1150 - s * 10), gcManaged: (long)(900 - s * 11)));
+            s => Sample(s, proc: (long)(1150 - s * 10), gcManaged: (long)(900 - s * 11)), ct: TestContext.Current.CancellationToken);
 
         Assert.True(samples[0].ProcMb > samples[^1].ProcMb);
         Assert.True(MemoryRecovery.Between(samples[0], samples[^1], 32).Recovered);
@@ -446,7 +446,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
 
         PostSaveMemoryWatch.Start(Sample(0, proc: 566, gcManaged: 435, allocTotal: 867));
 
-        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken));
         Assert.Same(gate.Task, done);
 
         lock (lines)
@@ -476,7 +476,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         PostSaveMemoryWatch.Start(Sample(0, proc: 566, gcManaged: 435));
-        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken));
         sw.Stop();
 
         Assert.Same(gate.Task, done);
@@ -506,9 +506,9 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
         };
 
         PostSaveMemoryWatch.Start(Sample(0, proc: 566));
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         PostSaveMemoryWatch.Stop();
-        await Task.Delay(400);
+        await Task.Delay(400, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, Volatile.Read(ref verdicts));
         Assert.True(Volatile.Read(ref sleeps) < 13, $"o loop continuou apos Stop: {sleeps} passos");
@@ -532,7 +532,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
         PostSaveMemoryWatch.Stop();
         PostSaveMemoryWatch.Start(Sample(0, proc: 566));
 
-        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken));
         Assert.Same(gate.Task, done);
     }
 
@@ -578,7 +578,7 @@ public sealed class PostSaveMemoryWatchTests : IDisposable
 
         PostSaveMemoryWatch.Start();
 
-        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+        var done = await Task.WhenAny(gate.Task, Task.Delay(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken));
         Assert.Same(gate.Task, done);
 
         lock (lines)
