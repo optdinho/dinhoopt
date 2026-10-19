@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2.1.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2.1.4-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
-  <img src="https://img.shields.io/badge/coverage-95.6%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
+  <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
   <img src="https://img.shields.io/badge/licença-Comercial-ef4444?style=for-the-badge&logo=legal&logoColor=white" alt="Licença" />
 </p>
 
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.3-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2.1.4-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,6 +47,23 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
+### 2.1.4
+
+**🔍 Registro num Windows em português.** O `reg.exe` traduz o rótulo do valor por omissão
+(`(padrão)`, `(Standardwert)`…), e o scanner procurava o literal inglês — **sete verificações do
+Registro não encontravam nada num Windows português**. Agora aceita qualquer rótulo.
+
+**🛡️ Resultados honestos.** A app deixa de dizer "tudo atualizado" quando o winget falha, de
+mostrar o check verde quando tudo falha e de dar por cancelado um scan que continuou a correr.
+A quarentena restaura apenas do caminho registado e volta a guardar o SHA-256; a instalação
+automática e a lista de ignoradas revertem quando a gravação é recusada.
+
+**🧩 Mais correções.** Desativar a hibernação apaga mesmo o `hiberfil.sys`; a página de
+Inicialização deixa de entrar em ciclo infinito quando não há itens; todas as ações que alteram
+o sistema passam a validar a origem do pedido.
+
+**⬆️ Tecnologias.** Electron 44.9, YARA-X 0.10 e NAudio 3.2; testes do motor em xunit.v3.
+
 ### 2.1.3
 
 **🎮 Deteção de jogos.** O Game Mode deixa de ativar quando abres um vídeo em ecrã inteiro
@@ -55,18 +72,6 @@ janela partilhadas só contam para jogos conhecidos.
 
 **⬆️ Tecnologias.** Electron 44.7.2, React 19.3.1, e o `electron-vite` passa à versão
 **estável 6.0.0** (sai do beta).
-
-### 2.1.2
-
-**🎙️ Microfones de volta.** Quando o motor de captura não está a correr, a lista de
-microfones volta a aparecer — o caminho alternativo estava partido e falhava sempre.
-
-**🎮 Game Mode mais honesto.** Os ajustes de memória deixam de reportar falha quando
-limparam processos com sucesso, e a deteção deixa de disparar para aplicações que não são
-jogos.
-
-**🧩 Clips.** O pedido de microfones é feito **uma vez** em vez de duas ao abrir; a base de
-jogos passa a atualizar a partir do repositório (o antigo `cdn.dinho.app` deixou de resolver).
 
 ---
 
@@ -145,7 +150,7 @@ presets CQ+VBV e notificações/hotkeys. Ver **[Tecnologias → Motor de Clips](
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
   <img src="https://img.shields.io/badge/Zustand-5-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand" />
-  <img src="https://img.shields.io/badge/YARA--X-0.7-00ADD8?style=flat-square" alt="YARA-X" />
+  <img src="https://img.shields.io/badge/YARA--X-0.10-00ADD8?style=flat-square" alt="YARA-X" />
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET" />
   <img src="https://img.shields.io/badge/ffmpeg-9.0-008000?style=flat-square&logo=ffmpeg&logoColor=white" alt="ffmpeg" />
 </p>
@@ -158,7 +163,7 @@ presets CQ+VBV e notificações/hotkeys. Ver **[Tecnologias → Motor de Clips](
 | **Estado** | Zustand 5 |
 | **Build** | electron-vite 6, electron-builder (NSIS) |
 | **Testes** | Vitest 5, Playwright, Testing Library |
-| **Segurança** | YARA-X 0.7 (bindings nativas), crypto (Node.js) |
+| **Segurança** | YARA-X 0.10 (bindings nativas), crypto (Node.js) |
 | **Base de dados** | better-sqlite3 v13 (SQLite) |
 | **Motor de Clips** | .NET 10 (C#), ffmpeg 9.0, NVENC/AMF/QSV, WGC, NAudio, Vortice (D3D11) |
 
@@ -218,8 +223,8 @@ npm run dev
 ### 🧪 Qualidade
 
 ```
-Cobertura: 95,6% linhas · 94,3% funções · 86,7% branches  (gate mínimo: 80%)
-TS:  7.936 testes em 295 ficheiros (Vitest) · Biome 0 · tsc 0
+Cobertura: 95,8% linhas · 94,7% funções · 86,8% branches  (gate mínimo: 80%)
+TS:  8.199 testes em 318 ficheiros (Vitest) · Biome 0 · tsc 0
 C#:  2.552 testes (Release), 0 falhas, 0 ignorados
 ```
 

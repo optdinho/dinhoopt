@@ -5,6 +5,83 @@ as duas versões mais recentes; o histórico completo vive aqui.
 
 ---
 
+## 2.1.4
+
+Uma versão de **auditoria**. Nove secções da app foram revistas à procura de ações que falhavam
+em silêncio, de resultados que mentiam e de caminhos que só funcionavam num Windows em inglês.
+
+### 🔍 Registro — o `(Default)` do Windows não é sempre "(Default)"
+
+O `reg.exe` traduz o rótulo do valor por omissão conforme o idioma do sistema: `(Default)` em
+inglês, `(padrão)` em português, `(Standardwert)` em alemão, `(Predeterminado)` em espanhol. O
+scanner procurava o literal inglês, por isso **sete verificações do Registro não encontravam
+nada num Windows português**. Passa a aceitar qualquer rótulo parentético, e o menu de contexto
+normaliza-o.
+
+Ainda nesta secção, o cartão de resultado fica **vermelho quando tudo falha** (antes mostrava o
+check verde), a tecla Tab deixa de alternar entradas, e o `registry fix --all` da linha de
+comandos passa a respeitar a lista de tweaks ignorados.
+
+### 🛡️ Malware, quarentena e privacidade
+
+- **Restauro da quarentena** apenas do caminho original registado — deixava de aceitar um
+  destino arbitrário — e o **SHA-256 volta a ser guardado** no manifesto (estava a perder-se) e
+  a ser conferido no restauro.
+- **Apagar um ficheiro protegido** da quarentena deixava de apagar o próprio manifesto.
+- **Cancelar** um scan usa finalmente o identificador real (o botão não cancelava nada) e o
+  interruptor de deteção de exploits passa a controlar a deteção (estava sempre ligada).
+- **Escudo de Privacidade:** a reversão passa a validar a origem; aplicar deixa de dizer "tudo
+  falhou" quando o que falhou foi só o recarregamento a seguir a um apply bem sucedido; o scan
+  mostra erro em vez de silêncio; o interruptor é anunciado como *switch*.
+- Removidas **3 categorias sem nenhuma definição** (visor "kernel/network/access" que nunca
+  aparecia) e corrigido "no tela" → "na tela" em português.
+
+### 🧹 Limpeza, Software e Disco
+
+- Limpeza: corrigidos os defeitos da auditoria, **WinSxS passa a estar disponível na limpeza
+  completa** e excluir subcategorias volta a ser respeitado na página e no painel.
+- Software: o verificador de atualizações deixa de dizer **"tudo atualizado"** quando o winget
+  falha (o mesmo no instalador); a instalação automática e a lista de ignoradas **revertem** se
+  a gravação for recusada; a cache é invalidada depois de uma atualização; o erro mostra o
+  **nome** da app, não o identificador.
+- Disco: o TRIM lê a **capacidade real** com `fsutil`; os textos passam a vir por códigos
+  (pt/en/es); progresso real por ficheiro; os reparos (`SFC`/`DISM`/`CHKDSK`/`TRIM`) deixam de
+  poder concluir duas vezes.
+
+### ⚙️ Otimizações, memória e inicialização
+
+- **Otimizações do Windows:** desativar a hibernação passa a apagar mesmo o `hiberfil.sys`
+  (antes só escrevia o registo); o banner fica vermelho em falha total; o **catálogo de 80
+  tweaks fica disponível em português, inglês e espanhol**; o snapshot pré-alteração é escrito
+  de forma atómica.
+- **Memória:** erros e passos deixam de vir em inglês fixo e o banner distingue sucesso total,
+  sucesso parcial e falha.
+- **Inicialização:** a página deixa de entrar em **ciclo infinito de pedidos** quando a lista
+  de arranque está legitimamente vazia; a pasta de arranque reconhece os itens desativados
+  (`*.disabled`, que apareciam como ativos e com o nome errado); itens com `REG_EXPAND_SZ`
+  deixam de desaparecer; o interruptor é anunciado como *switch*.
+
+### 🔐 A origem dos pedidos passa a ser validada
+
+Todos os handlers que alteram o sistema passam a confirmar que o pedido vem da janela da app —
+incluindo os que faltavam nas secções de limpeza, Registro, Software, drivers, Disco,
+Otimizações, Memória, Inicialização, Privacidade e Atualizações. É invisível no dia-a-dia, mas
+fecha a maior superfície destrutiva que estava sem guarda.
+
+### ⬆️ Tecnologias atualizadas
+
+- Electron **44.9.0**, YARA-X **0.10.0**, NAudio **3.2.0** (áudio do motor de clips), Vitest
+  **5.0.5**, i18next **26.5.2**, react-i18next **17.1.0**, framer-motion **14.3.0**,
+  lucide-react **1.59.0**, jsdom **30.1.3**, @axe-core/react **4.14.0**.
+- Sem alterações de código de produto: as APIs novas são aditivas.
+
+### 🧪 Manutenção
+
+- Testes do motor migrados para **xunit.v3 4.0.2** com o *Microsoft Testing Platform*: os 2552
+  testes C# correm no gate normal, sem elevação e com 0 avisos.
+
+---
+
 ## 2.1.3
 
 ### 🎮 Deteção de jogos mais precisa
