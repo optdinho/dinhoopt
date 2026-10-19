@@ -6,7 +6,10 @@ import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockGetWindow = vi.fn().mockReturnValue(null)
+// ── Mock window ─────────────────────────────────────────────────────
+// A real window id (matching the mocked BrowserWindow.fromWebContents) so
+// that validateSender accepts the handlers instead of short-circuiting them.
+const mockGetWindow = vi.fn(() => ({ id: 1 })) as unknown as WindowGetter
 const mockExecFile = vi.fn()
 
 // ── Mock logger ─────────────────────────────────────────────
@@ -62,12 +65,14 @@ const mockWriteFileSync = vi.fn()
 const mockMkdirSync = vi.fn()
 const mockReaddirSync = vi.fn()
 const mockUnlinkSync = vi.fn()
+const mockRenameSync = vi.fn()
 vi.mock('fs', () => ({
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
   readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
   writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
   mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
   readdirSync: (...args: unknown[]) => mockReaddirSync(...args),
+  renameSync: (...args: unknown[]) => mockRenameSync(...args),
   unlinkSync: (...args: unknown[]) => mockUnlinkSync(...args),
 }))
 
@@ -106,6 +111,7 @@ vi.mock('../platform', () => ({
 }))
 
 // ── Import under test (after mocks) ────────────────────────────────
+import type { WindowGetter } from './index'
 import {
   deleteStartupItem,
   getBootTrace,
@@ -187,6 +193,10 @@ beforeEach(() => {
   mockExistsSync.mockReturnValue(false)
   mockReadFileSync.mockReturnValue('[]')
   mockReaddirSync.mockReturnValue([])
+  // Default: no lingering implementations from previous tests
+  mockWriteFileSync.mockReset()
+  mockRenameSync.mockReset()
+  mockUnlinkSync.mockReset()
   // Default: all execFile calls fail (registry keys don't exist)
   mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: (...args: unknown[]) => unknown) => {
     cb(new Error('not found'), '', '')
@@ -195,274 +205,6 @@ beforeEach(() => {
 
 afterAll(() => {
   setPlatform(originalPlatform)
-})
-
-// =====================================================================
-// Pure function replicas — test correctness of internal logic
-// =====================================================================
-
-describe('deriveDisplayName (logic replica)', () => {
-  function friendlyExeName(name: string): string {
-    const knownExes: Record<string, string> = {
-      msedge: 'Microsoft Edge',
-      chrome: 'Google Chrome',
-      firefox: 'Mozilla Firefox',
-      steam: 'Steam',
-      discord: 'Discord',
-      spotify: 'Spotify',
-      teams: 'Microsoft Teams',
-      'ms-teams': 'Microsoft Teams',
-      slack: 'Slack',
-      notion: 'Notion',
-      onedrive: 'OneDrive',
-      googledrivefs: 'Google Drive',
-      protondrive: 'Proton Drive',
-      lghub_system_tray: 'Logitech G HUB',
-      'docker desktop': 'Docker Desktop',
-    }
-    const lc = name.toLowerCase()
-    if (knownExes[lc]) return knownExes[lc]
-    return name
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/[_-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  function deriveDisplayName(registryName: string, command: string): string {
-    const quotedMatch = command.match(/^"([^"]+)"/)
-    const exePathMatch = quotedMatch
-      ? quotedMatch[1]
-      : command.match(/^(.+?\.exe)\b/i)?.[1] || command.match(/^(\S+)/)?.[1] || ''
-    const exePath = exePathMatch!.replace(/\\/g, '/')
-    const exeName =
-      exePath
-        .split('/')
-        .pop()
-        ?.replace(/\.[^.]+$/, '') || ''
-
-    const electronMatch = registryName.match(/^electron\.app\.(.+)$/i)
-    if (electronMatch) return electronMatch[1]!
-
-    const hexSuffixMatch = registryName.match(/^(.+?)[_-][A-F0-9]{8,}$/i)
-    if (hexSuffixMatch) {
-      const prefix = hexSuffixMatch[1]!.replace(/[-_]/g, ' ')
-      if (prefix.length > 20 && exeName) return friendlyExeName(exeName)
-      return prefix
-    }
-
-    if (registryName.includes(' ') || (registryName.length <= 30 && /^[A-Za-z0-9 ._-]+$/.test(registryName))) {
-      return registryName
-    }
-
-    if (exeName) return friendlyExeName(exeName)
-    return registryName
-  }
-
-  it('extracts name from electron.app.X pattern', () => {
-    expect(deriveDisplayName('electron.app.Discord', '"C:\\Discord\\Discord.exe" --start-minimized')).toBe('Discord')
-  })
-
-  it('derives from hex-suffixed names using prefix', () => {
-    expect(deriveDisplayName('Steam_ABCDEF12', '"C:\\Steam\\Steam.exe"')).toBe('Steam')
-  })
-
-  it('falls back to exe for long hex-suffixed prefix', () => {
-    expect(deriveDisplayName('VeryLongApplicationNameThatExceeds_ABCDEF12', '"C:\\App\\discord.exe"')).toBe('Discord')
-  })
-
-  it('returns readable registry names as-is', () => {
-    expect(deriveDisplayName('Spotify', '"C:\\Spotify\\Spotify.exe"')).toBe('Spotify')
-    expect(deriveDisplayName('My App', '"C:\\App\\app.exe"')).toBe('My App')
-  })
-
-  it('falls back to exe name for unreadable registry names', () => {
-    expect(deriveDisplayName('{CLSID-GUID-HERE}', '"C:\\Program Files\\chrome.exe"')).toBe('Google Chrome')
-  })
-
-  it('handles known exe mappings via exe path', () => {
-    // When registryName is short/readable, it's returned as-is per the readable check
-    // The known exe fallback is only used when registryName is NOT readable
-    expect(deriveDisplayName('{GUID}', '"C:\\msedge.exe"')).toBe('Microsoft Edge')
-    expect(deriveDisplayName('{GUID}', '"C:\\slack.exe"')).toBe('Slack')
-    expect(deriveDisplayName('{GUID}', '"C:\\lghub_system_tray.exe"')).toBe('Logitech G HUB')
-  })
-
-  it('camelCase splits for unknown exe names', () => {
-    expect(deriveDisplayName('{X}', '"C:\\MyCustomApp.exe"')).toBe('My Custom App')
-  })
-})
-
-describe('extractPublisher (logic replica)', () => {
-  function extractPublisher(command: string | undefined): string {
-    if (!command) return 'Unknown'
-    const lc = command.toLowerCase()
-    if (lc.includes('google')) return 'Google LLC'
-    if (
-      lc.includes('\\microsoft\\') ||
-      lc.includes('microsoft edge') ||
-      lc.includes('\\msteams') ||
-      lc.includes('onedrive')
-    )
-      return 'Microsoft Corporation'
-    if (lc.includes('discord')) return 'Discord Inc.'
-    if (lc.includes('spotify')) return 'Spotify AB'
-    if (lc.includes('steam')) return 'Valve Corporation'
-    if (lc.includes('nvidia')) return 'NVIDIA Corporation'
-    if (lc.includes('amd') || lc.includes('radeon')) return 'AMD'
-    if (lc.includes('intel')) return 'Intel Corporation'
-    if (lc.includes('mozilla') || lc.includes('firefox')) return 'Mozilla Foundation'
-    if (lc.includes('notion')) return 'Notion Labs'
-    if (lc.includes('slack')) return 'Salesforce'
-    if (lc.includes('zoom')) return 'Zoom Video Communications'
-    if (lc.includes('adobe')) return 'Adobe Inc.'
-    if (lc.includes('logitech') || lc.includes('lghub')) return 'Logitech'
-    if (lc.includes('corsair') || lc.includes('icue')) return 'Corsair'
-    if (lc.includes('razer')) return 'Razer Inc.'
-    if (lc.includes('docker')) return 'Docker Inc.'
-    if (lc.includes('proton')) return 'Proton AG'
-    if (lc.includes('dropbox')) return 'Dropbox Inc.'
-    if (lc.includes('1password')) return 'AgileBits Inc.'
-    if (lc.includes('realtek')) return 'Realtek'
-    if (lc.includes('hp') || lc.includes('hewlett')) return 'HP Inc.'
-    if (lc.includes('dell')) return 'Dell Technologies'
-    if (lc.includes('lenovo')) return 'Lenovo'
-    if (lc.includes('asus')) return 'ASUS'
-    if (lc.includes('clair')) return 'Clair'
-    return 'Unknown'
-  }
-
-  it('returns "Unknown" for undefined', () => {
-    expect(extractPublisher(undefined)).toBe('Unknown')
-  })
-
-  it('detects Google', () => {
-    expect(extractPublisher('"C:\\Google\\Chrome\\chrome.exe"')).toBe('Google LLC')
-  })
-
-  it('detects Microsoft by path', () => {
-    expect(extractPublisher('"C:\\Program Files\\Microsoft\\Edge\\msedge.exe"')).toBe('Microsoft Corporation')
-  })
-
-  it('detects Discord', () => {
-    expect(extractPublisher('"C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe"')).toBe('Discord Inc.')
-  })
-
-  it('detects Spotify', () => {
-    expect(extractPublisher('"C:\\Spotify\\Spotify.exe"')).toBe('Spotify AB')
-  })
-
-  it('detects NVIDIA', () => {
-    expect(extractPublisher('"C:\\NVIDIA\\NvDisplay.exe"')).toBe('NVIDIA Corporation')
-  })
-
-  it('detects AMD/Radeon', () => {
-    expect(extractPublisher('"C:\\AMD\\Radeon\\cnext.exe"')).toBe('AMD')
-  })
-
-  it('detects Adobe', () => {
-    expect(extractPublisher('"C:\\Adobe\\CCDesktop.exe"')).toBe('Adobe Inc.')
-  })
-
-  it('detects Docker', () => {
-    expect(extractPublisher('"C:\\Docker Desktop\\Docker.exe"')).toBe('Docker Inc.')
-  })
-
-  it('returns "Unknown" for unrecognized paths', () => {
-    expect(extractPublisher('"C:\\MyApp\\app.exe"')).toBe('Unknown')
-  })
-})
-
-describe('estimateImpact (logic replica)', () => {
-  function estimateImpact(name: string, command?: string): 'high' | 'medium' | 'low' | 'none' {
-    const lc = `${name} ${command || ''}`.toLowerCase()
-    const highImpact = ['chrome', 'discord', 'teams', 'ms-teams', 'slack', 'steam', 'edge', 'msedge', 'docker']
-    const medImpact = ['spotify', 'onedrive', 'dropbox', 'adobe', 'notion', 'zoom', 'firefox']
-    const noImpact = ['securityhealth', 'windowsdefender', 'securitycenter', 'windows defender']
-
-    if (noImpact.some((k) => lc.includes(k))) return 'none'
-    if (highImpact.some((k) => lc.includes(k))) return 'high'
-    if (medImpact.some((k) => lc.includes(k))) return 'medium'
-    return 'low'
-  }
-
-  it('classifies Chrome as high impact', () => {
-    expect(estimateImpact('GoogleChrome', 'chrome.exe')).toBe('high')
-  })
-
-  it('classifies Discord as high impact', () => {
-    expect(estimateImpact('Discord', '"C:\\discord\\Update.exe"')).toBe('high')
-  })
-
-  it('classifies Spotify as medium impact', () => {
-    expect(estimateImpact('Spotify', '"C:\\spotify.exe"')).toBe('medium')
-  })
-
-  it('classifies OneDrive as medium impact', () => {
-    expect(estimateImpact('OneDrive', '"C:\\OneDrive.exe"')).toBe('medium')
-  })
-
-  it('classifies Windows Defender as none impact', () => {
-    expect(estimateImpact('SecurityHealth', 'SecurityHealthSystray.exe')).toBe('none')
-  })
-
-  it('classifies unknown apps as low impact', () => {
-    expect(estimateImpact('MyCustomApp', 'custom.exe')).toBe('low')
-  })
-
-  it('checks both name and command for keywords', () => {
-    expect(estimateImpact('UpdateHelper', 'C:\\docker\\helper.exe')).toBe('high')
-  })
-})
-
-describe('isSafeTaskName (logic replica)', () => {
-  function isSafeTaskName(name: string): boolean {
-    return typeof name === 'string' && name.length > 0 && name.length <= 260 && /^[A-Za-z0-9 \-._()]+$/.test(name)
-  }
-
-  it('accepts simple names', () => {
-    expect(isSafeTaskName('SpotifyStartup')).toBe(true)
-    expect(isSafeTaskName('My Task (v2)')).toBe(true)
-    expect(isSafeTaskName('App-Update.1.0')).toBe(true)
-  })
-
-  it('rejects empty string', () => {
-    expect(isSafeTaskName('')).toBe(false)
-  })
-
-  it('rejects names with shell metacharacters', () => {
-    expect(isSafeTaskName("task'; rm -rf /")).toBe(false)
-    expect(isSafeTaskName('task | evil')).toBe(false)
-    expect(isSafeTaskName('task`cmd`')).toBe(false)
-    expect(isSafeTaskName('task$var')).toBe(false)
-  })
-
-  it('rejects names longer than 260 chars', () => {
-    expect(isSafeTaskName('a'.repeat(261))).toBe(false)
-  })
-
-  it('accepts names at exactly 260 chars', () => {
-    expect(isSafeTaskName('a'.repeat(260))).toBe(true)
-  })
-})
-
-describe('makeStableId (logic replica)', () => {
-  it('produces a 16-character hex string', () => {
-    const id = makeStableId('Spotify', 'registry-hkcu')
-    expect(id).toMatch(/^[a-f0-9]{16}$/)
-  })
-
-  it('is deterministic for the same inputs', () => {
-    expect(makeStableId('Discord', 'registry-hkcu')).toBe(makeStableId('Discord', 'registry-hkcu'))
-  })
-
-  it('differs for different names', () => {
-    expect(makeStableId('Spotify', 'registry-hkcu')).not.toBe(makeStableId('Discord', 'registry-hkcu'))
-  })
-
-  it('differs for different sources', () => {
-    expect(makeStableId('Spotify', 'registry-hkcu')).not.toBe(makeStableId('Spotify', 'registry-hklm'))
-  })
 })
 
 // =====================================================================
@@ -1119,6 +861,192 @@ describe('getBootTrace', () => {
 })
 
 // =====================================================================
+// Auditoria 2026-10-18 — S1 / S5 / S6 / S7 / S8
+// =====================================================================
+
+describe('startup-folder disabled variants (S1)', () => {
+  const folderPath = (p: unknown) => String(p).includes('Start Menu')
+
+  it('lists a .disabled file as the original item with enabled=false', async () => {
+    mockExistsSync.mockImplementation((p: string) => folderPath(p))
+    mockReaddirSync.mockReturnValue(['MyApp.lnk.disabled'])
+
+    const items = await listStartupItems()
+    const item = items.find((i) => i.source === 'startup-folder')
+    expect(item).toBeDefined()
+    expect(item!.name).toBe('MyApp.lnk')
+    expect(item!.enabled).toBe(false)
+    expect(item!.command.endsWith('MyApp.lnk')).toBe(true)
+    expect(item!.command.endsWith('.disabled')).toBe(false)
+  })
+
+  it('deduplicates a file present both enabled and disabled (enabled wins)', async () => {
+    mockExistsSync.mockImplementation((p: string) => folderPath(p))
+    mockReaddirSync.mockReturnValue(['MyApp.lnk.disabled', 'MyApp.lnk'])
+
+    const items = await listStartupItems()
+    const folderItems = items.filter((i) => i.source === 'startup-folder')
+    expect(folderItems).toHaveLength(1)
+    expect(folderItems[0]!.enabled).toBe(true)
+  })
+
+  it('toggling a folder item renames to .disabled and back', async () => {
+    const command = 'C:\\Users\\Test\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\App.lnk'
+
+    expect(await toggleStartupItem('App.lnk', '', command, 'startup-folder', false)).toBe(true)
+    expect(mockRenameSync).toHaveBeenCalledWith(command, `${command}.disabled`)
+
+    mockRenameSync.mockClear()
+    expect(await toggleStartupItem('App.lnk', '', command, 'startup-folder', true)).toBe(true)
+    expect(mockRenameSync).toHaveBeenCalledWith(`${command}.disabled`, command)
+  })
+})
+
+describe('disabled-startups.json robustness (S5)', () => {
+  const disabledFile = (p: unknown) => String(p).endsWith('disabled-startups.json')
+
+  it('ignores non-array JSON instead of throwing', async () => {
+    mockExistsSync.mockImplementation(disabledFile)
+    mockReadFileSync.mockReturnValue('{"not":"an array"}')
+
+    const items = await listStartupItems()
+    expect(Array.isArray(items)).toBe(true)
+  })
+
+  it('skips malformed entries instead of crashing the list', async () => {
+    mockExistsSync.mockImplementation(disabledFile)
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify([
+        { name: 'Ok', command: '"C:\\Ok\\ok.exe"', location: HKCU_RUN, source: 'registry-hkcu' },
+        { name: 42, command: null, location: 7, source: 'nope' },
+        'junk',
+      ]),
+    )
+
+    const items = await listStartupItems()
+    expect(items.some((i) => i.name === 'Ok')).toBe(true)
+    expect(items.some((i) => (i.name as string | number) === 42)).toBe(false)
+  })
+
+  it('normalises a legacy "undefined" command to an empty string', async () => {
+    mockExistsSync.mockImplementation(disabledFile)
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify([{ name: 'Ghost', command: 'undefined', location: HKCU_RUN, source: 'registry-hkcu' }]),
+    )
+
+    const items = await listStartupItems()
+    expect(items[0]!.command).toBe('')
+  })
+
+  it('writes the disabled file atomically via a temp file + rename', async () => {
+    collectRegCalls()
+
+    await toggleStartupItem('Discord', HKCU_RUN, '"C:\\Discord\\Discord.exe"', 'registry-hkcu', false)
+
+    expect(mockRenameSync).toHaveBeenCalledTimes(1)
+    const [tmp, target] = mockRenameSync.mock.calls[0] as [string, string]
+    expect(tmp.endsWith('.tmp')).toBe(true)
+    expect(target.endsWith('disabled-startups.json')).toBe(true)
+  })
+
+  it('still succeeds (and warns) when the disabled file cannot be written', async () => {
+    collectRegCalls()
+    mockWriteFileSync.mockImplementation(() => {
+      throw new Error('disk full')
+    })
+
+    const result = await toggleStartupItem('Discord', HKCU_RUN, '"C:\\Discord\\Discord.exe"', 'registry-hkcu', false)
+
+    expect(result).toBe(true)
+    expect(mockLogger.warning).toHaveBeenCalled()
+  })
+})
+
+describe('REG_EXPAND_SZ entries (S6)', () => {
+  it('lists REG_EXPAND_SZ registry entries', async () => {
+    setupExecFileHandler((cmd, args) => {
+      if (cmd === 'reg' && args[1] === HKCU_RUN) {
+        return {
+          stdout: [
+            '',
+            `${HKCU_RUN}`,
+            '',
+            '    SecurityHealth    REG_EXPAND_SZ    %windir%\\System32\\SecurityHealthSystray.exe',
+            '',
+          ].join('\n'),
+        }
+      }
+      throw new Error('not found')
+    })
+
+    const items = await listStartupItems()
+    expect(items.some((i) => i.name === 'SecurityHealth')).toBe(true)
+  })
+})
+
+describe('StartupApproved source matching (S7)', () => {
+  it('does not apply StartupApproved entries from another source', async () => {
+    setupExecFileHandler((cmd, args) => {
+      const key = String(args[1] ?? '')
+      if (cmd !== 'reg') throw new Error('unexpected')
+      if (key === HKLM_RUN) {
+        return { stdout: `${HKLM_RUN}\n\n    Discord    REG_SZ    "C:\\Discord\\Discord.exe"\n` }
+      }
+      if (key.startsWith('HKCU') && key.includes('StartupApproved\\Run')) {
+        return { stdout: `\n    Discord    REG_BINARY    030000000000000000000000\n` }
+      }
+      throw new Error('not found')
+    })
+
+    const items = await listStartupItems()
+    const discord = items.find((i) => i.name === 'Discord')
+    expect(discord).toBeDefined()
+    expect(discord!.source).toBe('registry-hklm')
+    // The HKCU StartupApproved entry must not disable the HKLM item
+    expect(discord!.enabled).toBe(true)
+  })
+})
+
+describe('silent failures are logged (S8)', () => {
+  it('warns when the startup folder cannot be read', async () => {
+    mockExistsSync.mockImplementation((p: string) => String(p).includes('Start Menu'))
+    mockReaddirSync.mockImplementation(() => {
+      throw new Error('EACCES')
+    })
+
+    const items = await listStartupItems()
+    expect(items.some((i) => i.source === 'startup-folder')).toBe(false)
+    expect(mockLogger.warning).toHaveBeenCalledWith('startup-manager', expect.stringContaining('startup folder'))
+  })
+
+  it('logs an error when a startup-folder rename fails', async () => {
+    mockRenameSync.mockImplementation(() => {
+      throw new Error('EACCES')
+    })
+    const command = 'C:\\Users\\Test\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\App.lnk'
+
+    const result = await toggleStartupItem('App.lnk', '', command, 'startup-folder', false)
+
+    expect(result).toBe(false)
+    expect(mockLogger.error).toHaveBeenCalled()
+  })
+
+  it('logs an error when a scheduled-task toggle fails', async () => {
+    const result = await toggleStartupItem('MyTask', '', '', 'task-scheduler', false)
+
+    expect(result).toBe(false)
+    expect(mockLogger.error).toHaveBeenCalled()
+  })
+
+  it('warns when the boot trace query fails', async () => {
+    const trace = await getBootTrace()
+
+    expect(trace.available).toBe(false)
+    expect(mockLogger.warning).toHaveBeenCalledWith('startup-manager', expect.stringContaining('boot trace'))
+  })
+})
+
+// =====================================================================
 // registerStartupManagerIpc
 // =====================================================================
 
@@ -1135,10 +1063,12 @@ describe('registerStartupManagerIpc', () => {
   it('STARTUP_TOGGLE handler passes all arguments through', async () => {
     registerStartupManagerIpc(mockGetWindow)
     const handler = mockHandlers.get('startup:toggle')!
-    collectRegCalls()
+    const calls = collectRegCalls()
 
     const result = await handler({}, 'App', HKCU_RUN, '"C:\\app.exe"', 'registry-hkcu', false)
-    expect(typeof result).toBe('boolean')
+    expect(result).toBe(true)
+    // Non-vacuity: the handler must have actually touched the registry
+    expect(calls.length).toBeGreaterThan(0)
   })
 
   it('STARTUP_DELETE handler passes all arguments through', async () => {
@@ -1147,6 +1077,28 @@ describe('registerStartupManagerIpc', () => {
 
     const result = await handler({}, 'App', HKCU_RUN, 'registry-hkcu')
     expect(typeof result).toBe('boolean')
+  })
+
+  it('STARTUP_TOGGLE refuses a foreign sender without touching the registry', async () => {
+    const foreignWindow = vi.fn(() => ({ id: 99 })) as unknown as WindowGetter
+    registerStartupManagerIpc(foreignWindow)
+    const handler = mockHandlers.get('startup:toggle')!
+    const calls = collectRegCalls()
+
+    const result = await handler({}, 'App', HKCU_RUN, '"C:\\app.exe"', 'registry-hkcu', false)
+
+    expect(result).toBe(false)
+    expect(calls.length).toBe(0)
+  })
+
+  it('STARTUP_LIST returns an empty list for a foreign sender', async () => {
+    const foreignWindow = vi.fn(() => ({ id: 99 })) as unknown as WindowGetter
+    registerStartupManagerIpc(foreignWindow)
+    const handler = mockHandlers.get('startup:list')!
+
+    const result = await handler({})
+
+    expect(result).toEqual([])
   })
 })
 

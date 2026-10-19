@@ -42,7 +42,15 @@ export async function deleteStartupItem(
         deletedSource = true
       } catch (err: unknown) {
         const nodeErr = err as { code?: string }
-        if (nodeErr.code === 'ENOENT') deletedSource = true
+        if (nodeErr.code === 'ENOENT') {
+          // The on-disk variant may be the disabled one (`<file>.disabled`)
+          try {
+            unlinkSync(`${resolvedLocation}.disabled`)
+            deletedSource = true
+          } catch (err2: unknown) {
+            deletedSource = (err2 as { code?: string }).code === 'ENOENT'
+          }
+        }
       }
     } else {
       if (!ALLOWED_STARTUP_LOCATIONS.has(location)) return false
@@ -69,7 +77,8 @@ export async function deleteStartupItem(
         /* may not exist */
       }
     }
-  } catch {
+  } catch (err) {
+    getLogger().error('startup-manager', `Delete failed for ${name}: ${String(err)}`)
     return false
   }
 
@@ -78,8 +87,8 @@ export async function deleteStartupItem(
       const disabled = readDisabledEntries()
       writeDisabledEntries(disabled.filter((e) => !(e.name === name && e.source === source)))
     })
-  } catch {
-    /* ignore */
+  } catch (err) {
+    getLogger().warning('startup-manager', `Failed to clean disabled-startups.json entry for ${name}: ${String(err)}`)
   }
 
   getLogger().info('startup-manager', `Delete ${deletedSource ? 'succeeded' : 'failed'} for: ${name}`)

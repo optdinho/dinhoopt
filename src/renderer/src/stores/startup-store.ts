@@ -1,5 +1,6 @@
 import type { StartupBootTrace, StartupItem, StartupSafetyRating } from '@shared/types'
 import { create } from 'zustand'
+import logger from '@/lib/renderer-logger'
 
 interface StartupState {
   items: StartupItem[]
@@ -80,7 +81,8 @@ export const useStartupStore = create<StartupState>((set) => ({
         safetyLoading: false,
         safetyFetched: true,
       })
-    } catch {
+    } catch (err) {
+      logger.error('startup-store', 'Failed to fetch safety ratings', err)
       set({ safetyLoading: false, safetyFetched: true })
     }
   },

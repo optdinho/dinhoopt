@@ -397,9 +397,9 @@ describe('registerCleanerIpc', () => {
       'registerNetworkCleanupIpc',
       'registerStartupManagerIpc',
       'registerRecycleBinIpc',
+      'registerStartupSafetyIpc',
     ]
     const withoutArgs: Array<keyof typeof mocks.registerFns> = [
-      'registerStartupSafetyIpc',
       'registerProgramSafetyIpc',
       'registerLicenseIpc',
       'registerPowerPlansIpc',

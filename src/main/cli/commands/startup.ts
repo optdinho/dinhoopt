@@ -47,7 +47,8 @@ export async function handleStartup(args: string[], ctx: CliContext): Promise<nu
       cliNotFound(ctx, 'Startup item', name)
       return ExitCode.NOTHING_FOUND
     }
-    const result = await deleteStartupItem(item.name, item.location, item.source)
+    const location = item.source === 'startup-folder' ? item.command : item.location
+    const result = await deleteStartupItem(item.name, location, item.source)
     cliOut(ctx, result)
   } else {
     cliUsage(ctx, 'dinho --cli startup <list|boot-trace|disable|enable|delete> [name]')

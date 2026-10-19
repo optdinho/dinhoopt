@@ -6,7 +6,7 @@ export function parseRegOutput(stdout: string, location: string, source: Startup
   const items: StartupItem[] = []
   const lines = stdout.split('\n')
   for (const line of lines) {
-    const match = line.match(/^\s+(.+?)\s{4,}REG_SZ\s{4,}(.+)/i)
+    const match = line.match(/^\s+(.+?)\s{4,}REG_(?:EXPAND_)?SZ\s{4,}(.+)/i)
     if (match) {
       const name = (match[1] ?? '').trim()
       const command = stripComment((match[2] ?? '').trim())
@@ -42,7 +42,7 @@ export async function mergeStartupApproved(items: StartupItem[]): Promise<void> 
     },
   ]
 
-  for (const { key, source: _source } of approvedKeys) {
+  for (const { key, source } of approvedKeys) {
     try {
       const { stdout } = await execNativeUtf8('reg', ['query', key], { timeout: 10000 })
       const lines = stdout.split('\n')
@@ -55,7 +55,7 @@ export async function mergeStartupApproved(items: StartupItem[]): Promise<void> 
         const isDisabledByUser = firstByte === 0x03 || firstByte === 0x06
 
         if (isDisabledByUser) {
-          const existing = items.find((i) => i.name === name)
+          const existing = items.find((i) => i.name === name && i.source === source)
           if (existing) {
             existing.enabled = false
           }

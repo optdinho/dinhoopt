@@ -2,6 +2,12 @@ import type { StartupItem, StartupSafetyRating } from '@shared/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStartupStore } from './startup-store'
 
+vi.mock('@/lib/renderer-logger', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
+
+import logger from '@/lib/renderer-logger'
+
 function makeItem(overrides: Partial<StartupItem> = {}): StartupItem {
   return {
     id: 'item-1',
@@ -176,5 +182,17 @@ describe('fetchSafetyRatings', () => {
     await useStartupStore.getState().fetchSafetyRatings()
 
     expect(useStartupStore.getState().safetyLoading).toBe(false)
+  })
+
+  it('logs when the safety fetch fails (S8-r)', async () => {
+    vi.stubGlobal('window', {
+      dinho: {
+        startupSafetyFetch: vi.fn().mockRejectedValue(new Error('network error')),
+      },
+    })
+
+    await useStartupStore.getState().fetchSafetyRatings()
+
+    expect(logger.error).toHaveBeenCalledWith('startup-store', 'Failed to fetch safety ratings', expect.any(Error))
   })
 })

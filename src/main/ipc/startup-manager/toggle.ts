@@ -29,7 +29,11 @@ export async function toggleStartupItem(
         timeout: 10000,
         windowsHide: true,
       })
-    } catch {
+    } catch (err) {
+      getLogger().error(
+        'startup-manager',
+        `Failed to ${enabled ? 'enable' : 'disable'} scheduled task ${name}: ${String(err)}`,
+      )
       return false
     }
     return true
@@ -51,7 +55,8 @@ export async function toggleStartupItem(
         renameSync(resolvedPath, disabledPath)
       }
       return true
-    } catch {
+    } catch (err) {
+      getLogger().error('startup-manager', `Failed to toggle startup-folder file for ${name}: ${String(err)}`)
       return false
     }
   }
@@ -99,15 +104,25 @@ export async function toggleStartupItem(
       /* permissions */
     }
 
-    if (!approvedOk && !deleteOk) return false
+    if (!approvedOk && !deleteOk) {
+      getLogger().error(
+        'startup-manager',
+        `Failed to disable ${name}: neither StartupApproved nor the Run key could be updated`,
+      )
+      return false
+    }
 
-    await withDisabledFileLock(() => {
-      const disabled = readDisabledEntries()
-      if (!disabled.some((e) => e.name === name && e.source === source)) {
-        disabled.push({ name, command, location, source })
-      }
-      writeDisabledEntries(disabled)
-    })
+    try {
+      await withDisabledFileLock(() => {
+        const disabled = readDisabledEntries()
+        if (!disabled.some((e) => e.name === name && e.source === source)) {
+          disabled.push({ name, command, location, source })
+        }
+        writeDisabledEntries(disabled)
+      })
+    } catch (err) {
+      getLogger().warning('startup-manager', `Failed to update disabled-startups.json for ${name}: ${String(err)}`)
+    }
   } else {
     const disabled = readDisabledEntries()
     const stored = disabled.find((e) => e.name === name && e.source === source)
@@ -131,7 +146,8 @@ export async function toggleStartupItem(
           { timeout: 10000 },
         )
         return true
-      } catch {
+      } catch (err) {
+        getLogger().error('startup-manager', `Failed to enable ${name} via StartupApproved: ${String(err)}`)
         return false
       }
     }
@@ -168,12 +184,19 @@ export async function toggleStartupItem(
       /* non-critical */
     }
 
-    if (!addOk) return false
+    if (!addOk) {
+      getLogger().error('startup-manager', `Failed to re-enable ${name}: the Run key could not be recreated`)
+      return false
+    }
 
-    await withDisabledFileLock(() => {
-      const current = readDisabledEntries()
-      writeDisabledEntries(current.filter((e) => !(e.name === name && e.source === source)))
-    })
+    try {
+      await withDisabledFileLock(() => {
+        const current = readDisabledEntries()
+        writeDisabledEntries(current.filter((e) => !(e.name === name && e.source === source)))
+      })
+    } catch (err) {
+      getLogger().warning('startup-manager', `Failed to update disabled-startups.json for ${name}: ${String(err)}`)
+    }
   }
   getLogger().success('startup-manager', `Toggle complete for: ${name}`)
   return true

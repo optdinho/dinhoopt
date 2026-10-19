@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockExecFile = vi.fn()
 const mockUnlinkSync = vi.fn()
 const mockGetPath = vi.fn()
+const mockLogger = { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() }
 
 vi.mock('electron', () => ({
   app: { getPath: (...args: string[]) => mockGetPath(...args) },
@@ -28,7 +29,7 @@ vi.mock('../../services/exec-utf8', () => ({
 }))
 
 vi.mock('../../services/logger.service', () => ({
-  getLogger: () => ({ info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() }),
+  getLogger: () => mockLogger,
 }))
 
 vi.mock('../../platform', () => ({
@@ -105,5 +106,50 @@ describe('deleteStartupItem', () => {
 
   it('rejects locations outside the allowed registry roots', async () => {
     await expect(deleteStartupItem('MyApp', 'HKCU\\Software\\Other', 'registry-hkcu')).resolves.toBe(false)
+  })
+
+  // ── Auditoria 2026-10-18 (S1 / S8) ──────────────────────────────
+
+  it('startup-folder: falls back to the .disabled file when the original is gone', async () => {
+    const original = join(
+      'C:\\Users\\test\\AppData\\Roaming',
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs',
+      'Startup',
+      'MyApp.lnk',
+    )
+    mockUnlinkSync.mockImplementationOnce(() => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+    })
+
+    await expect(deleteStartupItem('MyApp.lnk', original, 'startup-folder')).resolves.toBe(true)
+    expect(mockUnlinkSync).toHaveBeenNthCalledWith(1, original)
+    expect(mockUnlinkSync).toHaveBeenNthCalledWith(2, `${original}.disabled`)
+  })
+
+  it('startup-folder: counts as deleted when neither variant exists', async () => {
+    const original = join(
+      'C:\\Users\\test\\AppData\\Roaming',
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs',
+      'Startup',
+      'MyApp.lnk',
+    )
+    mockUnlinkSync.mockImplementation(() => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+    })
+
+    await expect(deleteStartupItem('MyApp.lnk', original, 'startup-folder')).resolves.toBe(true)
+  })
+
+  it('task-scheduler: logs the failure instead of swallowing it', async () => {
+    rejectWith(new Error('Unregister-ScheduledTask failed'))
+
+    await expect(deleteStartupItem('My Task', 'path', 'task-scheduler')).resolves.toBe(false)
+    expect(mockLogger.error).toHaveBeenCalled()
   })
 })

@@ -1,5 +1,5 @@
 import type { StartupItem } from '@shared/types'
-import { CalendarClock, RefreshCw, Shield, Trash2, Zap } from 'lucide-react'
+import { CalendarClock, Filter, RefreshCw, Shield, Trash2, Zap } from 'lucide-react'
 import { Fragment, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -37,8 +37,6 @@ export function StartupPage() {
   const safetyFetched = useStartupStore((s) => s.safetyFetched)
   const expandedItemId = useStartupStore((s) => s.expandedItemId)
 
-  const isCloudLinked = false
-
   const store = useStartupStore
 
   const loadItems = useCallback(async () => {
@@ -65,16 +63,23 @@ export function StartupPage() {
     store.getState().setTraceLoading(false)
   }, [])
 
+  // Depend on booleans, not on the array/object identities: setItems always
+  // receives a fresh array, so depending on `items` would re-run the effect on
+  // every load and loop forever whenever the list is legitimately empty (S14).
+  const hasItems = items.length > 0
+  const hasBootTrace = bootTrace !== null
+
   useEffect(() => {
-    const tasks: Promise<void>[] = []
-    if (items.length === 0) {
-      tasks.push(loadItems())
+    if (!hasItems) {
+      void loadItems()
     }
-    if (!bootTrace) {
-      tasks.push(loadBootTrace())
+  }, [hasItems, loadItems])
+
+  useEffect(() => {
+    if (!hasBootTrace) {
+      void loadBootTrace()
     }
-    if (tasks.length > 0) Promise.all(tasks)
-  }, [loadItems, loadBootTrace, items, bootTrace])
+  }, [hasBootTrace, loadBootTrace])
 
   useEffect(() => {
     if (!safetyFetched) {
@@ -97,7 +102,7 @@ export function StartupPage() {
         )
         store
           .getState()
-          .setError(t('errorFailedToToggle', { action: enabled ? 'enable' : 'disable', name: item.displayName }))
+          .setError(t(enabled ? 'errorFailedToEnable' : 'errorFailedToDisable', { name: item.displayName }))
         return
       }
       await useHistoryStore.getState().addEntry({
@@ -120,7 +125,8 @@ export function StartupPage() {
         errorCount: 0,
       })
       store.getState().fetchSafetyRatings()
-    } catch {
+    } catch (err) {
+      logger.error('StartupPage', 'Failed to toggle startup item', err)
       store.getState().updateItem(item.id, { enabled: !enabled })
       toast.error(
         enabled
@@ -128,9 +134,7 @@ export function StartupPage() {
           : t('toastFailedToDisable', { name: item.displayName }),
         { description: t('toastAdminRequired') },
       )
-      store
-        .getState()
-        .setError(t('errorFailedToToggle', { action: enabled ? 'enable' : 'disable', name: item.displayName }))
+      store.getState().setError(t(enabled ? 'errorFailedToEnable' : 'errorFailedToDisable', { name: item.displayName }))
     }
   }
 
@@ -160,7 +164,8 @@ export function StartupPage() {
         toast.error(t('toastFailedToRemove', { name: item.displayName }), { description: t('toastAdminRequired') })
         store.getState().setError(t('errorFailedToRemove', { name: item.displayName }))
       }
-    } catch {
+    } catch (err) {
+      logger.error('StartupPage', 'Failed to delete startup item', err)
       toast.error(t('toastFailedToRemove', { name: item.displayName }), { description: t('toastAdminRequired') })
       store.getState().setError(t('errorFailedToRemove', { name: item.displayName }))
     }
@@ -171,10 +176,16 @@ export function StartupPage() {
     loadItems()
     loadBootTrace()
     store.getState().setExpandedItemId(null)
-    if (isCloudLinked) store.getState().fetchSafetyRatings()
+    store.getState().fetchSafetyRatings()
   }
 
   const impactOrder: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 }
+  const impactLevelKeys: Record<StartupItem['impact'], string> = {
+    high: 'impactLevelHigh',
+    medium: 'impactLevelMedium',
+    low: 'impactLevelLow',
+    none: 'impactLevelNone',
+  }
   const filtered = items.filter((i) => (filterBy === 'all' ? true : filterBy === 'active' ? i.enabled : !i.enabled))
   const sorted = [...filtered].sort((a, b) => {
     if (sortBy === 'impact') return (impactOrder[a.impact] ?? 0) - (impactOrder[b.impact] ?? 0)
@@ -241,6 +252,10 @@ export function StartupPage() {
 
       {items.length === 0 && !loading && !error && (
         <EmptyState icon={Zap} title={t('emptyStateTitle')} description={t('emptyStateDescription')} />
+      )}
+
+      {items.length > 0 && sorted.length === 0 && !loading && !error && (
+        <EmptyState icon={Filter} title={t('filterEmptyTitle')} description={t('filterEmptyDescription')} />
       )}
 
       <div className="space-y-2.5">
@@ -321,7 +336,9 @@ export function StartupPage() {
                     )
                   })()
                 ) : (
-                  <SafetyTooltip text={t(safetyLoading ? 'safetyTooltipPending' : 'safetyPending')}>
+                  <SafetyTooltip
+                    text={t(safetyLoading || !safetyFetched ? 'safetyTooltipPending' : 'safetyUnavailable')}
+                  >
                     <div
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
                       style={{ background: 'var(--bg-subtle-2)' }}
@@ -344,15 +361,21 @@ export function StartupPage() {
                   className="rounded-lg px-3 py-1.5 text-[11px] font-semibold capitalize shrink-0"
                   style={{ background: impactStyles[item.impact].bg, color: impactStyles[item.impact].text }}
                 >
-                  {t('impactLabel', { level: item.impact })}
+                  {t('impactLabel', { level: t(impactLevelKeys[item.impact]) })}
                 </span>
 
                 {/* Toggle + Delete */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    role="switch"
+                    aria-checked={item.enabled}
                     onClick={() => handleToggle(item, !item.enabled)}
-                    aria-label={item.enabled ? `Disable ${item.name}` : `Enable ${item.name}`}
+                    aria-label={
+                      item.enabled
+                        ? t('disableItem', { name: item.displayName })
+                        : t('enableItem', { name: item.displayName })
+                    }
                     className="relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors"
                     style={{ background: item.enabled ? 'var(--accent)' : 'var(--bg-active)' }}
                   >
@@ -407,7 +430,7 @@ export function StartupPage() {
                             </span>
                           </div>
                           <p className="mt-1 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-                            {rating.description || t('safetyPending')}
+                            {rating.description}
                           </p>
                           {rating.analyzedAt && (
                             <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-faint)' }}>
@@ -431,7 +454,7 @@ export function StartupPage() {
           onConfirm={() => handleDelete(deleteTarget)}
           title={t('confirmRemoveTitle', { name: deleteTarget.displayName })}
           description={t('confirmRemoveDescription')}
-          {...(deleteTarget.command && deleteTarget.command !== 'undefined' ? { details: deleteTarget.command } : {})}
+          {...(deleteTarget.command ? { details: deleteTarget.command } : {})}
           confirmLabel={t('confirmRemoveLabel')}
           variant="danger"
         />

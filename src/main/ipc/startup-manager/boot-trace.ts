@@ -1,6 +1,7 @@
 import type { StartupBootEntry, StartupBootTrace } from '@shared/types'
 import { getPlatform } from '../../platform'
 import { execFileAsync, psArgs } from '../../services/exec-utf8'
+import { getLogger } from '../../services/logger.service'
 import { deriveDisplayName } from './utils'
 
 export async function getBootTrace(): Promise<StartupBootTrace> {
@@ -118,7 +119,8 @@ export async function getBootTrace(): Promise<StartupBootTrace> {
       available: totalBootMs > 0 || deduped.length > 0,
       needsAdmin: false,
     }
-  } catch {
+  } catch (err) {
+    getLogger().warning('startup-manager', `Failed to get boot trace: ${String(err)}`)
     return empty
   }
 }

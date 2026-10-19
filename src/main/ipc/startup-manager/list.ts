@@ -16,24 +16,32 @@ function getStartupFolderItems(): StartupItem[] {
   try {
     if (!existsSync(startupDir)) return items
     const files = readdirSync(startupDir)
+    // Disabled entries live on disk as `<file>.disabled` — track both variants per
+    // original file, with the enabled variant winning if both exist.
+    const byOriginal = new Map<string, StartupItem>()
     for (const file of files) {
       if (file === 'desktop.ini') continue
-      const filePath = join(startupDir, file)
-      const name = basename(file, extname(file))
-      items.push({
+      const isDisabledVariant = file.endsWith('.disabled')
+      const originalFile = isDisabledVariant ? file.slice(0, -'.disabled'.length) : file
+      if (!originalFile || originalFile === 'desktop.ini') continue
+      if (byOriginal.has(originalFile) && isDisabledVariant) continue
+      const filePath = join(startupDir, originalFile)
+      const name = basename(originalFile, extname(originalFile))
+      byOriginal.set(originalFile, {
         id: makeStableId(name, 'startup-folder'),
-        name: file,
+        name: originalFile,
         displayName: name,
         command: filePath,
         location: startupDir,
         source: 'startup-folder',
-        enabled: true,
+        enabled: !isDisabledVariant,
         publisher: extractPublisher(filePath),
         impact: estimateImpact(name, filePath),
       })
     }
-  } catch {
-    /* skip */
+    items.push(...byOriginal.values())
+  } catch (err) {
+    getLogger().warning('startup-manager', `Failed to read startup folder: ${String(err)}`)
   }
 
   return items
@@ -90,8 +98,8 @@ async function getScheduledLogonTasks(): Promise<StartupItem[]> {
         impact: estimateImpact(name, command),
       })
     }
-  } catch {
-    /* task scheduler unavailable */
+  } catch (err) {
+    getLogger().warning('startup-manager', `Failed to read scheduled logon tasks: ${String(err)}`)
   }
 
   return items
