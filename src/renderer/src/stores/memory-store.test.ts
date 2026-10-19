@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMemoryStore } from './memory-store'
 
+const mocks = vi.hoisted(() => ({
+  logger: { error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}))
+
+vi.mock('@/lib/renderer-logger', () => ({ default: mocks.logger }))
+
 function mockMemoryApi() {
   const mock = {
     memoryInfo: vi.fn(),
@@ -33,8 +39,20 @@ describe('memory-store', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.logger.error.mockClear()
+    mocks.logger.info.mockClear()
+    mocks.logger.warning.mockClear()
     api = mockMemoryApi()
-    useMemoryStore.getState().reset()
+    useMemoryStore.setState({
+      info: null,
+      processes: [],
+      loading: false,
+      optimizing: false,
+      errorKind: null,
+      success: null,
+      progress: null,
+      result: null,
+    })
   })
 
   it('starts with default state', () => {
@@ -43,7 +61,7 @@ describe('memory-store', () => {
     expect(state.processes).toEqual([])
     expect(state.loading).toBe(false)
     expect(state.optimizing).toBe(false)
-    expect(state.error).toBeNull()
+    expect(state.errorKind).toBeNull()
     expect(state.success).toBeNull()
     expect(state.progress).toBeNull()
     expect(state.result).toBeNull()
@@ -58,24 +76,25 @@ describe('memory-store', () => {
     expect(state.processes).toEqual(fakeInfo.processes)
   })
 
-  it('load sets error on failure', async () => {
+  it('load sets errorKind on failure and logs it', async () => {
     api.memoryInfo.mockRejectedValueOnce(new Error('fail'))
     await useMemoryStore.getState().load()
     const state = useMemoryStore.getState()
     expect(state.loading).toBe(false)
-    expect(state.error).toBe('Failed to load memory info')
+    expect(state.errorKind).toBe('load')
     expect(state.info).toBeNull()
+    expect(mocks.logger.error).toHaveBeenCalledWith('memory-store', 'Failed to load memory info', expect.anything())
   })
 
-  it('optimize calls memoryOptimize and subscribes to progress', async () => {
+  it('optimize subscribes to progress and unsubscribes', async () => {
     const unsub = vi.fn()
-    api.onMemoryProgress.mockReturnValueOnce(unsub)
-    api.memoryOptimize.mockResolvedValueOnce({
+    api.onMemoryProgress.mockReturnValue(unsub)
+    api.memoryOptimize.mockResolvedValue({
       success: true,
       freedBytes: 1_000_000,
-      steps: [{ name: 'clear-cache', success: true, freedBytes: 1_000_000 }],
+      steps: [{ name: 'gc', success: true, freedBytes: 1_000_000 }],
     })
-    api.memoryInfo.mockResolvedValueOnce(fakeInfo)
+    api.memoryInfo.mockResolvedValue(fakeInfo)
     await useMemoryStore.getState().optimize()
     const state = useMemoryStore.getState()
     expect(api.onMemoryProgress).toHaveBeenCalled()
@@ -85,13 +104,78 @@ describe('memory-store', () => {
     expect(unsub).toHaveBeenCalled()
   })
 
-  it('optimize sets error on failure', async () => {
+  it('optimize sets non-partial success and refreshes info', async () => {
+    api.onMemoryProgress.mockReturnValue(vi.fn())
+    api.memoryOptimize.mockResolvedValueOnce({
+      success: true,
+      freedBytes: 1_000_000,
+      steps: [{ name: 'gc', success: true, freedBytes: 1_000_000 }],
+    })
+    api.memoryInfo.mockResolvedValueOnce(fakeInfo)
+    await useMemoryStore.getState().optimize()
+    const state = useMemoryStore.getState()
+    expect(state.success).toEqual({ freedBytes: 1_000_000, partial: false })
+    expect(state.errorKind).toBeNull()
+    expect(state.info).toEqual(fakeInfo.info)
+  })
+
+  it('optimize flags partial success when one step fails', async () => {
+    api.memoryOptimize.mockResolvedValueOnce({
+      success: true,
+      freedBytes: 2_097_152,
+      steps: [
+        { name: 'gc', success: true, freedBytes: 2_097_152 },
+        { name: 'workingset', success: false, freedBytes: 0, error: 'nope' },
+      ],
+    })
+    api.memoryInfo.mockResolvedValueOnce(fakeInfo)
+    await useMemoryStore.getState().optimize()
+    const state = useMemoryStore.getState()
+    expect(state.success).toEqual({ freedBytes: 2_097_152, partial: true })
+    expect(state.errorKind).toBeNull()
+  })
+
+  it('optimize sets errorKind when no step succeeds', async () => {
+    api.memoryOptimize.mockResolvedValueOnce({
+      success: false,
+      freedBytes: 0,
+      steps: [{ name: 'gc', success: false, freedBytes: 0 }],
+    })
+    api.memoryInfo.mockResolvedValueOnce(fakeInfo)
+    await useMemoryStore.getState().optimize()
+    const state = useMemoryStore.getState()
+    expect(state.errorKind).toBe('optimize')
+    expect(state.success).toBeNull()
+    expect(state.result?.success).toBe(false)
+    expect(state.optimizing).toBe(false)
+  })
+
+  it('optimize sets errorKind and logs on rejection', async () => {
     api.memoryOptimize.mockRejectedValueOnce(new Error('fail'))
     api.onMemoryProgress.mockReturnValueOnce(vi.fn())
     await useMemoryStore.getState().optimize()
     const state = useMemoryStore.getState()
     expect(state.optimizing).toBe(false)
-    expect(state.error).toBe('Optimization failed')
+    expect(state.errorKind).toBe('optimize')
+    expect(mocks.logger.error).toHaveBeenCalledWith('memory-store', 'Memory optimization failed', expect.anything())
+  })
+
+  it('keeps the success result when the post-optimize refresh fails', async () => {
+    api.memoryOptimize.mockResolvedValueOnce({
+      success: true,
+      freedBytes: 500,
+      steps: [{ name: 'gc', success: true, freedBytes: 500 }],
+    })
+    api.memoryInfo.mockRejectedValueOnce(new Error('refresh fail'))
+    await useMemoryStore.getState().optimize()
+    const state = useMemoryStore.getState()
+    expect(state.success).toEqual({ freedBytes: 500, partial: false })
+    expect(state.errorKind).toBeNull()
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      'memory-store',
+      expect.stringContaining('refresh'),
+      expect.anything(),
+    )
   })
 
   it('optimize no-ops if already optimizing', async () => {
@@ -100,53 +184,11 @@ describe('memory-store', () => {
     expect(api.memoryOptimize).not.toHaveBeenCalled()
   })
 
-  it('optimize res.success = false with error field', async () => {
-    const unsub = vi.fn()
-    api.onMemoryProgress.mockReturnValueOnce(unsub)
-    api.memoryOptimize.mockResolvedValueOnce({
-      success: false,
-      freedBytes: 0,
-      error: 'Not enough memory',
-      steps: [],
-    })
-    api.memoryInfo.mockRejectedValueOnce(new Error('load fail'))
-    await useMemoryStore.getState().optimize()
-    const state = useMemoryStore.getState()
-    expect(state.result).toMatchObject({ success: false })
-    expect(state.optimizing).toBe(false)
-  })
-
-  it('optimize res.success = false without error field (fallback msg)', async () => {
-    const unsub = vi.fn()
-    api.onMemoryProgress.mockReturnValueOnce(unsub)
-    api.memoryOptimize.mockResolvedValueOnce({
-      success: false,
-      freedBytes: 0,
-      steps: [],
-    })
-    api.memoryInfo.mockRejectedValueOnce(new Error('load fail'))
-    await useMemoryStore.getState().optimize()
-    const state = useMemoryStore.getState()
-    expect(state.result).toMatchObject({ success: false })
-    expect(state.optimizing).toBe(false)
-  })
-
-  it('reset returns to initial state', () => {
-    useMemoryStore.setState({
-      info: fakeInfo.info,
-      processes: fakeInfo.processes,
-      loading: true,
-      optimizing: true,
-      error: 'err',
-      success: 'ok',
-      progress: { step: 1, totalSteps: 3, label: 'test', detail: 'test' },
-      result: { success: true, freedBytes: 0, steps: [] },
-    })
-    useMemoryStore.getState().reset()
-    const state = useMemoryStore.getState()
-    expect(state.info).toBeNull()
-    expect(state.loading).toBe(false)
-    expect(state.optimizing).toBe(false)
-    expect(state.error).toBeNull()
+  it('clearError and clearSuccess reset their flags', () => {
+    useMemoryStore.setState({ errorKind: 'load', success: { freedBytes: 1, partial: false } })
+    useMemoryStore.getState().clearError()
+    expect(useMemoryStore.getState().errorKind).toBeNull()
+    useMemoryStore.getState().clearSuccess()
+    expect(useMemoryStore.getState().success).toBeNull()
   })
 })

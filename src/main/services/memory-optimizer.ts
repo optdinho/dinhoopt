@@ -27,8 +27,8 @@ export interface MemoryOptimizeStep {
 export interface MemoryOptimizeProgress {
   step: number
   totalSteps: number
+  /** Identificador do passo (ex.: `gc`, `workingset`); o renderer traduz. */
   label: string
-  detail: string
 }
 
 export type ProgressCallback = (progress: MemoryOptimizeProgress) => void
@@ -40,7 +40,7 @@ function runPs(script: string, timeout = WORKINGSET_TIMEOUT_MS): Promise<string>
   return new Promise((resolve, reject) => {
     execFile(
       'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', psUtf8(script)],
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psUtf8(script)],
       { timeout, windowsHide: true },
       (err, stdout, stderr) => {
         if (err) {
@@ -84,18 +84,18 @@ export async function getMemoryProcesses(top = 20): Promise<MemoryProcess[]> {
 
 export async function optimizeMemory(
   onProgress?: ProgressCallback,
-): Promise<{ success: boolean; freedBytes: number; steps: MemoryOptimizeStep[]; error?: string }> {
+): Promise<{ success: boolean; freedBytes: number; steps: MemoryOptimizeStep[] }> {
   const steps: MemoryOptimizeStep[] = []
   let totalFreed = 0
 
-  const notify = (step: number, totalSteps: number, label: string, detail: string) => {
-    onProgress?.({ step, totalSteps, label, detail })
+  const notify = (step: number, totalSteps: number, label: string) => {
+    onProgress?.({ step, totalSteps, label })
   }
 
   const TOTAL_STEPS = 2
 
   // Step 1: Force .NET garbage collection
-  notify(1, TOTAL_STEPS, 'gc', 'Collecting .NET garbage...')
+  notify(1, TOTAL_STEPS, 'gc')
   try {
     const before = (await si.mem()).used
     await runPs(
@@ -107,13 +107,14 @@ export async function optimizeMemory(
     totalFreed += freed
     steps.push({ name: 'gc', success: true, freedBytes: freed })
   } catch (err) {
+    getLogger().error('memory', `Garbage collection failed: ${String(err)}`)
     steps.push({ name: 'gc', success: false, freedBytes: 0, error: String(err) })
   }
 
   // Step 2: Empty working sets via multiple approaches
   // Tries .NET reflection first (avoids Add-Type), then falls back to
   // EmptyWorkingSet via Add-Type if reflection is unavailable.
-  notify(2, TOTAL_STEPS, 'workingset', 'Emptying working sets...')
+  notify(2, TOTAL_STEPS, 'workingset')
   try {
     const before = (await si.mem()).used
     await runPs(

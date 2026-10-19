@@ -1,20 +1,29 @@
 import type { MemoryInfo, MemoryOptimizeProgress, MemoryOptimizeResult, MemoryProcess } from '@shared/types'
 import { create } from 'zustand'
+import logger from '@/lib/renderer-logger'
+
+/** Falha do carregamento inicial (`load`) ou da operação de otimização. */
+export type MemoryErrorKind = 'load' | 'optimize'
+
+interface MemorySuccess {
+  freedBytes: number
+  /** Um ou mais passos falharam, mas a operação libertou memória. */
+  partial: boolean
+}
 
 interface MemoryState {
   info: MemoryInfo | null
   processes: MemoryProcess[]
   loading: boolean
   optimizing: boolean
-  error: string | null
-  success: string | null
+  errorKind: MemoryErrorKind | null
+  success: MemorySuccess | null
   progress: MemoryOptimizeProgress | null
   result: MemoryOptimizeResult | null
   load: () => Promise<void>
   optimize: () => Promise<void>
   clearError: () => void
   clearSuccess: () => void
-  reset: () => void
 }
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
@@ -22,18 +31,19 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   processes: [],
   loading: false,
   optimizing: false,
-  error: null,
+  errorKind: null,
   success: null,
   progress: null,
   result: null,
 
   load: async () => {
-    set({ loading: true, error: null })
+    set({ loading: true, errorKind: null })
     try {
       const data = await window.dinho.memoryInfo()
       set({ info: data.info, processes: data.processes, loading: false })
-    } catch {
-      set({ loading: false, error: 'Failed to load memory info' })
+    } catch (err) {
+      logger.error('memory-store', 'Failed to load memory info', err)
+      set({ loading: false, errorKind: 'load' })
     }
   },
 
@@ -41,7 +51,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     const { optimizing } = get()
     if (optimizing) return
 
-    set({ optimizing: true, error: null, success: null, progress: null, result: null })
+    set({ optimizing: true, errorKind: null, success: null, progress: null, result: null })
 
     const unsub = window.dinho.onMemoryProgress((data: MemoryOptimizeProgress) => {
       set({ progress: data })
@@ -50,33 +60,31 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     try {
       const res = await window.dinho.memoryOptimize()
       if (res.success) {
-        const freedMb = (res.freedBytes / 1024 / 1024).toFixed(1)
-        set({ success: `Freed ${freedMb} MB`, error: null })
+        set({
+          success: { freedBytes: res.freedBytes, partial: res.steps.some((s) => !s.success) },
+          errorKind: null,
+        })
       } else {
-        set({ error: res.error || 'Optimization failed', success: null })
+        set({ success: null, errorKind: 'optimize' })
       }
       set({ result: res, optimizing: false, progress: null })
-      await get().load()
-    } catch {
-      set({ optimizing: false, progress: null, error: 'Optimization failed' })
+
+      // Refresh dos números mostrados sem deixar uma falha de leitura competir
+      // com o resultado da operação (uma leitura falhada é registada, não exibida).
+      try {
+        const data = await window.dinho.memoryInfo()
+        set({ info: data.info, processes: data.processes })
+      } catch (err) {
+        logger.error('memory-store', 'Failed to refresh memory info after optimization', err)
+      }
+    } catch (err) {
+      logger.error('memory-store', 'Memory optimization failed', err)
+      set({ optimizing: false, progress: null, errorKind: 'optimize' })
     } finally {
       unsub()
     }
   },
 
-  clearError: () => set({ error: null }),
+  clearError: () => set({ errorKind: null }),
   clearSuccess: () => set({ success: null }),
-
-  reset: () => {
-    set({
-      info: null,
-      processes: [],
-      loading: false,
-      optimizing: false,
-      error: null,
-      success: null,
-      progress: null,
-      result: null,
-    })
-  },
 }))

@@ -88,6 +88,7 @@ const mocks = vi.hoisted(() => {
     appReleaseSingleInstanceLock: vi.fn(),
     appExit: vi.fn(),
     psUtf8: vi.fn((s: string) => s),
+    validateSender: vi.fn(),
   }
 })
 
@@ -192,6 +193,10 @@ vi.mock('../services/memory-optimizer', () => ({
   getMemoryInfo: (...args: unknown[]) => mocks.getMemoryInfo(...args),
   getMemoryProcesses: (...args: unknown[]) => mocks.getMemoryProcesses(...args),
   optimizeMemory: (...args: unknown[]) => mocks.optimizeMemory(...args),
+}))
+
+vi.mock('./sender-validation', () => ({
+  validateSender: (...args: unknown[]) => mocks.validateSender(...args),
 }))
 
 vi.mock('../services/settings-store', () => ({
@@ -348,6 +353,8 @@ const getWindow: () => BrowserWindow | null = () => null
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.validateSender.mockReset()
+  mocks.validateSender.mockReturnValue(true)
 })
 
 describe('registerCleanerIpc', () => {
@@ -616,28 +623,52 @@ describe('registerCleanerIpc', () => {
   })
 
   describe('memory:info', () => {
-    it('returns memory info and processes', async () => {
-      const info = { total: 16000, used: 8000 }
-      const processes = [{ name: 'test', memory: 100 }]
+    it('returns info and processes', async () => {
+      const info = { totalBytes: 16_000_000_000 }
+      const processes = [{ pid: 1, name: 'chrome.exe', workingSetBytes: 100 }]
       mocks.getMemoryInfo.mockResolvedValue(info)
       mocks.getMemoryProcesses.mockResolvedValue(processes)
       registerCleanerIpc(getWindow)
       const handler = getHandler('memory:info')
-      const result = await handler()
+      const result = await handler({})
       expect(result).toEqual({ info, processes })
+    })
+
+    it('returns a safe empty result for an invalid sender', async () => {
+      mocks.validateSender.mockReturnValueOnce(false)
+      registerCleanerIpc(getWindow)
+      const handler = getHandler('memory:info')
+      const result = await handler({})
+      expect(result).toEqual({ info: null, processes: [] })
+      expect(mocks.getMemoryInfo).not.toHaveBeenCalled()
     })
   })
 
   describe('memory:optimize', () => {
-    it('calls optimizeMemory with progress callback', async () => {
-      mocks.optimizeMemory.mockImplementation(async (onProgress: (p: { percent: number; phase: string }) => void) => {
-        onProgress({ percent: 50, phase: 'cleaning' })
-        return { freed: 512 }
-      })
+    it('forwards progress to the window and returns the result', async () => {
+      const send = vi.fn()
+      const win = { isDestroyed: () => false, webContents: { send } }
+      const winGetter = () => win as unknown as BrowserWindow
+      mocks.optimizeMemory.mockImplementation(
+        async (onProgress: (p: { step: number; totalSteps: number; label: string }) => void) => {
+          onProgress({ step: 1, totalSteps: 2, label: 'gc' })
+          return { success: true, freedBytes: 512, steps: [] }
+        },
+      )
+      registerCleanerIpc(winGetter)
+      const handler = getHandler('memory:optimize')
+      const result = await handler({})
+      expect(result).toEqual({ success: true, freedBytes: 512, steps: [] })
+      expect(send).toHaveBeenCalledWith('memory:progress', { step: 1, totalSteps: 2, label: 'gc' })
+    })
+
+    it('returns a safe failure for an invalid sender', async () => {
+      mocks.validateSender.mockReturnValueOnce(false)
       registerCleanerIpc(getWindow)
       const handler = getHandler('memory:optimize')
-      const result = await handler()
-      expect(result).toEqual({ freed: 512 })
+      const result = await handler({})
+      expect(result).toEqual({ success: false, freedBytes: 0, steps: [] })
+      expect(mocks.optimizeMemory).not.toHaveBeenCalled()
     })
   })
 

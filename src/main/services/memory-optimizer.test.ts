@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockExecFile = vi.fn()
 vi.mock('child_process', () => ({ execFile: (...args: unknown[]) => mockExecFile(...args) }))
 
+const mockLogger = { error: vi.fn(), info: vi.fn(), warning: vi.fn() }
+
 vi.mock('./elevation', () => ({ isAdmin: vi.fn() }))
 vi.mock('./exec-utf8', () => ({ psUtf8: (s: string) => s }))
-vi.mock('./logger.service', () => ({ getLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn() })) }))
+vi.mock('./logger.service', () => ({ getLogger: () => mockLogger }))
 
 import { isAdmin } from './elevation'
 import { getMemoryInfo, getMemoryProcesses, optimizeMemory } from './memory-optimizer'
@@ -34,6 +36,24 @@ import * as si from 'systeminformation'
 
 const mockedMem = vi.mocked(si.mem)
 const mockedProcesses = vi.mocked(si.processes)
+
+const MEM = {
+  total: 17179869184,
+  free: 4294967296,
+  used: 12884901888,
+  active: 12000000000,
+  available: 5000000000,
+  buffers: 0,
+  cached: 0,
+  slab: 0,
+  buffcache: 0,
+  swaptotal: 0,
+  swapused: 0,
+  swapfree: 0,
+  reclaimable: 0,
+  writeback: null,
+  dirty: null,
+}
 
 describe('getMemoryInfo', () => {
   beforeEach(() => {
@@ -168,7 +188,11 @@ describe('optimizeMemory', () => {
   })
 
   function captureScripts(): string[] {
-    return mockExecFile.mock.calls.map((call: unknown[]) => (call[1] as string[])[3] ?? '')
+    return mockExecFile.mock.calls.map((call: unknown[]) => {
+      const args = call[1] as string[]
+      const idx = args.indexOf('-Command')
+      return idx >= 0 ? (args[idx + 1] ?? '') : ''
+    })
   }
 
   it('returns 2 steps (gc + workingset)', async () => {
@@ -222,12 +246,8 @@ describe('optimizeMemory', () => {
     const onProgress = vi.fn()
     await optimizeMemory(onProgress)
     expect(onProgress).toHaveBeenCalledTimes(2)
-    expect(onProgress).toHaveBeenNthCalledWith(1, {
-      step: 1,
-      totalSteps: 2,
-      label: 'gc',
-      detail: 'Collecting .NET garbage...',
-    })
+    expect(onProgress).toHaveBeenNthCalledWith(1, { step: 1, totalSteps: 2, label: 'gc' })
+    expect(onProgress).toHaveBeenNthCalledWith(2, { step: 2, totalSteps: 2, label: 'workingset' })
   })
 
   it('step 1 uses .NET GC', async () => {
@@ -342,5 +362,28 @@ describe('optimizeMemory', () => {
     expect(scripts[1]).toContain('SetWorkingSetSize')
     expect(scripts[1]).toContain('[System.Reflection.BindingFlags]')
     expect(scripts[1]).toContain('EmptyWorkingSet')
+  })
+
+  it('runs PowerShell with -ExecutionPolicy Bypass', async () => {
+    mockedIsAdmin.mockReturnValue(false)
+    mockedMem.mockResolvedValue(MEM)
+    mockPsSuccess('')
+    await optimizeMemory()
+    expect(mockExecFile).toHaveBeenCalled()
+    const args = mockExecFile.mock.calls[0]![1] as string[]
+    expect(args).toContain('-ExecutionPolicy')
+    expect(args[args.indexOf('-ExecutionPolicy') + 1]).toBe('Bypass')
+  })
+
+  it('logs when the .NET garbage collection step fails', async () => {
+    mockedIsAdmin.mockReturnValue(false)
+    mockedMem.mockResolvedValue(MEM)
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: (...args: unknown[]) => unknown) => {
+        cb(new Error('boom'), '', '')
+      },
+    )
+    await optimizeMemory()
+    expect(mockLogger.error).toHaveBeenCalledWith('memory', expect.stringContaining('Garbage collection failed'))
   })
 })

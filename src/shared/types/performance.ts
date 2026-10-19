@@ -110,15 +110,14 @@ export interface MemoryOptimizeStep {
 export interface MemoryOptimizeProgress {
   step: number
   totalSteps: number
+  /** Identificador do passo (ex.: `gc`, `workingset`); o renderer traduz. */
   label: string
-  detail: string
 }
 
 export interface MemoryOptimizeResult {
   success: boolean
   freedBytes: number
   steps: MemoryOptimizeStep[]
-  error?: string
 }
 
 export interface BenchmarkResult {

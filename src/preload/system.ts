@@ -429,7 +429,8 @@ export const systemMethods = {
   licenseStatus: (): Promise<LicenseResult> => ipcRenderer.invoke(IPC.LICENSE_STATUS),
   licenseGetHwid: (): Promise<string> => ipcRenderer.invoke(IPC.LICENSE_GET_HWID),
 
-  memoryInfo: (): Promise<{ info: MemoryInfo; processes: MemoryProcess[] }> => ipcRenderer.invoke(IPC.MEMORY_INFO),
+  memoryInfo: (): Promise<{ info: MemoryInfo | null; processes: MemoryProcess[] }> =>
+    ipcRenderer.invoke(IPC.MEMORY_INFO),
   memoryOptimize: (): Promise<MemoryOptimizeResult> => ipcRenderer.invoke(IPC.MEMORY_OPTIMIZE),
   onMemoryProgress: (callback: (data: MemoryOptimizeProgress) => void) => onEvent(IPC.MEMORY_PROGRESS, callback),
 

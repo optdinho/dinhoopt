@@ -1,4 +1,15 @@
-import { CircleCheckBig, CircleX, Cpu, Gauge, Loader2, MemoryStick, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  CircleAlert,
+  CircleCheckBig,
+  CircleX,
+  Cpu,
+  Gauge,
+  Loader2,
+  MemoryStick,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -8,13 +19,21 @@ import { HealthScore } from '@/components/shared/HealthScore'
 import { formatBytes } from '@/lib/utils'
 import { useMemoryStore } from '@/stores/memory-store'
 
+/**
+ * Pontuação de saúde da memória: 100 menos a percentagem usada, com piso de 10
+ * para o medidor nunca mostrar um zero absoluto sem significado.
+ */
+export function getHealthScore(usedPercent: number): number {
+  return Math.max(10, 100 - usedPercent)
+}
+
 export function MemoryOptimizerPage() {
   const { t } = useTranslation('memory')
   const info = useMemoryStore((s) => s.info)
   const processes = useMemoryStore((s) => s.processes)
   const loading = useMemoryStore((s) => s.loading)
   const optimizing = useMemoryStore((s) => s.optimizing)
-  const error = useMemoryStore((s) => s.error)
+  const errorKind = useMemoryStore((s) => s.errorKind)
   const success = useMemoryStore((s) => s.success)
   const progress = useMemoryStore((s) => s.progress)
   const result = useMemoryStore((s) => s.result)
@@ -22,29 +41,46 @@ export function MemoryOptimizerPage() {
   const loadData = useMemoryStore((s) => s.load)
   const handleOptimize = useMemoryStore((s) => s.optimize)
   const clearError = useMemoryStore((s) => s.clearError)
+  const clearSuccess = useMemoryStore((s) => s.clearSuccess)
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  const getHealthScore = (percent: number) => {
-    if (percent < 50) return 100 - percent
-    if (percent < 70) return 100 - percent
-    return Math.max(10, 100 - percent)
-  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
       <PageHeader title={t('pageTitle')} description={t('pageDescription')} />
 
-      {error && <ErrorAlert message={error} onDismiss={clearError} />}
+      {errorKind && (
+        <ErrorAlert message={t(errorKind === 'load' ? 'loadError' : 'optimizeError')} onDismiss={clearError} />
+      )}
 
       {success && (
         <div
           className="flex items-center gap-3 rounded-xl px-5 py-3 text-sm"
-          style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}
+          style={
+            success.partial
+              ? { background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }
+              : { background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }
+          }
         >
-          <CircleCheckBig className="h-5 w-5 shrink-0" />
-          {success}
+          {success.partial ? (
+            <CircleAlert className="h-5 w-5 shrink-0" />
+          ) : (
+            <CircleCheckBig className="h-5 w-5 shrink-0" />
+          )}
+          <span className="flex-1">
+            {t(success.partial ? 'optimizePartial' : 'optimizeSuccess', {
+              mb: (success.freedBytes / 1024 / 1024).toFixed(1),
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={clearSuccess}
+            aria-label={t('dismiss')}
+            className="shrink-0 rounded-lg p-1 transition-opacity hover:opacity-70"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -82,6 +118,12 @@ export function MemoryOptimizerPage() {
                   {t('available')}:
                 </span>
                 <span className="text-xs font-medium text-white">{formatBytes(info.availableBytes)}</span>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                  {t('cached')}:
+                </span>
+                <span className="text-xs font-medium text-white">{formatBytes(info.cachedBytes)}</span>
               </div>
             </div>
 
@@ -139,9 +181,9 @@ export function MemoryOptimizerPage() {
               <div className="mb-3 flex items-center gap-3">
                 <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent)' }} />
                 <div>
-                  <div className="text-sm font-medium text-white">{progress.label}</div>
+                  <div className="text-sm font-medium text-white">{t(`step_${progress.label}`, progress.label)}</div>
                   <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {progress.detail}
+                    {t(`progress_${progress.label}`)}
                   </div>
                 </div>
               </div>
@@ -173,7 +215,7 @@ export function MemoryOptimizerPage() {
                 <tbody>
                   {result.steps.map((s) => (
                     <tr key={`step-${s.name}`} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <td className="px-5 py-3">{t(`step${result.steps.indexOf(s) + 1}`, s.name)}</td>
+                      <td className="px-5 py-3">{t(`step_${s.name}`, s.name)}</td>
                       <td className="px-5 py-3">
                         {s.success ? (
                           <span className="flex items-center gap-1.5 text-green-500">

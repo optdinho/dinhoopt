@@ -60,6 +60,7 @@ import { registerProgramSafetyIpc } from './program-safety.ipc'
 import { registerProgramUninstallerIpc } from './program-uninstaller.ipc'
 import { registerRecycleBinIpc } from './recycle-bin.ipc'
 import { registerRegistryCleanerIpc } from './registry-cleaner.ipc'
+import { validateSender } from './sender-validation'
 import { registerServiceManagerIpc } from './service-manager.ipc'
 import { registerShellIpc } from './shell.ipc'
 import { registerShortcutCleanerIpc } from './shortcut-cleaner.ipc'
@@ -230,12 +231,14 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   })
 
   // Memory Optimizer
-  ipcMain.handle(IPC.MEMORY_INFO, async () => {
+  ipcMain.handle(IPC.MEMORY_INFO, async (event) => {
+    if (!validateSender(event, getWindow())) return { info: null, processes: [] }
     const [info, processes] = await Promise.all([getMemoryInfo(), getMemoryProcesses()])
     return { info, processes }
   })
 
-  ipcMain.handle(IPC.MEMORY_OPTIMIZE, async () => {
+  ipcMain.handle(IPC.MEMORY_OPTIMIZE, async (event) => {
+    if (!validateSender(event, getWindow())) return { success: false, freedBytes: 0, steps: [] }
     const win = getWindow()
     const result = await optimizeMemory((progress: MemoryOptimizeProgress) => {
       if (win && !win.isDestroyed()) {
