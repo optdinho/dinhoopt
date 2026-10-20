@@ -87,6 +87,7 @@ import {
   isEngineCapturing,
   isEngineRunning,
   isPipeConnected,
+  onceEngineStopped,
   readClipsFromDisk,
   resetClipsCache,
   sendPipeCommand,
@@ -185,6 +186,20 @@ async function waitForWrites(cmd: string, from: number, count = 1): Promise<void
       throw new Error(`timed out waiting for ${count} write(s) of "${cmd}" (saw ${writeCount(cmd) - from})`)
     }
     await new Promise((r) => setTimeout(r, 1))
+  }
+}
+
+/**
+ * Item 3 (reqId): uma resposta sem reqId resolve UM pendente do cmd (o mais
+ * antigo), nunca todos. O arranque do engine dispara vários pedidos de config
+ * (on-reconnect + initial + o sync do próprio startClipCapture) e já nenhum
+ * substitui o anterior, por isso os testes têm de responder um a um — é
+ * exactamente o anti-comportamento "superseded" que o item 3 eliminou.
+ */
+function answerPendingConfigs(): void {
+  const n = writeCount('config')
+  for (let i = 0; i < n; i++) {
+    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
   }
 }
 
@@ -504,7 +519,9 @@ describe('getCurrentStatus', () => {
     expect(s.customGameProcess).toBeUndefined()
     expect(s.audioLoopback).toBeUndefined()
     expect(s.audioFallback).toBeUndefined()
-    expect(s.replayBufferBytes).toBeUndefined()
+    // Idle default is 0 and 0 is real data — it must reach the renderer as 0,
+    // not be coerced to `undefined` (the UI would show "—").
+    expect(s.replayBufferBytes).toBe(0)
   })
 
   it('reflects engine state when running', async () => {
@@ -579,6 +596,40 @@ describe('getCurrentStatus', () => {
     const s = getCurrentStatus()
     expect(s.droppedFrames).toBe(7)
     expect(s.gpuBusyDrops).toBe(3)
+  })
+
+  it('passes 0-valued counters through instead of coercing them to undefined', async () => {
+    // Start engine to get pipe handlers set up
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    triggerPipeData(
+      `${JSON.stringify({
+        cmd: '_event',
+        payload: {
+          type: 'engineStatus',
+          droppedFrames: 0,
+          gpuBusyDrops: 0,
+          replayBufferBytes: 0,
+          replayBufferVideoFrames: 0,
+          replayBufferVideoBytes: 0,
+          replayBufferAudioPackets: 0,
+          replayBufferAudioBytes: 0,
+        },
+      })}\n`,
+    )
+    const s = getCurrentStatus()
+    // `0 || undefined` used to turn every 0 into `undefined`; `??` keeps 0,
+    // so the renderer can show "0" instead of "—".
+    expect(s.droppedFrames).toBe(0)
+    expect(s.gpuBusyDrops).toBe(0)
+    expect(s.replayBufferBytes).toBe(0)
+    expect(s.replayBufferVideoFrames).toBe(0)
+    expect(s.replayBufferVideoBytes).toBe(0)
+    expect(s.replayBufferAudioPackets).toBe(0)
+    expect(s.replayBufferAudioBytes).toBe(0)
   })
 
   it('includes machine calibration tier when provided', async () => {
@@ -711,7 +762,11 @@ describe('sendPipeCommand', () => {
     await startEngine()
 
     const promise = sendPipeCommand('hello', { key: 'val' })
-    expect(mockSocket.write).toHaveBeenCalledWith('{"v":1,"cmd":"hello","payload":{"key":"val"}}\n')
+    // Item 3: o envelope ganhou reqId — o resto do formato é exactamente o mesmo.
+    const written = JSON.parse(String(mockSocket.write.mock.calls.at(-1)?.[0])) as Record<string, unknown>
+    expect(written).toMatchObject({ v: 1, cmd: 'hello', payload: { key: 'val' } })
+    expect(typeof written.reqId).toBe('string')
+    expect(String(written.reqId).length).toBeGreaterThan(0)
 
     // Resolve the pending request
     triggerPipeData(`{"cmd":"hello","payload":{"ok":true}}\n`)
@@ -726,7 +781,10 @@ describe('sendPipeCommand', () => {
     await startEngine()
 
     const promise = sendPipeCommand('noop')
-    expect(mockSocket.write).toHaveBeenCalledWith('{"v":1,"cmd":"noop"}\n')
+    const written = JSON.parse(String(mockSocket.write.mock.calls.at(-1)?.[0])) as Record<string, unknown>
+    expect(written).toMatchObject({ v: 1, cmd: 'noop' })
+    expect(written.payload).toBeUndefined()
+    expect(typeof written.reqId).toBe('string')
     triggerPipeData(`{"cmd":"noop"}\n`)
     await promise
   })
@@ -757,21 +815,24 @@ describe('sendPipeCommand', () => {
     await expect(sendPipeCommand('test')).rejects.toThrow('string error')
   })
 
-  it('replaces existing pending request for same command', async () => {
+  it('keeps two same-cmd requests in flight (the old "supersede" orphaned the first)', async () => {
     const child = makeMockChild()
     vi.mocked(spawn).mockReturnValue(child as never)
     vi.mocked(existsSync).mockReturnValue(true)
     await startEngine()
 
-    // First pending for 'test'
-    sendPipeCommand('test').catch(() => {})
-    // Second pending replaces the first
+    // Item 3: cada pedido tem o seu próprio reqId — o 2.º NÃO substitui o 1.º.
+    const p1 = sendPipeCommand('test')
     const p2 = sendPipeCommand('test')
 
-    triggerPipeData(`{"cmd":"test","payload":"final"}\n`)
-    const result = await p2
-    expect(result.payload).toBe('final')
-    // p1 was orphaned (timer cleared, removed from map) — expected behavior
+    // Resposta legada sem reqId: resolve o pendente mais antigo (FIFO do cmd).
+    triggerPipeData(`{"cmd":"test","payload":"first"}\n`)
+    expect((await p1).payload).toBe('first')
+
+    // O segundo continua vivo e resolve-se pela sua própria resposta — antes,
+    // o 2.º pedido limpava o pendente do 1.º e p1 ficava órfão para sempre.
+    triggerPipeData(`{"cmd":"test","payload":"second"}\n`)
+    expect((await p2).payload).toBe('second')
   })
 })
 
@@ -1334,12 +1395,12 @@ describe('startClipCapture', () => {
     )
 
     const promise = startClipCapture()
-    // startClipCapture syncs config first — respond to that
-    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
-    // Flush microtasks so startClipCapture proceeds past the config await
-    await new Promise((r) => setTimeout(r, 0))
+    // startClipCapture syncs config first — respond to every pending config
+    // (on-reconnect + initial + this sync): one reply settles exactly one request
+    await waitForWrites('config', 0, 3)
+    answerPendingConfigs()
     // Now startCapture is sent
-    expect(mockSocket.write).toHaveBeenCalledWith(expect.stringContaining('startCapture'))
+    await waitForWrites('startCapture', 0, 1)
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
     expect(result).toEqual({ success: true })
@@ -1352,8 +1413,9 @@ describe('startClipCapture', () => {
     await startEngine()
 
     const promise = startClipCapture()
-    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
-    await new Promise((r) => setTimeout(r, 0))
+    await waitForWrites('config', 0, 3)
+    answerPendingConfigs()
+    await waitForWrites('startCapture', 0, 1)
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
     expect(result).toEqual({ success: true })
@@ -1366,8 +1428,9 @@ describe('startClipCapture', () => {
     await startEngine()
 
     const promise = startClipCapture()
-    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
-    await new Promise((r) => setTimeout(r, 0))
+    await waitForWrites('config', 0, 3)
+    answerPendingConfigs()
+    await waitForWrites('startCapture', 0, 1)
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":false,"error":"denied"}}\n`)
     const result = await promise
     expect(result).toEqual({ success: false, error: 'denied' })
@@ -1388,9 +1451,9 @@ describe('startClipCapture', () => {
     )
 
     const promise = startClipCapture()
-    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
-    await new Promise((r) => setTimeout(r, 0))
-    expect(mockSocket.write).toHaveBeenCalledWith(expect.stringContaining('startCapture'))
+    await waitForWrites('config', 0, 3)
+    answerPendingConfigs()
+    await waitForWrites('startCapture', 0, 1)
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
     const result = await promise
     expect(result).toEqual({ success: true })
@@ -1462,8 +1525,10 @@ describe('ensureClipCaptureStarted', () => {
     vi.mocked(existsSync).mockReturnValue(true)
 
     const promise = ensureClipCaptureStarted({ retryDelayMs: 0 })
-    await waitForWrites('config', 0, 1)
-    triggerPipeData(`{"cmd":"config","payload":{"success":true}}\n`)
+    // on-reconnect + initial + startClipCapture's own sync — three config
+    // requests, and each reply only settles the oldest one (item 3)
+    await waitForWrites('config', 0, 3)
+    answerPendingConfigs()
     await waitForWrites('startCapture', 0, 1)
     triggerPipeData(`{"cmd":"startCapture","payload":{"success":true}}\n`)
 
@@ -1492,6 +1557,11 @@ describe('ensureClipCaptureStarted', () => {
     vi.mocked(spawn).mockReturnValue(child as never)
     vi.mocked(existsSync).mockReturnValue(true)
     await startEngine()
+    // startEngine fires its own config syncs (on-reconnect + initial) and they
+    // are still pending — drain them so the loop's single reply below matches
+    // the config it just waited for instead of settling a stale one.
+    await waitForWrites('config', 0, 2)
+    answerPendingConfigs()
     const cfgBase = writeCount('config')
 
     const promise = ensureClipCaptureStarted({ attempts: 3, retryDelayMs: 0 })
@@ -1516,6 +1586,9 @@ describe('ensureClipCaptureStarted', () => {
     vi.mocked(spawn).mockReturnValue(child as never)
     vi.mocked(existsSync).mockReturnValue(true)
     await startEngine()
+    // Drain startEngine's own config syncs (see the retry test above).
+    await waitForWrites('config', 0, 2)
+    answerPendingConfigs()
     const cfgBase = writeCount('config')
 
     const promise = ensureClipCaptureStarted({ attempts: 2, retryDelayMs: 0 })
@@ -1645,6 +1718,92 @@ describe('stopEngineProcess', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// ─── onceEngineStopped (Item 4) ────────────────────────────
+describe('onceEngineStopped', () => {
+  it('fires the listener when stopEngineProcess is called', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    const listener = vi.fn()
+    onceEngineStopped(listener)
+    stopEngineProcess()
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('fires all registered listeners', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    const first = vi.fn()
+    const second = vi.fn()
+    onceEngineStopped(first)
+    onceEngineStopped(second)
+    stopEngineProcess()
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fire a listener that was unsubscribed', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    const listener = vi.fn()
+    const unsubscribe = onceEngineStopped(listener)
+    unsubscribe()
+    stopEngineProcess()
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('does not fire on pipe disconnect alone (engine still running)', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    const listener = vi.fn()
+    onceEngineStopped(listener)
+    disconnectPipe()
+    expect(listener).not.toHaveBeenCalled()
+    expect(isEngineRunning()).toBe(true)
+  })
+
+  it('keeps firing remaining listeners when one throws', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    const throwing = vi.fn(() => {
+      throw new Error('listener boom')
+    })
+    const survivor = vi.fn()
+    onceEngineStopped(throwing)
+    onceEngineStopped(survivor)
+    expect(() => stopEngineProcess()).not.toThrow()
+    expect(throwing).toHaveBeenCalledTimes(1)
+    expect(survivor).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fire a listener twice for the same stop', async () => {
+    const child = makeMockChild()
+    vi.mocked(spawn).mockReturnValue(child as never)
+    vi.mocked(existsSync).mockReturnValue(true)
+    await startEngine()
+
+    const listener = vi.fn()
+    onceEngineStopped(listener)
+    stopEngineProcess()
+    stopEngineProcess()
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -2019,9 +2178,17 @@ describe('handshake', () => {
 
   it('sends handshake with protoVersion on connect', async () => {
     await startEngine()
-    expect(mockSocket.write).toHaveBeenCalledWith(
-      `${JSON.stringify({ v: 1, cmd: 'handshake', payload: { protoVersion: 1 } })}\n`,
-    )
+    // Item 3: o handshake também envia reqId (o eco do engine permite casar o ack).
+    // O startEngine também escreve configs, por isso localiza-se a linha do
+    // handshake em vez de assumir que é a última escrita.
+    const handshakeLine = mockSocket.write.mock.calls
+      .map((c) => String(c[0]))
+      .find((l) => l.includes('"cmd":"handshake"'))
+    expect(handshakeLine).toBeDefined()
+    const written = JSON.parse(handshakeLine as string) as Record<string, unknown>
+    expect(written).toMatchObject({ v: 1, cmd: 'handshake', payload: { protoVersion: 1 } })
+    expect(typeof written.reqId).toBe('string')
+    expect(String(written.reqId).length).toBeGreaterThan(0)
   })
 
   it('ok ack unlocks subsequent commands', async () => {

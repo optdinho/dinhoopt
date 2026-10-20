@@ -370,7 +370,13 @@ private async Task HandleClientAsync(NamedPipeServerStream server, bool slotHeld
                 // status efêmero sempre fresco sem consumo ilimitado.
                 EnqueueBounded(broadcastQueue, JsonSerializer.Serialize(msg.ToEnvelope()), MaxBroadcastQueueSize);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Item 19: aqui falham serializer/enqueue — sem log, o cliente nunca
+                // recebia status e ninguém sabia porquê. A fila tem cap por desenho
+                // (drop-oldest); este catch é para erro REAL de serialização.
+                Log.W("NamedPipeServer", $"Falha ao enfileirar broadcast de status: {ex.Message}");
+            }
         });
         OnStatusBroadcast += onStatus;
 

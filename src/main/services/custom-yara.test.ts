@@ -4,13 +4,29 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let currentTmpDir = ''
+let electronIsPackaged = false
 
 vi.mock('electron', () => ({
   app: {
     getPath: () => currentTmpDir,
-    isPackaged: false,
+    get isPackaged() {
+      return electronIsPackaged
+    },
   },
 }))
+
+/**
+ * The rules directory is resolved from `app.getPath('userData')`, which in an
+ * unpackaged dev run points at the same folder the installed app uses. Without
+ * a dev suffix, dev and the installed build share one rule set, so a rule added
+ * in dev would be loaded by production malware scans (and vice versa). These
+ * tests pin the isolation the same way `store-base` does it.
+ */
+function expectedRulesDir(): string {
+  return electronIsPackaged
+    ? join(currentTmpDir, 'custom-yara-rules')
+    : join(currentTmpDir, 'DiNho-Dev', 'custom-yara-rules')
+}
 
 vi.mock('./logger.service', () => ({
   getLogger: () => ({
@@ -29,6 +45,7 @@ async function getCustomYaraService(): Promise<typeof import('./custom-yara.serv
 describe('CustomYaraService', () => {
   beforeEach(() => {
     currentTmpDir = join(tmpdir(), 'tmp-test-custom-yara')
+    electronIsPackaged = false
     if (!existsSync(currentTmpDir)) {
       mkdirSync(currentTmpDir, { recursive: true })
     }
@@ -39,6 +56,11 @@ describe('CustomYaraService', () => {
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true })
     }
+    const devTestDir = join(currentTmpDir, 'DiNho-Dev', 'custom-yara-rules')
+    if (existsSync(devTestDir)) {
+      rmSync(devTestDir, { recursive: true, force: true })
+    }
+    electronIsPackaged = false
   })
 
   it('addRule creates file in rules directory', async () => {
@@ -123,13 +145,45 @@ describe('CustomYaraService', () => {
   })
 
   it('Constructor creates directory if not exists', async () => {
-    const customYaraPath = join(currentTmpDir, 'custom-yara-rules')
+    const customYaraPath = join(currentTmpDir, 'DiNho-Dev', 'custom-yara-rules')
     if (existsSync(customYaraPath)) {
       rmSync(customYaraPath, { recursive: true, force: true })
     }
     expect(existsSync(customYaraPath)).toBe(false)
     ;new (await import('./custom-yara.service')).CustomYaraService()
     expect(existsSync(customYaraPath)).toBe(true)
+  })
+
+  describe('dev isolation', () => {
+    it('in dev, keeps rules under the DiNho-Dev suffix (never the production folder)', async () => {
+      const { customYaraService: service } = await getCustomYaraService()
+      expect(service.getRulesDir()).toBe(expectedRulesDir())
+      expect(service.getRulesDir()).not.toBe(join(currentTmpDir, 'custom-yara-rules'))
+    })
+
+    it('in a packaged build, uses userData directly (no dev suffix)', async () => {
+      electronIsPackaged = true
+      ;new (await import('./custom-yara.service')).CustomYaraService()
+      const { CustomYaraService } = await import('./custom-yara.service')
+      const packaged = new CustomYaraService()
+      expect(packaged.getRulesDir()).toBe(expectedRulesDir())
+      expect(packaged.getRulesDir()).toBe(join(currentTmpDir, 'custom-yara-rules'))
+    })
+
+    it('a rule added in dev is not visible to a packaged build with the same userData', async () => {
+      const { customYaraService: devService } = await getCustomYaraService()
+      devService.addRule('dev-only.yar', 'rule DevOnly { condition: true }')
+      expect(devService.getRuleCount()).toBe(1)
+
+      // Simulate the installed build reading the same userData root.
+      electronIsPackaged = true
+      const productionDir = join(currentTmpDir, 'custom-yara-rules')
+      const productionFiles = existsSync(productionDir)
+        ? readdirSync(productionDir).filter((f) => f.endsWith('.yar') || f.endsWith('.yara'))
+        : []
+      expect(productionFiles).toEqual([])
+      electronIsPackaged = false
+    })
   })
 
   it('addRule appends .yar extension if missing', async () => {

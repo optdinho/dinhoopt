@@ -10,7 +10,13 @@ export class CustomYaraService {
   private customRulesDir: string
 
   constructor() {
-    this.customRulesDir = join(app.getPath('userData'), 'custom-yara-rules')
+    // Custom rules live beside the rest of the per-install state. In an
+    // unpackaged dev run that means the `DiNho-Dev` suffix, matching
+    // `createJsonStore`, so rules added while developing are never loaded by
+    // an installed build (and vice versa) — they are attacker-supplied
+    // detection rules, so sharing them between installs is not acceptable.
+    const base = app.isPackaged ? app.getPath('userData') : join(app.getPath('userData'), 'DiNho-Dev')
+    this.customRulesDir = join(base, 'custom-yara-rules')
     this.ensureDir()
   }
 

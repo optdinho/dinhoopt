@@ -731,9 +731,10 @@ Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
     [Fact]
     public void TrimNonAdtsPrefix_Empty_ReturnsEmpty()
     {
-        var result = ClipExporter.TrimNonAdtsPrefix(new List<EncodedPacket>());
+        var result = ClipExporter.TrimNonAdtsPrefix(new List<EncodedPacket>(), out var discarded);
         Assert.NotNull(result);
         Assert.Empty(result);
+        Assert.Equal(0, discarded);
     }
 
     [Fact]
@@ -745,9 +746,10 @@ Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
             MakeAdtsAudio(2),
             MakeAdtsAudio(3)
         };
-        var result = ClipExporter.TrimNonAdtsPrefix(audio);
+        var result = ClipExporter.TrimNonAdtsPrefix(audio, out var discarded);
         Assert.Equal(3, result.Count);
         Assert.Equal(1.0, result[0].Pts.TotalSeconds, 3);
+        Assert.Equal(0, discarded);
     }
 
     [Fact]
@@ -762,12 +764,13 @@ Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
             MakeAdtsAudio(1),
             MakeAdtsAudio(2)
         };
-        var result = ClipExporter.TrimNonAdtsPrefix(audio);
+        var result = ClipExporter.TrimNonAdtsPrefix(audio, out var discarded);
         Assert.Equal(2, result.Count);
         Assert.Equal(1.0, result[0].Pts.TotalSeconds, 3);
         Assert.Equal(2.0, result[1].Pts.TotalSeconds, 3);
         // Original untouched
         Assert.Equal(3, audio.Count);
+        Assert.Equal(1, discarded);
     }
 
     [Fact]
@@ -778,8 +781,10 @@ Assert.Equal(1.0, audio[0].Pts.TotalSeconds, 3);
             new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.Zero, TimeSpan.FromMilliseconds(21), false),
             new(Array.Empty<byte>(), MediaType.Audio, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(21), false)
         };
-        var result = ClipExporter.TrimNonAdtsPrefix(audio);
+        var result = ClipExporter.TrimNonAdtsPrefix(audio, out var discarded);
         Assert.Empty(result);
+        // Item 22: o descarte total é contabilizado (era 0/sem sinal antes).
+        Assert.Equal(2, discarded);
     }
 
     // ── GenerateThumbnail ──

@@ -6,10 +6,32 @@ export type ClipsCaptureMode = 'game' | 'window' | 'desktop'
 /**
  * Ações de atalho. `screenshot` substituiu `toggleCapture` na UI (o atalho de "captura"
  * passa a tirar um printscreen do jogo); `toggleCapture`/`pushToTalk` continuam válidos
- * no tipo por compatibilidade com configurações antigas e com o motor (que os ignora ou
- * mantém), mas já não são oferecidos na interface.
+ * no tipo só por compatibilidade com configurações antigas — `migrateHotkeys` converte
+ * ambos nos caminhos de escrita (load e `CLIPS_SET_CONFIG`), por isso nenhum caminho
+ * de leitura (UI/engine) os vê — mas já não são oferecidos na interface.
+ *
+ * NÃO remover os membros: `migrateHotkeys` compara `hk.action === 'toggleCapture'` /
+ * `'pushToTalk'` (o literal tem de estar na união) e os configs guardados em disco são
+ * tipados como `HotkeyBinding[]` no load.
  */
-export type HotkeyAction = 'saveClip' | 'toggleCapture' | 'toggleMic' | 'pushToTalk' | 'screenshot'
+export type HotkeyAction =
+  | 'saveClip'
+  /**
+   * @deprecated Migrado para `screenshot` em todos os caminhos de escrita (ver
+   * `migrateHotkeys` em `src/main/services/clips-config-manager.ts`); a UI já não
+   * oferece este atalho. Mantido no tipo só por compatibilidade com configs antigas.
+   */
+  | 'toggleCapture'
+  | 'toggleMic'
+  /**
+   * @deprecated Nunca existiu no enum C# `HotkeyAction` (`Hotkeys/HotkeyManager.cs`)
+   * e o `<select>` de acção em `ClipsConfigGame.tsx` deixou de o oferecer (item 2b).
+   * Migrado para `toggleMic` (PTT controlava o microfone) por `migrateHotkeys` no
+   * load e no `CLIPS_SET_CONFIG`. Mantido no tipo só por compatibilidade com configs
+   * guardadas antigas.
+   */
+  | 'pushToTalk'
+  | 'screenshot'
 export type HotkeyModifier = 'Ctrl' | 'Shift' | 'Alt'
 export type PushToTalkMode = 'off' | 'hold' | 'toggle'
 
@@ -96,17 +118,17 @@ export interface ClipsConfig {
   width: number
   height: number
   bitrateKbps: number
-  /** CRF value for NVENC/AV1 (0-51, lower = better, default 24) */
+  /** Quality value — CQ for NVENC/AV1, CRF for x264/x265 (0-51, lower = better, default 20) */
   cq: number
-  /** VBV max bitrate in Kbps (default 50000 = 50Mbps) */
+  /** VBV max bitrate in Kbps (default 30000 = 30Mbps) */
   maxrateKbps: number
-  /** VBV buffer size in Kbps (default 100000 = 100Mbps) */
+  /** VBV buffer size in Kbps (default 60000 = 60Mbps) */
   bufsizeKbps: number
-  /** Number of B-frames (0-16, default 2) */
+  /** Number of B-frames (0-16, default 3) */
   bframes: number
-  /** RC lookahead frames (0-256, default 4) */
+  /** RC lookahead frames (0-256, default 16) */
   lookahead: number
-  /** NVENC preset (p4, p5, etc., default p4) */
+  /** NVENC preset (p4, p5, etc., default p5) */
   encoderPreset: string
   /** Codec preference: auto | h264 | hevc | av1 | libx264 | libx265 */
   codec?: string
@@ -133,7 +155,7 @@ export interface ClipsConfig {
   audioSampleRate?: number
   /** AutoCleanup: remove clips antigos quando o disco está cheio */
   autoCleanupEnabled: boolean
-  /** Limite em GB de espaço total que o usuário quer usar para clips (default 20) */
+  /** Limite em GB de espaço total que o usuário quer usar para clips (default 100) */
   autoCleanupThresholdGB: number
   /** RNNoise/anlmdn noise suppression on microphone */
   noiseSuppression?: boolean

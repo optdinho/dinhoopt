@@ -1,4 +1,5 @@
 import type { HotkeyBinding } from '@shared/types'
+import { defaultHotkeys } from './clips-default-hotkeys'
 import { createJsonStore } from './store-base'
 
 interface ClipsPersistedConfig {
@@ -60,32 +61,7 @@ const DEFAULTS: ClipsPersistedConfig = {
   adapterIndex: -1,
   outputDirectory: '',
   forceSoftware: false,
-  hotkeys: [
-    {
-      id: 'hk-save-8',
-      vk: 123,
-      modifiers: [],
-      action: 'saveClip',
-      replayDurationSeconds: 300,
-      enabled: true,
-    },
-    {
-      id: 'hk-1782208376874',
-      vk: 122,
-      modifiers: [],
-      action: 'saveClip',
-      replayDurationSeconds: 120,
-      enabled: true,
-    },
-    {
-      id: 'hk-1782222941097',
-      vk: 49,
-      modifiers: ['Alt'],
-      action: 'screenshot',
-      replayDurationSeconds: 60,
-      enabled: true,
-    },
-  ],
+  hotkeys: defaultHotkeys(),
   pushToTalk: 'hold',
   pushToTalkKeys: [5, 20],
   gameDetection: true,

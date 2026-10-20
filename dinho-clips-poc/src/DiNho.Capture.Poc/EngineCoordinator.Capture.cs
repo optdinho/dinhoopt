@@ -1465,7 +1465,12 @@ public sealed partial class EngineCoordinator
         if (task != null)
         {
             try { await task.WaitAsync(TimeSpan.FromSeconds(2)); }
-            catch { }
+            // Item 19: timeout = o loop NÃO saiu em 2s → pipeline travado a meio de
+            // uma iteração (ffmpeg/pipe bloqueado); era invisível com catch vazio.
+            // A TaskCanceledException do cts.Cancel() acima é o caminho ESPERADO e
+            // continua silenciosa. Nenhuma exceção é rejeitada (fluxo inalterado).
+            catch (TimeoutException ex) { Log.W("EngineCoordinator", $"Pipeline loop não saiu em 2s após cancel (watchdog reinit): {ex.Message}"); }
+            catch { /* esperado: TaskCanceledException do cancel acima; segue para reinit */ }
         }
 
         lock (_pipelineLock)

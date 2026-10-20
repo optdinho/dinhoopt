@@ -916,6 +916,46 @@ describe('useClipsActions', () => {
       cleanup()
     })
 
+    it('Escape cancels rebinding without assigning vk 27', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
+      const hk: HotkeyBinding = {
+        id: 'hk-1',
+        vk: 0x50,
+        modifiers: [],
+        action: 'saveClip',
+        replayDurationSeconds: 60,
+        enabled: true,
+      }
+      const deps = getDeps(makeDeps({ config: makeConfig({ hotkeys: [hk] }) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+      const cleanup = result.current.setupRebindingListeners('hk-1')
+      try {
+        dispatchKey({ key: 'Escape', keyCode: 27 })
+
+        expect(dinho.clipsSetConfig).not.toHaveBeenCalled()
+        expect(deps.setRebindingId).toHaveBeenCalledWith(null)
+      } finally {
+        cleanup()
+      }
+    })
+
+    it('Escape cancels a push-to-talk rebind without adding key 27', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
+      const deps = getDeps(makeDeps({ config: makeConfig({ pushToTalkKeys: [0x14] }) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+      const cleanup = result.current.setupRebindingListeners('hk-ptt')
+      try {
+        dispatchKey({ key: 'Escape', keyCode: 27 })
+
+        expect(dinho.clipsSetConfig).not.toHaveBeenCalled()
+        expect(deps.setRebindingId).toHaveBeenCalledWith(null)
+      } finally {
+        cleanup()
+      }
+    })
+
     it('rebinds from a mouse button press', async () => {
       const dinho = mockDinho()
       dinho.clipsSetConfig.mockResolvedValue({ success: true })

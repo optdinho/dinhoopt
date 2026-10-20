@@ -1,6 +1,7 @@
 import type { ClipsConfig, HotkeyBinding } from '@shared/types'
 import { useCallback } from 'react'
 import { toast } from 'sonner'
+import logger from '@/lib/renderer-logger'
 import { MODIFIER_KEYS } from './clips-utils'
 
 interface ClipsActionDeps {
@@ -23,6 +24,50 @@ interface ClipsActionDeps {
   refreshStatus: () => Promise<void>
   setSelectedClips: React.Dispatch<React.SetStateAction<Set<string>>>
   t: (key: string) => string
+}
+
+/**
+ * Tenta iniciar a captura até `maxAttempts` vezes, esperando `delayMs` entre tentativas.
+ * Devolve o último resultado obtido (sucesso ou falha).
+ */
+async function startCaptureWithRetry(
+  startCapture: () => Promise<{ success?: boolean; error?: string } | undefined>,
+  maxAttempts = 3,
+  delayMs = 2000,
+): Promise<{ success?: boolean; error?: string } | undefined> {
+  let result = await startCapture()
+  for (let attempt = 1; attempt < maxAttempts && !result?.success; attempt++) {
+    await new Promise((r) => setTimeout(r, delayMs))
+    result = await startCapture()
+  }
+  return result
+}
+
+/**
+ * Patch de config para o rebind em curso: `hk-ptt` acrescenta a pushToTalkKeys
+ * (sem duplicados); os restantes ids atualizam vk/modificadores do hotkey com o
+ * mesmo id. Devolve `null` quando não há nada a mudar (PTT já contém a tecla).
+ */
+function computeRebindPatch(
+  config: ClipsConfig,
+  rebindingId: string,
+  vk: number,
+  modifiers: HotkeyBinding['modifiers'],
+): Partial<ClipsConfig> | null {
+  if (rebindingId === 'hk-ptt') {
+    if (config.pushToTalkKeys.includes(vk)) return null
+    return { pushToTalkKeys: [...config.pushToTalkKeys, vk] }
+  }
+  return { hotkeys: config.hotkeys.map((h) => (h.id === rebindingId ? { ...h, vk, modifiers } : h)) }
+}
+
+/** Modificadores premissados (Ctrl/Shift/Alt) de um evento de teclado ou rato. */
+function modifiersFromEvent(e: { ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): HotkeyBinding['modifiers'] {
+  const modifiers: HotkeyBinding['modifiers'] = []
+  if (e.ctrlKey) modifiers.push('Ctrl')
+  if (e.shiftKey) modifiers.push('Shift')
+  if (e.altKey) modifiers.push('Alt')
+  return modifiers
 }
 
 export function useClipsActions(deps: ClipsActionDeps) {
@@ -55,12 +100,14 @@ export function useClipsActions(deps: ClipsActionDeps) {
         const result = await window.dinho?.clipsSetConfig(partial)
         if (result && result.success === false) {
           toast.error(result.error || t('configSyncFailed'))
+          logger.error('clips', 'Config sync rejected by engine', result.error)
           await refreshConfig()
           return
         }
         await refreshConfig()
-      } catch {
+      } catch (err) {
         toast.error(t('configSyncFailed'))
+        logger.error('clips', 'Config sync threw', err)
         await refreshConfig()
       }
     },
@@ -78,15 +125,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
         }
       }
 
-      let captureResult = await window.dinho?.clipsStartCapture()
-      if (!captureResult?.success) {
-        await new Promise((r) => setTimeout(r, 2000))
-        captureResult = await window.dinho?.clipsStartCapture()
-      }
-      if (!captureResult?.success) {
-        await new Promise((r) => setTimeout(r, 2000))
-        captureResult = await window.dinho?.clipsStartCapture()
-      }
+      const captureResult = await startCaptureWithRetry(() => window.dinho?.clipsStartCapture())
 
       if (captureResult?.success) {
         toast.success(t('recordingStarted'))
@@ -96,6 +135,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
       }
     } catch (err) {
       toast.error(String(err))
+      logger.error('clips', 'Failed to start recording', err)
     } finally {
       setStarting(false)
     }
@@ -158,8 +198,8 @@ export function useClipsActions(deps: ClipsActionDeps) {
     for (const name of names) {
       try {
         await window.dinho?.clipsDelete(name)
-      } catch {
-        /* ignore */
+      } catch (err) {
+        logger.error('clips', `Delete of "${name}" failed — continuing with the rest`, err)
       }
     }
     setSelectedClips(new Set())
@@ -187,8 +227,8 @@ export function useClipsActions(deps: ClipsActionDeps) {
   const handleOpenClip = useCallback(async (path: string) => {
     try {
       await window.dinho?.clipsOpen(path)
-    } catch {
-      /* ignore */
+    } catch (err) {
+      logger.error('clips', `Failed to open clip "${path}"`, err)
     }
   }, [])
 
@@ -308,46 +348,28 @@ export function useClipsActions(deps: ClipsActionDeps) {
   const setupRebindingListeners = useCallback(
     (rebindingId: string | null) => {
       if (!rebindingId || !config) return () => {}
+      const commitRebind = (vk: number, modifiers: HotkeyBinding['modifiers']) => {
+        const patch = computeRebindPatch(config, rebindingId, vk, modifiers)
+        if (patch) handleConfigUpdate(patch)
+        setRebindingId(null)
+      }
       const keyHandler = (e: KeyboardEvent) => {
         e.preventDefault()
         e.stopPropagation()
         if (MODIFIER_KEYS.has(e.keyCode)) return
-        if (rebindingId === 'hk-ptt') {
-          const keys = config.pushToTalkKeys
-          if (!keys.includes(e.keyCode)) {
-            handleConfigUpdate({ pushToTalkKeys: [...keys, e.keyCode] })
-          }
+        // Escape cancels the rebind without assigning itself as the hotkey.
+        if (e.key === 'Escape' || e.keyCode === 27) {
           setRebindingId(null)
           return
         }
-        const modifiers: HotkeyBinding['modifiers'] = []
-        if (e.ctrlKey) modifiers.push('Ctrl')
-        if (e.shiftKey) modifiers.push('Shift')
-        if (e.altKey) modifiers.push('Alt')
-        const updated = config.hotkeys.map((h) => (h.id === rebindingId ? { ...h, vk: e.keyCode, modifiers } : h))
-        handleConfigUpdate({ hotkeys: updated })
-        setRebindingId(null)
+        commitRebind(e.keyCode, modifiersFromEvent(e))
       }
       const mouseHandler = (e: MouseEvent) => {
         const vk = e.button === 3 ? 0x05 : e.button === 4 ? 0x06 : null
         if (vk === null) return
         e.preventDefault()
         e.stopPropagation()
-        if (rebindingId === 'hk-ptt') {
-          const keys = config.pushToTalkKeys
-          if (!keys.includes(vk)) {
-            handleConfigUpdate({ pushToTalkKeys: [...keys, vk] })
-          }
-          setRebindingId(null)
-          return
-        }
-        const modifiers: HotkeyBinding['modifiers'] = []
-        if (e.ctrlKey) modifiers.push('Ctrl')
-        if (e.shiftKey) modifiers.push('Shift')
-        if (e.altKey) modifiers.push('Alt')
-        const updated = config.hotkeys.map((h) => (h.id === rebindingId ? { ...h, vk, modifiers } : h))
-        handleConfigUpdate({ hotkeys: updated })
-        setRebindingId(null)
+        commitRebind(vk, modifiersFromEvent(e))
       }
       window.addEventListener('keydown', keyHandler, true)
       window.addEventListener('mousedown', mouseHandler, true)
@@ -390,6 +412,7 @@ export function formatClipsDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString()
   } catch {
+    logger.warn('clips', `formatClipsDate fell back to raw ISO for invalid date: ${iso}`)
     return iso
   }
 }

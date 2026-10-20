@@ -1255,6 +1255,55 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
         Assert.False(GetField<bool>(coord, "_needsReinit"));
     }
 
+    /// <summary>
+    /// Item 19 (auditoria de catch vazios): um clip que NÃO pode ser apagado no
+    /// auto-cleanup (bloqueado por player/antivírus) era invisível — o catch vazio
+    /// escondia porquê o limite de disco não descia. Agora cada falha de
+    /// <c>File.Delete</c> gera <c>Log.W</c> com o nome do ficheiro, e o resto da
+    /// limpeza continua (fluxo inalterado).
+    /// </summary>
+    [Fact]
+    public void RunAutoCleanup_UndeletableClip_LogsWarningAndContinues()
+    {
+        var outDir = Path.Combine(Path.GetTempPath(), "cleanup_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outDir);
+        var lockedPath = Path.Combine(outDir, "locked.mp4");
+        var freePath = Path.Combine(outDir, "free.mp4");
+        File.WriteAllBytes(lockedPath, new byte[1024]);
+        File.WriteAllBytes(freePath, new byte[1024]);
+
+        var coord = CreateWithMinimalDeps(cfg =>
+        {
+            cfg.AutoCleanupEnabled = true;
+            cfg.AutoCleanupThresholdGB = 0; // 0 GB de limite → a limpeza apaga tudo
+            cfg.OutputDirectory = outDir;
+        });
+
+        var logger = new RecordingLogger();
+        var original = InstallLogger(logger);
+        try
+        {
+            using (new FileStream(lockedPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var method = CoordinatorType.GetMethod("RunAutoCleanup",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                method.Invoke(coord, null);
+            }
+
+            Assert.True(File.Exists(lockedPath), "clip bloqueado não deveria ser removido");
+            Assert.False(File.Exists(freePath), "clip não-bloqueado deveria ser removido");
+            Assert.Contains(logger.Entries,
+                e => e.Level == LogLevel.Warning && e.Message.Contains("locked.mp4"));
+        }
+        finally
+        {
+            Log.Instance = original;
+            try { File.Delete(lockedPath); } catch { }
+            try { File.Delete(freePath); } catch { }
+            try { Directory.Delete(outDir); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(25)]

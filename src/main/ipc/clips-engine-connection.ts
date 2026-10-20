@@ -13,6 +13,7 @@ import {
   isEngineRunning as _isEngineRunning,
   setEngineCapturing as _setEngineCapturing,
   startEngine as _startEngine,
+  stopEngineProcess as _stopEngineProcess,
   initEnginePipeIntegration,
   readEngineStatus,
   registerGetCurrentStatus,
@@ -41,9 +42,54 @@ export {
   readEngineStatus,
   setEngineCapturing,
   startEngine,
-  stopEngineProcess,
 } from './clips-engine'
-export { isPipeConnected, sendPipeCommand, sendPipeCommandLongRunning, sendWithFallback } from './clips-pipe'
+export {
+  isPipeConnected,
+  sendPipeCommand,
+  sendPipeCommandLongRunning,
+  sendWithFallback,
+  waitForPipeConnected,
+} from './clips-pipe'
+
+// ─── Engine-stop notification (Item 4) ─────────────────────────
+
+const _engineStopListeners = new Set<() => void>()
+
+/**
+ * Regista um listener que corre quando `stopEngineProcess` é chamado
+ * (paragem explícita do engine: stop do utilizador, fim da app,
+ * auto-session do game-mode). Devolve a função de unsubscribe.
+ *
+ * Nota (Item 4): uma queda NATURAL do processo (crash/exit sem passar por
+ * `stopEngineProcess`) não é observável a partir daqui — nesse caso quem
+ * espera por ligação apercebe-se no `isEngineRunning()` final, sem polling.
+ * Um listener que lança exceção não interrompe os restantes.
+ */
+export function onceEngineStopped(listener: () => void): () => void {
+  _engineStopListeners.add(listener)
+  return () => {
+    _engineStopListeners.delete(listener)
+  }
+}
+
+/**
+ * Envolvente do `stopEngineProcess` do engine: executa a paragem real e
+ * depois notifica os listeners registados via `onceEngineStopped`.
+ * Notificação uma só vez por paragem (a lista é limpa antes de correr),
+ * por isso um segundo `stopEngineProcess` não volta a disparar nada.
+ */
+export function stopEngineProcess(): void {
+  _stopEngineProcess()
+  const listeners = [..._engineStopListeners]
+  _engineStopListeners.clear()
+  for (const listener of listeners) {
+    try {
+      listener()
+    } catch (err) {
+      getLogger().warning('clips', `onceEngineStopped listener threw: ${String(err)}`)
+    }
+  }
+}
 
 // ─── Clips list cache ─────────────────────────────────────────
 
@@ -356,16 +402,17 @@ export async function readClipsFromDisk(): Promise<ClipInfo[]> {
       computeMissingDurations(missing)
     }
 
-    _clipsCache = valid.map((e) => {
-      const dur = durations.find((d) => d.path === e.path)
-      return {
-        name: e.name,
-        path: e.path,
-        size: e.size,
-        createdAt: e.createdAt,
-        duration: dur?.duration ?? 0,
-      }
-    })
+    // Map lookup instead of `durations.find(...)` inside the map: with many clips
+    // the linear scan per entry made this O(n²). `durations` holds exactly one
+    // entry per valid clip path, so the Map result is identical to `find`'s.
+    const durationByPath = new Map<string, number>(durations.map((d) => [d.path, d.duration]))
+    _clipsCache = valid.map((e) => ({
+      name: e.name,
+      path: e.path,
+      size: e.size,
+      createdAt: e.createdAt,
+      duration: durationByPath.get(e.path) ?? 0,
+    }))
     _cacheDirty = false
     return _clipsCache
   } catch (err) {
@@ -378,26 +425,35 @@ export async function readClipsFromDisk(): Promise<ClipInfo[]> {
 
 export function getCurrentStatus(): ClipsEngineStatus {
   const e = readEngineStatus()
-  const captureBackend = e.captureBackend || undefined
+  // `??` instead of `||`: falsy-but-real values must reach the renderer intact.
+  // `0` dropped frames / `0` replay-buffer bytes is data, not "unknown" — `||`
+  // turned every 0 into `undefined` and the UI displayed "—" instead of "0".
+  // String/boolean guards below stay truthy on purpose: `''`/`false` mean
+  // "not set"/"off", never a measured zero.
+  const captureBackend = e.captureBackend ?? undefined
   const captureMode =
     e.captureMode === 'game' || e.captureMode === 'window' || e.captureMode === 'desktop' ? e.captureMode : undefined
-  const encoder = e.encoder || undefined
-  const estimatedRamMB = e.estimatedRamMB || undefined
+  const encoder = e.encoder ?? undefined
+  const estimatedRamMB = e.estimatedRamMB ?? undefined
   const diskSpaceOk = e.diskSpaceOk
-  const currentGame = C.customGameProcess || e.currentGame || undefined
-  const customGameProcess = C.customGameProcess || undefined
-  const lastCrashRecovered = e.lastCrashRecovered || undefined
-  const audioLoopback = e.audioLoopback || undefined
-  const audioFallback = e.audioFallback || undefined
-  const replayBufferBytes = e.replayBufferBytes || undefined
-  const replayBufferVideoFrames = e.replayBufferVideoFrames || undefined
-  const replayBufferVideoBytes = e.replayBufferVideoBytes || undefined
-  const replayBufferAudioPackets = e.replayBufferAudioPackets || undefined
-  const replayBufferAudioBytes = e.replayBufferAudioBytes || undefined
-  const droppedFrames = e.droppedFrames || undefined
-  const gpuBusyDrops = e.gpuBusyDrops || undefined
-  const calibrationTier = e.calibrationTier || undefined
-  const codec = e.codec || undefined
+  // `''` = "not configured" in the config (its default) — normalize to undefined
+  // before the `??` chain, otherwise the empty config string would shadow the
+  // game reported by the engine.
+  const configuredCustomGameProcess = C.customGameProcess || undefined
+  const currentGame = configuredCustomGameProcess ?? e.currentGame ?? undefined
+  const customGameProcess = configuredCustomGameProcess
+  const lastCrashRecovered = e.lastCrashRecovered ?? undefined
+  const audioLoopback = e.audioLoopback ?? undefined
+  const audioFallback = e.audioFallback ?? undefined
+  const replayBufferBytes = e.replayBufferBytes ?? undefined
+  const replayBufferVideoFrames = e.replayBufferVideoFrames ?? undefined
+  const replayBufferVideoBytes = e.replayBufferVideoBytes ?? undefined
+  const replayBufferAudioPackets = e.replayBufferAudioPackets ?? undefined
+  const replayBufferAudioBytes = e.replayBufferAudioBytes ?? undefined
+  const droppedFrames = e.droppedFrames ?? undefined
+  const gpuBusyDrops = e.gpuBusyDrops ?? undefined
+  const calibrationTier = e.calibrationTier ?? undefined
+  const codec = e.codec ?? undefined
   const micLevel = e.micLevel
   const watchdogOk = e.watchdogOk
   const memoryMB = e.memoryMB
@@ -418,13 +474,15 @@ export function getCurrentStatus(): ClipsEngineStatus {
     ...(lastCrashRecovered ? { lastCrashRecovered } : {}),
     ...(audioLoopback ? { audioLoopback } : {}),
     ...(audioFallback ? { audioFallback } : {}),
-    ...(replayBufferBytes ? { replayBufferBytes } : {}),
-    ...(replayBufferVideoFrames ? { replayBufferVideoFrames } : {}),
-    ...(replayBufferVideoBytes ? { replayBufferVideoBytes } : {}),
-    ...(replayBufferAudioPackets ? { replayBufferAudioPackets } : {}),
-    ...(replayBufferAudioBytes ? { replayBufferAudioBytes } : {}),
-    ...(droppedFrames ? { droppedFrames } : {}),
-    ...(gpuBusyDrops ? { gpuBusyDrops } : {}),
+    // Numeric counters use `!= null` guards so a measured 0 survives (a truthy
+    // guard would drop it back into `undefined` — see the note at the top).
+    ...(replayBufferBytes != null ? { replayBufferBytes } : {}),
+    ...(replayBufferVideoFrames != null ? { replayBufferVideoFrames } : {}),
+    ...(replayBufferVideoBytes != null ? { replayBufferVideoBytes } : {}),
+    ...(replayBufferAudioPackets != null ? { replayBufferAudioPackets } : {}),
+    ...(replayBufferAudioBytes != null ? { replayBufferAudioBytes } : {}),
+    ...(droppedFrames != null ? { droppedFrames } : {}),
+    ...(gpuBusyDrops != null ? { gpuBusyDrops } : {}),
     ...(calibrationTier ? { calibrationTier } : {}),
     ...(codec ? { codec } : {}),
     ...(micLevel != null ? { micLevel } : {}),

@@ -3,6 +3,8 @@ import type { TFunction } from 'i18next'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import logger from '@/lib/renderer-logger'
+import { useClipsStateStore } from '@/stores/clips-state-store'
 import { QUALITY_PRESETS, type QualityPresetKey } from './clips-quality-presets'
 import type { FilterTab } from './clips-utils'
 import { formatClipsDate, formatClipsSeconds, formatClipsSize, useClipsActions } from './useClipsActions'
@@ -94,23 +96,54 @@ export interface ClipsState {
 export function useClipsState(): ClipsState {
   const { t } = useTranslation('clips')
 
-  const [status, setStatus] = useState<ClipsEngineStatus>({
-    running: false,
-    capturing: false,
-    uptime: 0,
-    fps: 60,
-    replayTimeSeconds: 120,
-  })
-  const [config, setConfig] = useState<ClipsConfig | null>(null)
-  const [clips, setClips] = useState<ClipInfo[]>([])
-  const [loading, setLoading] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const [stopping, setStopping] = useState(false)
-  const [rebindingId, setRebindingId] = useState<string | null>(null)
-  const [filterTab, setFilterTab] = useState<FilterTab>('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({})
-  const [refreshing, setRefreshing] = useState(false)
+  // ── Shared application state (Zustand) ───────────────────
+  // Atomic selectors keep re-renders scoped: the page only re-renders for the
+  // slices it actually reads, not for the whole store object.
+  const status = useClipsStateStore((s) => s.status)
+  const config = useClipsStateStore((s) => s.config)
+  const clips = useClipsStateStore((s) => s.clips)
+  const loading = useClipsStateStore((s) => s.loading)
+  const starting = useClipsStateStore((s) => s.starting)
+  const stopping = useClipsStateStore((s) => s.stopping)
+  const rebindingId = useClipsStateStore((s) => s.rebindingId)
+  const setRebindingId = useClipsStateStore((s) => s.setRebindingId)
+  const filterTab = useClipsStateStore((s) => s.filterTab)
+  const setFilterTab = useClipsStateStore((s) => s.setFilterTab)
+  const searchQuery = useClipsStateStore((s) => s.searchQuery)
+  const setSearchQuery = useClipsStateStore((s) => s.setSearchQuery)
+  const thumbnails = useClipsStateStore((s) => s.thumbnails)
+  const setThumbnails = useClipsStateStore((s) => s.setThumbnails)
+  const refreshing = useClipsStateStore((s) => s.refreshing)
+  const setRefreshing = useClipsStateStore((s) => s.setRefreshing)
+  const selectedClips = useClipsStateStore((s) => s.selectedClips)
+  const setSelectedClips = useClipsStateStore((s) => s.setSelectedClips)
+  const favorites = useClipsStateStore((s) => s.favorites)
+  const setFavorites = useClipsStateStore((s) => s.setFavorites)
+  const statusLoaded = useClipsStateStore((s) => s.statusLoaded)
+  const clipsLoaded = useClipsStateStore((s) => s.clipsLoaded)
+  const publishingPath = useClipsStateStore((s) => s.publishingPath)
+  const publishProgress = useClipsStateStore((s) => s.publishProgress)
+  const publishResult = useClipsStateStore((s) => s.publishResult)
+  const setPublishResult = useClipsStateStore((s) => s.setPublishResult)
+  const publishedLinks = useClipsStateStore((s) => s.publishedLinks)
+  const setPublishedLinkStore = useClipsStateStore((s) => s.setPublishedLink)
+
+  const setStatus = useClipsStateStore((s) => s.setStatus)
+  const setStatusLoaded = useClipsStateStore((s) => s.setStatusLoaded)
+  const setClipsLoaded = useClipsStateStore((s) => s.setClipsLoaded)
+  const setConfig = useClipsStateStore((s) => s.setConfig)
+  const setClips = useClipsStateStore((s) => s.setClips)
+  const setLoading = useClipsStateStore((s) => s.setLoading)
+  const setStarting = useClipsStateStore((s) => s.setStarting)
+  const setStopping = useClipsStateStore((s) => s.setStopping)
+  const setPublishingPath = useClipsStateStore((s) => s.setPublishingPath)
+  const setPublishProgress = useClipsStateStore((s) => s.setPublishProgress)
+  const setPublishedLink = useCallback(
+    (path: string, link: string) => setPublishedLinkStore(path, link),
+    [setPublishedLinkStore],
+  )
+
+  // ── Ephemeral UI state (local to the clips page tree) ────
   const [showProcPicker, setShowProcPicker] = useState(false)
   const [procSearch, setProcSearch] = useState('')
   const [processes, setProcesses] = useState<Array<{ name: string; pid: number }>>([])
@@ -118,15 +151,6 @@ export function useClipsState(): ClipsState {
   const [loadingMicDevices, setLoadingMicDevices] = useState(false)
   const [gpuList, setGpuList] = useState<Array<{ index: number; name: string; vendorId: number }>>([])
   const [showConfig, setShowConfig] = useState(false)
-  const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set())
-  const [favorites, setFavorites] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('clips-favorites')
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    } catch {
-      return new Set()
-    }
-  })
   const [activeTip, setActiveTip] = useState<string | null>(null)
   const [editingClip, setEditingClip] = useState<ClipInfo | null>(null)
   const [editingClipFullscreen, setEditingClipFullscreen] = useState(false)
@@ -142,19 +166,6 @@ export function useClipsState(): ClipsState {
   }, [])
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
-  const [statusLoaded, setStatusLoaded] = useState(false)
-  const [clipsLoaded, setClipsLoaded] = useState(false)
-  const [publishingPath, setPublishingPath] = useState<string | null>(null)
-  const [publishProgress, setPublishProgress] = useState(0)
-  const [publishResult, setPublishResult] = useState<{ link: string } | null>(null)
-  const [publishedLinks, setPublishedLinks] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('clips-published')
-      return saved ? (JSON.parse(saved) as Record<string, string>) : {}
-    } catch {
-      return {}
-    }
-  })
 
   const tooltipContent: Record<string, string> = useMemo(
     () => ({
@@ -200,19 +211,19 @@ export function useClipsState(): ClipsState {
     try {
       const s = await window.dinho?.clipsGetStatus()
       if (s) setStatus(s)
-    } catch {
-      /* ignore */
+    } catch (err) {
+      logger.warn('clips', `Failed to refresh engine status (${String(err)})`)
     }
-  }, [])
+  }, [setStatus])
 
   const refreshConfig = useCallback(async () => {
     try {
       const c = await window.dinho?.clipsGetConfig()
       if (c) setConfig(c)
-    } catch {
-      /* ignore */
+    } catch (err) {
+      logger.warn('clips', `Failed to refresh clips config (${String(err)})`)
     }
-  }, [])
+  }, [setConfig])
 
   const refreshClips = useCallback(async () => {
     setRefreshing(true)
@@ -223,10 +234,10 @@ export function useClipsState(): ClipsState {
         setThumbnails({})
       }
     } catch (err) {
-      console.error('refreshClips error:', err)
+      logger.error('clips', 'Failed to refresh clip list', err)
     }
     setRefreshing(false)
-  }, [])
+  }, [setClips, setRefreshing, setThumbnails])
 
   const loadMicDevices = useCallback(async () => {
     setLoadingMicDevices(true)
@@ -235,8 +246,8 @@ export function useClipsState(): ClipsState {
       if (devices && devices.length > 0) {
         setMicDevices(devices)
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      logger.warn('clips', `Failed to load microphone devices (${String(err)})`)
     }
     setLoadingMicDevices(false)
   }, [])
@@ -275,27 +286,31 @@ export function useClipsState(): ClipsState {
       try {
         const gpus = await window.dinho?.clipsGetGpus()
         if (gpus && gpus.length > 0) setGpuList(gpus)
-      } catch {
-        /* ignore */
+      } catch (err) {
+        logger.warn('clips', `Failed to load GPU list (${String(err)})`)
       }
     })()
   }, [statusLoaded, gpuList.length])
 
-  const loadThumbnail = useCallback(async (clipName: string) => {
-    const failedAt = failedThumbsRef.current.get(clipName)
-    if (failedAt !== undefined && Date.now() - failedAt < thumbRetryMs) return
-    try {
-      const dataUrl = await window.dinho?.clipsGetThumbnail(clipName)
-      if (dataUrl) {
-        failedThumbsRef.current.delete(clipName)
-        setThumbnails((prev) => ({ ...prev, [clipName]: dataUrl }))
-      } else {
+  const loadThumbnail = useCallback(
+    async (clipName: string) => {
+      const failedAt = failedThumbsRef.current.get(clipName)
+      if (failedAt !== undefined && Date.now() - failedAt < thumbRetryMs) return
+      try {
+        const dataUrl = await window.dinho?.clipsGetThumbnail(clipName)
+        if (dataUrl) {
+          failedThumbsRef.current.delete(clipName)
+          setThumbnails((prev) => ({ ...prev, [clipName]: dataUrl }))
+        } else {
+          failedThumbsRef.current.set(clipName, Date.now())
+        }
+      } catch (err) {
         failedThumbsRef.current.set(clipName, Date.now())
+        logger.warn('clips', `Thumbnail load for "${clipName}" failed — retry scheduled (${String(err)})`)
       }
-    } catch {
-      failedThumbsRef.current.set(clipName, Date.now())
-    }
-  }, [])
+    },
+    [setThumbnails],
+  )
 
   // Batch load thumbnails
   useEffect(() => {
@@ -319,6 +334,8 @@ export function useClipsState(): ClipsState {
   // Initial data load — all three in one effect so clipsLoaded is set in same microtask batch
   // Detector lifecycle is owned by the main process (started at boot); this
   // effect only loads initial data.
+  // Deps are store actions (stable across renders) — the exhaustive-deps rule
+  // cannot know that, so they are listed to satisfy it explicitly.
   useEffect(() => {
     ;(async () => {
       await Promise.all([refreshStatus(), refreshConfig()])
@@ -326,7 +343,7 @@ export function useClipsState(): ClipsState {
       await refreshClips()
       setClipsLoaded(true)
     })()
-  }, [refreshStatus, refreshConfig, refreshClips])
+  }, [refreshStatus, refreshConfig, refreshClips, setStatusLoaded, setClipsLoaded])
 
   // Poll status every 3s
   useEffect(() => {
@@ -338,7 +355,7 @@ export function useClipsState(): ClipsState {
   useEffect(() => {
     const unsub = window.dinho?.clipsOnEngineStatus?.((s) => setStatus(s))
     return () => unsub?.()
-  }, [])
+  }, [setStatus])
 
   // Listen for clip saved events (from hotkey saves in the engine)
   useEffect(() => {
@@ -398,13 +415,9 @@ export function useClipsState(): ClipsState {
       }
     })
     return () => unsub?.()
-  }, [])
+  }, [setPublishProgress])
 
   // ── Actions (delegated to useClipsActions) ───────────────
-
-  const setPublishedLink = useCallback((path: string, link: string) => {
-    setPublishedLinks((prev) => (prev[path] === link ? prev : { ...prev, [path]: link }))
-  }, [])
 
   const actions = useClipsActions({
     config,

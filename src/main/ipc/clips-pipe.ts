@@ -21,11 +21,19 @@ let _handshakeError: string | null = null
 export interface PipeEnvelope {
   v: number
   cmd: string
+  // 5.7: correlaciona a resposta com o pedido. O engine ecoa-o no envelope de
+  // resposta (NamedPipeServer.cs:459) e roteia resultados long-running por ele
+  // (ClientResponseRouter). Até a Fase 2 o Electron era o "cliente legacy que não
+  // envia reqId" (NamedPipeServer.cs:324-325) — ver nota em nextReqId().
+  reqId?: string
   payload?: Record<string, unknown>
 }
 
 export interface PipeMessage {
   cmd: string
+  // Presente quando o engine ecoa o reqId do pedido; ausente em broadcasts
+  // (_event/engineStatus/ramPressure) e em acks que o C# não ecoa.
+  reqId?: string
   payload?: Record<string, unknown>
   // Raw JSON broadcasts from the engine (e.g. RamManager watchdog) carry no
   // v/cmd envelope — they arrive as { event: "ramPressure", ... }.
@@ -33,9 +41,58 @@ export interface PipeMessage {
 }
 
 export type PendingRequest = {
+  /** cmd original do pedido — usado para casar respostas sem reqId (fallback) e em logs. */
+  cmd: string
+  /** reqId gerado por nextReqId(); é a chave do pedido no mapa. */
+  reqId: string
   resolve: (value: PipeMessage) => void
   reject: (err: Error) => void
   timer: ReturnType<typeof setTimeout>
+}
+
+// ─── Request correlation (item 3) ────────────────────────────
+
+// Sessão por processo + contador monótono: um reqId é legível no log
+// (`getStatus-a1b2c3d4-2`) e nunca colide dentro da vida do processo. Entre
+// processos a colisão é inócua: o engine desregistra os reqIds do cliente no
+// disconnect (ClientResponseRouter.ForgetClient).
+const REQ_SESSION = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+let _reqSeq = 0
+
+function nextReqId(cmd: string): string {
+  _reqSeq += 1
+  return `${cmd}-${REQ_SESSION}-${_reqSeq}`
+}
+
+/**
+ * Encontra e REMOVE o pendente que deve receber uma resposta.
+ *
+ * 1. Com `reqId` na resposta, só o pendente com esse reqId serve. Uma resposta
+ *    atrasada de um pedido já expirado NÃO rouba o pendente vivo de outro pedido.
+ * 2. Sem `reqId` — é o caso real: o C# não ecoa RequestId no ack "accepted" dos
+ *    comandos long-running (NamedPipeServer.cs:428-434) e as respostas de clientes
+ *    antigos também não trazem — resolve o pendente MAIS ANTIGO desse cmd. O pipe
+ *    é FIFO, portanto a N-ésima resposta sem reqId corresponde ao N-ésimo pedido
+ *    ainda pendente.
+ */
+function takePendingFor(
+  map: Map<string, PendingRequest>,
+  reqId: string | undefined,
+  cmd: string | undefined,
+): PendingRequest | null {
+  if (reqId) {
+    const hit = map.get(reqId)
+    if (hit) map.delete(reqId)
+    return hit ?? null
+  }
+  if (!cmd) return null
+  for (const [key, pending] of map) {
+    if (pending.cmd === cmd) {
+      map.delete(key)
+      return pending
+    }
+  }
+  return null
 }
 
 // ─── State (owned by clips-engine-connection, accessed via getters/setters) ──
@@ -50,6 +107,15 @@ export function getPipeSocket(): Socket | null {
 
 export function isPipeConnected(): boolean {
   return _pipeConnected
+}
+
+// ─── Item 4: espera event-driven pela ligação ────────────────
+
+type ConnectListener = () => void
+const _connectListeners = new Set<ConnectListener>()
+
+function notifyPipeConnected(): void {
+  for (const listener of [..._connectListeners]) listener()
 }
 
 // ─── Request maps ────────────────────────────────────────────
@@ -75,27 +141,31 @@ export function setStatusCallbacks(updater: StatusUpdater, getter: () => ClipsEn
 // ─── Pipe commands ───────────────────────────────────────────
 
 function sendHandshake(): void {
-  const envelope: PipeEnvelope = { v: 1, cmd: 'handshake', payload: { protoVersion: PROTO_VERSION } }
+  const reqId = nextReqId('handshake')
+  const envelope: PipeEnvelope = { v: 1, cmd: 'handshake', reqId, payload: { protoVersion: PROTO_VERSION } }
   const line = `${JSON.stringify(envelope)}\n`
-  getLogger().info('clips-pipe', `Sending: cmd=handshake payload=${JSON.stringify(envelope.payload)}`)
+  getLogger().info('clips-pipe', `Sending: cmd=handshake reqId=${reqId} payload=${JSON.stringify(envelope.payload)}`)
   const timer = setTimeout(() => {
-    pendingRequests.delete('handshake')
+    pendingRequests.delete(reqId)
     getLogger().warning(
       'clips-pipe',
       'Handshake timed out — engine did not reply (old engine? commands proceed unverified)',
     )
   }, 5000)
-  pendingRequests.set('handshake', { resolve: () => {}, reject: () => {}, timer })
+  pendingRequests.set(reqId, { cmd: 'handshake', reqId, resolve: () => {}, reject: () => {}, timer })
   try {
     _pipeSocket?.write(line)
   } catch (err) {
-    pendingRequests.delete('handshake')
+    pendingRequests.delete(reqId)
     clearTimeout(timer)
     getLogger().warning('clips-pipe', `Handshake write failed: ${String(err)}`)
   }
 }
 
-export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>): Promise<PipeMessage> {
+function sendPipeCommandTracked(
+  cmd: string,
+  payload?: Record<string, unknown>,
+): Promise<{ msg: PipeMessage; reqId: string }> {
   return new Promise((resolve, reject) => {
     if (!_pipeSocket || !_pipeConnected) {
       reject(new Error('Pipe not connected'))
@@ -105,32 +175,33 @@ export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>):
       reject(new Error(_handshakeError))
       return
     }
-    const existing = pendingRequests.get(cmd)
-    if (existing) {
-      clearTimeout(existing.timer)
-      existing.reject(new Error(`Command "${cmd}" superseded`))
-      pendingRequests.delete(cmd)
-    }
 
-    const envelope: PipeEnvelope = { v: 1, cmd, ...(payload !== undefined ? { payload } : {}) }
+    // Item 3: cada pedido tem o SEU reqId — pedidos concorrentes do mesmo cmd
+    // deixam de se "superseded" um ao outro e ambos resolvem com a sua resposta.
+    const reqId = nextReqId(cmd)
+    const envelope: PipeEnvelope = { v: 1, cmd, reqId, ...(payload !== undefined ? { payload } : {}) }
     const line = `${JSON.stringify(envelope)}\n`
-    getLogger().info('clips-pipe', `Sending: cmd=${cmd} payload=${JSON.stringify(payload ?? null)}`)
+    getLogger().info('clips-pipe', `Sending: cmd=${cmd} reqId=${reqId} payload=${JSON.stringify(payload ?? null)}`)
 
     const timer = setTimeout(() => {
-      pendingRequests.delete(cmd)
+      pendingRequests.delete(reqId)
       reject(new Error(`Command "${cmd}" timed out`))
     }, 5000)
 
-    pendingRequests.set(cmd, { resolve, reject, timer })
+    pendingRequests.set(reqId, { cmd, reqId, resolve: (msg) => resolve({ msg, reqId }), reject, timer })
 
     try {
       _pipeSocket.write(line)
     } catch (err) {
-      pendingRequests.delete(cmd)
+      pendingRequests.delete(reqId)
       clearTimeout(timer)
       reject(err instanceof Error ? err : new Error(String(err)))
     }
   })
+}
+
+export function sendPipeCommand(cmd: string, payload?: Record<string, unknown>): Promise<PipeMessage> {
+  return sendPipeCommandTracked(cmd, payload).then((r) => r.msg)
 }
 
 export function sendPipeCommandLongRunning(
@@ -139,16 +210,18 @@ export function sendPipeCommandLongRunning(
   timeoutMs = 120_000,
 ): Promise<PipeMessage> {
   return new Promise((resolve, reject) => {
-    sendPipeCommand(cmd, payload)
-      .then((accepted) => {
-        if (accepted.payload?.status === 'accepted') {
+    sendPipeCommandTracked(cmd, payload)
+      .then(({ msg, reqId }) => {
+        if (msg.payload?.status === 'accepted') {
           const timer = setTimeout(() => {
-            longRunningPending.delete(cmd)
+            longRunningPending.delete(reqId)
             reject(new Error(`Long-running command "${cmd}" timed out after ${timeoutMs}ms`))
           }, timeoutMs)
-          longRunningPending.set(cmd, { resolve, reject, timer })
+          // Chaveado pelo MESMO reqId do pedido inicial: o commandResult final traz
+          // payload.requestId (NamedPipeServer.cs:566) e é para ele que se casa.
+          longRunningPending.set(reqId, { cmd, reqId, resolve, reject, timer })
         } else {
-          resolve(accepted)
+          resolve(msg)
         }
       })
       .catch(reject)
@@ -207,18 +280,51 @@ export function onPipeData(chunk: Buffer): void {
   }
 }
 
+// ─── Multi-window broadcast (item 12) ────────────────────────
+
+function liveWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
+}
+
+/**
+ * Envia a TODAS as janelas vivas. O `.find()` anterior pegava só na primeira
+ * janela — com uma só (o caso real) o comportamento é idêntico; com N janelas,
+ * todas recebem.
+ */
+function broadcastToWindows(channel: string, payload: unknown): void {
+  for (const win of liveWindows()) {
+    win.webContents.send(channel, payload)
+  }
+}
+
+/**
+ * WDA_EXCLUDEFROMCAPTURE só esconde janelas do PRÓPRIO processo. O engine C#
+ * é outro processo e não pode excluir a UI do DiNho; o Electron, dono da
+ * janela, é quem aplica a proteção (liga ao gravar, desliga ao parar).
+ * Aplicada a todas as janelas vivas, não só à primeira.
+ */
+function applyContentProtection(recording: boolean): void {
+  for (const win of liveWindows()) {
+    win.setContentProtection(recording)
+  }
+}
+
 function handlePipeMessage(msg: PipeMessage): void {
   if (msg.cmd === '_event' && msg.payload?.type === 'commandResult') {
-    const originalCmd = String(msg.payload.originalCmd ?? '')
-    const pending = longRunningPending.get(originalCmd)
+    const p = msg.payload as Record<string, unknown>
+    const originalCmd = String(p.originalCmd ?? '')
+    // O engine corrêla o resultado por payload.requestId (NamedPipeServer.cs:566);
+    // sem esse campo cai no pendente mais antigo de originalCmd (fila órfã/legacy).
+    const resultReqId = typeof p.requestId === 'string' && p.requestId.length > 0 ? p.requestId : undefined
+    const pending = takePendingFor(longRunningPending, resultReqId, originalCmd)
     if (pending) {
-      longRunningPending.delete(originalCmd)
       clearTimeout(pending.timer)
-      if (msg.payload.error) {
-        getLogger().warning('clips-pipe', `Long-running command "${originalCmd}" failed: ${msg.payload.error}`)
-        pending.reject(new Error(String(msg.payload.error)))
+      if (p.error) {
+        getLogger().warning('clips-pipe', `Long-running command "${originalCmd}" failed: ${p.error}`)
+        pending.reject(new Error(String(p.error)))
       } else {
-        const value = msg.payload.value as Record<string, unknown> | undefined
+        const value = p.value as Record<string, unknown> | undefined
+        getLogger().info('clips-pipe', `Long-running command "${originalCmd}" done (reqId=${pending.reqId})`)
         pending.resolve({ cmd: originalCmd, ...(value !== undefined ? { payload: value } : {}) })
       }
     } else {
@@ -243,15 +349,9 @@ function handlePipeMessage(msg: PipeMessage): void {
     )
 
     _statusUpdater?.(src)
-    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
-    if (win && typeof src.recording === 'boolean') {
-      // WDA_EXCLUDEFROMCAPTURE só esconde janelas do PRÓPRIO processo. O engine C#
-      // é outro processo e não pode excluir a UI do DiNho; o Electron, dono da
-      // janela, é quem aplica a proteção (liga ao gravar, desliga ao parar).
-      win.setContentProtection(src.recording === true)
-    }
-    if (win && _getCurrentStatus) {
-      win.webContents.send(IPC.CLIPS_ENGINE_STATUS, _getCurrentStatus())
+    if (typeof src.recording === 'boolean') applyContentProtection(src.recording === true)
+    if (_getCurrentStatus && liveWindows().length > 0) {
+      broadcastToWindows(IPC.CLIPS_ENGINE_STATUS, _getCurrentStatus())
     }
     return
   }
@@ -259,10 +359,7 @@ function handlePipeMessage(msg: PipeMessage): void {
   if (msg.cmd === '_event' && msg.payload?.type === 'clipSaved') {
     const p = msg.payload as Record<string, unknown>
     getLogger().info('clips-pipe', `Clip saved: ${String(p.path ?? 'unknown')}`)
-    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
-    if (win) {
-      win.webContents.send(IPC.CLIPS_CLIP_SAVED, { path: p.path })
-    }
+    broadcastToWindows(IPC.CLIPS_CLIP_SAVED, { path: p.path })
     return
   }
 
@@ -273,14 +370,11 @@ function handlePipeMessage(msg: PipeMessage): void {
       'clips-pipe',
       `Screenshot ${success ? 'saved' : 'failed'}: ${String(p.path ?? p.error ?? 'unknown')}`,
     )
-    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
-    if (win) {
-      win.webContents.send(IPC.CLIPS_SCREENSHOT, {
-        success,
-        path: p.path,
-        error: p.error,
-      })
-    }
+    broadcastToWindows(IPC.CLIPS_SCREENSHOT, {
+      success,
+      path: p.path,
+      error: p.error,
+    })
     return
   }
 
@@ -297,38 +391,47 @@ function handlePipeMessage(msg: PipeMessage): void {
     } else {
       getLogger().info('clips-pipe', `${baseMsg}${detail}`)
     }
-    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
-    if (win) {
-      win.webContents.send(IPC.CLIPS_RAM_PRESSURE, p)
-    }
+    broadcastToWindows(IPC.CLIPS_RAM_PRESSURE, p)
     return
   }
 
   if (msg.cmd === 'handshake_ack') {
-    handleHandshakeAck(msg)
+    // Cliente antigo / engine que envia o Action original: casa com o pendente
+    // do handshake pelo reqId, ou pelo cmd 'handshake' se não houver reqId.
+    const pending = takePendingFor(pendingRequests, msg.reqId, 'handshake')
+    applyHandshakeAck(msg)
+    if (pending) {
+      clearTimeout(pending.timer)
+      pending.resolve(msg)
+    } else {
+      getLogger().info('clips-pipe', 'Handshake ack with no pending request (late or duplicate)')
+    }
     return
   }
 
-  const pending = pendingRequests.get(msg.cmd)
+  const pending = takePendingFor(pendingRequests, msg.reqId, msg.cmd)
   if (pending) {
-    pendingRequests.delete(msg.cmd)
     clearTimeout(pending.timer)
     getLogger().info(
       'clips-pipe',
-      `Received response for cmd="${msg.cmd}" payload=${JSON.stringify(msg.payload ?? null)}`,
+      `Received response for cmd="${pending.cmd}" reqId=${pending.reqId} payload=${JSON.stringify(msg.payload ?? null)}`,
     )
+    // O engine C# sobrescreve o cmd da resposta com o do pedido
+    // (NamedPipeServer.cs:458), por isso um ack de handshake chega como
+    // cmd="handshake" — é o ack, aplicar o gate da mesma forma.
+    if (pending.cmd === 'handshake') applyHandshakeAck(msg)
     pending.resolve(msg)
   } else {
-    getLogger().info('clips-pipe', `No pending request for cmd="${msg.cmd}" (maybe late response)`)
+    getLogger().info(
+      'clips-pipe',
+      `No pending request for cmd="${msg.cmd}" (maybe late response; reqId=${msg.reqId ?? 'none'})`,
+    )
   }
 }
 
-function handleHandshakeAck(msg: PipeMessage): void {
-  const pending = pendingRequests.get('handshake')
-  if (pending) {
-    pendingRequests.delete('handshake')
-    clearTimeout(pending.timer)
-  }
+/** Regista o resultado do handshake_ack (gate de protocolo) — o pendente em si
+ *  é resolvido pelo chamador. */
+function applyHandshakeAck(msg: PipeMessage): void {
   const p = (msg.payload ?? {}) as Record<string, unknown>
   const status = String(p.status ?? 'ok')
   const engineProto = p.protoVersion === undefined ? undefined : Number(p.protoVersion)
@@ -345,7 +448,6 @@ function handleHandshakeAck(msg: PipeMessage): void {
       `Handshake OK: engineVersion=${String(p.engineVersion ?? '?')} protoVersion=${String(engineProto ?? PROTO_VERSION)}`,
     )
   }
-  pending?.resolve(msg)
 }
 
 // ─── Connection management ───────────────────────────────────
@@ -386,6 +488,7 @@ export function connectPipe(): void {
     _pipeConnected = true
     _handshakeError = null
     getLogger().info('clips-pipe', 'Connected to engine pipe')
+    notifyPipeConnected()
     sendHandshake()
     _onReconnect?.()
   })
@@ -467,4 +570,47 @@ export async function waitForPipeConnection(timeoutMs: number): Promise<boolean>
     `Pipe wait timeout after ${attempts * 200}ms (pipeSocket=${!!_pipeSocket}, pipeConnected=${_pipeConnected})`,
   )
   return _pipeConnected
+}
+
+/**
+ * Item 4 — espera **event-driven** pela ligação do pipe (substitui o poll de
+ * 200ms do `waitForPipeConnection` no caminho do `saveClip`).
+ *
+ * - `true` quando o pipe ligar (ou já estiver ligado no momento da chamada);
+ * - `false` no timeout (`timeoutMs`);
+ * - `false` se `opts.signal` abortar — **resolve**, não rejeita: o contrato é
+ *   booleano igual ao de `waitForPipeConnection`, e o agente B trata o `false`
+ *   como "não ligou".
+ *
+ * Sem polling interno: subscreve o evento `connect` do socket (a mesma fonte que
+ * `_pipeConnected` usa) e o timeout é um único `setTimeout`.
+ */
+export function waitForPipeConnected(timeoutMs: number, opts?: { signal?: AbortSignal }): Promise<boolean> {
+  if (_pipeConnected) return Promise.resolve(true)
+  const signal = opts?.signal
+  if (signal?.aborted) return Promise.resolve(false)
+
+  return new Promise<boolean>((resolve) => {
+    let done = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    function finish(value: boolean): void {
+      if (done) return
+      done = true
+      if (timer !== undefined) clearTimeout(timer)
+      _connectListeners.delete(onConnect)
+      signal?.removeEventListener('abort', onAbort)
+      resolve(value)
+    }
+    function onConnect(): void {
+      finish(true)
+    }
+    function onAbort(): void {
+      finish(false)
+    }
+
+    _connectListeners.add(onConnect)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    timer = setTimeout(() => finish(false), timeoutMs)
+  })
 }

@@ -57,6 +57,8 @@ const engineConnMock = vi.hoisted(() => ({
   setEngineCapturing: vi.fn(),
   stopClipCapture: vi.fn(async (): Promise<{ success: boolean; error?: string }> => ({ success: true })),
   invalidateDurationCache: vi.fn(),
+  waitForPipeConnected: vi.fn(async (_timeoutMs: number): Promise<boolean> => false),
+  onceEngineStopped: vi.fn(() => () => {}),
 }))
 
 vi.mock('node:child_process', () => ({
@@ -123,6 +125,8 @@ function resetMocks(): void {
   engineConnMock.sendWithFallback.mockResolvedValue({ success: true })
   engineConnMock.sendPipeCommand.mockResolvedValue({ cmd: 'x', payload: {} })
   engineConnMock.sendPipeCommandLongRunning.mockResolvedValue({ cmd: 'x', payload: {} })
+  engineConnMock.waitForPipeConnected.mockReset().mockResolvedValue(false)
+  engineConnMock.onceEngineStopped.mockReset().mockReturnValue(() => {})
   thumbnailMock.getCachedThumbnailPath.mockReturnValue(null)
   enhanceMock.parseEnhanceOption.mockReturnValue('none')
   enhanceMock.probeVideoResolution.mockResolvedValue(null)
@@ -247,6 +251,19 @@ describe('CLIPS_SET_CONFIG branch gaps', () => {
     expect(clipsConfig.hotkeys).toEqual([{ vk: 65, action: 'SaveClip', modifiers: [18] }])
   })
 
+  it('migrates legacy pushToTalk hotkeys on set (a UI já não oferece a acção)', async () => {
+    // Escrita: o SET_CONFIG é o único outro caminho que escreve config.hotkeys
+    // (além do load). Sem a migração aqui uma acção legada re-entrava na memória
+    // e era re-persistida por persistClipsConfig().
+    resetMocks()
+    const handlers = captureHandlers()
+    await asyncHandler(handlers, IPC.CLIPS_SET_CONFIG)(
+      {},
+      { hotkeys: [{ id: 'hk-ptt', vk: 0x79, modifiers: [], action: 'pushToTalk', enabled: true }] },
+    )
+    expect(clipsConfig.hotkeys).toEqual([{ id: 'hk-ptt', vk: 0x79, modifiers: [], action: 'toggleMic', enabled: true }])
+  })
+
   it('rejects an output directory that is not a directory', async () => {
     resetMocks()
     fspMock.stat.mockResolvedValue({ isDirectory: () => false } as never)
@@ -303,21 +320,16 @@ describe('CLIPS_SAVE_CLIP failure paths', () => {
   })
 
   it('skips config sync when the pipe never reconnects', async () => {
-    vi.useFakeTimers()
-    try {
-      resetMocks()
-      engineConnMock.isEngineRunning.mockReturnValue(true)
-      engineConnMock.isPipeConnected.mockReturnValue(false)
-      engineConnMock.sendPipeCommandLongRunning.mockResolvedValue({ cmd: 'saveClip', payload: { success: true } })
-      const handlers = captureHandlers()
-      const pending = asyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)()
-      await vi.advanceTimersByTimeAsync(5200)
-      const result = (await pending) as { success: boolean }
-      expect(result.success).toBe(true)
-      expect(engineConnMock.sendWithFallback).not.toHaveBeenCalledWith('config', expect.anything())
-    } finally {
-      vi.useRealTimers()
-    }
+    resetMocks()
+    engineConnMock.isEngineRunning.mockReturnValue(true)
+    engineConnMock.isPipeConnected.mockReturnValue(false)
+    engineConnMock.waitForPipeConnected.mockResolvedValue(false) // 5s deadline expires, never reconnected
+    engineConnMock.sendPipeCommandLongRunning.mockResolvedValue({ cmd: 'saveClip', payload: { success: true } })
+    const handlers = captureHandlers()
+    const result = (await asyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)()) as { success: boolean }
+    expect(result.success).toBe(true)
+    expect(engineConnMock.waitForPipeConnected).toHaveBeenCalledWith(5000, { signal: expect.any(AbortSignal) })
+    expect(engineConnMock.sendWithFallback).not.toHaveBeenCalledWith('config', expect.anything())
   })
 })
 

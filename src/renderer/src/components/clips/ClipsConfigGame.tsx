@@ -135,9 +135,6 @@ export function GameSection({
                   <option value="toggleMic" style={nativeSelectStyle}>
                     {tClips('actionToggleMicLabel')}
                   </option>
-                  <option value="pushToTalk" style={nativeSelectStyle}>
-                    {tClips('actionPushToTalkLabel')}
-                  </option>
                 </select>
                 {hk.action === 'saveClip' && (
                   <select

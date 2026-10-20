@@ -68,6 +68,7 @@ import {
   persistClipsConfig,
 } from './clips-config-manager'
 import { loadClipsConfig, saveClipsConfig } from './clips-config-store'
+import { defaultHotkeys } from './clips-default-hotkeys'
 
 describe('clips-config-manager', () => {
   beforeEach(() => {
@@ -182,10 +183,17 @@ describe('clips-config-manager', () => {
       expect((result.Hotkeys as Record<string, unknown>[])[0]!.vk).toBe(0x31)
     })
 
-    it('uses default hotkeys when config.hotkeys is empty', () => {
+    it('uses the canonical default hotkeys when config.hotkeys is empty', () => {
+      // 2026-10-19 (item 2, centralização): o fallback era F8/F9/F10 (0x77/0x78/0x79),
+      // uma segunda fonte de verdade que discordava do set de novas instalações
+      // (store: F12/F11/Alt+1). Ambas as fontes vêm agora de clips-default-hotkeys.ts.
       config.hotkeys = []
       const result = buildEngineConfig()
-      expect((result.Hotkeys as Record<string, unknown>[])[0]!.vk).toBe(0x77)
+      expect(result.Hotkeys as Record<string, unknown>[]).toStrictEqual([
+        { vk: 123, modifiers: [], action: 'SaveClip', replayDurationSeconds: 300, enabled: true },
+        { vk: 122, modifiers: [], action: 'SaveClip', replayDurationSeconds: 120, enabled: true },
+        { vk: 49, modifiers: [0x12], action: 'Screenshot', replayDurationSeconds: 60, enabled: true },
+      ])
     })
 
     it('maps modifier names to VK codes', () => {
@@ -332,10 +340,11 @@ describe('clips-config-manager', () => {
       expect(result.bitrateKbps).toBe(40000)
     })
 
-    it('uses default hotkeys when config.hotkeys is empty', () => {
+    it('falls back to the canonical default hotkeys when config.hotkeys is empty', () => {
+      // 2026-10-19 (item 2): mesmo fix do buildEngineConfig — fallback == set canónico do store.
       config.hotkeys = []
       const result = getCurrentConfigPayload()
-      expect((result.hotkeys as Record<string, unknown>[])[0]!.vk).toBe(0x77)
+      expect(result.hotkeys).toStrictEqual(defaultHotkeys())
     })
   })
 
@@ -352,6 +361,35 @@ describe('clips-config-manager', () => {
       expect(capture?.action).toBe('screenshot')
       const saveHk = config.hotkeys.find((h) => h.action === 'saveClip')
       expect(saveHk).toBeTruthy()
+    })
+
+    it('migrates legacy pushToTalk hotkeys to toggleMic on load (achado 1 da revisão)', () => {
+      // O <select> de acção em ClipsConfigGame.tsx só oferece
+      // saveClip/screenshot/toggleMic (item 2b removeu pushToTalk — o enum C#
+      // HotkeyAction nunca o teve); uma config guardada com pushToTalk ficava com
+      // o select sem correspondência (valor branco).
+      const saved = loadClipsConfig()
+      vi.mocked(loadClipsConfig).mockReturnValueOnce({
+        ...saved,
+        hotkeys: [
+          ...saved.hotkeys,
+          {
+            id: 'hk-ptt-legacy',
+            vk: 0x79,
+            modifiers: [],
+            action: 'pushToTalk',
+            replayDurationSeconds: 60,
+            enabled: true,
+          },
+        ],
+      })
+      loadPersistedClipsConfig()
+      expect(config.hotkeys.find((h) => h.id === 'hk-ptt-legacy')?.action).toBe('toggleMic')
+
+      // Caminho da UI: CLIPS_GET_CONFIG → getCurrentConfigPayload() lê config.hotkeys.
+      const payload = getCurrentConfigPayload()
+      const fromUiPath = (payload.hotkeys as HotkeyBinding[]).find((h) => h.id === 'hk-ptt-legacy')
+      expect(fromUiPath?.action).toBe('toggleMic')
     })
 
     it('applies defaults for missing optional fields', () => {
@@ -551,6 +589,33 @@ describe('clips-config-manager', () => {
       persistClipsConfig()
       const saved = vi.mocked(saveClipsConfig).mock.calls[0]![0] as Record<string, unknown>
       expect(saved.outputDirectory).toBe(join(mockUserProfile, 'Videos', 'DiNho Clips'))
+    })
+  })
+
+  // Fase 3 (item 11): the manager is now a facade re-exporting the split modules
+  // (schema/paths) plus its own orchestration. Consumers must keep importing the SAME
+  // names from the SAME path — this barrier fails if a re-export is dropped.
+  describe('facade contract (re-exported names)', () => {
+    it('exposes every name consumers import from clips-config-manager', async () => {
+      const facade = await import('./clips-config-manager')
+      const expectedFunctions = [
+        'normalizeFps',
+        'migrateHotkeys',
+        'buildEngineConfig',
+        'getCurrentConfigPayload',
+        'loadPersistedClipsConfig',
+        'persistClipsConfig',
+        'getDefaultOutputDir',
+        'clipPathInOutputDir',
+      ] as const
+      for (const name of expectedFunctions) {
+        expect(typeof facade[name]).toBe('function')
+      }
+      expect(facade.config).toBeTypeOf('object')
+      // `config` is the single shared state object — the facade must re-export the very
+      // same reference the schema module owns, not a copy.
+      const schema = await import('./clips-config-schema')
+      expect(facade.config).toBe(schema.config)
     })
   })
 })

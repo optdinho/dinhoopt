@@ -234,4 +234,65 @@ public sealed class FfmpegPathResolverTests
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.Contains(Path.GetFullPath(resolved), candidates);
     }
+
+    // ── Item 19 (auditoria de catch vazios): probe que LANÇA ─────────
+
+    /// <summary>
+    /// Quando o probe <c>ffmpeg -version</c> de um candidato LANÇA (ficheiro
+    /// existente mas não executável → <c>Win32Exception</c> em
+    /// <c>Process.Start</c>), o catch vazio escondia QUAL candidato falhou e porquê
+    /// — exactamente a classe de problema do incidente E6. Agora o candidato é
+    /// registado em Debug e a busca continua para o seguinte (fluxo inalterado).
+    /// </summary>
+    [Fact]
+    public void GetFfmpegPath_BrokenCandidate_LogsDebugAndContinues()
+    {
+        var bogus = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
+        var logger = new RecordingLogger();
+        var original = DiNho.Capture.Poc.Logging.Log.Instance;
+        DiNho.Capture.Poc.Logging.Log.Instance = logger;
+        try
+        {
+            File.WriteAllText(bogus, "not a real executable");
+            FfmpegPathResolver.OverridePathForTest(null); // limpa os estáticos de cache
+
+            var resolved = FfmpegPathResolver.GetFfmpegPath();
+
+            // O probe do candidato quebrado falhou E foi registado...
+            Assert.Contains(logger.Entries,
+                e => e.Level == DiNho.Capture.Poc.Logging.LogLevel.Debug && e.Message.Contains(bogus));
+            // ...e a busca continuou: o candidato quebrado nunca vence.
+            Assert.NotEqual(bogus, resolved);
+        }
+        finally
+        {
+            DiNho.Capture.Poc.Logging.Log.Instance = original;
+            FfmpegPathResolver.OverridePathForTest(null);
+            try { File.Delete(bogus); } catch { }
+        }
+    }
+
+    private sealed class RecordingLogger : DiNho.Capture.Poc.Logging.ILogger
+    {
+        private readonly int _threadId = Environment.CurrentManagedThreadId;
+        private readonly object _gate = new();
+        public List<(DiNho.Capture.Poc.Logging.LogLevel Level, string Source, string Message)> Entries { get; } = new();
+
+        private void Add(DiNho.Capture.Poc.Logging.LogLevel level, string source, string message)
+        {
+            // Log.Instance é global: ignora entradas de threads de fundo para as
+            // asserções serem determinísticas (mesmo padrão de EngineCoordinatorCaptureTests).
+            if (Environment.CurrentManagedThreadId != _threadId) return;
+            lock (_gate)
+            {
+                Entries.Add((level, source, message));
+            }
+        }
+
+        public void Debug(string source, string message) => Add(DiNho.Capture.Poc.Logging.LogLevel.Debug, source, message);
+        public void Info(string source, string message) => Add(DiNho.Capture.Poc.Logging.LogLevel.Info, source, message);
+        public void Warning(string source, string message) => Add(DiNho.Capture.Poc.Logging.LogLevel.Warning, source, message);
+        public void Error(string source, string message) => Add(DiNho.Capture.Poc.Logging.LogLevel.Error, source, message);
+        public void Log(DiNho.Capture.Poc.Logging.LogLevel level, string source, string message) => Add(level, source, message);
+    }
 }

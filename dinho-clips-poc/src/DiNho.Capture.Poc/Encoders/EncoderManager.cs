@@ -76,7 +76,14 @@ internal static class FfmpegPathResolver
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Item 19: um candidato ausente é o caso CORRETO do loop (nem todo
+                // existe em cada layout → Win32Exception em Process.Start), por isso
+                // Debug e não Warning — mas um candidato PRESENTE e não-executável
+                // (permissão, exe corrompido) fica diagnosticável em vez de invisível.
+                Log.D("FfmpegPathResolver", $"Probe falhou para candidato '{candidate}': {ex.Message}");
+            }
         }
 
         Log.W("FfmpegPathResolver", "ffmpeg.exe not found in any candidate path");
@@ -261,7 +268,12 @@ public sealed class EncoderManager : IDisposable
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Item 19: lista parcial era devolvida sem rasto — o UI mostrava menos
+            // GPUs sem diagnosticável. Debug (detecção tem fallback por desenho).
+            Log.D("GpuList", $"Enumeração DXGI parcial em GetGpuList: {ex.Message}");
+        }
         return list;
     }
 
@@ -1389,7 +1401,12 @@ public sealed class EncoderManager : IDisposable
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Item 19: sem este log, falhar aqui era indistinguível de "sem GPU NVIDIA"
+            // (return 0 → gate AV1 por VRAM). Só visibilidade; o fallback continua.
+            Log.D("EncoderManager", $"DetectNvidiaGeneration falhou (assume 0): {ex.Message}");
+        }
         return 0;
     }
 

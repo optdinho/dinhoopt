@@ -25,7 +25,19 @@
 
     <!-- .NET 10 projects Windows.Graphics.Capture and Direct3D11 natively — CsWinRT package no longer needed -->
 
-    <!-- Media Foundation (encoder MFT + Sink Writer) -->
+    <!-- Media Foundation — MANTIDO com uso real, mas MUITO mais restrito do que esta
+         comment original sugeria ("encoder MFT + Sink Writer" — a migração MF→ffmpeg
+         removeu o SinkWriter e os MFT de encode). Uso actual (verificado por grep em
+         2026-10-19, item 20 da Fase 1 Clips):
+           · MediaFactory.MFStartup/MFShutdown — singleton no StartAsync/StopAsync do
+             EngineCoordinator (guardado por _mfStarted) e no ProgramBenchmark;
+           · MediaFactory.MFCreateDXGIDeviceManager + ResetDevice — EngineCoordinator.Capture.cs
+             (arranque da captura e recuperação após device lost/TDR);
+           · IMFDXGIDeviceManager — tipo no campo _dxgiManager e na assinatura
+             IEncoder.SetD3DManager (esta última é no-op SEM chamadores — resto da
+             migração; o encoder ffmpeg não consome o manager).
+         Remover o PackageReference exige remover esses call sites (comportamento de
+         arranque/encerramento muda), não só a linha do csproj. -->
     <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
 
     <!-- CsWin32 source generator — auto-generated P/Invoke bindings -->

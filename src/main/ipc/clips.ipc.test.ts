@@ -101,6 +101,8 @@ const mockStopClipCapture = vi.hoisted(() =>
   vi.fn(async (): Promise<{ success: boolean; error?: string }> => ({ success: true })),
 )
 const mockInvalidateDurationCache = vi.hoisted(() => vi.fn())
+const mockWaitForPipeConnected = vi.hoisted(() => vi.fn())
+const mockOnceEngineStopped = vi.hoisted(() => vi.fn())
 
 const realInvalidateDurationCache = vi.hoisted(() => {
   let fn: (() => void) | null = null
@@ -125,6 +127,8 @@ vi.mock('./clips-engine-connection', async (importOriginal) => {
     setEngineCapturing: mockSetEngineCapturing,
     stopClipCapture: mockStopClipCapture,
     invalidateDurationCache: mockInvalidateDurationCache,
+    waitForPipeConnected: mockWaitForPipeConnected,
+    onceEngineStopped: mockOnceEngineStopped,
   }
 })
 
@@ -137,6 +141,8 @@ function resetEngineMocks(): void {
   mockSetEngineCapturing.mockReset()
   mockStopClipCapture.mockReset().mockResolvedValue({ success: true })
   mockInvalidateDurationCache.mockReset()
+  mockWaitForPipeConnected.mockReset().mockResolvedValue(false)
+  mockOnceEngineStopped.mockReset().mockReturnValue(() => {})
   mockAmdCache.loadAmdGpuCache.mockReturnValue(false)
   mockAmdCache.rememberAmdDetection.mockReset()
   mockAmdCache.resolveAmdAvailable.mockImplementation((inMemory: boolean | null) => inMemory === true)
@@ -1094,14 +1100,18 @@ describe('CLIPS_SAVE_CLIP', () => {
     expect(result.success).toBe(true)
     expect(mockSendWithFallback).toHaveBeenCalledWith('config', expect.any(Object))
     expect(mockSendPipeCommandLongRunning).toHaveBeenCalledWith('saveClip')
+    // connected on the first check → the event-driven wait is never armed
+    expect(mockOnceEngineStopped).not.toHaveBeenCalled()
+    expect(mockWaitForPipeConnected).not.toHaveBeenCalled()
   })
 
-  it('waits for pipe reconnection and returns saveClip result', async () => {
+  it('waits for pipe reconnection via waitForPipeConnected and returns saveClip result', async () => {
     mockIsEngineRunning.mockReturnValue(true)
-    mockIsPipeConnected
-      .mockReturnValueOnce(false) // first check → enters wait loop
-      .mockReturnValueOnce(false) // iteration 1
-    mockIsPipeConnected.mockReturnValue(true) // iteration 2 → connected, stays true for post-loop check
+    mockIsPipeConnected.mockReturnValueOnce(false) // first check → arms the event-driven wait
+    mockIsPipeConnected.mockReturnValue(true) // reconnected for the config-sync check
+    mockWaitForPipeConnected.mockResolvedValue(true)
+    const unsubscribe = vi.fn()
+    mockOnceEngineStopped.mockReturnValue(unsubscribe)
     mockSendPipeCommandLongRunning.mockResolvedValue({
       cmd: 'saveClip',
       payload: { success: true, path: '/clips/test.mp4' },
@@ -1110,19 +1120,62 @@ describe('CLIPS_SAVE_CLIP', () => {
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
     const result = (await handler()) as { success: boolean }
     expect(result.success).toBe(true)
+    // event-driven wait, no polling: subscribed to engine death, waited once, unsubscribed
+    expect(mockOnceEngineStopped).toHaveBeenCalledTimes(1)
+    expect(mockWaitForPipeConnected).toHaveBeenCalledTimes(1)
+    expect(mockWaitForPipeConnected).toHaveBeenCalledWith(5000, { signal: expect.any(AbortSignal) })
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
     expect(mockSendWithFallback).toHaveBeenCalledWith('config', expect.any(Object))
   })
 
-  it('returns error if engine dies during wait loop', async () => {
-    mockIsEngineRunning
-      .mockReturnValueOnce(true) // first check passes
-      .mockReturnValueOnce(false) // engine dies during loop
+  it('returns a clear error fast when the engine stops during the reconnect wait', async () => {
+    mockIsEngineRunning.mockReturnValueOnce(true).mockReturnValue(false)
     mockIsPipeConnected.mockReturnValue(false)
+    const unsubscribe = vi.fn()
+    let stopListener: (() => void) | undefined
+    mockOnceEngineStopped.mockImplementation((listener: () => void) => {
+      stopListener = listener
+      return unsubscribe
+    })
+    // Emulates the real waitForPipeConnected: resolves false once aborted.
+    // The stop fires asynchronously, right after the handler subscribes.
+    mockWaitForPipeConnected.mockImplementation((_timeout: number, opts?: { signal?: AbortSignal }) => {
+      const signal = opts?.signal
+      if (!signal || signal.aborted) return Promise.resolve(false)
+      return new Promise<boolean>((resolve) => {
+        signal.addEventListener('abort', () => resolve(false), { once: true })
+        queueMicrotask(() => stopListener?.())
+      })
+    })
+    const handlers = captureHandlers()
+    const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
+    const started = Date.now()
+    const result = (await handler()) as { success: boolean; error?: string }
+    const elapsed = Date.now() - started
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Engine not running')
+    expect(elapsed).toBeLessThan(3000) // the stop aborts the wait — no 5s deadline
+    expect(mockWaitForPipeConnected).toHaveBeenCalledWith(5000, { signal: expect.any(AbortSignal) })
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(mockSendWithFallback).not.toHaveBeenCalled()
+    expect(mockSendPipeCommandLongRunning).not.toHaveBeenCalled()
+  })
+
+  it('skips config sync and reports "Pipe not connected" when the wait times out with the engine alive', async () => {
+    mockIsEngineRunning.mockReturnValue(true)
+    mockIsPipeConnected.mockReturnValue(false)
+    mockWaitForPipeConnected.mockResolvedValue(false) // timeout: never reconnected
+    mockSendPipeCommandLongRunning.mockRejectedValue(new Error('Pipe not connected'))
+    const unsubscribe = vi.fn()
+    mockOnceEngineStopped.mockReturnValue(unsubscribe)
     const handlers = captureHandlers()
     const handler = getAsyncHandler(handlers, IPC.CLIPS_SAVE_CLIP)
     const result = (await handler()) as { success: boolean; error?: string }
     expect(result.success).toBe(false)
-    expect(result.error).toBe('Engine not running')
+    expect(result.error).toBe('Pipe not connected')
+    expect(mockSendWithFallback).not.toHaveBeenCalledWith('config', expect.anything())
+    expect(mockSendPipeCommandLongRunning).toHaveBeenCalledWith('saveClip')
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
 })
 

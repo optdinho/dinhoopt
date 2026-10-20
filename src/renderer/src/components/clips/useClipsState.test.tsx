@@ -4,6 +4,7 @@ import type { ClipInfo, ClipsConfig, ClipsEngineStatus } from '@shared/types'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useClipsStateStore } from '@/stores/clips-state-store'
 import { setThumbRetryMsForTest, useClipsState } from './useClipsState'
 
 vi.mock('sonner', () => ({
@@ -135,6 +136,10 @@ const flushInitial = () =>
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  // `useClipsState` now reads shared state from a module-level Zustand store
+  // (Fase 3, item 10). Without this reset, state written by one test leaks into
+  // the next one (the hook used to own its `useState` and reset on unmount).
+  useClipsStateStore.getState().reset()
   captured.deps = null
   for (const key of Object.keys(listeners)) delete listeners[key as keyof typeof listeners]
   setThumbRetryMsForTest(30_000)
@@ -169,6 +174,9 @@ describe('useClipsState', () => {
   it('restores favorites and published links from localStorage', async () => {
     localStorage.setItem('clips-favorites', JSON.stringify(['a.mp4']))
     localStorage.setItem('clips-published', JSON.stringify({ 'C:\\Clips\\a.mp4': 'https://x' }))
+    // The store reads localStorage at module init / reset time, so re-apply the
+    // seeded values to the shared store (it outlives the hook across tests).
+    useClipsStateStore.getState().reset()
     makeDinho()
 
     const { result } = renderHook(() => useClipsState())
@@ -233,13 +241,12 @@ describe('useClipsState', () => {
   })
 
   it('logs an error and clears the refreshing flag when the list request rejects', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    makeDinho({ clipsList: vi.fn().mockRejectedValue(new Error('boom')) })
+    const logSpy = vi.fn()
+    makeDinho({ clipsList: vi.fn().mockRejectedValue(new Error('boom')), log: logSpy })
 
     const { result } = renderHook(() => useClipsState())
-    await waitFor(() => expect(errorSpy).toHaveBeenCalled())
+    await waitFor(() => expect(logSpy).toHaveBeenCalledWith('error', expect.stringContaining('refresh clip list')))
     expect(result.current.refreshing).toBe(false)
-    errorSpy.mockRestore()
   })
 
   it('ignores an empty status response', async () => {
@@ -577,6 +584,7 @@ describe('useClipsState', () => {
 
   it('filters clips by tab, favorites and search', async () => {
     localStorage.setItem('clips-favorites', JSON.stringify(['today.mp4']))
+    useClipsStateStore.getState().reset()
     const now = Date.now()
     const clips = [
       makeClip({ name: 'today.mp4', createdAt: new Date(now).toISOString() }),

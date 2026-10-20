@@ -557,7 +557,8 @@ describe('ClipsPage', () => {
     })
     expect(await screen.findByText('actionScreenshotLabel')).toBeTruthy()
     expect(screen.queryByText('actionToggleCaptureLabel')).toBeNull()
-    expect(await screen.findByText('actionPushToTalkLabel')).toBeTruthy()
+    // pushToTalk was removed from the action select (engine never supported it as a hotkey action)
+    expect(screen.queryByText('actionPushToTalkLabel')).toBeNull()
   })
 
   it('still offers the Push-to-Talk section in the audio settings', async () => {

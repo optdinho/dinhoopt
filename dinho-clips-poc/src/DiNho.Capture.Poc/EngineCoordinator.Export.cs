@@ -296,13 +296,23 @@ public sealed partial class EngineCoordinator
                     deleted += file.Length;
                     count++;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // Item 19: silenciar aqui escondia porquê o limite de disco não
+                    // descia (clip bloqueado por player/antivírus). Só visibilidade —
+                    // o fluxo continua: os restantes clips são tentados na mesma.
+                    Log.W("Cleanup", $"Falha ao remover clip {file.Name} no auto-cleanup: {ex.Message}");
+                }
             }
 
             if (deleted > 0)
                 Log.W("Cleanup", $"Removidos {count} clips ({deleted / (1024 * 1024)} MB) — limite={_config.Config.AutoCleanupThresholdGB}GB");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Item 19: a limpeza inteira abortava sem rasto (dir ilegível, IO error).
+            Log.E("Cleanup", $"Auto-cleanup abortado: {ex.Message}");
+        }
     }
 
     private EngineStatusMessage GetStatusMessage()

@@ -1,163 +1,33 @@
-import { join, resolve } from 'node:path'
-import type { HotkeyBinding } from '@shared/types'
+import { clipPathInOutputDir, getDefaultOutputDir } from './clips-config-paths'
+import { baseConfigPayload, config, migrateHotkeys, modifierVk, normalizeFps } from './clips-config-schema'
 import { loadClipsConfig, saveClipsConfig } from './clips-config-store'
+import { defaultHotkeys } from './clips-default-hotkeys'
 
-const MODIFIER_VK_MAP: Record<string, number> = {
-  Ctrl: 0x11,
-  Shift: 0x10,
-  Alt: 0x12,
-}
+/**
+ * Clips config orchestrator — facade over the split modules.
+ *
+ * Fase 3 (item 11) split this file's responsibilities:
+ *  - `clips-config-schema.ts` — config state shape, defaults, validation/normalization
+ *    (`normalizeFps`, `migrateHotkeys`, `modifierVk`, `baseConfigPayload`);
+ *  - `clips-config-paths.ts`  — output-directory resolution + clip path containment;
+ *  - `clips-config-store.ts`  — JSON persistence (`loadClipsConfig`/`saveClipsConfig`);
+ *  - this file — orchestration: load/persist wiring and engine/UI payload derivation.
+ *
+ * Every name below is re-exported with the SAME signature as before, so no consumer
+ * (`ipc/clips.ipc.ts`, `ipc/clips-engine-connection.ts`, `ipc/clips-engine.ts`,
+ * `ipc/clips-encode.ipc.ts`, `ipc/clip-video-protocol.ts`) needs to change its import.
+ */
 
-// Clip recording only supports 30/60 FPS (UI + engine whitelist). Any other
-// value (75/120 legacy persisted) is normalized back to 60 for consistency.
-export function normalizeFps(fps: number): number {
-  return fps === 30 || fps === 60 ? fps : 60
-}
-
-export interface ConfigState {
-  engineFps: number
-  engineReplayTimeSeconds: number
-  width: number
-  height: number
-  bitrateKbps: number
-  cq: number
-  maxrateKbps: number
-  bufsizeKbps: number
-  bframes: number
-  lookahead: number
-  encoderPreset: string
-  codec: string
-  adapterIndex: number
-  micEnabled: boolean
-  audioLoopback: boolean
-  forceSoftware: boolean
-  pushToTalk: 'off' | 'hold' | 'toggle'
-  pushToTalkKeys: number[]
-  gameDetection: boolean
-  gameAudioOnly: boolean
-  customGameProcess: string
-  micDeviceId: string
-  autoStartCapture: boolean
-  useExcludeMode: boolean
-  excludeProcessId: number
-  hotkeys: HotkeyBinding[]
-  outputDirectory: string
-  gameVolume: number
-  micVolume: number
-  selectedAudioSessions: number[]
-  noiseSuppression: boolean
-  audioSampleRate: number
-  autoCleanupEnabled: boolean
-  autoCleanupThresholdGB: number
-  adaptiveQuality: boolean
-  stretchToFit: boolean
-  replayBufferMode: 'ram' | 'hybrid' | 'disk'
-}
-
-export const config: ConfigState = {
-  engineFps: 60,
-  engineReplayTimeSeconds: 120,
-  width: 1280,
-  height: 720,
-  bitrateKbps: 30000,
-  cq: 20,
-  maxrateKbps: 30000,
-  bufsizeKbps: 60000,
-  bframes: 3,
-  lookahead: 16,
-  encoderPreset: 'p5',
-  codec: 'auto',
-  adapterIndex: -1,
-  micEnabled: true,
-  audioLoopback: false,
-  forceSoftware: false,
-  pushToTalk: 'hold',
-  pushToTalkKeys: [5, 20],
-  gameDetection: true,
-  gameAudioOnly: true,
-  customGameProcess: '',
-  micDeviceId: '',
-  autoStartCapture: true,
-  useExcludeMode: false,
-  excludeProcessId: 0,
-  hotkeys: [],
-  outputDirectory: '',
-  gameVolume: 1.0,
-  micVolume: 1.0,
-  selectedAudioSessions: [],
-  noiseSuppression: false,
-  audioSampleRate: 48000,
-  autoCleanupEnabled: true,
-  autoCleanupThresholdGB: 100,
-  adaptiveQuality: false,
-  stretchToFit: true,
-  replayBufferMode: 'disk',
-}
-
-function defaultHotkeys(): HotkeyBinding[] {
-  return [
-    { id: 'hk-save-8', vk: 0x77, modifiers: [], action: 'saveClip', replayDurationSeconds: 60, enabled: true },
-    { id: 'hk-capture', vk: 0x78, modifiers: [], action: 'screenshot', enabled: true },
-    { id: 'hk-mic', vk: 0x79, modifiers: [], action: 'toggleMic', enabled: true },
-  ]
-}
-
-/** Migra atalhos legados: o antigo "toggleCapture" virou printscreen (decisão do usuário). */
-function migrateHotkeys(hotkeys: HotkeyBinding[] | undefined): HotkeyBinding[] {
-  if (!hotkeys) return []
-  return hotkeys.map((hk) =>
-    hk.action === 'toggleCapture' ? { ...hk, action: 'screenshot' as HotkeyBinding['action'] } : hk,
-  )
-}
-
-function baseConfigPayload(): Record<string, unknown> {
-  const c = config
-  return {
-    replayTimeSeconds: c.engineReplayTimeSeconds,
-    micEnabled: c.micEnabled,
-    audioLoopback: c.audioLoopback,
-    fps: c.engineFps,
-    width: c.width,
-    height: c.height,
-    bitrateKbps: c.bitrateKbps,
-    cq: c.cq,
-    maxrateKbps: c.maxrateKbps,
-    bufsizeKbps: c.bufsizeKbps,
-    bframes: c.bframes,
-    lookahead: c.lookahead,
-    encoderPreset: c.encoderPreset,
-    codec: c.codec,
-    adapterIndex: c.adapterIndex,
-    outputDirectory: getDefaultOutputDir(),
-    forceSoftware: c.forceSoftware,
-    pushToTalk: c.pushToTalk,
-    pushToTalkKeys: c.pushToTalkKeys,
-    gameDetection: c.gameDetection,
-    gameAudioOnly: c.gameAudioOnly,
-    customGameProcess: c.customGameProcess || undefined,
-    micDeviceId: c.micDeviceId || undefined,
-    autoStartCapture: c.autoStartCapture || undefined,
-    useExcludeMode: c.useExcludeMode,
-    excludeProcessId: c.useExcludeMode ? process.pid : c.excludeProcessId,
-    gameVolume: c.gameVolume,
-    micVolume: c.micVolume,
-    audioSampleRate: c.audioSampleRate,
-    autoCleanupEnabled: c.autoCleanupEnabled,
-    autoCleanupThresholdGB: c.autoCleanupThresholdGB,
-    noiseSuppression: c.noiseSuppression,
-    adaptiveQuality: c.adaptiveQuality,
-    stretchToFit: c.stretchToFit,
-    replayBufferMode: c.replayBufferMode,
-  }
-}
+export type { ConfigState } from './clips-config-schema'
+export { clipPathInOutputDir, config, getDefaultOutputDir, migrateHotkeys, normalizeFps }
 
 export function buildEngineConfig(): Record<string, unknown> {
   const hks = config.hotkeys.length > 0 ? config.hotkeys : defaultHotkeys()
   return {
-    ...baseConfigPayload(),
+    ...baseConfigPayload(getDefaultOutputDir),
     Hotkeys: hks.map((hk) => ({
       vk: hk.vk,
-      modifiers: hk.modifiers.map((m) => MODIFIER_VK_MAP[m] ?? 0),
+      modifiers: hk.modifiers.map(modifierVk),
       action: hk.action.charAt(0).toUpperCase() + hk.action.slice(1),
       replayDurationSeconds: hk.replayDurationSeconds,
       enabled: hk.enabled,
@@ -166,35 +36,9 @@ export function buildEngineConfig(): Record<string, unknown> {
   }
 }
 
-export function getDefaultOutputDir(): string {
-  if (config.outputDirectory) return config.outputDirectory
-  const home =
-    process.env.USERPROFILE ||
-    (process.env.HOMEDRIVE && process.env.HOMEPATH ? process.env.HOMEDRIVE + process.env.HOMEPATH : undefined) ||
-    process.cwd()
-  // Default: %USERPROFILE%\Videos\DiNho Clips — pasta de vídeos do usuário (observável,
-  // com nome da marca). O usuário muda pelo front (seletor de pasta) e o valor escolhido
-  // persiste em config.outputDirectory, que tem precedência aqui.
-  return join(home, 'Videos', 'DiNho Clips')
-}
-
-export function clipPathInOutputDir(inputPath: string): string | null {
-  const outputDir = getDefaultOutputDir()
-  try {
-    const resolved = resolve(outputDir, inputPath)
-    const normalized = outputDir.toLowerCase()
-    const prefix = normalized.endsWith('\\') || normalized.endsWith('/') ? normalized : `${normalized}\\`
-    const isDirItself = resolved.toLowerCase() === normalized
-    if (!isDirItself && !resolved.toLowerCase().startsWith(prefix)) return null
-    return resolved
-  } catch {
-    return null
-  }
-}
-
 export function getCurrentConfigPayload(): Record<string, unknown> {
   return {
-    ...baseConfigPayload(),
+    ...baseConfigPayload(getDefaultOutputDir),
     selectedAudioSessions: config.selectedAudioSessions,
     hotkeys: config.hotkeys.length > 0 ? config.hotkeys : defaultHotkeys(),
     excludeProcessId: config.useExcludeMode ? process.pid : config.excludeProcessId,

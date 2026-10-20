@@ -1,7 +1,6 @@
 using System.Buffers;
 using DiNho.Capture.Poc.Export;
 using DiNho.Capture.Poc.Logging;
-using Vortice.MediaFoundation;
 
 namespace DiNho.Capture.Poc.Encoders;
 

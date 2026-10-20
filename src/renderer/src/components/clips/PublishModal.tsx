@@ -2,6 +2,7 @@ import { Copy, ExternalLink, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import logger from '@/lib/renderer-logger'
 
 interface PublishModalProps {
   link: string
@@ -30,7 +31,8 @@ export default function PublishModal({ link, onClose }: PublishModalProps) {
         clearTimeout(timerRef.current)
       }
       timerRef.current = window.setTimeout(() => setCopied(false), 2000)
-    } catch {
+    } catch (err) {
+      logger.warn('clips', `Clipboard write of the publish link failed (${String(err)})`)
       toast.error(t('copyFailed'))
     }
   }

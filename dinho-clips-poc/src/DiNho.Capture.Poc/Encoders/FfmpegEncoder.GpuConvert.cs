@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using DiNho.Capture.Poc.Logging;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
-using Vortice.MediaFoundation;
 
 namespace DiNho.Capture.Poc.Encoders;
 

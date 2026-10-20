@@ -67,6 +67,7 @@ import { cancelAllClipJobs } from './services/clip-encode-job'
 import { isAdmin } from './services/elevation'
 import { execNativeUtf8, killAllChildren, psUtf8 } from './services/exec-utf8'
 import { getLogger } from './services/logger.service'
+import { attachMouseNavGuard } from './services/mouse-back-forward-guard'
 import { attachRendererDiagnostics } from './services/renderer-diagnostics'
 import { completeScheduleRun, notifyScheduledScanComplete, startScheduler, stopScheduler } from './services/scheduler'
 import { getSettings } from './services/settings-store'
@@ -436,6 +437,15 @@ function initGui(): void {
     const isStartupLaunch = process.argv.includes('--startup')
 
     attachRendererDiagnostics(mainWindow)
+
+    // Mouse XButton1/XButton2 (back/forward) não pode navegar o hash-history do renderer:
+    // desmontaria o React app a meio de operações (ex. save de clip). preventDefault em
+    // `input-event` NÃO funciona — o Electron descarta o retorno de Emit (probe A/B com
+    // cliques reais, 2026-10-20), por isso o guard detecta o XButton no `input-event` e
+    // DESFAZ a navegação no `did-navigate-in-page` (goForward/goBack numa janela curta).
+    // Nada é suprimido ao renderer: mousedown/auxclick button 3/4 continuam a chegar
+    // (rebind de hotkeys) — mecanismo, testes e limitações em mouse-back-forward-guard.ts.
+    attachMouseNavGuard(mainWindow.webContents)
 
     mainWindow.on('ready-to-show', () => {
       assertTaskbarIcon()

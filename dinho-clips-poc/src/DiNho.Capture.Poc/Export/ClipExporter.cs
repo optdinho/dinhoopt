@@ -67,7 +67,18 @@ public sealed partial class ClipExporter : IDisposable
         // Opção B: descarta prefixo não-ADTS (frames corrompidos do spill pré-fix A)
         // ANTES do parse de sample rate e do hasAudioTracks, para que audioPackets[0]
         // seja sempre ADTS válido quando houver áudio.
-        audioPackets = TrimNonAdtsPrefix(audioPackets);
+        audioPackets = TrimNonAdtsPrefix(audioPackets, out var nonAdtsDiscarded);
+
+        // Item 22: descarte TOTAL neste ponto era silencioso (o warning interno do
+        // TrimNonAdtsPrefix só dispara quando existe pacote ADTS válido no suffixo).
+        if (nonAdtsDiscarded > 0 && audioPackets.Count == 0)
+            Log.W("Exporter", $"TrimNonAdtsPrefix: {nonAdtsDiscarded} pacote(s) de áudio e nenhum era ADTS válido — exportando vídeo sem áudio");
+
+        // Item 22: havia áudio ADTS válido na entrada ANTES do filtro de intervalos.
+        // É este sinal que o verify recebe como expectedAudio — sem ele, um clip cujo
+        // filtro descarta 100% do áudio seria publicado mudo sem acusar falha
+        // (hasAudioTracks é pós-filtro e não pode servir de expectativa).
+        bool hadAudioOnInput = audioPackets.Count > 0;
 
         // Parse audio sample rate from first ADTS packet (used for padding & CodecDelay)
         int audioSampleRate = 48000;
@@ -147,6 +158,13 @@ public sealed partial class ClipExporter : IDisposable
                     audioPackets = FilterAudioByIntervals(audioPackets, intervals);
                     gapsRemoved = origAudioCount - audioPackets.Count;
                     // Note: gapsRemoved is number of audio packets removed = original - filtered.
+
+                    // Item 22: o filtro descartou TODO o áudio — sinal de PTS fora da
+                    // timeline do vídeo. O verify vai rejeitar o export com
+                    // ExpectedAudioMissing (hadAudioOnInput); aqui fica o motivo para
+                    // investigação no log.
+                    if (origAudioCount > 0 && audioPackets.Count == 0)
+                        Log.W("PTS", $"todo o áudio ({origAudioCount} pacote(s)) foi descartado pelo filtro de intervalos — investigar PTS");
 
                     int startTrimmed = audioPackets.Count;
                     audioPackets = TrimAudioStart(audioPackets, videoPackets[0].Pts);
@@ -325,7 +343,9 @@ public sealed partial class ClipExporter : IDisposable
                 // thumbnail na mesma chamada ffmpeg) e só publica no caminho final
                 // se passar. Um export quebrado agora LANÇA — nunca chega um
                 // arquivo truncado ao diretório do usuário.
-                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, rawFormat, adtsTemp, audioOffset);
+                // Item 22: expectedAudio = hadAudioOnInput (áudio ADTS válido antes do
+                // filtro), não hasAudioTracks (pós-filtro) — ver MuxWithFfmpegStreaming.
+                MuxWithFfmpegStreaming(outputPath, mkvTemp, hasAudioTracks, hadAudioOnInput, rawFormat, adtsTemp, audioOffset);
             }
             finally
             {
@@ -345,6 +365,11 @@ public sealed partial class ClipExporter : IDisposable
         string outputPath,
         string videoPath,
         bool hasAudioTracks,
+        // Item 22: expectativa de áudio do CALLER (havia áudio ADTS válido na
+        // entrada, antes do sync/filtro). hasAudioTracks é pós-filtro: usá-lo como
+        // expectedAudio fazia o verify aceitar um clip mudo quando o filtro
+        // descartava 100% do áudio — publicação silenciosa sem acusar falha.
+        bool expectedAudio,
         string rawFormat = "h264",
         string? adtsPath = null,
         TimeSpan audioOffset = default)
@@ -372,7 +397,7 @@ public sealed partial class ClipExporter : IDisposable
                 Log.I("Exporter", $"ffmpeg mux: {args.Replace("\"", "'")}");
                 RunFfmpegMux(args);
             },
-            partial => GenerateThumbnailAndVerify(partial, stagingThumb, hasAudioTracks),
+            partial => GenerateThumbnailAndVerify(partial, stagingThumb, expectedAudio),
             stagingThumb);
     }
 
@@ -734,12 +759,25 @@ public sealed partial class ClipExporter : IDisposable
     /// dessincroniza A/V porque a âncora do sync é o FIM dos streams e o prefixo
     /// removido está no início. Retorna a lista original se já começa em ADTS.
     /// </summary>
-    internal static List<EncodedPacket> TrimNonAdtsPrefix(List<EncodedPacket> audioPackets)
+    /// <param name="discardedCount">
+    /// Item 22: quantos pacotes foram descartados (Count quando nenhum é ADTS válido,
+    /// first quando há um prefixo a remover, 0 caso contrário) — permite ao caller
+    /// registar o descarte TOTAL, que aqui dentro permaneceria silencioso.
+    /// </param>
+    internal static List<EncodedPacket> TrimNonAdtsPrefix(List<EncodedPacket> audioPackets, out int discardedCount)
     {
+        discardedCount = 0;
         if (audioPackets.Count == 0) return audioPackets;
         int first = audioPackets.FindIndex(p => p.Type == MediaType.Audio && IsAdts(p));
-        if (first == -1) return new List<EncodedPacket>();
+        if (first == -1)
+        {
+            // Item 22: antes retornava lista vazia sem contar o descarte — o caller
+            // via apenas "sem áudio" e o operador nunca soube que 100% foi jogado fora.
+            discardedCount = audioPackets.Count;
+            return new List<EncodedPacket>();
+        }
         if (first == 0) return audioPackets;
+        discardedCount = first;
         Log.W("Exporter", $"TrimNonAdtsPrefix: descartando {first} pacote(s) não-ADTS no início do áudio");
         return audioPackets.GetRange(first, audioPackets.Count - first);
     }

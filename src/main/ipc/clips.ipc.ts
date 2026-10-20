@@ -1,26 +1,9 @@
 import { execFile } from 'node:child_process'
-import { access, stat as fsStat, mkdir, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { access, stat as fsStat, rename, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { IPC } from '@shared/channels'
-import type {
-  AudioSessionInfo,
-  ClipEncodeProgressEvent,
-  ClipInfo,
-  ClipMergeResult,
-  ClipTrimResult,
-  HotkeyBinding,
-  IpcResult,
-  MicDeviceInfo,
-} from '@shared/types'
+import type { AudioSessionInfo, ClipInfo, HotkeyBinding, IpcResult, MicDeviceInfo } from '@shared/types'
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import {
-  cancelClipJob,
-  clearClipJob,
-  createProgressEmitter,
-  FFMPEG_PROGRESS_ARGS,
-  isClipJobCancelled,
-  registerClipJob,
-} from '../services/clip-encode-job'
 import { rememberAmdDetection, resolveAmdAvailable } from '../services/clips-amd-cache'
 import {
   buildEngineConfig,
@@ -28,32 +11,24 @@ import {
   clipPathInOutputDir,
   getCurrentConfigPayload,
   getDefaultOutputDir,
+  migrateHotkeys,
   normalizeFps,
   persistClipsConfig,
 } from '../services/clips-config-manager'
-import { buildReEncodeArgs, resolveTrimCodec } from '../services/clips-encode-args'
-import {
-  AMD_VENDOR_ID,
-  appendSharpnessFilter,
-  buildAmfEnhanceVf,
-  normalizeSharpness,
-  parseEnhanceOption,
-  probeVideoResolution,
-} from '../services/clips-enhance'
+import { AMD_VENDOR_ID } from '../services/clips-enhance'
 import { uploadClipToGofile } from '../services/clips-publish'
-import { psEncodedArgs, trackChildProcess } from '../services/exec-utf8'
-import { getFfmpegPath } from '../services/ffmpeg-path'
+import { psEncodedArgs } from '../services/exec-utf8'
 import { getLogger } from '../services/logger.service'
 import { getCachedThumbnailPath, getThumbnailDataUrl } from '../services/thumbnail-generator'
+import { registerClipsEncodeIpc } from './clips-encode.ipc'
 import {
-  getCachedDurationSeconds,
   getCurrentStatus,
   invalidateClipsCache,
   invalidateDurationCache,
   isEngineRunning,
   isPipeConnected,
+  onceEngineStopped,
   readClipsFromDisk,
-  readEngineStatus,
   sendPipeCommand,
   sendPipeCommandLongRunning,
   sendWithFallback,
@@ -61,7 +36,25 @@ import {
   startEngine,
   stopClipCapture,
   stopEngineProcess,
+  waitForPipeConnected,
 } from './clips-engine-connection'
+
+// ─── Item 9: helpers de resultado ───────────────────────────────
+// Substituem as construções `{ success: true/false, error: … }` repetidas
+// pelo ficheiro. Os textos de erro passam para dentro dos helpers sem qualquer
+// alteração — são contrato visível (UI + testes).
+
+function ok(): { success: true } {
+  return { success: true }
+}
+
+function fail(error: string): { success: false; error: string } {
+  return { success: false, error }
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 async function fileExists(path: string): Promise<boolean> {
   try {
@@ -70,23 +63,6 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-/** Pushes a re-encode reading to every live window. */
-function sendClipProgress(channel: string, event: ClipEncodeProgressEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue
-    win.webContents.send(channel, event)
-  }
-}
-
-/**
- * Stable identity for a merge job, so the renderer can match readings to the
- * job it started and cancel exactly that one. The order is normalised because
- * the selection order carries no meaning for the key.
- */
-function mergeJobKey(safePaths: string[]): string {
-  return [...safePaths].sort().join('|')
 }
 
 let _micDevicesCache: MicDeviceInfo[] | null = null
@@ -173,30 +149,38 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(IPC.CLIPS_STOP_ENGINE, async (): Promise<{ success: boolean }> => {
     stopEngineProcess()
-    return { success: true }
+    return ok()
   })
 
   ipcMain.handle(IPC.CLIPS_START_CAPTURE, startClipCapture)
 
   ipcMain.handle(IPC.CLIPS_STOP_CAPTURE, async (): Promise<IpcResult> => {
     const result = await stopClipCapture()
-    return result.success ? { success: true } : { success: false, error: result.error ?? 'Failed to stop capture' }
+    return result.success ? ok() : fail(result.error ?? 'Failed to stop capture')
   })
 
   ipcMain.handle(IPC.CLIPS_SAVE_CLIP, async (): Promise<IpcResult> => {
     if (!isEngineRunning()) {
       getLogger().warning('clips', 'SaveClip failed: Engine not running')
-      return { success: false, error: 'Engine not running' }
+      return fail('Engine not running')
     }
     if (!isPipeConnected()) {
-      const deadline = Date.now() + 5000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 200))
-        if (isPipeConnected()) break
-        if (!isEngineRunning()) {
+      // Item 4 — espera dirigida por eventos, sem polling: subscrição à paragem
+      // explícita do engine aborta a espera de imediato (utilizador, fim da app,
+      // auto-session). Uma queda NATURAL do processo não é observável daqui (não
+      // existe notificação para crash), por isso é apanhada pelo único
+      // isEngineRunning() abaixo, quando a espera termina ao fim de 5s — o texto
+      // de erro é o mesmo de antes, só a latência difere.
+      const controller = new AbortController()
+      const unsubscribe = onceEngineStopped(() => controller.abort())
+      try {
+        const connected = await waitForPipeConnected(5000, { signal: controller.signal })
+        if (!connected && (controller.signal.aborted || !isEngineRunning())) {
           getLogger().warning('clips', 'SaveClip failed: Engine stopped during reconnect wait')
-          return { success: false, error: 'Engine not running' }
+          return fail('Engine not running')
         }
+      } finally {
+        unsubscribe()
       }
     }
     if (isPipeConnected()) {
@@ -207,13 +191,13 @@ export function registerClipsIpc(): void {
       const resp = await sendPipeCommandLongRunning('saveClip')
       if (resp.payload?.success === false || resp.payload?.error) {
         getLogger().warning('clips', `SaveClip failed: ${resp.payload?.error || 'Save failed'}`)
-        return { success: false, error: String(resp.payload?.error || 'Save failed') }
+        return fail(String(resp.payload?.error || 'Save failed'))
       }
       invalidateClipsCache()
-      return { success: true }
+      return ok()
     } catch (err) {
-      getLogger().warning('clips', `SaveClip exception: ${err instanceof Error ? err.message : String(err)}`)
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
+      getLogger().warning('clips', `SaveClip exception: ${errMessage(err)}`)
+      return fail(errMessage(err))
     }
   })
 
@@ -225,12 +209,12 @@ export function registerClipsIpc(): void {
   ipcMain.handle(IPC.CLIPS_DELETE_CLIP, async (_event, clipName: unknown): Promise<IpcResult> => {
     if (typeof clipName !== 'string') {
       getLogger().warning('clips', 'DeleteClip failed: Invalid clip name (not a string)')
-      return { success: false, error: 'Invalid clip name' }
+      return fail('Invalid clip name')
     }
     const clipPath = clipPathInOutputDir(clipName)
     if (!clipPath) {
       getLogger().warning('clips', `DeleteClip failed: Invalid path for '${clipName}'`)
-      return { success: false, error: 'Invalid path' }
+      return fail('Invalid path')
     }
     try {
       const outputDir = getDefaultOutputDir()
@@ -253,22 +237,22 @@ export function registerClipsIpc(): void {
       }
       invalidateDurationCache(clipPath)
       invalidateClipsCache()
-      return { success: true }
+      return ok()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errMessage(err)
       getLogger().warning('clips', `DeleteClip failed: ${msg}`)
-      return { success: false, error: msg }
+      return fail(msg)
     }
   })
 
   ipcMain.handle(IPC.CLIPS_RENAME_CLIP, async (_event, clipName: unknown, newName: unknown): Promise<IpcResult> => {
     if (typeof clipName !== 'string' || !clipName) {
       getLogger().warning('clips', 'RenameClip failed: Invalid clip name')
-      return { success: false, error: 'Invalid clip name' }
+      return fail('Invalid clip name')
     }
     if (typeof newName !== 'string' || !newName) {
       getLogger().warning('clips', 'RenameClip failed: Invalid new name')
-      return { success: false, error: 'Invalid new name' }
+      return fail('Invalid new name')
     }
     let resolvedName = newName
     if (resolvedName.endsWith('.mp4')) {
@@ -276,27 +260,27 @@ export function registerClipsIpc(): void {
     }
     if (!resolvedName) {
       getLogger().warning('clips', 'RenameClip failed: Invalid new name (empty after stripping .mp4)')
-      return { success: false, error: 'Invalid new name' }
+      return fail('Invalid new name')
     }
     resolvedName = `${resolvedName}.mp4`
     const oldPath = clipPathInOutputDir(clipName)
     if (!oldPath) {
       getLogger().warning('clips', `RenameClip failed: Invalid old clip name '${clipName}'`)
-      return { success: false, error: 'Invalid old clip name' }
+      return fail('Invalid old clip name')
     }
     const newPath = clipPathInOutputDir(resolvedName)
     if (!newPath) {
       getLogger().warning('clips', `RenameClip failed: Invalid new clip name '${resolvedName}'`)
-      return { success: false, error: 'Invalid new clip name' }
+      return fail('Invalid new clip name')
     }
     try {
       if (!(await fileExists(oldPath))) {
         getLogger().warning('clips', `RenameClip failed: Clip '${clipName}' not found`)
-        return { success: false, error: 'Clip not found' }
+        return fail('Clip not found')
       }
       if (await fileExists(newPath)) {
         getLogger().warning('clips', `RenameClip failed: A clip named '${resolvedName}' already exists`)
-        return { success: false, error: 'A clip with that name already exists' }
+        return fail('A clip with that name already exists')
       }
       await rename(oldPath, newPath)
       const outputDir = getDefaultOutputDir()
@@ -329,11 +313,11 @@ export function registerClipsIpc(): void {
       }
       invalidateDurationCache(oldPath)
       invalidateClipsCache()
-      return { success: true }
+      return ok()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errMessage(err)
       getLogger().warning('clips', `RenameClip failed: ${msg}`)
-      return { success: false, error: msg }
+      return fail(msg)
     }
   })
 
@@ -418,13 +402,19 @@ export function registerClipsIpc(): void {
         C.pushToTalkKeys = [c.pushToTalkKey as number]
       }
       if (Array.isArray(c.hotkeys)) {
-        C.hotkeys = c.hotkeys.filter(
-          (h): h is HotkeyBinding =>
-            typeof h === 'object' &&
-            h !== null &&
-            typeof (h as Record<string, unknown>).vk === 'number' &&
-            typeof (h as Record<string, unknown>).action === 'string' &&
-            Array.isArray((h as Record<string, unknown>).modifiers),
+        // Migra ações legadas na ESCRITA também (pushToTalk → toggleMic, toggleCapture →
+        // screenshot): o load já migra, mas sem isto uma config antiga re-entraria pela UI
+        // e seria re-persistida com a ação morta (o <select> de ClipsConfigGame.tsx não a
+        // oferece mais → valor branco).
+        C.hotkeys = migrateHotkeys(
+          c.hotkeys.filter(
+            (h): h is HotkeyBinding =>
+              typeof h === 'object' &&
+              h !== null &&
+              typeof (h as Record<string, unknown>).vk === 'number' &&
+              typeof (h as Record<string, unknown>).action === 'string' &&
+              Array.isArray((h as Record<string, unknown>).modifiers),
+          ),
         )
       }
       if (typeof c.outputDirectory === 'string' && c.outputDirectory.length > 0 && c.outputDirectory.length < 1024) {
@@ -457,12 +447,12 @@ export function registerClipsIpc(): void {
       const syncResult = await sendWithFallback('config', engineConfig)
       if (!syncResult.success) {
         getLogger().warning('clips', `Config sync to engine failed: ${syncResult.error}`)
-        return { success: false, error: syncResult.error || 'Config sync to engine failed' }
+        return fail(syncResult.error || 'Config sync to engine failed')
       }
     } else {
       getLogger().info('clips', 'Config sync: pipe not connected, skipping')
     }
-    return { success: true }
+    return ok()
   })
 
   ipcMain.handle(IPC.CLIPS_SELECT_OUTPUT_DIR, async (): Promise<string | null> => {
@@ -515,25 +505,25 @@ export function registerClipsIpc(): void {
   ipcMain.handle(IPC.CLIPS_SET_AUDIO_SESSIONS, async (_event, sessionPids: unknown): Promise<IpcResult> => {
     if (!Array.isArray(sessionPids)) {
       getLogger().warning('clips', 'SetAudioSessions failed: sessionPids must be an array')
-      return { success: false, error: 'sessionPids must be an array' }
+      return fail('sessionPids must be an array')
     }
     const pids = sessionPids.filter((p): p is number => typeof p === 'number')
     C.selectedAudioSessions = pids
     persistClipsConfig()
     if (!isPipeConnected()) {
       getLogger().warning('clips', 'SetAudioSessions failed: engine pipe not connected')
-      return { success: false, error: 'Engine pipe not connected' }
+      return fail('Engine pipe not connected')
     }
     try {
       const resp = await sendPipeCommand('setAudioSessions', { pids })
       if (resp.payload?.success === false) {
         getLogger().warning('clips', `SetAudioSessions failed: ${resp.payload?.error || 'Command failed'}`)
-        return { success: false, error: (resp.payload?.error as string) || 'Command failed' }
+        return fail((resp.payload?.error as string) || 'Command failed')
       }
-      return { success: true }
+      return ok()
     } catch (err) {
-      getLogger().warning('clips', `SetAudioSessions failed: ${err instanceof Error ? err.message : String(err)}`)
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
+      getLogger().warning('clips', `SetAudioSessions failed: ${errMessage(err)}`)
+      return fail(errMessage(err))
     }
   })
 
@@ -553,7 +543,7 @@ export function registerClipsIpc(): void {
         }
         getLogger().warning('clips-mic', 'devices is not an array')
       } catch (err) {
-        getLogger().warning('clips-mic', `pipe error: ${err instanceof Error ? err.message : String(err)}`)
+        getLogger().warning('clips-mic', `pipe error: ${errMessage(err)}`)
       }
     }
     return enumerateMicDevicesLocal()
@@ -594,16 +584,16 @@ export function registerClipsIpc(): void {
   ipcMain.handle(IPC.CLIPS_SET_FAVORITE, async (_event, clipName: unknown, favorite: unknown): Promise<IpcResult> => {
     if (typeof clipName !== 'string' || !clipName) {
       getLogger().warning('clips', 'SetFavorite failed: Invalid clip name')
-      return { success: false, error: 'Invalid clip name' }
+      return fail('Invalid clip name')
     }
     if (typeof favorite !== 'boolean') {
       getLogger().warning('clips', 'SetFavorite failed: Invalid favorite value (must be boolean)')
-      return { success: false, error: 'Invalid favorite value' }
+      return fail('Invalid favorite value')
     }
     const resolvedName = clipPathInOutputDir(`.${clipName}.favorite`)
     if (!resolvedName) {
       getLogger().warning('clips', `SetFavorite failed: Invalid clip name '${clipName}'`)
-      return { success: false, error: 'Invalid clip name' }
+      return fail('Invalid clip name')
     }
     try {
       if (favorite) {
@@ -613,334 +603,48 @@ export function registerClipsIpc(): void {
           await unlink(resolvedName)
         }
       }
-      return { success: true }
+      return ok()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errMessage(err)
       getLogger().error('clips', `Failed to set favorite: ${msg}`)
-      return { success: false, error: msg }
+      return fail(msg)
     }
   })
 
-  ipcMain.handle(
-    IPC.CLIPS_TRIM_CLIP,
-    async (
-      _event,
-      clipPath: string,
-      startSeconds: number,
-      endSeconds: number,
-      reEncode?: boolean,
-      enhance?: unknown,
-      sharpness?: unknown,
-    ): Promise<ClipTrimResult> => {
-      if (!clipPath || typeof clipPath !== 'string') {
-        getLogger().warning('clips', 'TrimClip failed: Invalid clip path')
-        return { success: false, error: 'Invalid clip path' }
-      }
-      const safePath = clipPathInOutputDir(clipPath)
-      if (!safePath || !(await fileExists(safePath))) {
-        getLogger().warning('clips', `TrimClip failed: Clip file not found '${clipPath}'`)
-        return { success: false, error: 'Clip file not found' }
-      }
-      if (
-        typeof startSeconds !== 'number' ||
-        typeof endSeconds !== 'number' ||
-        endSeconds <= startSeconds ||
-        startSeconds < 0
-      ) {
-        getLogger().warning('clips', `TrimClip failed: Invalid trim range (${startSeconds}-${endSeconds})`)
-        return { success: false, error: 'Invalid trim range' }
-      }
-      const outDir = getDefaultOutputDir()
-      await mkdir(outDir, { recursive: true })
-      const baseName = basename(safePath, '.mp4')
-      const outPath = join(outDir, `${baseName} DiNho Clipe ${Date.now()}.mp4`)
-      const copyArgs = ['-c', 'copy']
-      const enhanceOption = parseEnhanceOption(enhance)
-      let enhanceVf: string | null = null
-      if (enhanceOption !== 'none') {
-        if (!reEncode) {
-          getLogger().warning('clips', 'TrimClip enhance ignored: enhancement requires re-encode')
-        } else if (!resolveAmdAvailable(_amdDetected)) {
-          getLogger().warning('clips', 'TrimClip enhance ignored: no AMD GPU detected')
-        } else {
-          const res = await probeVideoResolution(getFfmpegPath(), safePath)
-          if (res) {
-            enhanceVf = buildAmfEnhanceVf(enhanceOption, res.w, res.h)
-          } else {
-            getLogger().warning('clips', 'TrimClip enhance ignored: could not probe source resolution')
-          }
-        }
-      }
-      const sharpnessVal = normalizeSharpness(sharpness)
-      if (sharpnessVal > 0 && !reEncode) {
-        getLogger().warning('clips', 'TrimClip sharpness ignored: sharpening requires re-encode')
-      }
-      const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
-      // Item 8: re-encodar com o codec que o engine detectou, não com libx264 fixo. Quem tem
-      // GPU parava de gastar CPU editando um clipe que tinha saído do encoder de hardware.
-      const trimCodec = resolveTrimCodec(readEngineStatus().codec)
-      const reEncodeArgs = buildReEncodeArgs({
-        codec: trimCodec,
-        cq: C.cq,
-        maxrateKbps: C.maxrateKbps,
-        bufsizeKbps: C.bufsizeKbps,
-      })
-      const totalSeconds = endSeconds - startSeconds
-      const jobKey = safePath
-      return new Promise((resolve) => {
-        const seekArgs = reEncode
-          ? [
-              '-i',
-              safePath,
-              '-ss',
-              String(startSeconds),
-              '-to',
-              String(endSeconds),
-              ...reEncodeArgs,
-              ...(vfChain ? ['-vf', vfChain] : []),
-            ]
-          : ['-ss', String(startSeconds), '-to', String(endSeconds), '-i', safePath, ...copyArgs]
-        const args = ['-y', '-loglevel', 'error', ...FFMPEG_PROGRESS_ARGS, ...seekArgs, outPath]
-        // Settles the promise exactly once: ffmpeg reports a killed process as
-        // an error, and a user cancel must not surface as a failure.
-        let settled = false
-        const finish = (result: ClipTrimResult) => {
-          if (settled) return
-          settled = true
-          clearClipJob(jobKey)
-          resolve(result)
-        }
-        const emitter = createProgressEmitter(jobKey, totalSeconds, (event) => {
-          sendClipProgress(IPC.CLIPS_TRIM_PROGRESS, event)
-        })
-        const proc = execFile(getFfmpegPath(), args, { timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }, (err) => {
-          if (isClipJobCancelled(jobKey)) {
-            // A half-written file is worse than no file: it would show up in
-            // the grid as an unplayable clip.
-            void unlink(outPath).catch(() => {
-              /* ignore cleanup error */
-            })
-            getLogger().info('clips', 'TrimClip cancelled by user')
-            finish({ success: false, cancelled: true })
-            return
-          }
-          if (err) {
-            void unlink(outPath).catch(() => {
-              /* ignore cleanup error */
-            })
-            getLogger().warning('clips', `TrimClip ffmpeg failed: ${err.message}`)
-            finish({ success: false, error: err.message })
-          } else {
-            invalidateClipsCache()
-            finish({ success: true, path: outPath })
-          }
-        })
-        registerClipJob(jobKey, proc)
-        // Undefined only in test doubles; execFile always pipes stderr in prod.
-        proc.stderr?.on('data', (chunk: Buffer) => emitter.push(chunk.toString('utf8')))
-        trackChildProcess(proc)
-        proc.on('error', (e) => {
-          void unlink(outPath).catch(() => {
-            /* ignore cleanup error */
-          })
-          getLogger().warning('clips', `TrimClip process error: ${e.message}`)
-          finish({ success: false, error: e.message })
-        })
-      })
-    },
-  )
-
-  ipcMain.handle(IPC.CLIPS_TRIM_CANCEL, (_event, clipPath: unknown): IpcResult => {
-    if (typeof clipPath !== 'string') return { success: false, error: 'Invalid clip path' }
-    const safePath = clipPathInOutputDir(clipPath)
-    if (!safePath || !cancelClipJob(safePath)) {
-      getLogger().warning('clips', 'Trim cancel failed: no re-encode in progress')
-      return { success: false, error: 'No re-encode in progress' }
-    }
-    return { success: true }
-  })
-
-  ipcMain.handle(
-    IPC.CLIPS_MERGE_CLIPS,
-    async (_event, clipPaths: string[], enhance?: unknown, sharpness?: unknown): Promise<ClipMergeResult> => {
-      if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
-        getLogger().warning(
-          'clips',
-          `MergeClips failed: At least 2 clips required (got ${Array.isArray(clipPaths) ? clipPaths.length : 0})`,
-        )
-        return { success: false, error: 'At least 2 clips required' }
-      }
-      const safePaths: string[] = []
-      for (const p of clipPaths) {
-        if (typeof p !== 'string') {
-          getLogger().warning('clips', 'MergeClips failed: Invalid clip path (not a string)')
-          return { success: false, error: 'Invalid clip path' }
-        }
-        const safe = clipPathInOutputDir(p)
-        if (!safe || !(await fileExists(safe))) {
-          getLogger().warning('clips', `MergeClips failed: Clip not found '${p}'`)
-          return { success: false, error: `Clip not found: ${p}` }
-        }
-        safePaths.push(safe)
-      }
-      const outDir = getDefaultOutputDir()
-      await mkdir(outDir, { recursive: true })
-      const now = new Date()
-      const pad = (n: number) => String(n).padStart(2, '0')
-      const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-      const concatFile = join(outDir, `concat_${Date.now()}.txt`)
-      const outPath = join(outDir, `DiNho Clipes ${ts}.mp4`)
-      const enhanceOption = parseEnhanceOption(enhance)
-      let enhanceVf: string | null = null
-      if (enhanceOption !== 'none') {
-        if (!resolveAmdAvailable(_amdDetected)) {
-          getLogger().warning('clips', 'MergeClips enhance ignored: no AMD GPU detected')
-        } else {
-          const res = await probeVideoResolution(getFfmpegPath(), safePaths[0]!)
-          if (res) {
-            enhanceVf = buildAmfEnhanceVf(enhanceOption, res.w, res.h)
-          } else {
-            getLogger().warning('clips', 'MergeClips enhance ignored: could not probe source resolution')
-          }
-        }
-      }
-      const sharpnessVal = normalizeSharpness(sharpness)
-      const vfChain = appendSharpnessFilter(enhanceVf, sharpnessVal)
-      // Item 8: mesma regra do trim — o merge com filtro re-encodava em libx264 fixo.
-      const mergeCodec = resolveTrimCodec(readEngineStatus().codec)
-      const streamArgs =
-        vfChain !== null
-          ? buildReEncodeArgs({
-              codec: mergeCodec,
-              cq: C.cq,
-              maxrateKbps: C.maxrateKbps,
-              bufsizeKbps: C.bufsizeKbps,
-              vfChain,
-            })
-          : ['-c', 'copy']
-      try {
-        const lines = safePaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
-        await writeFile(concatFile, lines.join('\n'), 'utf-8')
-        // The merged output is as long as the sum of its parts, which is the
-        // denominator the progress bar needs. Read from the warm duration cache
-        // so the encode never waits on extra ffmpeg probes.
-        const totalSeconds = safePaths.reduce((sum, p) => sum + getCachedDurationSeconds(p), 0)
-        const jobKey = mergeJobKey(safePaths)
-        return await new Promise((resolve) => {
-          const args = [
-            '-y',
-            '-loglevel',
-            'error',
-            ...FFMPEG_PROGRESS_ARGS,
-            '-f',
-            'concat',
-            '-safe',
-            '0',
-            '-i',
-            concatFile,
-            ...streamArgs,
-            outPath,
-          ]
-          let settled = false
-          const finish = (result: ClipMergeResult) => {
-            if (settled) return
-            settled = true
-            clearClipJob(jobKey)
-            resolve(result)
-          }
-          const emitter = createProgressEmitter(jobKey, totalSeconds, (event) => {
-            sendClipProgress(IPC.CLIPS_MERGE_PROGRESS, event)
-          })
-          const proc = execFile(getFfmpegPath(), args, { timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }, (err) => {
-            void unlink(concatFile).catch(() => {})
-            if (isClipJobCancelled(jobKey)) {
-              void unlink(outPath).catch(() => {
-                /* ignore cleanup error */
-              })
-              getLogger().info('clips', 'MergeClips cancelled by user')
-              finish({ success: false, cancelled: true })
-              return
-            }
-            if (err) {
-              void unlink(outPath).catch(() => {
-                /* ignore cleanup error */
-              })
-              getLogger().warning('clips', `MergeClips ffmpeg failed: ${err.message}`)
-              finish({ success: false, error: err.message })
-            } else {
-              invalidateClipsCache()
-              finish({ success: true, path: outPath })
-            }
-          })
-          registerClipJob(jobKey, proc)
-          proc.stderr?.on('data', (chunk: Buffer) => emitter.push(chunk.toString('utf8')))
-          trackChildProcess(proc)
-          proc.on('error', (e) => {
-            void unlink(concatFile).catch(() => {})
-            void unlink(outPath).catch(() => {
-              /* ignore cleanup error */
-            })
-            getLogger().warning('clips', `MergeClips process error: ${e.message}`)
-            finish({ success: false, error: e.message })
-          })
-        })
-      } catch (err) {
-        await unlink(concatFile).catch(() => {})
-        getLogger().warning('clips', `MergeClips failed: ${err instanceof Error ? err.message : String(err)}`)
-        return { success: false, error: err instanceof Error ? err.message : String(err) }
-      }
-    },
-  )
-
-  ipcMain.handle(IPC.CLIPS_MERGE_CANCEL, (_event, clipPaths: unknown): IpcResult => {
-    if (!Array.isArray(clipPaths) || clipPaths.length < 2) {
-      return { success: false, error: 'At least 2 clips required' }
-    }
-    const safePaths: string[] = []
-    for (const p of clipPaths) {
-      if (typeof p !== 'string') return { success: false, error: 'Invalid clip path' }
-      const safe = clipPathInOutputDir(p)
-      if (!safe) return { success: false, error: 'Invalid clip path' }
-      safePaths.push(safe)
-    }
-    if (!cancelClipJob(mergeJobKey(safePaths))) {
-      getLogger().warning('clips', 'Merge cancel failed: no re-encode in progress')
-      return { success: false, error: 'No re-encode in progress' }
-    }
-    return { success: true }
-  })
+  // ── Encode cluster (trim/merge + cancel) lives in clips-encode.ipc.ts ──
+  registerClipsEncodeIpc({ amdDetected: () => _amdDetected })
 
   ipcMain.handle(IPC.CLIPS_OPEN_EXTERNAL, (_event, url: unknown): IpcResult => {
     if (typeof url !== 'string') {
-      return { success: false, error: 'Invalid URL' }
+      return fail('Invalid URL')
     }
     try {
       const parsed = new URL(url)
       if (parsed.protocol !== 'https:') {
         getLogger().warning('clips', `Blocked non-https external URL: ${url}`)
-        return { success: false, error: 'Only https URLs are allowed' }
+        return fail('Only https URLs are allowed')
       }
       shell.openExternal(parsed.toString())
       return { success: true, data: { opened: true } }
     } catch {
       getLogger().warning('clips', `Invalid external URL: ${url}`)
-      return { success: false, error: 'Invalid URL' }
+      return fail('Invalid URL')
     }
   })
 
   ipcMain.handle(IPC.CLIPS_PUBLISH, async (_event, clipPath: unknown): Promise<IpcResult> => {
     if (typeof clipPath !== 'string' || !clipPath) {
       getLogger().warning('clips', 'Publish failed: Invalid clip path')
-      return { success: false, error: 'Invalid clip path' }
+      return fail('Invalid clip path')
     }
     const safe = clipPathInOutputDir(clipPath)
     if (!safe || !(await fileExists(safe))) {
       getLogger().warning('clips', `Publish failed: Clip file not found '${clipPath}'`)
-      return { success: false, error: 'Clip file not found' }
+      return fail('Clip file not found')
     }
     if (_publishingPaths.has(safe)) {
       getLogger().warning('clips', 'Publish failed: Upload already in progress')
-      return { success: false, error: 'Upload already in progress' }
+      return fail('Upload already in progress')
     }
     const controller = new AbortController()
     _publishingPaths.add(safe)
@@ -970,16 +674,16 @@ export function registerClipsIpc(): void {
 
   ipcMain.handle(IPC.CLIPS_PUBLISH_CANCEL, (_event, clipPath: unknown): IpcResult => {
     if (typeof clipPath !== 'string' || !clipPath) {
-      return { success: false, error: 'Invalid clip path' }
+      return fail('Invalid clip path')
     }
     const safe = clipPathInOutputDir(clipPath)
     const controller = safe ? _publishingControllers.get(safe) : undefined
     if (!safe || !controller) {
       getLogger().warning('clips', 'Publish cancel failed: no upload in progress')
-      return { success: false, error: 'No upload in progress' }
+      return fail('No upload in progress')
     }
     controller.abort(new Error('Aborted'))
-    return { success: true }
+    return ok()
   })
 }
 

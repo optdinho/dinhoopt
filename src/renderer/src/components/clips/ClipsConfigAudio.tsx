@@ -2,6 +2,7 @@ import type { AudioSessionInfo } from '@shared/types'
 import { RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import logger from '@/lib/renderer-logger'
 import { TipBadge } from './ClipsConfigQuality'
 import { CollapsibleMini, ToggleItem, TogglePill, VK_MAP, VolumeSlider } from './clips-utils'
 import type { ClipsState } from './useClipsState'
@@ -35,7 +36,8 @@ export function AudioSection({
     try {
       const sessions = await window.dinho?.clipsGetAudioSessions()
       setAudioSessions(Array.isArray(sessions) ? sessions : [])
-    } catch {
+    } catch (err) {
+      logger.warn('clips', `Failed to load audio sessions — starting empty (${String(err)})`)
       setAudioSessions([])
     }
   }, [])
