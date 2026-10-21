@@ -130,6 +130,7 @@
   "toastRestoreFailed_one": "{{count}} ajuste no pudo restaurarse — use el banner de limpieza debajo para reintentar cuando se resuelva la causa",
   "toastRestoreFailed_other": "{{count}} ajustes no pudieron restaurarse — use el banner de limpieza debajo para reintentar cuando se resuelva la causa",
   "toastDeactivationFailed": "Desactivación falló",
+  "toastCaptureToggleFailed": "No se pudo guardar la captura automática",
   "validationProcessName": "El nombre del proceso solo puede contener letras, números, puntos, guiones, guiones bajos y espacios",
   "pendingRestoreMessage": "Algunos ajustes de la última sesión no pudieron restaurarse automáticamente. Reintente una vez que se resuelva la causa (p. ej., derechos de administrador).",
   "retryCleanup": "Reintentar limpieza",

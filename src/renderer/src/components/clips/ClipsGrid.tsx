@@ -28,7 +28,7 @@ export function ClipsGrid({
   favorites,
   refreshing,
   refreshClips,
-  handleDeleteSelected,
+  setDeleteAllPending,
   setMergeModePaths,
   handleOpenClip,
   openClipEditor,
@@ -39,7 +39,7 @@ export function ClipsGrid({
   publishingPath,
   publishProgress,
   publishedLinks,
-  handleDeleteClip,
+  setDeleteTarget,
   toggleFavorite,
   formatSize,
   formatDate,
@@ -140,7 +140,7 @@ export function ClipsGrid({
               )}
               <button
                 type="button"
-                onClick={handleDeleteSelected}
+                onClick={() => setDeleteAllPending(true)}
                 className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-all hover:bg-red-500/15"
                 style={{ color: '#ef4444' }}
               >
@@ -327,7 +327,7 @@ export function ClipsGrid({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDeleteClip(clip.name)}
+                      onClick={() => setDeleteTarget(clip.name)}
                       title={t('delete')}
                       aria-label={t('delete')}
                       className="rounded-md p-1.5 transition-colors hover:bg-red-500/15"

@@ -73,6 +73,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     refreshConfig: vi.fn().mockResolvedValue(undefined),
     refreshStatus: vi.fn().mockResolvedValue(undefined),
     setSelectedClips: vi.fn(),
+    getLatestClip: vi.fn(() => undefined),
     t: vi.fn((key: string) => key),
     ...overrides,
   }
@@ -84,7 +85,6 @@ function getDeps(deps: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  window.confirm = vi.fn(() => true) as never
 })
 
 describe('useClipsActions', () => {
@@ -315,6 +315,30 @@ describe('useClipsActions', () => {
       expect(deps.setLoading).toHaveBeenLastCalledWith(false)
     })
 
+    it('offers an "open" action when a new clip is available (C1)', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSaveClip.mockResolvedValue({ success: true })
+      const deps = getDeps(
+        makeDeps({
+          getLatestClip: vi.fn(() => ({ name: '2026-10-20_12-34-56.mp4', path: 'C:\\clips\\x.mp4' })),
+        }),
+      )
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleSaveClip()
+      })
+
+      expect(toast.success).toHaveBeenCalledTimes(1)
+      const [message, opts] = (toast.success as ReturnType<typeof vi.fn>).mock.calls[0]!
+      expect(message).toBe('clipSaved')
+      expect(opts?.action?.label).toBe('open')
+      act(() => {
+        opts.action.onClick()
+      })
+      expect(dinho.clipsOpen).toHaveBeenCalledWith('C:\\clips\\x.mp4')
+    })
+
     it('shows the engine error when save fails', async () => {
       const dinho = mockDinho()
       dinho.clipsSaveClip.mockResolvedValue({ success: false, error: 'no space' })
@@ -353,22 +377,8 @@ describe('useClipsActions', () => {
         await result.current.handleDeleteClip('clip1.mp4')
       })
 
-      expect(window.confirm).toHaveBeenCalledWith('deleteConfirm')
       expect(dinho.clipsDelete).toHaveBeenCalledWith('clip1.mp4')
       expect(deps.refreshClips).toHaveBeenCalled()
-    })
-
-    it('does nothing when confirmation is declined', async () => {
-      const dinho = mockDinho()
-      window.confirm = vi.fn(() => false) as never
-      const deps = getDeps(makeDeps())
-      const { result } = renderHook(() => useClipsActions(deps))
-
-      await act(async () => {
-        await result.current.handleDeleteClip('clip1.mp4')
-      })
-
-      expect(dinho.clipsDelete).not.toHaveBeenCalled()
     })
 
     it('shows the engine error when delete fails', async () => {
@@ -396,13 +406,63 @@ describe('useClipsActions', () => {
         await result.current.handleDeleteSelected()
       })
 
-      expect(window.confirm).toHaveBeenCalledWith('deleteMultipleConfirm')
       expect(dinho.clipsDelete).toHaveBeenCalledTimes(2)
       expect(deps.setSelectedClips).toHaveBeenCalledWith(new Set())
       expect(deps.refreshClips).toHaveBeenCalled()
     })
 
-    it('ignores per-clip delete failures', async () => {
+    it('reports a success toast when every selected clip is deleted', async () => {
+      const dinho = mockDinho()
+      dinho.clipsDelete.mockResolvedValue({ success: true })
+      const deps = getDeps(makeDeps({ selectedClips: new Set(['a.mp4', 'b.mp4']) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleDeleteSelected()
+      })
+
+      expect(dinho.clipsDelete).toHaveBeenCalledTimes(2)
+      expect(deps.setSelectedClips).toHaveBeenCalledWith(new Set())
+      expect(deps.refreshClips).toHaveBeenCalled()
+      expect(toast.success).toHaveBeenCalledWith('deleteSelectedSuccess')
+      expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('reads the per-item result and reports the failures (E6)', async () => {
+      const dinho = mockDinho()
+      // `clipsDelete` resolve com `{success:false}` sem lancar — o codigo antigo
+      // contava isto como apagado.
+      dinho.clipsDelete.mockResolvedValue({ success: false, error: 'locked' })
+      const deps = getDeps(makeDeps({ selectedClips: new Set(['a.mp4', 'b.mp4']) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleDeleteSelected()
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('deleteSelectedAllFailed')
+      expect(toast.success).not.toHaveBeenCalled()
+    })
+
+    it('reports a partial failure when some items succeed and some do not', async () => {
+      const dinho = mockDinho()
+      dinho.clipsDelete
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: false })
+        .mockRejectedValueOnce(new Error('gone'))
+      const deps = getDeps(makeDeps({ selectedClips: new Set(['a.mp4', 'b.mp4', 'c.mp4']) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+
+      await act(async () => {
+        await result.current.handleDeleteSelected()
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('deleteSelectedSomeFailed')
+      expect(dinho.clipsDelete).toHaveBeenCalledTimes(3)
+      expect(deps.refreshClips).toHaveBeenCalled()
+    })
+
+    it('still refreshes and clears selection when every delete throws', async () => {
       const dinho = mockDinho()
       dinho.clipsDelete.mockRejectedValue(new Error('locked'))
       const deps = getDeps(makeDeps({ selectedClips: new Set(['a.mp4']) }))
@@ -412,8 +472,9 @@ describe('useClipsActions', () => {
         await result.current.handleDeleteSelected()
       })
 
-      expect(toast.error).not.toHaveBeenCalled()
+      expect(toast.error).toHaveBeenCalledWith('deleteSelectedAllFailed')
       expect(deps.refreshClips).toHaveBeenCalled()
+      expect(deps.setSelectedClips).toHaveBeenCalledWith(new Set())
     })
 
     it('returns early when nothing is selected', async () => {
@@ -425,8 +486,8 @@ describe('useClipsActions', () => {
         await result.current.handleDeleteSelected()
       })
 
-      expect(window.confirm).not.toHaveBeenCalled()
       expect(dinho.clipsDelete).not.toHaveBeenCalled()
+      expect(deps.refreshClips).not.toHaveBeenCalled()
     })
   })
 
@@ -1060,10 +1121,9 @@ describe('useClipsActions', () => {
       expect(toast.error).toHaveBeenCalledWith('boom')
     })
 
-    it('aborts a multi-delete when the confirmation is declined', async () => {
+    it('aborts a multi-delete when nothing is selected', async () => {
       const dinho = mockDinho()
-      window.confirm = vi.fn(() => false) as never
-      const deps = getDeps(makeDeps({ selectedClips: new Set(['a.mp4']) }))
+      const deps = getDeps(makeDeps({ selectedClips: new Set<string>() }))
       const { result } = renderHook(() => useClipsActions(deps))
 
       await act(async () => {

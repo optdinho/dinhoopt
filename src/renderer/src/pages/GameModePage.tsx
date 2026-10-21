@@ -13,6 +13,7 @@ import { GameModeGpuTweaks } from '@/components/game-mode/GameModeGpuTweaks'
 import { GameModeHero } from '@/components/game-mode/GameModeHero'
 import { GameModeProfiles } from '@/components/game-mode/GameModeProfiles'
 import { PageHeader } from '@/components/layout/PageHeader'
+import logger from '@/lib/renderer-logger'
 import { useGameModeStore } from '@/stores/game-mode-store'
 
 export function GameModePage() {
@@ -60,11 +61,25 @@ export function GameModePage() {
       .catch(() => {})
   }, [])
 
-  const handleToggleAutoStartCapture = useCallback(() => {
-    const next = !autoStartCapture
+  const handleToggleAutoStartCapture = useCallback(async () => {
+    const previous = autoStartCapture
+    const next = !previous
     setAutoStartCapture(next)
-    window.dinho?.clipsSetConfig?.({ autoStartCapture: next }).catch(() => {})
-  }, [autoStartCapture])
+    try {
+      // C4 — o resultado tem de ser lido: `clipsSetConfig` resolve com
+      // `{success:false}` sem lancar, e o toggle optimista ficava a mentir
+      // quando o backend rejeitava a config.
+      const result = await window.dinho?.clipsSetConfig?.({ autoStartCapture: next })
+      if (result && result.success === false) {
+        setAutoStartCapture(previous)
+        toast.error(result.error || t('toastCaptureToggleFailed'))
+      }
+    } catch (err) {
+      setAutoStartCapture(previous)
+      logger.error('game-mode', 'Failed to persist autoStartCapture', err)
+      toast.error(t('toastCaptureToggleFailed'))
+    }
+  }, [autoStartCapture, t])
 
   useEffect(() => {
     if (!active || !activatedAt) {
@@ -194,6 +209,19 @@ export function GameModePage() {
     setShowAuditModal(true)
   }, [])
 
+  // B5 — `progress.currentLabel` chega do backend como o ID da optimizacao
+  // (`activate.ts:68`). Traduzimo-lo para o rotulo humano pelo mapa que a
+  // propria pagina ja' usa nas categorias; se o id for desconhecido, o id
+  // cru passa a ser o fallback (nunca fica em branco).
+  const progressLabel = progress
+    ? (() => {
+        const id = progress.currentLabel
+        const def = OPTIMIZATIONS.find((o) => o.id === id)
+        const label = def ? t(def.labelKey) : id
+        return t(progress.phase === 'activating' ? 'applyingOptimization' : 'restoringOptimization', { label })
+      })()
+    : null
+
   const enabledSet = new Set(config.enabledOptimizations)
   const enabledCount = config.enabledOptimizations.length
   const serviceCount = OPTIMIZATIONS.filter((o) => o.category === 'services' && enabledSet.has(o.id)).length
@@ -284,7 +312,7 @@ export function GameModePage() {
                   />
                 </div>
                 <div className="mt-2 text-[11px] text-zinc-500">
-                  {progress.currentLabel} ({progress.current}/{progress.total})
+                  {progressLabel} ({progress.current}/{progress.total})
                 </div>
               </div>
             </motion.div>

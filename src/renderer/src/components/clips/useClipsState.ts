@@ -56,6 +56,12 @@ export interface ClipsState {
   openClipPlayer: (clip: ClipInfo) => void
   renameTarget: string | null
   setRenameTarget: (name: string | null) => void
+  /** F2 — clipe com exclusão pendente de confirmação (dialog na página). */
+  deleteTarget: string | null
+  setDeleteTarget: (name: string | null) => void
+  /** F2 — exclusão em massa pendente de confirmação (dialog na página). */
+  deleteAllPending: boolean
+  setDeleteAllPending: (v: boolean) => void
   mergeModePaths: string[] | null
   setMergeModePaths: (paths: string[] | null) => void
   filteredClips: ClipInfo[]
@@ -165,6 +171,11 @@ export function useClipsState(): ClipsState {
     setEditingClip(clip)
   }, [])
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
+  // F2 — o `confirm()` nativo foi substituído pelos `ConfirmDialog` da app
+  // (renderizados pela página). O estado de pendente vive aqui, ao lado do
+  // `renameTarget`, para que a página e a grelha partilhem o mesmo fluxo.
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleteAllPending, setDeleteAllPending] = useState(false)
   const [mergeModePaths, setMergeModePaths] = useState<string[] | null>(null)
 
   const tooltipContent: Record<string, string> = useMemo(
@@ -438,6 +449,18 @@ export function useClipsState(): ClipsState {
     refreshConfig,
     refreshStatus,
     setSelectedClips,
+    // C1 — o toast de sucesso do save oferece "Abrir clipe" com o caminho
+    // do clipe mais recente (salvo por nome decrescente pela data de criacao).
+    getLatestClip: () => {
+      const list = [...clips].sort((a, b) => {
+        const ta = new Date(a.createdAt).getTime()
+        const tb = new Date(b.createdAt).getTime()
+        if (tb !== ta) return tb - ta
+        return b.name.localeCompare(a.name)
+      })
+      const newest = list[0]
+      return newest ? { name: newest.name, path: newest.path } : undefined
+    },
     t,
   })
 
@@ -529,6 +552,10 @@ export function useClipsState(): ClipsState {
     openClipPlayer,
     renameTarget,
     setRenameTarget,
+    deleteTarget,
+    setDeleteTarget,
+    deleteAllPending,
+    setDeleteAllPending,
     mergeModePaths,
     setMergeModePaths,
     filteredClips,

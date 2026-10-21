@@ -23,6 +23,7 @@ interface ClipsActionDeps {
   refreshConfig: () => Promise<void>
   refreshStatus: () => Promise<void>
   setSelectedClips: React.Dispatch<React.SetStateAction<Set<string>>>
+  getLatestClip: () => { name: string; path: string } | undefined
   t: (key: string) => string
 }
 
@@ -90,6 +91,7 @@ export function useClipsActions(deps: ClipsActionDeps) {
     refreshConfig,
     refreshStatus,
     setSelectedClips,
+    getLatestClip,
     t,
   } = deps
 
@@ -162,8 +164,26 @@ export function useClipsActions(deps: ClipsActionDeps) {
     try {
       const result = await window.dinho?.clipsSaveClip()
       if (result?.success) {
-        toast.success(t('clipSaved'))
+        // C1 — um toast que aparece e desaparece nao deixa o utilizador fazer
+        // nada com o clipe. Oferece abrir o ficheiro recem-gravado (o mais
+        // recente da lista actualizada) e cai no toast simples se nao houver.
         await refreshClips()
+        const latest = getLatestClip()
+        if (latest) {
+          const clipPath = latest.path
+          toast.success(t('clipSaved'), {
+            action: {
+              label: t('open'),
+              onClick: () => {
+                window.dinho?.clipsOpen(clipPath)?.catch((err) => {
+                  logger.error('clips', `Failed to open clip "${clipPath}"`, err)
+                })
+              },
+            },
+          })
+        } else {
+          toast.success(t('clipSaved'))
+        }
       } else {
         toast.error(result?.error || t('failedToSaveClip'))
       }
@@ -172,11 +192,10 @@ export function useClipsActions(deps: ClipsActionDeps) {
     } finally {
       setLoading(false)
     }
-  }, [setLoading, refreshClips, t])
+  }, [setLoading, refreshClips, getLatestClip, t])
 
   const handleDeleteClip = useCallback(
     async (name: string) => {
-      if (!confirm(t('deleteConfirm'))) return
       try {
         const result = await window.dinho?.clipsDelete(name)
         if (result?.success) {
@@ -194,16 +213,39 @@ export function useClipsActions(deps: ClipsActionDeps) {
   const handleDeleteSelected = useCallback(async () => {
     const names = [...selectedClips]
     if (names.length === 0) return
-    if (!confirm(t('deleteMultipleConfirm'))) return
-    for (const name of names) {
-      try {
-        await window.dinho?.clipsDelete(name)
-      } catch (err) {
-        logger.error('clips', `Delete of "${name}" failed — continuing with the rest`, err)
+
+    // E6 — paraleliza com um tecto, lê o `success` de CADA resposta (o IPC
+    // resolve com `{success:false}` sem lancar; o caminho antigo contava essas
+    // falhas como apagadas) e agrega o resultado real num resumo.
+    let succeeded = 0
+    const failures: string[] = []
+    let next = 0
+    const worker = async () => {
+      while (next < names.length) {
+        const name = names[next++]
+        if (name === undefined) return
+        try {
+          const result = await window.dinho?.clipsDelete(name)
+          if (result?.success) succeeded++
+          else failures.push(name)
+        } catch (err) {
+          failures.push(name)
+          logger.error('clips', `Delete of "${name}" failed — continuing with the rest`, err)
+        }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(4, names.length) }, () => worker()))
+
     setSelectedClips(new Set())
     await refreshClips()
+
+    if (failures.length === 0) {
+      toast.success(t('deleteSelectedSuccess'))
+    } else if (succeeded === 0) {
+      toast.error(t('deleteSelectedAllFailed'))
+    } else {
+      toast.error(t('deleteSelectedSomeFailed'))
+    }
   }, [selectedClips, setSelectedClips, refreshClips, t])
 
   const handleRenameClip = useCallback(

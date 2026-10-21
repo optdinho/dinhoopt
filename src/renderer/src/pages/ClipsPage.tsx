@@ -9,6 +9,7 @@ import PublishModal from '@/components/clips/PublishModal'
 import { RenameDialog } from '@/components/clips/RenameDialog'
 import { useClipsState } from '@/components/clips/useClipsState'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { APP_VERSION } from '@/lib/app-version'
 import { useNewVersionBadge } from '@/lib/whats-new'
 
@@ -158,6 +159,32 @@ export function ClipsPage() {
           state.setRenameTarget(null)
         }}
         onCancel={() => state.setRenameTarget(null)}
+      />
+
+      {/* F2 — o `confirm()` nativo foi substituído pelos `ConfirmDialog` da app.
+          O clipe (ou o conjunto) fica pendente até o utilizador confirmar. */}
+      <ConfirmDialog
+        open={state.deleteTarget !== null}
+        onConfirm={() => {
+          const name = state.deleteTarget
+          state.setDeleteTarget(null)
+          if (name) void state.handleDeleteClip(name)
+        }}
+        onCancel={() => state.setDeleteTarget(null)}
+        title={t('deleteConfirmTitle')}
+        description={t('deleteConfirm')}
+        variant="danger"
+      />
+      <ConfirmDialog
+        open={state.deleteAllPending}
+        onConfirm={() => {
+          state.setDeleteAllPending(false)
+          void state.handleDeleteSelected()
+        }}
+        onCancel={() => state.setDeleteAllPending(false)}
+        title={t('deleteMultipleConfirmTitle')}
+        description={t('deleteMultipleConfirm')}
+        variant="danger"
       />
     </>
   )
