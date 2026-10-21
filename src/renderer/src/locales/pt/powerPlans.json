@@ -17,7 +17,7 @@
   "groupStock": "Planos do sistema",
   "groupCustom": "Planos personalizados",
   "ultimateTitle": "Desempenho Máximo",
-  "ultimateDescription": "O Windows oculta este plano em quase todas as editions. Desbloqueie-o para desactivar as poupança de energia ao nível do hardware — ideal para máquinas de secretária ligadas à corrente. Consome mais energia e pode aumentar a temperatura.",
+  "ultimateDescription": "O Windows oculta este plano em quase todas as edições. Desbloqueie-o para desativar a economia de energia ao nível do hardware — ideal para computadores de mesa ligados à tomada. Consome mais energia e pode aumentar a temperatura.",
   "unlockUltimate": "Desbloquear",
   "kindUltimate": "Desempenho máximo",
   "kindHighPerformance": "Alto desempenho",

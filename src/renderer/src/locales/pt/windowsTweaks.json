@@ -70,7 +70,7 @@
     "dnsCurrent": "Atual",
     "dnsCurrentLabel": "Em uso",
     "dnsCurrentUnknown": "não detetado",
-    "dnsDescription": "O resolvedor responde mais depressa quando resolve um nome mais rápido, o que faz páginas e respostas da API chegarem antes. Teste para descobrir qual é o melhor para a sua ligação.",
+    "dnsDescription": "O resolvedor responde mais depressa quando resolve um nome mais rápido, o que faz páginas e respostas da API chegarem antes. Teste para descobrir qual é o melhor para a sua conexão.",
     "dnsManualHint": "Pode usar qualquer uma das opções. Testar apenas ordena a lista pela velocidade.",
     "dnsPartialFailure": "Alguns servidores não responderam dentro do tempo limite e ficam no fim da lista.",
     "dnsTestSpeed": "Testar velocidade",

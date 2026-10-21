@@ -47,7 +47,7 @@
   "confirmDeleteTitle": "Excluir regras de firewall?",
   "confirmDisableTitle": "Desativar regras de firewall?",
   "confirmDeleteDescription": "Excluir permanentemente {{count}} regra(s) de firewall. Isto não pode ser desfeito.",
-  "confirmDisableDescription": "Desativar {{count}} regra(s) de firewall. Pode reativá-las mais tarde nas definições do Firewall do Windows.",
+  "confirmDisableDescription": "Desativar {{count}} regra(s) de firewall. Pode reativá-las mais tarde nas configurações do Firewall do Windows.",
   "confirmDeleteLabel": "Excluir",
   "confirmDisableLabel": "Desativar",
   "ariaSelectRule": "Selecionar regra {{name}}",

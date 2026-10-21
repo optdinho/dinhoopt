@@ -16,7 +16,7 @@
   "deleteConfirmDescription": "Este agendamento será removido permanentemente. Esta ação não pode ser desfeita.",
   "deleteConfirmLabel": "Excluir",
   "card": {
-    "autoApplyBadge": "Aplicação automática",
+    "autoApplyBadge": "Aplicativo automático",
     "editAction": "Editar",
     "duplicateAction": "Duplicar",
     "deleteAction": "Excluir",
@@ -52,7 +52,7 @@
     "deselectAll": "Desmarcar tudo",
     "cleanerGroup": "Limpeza",
     "maintenanceGroup": "Manutenção",
-    "autoApplyLabel": "Aplicação automática",
+    "autoApplyLabel": "Aplicativo automático",
     "autoApplyDescription": "Limpe arquivos automaticamente, corrija problemas do registro e instale atualizações sem confirmação.",
     "autoApplyWarning": "As ações serão executadas automaticamente conforme o agendamento. Certifique-se de que sua lista de exclusões esteja atualizada.",
     "cancelButton": "Cancelar",

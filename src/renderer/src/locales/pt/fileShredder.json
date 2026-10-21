@@ -1,6 +1,6 @@
 {
   "pageTitle": "Destruidor de Arquivos",
-  "pageDescription": "Destrua arquivos e pastas em segurança, de forma irrecuperável, sobrescrevendo o respectivo conteúdo antes da eliminação",
+  "pageDescription": "Destrua arquivos e pastas em segurança, de forma irrecuperável, sobrescrevendo o respectivo conteúdo antes da exclusão",
   "addFiles": "Adicionar arquivos",
   "addFolders": "Adicionar pastas",
   "clearAll": "Limpar tudo",
@@ -21,13 +21,13 @@
   "remove": "Remover da lista",
   "openLocation": "Abrir localização do arquivo",
   "confirmTitle": "Destruir arquivos?",
-  "confirmDesc": "{{count}} itens ({{size}}) serão sobrescritos em segurança com dados aleatórios e depois eliminados. Esta ação não pode ser anulada.",
-  "shredSuccess": "{{count}} arquivos destruídos, {{size}} de dados eliminados",
+  "confirmDesc": "{{count}} itens ({{size}}) serão sobrescritos em segurança com dados aleatórios e depois excluídos. Esta ação não pode ser anulada.",
+  "shredSuccess": "{{count}} arquivos destruídos, {{size}} de dados excluídos",
   "shredCancelled": "Cancelado — {{count}} arquivos destruídos ({{size}}) antes de parar",
   "shredFailed": "Não foi possível destruir {{failed}} arquivos",
   "failed": "Falhou",
   "emptyTitle": "Nenhum arquivo selecionado",
-  "emptyDescription": "Adicione arquivos ou pastas para os destruir em segurança. Os dados são sobrescritos com bytes aleatórios e depois preenchidos com zeros antes da eliminação, tornando a recuperação praticamente impossível.",
+  "emptyDescription": "Adicione arquivos ou pastas para os destruir em segurança. Os dados são sobrescritos com bytes aleatórios e depois preenchidos com zeros antes da exclusão, tornando a recuperação praticamente impossível.",
   "completeTitle": "Destruição concluída",
   "shredAnother": "Destruir mais arquivos"
 }

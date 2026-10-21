@@ -24,7 +24,7 @@
   "performance": "Desempenho",
   "diskTools": "Ferramentas de disco",
   "history": "Histórico",
-  "settings": "Definições",
+  "settings": "Configurações",
   "breachMonitor": "Monitor de violações",
   "gameMode": "Modo de jogo",
   "privacy": "Privacidade",
@@ -69,10 +69,10 @@
   "actionScanMalware": "Verificar Malware",
   "actionCheckUpdates": "Verificar Atualizações",
   "actionGameMode": "Alternar Modo de Jogo",
-  "actionExportSettings": "Exportar Definições",
+  "actionExportSettings": "Exportar Configurações",
   "sectionQuick": "Acesso rápido",
   "sectionOther": "Outros",
-  "settingsHeading": "DEFINIÇÕES",
+  "settingsHeading": "CONFIGURAÇÕES",
   "new": "NOVO",
   "mainNavigation": "Navegação principal"
 }
