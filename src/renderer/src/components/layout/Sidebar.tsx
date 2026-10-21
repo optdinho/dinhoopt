@@ -602,7 +602,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
               className="rounded border px-1.5 py-0.5 text-[9px] text-zinc-600"
               style={{ borderColor: 'var(--border-subtle)' }}
             >
-              ⌘K
+              Ctrl+K
             </kbd>
           </button>
         )}

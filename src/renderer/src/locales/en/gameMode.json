@@ -13,9 +13,11 @@
   "restoringOptimization": "Restoring: {{label}}",
 
   "resultActivated": "Game Mode activated — {{count}} optimization applied",
-  "resultActivated_plural": "Game Mode activated — {{count}} optimizations applied",
+  "resultActivated_one": "Game Mode activated — {{count}} optimization applied",
+  "resultActivated_other": "Game Mode activated — {{count}} optimizations applied",
   "resultDeactivated": "System restored — {{count}} setting reverted",
-  "resultDeactivated_plural": "System restored — {{count}} settings reverted",
+  "resultDeactivated_one": "System restored — {{count}} setting reverted",
+  "resultDeactivated_other": "System restored — {{count}} settings reverted",
   "resultErrors": "{{count}} failed",
 
   "categoryServices": "Services",

@@ -1,10 +1,18 @@
 import { STOPED_SERVICES } from '@shared/stoped-services'
 import { describe, expect, it } from 'vitest'
+import enSidebar from '../renderer/src/locales/en/sidebar.json'
 import en from '../renderer/src/locales/en/stoped.json'
+import esSidebar from '../renderer/src/locales/es/sidebar.json'
 import es from '../renderer/src/locales/es/stoped.json'
+import ptSidebar from '../renderer/src/locales/pt/sidebar.json'
 import pt from '../renderer/src/locales/pt/stoped.json'
 
 const BUNDLES: Record<string, Record<string, string>> = { pt, en, es }
+const SIDEBAR: Record<string, Record<string, string>> = {
+  pt: ptSidebar as unknown as Record<string, string>,
+  en: enSidebar as unknown as Record<string, string>,
+  es: esSidebar as unknown as Record<string, string>,
+}
 
 describe('stoped locale bundles', () => {
   it('pt is the reference bundle', () => {
@@ -69,6 +77,20 @@ describe('stoped locale bundles', () => {
     for (const [lang, bundle] of Object.entries(BUNDLES)) {
       expect(bundle.statusRunning, lang).toBe('RUN')
       expect(bundle.statusStopped, lang).toBe('STOPED')
+    }
+  })
+
+  it('does not leak the internal "STOPED" token into the navigation label', () => {
+    for (const [lang, sidebar] of Object.entries(SIDEBAR)) {
+      const label = sidebar.stopedServices
+      expect(label, `${lang}:stopedServices`).toBeTruthy()
+      expect(label, `${lang}:stopedServices`).not.toContain('STOPED')
+    }
+  })
+
+  it('does not leak the internal "STOPED" token into the page title', () => {
+    for (const [lang, bundle] of Object.entries(BUNDLES)) {
+      expect(bundle.pageTitle, `${lang}:pageTitle`).not.toContain('STOPED')
     }
   })
 })

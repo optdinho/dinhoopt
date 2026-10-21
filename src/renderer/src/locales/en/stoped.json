@@ -1,5 +1,5 @@
 {
-  "pageTitle": "Windows Services — STOPED",
+  "pageTitle": "Windows Services",
   "pageDescription": "Control the startup state of essential Windows services. Turn on to enable automatically at boot, turn off to stop.",
   "loading": "Loading services...",
   "noServices": "No services found.",

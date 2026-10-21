@@ -141,3 +141,19 @@ describe('Sidebar news dots', () => {
     expect(queryAllByTestId(/^nav-news-/)).toHaveLength(0)
   })
 })
+
+describe('Sidebar search shortcut hint', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    routerState.pathname = '/'
+  })
+  afterEach(() => localStorage.clear())
+
+  it('advertises Ctrl+K (not the macOS ⌘K) on Windows', () => {
+    const { container } = renderSidebar()
+    const kbd = container.querySelector('kbd')
+    expect(kbd).toBeTruthy()
+    expect(kbd?.textContent).toBe('Ctrl+K')
+    expect(container.textContent).not.toContain('⌘K')
+  })
+})

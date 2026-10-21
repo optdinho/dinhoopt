@@ -75,6 +75,7 @@ export function PerformanceMonitorPage() {
       cancelled = true
       snapshotUnsub?.()
       processUnsub?.()
+      window.dinho.perfStopProcessPolling().catch(() => {})
       window.dinho.perfStopMonitoring().catch(() => {})
       reset()
     }
@@ -87,6 +88,7 @@ export function PerformanceMonitorPage() {
       setPaused(false)
     } else {
       await window.dinho.perfStopMonitoring()
+      window.dinho.perfStopProcessPolling()
       setPaused(true)
     }
   }, [paused])

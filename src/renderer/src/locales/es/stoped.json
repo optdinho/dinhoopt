@@ -1,5 +1,5 @@
 {
-  "pageTitle": "Servicios de Windows — STOPED",
+  "pageTitle": "Servicios de Windows",
   "pageDescription": "Controla el estado de inicio de servicios esenciales de Windows. Activa para iniciar automáticamente al arrancar, desactiva para detener.",
   "loading": "Cargando servicios...",
   "noServices": "No se encontraron servicios.",

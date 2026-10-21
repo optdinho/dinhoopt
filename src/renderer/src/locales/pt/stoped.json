@@ -1,5 +1,5 @@
 {
-  "pageTitle": "Serviços do Windows — STOPED",
+  "pageTitle": "Serviços do Windows",
   "pageDescription": "Controle o estado de inicialização de serviços essenciais do Windows. Conecte para ativar automaticamente a cada boot, desligue para parar.",
   "loading": "Carregando serviços...",
   "noServices": "Nenhum serviço encontrado.",
