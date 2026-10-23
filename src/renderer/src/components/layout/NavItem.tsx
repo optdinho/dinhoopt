@@ -34,7 +34,8 @@ export const NavItem = memo(function NavItem({
   badgeLabel?: string
   isActive?: boolean
   submenuOpen?: boolean
-  onToggleSubmenu?: (path: string) => void
+  /** Receives the submenu key: the item's path when it has one, else its label key. */
+  onToggleSubmenu?: (key: string) => void
   onCloseSubmenu?: () => void
   collapsed?: boolean
   sectionColor?: SectionColor
@@ -43,8 +44,10 @@ export const NavItem = memo(function NavItem({
   const { t } = useTranslation('sidebar')
   const location = useLocation()
   const navigate = useNavigate()
-  const isActive = isActiveProp ?? location.pathname === item.path
   const hasChildren = item.children && item.children.length > 0
+  const hasActiveChild = !!item.children?.some((child) => child.path === location.pathname)
+  const isActive = isActiveProp ?? (item.path ? location.pathname === item.path : hasActiveChild)
+  const submenuKey = item.path ?? item.labelKey ?? ''
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,9 +66,10 @@ export const NavItem = memo(function NavItem({
 
   const handleClick = () => {
     if (hasChildren) {
-      onToggleSubmenu?.(item.path)
+      onToggleSubmenu?.(submenuKey)
     }
-    navigate(item.path)
+    // Parents without a path are groups: they only expand, never navigate.
+    if (item.path) navigate(item.path)
   }
 
   return (

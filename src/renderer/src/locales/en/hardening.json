@@ -140,7 +140,7 @@
     "browserDescription": "Stop browsers from reporting usage data to Microsoft, Google, and Mozilla"
   },
   "debloater": {
-    "pageTitle": "Debloater",
+    "pageTitle": "Unwanted Apps Remover",
     "pageDescription": "Remove pre-installed Windows apps and OEM bloatware",
     "scanButton": "Scan",
     "removingButton": "Removing...",

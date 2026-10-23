@@ -140,7 +140,7 @@
     "browserDescription": "Evite que los navegadores informen datos de uso a Microsoft, Google y Mozilla"
   },
   "debloater": {
-    "pageTitle": "Eliminador de bloatware",
+    "pageTitle": "Eliminador de apps no deseadas",
     "pageDescription": "Elimine aplicaciones preinstaladas de Windows y bloatware del fabricante",
     "scanButton": "Analizar",
     "removingButton": "Eliminando...",

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const routerState = vi.hoisted(() => ({ pathname: '/' }))
+const routerState = vi.hoisted(() => ({ pathname: '/', navigate: vi.fn() }))
 
 vi.mock('@/lib/app-version', () => ({ APP_VERSION: '2.0.9' }))
 
@@ -12,7 +12,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('react-router-dom', () => ({
   useLocation: () => ({ pathname: routerState.pathname }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => routerState.navigate,
 }))
 
 vi.mock('@/assets/logo-80.png', () => ({ default: 'logo.png' }))
@@ -23,6 +23,7 @@ vi.mock('lucide-react', () => {
     'Activity',
     'BatteryCharging',
     'Bug',
+    'CalendarClock',
     'ChevronRight',
     'Clapperboard',
     'ClipboardCheck',
@@ -42,6 +43,7 @@ vi.mock('lucide-react', () => {
     'HardDrive',
     'History',
     'Info',
+    'KeyRound',
     'LayoutDashboard',
     'MemoryStick',
     'Menu',
@@ -60,6 +62,7 @@ vi.mock('lucide-react', () => {
     'Sliders',
     'Sparkles',
     'Trash2',
+    'Wifi',
     'Wrench',
     'X',
     'Zap',
@@ -139,6 +142,44 @@ describe('Sidebar news dots', () => {
     localStorage.setItem('dinho-nav-news', JSON.stringify({ baseline: '2.0.9', dismissed: {} }))
     const { queryAllByTestId } = renderSidebar()
     expect(queryAllByTestId(/^nav-news-/)).toHaveLength(0)
+  })
+})
+
+describe('Sidebar group parents', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    routerState.pathname = '/'
+    routerState.navigate.mockClear()
+  })
+  afterEach(() => localStorage.clear())
+
+  it('expands without navigating when a parent is clicked', () => {
+    const { getByRole } = renderSidebar()
+    const parent = getByRole('button', { name: 'systemHardening' })
+    expect(parent.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(parent)
+    expect(routerState.navigate).not.toHaveBeenCalled()
+    expect(parent.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('opens the parent submenu when a child route is active', () => {
+    routerState.pathname = '/privacy'
+    const { getByRole } = renderSidebar()
+    expect(getByRole('button', { name: 'systemHardening' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('highlights the parent while a child route is active', () => {
+    routerState.pathname = '/privacy'
+    const { getByRole } = renderSidebar()
+    const parent = getByRole('button', { name: 'systemHardening' })
+    // The active bar is the only element carrying the plain section colour class.
+    expect(parent.querySelector('.bg-red-500')).not.toBeNull()
+  })
+
+  it('still navigates from a leaf item', () => {
+    const { getByRole } = renderSidebar()
+    fireEvent.click(getByRole('button', { name: 'network' }))
+    expect(routerState.navigate).toHaveBeenCalledWith('/network')
   })
 })
 

@@ -2,6 +2,7 @@ import {
   Activity,
   BatteryCharging,
   Bug,
+  CalendarClock,
   Clapperboard,
   ClipboardCheck,
   Clock,
@@ -20,6 +21,7 @@ import {
   HardDrive,
   History,
   Info,
+  KeyRound,
   LayoutDashboard,
   MemoryStick,
   Menu,
@@ -38,6 +40,7 @@ import {
   Sliders,
   Sparkles,
   Trash2,
+  Wifi,
   Wrench,
   X,
   Zap,
@@ -54,7 +57,7 @@ import { useDriverStore } from '@/stores/driver-store'
 import { useGameModeStore } from '@/stores/game-mode-store'
 import { useUpdaterStore } from '@/stores/updater-store'
 import { NavItem } from './NavItem'
-import type { NavGroup, SectionColor } from './NavTypes'
+import type { NavGroup, NavItemDef, SectionColor } from './NavTypes'
 
 const navGroups: NavGroup[] = [
   // ── Acesso rápido (pinned) ──
@@ -74,13 +77,11 @@ const navGroups: NavGroup[] = [
       {
         icon: Shield,
         labelKey: 'systemHardening',
-        path: '/hardening',
         children: [
           { icon: Eye, labelKey: 'privacy', path: '/privacy' },
           { icon: Server, labelKey: 'services', path: '/services' },
           { icon: Flame, labelKey: 'firewallAudit', path: '/firewall' },
           { icon: BatteryCharging, labelKey: 'powerPlans', path: '/power-plans' },
-          { icon: Globe, labelKey: 'hostsEditor', path: '/hosts-editor' },
           { icon: ClipboardCheck, labelKey: 'compliance', path: '/compliance' },
           { icon: Bug, labelKey: 'vulnerability', path: '/vulnerability' },
         ],
@@ -93,11 +94,12 @@ const navGroups: NavGroup[] = [
     color: 'blue',
     items: [
       { icon: Sparkles, labelKey: 'cleaner', path: '/cleaner' },
+      { icon: Wifi, labelKey: 'network', path: '/network' },
+      { icon: Globe, labelKey: 'hostsEditor', path: '/hosts-editor' },
       { icon: Database, labelKey: 'registry', path: '/registry' },
       {
         icon: Package,
         labelKey: 'software',
-        path: '/updates',
         children: [
           { icon: Download, labelKey: 'softwareUpdates', path: '/updates' },
           { icon: PackageCheck, labelKey: 'appInstaller', path: '/installer' },
@@ -110,7 +112,6 @@ const navGroups: NavGroup[] = [
       {
         icon: HardDrive,
         labelKey: 'diskTools',
-        path: '/disk',
         children: [
           { icon: HardDrive, labelKey: 'diskAnalyzer', path: '/disk' },
           { icon: CopyCheck, labelKey: 'duplicateFinder', path: '/duplicates' },
@@ -132,14 +133,15 @@ const navGroups: NavGroup[] = [
       { icon: MemoryStick, labelKey: 'memoryOptimizer', path: '/memory' },
       { icon: PowerOff, labelKey: 'stopedServices', path: '/stoped' },
       { icon: Zap, labelKey: 'startup', path: '/startup' },
+      { icon: CalendarClock, labelKey: 'schedules', path: '/schedules' },
       { icon: Activity, labelKey: 'performance', path: '/performance' },
       { icon: Gauge, labelKey: 'benchmark', path: '/benchmark' },
       {
         icon: Settings,
-        labelKey: 'settings',
-        path: '/settings',
+        labelKey: 'systemGroup',
         children: [
           { icon: Settings, labelKey: 'preferences', path: '/settings' },
+          { icon: KeyRound, labelKey: 'activation', path: '/activation' },
           { icon: History, labelKey: 'history', path: '/history' },
           { icon: Info, labelKey: 'aboutUpdates', path: '/about' },
         ],
@@ -147,6 +149,11 @@ const navGroups: NavGroup[] = [
     ],
   },
 ]
+
+/** Submenu state key: the item's path when it has one, else its label key (group parents). */
+function navKey(item: NavItemDef): string {
+  return item.path ?? item.labelKey ?? ''
+}
 
 // ── Command Palette: Actions ─────────────────────────────
 interface PaletteAction {
@@ -231,7 +238,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
     for (const group of navGroups) {
       for (const item of group.items) {
         if (item.children?.some((c) => c.path === location.pathname)) {
-          setOpenSubmenu(item.path)
+          setOpenSubmenu(navKey(item))
           return
         }
       }
@@ -283,15 +290,15 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
     for (const group of filteredNavGroups) {
       for (const item of group.items) {
         if (item.children && item.children.length > 0) {
-          counts[item.path] = item.children.reduce((sum, child) => sum + (badgeCounts[child.path] ?? 0), 0)
+          counts[navKey(item)] = item.children.reduce((sum, child) => sum + (badgeCounts[child.path] ?? 0), 0)
         }
       }
     }
     return counts
   }, [badgeCounts, filteredNavGroups])
 
-  const isPathActive = (item: { children?: { path: string }[]; path: string }) => {
-    if (location.pathname === item.path) return true
+  const isPathActive = (item: { children?: { path: string }[]; path?: string }) => {
+    if (item.path && location.pathname === item.path) return true
     if (item.children) {
       return item.children.some((c) => c.path === location.pathname)
     }
@@ -357,7 +364,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
       },
       {
         id: 'export-settings',
-        labelKey: 'actionExportSettings',
+        labelKey: 'actionOpenSettings',
         icon: Settings,
         group: 'actions',
         run: () => navigate('/settings'),
@@ -685,16 +692,16 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
             <div className="space-y-0.5">
               {quickAccessGroup.items.map((item) => (
                 <NavItem
-                  key={item.path}
+                  key={navKey(item)}
                   item={item}
-                  badgeCount={effectiveBadgeCounts[item.path] ?? 0}
+                  badgeCount={item.path ? (effectiveBadgeCounts[item.path] ?? 0) : 0}
                   badgeCounts={effectiveBadgeCounts}
                   {...(item.badgeLabel ? { badgeLabel: item.badgeLabel } : {})}
                   isActive={isPathActive(item)}
-                  submenuOpen={openSubmenu === item.path}
+                  submenuOpen={openSubmenu === navKey(item)}
                   collapsed={collapsed}
                   sectionColor="amber"
-                  onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
+                  onToggleSubmenu={(key: string) => setOpenSubmenu((prev) => (prev === key ? null : key))}
                   onCloseSubmenu={() => setOpenSubmenu(null)}
                 />
               ))}
@@ -761,16 +768,16 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: { collapse
               <div className="space-y-0.5">
                 {group.items.map((item) => (
                   <NavItem
-                    key={item.path}
+                    key={navKey(item)}
                     item={item}
-                    badgeCount={effectiveBadgeCounts[item.path] ?? 0}
+                    badgeCount={item.path ? (effectiveBadgeCounts[item.path] ?? 0) : 0}
                     badgeCounts={effectiveBadgeCounts}
                     {...(item.badgeLabel ? { badgeLabel: item.badgeLabel } : {})}
                     isActive={isPathActive(item)}
-                    submenuOpen={openSubmenu === item.path}
+                    submenuOpen={openSubmenu === navKey(item)}
                     collapsed={collapsed}
                     sectionColor={(group.color ?? 'amber') as SectionColor}
-                    onToggleSubmenu={(path: string) => setOpenSubmenu((prev) => (prev === path ? null : path))}
+                    onToggleSubmenu={(key: string) => setOpenSubmenu((prev) => (prev === key ? null : key))}
                     onCloseSubmenu={() => setOpenSubmenu(null)}
                   />
                 ))}

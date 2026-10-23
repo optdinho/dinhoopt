@@ -1,5 +1,5 @@
 {
-  "pageTitle": "Destructor de archivos",
+  "pageTitle": "Borrado seguro de archivos",
   "pageDescription": "Destruya de forma segura archivos y carpetas para que no puedan recuperarse, sobrescribiendo su contenido antes de eliminarlos",
   "addFiles": "Agregar archivos",
   "addFolders": "Agregar carpetas",
