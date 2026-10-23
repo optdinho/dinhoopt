@@ -38,5 +38,6 @@
   "name": "Nome",
   "status": "Estado",
   "driverAgentEvalFailed": "Falha na avaliação dos agentes",
-  "driverAgentInstallFailed": "Falha na instalação"
+  "driverAgentInstallFailed": "Falha na instalação",
+  "loading": "Carregando..."
 }

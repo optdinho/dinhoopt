@@ -21,7 +21,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-vi.mock('@/assets/logo.png', () => ({ default: 'logo.png' }))
+vi.mock('@/assets/logo-160.png', () => ({ default: 'logo.png' }))
 
 // Injected by electron.vite.config.ts `define`; vitest does not apply it.
 ;(globalThis as unknown as { __APP_VERSION__: string }).__APP_VERSION__ = '0.0.0-test'

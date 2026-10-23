@@ -92,7 +92,7 @@ import { useSettingsStore } from './stores/settings-store'
 import { useStatsStore } from './stores/stats-store'
 
 export function App() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('common')
   const loadHistory = useHistoryStore((s) => s.load)
   const historyLoaded = useHistoryStore((s) => s.loaded)
   const recomputeStats = useStatsStore((s) => s.recompute)
@@ -196,7 +196,21 @@ export function App() {
           <LicenseGate>
             <AppShell>
               <ErrorBoundary>
-                <Suspense fallback={null}>
+                <Suspense
+                  fallback={
+                    <div
+                      className="flex h-full w-full items-center justify-center"
+                      role="status"
+                      aria-live="polite"
+                      aria-label={t('loading')}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-8 w-8 animate-pulse rounded-xl bg-white/[0.04]" />
+                        <div className="h-2 w-24 animate-pulse rounded-full bg-white/[0.04]" />
+                      </div>
+                    </div>
+                  }
+                >
                   <AnimatedRoutes />
                 </Suspense>
               </ErrorBoundary>

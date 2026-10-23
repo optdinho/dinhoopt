@@ -45,7 +45,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
-import logoSrc from '@/assets/logo.png'
+import logoSrc from '@/assets/logo-80.png'
 import { usePlatform } from '@/hooks/usePlatform'
 import { APP_VERSION } from '@/lib/app-version'
 import { cn } from '@/lib/utils'

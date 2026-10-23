@@ -41,7 +41,7 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 
-vi.mock('@/assets/logo.png', () => ({ default: 'logo.png' }))
+vi.mock('@/assets/logo-160.png', () => ({ default: 'logo.png' }))
 
 const mockSystemScan = vi.fn()
 

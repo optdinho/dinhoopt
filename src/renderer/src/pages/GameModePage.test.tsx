@@ -33,9 +33,9 @@ vi.mock('framer-motion', () => ({
   motion: { div: ({ children }: { children?: unknown }) => <div>{children as never}</div> },
 }))
 
+import { toast } from 'sonner'
 import { useGameModeStore } from '@/stores/game-mode-store'
 import { GameModePage } from './GameModePage'
-import { toast } from 'sonner'
 
 beforeEach(() => {
   vi.clearAllMocks()

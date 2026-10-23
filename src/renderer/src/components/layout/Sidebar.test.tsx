@@ -15,7 +15,7 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 
-vi.mock('@/assets/logo.png', () => ({ default: 'logo.png' }))
+vi.mock('@/assets/logo-80.png', () => ({ default: 'logo.png' }))
 
 vi.mock('lucide-react', () => {
   const Stub = () => null

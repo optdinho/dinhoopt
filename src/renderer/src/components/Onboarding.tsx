@@ -3,7 +3,7 @@ import { Briefcase, Check, ChevronLeft, ChevronRight, Gamepad2, Monitor, Rocket,
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import logoSrc from '@/assets/logo.png'
+import logoSrc from '@/assets/logo-160.png'
 import { StaggerContainer, StaggerItem } from '@/components/shared/StaggerContainer'
 import { usePlatform } from '@/hooks/usePlatform'
 import { formatBytes } from '@/lib/utils'
