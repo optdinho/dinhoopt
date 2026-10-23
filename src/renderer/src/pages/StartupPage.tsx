@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { Select } from '@/components/shared/Select'
 import logger from '@/lib/renderer-logger'
 import { cn } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
@@ -204,26 +205,28 @@ export function StartupPage() {
         description={t('pageDescription')}
         action={
           <div className="flex items-center gap-2.5">
-            <select
+            <Select
               value={filterBy}
               onChange={(e) => store.getState().setFilterBy(e.target.value as 'all' | 'active' | 'disabled')}
+              aria-label={t('filterLabel')}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
             >
               <option value="all">{t('filterAll')}</option>
               <option value="active">{t('filterActive')}</option>
               <option value="disabled">{t('filterDisabled')}</option>
-            </select>
-            <select
+            </Select>
+            <Select
               value={sortBy}
               onChange={(e) => store.getState().setSortBy(e.target.value as 'name' | 'impact' | 'safety')}
+              aria-label={t('sortLabel')}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
             >
               <option value="impact">{t('sortByImpact')}</option>
               <option value="name">{t('sortByName')}</option>
               <option value="safety">{t('sortBySafety')}</option>
-            </select>
+            </Select>
             <button
               type="button"
               onClick={handleRefresh}

@@ -454,6 +454,7 @@ export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
 
             <FilterDropdown
               value={safetyFilter}
+              label={t('serviceManager.filterSafetyLabel')}
               options={[
                 { value: 'all', label: t('serviceManager.filterAllSafety') },
                 { value: 'safe', label: t('serviceManager.filterSafe') },
@@ -465,6 +466,7 @@ export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
 
             <FilterDropdown
               value={categoryFilter}
+              label={t('serviceManager.filterCategoryLabel')}
               options={[
                 { value: 'all', label: t('serviceManager.filterAllCategories') },
                 ...Array.from(presentCategories)
@@ -476,6 +478,7 @@ export function ServiceManagerPage({ embedded }: { embedded?: boolean }) {
 
             <FilterDropdown
               value={statusFilter}
+              label={t('serviceManager.filterStatusLabel')}
               options={[
                 { value: 'all', label: t('serviceManager.filterAllStatus') },
                 { value: 'running', label: t('serviceManager.filterRunning') },

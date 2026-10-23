@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Trash
 import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { Select } from '@/components/shared/Select'
 import { useLoggerStore } from '@/stores/logger-store'
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
@@ -78,12 +79,13 @@ export function LogViewer() {
             style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-medium)' }}
           />
         </div>
-        <select
+        <Select
           value={filter.level ?? ''}
           onChange={(e) => {
             const level = e.target.value as LogLevel
             setFilter({ ...filter, ...(level ? { level } : {}) })
           }}
+          aria-label={t('logsFilterLevelLabel')}
           className="rounded-lg px-3 py-2 text-[13px] text-zinc-400 outline-none"
           style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
         >
@@ -92,7 +94,7 @@ export function LogViewer() {
           <option value="success">{t('logsLevelSuccess')}</option>
           <option value="warning">{t('logsLevelWarning')}</option>
           <option value="error">{t('logsLevelError')}</option>
-        </select>
+        </Select>
         <button
           type="button"
           onClick={fetchLogs}

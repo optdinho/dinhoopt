@@ -96,6 +96,7 @@
   "logsClear": "Clear all logs",
   "logsSearchPlaceholder": "Search logs...",
   "logsLevelAll": "All levels",
+  "logsFilterLevelLabel": "Filter by level",
   "logsLevelInfo": "Info",
   "logsLevelSuccess": "Success",
   "logsLevelWarning": "Warning",

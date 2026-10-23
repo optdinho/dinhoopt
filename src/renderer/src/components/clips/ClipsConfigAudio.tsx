@@ -2,6 +2,7 @@ import type { AudioSessionInfo } from '@shared/types'
 import { RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Select } from '@/components/shared/Select'
 import logger from '@/lib/renderer-logger'
 import { TipBadge } from './ClipsConfigQuality'
 import { CollapsibleMini, ToggleItem, TogglePill, VK_MAP, VolumeSlider } from './clips-utils'
@@ -268,9 +269,10 @@ export function AudioSection({
               {t('loadingMicDevices')}
             </span>
           ) : (
-            <select
+            <Select
               value={config.micDeviceId || ''}
               onChange={(e) => handleConfigUpdate({ micDeviceId: e.target.value })}
+              aria-label={t('micDevice')}
               className="rounded-md border bg-transparent px-2 py-1 text-[10px] outline-none"
               style={{ borderColor: 'var(--border-medium)', color: 'var(--text-primary)' }}
             >
@@ -281,7 +283,7 @@ export function AudioSection({
                   {d.isDefault ? ` (${t('defaultMic')})` : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
         </div>
       </div>

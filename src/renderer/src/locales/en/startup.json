@@ -4,6 +4,7 @@
   "filterAll": "All Items",
   "filterActive": "Active Only",
   "filterDisabled": "Disabled Only",
+  "filterLabel": "Filter by",
   "sortByImpact": "Sort by Impact",
   "sortByName": "Sort by Name",
   "impactLabel": "{{level}} impact",
@@ -68,6 +69,7 @@
   "safetyScore": "Safety: {{score}}/10",
   "safetyAnalyzed": "Analyzed {{date}}",
   "sortBySafety": "Sort by Safety",
+  "sortLabel": "Sort by",
   "schedulesLink": "Scheduler",
   "enableItem": "Enable {{name}}",
   "disableItem": "Disable {{name}}"

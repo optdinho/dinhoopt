@@ -371,6 +371,7 @@ export function FirewallAuditPage() {
             </div>
             <FilterSelect
               value={riskFilter}
+              label={t('filterRiskLabel')}
               onChange={(v) => useFirewallStore.getState().setRiskFilter(v as 'all' | 'high' | 'medium' | 'low')}
               options={[
                 { value: 'all', label: t('filterAllRisk') },
@@ -381,6 +382,7 @@ export function FirewallAuditPage() {
             />
             <FilterSelect
               value={programFilter}
+              label={t('filterProgramLabel')}
               onChange={(v) =>
                 useFirewallStore.getState().setProgramFilter(v as 'all' | 'with-program' | 'no-program' | 'stale')
               }

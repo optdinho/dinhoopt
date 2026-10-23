@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { TriangleAlert, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Select } from '@/components/shared/Select'
 import { cn } from '@/lib/utils'
 import { CLEANER_TASKS, DAY_NAME_KEYS, ordinal, type Preset, type TaskDef } from './constants'
 import { Toggle } from './Toggle'
@@ -210,7 +211,7 @@ export function ScheduleDialog({
             >
               {t('dialog.frequencyLabel')}
             </label>
-            <select
+            <Select
               id="sched-frequency"
               value={frequency}
               onChange={(e) => {
@@ -225,7 +226,7 @@ export function ScheduleDialog({
               <option value="daily">{t('dialog.frequencyDaily')}</option>
               <option value="weekly">{t('dialog.frequencyWeekly')}</option>
               <option value="monthly">{t('dialog.frequencyMonthly')}</option>
-            </select>
+            </Select>
           </div>
 
           {frequency === 'weekly' && (
@@ -237,7 +238,7 @@ export function ScheduleDialog({
               >
                 {t('dialog.dayLabel')}
               </label>
-              <select
+              <Select
                 id="sched-weekly-day"
                 value={day}
                 onChange={(e) => setDay(Number(e.target.value))}
@@ -249,7 +250,7 @@ export function ScheduleDialog({
                     {t(key)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
@@ -262,7 +263,7 @@ export function ScheduleDialog({
               >
                 {t('dialog.dayLabel')}
               </label>
-              <select
+              <Select
                 id="sched-monthly-day"
                 value={day}
                 onChange={(e) => setDay(Number(e.target.value))}
@@ -274,7 +275,7 @@ export function ScheduleDialog({
                     {ordinal(dayNum)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
@@ -287,7 +288,8 @@ export function ScheduleDialog({
               {t('dialog.timeLabel')}
             </label>
             <div className="flex gap-1.5">
-              <select
+              <Select
+                id="sched-hour"
                 value={hour}
                 onChange={(e) => setHour(Number(e.target.value))}
                 className={cn(selectStyle, 'w-full')}
@@ -298,11 +300,12 @@ export function ScheduleDialog({
                     {String(hourVal).padStart(2, '0')}
                   </option>
                 ))}
-              </select>
+              </Select>
               <span className="flex items-center text-[13px] text-zinc-400">:</span>
-              <select
+              <Select
                 value={minute}
                 onChange={(e) => setMinute(Number(e.target.value))}
+                aria-label={t('dialog.minuteLabel')}
                 className={cn(selectStyle, 'w-full')}
                 style={selectBorder}
               >
@@ -311,7 +314,7 @@ export function ScheduleDialog({
                     {String(minVal).padStart(2, '0')}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
         </div>

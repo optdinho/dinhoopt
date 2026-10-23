@@ -17,6 +17,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { Select } from '@/components/shared/Select'
 import { StatCard } from '@/components/shared/StatCard'
 import logger from '@/lib/renderer-logger'
 import { useAppInstallerStore } from '@/stores/app-installer-store'
@@ -242,7 +243,7 @@ export function AppInstallerPage() {
           />
         </div>
 
-        <select
+        <Select
           value={categoryFilter}
           onChange={(e) => useAppInstallerStore.getState().setCategoryFilter(e.target.value as typeof categoryFilter)}
           aria-label={t('filterLabel')}
@@ -254,7 +255,7 @@ export function AppInstallerPage() {
               {opt.label}
             </option>
           ))}
-        </select>
+        </Select>
 
         <button
           type="button"

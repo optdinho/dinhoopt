@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { ScanProgress } from '@/components/shared/ScanProgress'
+import { Select } from '@/components/shared/Select'
 import { usePlatform } from '@/hooks/usePlatform'
 import logger from '@/lib/renderer-logger'
 import { formatBytes } from '@/lib/utils'
@@ -148,9 +149,10 @@ export function DiskAnalyzerPage() {
         description={t('pageDescription')}
         action={
           <div className="flex items-center gap-2.5">
-            <select
+            <Select
               value={selectedDrive}
               onChange={(e) => setSelectedDrive(e.target.value)}
+              aria-label={t('selectDriveLabel')}
               className="rounded-xl px-4 py-2.5 text-[13px] text-zinc-400 outline-none"
               style={{ background: 'var(--bg-subtle-2)', border: '1px solid var(--border-medium)' }}
             >
@@ -162,7 +164,7 @@ export function DiskAnalyzerPage() {
                   {isWin ? `${d.letter}: ${d.label}` : `${d.letter} ${d.label}`}
                 </option>
               ))}
-            </select>
+            </Select>
             <button
               type="button"
               onClick={handleAnalyze}

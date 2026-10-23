@@ -2,6 +2,7 @@ import type { NetworkConnection } from '@shared/types'
 import { AlertTriangle, ArrowUpDown, Globe, Loader2, Search, ShieldAlert } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Select } from '@/components/shared/Select'
 
 type SortField = 'remoteAddress' | 'remotePort' | 'processName' | 'state'
 type SortDir = 'asc' | 'desc'
@@ -142,9 +143,10 @@ export function NetworkMonitor() {
             style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
           />
         </div>
-        <select
+        <Select
           value={filterState}
           onChange={(e) => setFilterState(e.target.value)}
+          aria-label={t('monitorFilterStateLabel')}
           className="rounded-lg px-3 py-2 text-[13px] text-zinc-300"
           style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
         >
@@ -154,7 +156,7 @@ export function NetworkMonitor() {
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {error && (

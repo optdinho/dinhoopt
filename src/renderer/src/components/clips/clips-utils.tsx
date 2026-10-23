@@ -131,15 +131,10 @@ export const MODIFIER_KEYS = new Set([0x11, 0x10, 0x12])
 export const REPLAY_DURATIONS = [30, 60, 120, 300, 600]
 
 /**
- * Estilo para os `<select>`/`<option>` nativos. O popup do SO ignora o tema do app e
- * abre com fundo do sistema (branco) enquanto o texto herda `--text-primary` (branco em
- * tema escuro) — resultado: texto invisível. Fixar fundo `--card-bg` + cor `--text-primary`
- * mantém a lista legível em claro e escuro.
+ * Kept as a re-export so the `<option style={nativeSelectStyle}>` sites keep working;
+ * the definition (and the popup-theme rationale) lives in `shared/Select`.
  */
-export const nativeSelectStyle: React.CSSProperties = {
-  background: 'var(--card-bg)',
-  color: 'var(--text-primary)',
-}
+export { nativeSelectStyle } from '@/components/shared/Select'
 
 export function formatUptime(seconds: number, t: (key: string) => string): string {
   const m = Math.floor(seconds / 60)

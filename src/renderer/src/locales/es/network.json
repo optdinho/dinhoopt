@@ -40,6 +40,7 @@
   "monitorConnectionCount": "{{total}} conexiones ({{shown}} mostradas)",
   "monitorFilterProcess": "Filtrar por proceso...",
   "monitorAllStates": "Todos los Estados",
+  "monitorFilterStateLabel": "Filtrar por estado",
   "monitorLoading": "Cargando conexiones...",
   "monitorNoConnections": "No se encontraron conexiones",
   "monitorColRemote": "Dirección Remota",

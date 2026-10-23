@@ -26,6 +26,9 @@
   "filterStatusAll": "All",
   "filterStatusEnabled": "Enabled",
   "filterStatusDisabled": "Disabled",
+  "filterScopeLabel": "Filter by scope",
+  "filterSourceLabel": "Filter by source",
+  "filterStatusLabel": "Filter by status",
 
   "scopeAllFiles": "All files",
   "scopeDirectory": "Folders",

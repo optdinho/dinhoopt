@@ -1,6 +1,7 @@
 import type { ContextMenuScope, ContextMenuSource, ContextMenuStatus } from '@shared/types'
 import { Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Select } from '@/components/shared/Select'
 import { SCOPE_LABEL_KEY } from './constants'
 
 interface FilterBarProps {
@@ -34,9 +35,10 @@ export function FilterBar({ filters, availableScopes, availableSources, onChange
           style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}
         />
       </div>
-      <select
+      <Select
         value={filters.scope}
         onChange={(e) => onChange('scope', e.target.value as ContextMenuScope | 'all')}
+        aria-label={t('filterScopeLabel')}
         className="rounded-xl px-3 py-2 text-[12px] text-zinc-200 outline-none"
         style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}
       >
@@ -46,10 +48,11 @@ export function FilterBar({ filters, availableScopes, availableSources, onChange
             {t(SCOPE_LABEL_KEY[s])}
           </option>
         ))}
-      </select>
-      <select
+      </Select>
+      <Select
         value={filters.source}
         onChange={(e) => onChange('source', e.target.value as ContextMenuSource | 'all')}
+        aria-label={t('filterSourceLabel')}
         className="rounded-xl px-3 py-2 text-[12px] text-zinc-200 outline-none"
         style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}
       >
@@ -59,17 +62,18 @@ export function FilterBar({ filters, availableScopes, availableSources, onChange
             {s}
           </option>
         ))}
-      </select>
-      <select
+      </Select>
+      <Select
         value={filters.status}
         onChange={(e) => onChange('status', e.target.value as ContextMenuStatus | 'all')}
+        aria-label={t('filterStatusLabel')}
         className="rounded-xl px-3 py-2 text-[12px] text-zinc-200 outline-none"
         style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}
       >
         <option value="all">{t('filterStatusAll')}</option>
         <option value="enabled">{t('filterStatusEnabled')}</option>
         <option value="disabled">{t('filterStatusDisabled')}</option>
-      </select>
+      </Select>
     </div>
   )
 }

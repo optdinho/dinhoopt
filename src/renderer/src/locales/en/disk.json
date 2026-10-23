@@ -141,6 +141,7 @@
   "statusUnknown": "Unknown",
   "selectDrive": "Select {{drive}}",
   "systemDrive": "System",
+  "selectDriveLabel": "Select drive",
   "runButton": "Run",
   "trimNoResultsToast": "The backend returned no TRIM results",
   "trimCode": {

@@ -2,6 +2,7 @@ import type { WindowsService } from '@shared/types'
 import { ChevronDown, ChevronRight, Circle, CircleCheckBig, Link2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Select } from '@/components/shared/Select'
 import { useServiceStore } from '@/stores/service-store'
 
 const SAFETY_COLORS = {
@@ -248,16 +249,20 @@ export function FilterDropdown({
   value,
   options,
   onChange,
+  label,
 }: {
   value: string
   options: { value: string; label: string }[]
   onChange: (value: string) => void
+  /** Accessible name — the control shows only the current value, so a screen reader needs this. */
+  label: string
 }) {
   return (
     <div className="relative">
-      <select
+      <Select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
         className="appearance-none rounded-lg py-2 pl-3 pr-8 text-[12.5px] font-medium text-white outline-none"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border-medium)' }}
       >
@@ -266,7 +271,7 @@ export function FilterDropdown({
             {opt.label}
           </option>
         ))}
-      </select>
+      </Select>
       <ChevronDown
         className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
         style={{ color: 'var(--text-muted)' }}

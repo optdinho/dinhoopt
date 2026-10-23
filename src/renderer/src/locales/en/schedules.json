@@ -47,6 +47,7 @@
     "frequencyMonthly": "Monthly",
     "dayLabel": "Day",
     "timeLabel": "Time",
+    "minuteLabel": "Minute",
     "tasksLabel": "Tasks",
     "selectAll": "Select all",
     "deselectAll": "Deselect all",

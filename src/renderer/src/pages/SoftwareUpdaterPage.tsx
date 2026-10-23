@@ -23,6 +23,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
 import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
+import { Select } from '@/components/shared/Select'
 import { StatCard } from '@/components/shared/StatCard'
 
 import logger from '@/lib/renderer-logger'
@@ -279,7 +280,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
           </button>
 
           {autoInstallUpdates && (
-            <select
+            <Select
               value={autoInstallSchedule ?? 'daily'}
               onChange={async (e) => {
                 const value = e.target.value as 'daily' | 'weekly'
@@ -304,7 +305,7 @@ export function SoftwareUpdaterPage({ embedded }: { embedded?: boolean }) {
             >
               <option value="daily">{t('softwareUpdater.scheduleDaily')}</option>
               <option value="weekly">{t('softwareUpdater.scheduleWeekly')}</option>
-            </select>
+            </Select>
           )}
         </div>
 

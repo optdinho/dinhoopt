@@ -1,6 +1,7 @@
 import type { FirewallIssue, FirewallRiskLevel, FirewallRule } from '@shared/types'
 import { FileWarning, FileX, Globe, type Inbox, Network } from 'lucide-react'
 import { Checkbox } from '@/components/shared/Checkbox'
+import { Select } from '@/components/shared/Select'
 import { useFirewallStore } from '@/stores/firewall-store'
 
 export const RISK_COLORS: Record<FirewallRiskLevel, { dot: string; bg: string; border: string; text: string }> = {
@@ -127,15 +128,19 @@ export function FilterSelect({
   value,
   onChange,
   options,
+  label,
 }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
+  /** Accessible name — the control shows only the current value, so a screen reader needs this. */
+  label: string
 }) {
   return (
-    <select
+    <Select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
       className="rounded-lg border-0 px-3 py-2 text-[13px] outline-none"
       style={{ background: 'var(--card-bg)', border: '1px solid var(--border-medium)', color: 'var(--text-primary)' }}
     >
@@ -144,6 +149,6 @@ export function FilterSelect({
           {o.label}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }

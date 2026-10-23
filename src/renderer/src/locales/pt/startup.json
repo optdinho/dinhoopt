@@ -4,6 +4,7 @@
   "filterAll": "Todos os itens",
   "filterActive": "Apenas ativos",
   "filterDisabled": "Apenas desativados",
+  "filterLabel": "Filtrar por",
   "sortByImpact": "Ordenar por impacto",
   "sortByName": "Ordenar por nome",
   "impactLabel": "impacto {{level}}",
@@ -68,6 +69,7 @@
   "safetyScore": "Segurança: {{score}}/10",
   "safetyAnalyzed": "Analisado em {{date}}",
   "sortBySafety": "Ordenar por segurança",
+  "sortLabel": "Ordenar por",
   "schedulesLink": "Agendador",
   "enableItem": "Ativar {{name}}",
   "disableItem": "Desativar {{name}}"

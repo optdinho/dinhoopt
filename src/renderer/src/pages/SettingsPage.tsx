@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { LogViewer } from '@/components/shared/LogViewer'
+import { Select } from '@/components/shared/Select'
 import { usePlatform } from '@/hooks/usePlatform'
 import { loadLanguage } from '@/i18n'
 import { LANGUAGES } from '@/lib/languages'
@@ -86,13 +87,14 @@ export function SettingsPage() {
           <ThemeSelector value={settings.theme} onChange={(v) => save({ theme: v })} />
         </Row>
         <Row label={t('languageLabel')} desc={t('languageDesc')}>
-          <select
+          <Select
             value={settings.language}
             onChange={async (e) => {
               save({ language: e.target.value })
               await loadLanguage(e.target.value)
               i18next.changeLanguage(e.target.value)
             }}
+            aria-label={t('languageLabel')}
             className={selectStyle}
             style={selectBorder}
           >
@@ -101,7 +103,7 @@ export function SettingsPage() {
                 {lang.nativeName} ({lang.name})
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
         <Row label={t('runAtStartupLabel')} desc={t('runAtStartupDesc')}>
           <Toggle checked={settings.runAtStartup} onChange={saveStartup} />
@@ -125,9 +127,10 @@ export function SettingsPage() {
           <Toggle checked={settings.autoRestart} onChange={(v) => save({ autoRestart: v })} />
         </Row>
         <Row label={t('updateCheckIntervalLabel')} desc={t('updateCheckIntervalDesc')} last={platform !== 'win32'}>
-          <select
+          <Select
             value={settings.updateCheckIntervalHours}
             onChange={(e) => save({ updateCheckIntervalHours: Number(e.target.value) })}
+            aria-label={t('updateCheckIntervalLabel')}
             className={selectStyle}
             style={selectBorder}
           >
@@ -135,7 +138,7 @@ export function SettingsPage() {
             <option value={4}>{t('updateCheckEvery4Hours')}</option>
             <option value={12}>{t('updateCheckEvery12Hours')}</option>
             <option value={24}>{t('updateCheckOnceADay')}</option>
-          </select>
+          </Select>
         </Row>
       </Section>
 
@@ -165,15 +168,16 @@ export function SettingsPage() {
             )}
             last
           >
-            <select
+            <Select
               value={settings.backupMode ?? 'targeted'}
               onChange={(e) => save({ backupMode: e.target.value as 'targeted' | 'full' })}
+              aria-label={t('backupModeLabel')}
               className={selectStyle}
               style={selectBorder}
             >
               <option value="targeted">{t('backupModeTargeted', 'Targeted (recommended)')}</option>
               <option value="full">{t('backupModeFull', 'Full hive')}</option>
-            </select>
+            </Select>
           </Row>
         </div>
       </Section>
@@ -204,9 +208,10 @@ export function SettingsPage() {
           />
         </Row>
         <Row label={t('skipRecentFilesLabel')} desc={t('skipRecentFilesDesc')} last>
-          <select
+          <Select
             value={settings.cleaner.skipRecentMinutes}
             onChange={(e) => save({ cleaner: { ...settings.cleaner, skipRecentMinutes: Number(e.target.value) } })}
+            aria-label={t('skipRecentFilesLabel')}
             className={selectStyle}
             style={selectBorder}
           >
@@ -214,7 +219,7 @@ export function SettingsPage() {
             <option value={60}>{t('skipRecent1Hour')}</option>
             <option value={120}>{t('skipRecent2Hours')}</option>
             <option value={1440}>{t('skipRecent24Hours')}</option>
-          </select>
+          </Select>
         </Row>
       </Section>
 

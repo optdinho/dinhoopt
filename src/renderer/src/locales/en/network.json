@@ -40,6 +40,7 @@
   "monitorConnectionCount": "{{total}} connections ({{shown}} shown)",
   "monitorFilterProcess": "Filter by process...",
   "monitorAllStates": "All States",
+  "monitorFilterStateLabel": "Filter by state",
   "monitorLoading": "Loading connections...",
   "monitorNoConnections": "No connections found",
   "monitorColRemote": "Remote Address",

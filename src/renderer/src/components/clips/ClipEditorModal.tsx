@@ -1,9 +1,10 @@
 import type { ClipInfo, EnhanceOption } from '@shared/types'
 import { MAX_SHARPNESS } from '@shared/types'
 import { Combine, Maximize, Minimize, Pause, Play, Scissors, Sparkles, X } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { Select } from '@/components/shared/Select'
 import logger from '@/lib/renderer-logger'
 import { EncodeProgressBar } from './EncodeProgressBar'
 import { fmt, TrimTimeline } from './TrimTimeline'
@@ -29,17 +30,21 @@ function EnhanceSelect({
   title?: string
 }) {
   const { t } = useTranslation('clips')
+  const selectId = useId()
   return (
     <label
+      htmlFor={selectId}
       className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[10px]"
       style={{ background: 'rgba(0,0,0,0.2)' }}
       title={title}
     >
       <span style={{ color: 'var(--text-secondary)' }}>{t('enhance')}</span>
-      <select
+      <Select
+        id={selectId}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as EnhanceOption)}
+        aria-label={t('enhance')}
         className="flex-1 rounded border bg-transparent px-1 py-0.5 text-[10px] disabled:opacity-40"
         style={{ borderColor: 'var(--border-medium)', color: 'var(--text-primary)' }}
       >
@@ -47,7 +52,7 @@ function EnhanceSelect({
         <option value="sr">{t('enhanceSr')}</option>
         <option value="frc">{t('enhanceFrc')}</option>
         <option value="sr+frc">{t('enhanceSrFrc')}</option>
-      </select>
+      </Select>
     </label>
   )
 }

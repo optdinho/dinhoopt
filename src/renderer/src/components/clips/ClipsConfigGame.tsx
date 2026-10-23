@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 import { Gamepad2, Plus, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Select } from '@/components/shared/Select'
 import {
   CollapsibleMini,
   formatKey,
@@ -118,11 +119,12 @@ export function GameSection({
                 >
                   {rebindingId === hk.id ? '...' : formatKey(hk.vk, hk.modifiers)}
                 </button>
-                <select
+                <Select
                   value={hk.action}
                   onChange={(e) =>
                     updateHotkey(hk.id, { action: e.target.value as import('@shared/types').HotkeyAction })
                   }
+                  aria-label={tClips('actions')}
                   className="rounded-md border px-1 py-0.5 text-[10px] outline-none"
                   style={{ ...nativeSelectStyle, borderColor: 'var(--border-medium)', colorScheme: 'dark' }}
                 >
@@ -135,11 +137,12 @@ export function GameSection({
                   <option value="toggleMic" style={nativeSelectStyle}>
                     {tClips('actionToggleMicLabel')}
                   </option>
-                </select>
+                </Select>
                 {hk.action === 'saveClip' && (
-                  <select
+                  <Select
                     value={hk.replayDurationSeconds || 60}
                     onChange={(e) => updateHotkey(hk.id, { replayDurationSeconds: Number(e.target.value) })}
+                    aria-label={tClips('replayTime')}
                     className="rounded-md border px-1 py-0.5 text-[10px] outline-none"
                     style={{ ...nativeSelectStyle, borderColor: 'var(--border-medium)', colorScheme: 'dark' }}
                   >
@@ -148,7 +151,7 @@ export function GameSection({
                         {d < 60 ? `${d}${t('s')}` : `${d / 60}${t('min')}`}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
                 <div className="ml-auto flex items-center gap-0.5">
                   <TogglePill
