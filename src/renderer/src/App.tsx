@@ -103,18 +103,27 @@ export function App() {
   // Apply theme class to <html> element
   useEffect(() => {
     const root = document.documentElement
-    const apply = (mode: 'dark' | 'light') => {
-      root.classList.remove('dark', 'light')
-      root.classList.add(mode)
-    }
+    try {
+      localStorage.setItem('theme', theme ?? 'dark')
+    } catch {}
+    root.classList.remove('dark', 'light', 'system')
     if (theme === 'system') {
+      root.classList.add('system')
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      const apply = (mode: 'dark' | 'light') => {
+        root.classList.remove('dark', 'light')
+        root.classList.add(mode)
+      }
       apply(mq.matches ? 'dark' : 'light')
       const handler = (e: MediaQueryListEvent) => apply(e.matches ? 'dark' : 'light')
       mq.addEventListener('change', handler)
-      return () => mq.removeEventListener('change', handler)
+      return () => {
+        mq.removeEventListener('change', handler)
+        root.classList.remove('system')
+      }
     }
-    apply(theme ?? 'dark')
+    root.classList.remove('dark', 'light')
+    root.classList.add(theme ?? 'dark')
   }, [theme])
 
   // Sync RTL direction and lang attribute based on current language

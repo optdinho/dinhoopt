@@ -58,9 +58,6 @@ export function GameSection({
           <span className="text-xs" style={{ color: 'var(--text-primary)' }}>
             {t('autoStartCapture')}
           </span>
-          <span className="text-[9px] opacity-50" style={{ color: 'var(--text-dim)' }}>
-            {t('autoStartCaptureDesc')}
-          </span>
         </div>
         <TogglePill
           enabled={config.autoStartCapture ?? false}

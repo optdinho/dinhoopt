@@ -144,6 +144,11 @@
     --toast-text: #e4e4e7;
 
     --glow-amber: rgba(245, 158, 11, 0.18);
+    --warning: #f59e0b;
+    --warning-strong: #d97706;
+    --warning-soft: #fbbf24;
+    --warning-muted-bg: rgba(245, 158, 11, 0.1);
+    --warning-muted-border: rgba(245, 158, 11, 0.25);
     --glow-blue: rgba(59, 130, 246, 0.14);
     --glow-green: rgba(34, 197, 94, 0.1);
     --glass-inset: rgba(255, 255, 255, 0.05);
@@ -183,6 +188,11 @@
     --toast-text: #18181b;
 
     --glow-amber: rgba(245, 158, 11, 0.1);
+    --warning: #d97706;
+    --warning-strong: #b45309;
+    --warning-soft: #f59e0b;
+    --warning-muted-bg: rgba(245, 158, 11, 0.08);
+    --warning-muted-border: rgba(245, 158, 11, 0.22);
     --glow-blue: rgba(59, 130, 246, 0.07);
     --glow-green: rgba(34, 197, 94, 0.06);
     --glass-inset: rgba(255, 255, 255, 0.8);
@@ -232,6 +242,10 @@
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
   }
 
   html {
