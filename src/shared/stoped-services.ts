@@ -20,6 +20,8 @@ export const STOPED_SERVICE_IDS = [
   'EventLog',
   'ADPSvc',
   'UmRdpService',
+  'CDPSvc',
+  'SSDPSRV',
 ] as const
 
 export type StopedServiceId = (typeof STOPED_SERVICE_IDS)[number]
@@ -68,6 +70,16 @@ export const STOPED_SERVICES: readonly StopedServiceDef[] = [
     id: 'UmRdpService',
     labelKey: 'serviceUmRdpLabel',
     descriptionKey: 'serviceUmRdpDescription',
+  },
+  {
+    id: 'CDPSvc',
+    labelKey: 'serviceCdpsvcLabel',
+    descriptionKey: 'serviceCdpsvcDescription',
+  },
+  {
+    id: 'SSDPSRV',
+    labelKey: 'serviceSsdpsrvLabel',
+    descriptionKey: 'serviceSsdpsrvDescription',
   },
 ]
 

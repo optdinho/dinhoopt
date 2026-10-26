@@ -37,10 +37,31 @@ export default function LicenseGate({ children }: { children: React.ReactNode })
     }
   }, [checkStatus, getHwid])
 
-  const handleCopyHwid = () => {
-    navigator.clipboard.writeText(hwid)
-    setCopied(true)
-    timersRef.current.push(setTimeout(() => setCopied(false), 2000))
+  const handleCopyHwid = async () => {
+    if (!hwid) return
+    try {
+      await navigator.clipboard.writeText(hwid)
+      setCopied(true)
+      timersRef.current.push(setTimeout(() => setCopied(false), 2000))
+      return
+    } catch {
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = hwid
+        textarea.style.position = 'fixed'
+        textarea.style.left = '-9999px'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+        setCopied(true)
+        timersRef.current.push(setTimeout(() => setCopied(false), 2000))
+      } catch {
+        // Silently ignore copy failures
+      }
+    }
   }
 
   const handleActivate = async () => {
