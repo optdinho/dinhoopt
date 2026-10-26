@@ -1,3 +1,25 @@
+## [2.1.6]
+
+### Adicionado
+- **STOPED**: adicionados `CDPSvc` e `SSDPSRV` à lista com traduções PT-BR.
+- **Licença**: fallback de cópia para área de transferência (HWID) no LicensePage e LicenseGate.
+
+### Alterado
+- **Sidebar**: rótulo "Serviços em segundo plano" alterado para "STOPPED" em PT-BR.
+- **STOPED**: "Ativar/Desativar todos" agora cobre todos os serviços do catálogo.
+
+## [2.1.5]
+
+### Alterado
+- **Tema claro/escuro**: sincronizacao entre definicoes, bootstrap HTML e armazenamento local, evitando flash e mantendo a escolha do utilizador.
+- **Interface**: melhorias em filtros, navegacao da barra lateral e auditoria de UI.
+- **Clips**: melhorias das fases 1-3, isolamento dev/prod das regras YARA.
+- **Documentacao**: higienizacao do AGENTS.md com historico movido.
+
+### Corrigido
+- **Navegacao**: grupos nao-navegaveis corrigidos e rotas ocultas resolvidas.
+- **Localizacao**: varredura PT-PT -> PT-BR nas traducoes.
+
 # Changelog
 
 Todas as mudanças relevantes do **DiNho Optimizer**. O [README](README.md) mantém apenas

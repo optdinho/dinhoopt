@@ -37,5 +37,9 @@
   "serviceAdpSvcLabel": "Plataforma de Dados Agregados",
     "serviceAdpSvcDescription": "Agrega dados de diagnóstico do dispositivo e limpa arquivos temporários em segundo plano.",
   "serviceUmRdpLabel": "Redirecionador RDP",
-  "serviceUmRdpDescription": "Redireciona dispositivos como impressoras e drives em sessões de Área de Trabalho Remota."
+  "serviceUmRdpDescription": "Redireciona dispositivos como impressoras e drives em sessões de Área de Trabalho Remota.",
+  "serviceCdpsvcLabel": "Serviço de Plataforma de Dispositivos Conectados",
+  "serviceCdpsvcDescription": "Gerencia recursos para dispositivos conectados via CDP. Na maioria dos PCs domésticos pode ser desativado com segurança.",
+  "serviceSsdpsrvLabel": "Descoberta SSDP",
+  "serviceSsdpsrvDescription": "Permite descoberta de dispositivos UPnP/SSDP na rede local. Desnecessário se não usa esse tipo de descoberta."
 }

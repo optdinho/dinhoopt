@@ -1,7 +1,7 @@
 {
   "name": "dinho-optimizer",
-  "version": "2.1.5",
-  "description": "DiNho Optimizer — Otimizador de sistema Windows",
+  "version": "2.1.6",
+  "description": "DiNho Optimizer \u00e2\u20ac\u201d Otimizador de sistema Windows",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/optdinho/dinhoopt.git"
