@@ -1,15 +1,27 @@
-import { CircleCheck, CircleX, Copy, Info, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react'
+import {
+  CircleCheck,
+  CircleX,
+  Copy,
+  Info,
+  KeyRound,
+  RefreshCw,
+  ShieldCheck,
+  ShoppingCart,
+  TriangleAlert,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLicenseStore } from '../stores/license-store'
 
 export function LicensePage() {
   const { t } = useTranslation('license')
-  const { hwid, isActivating, error, getHwid, activate, status } = useLicenseStore()
+  const { hwid, isActivating, error, getHwid, activate, status, checkStatus } = useLicenseStore()
   const [key, setKey] = useState('')
   const [copied, setCopied] = useState(false)
   const [activationSuccess, setActivationSuccess] = useState(false)
   const [reason, setReason] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshNotice, setRefreshNotice] = useState('')
 
   useEffect(() => {
     getHwid()
@@ -59,6 +71,19 @@ export function LicensePage() {
     v = v.replace(/[^A-Z0-9-]/g, '')
     if (v.length > 49) v = v.slice(0, 49)
     setKey(v)
+  }
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    setRefreshNotice('')
+    const result = await checkStatus()
+    if (!result.valid) setRefreshNotice(result.reason || t('notActiveYet'))
+    setIsRefreshing(false)
+  }
+
+  const handleRenew = () => {
+    void window.dinho.openExternal('https://dinhooptimizer.netlify.app/')
   }
 
   const alreadyActivated = status?.valid
@@ -136,6 +161,28 @@ export function LicensePage() {
         </div>
         {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
       </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-6">
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isRefreshing || isActivating}
+          className="flex items-center justify-center gap-2 bg-zinc-800/50 border border-zinc-600 hover:bg-zinc-700/60 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-200 px-4 py-3 rounded-lg font-medium transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? t('refreshing') : t('refreshStatus')}
+        </button>
+        <button
+          type="button"
+          onClick={handleRenew}
+          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-lg font-medium transition-colors"
+        >
+          <ShoppingCart className="w-4 h-4" />
+          {t('renewNow')}
+        </button>
+      </div>
+
+      {refreshNotice && <p className="text-amber-400 text-sm text-center mb-6">{refreshNotice}</p>}
 
       <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">

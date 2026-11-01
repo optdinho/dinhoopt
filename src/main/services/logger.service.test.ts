@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { mockAppendFile, mockMkdir, mockReadFile, mockReaddir, mockUnlink } = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ const { mockAppendFile, mockMkdir, mockReadFile, mockReaddir, mockUnlink } = vi.
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => '/tmp/test-logs'),
+    isPackaged: true,
   },
 }))
 
@@ -111,6 +113,26 @@ describe('LoggerService', () => {
       const logger = getLogger()
       await logger.ready()
       expect(mockReaddir).toHaveBeenCalled()
+    })
+
+    it('writes packaged logs to the shared logs folder', async () => {
+      const logger = getLogger()
+      await logger.ready()
+      expect(mockMkdir).toHaveBeenCalledWith(join('/tmp/test-logs', 'logs'), { recursive: true })
+    })
+
+    it('writes dev logs to the DiNho-Dev subfolder', async () => {
+      const { app } = await import('electron')
+      Object.defineProperty(app, 'isPackaged', { value: false, configurable: true })
+      try {
+        const logger = getLogger()
+        await logger.ready()
+        expect(mockMkdir).toHaveBeenCalledWith(join('/tmp/test-logs', 'logs', 'DiNho-Dev'), {
+          recursive: true,
+        })
+      } finally {
+        Object.defineProperty(app, 'isPackaged', { value: true, configurable: true })
+      }
     })
   })
 

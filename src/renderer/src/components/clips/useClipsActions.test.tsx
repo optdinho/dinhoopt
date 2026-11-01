@@ -1280,9 +1280,21 @@ describe('formatClipsSize', () => {
 })
 
 describe('formatClipsDate', () => {
-  it('formats a valid ISO date', () => {
-    const iso = '2026-07-28T10:00:00.000Z'
-    expect(formatClipsDate(iso)).toBe(new Date(iso).toLocaleString())
+  const now = new Date('2026-08-01T12:00:00.000Z')
+
+  it('shows only the time for clips from today', () => {
+    const iso = new Date(2026, 7, 1, 9, 5).toISOString()
+    expect(formatClipsDate(iso, now)).toBe('09:05')
+  })
+
+  it('shows day/month for clips from the current year', () => {
+    const iso = new Date(2026, 6, 28, 10, 0).toISOString()
+    expect(formatClipsDate(iso, now)).toBe('28/07')
+  })
+
+  it('adds a two-digit year for clips from previous years', () => {
+    const iso = new Date(2024, 11, 31, 23, 0).toISOString()
+    expect(formatClipsDate(iso, now)).toBe('31/12/24')
   })
 
   it('does not throw for invalid input (renders Invalid Date)', () => {

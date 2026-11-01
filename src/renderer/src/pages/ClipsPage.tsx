@@ -32,7 +32,7 @@ export function ClipsPage() {
               state.setShowConfig(!state.showConfig)
               if (hasVersionNews) dismissVersionNews()
             }}
-            className="relative mt-1 shrink-0 rounded-lg p-2 transition-colors hover:bg-white/[0.06]"
+            className="relative mt-1 shrink-0 rounded-lg p-2 transition-colors hover:bg-[var(--bg-hover)]"
             style={{ color: state.showConfig ? 'var(--accent)' : 'var(--text-dim)' }}
             title={state.showConfig ? t('hideSettings') : t('showSettings')}
           >
@@ -77,7 +77,7 @@ export function ClipsPage() {
                     }}
                     aria-label={t('close')}
                     title={t('close')}
-                    className="pointer-events-auto -mr-1 ml-0.5 grid h-4 w-4 shrink-0 place-items-center rounded transition-colors hover:bg-white/10"
+                    className="pointer-events-auto -mr-1 ml-0.5 grid h-4 w-4 shrink-0 place-items-center rounded transition-colors hover:bg-[var(--bg-hover)]"
                     style={{ color: 'var(--text-dim)' }}
                   >
                     <X className="h-3 w-3" />
@@ -116,8 +116,8 @@ export function ClipsPage() {
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: tooltip panel that must intercept mousedown to prevent backdrop close */}
           <div
-            className="max-w-xs rounded-xl border bg-[#1a1a2e] p-5 text-sm leading-relaxed shadow-2xl"
-            style={{ borderColor: 'var(--border-medium)', color: 'var(--text-muted)' }}
+            className="max-w-xs rounded-xl border p-5 text-sm leading-relaxed shadow-2xl"
+            style={{ background: 'var(--card-bg)', borderColor: 'var(--border-medium)', color: 'var(--text-muted)' }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             {state.tooltipContent[state.activeTip]}

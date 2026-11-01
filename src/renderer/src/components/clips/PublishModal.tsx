@@ -45,7 +45,7 @@ export default function PublishModal({ link, onClose }: PublishModalProps) {
         aria-modal="true"
         aria-label={t('publishDone')}
         className="relative w-full max-w-md rounded-xl border shadow-2xl p-6"
-        style={{ background: '#111318', borderColor: 'var(--border-medium)' }}
+        style={{ background: 'var(--card-bg)', borderColor: 'var(--border-medium)' }}
       >
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -102,7 +102,7 @@ export default function PublishModal({ link, onClose }: PublishModalProps) {
             type="button"
             onClick={onClose}
             className="rounded-lg px-4 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
-            style={{ background: '#06b6d4' }}
+            style={{ background: 'var(--accent)' }}
           >
             {t('close')}
           </button>

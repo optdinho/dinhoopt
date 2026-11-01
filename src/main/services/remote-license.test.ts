@@ -131,6 +131,7 @@ vi.mock('electron', () => {
   return {
     app: {
       getPath: (n: string) => (n === 'userData' ? mockVars.getTestRoot() : p.join(os.tmpdir(), n)),
+      getAppPath: () => mockVars.getTestRoot(),
       isPackaged: false,
     },
     net: {
@@ -716,6 +717,55 @@ describe('remote-license', () => {
       const result = await checkLicense()
       expect(result.valid).toBe(false)
       expect(result.reason).toBe('Sem validação offline disponível')
+    })
+  })
+
+  // ── Dev override (license-dev-override.txt) ──────────────────────
+  describe('dev license override', () => {
+    const overrideFile = 'license-dev-override.txt'
+
+    function writeOverride(value: string): void {
+      fs.writeFileSync(path.join(testRoot, overrideFile), value, 'utf-8')
+    }
+
+    it('forces an invalid license even when a saved key exists', async () => {
+      fs.writeFileSync(path.join(testRoot, KEYFILE), 'KEY', 'utf-8')
+      writeOverride('invalid')
+      mockNet.setResponse({ valid: true })
+
+      const result = await checkLicense()
+
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Licença forçada a inválida (modo de teste)')
+      expect(mockNet.getRequests()).toHaveLength(0)
+    })
+
+    it('forces a valid license without a saved key', async () => {
+      writeOverride('valid')
+
+      const result = await checkLicense()
+
+      expect(result.valid).toBe(true)
+      expect(result.type).toBe('test')
+    })
+
+    it('blocks activation while the override is invalid', async () => {
+      writeOverride('invalid')
+      mockNet.setResponse({ valid: true })
+
+      const result = await activateLicense('AAAA-BBBB-CCCC')
+
+      expect(result.valid).toBe(false)
+      expect(mockNet.getRequests()).toHaveLength(0)
+    })
+
+    it('ignores unknown override values', async () => {
+      writeOverride('maybe')
+
+      const result = await checkLicense()
+
+      expect(result.valid).toBe(false)
+      expect(result.reason).toBe('Nenhuma licença encontrada')
     })
   })
 

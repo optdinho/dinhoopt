@@ -139,7 +139,7 @@ export function TrimTimeline({
         {/* Track background */}
         <div
           className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full"
-          style={{ background: 'rgba(255,255,255,0.12)' }}
+          style={{ background: 'var(--gauge-track)' }}
         />
 
         {/* Selected region highlight */}
@@ -178,7 +178,7 @@ export function TrimTimeline({
           style={{
             left: `${pct(startSec)}%`,
             borderColor: 'var(--accent)',
-            background: dragging === 'start' ? 'var(--accent)' : '#111318',
+            background: dragging === 'start' ? 'var(--accent)' : 'var(--card-bg)',
           }}
         />
 
@@ -207,7 +207,7 @@ export function TrimTimeline({
           style={{
             left: `${pct(endSec)}%`,
             borderColor: 'var(--accent)',
-            background: dragging === 'end' ? 'var(--accent)' : '#111318',
+            background: dragging === 'end' ? 'var(--accent)' : 'var(--card-bg)',
           }}
         />
 
@@ -216,7 +216,7 @@ export function TrimTimeline({
           className="absolute top-0 z-20 h-full w-0.5 -translate-x-1/2"
           style={{
             left: `${pct(currentTime)}%`,
-            background: '#fff',
+            background: 'var(--text-primary)',
             opacity: 0.7,
           }}
         />

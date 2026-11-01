@@ -10,6 +10,25 @@ import { deleteSavedKey, initStore, readSavedKey, writeSavedKey } from './licens
 const NETWORK_TIMEOUT = 20_000
 const MAX_RETRIES = 2
 
+const DEV_LICENSE_OVERRIDE_FILENAME = 'license-dev-override.txt'
+
+type DevLicenseOverride = 'valid' | 'invalid'
+
+/** Apenas em dev: permite forcar a licenca lendo um ficheiro na raiz do
+ *  projeto. Criar/alterar o ficheiro entre chamadas permite testar o botao
+ *  "Atualizar" sem reiniciar a app. Ignorado em builds empacotados. */
+function getDevLicenseOverride(): DevLicenseOverride | null {
+  if (app.isPackaged) return null
+  try {
+    const overridePath = join(app.getAppPath(), DEV_LICENSE_OVERRIDE_FILENAME)
+    if (!existsSync(overridePath)) return null
+    const value = readFileSync(overridePath, 'utf-8').trim().toLowerCase()
+    return value === 'valid' || value === 'invalid' ? value : null
+  } catch {
+    return null
+  }
+}
+
 const FALLBACK_URL = 'https://crimson-wildflower-4de0.mirandaotabol.workers.dev'
 
 // O app so usa a rota publica `validate`, que nao exige token de admin.
@@ -289,6 +308,14 @@ export async function validateLicense(key: string, hwid: string): Promise<Remote
 
 export async function activateLicense(key: string): Promise<RemoteLicenseResult> {
   ensureInit()
+  const devOverride = getDevLicenseOverride()
+  if (devOverride === 'invalid') {
+    return { valid: false, reason: 'Licença forçada a inválida (modo de teste)' }
+  }
+  if (devOverride === 'valid') {
+    writeSavedKey(join(app.getPath('userData'), 'remote-license.key'), key.toUpperCase().trim())
+    return { valid: true, type: 'test' }
+  }
   const hwid = await generateHwid()
   const result = await validateLicense(key.toUpperCase().trim(), hwid)
   const userData = app.getPath('userData')
@@ -324,6 +351,13 @@ function scheduleBackgroundRevalidation(key: string): void {
 
 export async function checkLicense(): Promise<RemoteLicenseResult> {
   if (isE2EBypassEnabled()) {
+    return { valid: true, type: 'test' }
+  }
+  const devOverride = getDevLicenseOverride()
+  if (devOverride === 'invalid') {
+    return { valid: false, reason: 'Licença forçada a inválida (modo de teste)' }
+  }
+  if (devOverride === 'valid') {
     return { valid: true, type: 'test' }
   }
   ensureInit()

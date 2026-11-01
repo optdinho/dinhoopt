@@ -87,6 +87,7 @@ export function ClipsConfigPanel({
             {/* Quality Section */}
             <ConfigSection
               icon={Video}
+              accent="violet"
               label={
                 <span className="flex items-center gap-1">
                   {t('recordingQuality')}
@@ -111,6 +112,7 @@ export function ClipsConfigPanel({
             {/* Audio Section */}
             <ConfigSection
               icon={Mic}
+              accent="blue"
               label={t('audio')}
               defaultOpen={true}
               content={
@@ -132,6 +134,7 @@ export function ClipsConfigPanel({
             {/* Game Detection Section */}
             <ConfigSection
               icon={Gamepad2}
+              accent="amber"
               label={t('gameDetection')}
               defaultOpen={true}
               content={

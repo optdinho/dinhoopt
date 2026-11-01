@@ -26,5 +26,9 @@
   "activationError": "Error en la activación",
   "activationFailedShort": "Error al activar",
   "noConnection": "Sin conexión",
-  "checkFailed": "Error al verificar licencia"
+  "checkFailed": "Error al verificar licencia",
+  "refreshStatus": "Actualizar",
+  "refreshing": "Verificando...",
+  "renewNow": "Renovar ahora",
+  "notActiveYet": "Licencia aún no validada. Espere un momento e intente de nuevo."
 }

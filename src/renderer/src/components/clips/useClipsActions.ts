@@ -450,9 +450,22 @@ export function formatClipsSize(bytes: number, t: (key: string) => string): stri
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ${t('gigabytes')}`
 }
 
-export function formatClipsDate(iso: string): string {
+/**
+ * Compact date for the clip cards: time for today, `dd/mm` for the current
+ * year and `dd/mm/yy` for older clips. `toLocaleString()` was too long to fit
+ * under the file name in a 4-column grid.
+ */
+export function formatClipsDate(iso: string, now: Date = new Date()): string {
   try {
-    return new Date(iso).toLocaleString()
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return 'Invalid Date'
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const sameDay =
+      date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
+    if (sameDay) return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+    const dayMonth = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}`
+    if (date.getFullYear() === now.getFullYear()) return dayMonth
+    return `${dayMonth}/${String(date.getFullYear()).slice(-2)}`
   } catch {
     logger.warn('clips', `formatClipsDate fell back to raw ISO for invalid date: ${iso}`)
     return iso

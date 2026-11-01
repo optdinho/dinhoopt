@@ -344,7 +344,7 @@ export function ClipEditorModal({ clip, initialMergePaths, startFullscreen, onCl
         style={{
           maxWidth: fullscreen ? '100%' : '36rem',
           height: fullscreen ? '100%' : 'auto',
-          background: fullscreen ? '#000' : '#111318',
+          background: fullscreen ? '#000' : 'var(--card-bg)',
           borderColor: 'var(--border-medium)',
           display: 'flex',
           flexDirection: 'column',

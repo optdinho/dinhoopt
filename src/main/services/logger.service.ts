@@ -5,10 +5,18 @@ import { app } from 'electron'
 
 const DEFAULT_RETENTION_DAYS = 7
 const PAGE_SIZE = 50
+/** Subfolder used only by un-packaged runs, mirroring clips-engine-connection.ts. */
+const DEV_LOG_DIR_NAME = 'DiNho-Dev'
 
 function resolveLogDir(): string {
   try {
-    return join(app.getPath('userData'), 'logs')
+    const base = app.getPath('userData')
+    // Dev and installed builds share %APPDATA%\dinho-optimizer (app.getName()
+    // resolves to package.json "name", not productName), so without this split
+    // a line written by `npm run dev` is indistinguishable from one written by
+    // the installed app — user reports then have to be reconstructed from
+    // isPackaged lines. Keep dev telemetry in its own subfolder.
+    return app.isPackaged ? join(base, 'logs') : join(base, 'logs', DEV_LOG_DIR_NAME)
   } catch {
     return join(process.cwd(), 'logs')
   }

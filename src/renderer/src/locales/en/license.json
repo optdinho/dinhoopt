@@ -26,5 +26,9 @@
   "activationError": "Activation error",
   "activationFailedShort": "Failed to activate",
   "noConnection": "No connection",
-  "checkFailed": "Failed to check license"
+  "checkFailed": "Failed to check license",
+  "refreshStatus": "Refresh",
+  "refreshing": "Checking...",
+  "renewNow": "Renew now",
+  "notActiveYet": "License not validated yet. Wait a moment and try again."
 }

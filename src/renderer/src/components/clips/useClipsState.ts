@@ -65,6 +65,7 @@ export interface ClipsState {
   mergeModePaths: string[] | null
   setMergeModePaths: (paths: string[] | null) => void
   filteredClips: ClipInfo[]
+  filterCounts: Record<FilterTab, number>
   estimatedRamMB: number
   tooltipContent: Record<string, string>
   filterTabs: { key: FilterTab; label: string }[]
@@ -491,6 +492,31 @@ export function useClipsState(): ClipsState {
     })
   }, [clips, filterTab, searchQuery, favorites])
 
+  // Per-tab counts for the filter pills (same date windows as `filteredClips`).
+  const filterCounts = useMemo(() => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const startOfWeek = startOfToday - 6 * 24 * 60 * 60 * 1000
+    let today = 0
+    let week = 0
+    for (const clip of clips) {
+      const ct = new Date(clip.createdAt).getTime()
+      if (ct <= 0) {
+        today++
+        week++
+        continue
+      }
+      if (ct >= startOfToday) today++
+      if (ct >= startOfWeek) week++
+    }
+    return {
+      all: clips.length,
+      today,
+      week,
+      favorites: clips.filter((c) => favorites.has(c.name)).length,
+    }
+  }, [clips, favorites])
+
   // Expose save trigger for E2E tests
   useEffect(() => {
     ;(window as unknown as Record<string, unknown>).__clipsSaveClip = actions.handleSaveClip
@@ -559,6 +585,7 @@ export function useClipsState(): ClipsState {
     mergeModePaths,
     setMergeModePaths,
     filteredClips,
+    filterCounts,
     estimatedRamMB,
     tooltipContent,
     filterTabs,
