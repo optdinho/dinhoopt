@@ -503,11 +503,6 @@ describe('computeStatus', () => {
     expect(result.status).toBe('not-applicable')
   })
 
-  it('returns not-applicable for HDD', () => {
-    const result = computeStatus({ mediaType: 'HDD', trimSupport: 'supported' })
-    expect(result.status).toBe('not-applicable')
-  })
-
   it('returns not-applicable for removable drives', () => {
     const result = computeStatus({ isRemovable: true, trimSupport: 'supported' })
     expect(result.status).toBe('not-applicable')
@@ -526,12 +521,6 @@ describe('computeStatus', () => {
   it('returns recently-trimmed when lastTrimAt < 7 days', () => {
     const result = computeStatus({ trimSupport: 'supported', lastTrimAt: Date.now() - 1000 })
     expect(result.status).toBe('recently-trimmed')
-  })
-
-  it('returns recommended when stale (>30 days)', () => {
-    const now = Date.now()
-    const result = computeStatus({ trimSupport: 'supported', lastTrimAt: now - 31 * 24 * 60 * 60 * 1000 }, now)
-    expect(result.status).toBe('recommended')
   })
 
   it('returns recommended when stale (>30 days)', () => {

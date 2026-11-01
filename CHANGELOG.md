@@ -1,3 +1,19 @@
+## [2.1.7]
+
+### Adicionado
+- **Game Mode**: snapshots AC/DC do esquema de energia ativo com reversão, tweaks de energia/GPU (boost mode, EPP, HAGS off), purga de standby memory e prioridades CPU/IO por perfil.
+- **Game Mode**: exclusões do Microsoft Defender pela UI, com validação de caminho (aspas, metacaracteres, traversal e limite de 260 caracteres) e IPC dedicado.
+- **STOPED**: catálogo corrigido para os 9 serviços pedidos, com traduções.
+
+### Alterado
+- **Tecnologias**: Electron 45.2.1 (Chromium 156, Node 24.22.1), YARA-X 0.12, NAudio 3.3, CsWin32 0.3.367, Biome 2.6.4, Vite 8.3.5, React Router 7.18.5, i18next 26.6.0, lucide-react 1.66.0 e restantes minors.
+- **CI**: `actions/checkout` e `actions/setup-node` v7; matriz Node 22/24/26.
+- **Qualidade**: regras novas do Biome 2.6 aplicadas; `npm audit` sem vulnerabilidades high.
+
+### Corrigido
+- **Clips**: adaptação ao CsWin32 0.3.367 (o namespace `Windows.Win32.System.Memory` deixou de ser gerado).
+- **Testes**: removidos títulos duplicados que a regra `noIdenticalTestTitle` passou a detetar.
+
 ## [2.1.6]
 
 ### Adicionado

@@ -7,6 +7,37 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn, formatBytes } from '@/lib/utils'
 import { usePerfStore } from '@/stores/perf-store'
 
+type SortColumn = 'cpuPercent' | 'memBytes' | 'name' | 'pid'
+
+function SortHeader({
+  column,
+  label,
+  width,
+  activeColumn,
+  onSort,
+}: {
+  column: SortColumn
+  label: string
+  width: string
+  activeColumn: SortColumn
+  onSort: (column: SortColumn) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      className={cn(
+        'flex items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-colors',
+        activeColumn === column ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400',
+      )}
+      style={{ width }}
+    >
+      {label}
+      <ArrowUpDown className="h-3 w-3" />
+    </button>
+  )
+}
+
 export function ProcessTable() {
   const { t } = useTranslation('performance')
   const processList = usePerfStore((s) => s.processList)
@@ -57,21 +88,6 @@ export function ProcessTable() {
     }
   }, [killTarget, t])
 
-  const SortHeader = ({ column, label, width }: { column: typeof sortColumn; label: string; width: string }) => (
-    <button
-      type="button"
-      onClick={() => setSort(column)}
-      className={cn(
-        'flex items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-colors',
-        sortColumn === column ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400',
-      )}
-      style={{ width }}
-    >
-      {label}
-      <ArrowUpDown className="h-3 w-3" />
-    </button>
-  )
-
   function cpuBarColor(pct: number): string {
     if (pct >= 50) return '#ef4444'
     if (pct >= 20) return '#f59e0b'
@@ -114,10 +130,16 @@ export function ProcessTable() {
 
       {/* Column headers */}
       <div className="mb-2 flex items-center gap-2 px-2">
-        <SortHeader column="name" label={t('columnName')} width="40%" />
-        <SortHeader column="pid" label={t('columnPid')} width="12%" />
-        <SortHeader column="cpuPercent" label={t('columnCpu')} width="20%" />
-        <SortHeader column="memBytes" label={t('columnMemory')} width="18%" />
+        <SortHeader column="name" label={t('columnName')} width="40%" activeColumn={sortColumn} onSort={setSort} />
+        <SortHeader column="pid" label={t('columnPid')} width="12%" activeColumn={sortColumn} onSort={setSort} />
+        <SortHeader column="cpuPercent" label={t('columnCpu')} width="20%" activeColumn={sortColumn} onSort={setSort} />
+        <SortHeader
+          column="memBytes"
+          label={t('columnMemory')}
+          width="18%"
+          activeColumn={sortColumn}
+          onSort={setSort}
+        />
         <div style={{ width: '10%' }} />
       </div>
 

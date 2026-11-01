@@ -10,8 +10,8 @@ jobs:
   lint:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -22,22 +22,27 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        node-version: [22, 24]
+        node-version: [22, 24, 26]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      # Desde o Electron 42 o pacote nao corre postinstall, por isso o `npm ci`
+      # deixa `node_modules/electron/dist` vazio. `paths.test.ts` importa o
+      # pacote `electron` e falha com "Electron failed to install correctly"
+      # sem o binario.
+      - run: npx install-electron
       - run: npm test
 
   build:
     runs-on: windows-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -52,7 +57,7 @@ jobs:
   dotnet:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: dotnet --info
         shell: pwsh
         run: dotnet --info
@@ -83,10 +88,13 @@ jobs:
     runs-on: windows-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      # O Playwright lanca o binario de `node_modules/electron/dist`, que o
+      # `npm ci` ja nao descarrega (Electron 42+ sem postinstall).
+      - run: npx install-electron
       - run: npm run test:e2e

@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Windows.Win32;
-using Windows.Win32.System.Memory;
 using Windows.Win32.System.SystemInformation;
 
 namespace DiNho.Capture.Poc.Memory;

@@ -208,7 +208,7 @@ describe('getNextScanTime', () => {
   })
 })
 
-describe('completeScheduleRun', () => {
+describe('completeScheduleRun import', () => {
   it('can be imported and called', async () => {
     const { completeScheduleRun } = await import('./scheduler')
     vi.useFakeTimers()
@@ -217,7 +217,7 @@ describe('completeScheduleRun', () => {
   })
 })
 
-describe('stopScheduler', () => {
+describe('stopScheduler basic cleanup', () => {
   beforeEach(() => {
     mockSettings = makeSettings()
   })

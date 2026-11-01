@@ -1036,7 +1036,7 @@ describe('WINDOWS_TWEAKS_SET_DNS handler', () => {
 
 // ── STATUS handler ──
 
-describe('WINDOWS_TWEAKS_STATUS handler', () => {
+describe('WINDOWS_TWEAKS_STATUS handler (IPC registration)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

@@ -7,6 +7,18 @@ import { Select } from '@/components/shared/Select'
 type SortField = 'remoteAddress' | 'remotePort' | 'processName' | 'state'
 type SortDir = 'asc' | 'desc'
 
+function SortIcon({ field, sortField }: { field: SortField; sortField: SortField }) {
+  return (
+    <ArrowUpDown
+      className="h-3 w-3 shrink-0"
+      style={{
+        color: sortField === field ? 'var(--accent)' : 'var(--text-muted)',
+        opacity: sortField === field ? 1 : 0.4,
+      }}
+    />
+  )
+}
+
 export function NetworkMonitor() {
   const { t } = useTranslation('network')
   const [connections, setConnections] = useState<NetworkConnection[]>([])
@@ -80,16 +92,6 @@ export function NetworkMonitor() {
       }
     },
     [sortField],
-  )
-
-  const SortIcon = ({ field }: { field: SortField }) => (
-    <ArrowUpDown
-      className="h-3 w-3 shrink-0"
-      style={{
-        color: sortField === field ? 'var(--accent)' : 'var(--text-muted)',
-        opacity: sortField === field ? 1 : 0.4,
-      }}
-    />
   )
 
   return (
@@ -206,7 +208,7 @@ export function NetworkMonitor() {
                   >
                     <div className="flex items-center gap-1.5">
                       {label}
-                      <SortIcon field={field} />
+                      <SortIcon field={field} sortField={sortField} />
                     </div>
                   </th>
                 ))}

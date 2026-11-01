@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2\.1\.6-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2\.1\.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.6-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,31 +47,21 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
-### 2\.1\.5
+### 2\.1\.7
 
-**🔍 Registro num Windows em português.** O `reg.exe` traduz o rótulo do valor por omissão
-(`(padrão)`, `(Standardwert)`…), e o scanner procurava o literal inglês — **sete verificações do
-Registro não encontravam nada num Windows português**. Agora aceita qualquer rótulo.
+**🎮 Game Mode mais completo.** O perfil ativo passa a guardar e reverter o esquema de energia
+(AC/DC), com tweaks de GPU/HAGS, purga de standby memory e prioridades CPU/IO por perfil.
+As exclusões do Microsoft Defender chegam à UI com validação rigorosa do caminho.
 
-**🛡️ Resultados honestos.** A app deixa de dizer "tudo atualizado" quando o winget falha, de
-mostrar o check verde quando tudo falha e de dar por cancelado um scan que continuou a correr.
-A quarentena restaura apenas do caminho registado e volta a guardar o SHA-256; a instalação
-automática e a lista de ignoradas revertem quando a gravação é recusada.
+**⬆️ Tecnologias.** Electron 45.2.1 (Chromium 156, Node 24.22.1), YARA-X 0.12, NAudio 3.3,
+CsWin32 0.3.367, Biome 2.6.4 e Vite 8.3.5; CI passa a `actions/checkout`/`setup-node` v7.
 
-**🧩 Mais correções.** Desativar a hibernação apaga mesmo o `hiberfil.sys`; a página de
-Inicialização deixa de entrar em ciclo infinito quando não há itens; todas as ações que alteram
-o sistema passam a validar a origem do pedido.
+### 2\.1\.6
 
-**⬆️ Tecnologias.** Electron 44.9, YARA-X 0.10 e NAudio 3.2; testes do motor em xunit.v3.
+**🛑 STOPED.** `CDPSvc` e `SSDPSRV` entram no catálogo, e "Ativar/Desativar todos" passa a
+cobrir todos os serviços.
 
-### 2.1.3
-
-**🎮 Deteção de jogos.** O Game Mode deixa de ativar quando abres um vídeo em ecrã inteiro
-no navegador — a lista de apps que nunca contam como jogos foi alargada e as classes de
-janela partilhadas só contam para jogos conhecidos.
-
-**⬆️ Tecnologias.** Electron 44.7.2, React 19.3.1, e o `electron-vite` passa à versão
-**estável 6.0.0** (sai do beta).
+**🔑 Licença.** Copiar o HWID volta a funcionar no LicensePage e no LicenseGate.
 
 ---
 
@@ -150,20 +140,20 @@ presets CQ+VBV e notificações/hotkeys. Ver **[Tecnologias → Motor de Clips](
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
   <img src="https://img.shields.io/badge/Zustand-5-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand" />
-  <img src="https://img.shields.io/badge/YARA--X-0.10-00ADD8?style=flat-square" alt="YARA-X" />
+  <img src="https://img.shields.io/badge/YARA--X-0.12-00ADD8?style=flat-square" alt="YARA-X" />
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET" />
   <img src="https://img.shields.io/badge/ffmpeg-9.0-008000?style=flat-square&logo=ffmpeg&logoColor=white" alt="ffmpeg" />
 </p>
 
 | Categoria | Tecnologias |
 |-----------|-------------|
-| **Runtime** | Electron 44, Node.js 24+ |
+| **Runtime** | Electron 45, Node.js 24+ |
 | **Linguagem** | TypeScript 7 (strict mode) |
 | **Frontend** | React 19, Tailwind CSS 4, shadcn/ui, Recharts |
 | **Estado** | Zustand 5 |
 | **Build** | electron-vite 6, electron-builder (NSIS) |
 | **Testes** | Vitest 5, Playwright, Testing Library |
-| **Segurança** | YARA-X 0.10 (bindings nativas), crypto (Node.js) |
+| **Segurança** | YARA-X 0.12 (bindings nativas), crypto (Node.js) |
 | **Base de dados** | better-sqlite3 v13 (SQLite) |
 | **Motor de Clips** | .NET 10 (C#), ffmpeg 9.0, NVENC/AMF/QSV, WGC, NAudio, Vortice (D3D11) |
 
