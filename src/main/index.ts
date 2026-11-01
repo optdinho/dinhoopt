@@ -19,12 +19,28 @@ import { isWebPermissionAllowed } from './services/web-permissions'
 
 sanitizeEnvVars()
 
-// GPU workaround — Chromium 134 (Electron 43) crashes the GPU process with
-// error_code=18 on RTX 5050. --no-sandbox prevents the GPU sandbox from
-// blocking initialization; --disable-gpu forces software rendering as fallback.
+// GPU: hardware acceleration stays ON. Chromium's GPU process died with
+// error_code=18 on Windows 25H2 + RTX 5050 under Electron 43 (black screen,
+// issue #148), which is why 6e1cb35 disabled the GPU unconditionally. That
+// workaround cost hardware video decode for every user: a 1080p60 AV1 clip
+// dropped 26% of frames in the clip editor with --disable-gpu versus 0 with
+// the GPU enabled (measured 2026-11-01, Electron 45.2.1). --no-sandbox alone
+// keeps the GPU process up, so software rendering is now a fallback triggered
+// by an actual GPU failure — see services/gpu-fallback.ts.
 app.commandLine.appendSwitch('no-sandbox')
-app.commandLine.appendSwitch('disable-gpu')
-app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+
+const gpuFallback = createGpuFallback({
+  argv: process.argv,
+  isPackaged: app.isPackaged,
+  now: () => Date.now(),
+  relaunch: (args) => app.relaunch({ args }),
+  quit: () => app.quit(),
+  log: (message) => getLogger().error('GpuFallback', message),
+})
+
+app.on('child-process-gone', (_event, details) => {
+  gpuFallback.handleChildProcessGone(details)
+})
 
 // Custom protocol to serve clip video files. Registered as privileged (standard +
 // stream) so `<video src="clip-video://...">` works both in dev (renderer served
@@ -66,6 +82,7 @@ import { initBackupManager } from './services/backup-manager'
 import { cancelAllClipJobs } from './services/clip-encode-job'
 import { isAdmin } from './services/elevation'
 import { execNativeUtf8, killAllChildren, psUtf8 } from './services/exec-utf8'
+import { createGpuFallback } from './services/gpu-fallback'
 import { getLogger } from './services/logger.service'
 import { attachMouseNavGuard } from './services/mouse-back-forward-guard'
 import { attachRendererDiagnostics } from './services/renderer-diagnostics'
@@ -715,6 +732,8 @@ function initGui(): void {
 
   app.on('before-quit', () => {
     getLogger().info('app', 'App shutting down')
+    // A GPU process exit during shutdown is not a failure: never relaunch.
+    gpuFallback.markQuitting()
     // Drop the deferred-install poller: the app is going away, so there is
     // nothing left for it to install into, and a live interval would keep the
     // event loop alive.
