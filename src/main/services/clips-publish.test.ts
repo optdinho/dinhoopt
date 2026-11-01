@@ -12,21 +12,33 @@ vi.mock('node:stream', () => ({
   },
 }))
 
+const loggerSpies = vi.hoisted(() => ({
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+}))
+
 vi.mock('./logger.service', () => ({
-  getLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-  }),
+  getLogger: () => loggerSpies,
 }))
 
 import { createReadStream, statSync } from 'node:fs'
-import { buildMultipartFooter, buildMultipartHeader, uploadClipToGofile } from './clips-publish'
+import {
+  buildMultipartFooter,
+  buildMultipartHeader,
+  isRetryableStatus,
+  MAX_UPLOAD_ATTEMPTS,
+  RETRY_DELAYS_MS,
+  serverErrorSnippet,
+  uploadClipToGofile,
+} from './clips-publish'
 
 type AsyncChunks = {
   destroy: ReturnType<typeof vi.fn>
   [Symbol.asyncIterator]: () => AsyncIterator<Buffer>
 }
+
+const OK_BODY = JSON.stringify({ status: 'ok', data: { downloadPage: 'https://gofile.io/d/abc' } })
 
 function makeAsyncChunks(chunks: Buffer[]): AsyncChunks {
   return {
@@ -116,6 +128,24 @@ function mockFetchRespond(response: Response): ReturnType<typeof vi.fn> {
   return fn
 }
 
+/** Returns the responses in order, repeating the last one once exhausted. */
+function mockFetchSequence(responses: Response[]): ReturnType<typeof vi.fn> {
+  let index = 0
+  const fn = vi.fn(async (_url: string, init?: RequestInit) => {
+    const body = init?.body as AsyncIterable<Uint8Array> | undefined
+    if (body) {
+      for await (const _chunk of body) {
+        // drain
+      }
+    }
+    const response = responses[Math.min(index, responses.length - 1)]
+    index += 1
+    return response as Response
+  })
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
 describe('buildMultipartHeader/Footer', () => {
   it('builds a header with the file name', () => {
     const header = buildMultipartHeader('clip.mp4')
@@ -136,6 +166,41 @@ describe('buildMultipartHeader/Footer', () => {
     expect(header).toContain('filename="clipevil.mp4"')
     expect(header).not.toContain('"evil')
     expect(header).not.toContain('\r\n.mp4')
+  })
+})
+
+describe('isRetryableStatus', () => {
+  it('retries 5xx', () => {
+    expect(isRetryableStatus(500)).toBe(true)
+    expect(isRetryableStatus(502)).toBe(true)
+    expect(isRetryableStatus(503)).toBe(true)
+  })
+
+  it('retries 429', () => {
+    expect(isRetryableStatus(429)).toBe(true)
+  })
+
+  it('does not retry 2xx or other 4xx', () => {
+    expect(isRetryableStatus(200)).toBe(false)
+    expect(isRetryableStatus(400)).toBe(false)
+    expect(isRetryableStatus(403)).toBe(false)
+    expect(isRetryableStatus(404)).toBe(false)
+  })
+})
+
+describe('serverErrorSnippet', () => {
+  it('flattens whitespace', () => {
+    expect(serverErrorSnippet('  error\n\ncreateFolderResponse  ')).toBe('error createFolderResponse')
+  })
+
+  it('returns an empty string for a blank body', () => {
+    expect(serverErrorSnippet('   \n\t ')).toBe('')
+  })
+
+  it('truncates a long body with an ellipsis', () => {
+    const snippet = serverErrorSnippet('x'.repeat(200))
+    expect(snippet).toHaveLength(81)
+    expect(snippet.endsWith('…')).toBe(true)
   })
 })
 
@@ -161,19 +226,106 @@ describe('uploadClipToGofile', () => {
   })
 
   it('resolves a link on HTTP 200 with valid JSON', async () => {
-    mockFetchRespond(
-      makeFetchResponse(200, JSON.stringify({ status: 'ok', data: { downloadPage: 'https://gofile.io/d/abc' } })),
-    )
+    mockFetchRespond(makeFetchResponse(200, OK_BODY))
     vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
     const result = await uploadClipToGofile('C:\\clips\\clip.mp4')
     expect(result).toEqual({ success: true, link: 'https://gofile.io/d/abc' })
   })
 
-  it('resolves HTTP error status', async () => {
-    mockFetchRespond(makeFetchResponse(500, 'oops'))
+  it('logs the start and the successful end of an upload', async () => {
+    mockFetchRespond(makeFetchResponse(200, OK_BODY))
     vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+    await uploadClipToGofile('C:\\clips\\clip.mp4')
+
+    expect(loggerSpies.info).toHaveBeenCalledWith(
+      'ClipPublish',
+      expect.stringContaining("gofile upload start: 'clip.mp4' (1000 bytes)"),
+    )
+    expect(loggerSpies.info).toHaveBeenCalledWith(
+      'ClipPublish',
+      expect.stringContaining("gofile upload ok: 'clip.mp4'"),
+    )
+  })
+
+  it('retries 3 times on HTTP 500 and reports the server snippet', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchRespond(makeFetchResponse(500, 'error-createFolderResponse'))
+    vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+
+    const promise = uploadClipToGofile('C:\\clips\\clip.mp4')
+    await vi.advanceTimersByTimeAsync(8_000)
+    const result = await promise
+
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_UPLOAD_ATTEMPTS)
+    expect(result).toEqual({
+      success: false,
+      error: 'Upload failed (HTTP 500): error-createFolderResponse',
+    })
+    expect(loggerSpies.warning).toHaveBeenCalledWith(
+      'ClipPublish',
+      expect.stringContaining(`attempt 1/${MAX_UPLOAD_ATTEMPTS} failed`),
+    )
+    expect(loggerSpies.error).toHaveBeenCalledWith(
+      'ClipPublish',
+      expect.stringContaining("gofile upload failed: 'clip.mp4' (1000 bytes)"),
+    )
+  })
+
+  it('succeeds on a retry after a transient 500', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchSequence([
+      makeFetchResponse(500, 'error-createFolderResponse'),
+      makeFetchResponse(200, OK_BODY),
+    ])
+    vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+
+    const promise = uploadClipToGofile('C:\\clips\\clip.mp4')
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0] as number)
+    const result = await promise
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result).toEqual({ success: true, link: 'https://gofile.io/d/abc' })
+  })
+
+  it('retries 429 as well', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchRespond(makeFetchResponse(429, 'too many requests'))
+    vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+
+    const promise = uploadClipToGofile('C:\\clips\\clip.mp4')
+    await vi.advanceTimersByTimeAsync(8_000)
+    const result = await promise
+
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_UPLOAD_ATTEMPTS)
+    expect(result.error).toBe('Upload failed (HTTP 429): too many requests')
+  })
+
+  it('does not retry a 4xx response', async () => {
+    const fetchMock = mockFetchRespond(makeFetchResponse(400, 'bad request'))
+    vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+
     const result = await uploadClipToGofile('C:\\clips\\clip.mp4')
-    expect(result).toEqual({ success: false, error: 'Upload failed (HTTP 500)' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ success: false, error: 'Upload failed (HTTP 400): bad request' })
+  })
+
+  it('cancels when aborted during the retry backoff', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchRespond(makeFetchResponse(500, 'boom'))
+    vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(1000)]) as never)
+
+    const controller = new AbortController()
+    const promise = uploadClipToGofile('C:\\clips\\clip.mp4', undefined, controller.signal)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0] as number)
+    const result = await promise
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ success: false, cancelled: true, error: 'Upload cancelled' })
   })
 
   it('resolves invalid response for non-JSON body', async () => {
@@ -217,10 +369,7 @@ describe('uploadClipToGofile', () => {
 
   it('does not time out at 120s while upload keeps progressing', async () => {
     vi.useFakeTimers()
-    mockFetchSlowAbortAware(
-      makeFetchResponse(200, JSON.stringify({ status: 'ok', data: { downloadPage: 'https://gofile.io/d/abc' } })),
-      50_000,
-    )
+    mockFetchSlowAbortAware(makeFetchResponse(200, OK_BODY), 50_000)
     vi.mocked(createReadStream).mockReturnValue(
       makeAsyncChunks([Buffer.alloc(250), Buffer.alloc(250), Buffer.alloc(250), Buffer.alloc(250)]) as never,
     )
@@ -253,9 +402,7 @@ describe('uploadClipToGofile', () => {
   })
 
   it('emits progress at 1% thresholds and 100% on end', async () => {
-    mockFetchRespond(
-      makeFetchResponse(200, JSON.stringify({ status: 'ok', data: { downloadPage: 'https://gofile.io/d/abc' } })),
-    )
+    mockFetchRespond(makeFetchResponse(200, OK_BODY))
     vi.mocked(createReadStream).mockReturnValue(makeAsyncChunks([Buffer.alloc(400), Buffer.alloc(600)]) as never)
 
     const progress: { loaded: number; percent: number }[] = []
