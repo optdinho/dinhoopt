@@ -508,6 +508,7 @@ describe('onGameDetected callback', () => {
     expect(activateGameMode).toHaveBeenCalledWith(
       expect.objectContaining({ enabledOptimizations: ['p1'] }),
       expect.any(Function),
+      { cpuPriority: 'high', ioPriority: 'normal' },
     )
     expect(startAutoRecording).toHaveBeenCalled()
     expect(state.logger.info).toHaveBeenCalledWith('game-mode', 'autoStartCapture enabled — starting clip capture')
@@ -524,6 +525,7 @@ describe('onGameDetected callback', () => {
     expect(activateGameMode).toHaveBeenCalledWith(
       expect.objectContaining({ enabledOptimizations: ['optimization-a'] }),
       expect.any(Function),
+      undefined,
     )
     expect(startAutoRecording).not.toHaveBeenCalled()
   })

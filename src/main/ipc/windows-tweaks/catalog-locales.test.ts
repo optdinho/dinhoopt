@@ -37,7 +37,7 @@ describe('catálogo de tweaks: nome e descrição localizados (W17)', () => {
   const catalog = getCatalog()
 
   it('tem o catálogo completo e sem ids duplicados', () => {
-    expect(catalog.length).toBe(80)
+    expect(catalog.length).toBe(83)
     const ids = catalog.map((tweak) => tweak.id)
     expect(new Set(ids).size).toBe(ids.length)
   })

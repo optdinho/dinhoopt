@@ -13,6 +13,8 @@ import type {
   ContextMenuApplyResult,
   ContextMenuScanResult,
   CurrentDns,
+  DefenderExclusionResult,
+  DefenderExclusionStatus,
   DiNhoSettings,
   DiskNode,
   DiskRepairProgress,
@@ -405,6 +407,12 @@ export const systemMethods = {
   gamingHagsGet: (): Promise<{ enabled: boolean }> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET),
   gamingHagsSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET, enabled),
+
+  defenderExclusionsStatus: (): Promise<DefenderExclusionStatus> => ipcRenderer.invoke(IPC.DEFENDER_EXCLUSIONS_STATUS),
+  defenderExclusionsAdd: (path: string): Promise<DefenderExclusionResult> =>
+    ipcRenderer.invoke(IPC.DEFENDER_EXCLUSIONS_ADD, path),
+  defenderExclusionsRemove: (path: string): Promise<DefenderExclusionResult> =>
+    ipcRenderer.invoke(IPC.DEFENDER_EXCLUSIONS_REMOVE, path),
 
   directstorageCheck: (): Promise<import('@shared/types').DirectStorageStatus> =>
     ipcRenderer.invoke(IPC.GAME_MODE_DIRECTSTORAGE_CHECK),

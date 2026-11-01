@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getStopedServiceDef, isStopedServiceId, STOPED_SERVICE_IDS, STOPED_SERVICES } from './stoped-services'
 
 describe('stoped-services catalog', () => {
-  it('exposes the 7 requested services in order', () => {
+  it('exposes the 9 requested services in order', () => {
     expect([...STOPED_SERVICE_IDS]).toEqual([
       'PcaSvc',
       'DPS',
@@ -11,6 +11,8 @@ describe('stoped-services catalog', () => {
       'EventLog',
       'ADPSvc',
       'UmRdpService',
+      'CDPSvc',
+      'SSDPSRV',
     ])
   })
 

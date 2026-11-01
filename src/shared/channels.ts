@@ -301,6 +301,11 @@ export const IPC = {
   WINDOWS_TWEAKS_GAMING_HAGS_GET: 'windows-tweaks:gaming-hags-get',
   WINDOWS_TWEAKS_GAMING_HAGS_SET: 'windows-tweaks:gaming-hags-set',
 
+  // Windows Defender exclusions (opt-in)
+  DEFENDER_EXCLUSIONS_STATUS: 'defender-exclusions:status',
+  DEFENDER_EXCLUSIONS_ADD: 'defender-exclusions:add',
+  DEFENDER_EXCLUSIONS_REMOVE: 'defender-exclusions:remove',
+
   // DirectStorage check
   GAME_MODE_DIRECTSTORAGE_CHECK: 'game-mode:directstorage-check',
   GAME_MODE_DETECTOR_START: 'game-mode:detector-start',

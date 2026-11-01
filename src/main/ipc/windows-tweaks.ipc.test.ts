@@ -69,12 +69,12 @@ const CATEGORY_EXPECTED_COUNTS: Record<WindowsTweakCategory, number> = {
   keyboard: 0,
   accessibility: 4,
   network: 17,
-  gpu: 7,
+  gpu: 8,
   system: 21,
   gaming: 8,
   privacy: 6,
   mmcss: 8,
-  energy: 5,
+  energy: 7,
 }
 
 const TOTAL_TWEAKS = Object.values(CATEGORY_EXPECTED_COUNTS).reduce((a, b) => a + b, 0)
@@ -838,8 +838,8 @@ describe('WINDOWS_TWEAKS_APPLY handler', () => {
     const result = (await handler({}, ['processor-min-max'])) as { succeeded: number }
 
     expect(result.succeeded).toBe(1)
-    // 2 settings × 1 scheme × 2 (AC+DC) = 4 powercfg + 2 reg + 1 list + 1 active + 1 reactivate = 9 calls
-    expect(callCount).toBe(9)
+    // 2 queries + 2 settings x (AC+DC) = 4 writes + 1 active + 1 reactivate = 8 calls
+    expect(callCount).toBe(8)
   })
 
   it('applies Interface tweak via PowerShell Get-ChildItem', async () => {

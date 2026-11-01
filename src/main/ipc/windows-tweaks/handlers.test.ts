@@ -26,6 +26,20 @@ vi.mock('../../services/exec-utf8', () => ({
   psUtf8: (s: string) => mockPsUtf8(s),
 }))
 
+const mockPowerCfgSnapshots = vi.hoisted(() => new Map<string, unknown>())
+
+vi.mock('../../services/windows-tweaks/snapshot-store', () => ({
+  getSnapshotEntry: () => undefined,
+  saveSnapshotEntry: () => {},
+  getPowerCfgSnapshot: (id: string) => mockPowerCfgSnapshots.get(id),
+  savePowerCfgSnapshot: (id: string, snapshot: unknown) => {
+    mockPowerCfgSnapshots.set(id, snapshot)
+  },
+  deletePowerCfgSnapshot: (id: string) => {
+    mockPowerCfgSnapshots.delete(id)
+  },
+}))
+
 vi.mock('../../services/logger.service', () => ({
   getLogger: () => mockGetLogger(),
 }))
@@ -162,6 +176,7 @@ vi.mock('./tweaks/gaming', () => ({
 describe('handlers.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPowerCfgSnapshots.clear()
     mockIsAdmin.mockReturnValue(true)
     mockValidateSender.mockReturnValue(true)
   })
@@ -897,7 +912,7 @@ describe('handlers.ts', () => {
       expect(result.failed).toBe(1)
     })
 
-    it('handles reg.exe add Default failure gracefully', async () => {
+    it('applies powercfg tweaks without writing the global Default registry value', async () => {
       mockExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
         if (cmd === 'powercfg' && args[0] === '/LIST') {
           return Promise.resolve({ stdout: VALID_GUID, stderr: '' })
@@ -916,8 +931,9 @@ describe('handlers.ts', () => {
 
       const applyHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:apply')![1]
       const result = await applyHandler(null, ['pcie-aspm-off'])
-      expect(result.succeeded).toBe(0)
-      expect(result.failed).toBe(1)
+      expect(result.succeeded).toBe(1)
+      expect(result.failed).toBe(0)
+      expect(mockExecFileAsync.mock.calls.some((c) => c[0] === 'reg' || c[0] === 'reg.exe')).toBe(false)
     })
 
     it('skips SETACTIVE when no active GUID found', async () => {

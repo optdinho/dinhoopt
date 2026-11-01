@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { POWERCFG_SETTINGS, parsePowerCfgAcIndex } from './powercfg-settings'
+import { POWERCFG_SETTINGS, parsePowerCfgAcIndex, parsePowerCfgIndices } from './powercfg-settings'
 
 const PT_BR_OUTPUT = [
   'GUID do Esquema de Energia: 0f25382e-e29e-4f06-8898-7998112419de  (Desempenho Máximo)',
@@ -89,6 +89,28 @@ describe('parsePowerCfgAcIndex', () => {
   })
 })
 
+describe('parsePowerCfgIndices', () => {
+  it('reads both AC and DC indices from English output', () => {
+    expect(parsePowerCfgIndices(EN_OUTPUT)).toEqual({ ac: 0, dc: 100 })
+  })
+
+  it('reads both AC and DC indices from Portuguese output', () => {
+    expect(parsePowerCfgIndices(PT_BR_OUTPUT)).toEqual({ ac: 0, dc: 100 })
+  })
+
+  it('reads both AC and DC indices from German output', () => {
+    expect(parsePowerCfgIndices(DE_OUTPUT)).toEqual({ ac: 5, dc: 0 })
+  })
+
+  it('returns null when only one index is present', () => {
+    expect(parsePowerCfgIndices('    Current AC Power Setting Index: 0x00000064')).toBeNull()
+  })
+
+  it('returns null for empty output', () => {
+    expect(parsePowerCfgIndices('')).toBeNull()
+  })
+})
+
 describe('POWERCFG_SETTINGS', () => {
   it('uses the real SUB_PCIEXPRESS subgroup and ASPM setting GUIDs', () => {
     const aspm = POWERCFG_SETTINGS['pcie-aspm-off']!
@@ -115,5 +137,21 @@ describe('POWERCFG_SETTINGS', () => {
     const max = proc.find((s) => s.setting === 'bc5038f7-23e0-4960-96da-33abaf5935ec')
     expect(max?.applyValue).toBe(100)
     expect(max?.revertValue).toBe(100)
+  })
+
+  it('uses the real PERFBOOSTMODE GUID and enables it on apply', () => {
+    const boost = POWERCFG_SETTINGS['perf-boost-mode']!
+    expect(boost[0]?.subgroup).toBe('54533251-82be-4824-96c1-47b60b740d00')
+    expect(boost[0]?.setting).toBe('be337238-0d82-4146-a960-4f3749d470c7')
+    expect(boost[0]?.applyValue).toBe(1)
+    expect(boost[0]?.revertValue).toBe(2)
+  })
+
+  it('uses the real PERFEPP GUID and targets maximum performance on apply', () => {
+    const epp = POWERCFG_SETTINGS['perf-epp']!
+    expect(epp[0]?.subgroup).toBe('54533251-82be-4824-96c1-47b60b740d00')
+    expect(epp[0]?.setting).toBe('36687f9e-e3a5-4dbf-b1dc-15eb381c6863')
+    expect(epp[0]?.applyValue).toBe(0)
+    expect(epp[0]?.revertValue).toBe(50)
   })
 })

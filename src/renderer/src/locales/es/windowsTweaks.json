@@ -181,6 +181,10 @@
       "name": "Planificación GPU por Hardware — ON",
       "description": "Activa la planificación por hardware de la GPU (reduce latencia)"
     },
+    "hags-off": {
+      "name": "Planificacion GPU por Hardware - OFF",
+      "description": "Desactiva la planificacion por hardware de la GPU (compatibilidad con captura/encoders)"
+    },
     "mpo-overlay-minfps": {
       "name": "MPO Overlay Min FPS — 0",
       "description": "Quita el FPS mínimo de los overlays MPO (experimental)"
@@ -404,6 +408,14 @@
     "disable-ipv6": {
       "name": "IPv6 — OFF (todas las interfaces)",
       "description": "Desactiva IPv6 en todas las interfaces de red"
+    },
+    "perf-boost-mode": {
+      "name": "Performance Boost Mode - ON",
+      "description": "Activa el modo de impulso de rendimiento del procesador (PERFBOOSTMODE)"
+    },
+    "perf-epp": {
+      "name": "EPP - Rendimiento maximo",
+      "description": "Fuerza la preferencia de rendimiento energetico al maximo (PERFEPP 0)"
     }
   }
 }

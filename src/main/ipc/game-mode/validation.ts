@@ -30,6 +30,8 @@ export const VALID_OPTIMIZATION_IDS = new Set<string>([
 ])
 
 const PROCESS_NAME_RE = /^[A-Za-z0-9._\- ]+$/
+const CPU_PRIORITIES = new Set(['normal', 'aboveNormal', 'high'])
+const IO_PRIORITIES = new Set(['normal', 'low', 'veryLow'])
 
 export function validateGameModeConfig(input: unknown): GameModeConfig | null {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) return null
@@ -80,6 +82,8 @@ export function validateGameModeConfig(input: unknown): GameModeConfig | null {
         )
       )
         return null
+      if ('cpuPriority' in profile && !CPU_PRIORITIES.has(profile.cpuPriority as string)) return null
+      if ('ioPriority' in profile && !IO_PRIORITIES.has(profile.ioPriority as string)) return null
     }
   }
 

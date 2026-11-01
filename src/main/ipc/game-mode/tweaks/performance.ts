@@ -2,25 +2,83 @@ import type { GameModeSnapshot } from '@shared/types'
 import { getLogger } from '../../../services/logger.service'
 import { ps } from '../utils'
 
-export async function clearStandbyMemory(): Promise<void> {
-  await ps(
-    `Add-Type -TypeDefinition @'
-      using System;
-      using System.Runtime.InteropServices;
-      public class MemoryUtils {
-        [DllImport("kernel32.dll")]
-        public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, int dwMinimumWorkingSetSize, int dwMaximumWorkingSetSize);
-      }
-'@
-$ok = 0
-$fail = 0
-foreach ($p in Get-Process) {
-  try { [MemoryUtils]::SetProcessWorkingSetSize($p.Handle, -1, -1) | Out-Null; $ok++ } catch { $fail++ }
+export interface StandbyPurgeResult {
+  purged: boolean
+  availableMbBefore: number
+  availableMbAfter: number
+  skipped?: boolean
 }
-if ($ok -eq 0 -and $fail -gt 0) { exit 1 }
+
+/**
+ * Purges the real standby list via NtSetSystemInformation(80, 4) after enabling
+ * SeProfileSingleProcessPrivilege. Refuses to run when less than 10% of RAM is
+ * free: purging then would only evict pages the system still needs.
+ */
+export async function clearStandbyMemory(): Promise<StandbyPurgeResult> {
+  const out = await ps(
+    `Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MemoryPurge {
+  [DllImport("ntdll.dll")]
+  public static extern int NtSetSystemInformation(int infoClass, ref int info, int length);
+  [DllImport("advapi32.dll", SetLastError = true)]
+  public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+  [DllImport("advapi32.dll", SetLastError = true)]
+  public static extern bool LookupPrivilegeValue(string system, string name, out long luid);
+  [DllImport("advapi32.dll", SetLastError = true)]
+  public static extern bool AdjustTokenPrivileges(IntPtr token, bool disable, ref TokenPrivileges state, int length, IntPtr previous, IntPtr returnLength);
+  [DllImport("kernel32.dll")]
+  public static extern IntPtr GetCurrentProcess();
+  [DllImport("kernel32.dll")]
+  public static extern bool CloseHandle(IntPtr handle);
+  [StructLayout(LayoutKind.Sequential)]
+  public struct TokenPrivileges {
+    public int PrivilegeCount;
+    public long Luid;
+    public int Attributes;
+  }
+  public static int Purge() {
+    IntPtr token;
+    if (!OpenProcessToken(GetCurrentProcess(), 0x0020 | 0x0008, out token)) { return -1; }
+    try {
+      long luid;
+      if (!LookupPrivilegeValue(null, "SeProfileSingleProcessPrivilege", out luid)) { return -2; }
+      TokenPrivileges state = new TokenPrivileges();
+      state.PrivilegeCount = 1;
+      state.Luid = luid;
+      state.Attributes = 0x0002;
+      if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero)) { return -3; }
+      int command = 4;
+      return NtSetSystemInformation(80, ref command, 4);
+    } finally {
+      CloseHandle(token);
+    }
+  }
+}
+'@
+$os = Get-CimInstance Win32_OperatingSystem
+$before = [math]::Round($os.FreePhysicalMemory / 1024, 0)
+$total = [math]::Round($os.TotalVisibleMemorySize / 1024, 0)
+$threshold = [math]::Max(512, [int]($total * 0.10))
+if ($before -lt $threshold) { "SKIP 0 $before $before"; exit 0 }
+$status = [MemoryPurge]::Purge()
+$after = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024, 0)
+"OK $status $before $after"
 exit 0`,
     30000,
   )
+
+  const match = /^(OK|SKIP)\s+(-?\d+)\s+(\d+)\s+(\d+)/m.exec(out)
+  if (!match) return { purged: false, availableMbBefore: 0, availableMbAfter: 0 }
+  const kind = match[1]
+  const status = Number.parseInt(match[2] ?? '1', 10)
+  return {
+    purged: kind === 'OK' && status === 0,
+    availableMbBefore: Number.parseInt(match[3] ?? '0', 10),
+    availableMbAfter: Number.parseInt(match[4] ?? '0', 10),
+    skipped: kind === 'SKIP',
+  }
 }
 
 export async function emptyWorkingSetForBackground(): Promise<void> {

@@ -36,6 +36,7 @@ import { registerComplianceAuditorIpc } from './compliance-auditor.ipc'
 import { registerContextMenuCleanerIpc } from './context-menu-cleaner.ipc'
 import { registerDatabaseOptimizerIpc } from './database-optimizer.ipc'
 import { registerDebloaterIpc } from './debloater.ipc'
+import { registerDefenderExclusionsIpc } from './defender-exclusions.ipc'
 import { registerDiskAnalyzerIpc } from './disk-analyzer.ipc'
 import { registerDiskTrimIpc } from './disk-trim.ipc'
 import { registerDriverManagerIpc } from './driver-manager.ipc'
@@ -113,6 +114,7 @@ export function registerCleanerIpc(getWindow: WindowGetter): void {
   registerFileShredderIpc(getWindow)
   registerGameModeIpc(getWindow)
   registerWindowsTweaksIpc(getWindow)
+  registerDefenderExclusionsIpc(getWindow)
   registerLicenseIpc()
   registerBenchmarkIpc(getWindow)
   registerPowerPlansIpc()

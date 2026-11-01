@@ -4,10 +4,16 @@ import { ipcMain } from 'electron'
 import { isAdmin } from '../../services/elevation'
 import { execFileAsync, psUtf8 } from '../../services/exec-utf8'
 import { getLogger } from '../../services/logger.service'
-import { getSnapshotEntry, saveSnapshotEntry } from '../../services/windows-tweaks/snapshot-store'
+import {
+  deletePowerCfgSnapshot,
+  getPowerCfgSnapshot,
+  getSnapshotEntry,
+  savePowerCfgSnapshot,
+  saveSnapshotEntry,
+} from '../../services/windows-tweaks/snapshot-store'
 import type { WindowGetter } from '../index'
 import { validateSender } from '../sender-validation'
-import { POWERCFG_SETTINGS, parsePowerCfgAcIndex } from './powercfg-settings'
+import { POWERCFG_SETTINGS, parsePowerCfgAcIndex, parsePowerCfgIndices } from './powercfg-settings'
 import { registerGamingTweaks } from './tweaks/gaming'
 import { NETWORK_TWEAKS, registerNetworkTweaks } from './tweaks/network'
 import { PERFORMANCE_TWEAKS } from './tweaks/performance'
@@ -48,45 +54,98 @@ const POWERCFG_TWEAKS = new Set(Object.keys(POWERCFG_SETTINGS))
 // hiberfil.sys — isso exige `powercfg /h off`. O tweak passa a fazer as duas coisas.
 const HIBERNATE_TWEAK_ID = 'hibernate-off'
 
+async function getActiveSchemeGuid(): Promise<string | null> {
+  try {
+    const activeOut = await execFileAsync('powercfg', ['/GETACTIVESCHEME'], { timeout: 5000, windowsHide: true })
+    return String(activeOut.stdout).match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i)?.[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+async function listSchemeGuids(): Promise<string[]> {
+  const listOut = await execFileAsync('powercfg', ['/LIST'], { timeout: 10000, windowsHide: true })
+  return [...String(listOut.stdout).matchAll(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi)].map((m) => m[0])
+}
+
+async function queryPowerCfgIndices(
+  schemeGuid: string,
+  subgroup: string,
+  setting: string,
+): Promise<{ ac: number; dc: number } | null> {
+  try {
+    const result = await execFileAsync('powercfg', ['-query', schemeGuid, subgroup, setting], {
+      timeout: 10000,
+      windowsHide: true,
+    })
+    return parsePowerCfgIndices(String(result.stdout))
+  } catch {
+    return null
+  }
+}
+
+async function setPowerCfgValue(
+  schemeGuid: string,
+  subgroup: string,
+  setting: string,
+  ac: number,
+  dc: number,
+): Promise<void> {
+  await execFileAsync('powercfg', ['-setacvalueindex', schemeGuid, subgroup, setting, String(ac)], {
+    timeout: 10000,
+    windowsHide: true,
+  })
+  await execFileAsync('powercfg', ['-setdcvalueindex', schemeGuid, subgroup, setting, String(dc)], {
+    timeout: 10000,
+    windowsHide: true,
+  })
+}
+
+/**
+ * Applies/reverts a powercfg-backed tweak on the ACTIVE scheme only, capturing
+ * the original AC/DC indices before the first apply so the revert restores the
+ * user's real values instead of a hard-coded factory default.
+ */
 async function applyPowerCfgTweak(tweakId: string, action: 'apply' | 'revert'): Promise<void> {
   const settings = POWERCFG_SETTINGS[tweakId]
   if (!settings) throw new Error(`Unknown powercfg tweak: ${tweakId}`)
-  const valueKey = action === 'apply' ? 'applyValue' : ('revertValue' as const)
-  const basePowerKey = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings'
 
-  const listOut = await execFileAsync('powercfg', ['/LIST'], { timeout: 10000, windowsHide: true })
-  const guids = [...String(listOut.stdout).matchAll(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi)].map((m) => m[0])
+  const activeGuid = await getActiveSchemeGuid()
+  // No active scheme (rare): fall back to every scheme, matching the legacy
+  // behaviour, but never write the global "Default" registry value.
+  const targets = activeGuid ? [activeGuid] : await listSchemeGuids()
+  if (targets.length === 0) {
+    if (action === 'revert') deletePowerCfgSnapshot(tweakId)
+    return
+  }
 
-  const activeOut = await execFileAsync('powercfg', ['/GETACTIVESCHEME'], { timeout: 5000, windowsHide: true })
-  const activeGuid = String(activeOut.stdout).match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i)?.[0]
-
-  for (const s of settings) {
-    const val = s[valueKey]
-    for (const guid of guids) {
-      await execFileAsync('powercfg', ['-setacvalueindex', guid, s.subgroup, s.setting, String(val)], {
-        timeout: 10000,
-        windowsHide: true,
-      })
-      await execFileAsync('powercfg', ['-setdcvalueindex', guid, s.subgroup, s.setting, String(val)], {
-        timeout: 10000,
-        windowsHide: true,
-      })
+  if (action === 'apply') {
+    if (activeGuid && !getPowerCfgSnapshot(tweakId)) {
+      const values: Array<{ subgroup: string; setting: string; ac: number; dc: number }> = []
+      for (const s of settings) {
+        const indices = await queryPowerCfgIndices(activeGuid, s.subgroup, s.setting)
+        if (indices) values.push({ subgroup: s.subgroup, setting: s.setting, ac: indices.ac, dc: indices.dc })
+      }
+      if (values.length > 0) savePowerCfgSnapshot(tweakId, { schemeGuid: activeGuid, values })
     }
-    await execFileAsync(
-      'reg',
-      [
-        'add',
-        `${basePowerKey}\\${s.subgroup}\\${s.setting}`,
-        '/v',
-        'Default',
-        '/t',
-        'REG_DWORD',
-        '/d',
-        String(val),
-        '/f',
-      ],
-      { timeout: 10000, windowsHide: true },
-    )
+
+    for (const scheme of targets) {
+      for (const s of settings) {
+        await setPowerCfgValue(scheme, s.subgroup, s.setting, s.applyValue, s.applyValue)
+      }
+    }
+  } else {
+    const snapshot = getPowerCfgSnapshot(tweakId)
+    for (const scheme of targets) {
+      for (const s of settings) {
+        const saved =
+          snapshot?.schemeGuid === scheme
+            ? snapshot.values.find((v) => v.subgroup === s.subgroup && v.setting === s.setting)
+            : undefined
+        await setPowerCfgValue(scheme, s.subgroup, s.setting, saved?.ac ?? s.revertValue, saved?.dc ?? s.revertValue)
+      }
+    }
+    deletePowerCfgSnapshot(tweakId)
   }
 
   if (activeGuid) {

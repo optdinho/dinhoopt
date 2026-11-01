@@ -219,7 +219,13 @@ export function initGameDetector(
         const activeCfg: GameModeConfig = profile ? { ...cfg, enabledOptimizations: profile.enabledOptimizations } : cfg
 
         autoActivated = true
-        await activateGameMode(activeCfg, sendProgress)
+        await activateGameMode(
+          activeCfg,
+          sendProgress,
+          profile
+            ? { cpuPriority: profile.cpuPriority ?? 'high', ioPriority: profile.ioPriority ?? 'normal' }
+            : undefined,
+        )
         const clipsCfg = loadClipsConfig()
         if (clipsCfg.autoStartCapture) {
           getLogger().info('game-mode', 'autoStartCapture enabled — starting clip capture')

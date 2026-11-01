@@ -1,5 +1,12 @@
 import { isGameCompatible } from '@shared/service-safety-kb'
-import type { GameModeActivateResult, GameModeConfig, GameModeProgress, GameModeSnapshot } from '@shared/types'
+import type {
+  GameCpuPriority,
+  GameIoPriority,
+  GameModeActivateResult,
+  GameModeConfig,
+  GameModeProgress,
+  GameModeSnapshot,
+} from '@shared/types'
 import { powerSaveBlocker } from 'electron'
 import { getPlatform } from '../../platform'
 import { isAdmin } from '../../services/elevation'
@@ -39,6 +46,7 @@ export function resetActivePowerBlockerId(): void {
 export async function activateGameMode(
   config: GameModeConfig,
   onProgress: (p: GameModeProgress) => void,
+  priorities?: { cpuPriority?: GameCpuPriority; ioPriority?: GameIoPriority },
 ): Promise<GameModeActivateResult> {
   getLogger().info('game-mode', 'Activating Game Mode')
   const enabled = config.enabledOptimizations
@@ -120,7 +128,13 @@ export async function activateGameMode(
       }
 
       if (id === 'mem-clear-standby') {
-        await clearStandbyMemory()
+        const purge = await clearStandbyMemory()
+        getLogger().info(
+          'game-mode',
+          purge.skipped
+            ? `Standby purge skipped (only ${purge.availableMbBefore} MB free)`
+            : `Standby purge: ${purge.availableMbBefore} MB -> ${purge.availableMbAfter} MB (purged=${purge.purged})`,
+        )
         succeeded++
         continue
       }
@@ -176,7 +190,7 @@ export async function activateGameMode(
       }
 
       if (id === 'cpu-game-priority') {
-        await captureAndSetGamePriority(snapshot)
+        await captureAndSetGamePriority(snapshot, priorities?.cpuPriority, priorities?.ioPriority)
         succeeded++
         writeSnapshot(snapshot)
         continue

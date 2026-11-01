@@ -1,4 +1,4 @@
-import type { GameModeOptimizationId } from '@shared/types'
+import type { GameCpuPriority, GameIoPriority, GameModeOptimizationId } from '@shared/types'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, CircleCheckBig, Radar, Shield, Timer, TriangleAlert, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -8,6 +8,7 @@ import { CATEGORIES, formatElapsed, OPTIMIZATIONS } from '@/components/game-mode
 import { GameModeAudit } from '@/components/game-mode/GameModeAudit'
 import { GameModeAutoDetect } from '@/components/game-mode/GameModeAutoDetect'
 import { GameModeCategoryCard } from '@/components/game-mode/GameModeCategoryCard'
+import { GameModeDefenderExclusions } from '@/components/game-mode/GameModeDefenderExclusions'
 import { GameModeDirectStorage } from '@/components/game-mode/GameModeDirectStorage'
 import { GameModeGpuTweaks } from '@/components/game-mode/GameModeGpuTweaks'
 import { GameModeHero } from '@/components/game-mode/GameModeHero'
@@ -39,6 +40,8 @@ export function GameModePage() {
   const [profileGameName, setProfileGameName] = useState('')
   const [profileProcessName, setProfileProcessName] = useState('')
   const [profileOpts, setProfileOpts] = useState<GameModeOptimizationId[]>([])
+  const [profileCpuPriority, setProfileCpuPriority] = useState<GameCpuPriority>('high')
+  const [profileIoPriority, setProfileIoPriority] = useState<GameIoPriority>('normal')
   const progressCleanupRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -428,26 +431,36 @@ export function GameModePage() {
           profileGameName={profileGameName}
           profileProcessName={profileProcessName}
           profileOpts={profileOpts}
+          profileCpuPriority={profileCpuPriority}
+          profileIoPriority={profileIoPriority}
           editingProfile={editingProfile}
           onProfileGameNameChange={setProfileGameName}
           onProfileProcessNameChange={setProfileProcessName}
           onProfileOptsChange={setProfileOpts}
+          onProfileCpuPriorityChange={setProfileCpuPriority}
+          onProfileIoPriorityChange={setProfileIoPriority}
           onStartNewProfile={() => {
             setProfileGameName('')
             setProfileProcessName('')
             setProfileOpts([...config.enabledOptimizations])
+            setProfileCpuPriority('high')
+            setProfileIoPriority('normal')
             setEditingProfile('__new__')
           }}
-          onStartEditProfile={(key, gameName, processName, opts) => {
+          onStartEditProfile={(key, gameName, processName, opts, cpuPriority, ioPriority) => {
             setProfileGameName(gameName)
             setProfileProcessName(processName)
             setProfileOpts(opts)
+            setProfileCpuPriority(cpuPriority ?? 'high')
+            setProfileIoPriority(ioPriority ?? 'normal')
             setEditingProfile(key)
           }}
           onCancelProfile={() => setEditingProfile(null)}
         />
 
         <GameModeGpuTweaks />
+
+        <GameModeDefenderExclusions />
 
         <GameModeDirectStorage />
 

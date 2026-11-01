@@ -129,7 +129,7 @@ describe('scanStopedServices', () => {
   it('returns one entry per catalog service', async () => {
     mocks.execFileAsync.mockResolvedValue({ stdout: 'SVC|PcaSvc|Running|Auto\n' })
     const result = await scanStopedServices()
-    expect(result.services).toHaveLength(7)
+    expect(result.services).toHaveLength(9)
     expect(result.services.map((s) => s.id)).toEqual([
       'PcaSvc',
       'DPS',
@@ -138,6 +138,8 @@ describe('scanStopedServices', () => {
       'EventLog',
       'ADPSvc',
       'UmRdpService',
+      'CDPSvc',
+      'SSDPSRV',
     ])
   })
 
@@ -151,11 +153,13 @@ describe('scanStopedServices', () => {
         'SVC|EventLog|Running|Auto',
         'SVC|ADPSvc|Running|Auto',
         'SVC|UmRdpService|Stopped|Manual',
+        'SVC|CDPSvc|Running|Auto',
+        'SVC|SSDPSRV|Stopped|Manual',
       ].join('\n'),
     })
     const result = await scanStopedServices()
-    expect(result.runningCount).toBe(5)
-    expect(result.stoppedCount).toBe(2)
+    expect(result.runningCount).toBe(6)
+    expect(result.stoppedCount).toBe(3)
     expect(result.missingCount).toBe(0)
   })
 
@@ -168,7 +172,7 @@ describe('scanStopedServices', () => {
     expect(umrdp?.found).toBe(false)
     expect(umrdp?.running).toBe(false)
     expect(umrdp?.startType).toBe('Unknown')
-    expect(result.missingCount).toBe(6)
+    expect(result.missingCount).toBe(8)
   })
 
   it('exposes the real service name on each entry', async () => {
@@ -180,9 +184,9 @@ describe('scanStopedServices', () => {
   it('returns a safe all-missing result when PowerShell throws', async () => {
     mocks.execFileAsync.mockRejectedValue(new Error('boom'))
     const result = await scanStopedServices()
-    expect(result.services).toHaveLength(7)
+    expect(result.services).toHaveLength(9)
     expect(result.runningCount).toBe(0)
-    expect(result.missingCount).toBe(7)
+    expect(result.missingCount).toBe(9)
   })
 
   it('ignores SCM output for services outside the catalog', async () => {
@@ -195,7 +199,7 @@ describe('scanStopedServices', () => {
     setPlatform('linux')
     const result = await scanStopedServices()
     expect(mocks.execFileAsync).not.toHaveBeenCalled()
-    expect(result.missingCount).toBe(7)
+    expect(result.missingCount).toBe(9)
   })
 })
 
@@ -275,11 +279,11 @@ describe('setStopedService', () => {
 // ── setAllStopedServices ──────────────────────────────────────
 
 describe('setAllStopedServices', () => {
-  it('enables every catalog service and reports all 7 as changed', async () => {
+  it('enables every catalog service and reports all 9 as changed', async () => {
     mocks.execFileAsync.mockResolvedValue({ stdout: 'OK|X\n' })
     const result = await setAllStopedServices(true)
     expect(result.success).toBe(true)
-    expect(result.changed).toHaveLength(7)
+    expect(result.changed).toHaveLength(9)
     expect(result.rebootRequired).toBe(true)
   })
 
@@ -287,7 +291,7 @@ describe('setAllStopedServices', () => {
     mocks.execFileAsync.mockResolvedValue({ stdout: 'OK|X\n' })
     const result = await setAllStopedServices(false)
     expect(result.success).toBe(true)
-    expect(result.changed).toHaveLength(7)
+    expect(result.changed).toHaveLength(9)
   })
 
   it('keeps going when one service fails and records the failure', async () => {
@@ -297,7 +301,7 @@ describe('setAllStopedServices', () => {
       .mockResolvedValue({ stdout: 'OK|X\n' })
     const result = await setAllStopedServices(true)
     expect(result.success).toBe(true)
-    expect(result.changed).toHaveLength(6)
+    expect(result.changed).toHaveLength(8)
     expect(result.failed).toEqual([{ id: 'DPS', error: 'Access is denied' }])
   })
 
@@ -306,7 +310,7 @@ describe('setAllStopedServices', () => {
     const result = await setAllStopedServices(true)
     expect(result.success).toBe(false)
     expect(result.changed).toHaveLength(0)
-    expect(result.failed).toHaveLength(7)
+    expect(result.failed).toHaveLength(9)
     expect(result.rebootRequired).toBe(false)
     expect(result.error).toBe('boom')
   })
@@ -344,7 +348,7 @@ describe('registerStopedServicesIpc', () => {
       services: unknown[]
     }>
     const result = await handler()
-    expect(result.services).toHaveLength(7)
+    expect(result.services).toHaveLength(9)
   })
 
   it('the set handler forwards id and enabled to the core function', async () => {

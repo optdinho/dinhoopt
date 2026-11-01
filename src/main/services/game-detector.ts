@@ -493,11 +493,11 @@ export function findGameWithDisplay(
  * reports a friendly name, so a profile keyed by either the real image name or
  * the friendly one is accepted; the image name wins when both exist.
  */
-export function resolveGameProfile<T>(
-  gameProfiles: Record<string, { enabledOptimizations: T[] }> | undefined,
+export function resolveGameProfile<T extends { enabledOptimizations: unknown[] }>(
+  gameProfiles: Record<string, T> | undefined,
   processName: string,
   displayName?: string | null,
-): { enabledOptimizations: T[] } | undefined {
+): T | undefined {
   if (!gameProfiles) return undefined
   return gameProfiles[processName] ?? (displayName ? gameProfiles[displayName] : undefined)
 }

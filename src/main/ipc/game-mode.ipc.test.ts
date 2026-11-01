@@ -2947,6 +2947,45 @@ describe('validateGameModeConfig (real)', () => {
     ).toBeNull()
   })
 
+  it('accepts valid cpuPriority and ioPriority values', () => {
+    const result = realValidateGameModeConfig({
+      ...validBase,
+      gameProfiles: {
+        'cs2.exe': { gameName: 'CS2', enabledOptimizations: [], cpuPriority: 'aboveNormal', ioPriority: 'veryLow' },
+      },
+    })
+    expect(result).not.toBeNull()
+    expect(result?.gameProfiles?.['cs2.exe']?.cpuPriority).toBe('aboveNormal')
+    expect(result?.gameProfiles?.['cs2.exe']?.ioPriority).toBe('veryLow')
+  })
+
+  it('returns null when profile cpuPriority is invalid', () => {
+    expect(
+      realValidateGameModeConfig({
+        ...validBase,
+        gameProfiles: { 'cs2.exe': { gameName: 'CS2', enabledOptimizations: [], cpuPriority: 'realtime' } },
+      }),
+    ).toBeNull()
+  })
+
+  it('returns null when profile ioPriority is invalid', () => {
+    expect(
+      realValidateGameModeConfig({
+        ...validBase,
+        gameProfiles: { 'cs2.exe': { gameName: 'CS2', enabledOptimizations: [], ioPriority: 'high' } },
+      }),
+    ).toBeNull()
+  })
+
+  it('returns null when profile cpuPriority is not a string', () => {
+    expect(
+      realValidateGameModeConfig({
+        ...validBase,
+        gameProfiles: { 'cs2.exe': { gameName: 'CS2', enabledOptimizations: [], cpuPriority: 3 } },
+      }),
+    ).toBeNull()
+  })
+
   it('returns valid config for complete valid input with all optional fields', () => {
     const result = realValidateGameModeConfig({
       enabledOptimizations: validOpts,

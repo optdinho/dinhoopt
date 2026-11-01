@@ -36,13 +36,44 @@ export const POWERCFG_SETTINGS: Record<string, PowerCfgSetting[]> = {
       revertValue: 100,
     },
   ],
+  'perf-boost-mode': [
+    {
+      subgroup: '54533251-82be-4824-96c1-47b60b740d00',
+      setting: 'be337238-0d82-4146-a960-4f3749d470c7',
+      applyValue: 1,
+      revertValue: 2,
+    },
+  ],
+  'perf-epp': [
+    {
+      subgroup: '54533251-82be-4824-96c1-47b60b740d00',
+      setting: '36687f9e-e3a5-4dbf-b1dc-15eb381c6863',
+      applyValue: 0,
+      revertValue: 50,
+    },
+  ],
 }
 
 const HEX_VALUE_LINE = /:\s*(0x[0-9a-fA-F]+)\s*$/m
+const HEX_VALUE_LINES = /:\s*(0x[0-9a-fA-F]+)\s*$/gm
 
 export function parsePowerCfgAcIndex(stdout: string): number | null {
   const match = HEX_VALUE_LINE.exec(String(stdout))
   const hex = match?.[1]
   if (hex === undefined) return null
   return Number.parseInt(hex, 16)
+}
+
+/**
+ * Reads the current AC and DC indices from `powercfg /query`.
+ * The output lists AC first and DC second; both lines end in a hex index in
+ * every locale, so the language does not matter.
+ */
+export function parsePowerCfgIndices(stdout: string): { ac: number; dc: number } | null {
+  const matches = [...String(stdout).matchAll(HEX_VALUE_LINES)]
+  if (matches.length < 2) return null
+  const ac = matches[0]?.[1]
+  const dc = matches[1]?.[1]
+  if (ac === undefined || dc === undefined) return null
+  return { ac: Number.parseInt(ac, 16), dc: Number.parseInt(dc, 16) }
 }

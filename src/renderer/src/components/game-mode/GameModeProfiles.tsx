@@ -1,4 +1,4 @@
-import type { GameModeOptimizationId } from '@shared/types'
+import type { GameCpuPriority, GameIoPriority, GameModeOptimizationId } from '@shared/types'
 import { motion } from 'framer-motion'
 import { Plus, X } from 'lucide-react'
 import { useCallback } from 'react'
@@ -10,23 +10,41 @@ interface GameModeProfilesProps {
   profileGameName: string
   profileProcessName: string
   profileOpts: GameModeOptimizationId[]
+  profileCpuPriority: GameCpuPriority
+  profileIoPriority: GameIoPriority
   editingProfile: string | null
   onProfileGameNameChange: (v: string) => void
   onProfileProcessNameChange: (v: string) => void
   onProfileOptsChange: (v: GameModeOptimizationId[]) => void
+  onProfileCpuPriorityChange: (v: GameCpuPriority) => void
+  onProfileIoPriorityChange: (v: GameIoPriority) => void
   onStartNewProfile: () => void
-  onStartEditProfile: (key: string, gameName: string, processName: string, opts: GameModeOptimizationId[]) => void
+  onStartEditProfile: (
+    key: string,
+    gameName: string,
+    processName: string,
+    opts: GameModeOptimizationId[],
+    cpuPriority?: GameCpuPriority,
+    ioPriority?: GameIoPriority,
+  ) => void
   onCancelProfile: () => void
 }
+
+const CPU_PRIORITIES: GameCpuPriority[] = ['normal', 'aboveNormal', 'high']
+const IO_PRIORITIES: GameIoPriority[] = ['normal', 'low', 'veryLow']
 
 export function GameModeProfiles({
   profileGameName,
   profileProcessName,
   profileOpts,
+  profileCpuPriority,
+  profileIoPriority,
   editingProfile,
   onProfileGameNameChange,
   onProfileProcessNameChange,
   onProfileOptsChange,
+  onProfileCpuPriorityChange,
+  onProfileIoPriorityChange,
   onStartNewProfile,
   onStartEditProfile,
   onCancelProfile,
@@ -40,21 +58,35 @@ export function GameModeProfiles({
   const handleSave = useCallback(() => {
     if (editingProfile === '__new__') {
       if (profileProcessName && profileGameName && profileOpts.length > 0) {
-        store
-          .getState()
-          .setGameProfile(profileProcessName, { gameName: profileGameName, enabledOptimizations: profileOpts })
+        store.getState().setGameProfile(profileProcessName, {
+          gameName: profileGameName,
+          enabledOptimizations: profileOpts,
+          cpuPriority: profileCpuPriority,
+          ioPriority: profileIoPriority,
+        })
       }
     } else if (editingProfile) {
       if (profileOpts.length > 0) {
-        store
-          .getState()
-          .setGameProfile(editingProfile, { gameName: profileGameName, enabledOptimizations: profileOpts })
+        store.getState().setGameProfile(editingProfile, {
+          gameName: profileGameName,
+          enabledOptimizations: profileOpts,
+          cpuPriority: profileCpuPriority,
+          ioPriority: profileIoPriority,
+        })
       } else {
         store.getState().setGameProfile(editingProfile, null)
       }
     }
     onCancelProfile()
-  }, [editingProfile, profileGameName, profileProcessName, profileOpts, onCancelProfile])
+  }, [
+    editingProfile,
+    profileGameName,
+    profileProcessName,
+    profileOpts,
+    profileCpuPriority,
+    profileIoPriority,
+    onCancelProfile,
+  ])
 
   return (
     <motion.div
@@ -140,6 +172,42 @@ export function GameModeProfiles({
               ))}
             </div>
           </div>
+          <div className="mb-3 grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="profile-cpu-priority" className="mb-1 block text-[11px] font-medium text-zinc-400">
+                {t('profilesCpuPriorityLabel')}
+              </label>
+              <select
+                id="profile-cpu-priority"
+                value={profileCpuPriority}
+                onChange={(e) => onProfileCpuPriorityChange(e.target.value as GameCpuPriority)}
+                className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[12px] text-zinc-300 outline-none focus:border-emerald-500/30"
+              >
+                {CPU_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {t(`profilesCpuPriority_${p}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="profile-io-priority" className="mb-1 block text-[11px] font-medium text-zinc-400">
+                {t('profilesIoPriorityLabel')}
+              </label>
+              <select
+                id="profile-io-priority"
+                value={profileIoPriority}
+                onChange={(e) => onProfileIoPriorityChange(e.target.value as GameIoPriority)}
+                className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[12px] text-zinc-300 outline-none focus:border-emerald-500/30"
+              >
+                {IO_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {t(`profilesIoPriority_${p}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -181,7 +249,16 @@ export function GameModeProfiles({
                 </span>
                 <button
                   type="button"
-                  onClick={() => onStartEditProfile(key, profile.gameName, key, [...profile.enabledOptimizations])}
+                  onClick={() =>
+                    onStartEditProfile(
+                      key,
+                      profile.gameName,
+                      key,
+                      [...profile.enabledOptimizations],
+                      profile.cpuPriority,
+                      profile.ioPriority,
+                    )
+                  }
                   className="rounded px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:text-zinc-200"
                 >
                   {t('profilesEdit')}

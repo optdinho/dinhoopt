@@ -47,6 +47,8 @@ export function GameModeGpuTweaks() {
       if (result && !result.success) {
         setHagsEnabled(!next)
         toast.error(result.error ?? t('gpuTweaksApplyFailed'))
+      } else {
+        toast.info(t('hagsRestartRequired'))
       }
     } catch {
       setHagsEnabled(!next)
@@ -118,6 +120,7 @@ export function GameModeGpuTweaks() {
           <div className="flex-1">
             <span className="text-[13px] font-medium text-zinc-300">{t('hagsLabel')}</span>
             <p className="mt-0.5 text-[11px] text-zinc-500">{t('hagsDesc')}</p>
+            <p className="mt-1 text-[10px] text-zinc-600">{t('hagsNote')}</p>
           </div>
           <button
             type="button"

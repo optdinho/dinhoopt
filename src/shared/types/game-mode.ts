@@ -46,17 +46,35 @@ export type GameModeOptimizationId =
 
 export type GameModeCategory = 'services' | 'processes' | 'memory' | 'system' | 'network'
 
+export interface DefenderExclusionStatus {
+  supported: boolean
+  tamperProtection: boolean | null
+  exclusions: string[]
+}
+
+export interface DefenderExclusionResult {
+  success: boolean
+  error?: string
+}
+
 export interface DirectStorageStatus {
   supported: boolean
   nvmeHealthy: boolean
   nvmeDrives: Array<{ model: string; health: 'Healthy' | 'Caution' | 'Bad' | 'Unknown'; type: string }>
 }
 
+export type GameCpuPriority = 'normal' | 'aboveNormal' | 'high'
+export type GameIoPriority = 'normal' | 'low' | 'veryLow'
+
 export interface GameProfile {
   /** Display name for this profile (e.g. "CS2", "FiveM") */
   gameName: string
   /** Optimizations to enable when this game is detected */
   enabledOptimizations: GameModeOptimizationId[]
+  /** CPU priority applied to the detected game process (default: high) */
+  cpuPriority?: GameCpuPriority
+  /** I/O priority applied to the detected game process (default: normal) */
+  ioPriority?: GameIoPriority
 }
 
 export interface GameModeConfig {

@@ -37,5 +37,9 @@
   "serviceAdpSvcLabel": "Aggregated Data Platform",
   "serviceAdpSvcDescription": "Aggregates device diagnostic data and cleans temporary files in the background.",
   "serviceUmRdpLabel": "RDP Redirector",
-  "serviceUmRdpDescription": "Redirects devices like printers and drives in Remote Desktop sessions."
+  "serviceUmRdpDescription": "Redirects devices like printers and drives in Remote Desktop sessions.",
+  "serviceCdpsvcLabel": "Connected Devices Platform Service",
+  "serviceCdpsvcDescription": "Manages resources for devices connected via CDP. On most home PCs it can be safely disabled.",
+  "serviceSsdpsrvLabel": "SSDP Discovery",
+  "serviceSsdpsrvDescription": "Enables discovery of UPnP/SSDP devices on the local network. Unnecessary if you do not use that kind of discovery."
 }

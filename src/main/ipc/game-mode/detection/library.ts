@@ -1,46 +1,88 @@
-import type { GameModeSnapshot } from '@shared/types'
+import type { GameCpuPriority, GameIoPriority, GameModeSnapshot } from '@shared/types'
 import { getDetectedGame } from '../../../services/game-detector'
 import { ps } from '../utils'
 
-export async function captureAndSetGamePriority(snapshot: GameModeSnapshot): Promise<void> {
+const CPU_PRIORITY_TO_PS: Record<GameCpuPriority, string> = {
+  normal: 'Normal',
+  aboveNormal: 'AboveNormal',
+  high: 'High',
+}
+
+const IO_PRIORITY_TO_NUMBER: Record<GameIoPriority, number> = {
+  veryLow: 0,
+  low: 1,
+  normal: 2,
+}
+
+function buildIoPriorityScript(pid: number, priority: number): string {
+  return [
+    '$sig = @"',
+    'using System;',
+    'using System.Runtime.InteropServices;',
+    'public static class DinhoIoPriority {',
+    '  [DllImport("kernel32.dll", SetLastError = true)]',
+    '  public static extern IntPtr OpenProcess(int access, bool inherit, int pid);',
+    '  [DllImport("kernel32.dll", SetLastError = true)]',
+    '  public static extern bool CloseHandle(IntPtr handle);',
+    '  [DllImport("ntdll.dll")]',
+    '  public static extern int NtSetInformationProcess(IntPtr handle, int infoClass, ref int value, int length);',
+    '  public static int Set(int processId, int ioPriority) {',
+    '    IntPtr handle = OpenProcess(0x0600, false, processId);',
+    '    if (handle == IntPtr.Zero) { return -1; }',
+    '    try { int value = ioPriority; return NtSetInformationProcess(handle, 33, ref value, 4); }',
+    '    finally { CloseHandle(handle); }',
+    '  }',
+    '}',
+    '"@',
+    `Add-Type -TypeDefinition $sig -ErrorAction SilentlyContinue`,
+    `[DinhoIoPriority]::Set(${pid}, ${priority}) | Out-Null`,
+  ].join('\n')
+}
+
+async function setProcessIoPriority(pid: number, priority: GameIoPriority): Promise<void> {
+  if (priority === 'normal') return
+  await ps(buildIoPriorityScript(pid, IO_PRIORITY_TO_NUMBER[priority]), 8000)
+}
+
+export async function captureAndSetGamePriority(
+  snapshot: GameModeSnapshot,
+  cpuPriority: GameCpuPriority = 'high',
+  ioPriority: GameIoPriority = 'normal',
+): Promise<void> {
   const gameName = getDetectedGame()
   if (!gameName) return
+  const processName = gameName.replace('.exe', '')
 
   try {
-    const out = await ps(
-      `$procs = Get-Process -Name '${gameName.replace('.exe', '')}' -ErrorAction SilentlyContinue; foreach ($p in $procs) { $p.PriorityClass; }`,
+    const procsOut = await ps(
+      `(Get-Process -Name '${processName}' -ErrorAction SilentlyContinue) | Select-Object Id, PriorityClass | ConvertTo-Json`,
       10000,
     )
-    const lines = out.trim().split(/\r?\n/).filter(Boolean)
+    let procs: Array<{ Id?: number; PriorityClass?: string }> = []
+    try {
+      const parsed = JSON.parse(procsOut)
+      procs = Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+      return
+    }
 
-    for (const line of lines) {
-      const originalPriority = line.trim()
-      if (!originalPriority) continue
-      const procsOut = await ps(
-        `(Get-Process -Name '${gameName.replace('.exe', '')}' -ErrorAction SilentlyContinue) | Select-Object Id, PriorityClass | ConvertTo-Json`,
-        10000,
-      )
-      let procs: Array<{ Id?: number }> = []
+    for (const proc of procs) {
+      if (!proc || typeof proc.Id !== 'number') continue
+      const pid = proc.Id
+      const originalPriority = typeof proc.PriorityClass === 'string' ? proc.PriorityClass : 'Normal'
       try {
-        const parsed = JSON.parse(procsOut)
-        procs = Array.isArray(parsed) ? parsed : [parsed]
+        await ps(
+          `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).PriorityClass = '${CPU_PRIORITY_TO_PS[cpuPriority]}'`,
+          5000,
+        )
+        await setProcessIoPriority(pid, ioPriority)
+        snapshot.gameProcessPriorities.push({
+          name: gameName,
+          pid,
+          originalPriority,
+        })
       } catch {
-        return
-      }
-
-      for (const proc of procs) {
-        if (!proc || typeof proc.Id !== 'number') continue
-        const pid = proc.Id
-        try {
-          await ps(`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).PriorityClass = 'High'`, 5000)
-          snapshot.gameProcessPriorities.push({
-            name: gameName,
-            pid,
-            originalPriority,
-          })
-        } catch {
-          /* process may have exited */
-        }
+        /* process may have exited */
       }
     }
   } catch {
@@ -58,6 +100,7 @@ export async function restoreGamePriority(
           `if ($p) { $p.PriorityClass = '${entry.originalPriority}' }`,
         5000,
       )
+      await ps(buildIoPriorityScript(entry.pid, IO_PRIORITY_TO_NUMBER.normal), 8000)
     } catch {
       /* process may have exited — that's fine */
     }
