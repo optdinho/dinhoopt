@@ -33,6 +33,7 @@ export type ScheduleTaskType =
   | 'registry'
   | 'drivers'
   | 'software-update'
+  | 'full-maintenance'
 
 export type ScheduleRunStatus = 'success' | 'partial' | 'failed' | 'never'
 
@@ -75,6 +76,12 @@ export interface DiNhoSettings {
     secureDelete: boolean
     closeBrowsersBeforeClean: boolean
     protectRecycleBin: boolean
+    /**
+     * Show an informational notice on the Cleaner page stating that browser
+     * cookies, logins and passwords are never deleted. Purely visual: the
+     * protection itself cannot be turned off.
+     */
+    showBrowserProtectionNotice: boolean
   }
   exclusions: string[]
   ignoredSoftwareUpdates: string[]

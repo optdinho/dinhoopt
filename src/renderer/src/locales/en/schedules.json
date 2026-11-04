@@ -69,7 +69,8 @@
     "databases": "Databases",
     "registryFixes": "Registry Fixes",
     "driverUpdates": "Driver Updates",
-    "softwareUpdates": "Software Updates"
+    "softwareUpdates": "Software Updates",
+    "fullMaintenance": "Full Maintenance"
   },
   "dayNames": {
     "sunday": "Sunday",

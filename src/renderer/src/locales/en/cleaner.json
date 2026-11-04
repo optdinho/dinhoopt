@@ -4,6 +4,7 @@
   "groupApps": "Applications",
   "groupMaintenance": "Maintenance",
   "pageDescription": "Optimize, clean, and maintain your Windows for peak performance",
+  "browserDataProtectionNotice": "Browser cleaning removes cache only. Cookies, saved logins and passwords are never scanned or deleted.",
   "scanButton": "Scan",
   "quickCleanButton": "Quick Clean",
   "fullCleanButton": "Full Clean",

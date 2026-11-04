@@ -25,6 +25,7 @@ describe('settings-store', () => {
           secureDelete: false,
           closeBrowsersBeforeClean: false,
           protectRecycleBin: true,
+          showBrowserProtectionNotice: false,
         },
         exclusions: [],
         ignoredSoftwareUpdates: [],

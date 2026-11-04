@@ -201,6 +201,12 @@ export function SettingsPage() {
             onChange={(v) => save({ cleaner: { ...settings.cleaner, closeBrowsersBeforeClean: v } })}
           />
         </Row>
+        <Row label={t('showBrowserProtectionNoticeLabel')} desc={t('showBrowserProtectionNoticeDesc')}>
+          <Toggle
+            checked={settings.cleaner.showBrowserProtectionNotice}
+            onChange={(v) => save({ cleaner: { ...settings.cleaner, showBrowserProtectionNotice: v } })}
+          />
+        </Row>
         <Row label={t('skipRecentFilesLabel')} desc={t('skipRecentFilesDesc')} last>
           <Select
             value={settings.cleaner.skipRecentMinutes}

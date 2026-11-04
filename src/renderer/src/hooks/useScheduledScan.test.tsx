@@ -61,6 +61,29 @@ function mockWindowDinho() {
     databaseClean: vi.fn(),
     shortcutScan: vi.fn().mockResolvedValue([]),
     shortcutClean: vi.fn(),
+    environmentScan: vi.fn().mockResolvedValue([]),
+    environmentClean: vi.fn(),
+    winSxSScan: vi.fn().mockResolvedValue([]),
+    winSxSClean: vi.fn().mockResolvedValue({ totalCleaned: 0, filesDeleted: 0 }),
+    diskRepairDism: vi.fn().mockResolvedValue({
+      success: true,
+      needsAdmin: false,
+      requiresReboot: false,
+      summaryCode: 'dismHealthy',
+    }),
+    diskRepairSfc: vi.fn().mockResolvedValue({
+      success: true,
+      needsAdmin: false,
+      requiresReboot: false,
+      summaryCode: 'sfcHealthy',
+    }),
+    diskTrimList: vi.fn().mockResolvedValue([]),
+    diskTrimRun: vi.fn().mockResolvedValue([]),
+    powerPlansList: vi.fn().mockResolvedValue([]),
+    powerPlansActivate: vi.fn().mockResolvedValue({ success: true }),
+    networkScan: vi.fn().mockResolvedValue([]),
+    networkClean: vi.fn().mockResolvedValue({ cleaned: 0 }),
+    memoryOptimize: vi.fn().mockResolvedValue({ success: true, freedBytes: 0 }),
     uninstallLeftoversScan: vi.fn().mockResolvedValue([]),
     uninstallLeftoversClean: vi.fn(),
     registryScan: vi.fn().mockResolvedValue([]),
@@ -791,5 +814,104 @@ describe('useScheduledScan', () => {
     await vi.advanceTimersByTimeAsync(10_000)
 
     expect(window.dinho.notifyScheduledScanComplete).toHaveBeenCalledWith(500, 1)
+  })
+
+  it('runs the full maintenance pipeline when the task is selected', async () => {
+    mockWindowDinho()
+    vi.useFakeTimers()
+
+    window.dinho.systemScan = vi.fn().mockResolvedValue([
+      {
+        category: 'system',
+        subcategory: 'temp',
+        items: [{ id: 'item1', path: '/tmp/x', size: 500, selected: true }],
+        totalSize: 500,
+        itemCount: 1,
+      },
+    ])
+    window.dinho.systemClean = vi.fn().mockResolvedValue({ filesDeleted: 1, totalCleaned: 500 })
+    window.dinho.registryScan = vi.fn().mockResolvedValue([{ id: 'reg1' }])
+    window.dinho.registryFix = vi.fn().mockResolvedValue({ fixed: 1 })
+    window.dinho.softwareUpdateCheck = vi.fn().mockResolvedValue({
+      apps: [{ id: 'app1', selected: true }],
+      packageManagerName: 'winget',
+    })
+    window.dinho.softwareUpdateRun = vi.fn().mockResolvedValue({ succeeded: 1, failed: 0 })
+    window.dinho.driverUpdateScan = vi.fn().mockResolvedValue({ updates: [{ updateId: 'drv1', selected: true }] })
+    window.dinho.driverUpdateInstall = vi.fn().mockResolvedValue({ installed: 1, failed: 0, rebootRequired: false })
+
+    const payload = {
+      scheduleId: 'sched-full',
+      scheduleName: 'Full Maintenance',
+      tasks: ['full-maintenance'],
+      autoApply: true,
+    }
+
+    let triggerCb: (p: typeof payload) => void
+    window.dinho.onScheduleRunTrigger = vi.fn((cb: (p: typeof payload) => void) => {
+      triggerCb = cb
+      return vi.fn()
+    }) as never
+
+    renderHook(() => useScheduledScan())
+    triggerCb!(payload)
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(window.dinho.diskRepairDism).toHaveBeenCalled()
+    expect(window.dinho.winSxSClean).toHaveBeenCalled()
+    expect(window.dinho.systemClean).toHaveBeenCalledWith(['item1'])
+    expect(window.dinho.registryFix).toHaveBeenCalledWith(['reg1'])
+    expect(window.dinho.softwareUpdateRun).toHaveBeenCalledWith(['app1'], 'winget')
+    expect(window.dinho.driverUpdateInstall).toHaveBeenCalledWith(['drv1'])
+    expect(window.dinho.scheduleRunComplete).toHaveBeenCalledWith('sched-full', 'success')
+
+    const entry = mockHistoryStore.addEntry.mock.calls[0]![0]
+    expect(entry.scheduleName).toBe('Full Maintenance')
+    expect(entry.categories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Full Maintenance',
+          itemsFound: 4,
+          itemsCleaned: 4,
+          spaceSaved: 500,
+        }),
+      ]),
+    )
+  })
+
+  it('only scans during full maintenance when autoApply is false', async () => {
+    mockWindowDinho()
+    vi.useFakeTimers()
+
+    const payload = {
+      scheduleId: 'sched-full-scan',
+      scheduleName: 'Full Maintenance Scan',
+      tasks: ['full-maintenance'],
+      autoApply: false,
+    }
+
+    let triggerCb: (p: typeof payload) => void
+    window.dinho.onScheduleRunTrigger = vi.fn((cb: (p: typeof payload) => void) => {
+      triggerCb = cb
+      return vi.fn()
+    }) as never
+
+    renderHook(() => useScheduledScan())
+    triggerCb!(payload)
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(window.dinho.systemScan).toHaveBeenCalled()
+    expect(window.dinho.registryScan).toHaveBeenCalled()
+    expect(window.dinho.softwareUpdateCheck).toHaveBeenCalled()
+    expect(window.dinho.driverUpdateScan).toHaveBeenCalled()
+
+    expect(window.dinho.diskRepairDism).not.toHaveBeenCalled()
+    expect(window.dinho.winSxSClean).not.toHaveBeenCalled()
+    expect(window.dinho.systemClean).not.toHaveBeenCalled()
+    expect(window.dinho.registryFix).not.toHaveBeenCalled()
+    expect(window.dinho.softwareUpdateRun).not.toHaveBeenCalled()
+    expect(window.dinho.driverUpdateInstall).not.toHaveBeenCalled()
+    expect(window.dinho.memoryOptimize).not.toHaveBeenCalled()
+    expect(window.dinho.scheduleRunComplete).toHaveBeenCalledWith('sched-full-scan', 'success')
   })
 })

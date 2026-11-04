@@ -187,6 +187,28 @@ describe('validateSettingsPartial', () => {
     expect(validateSettingsPartial(input)).toEqual(input)
   })
 
+  it('accepts the full-maintenance task', () => {
+    const input = {
+      schedules: [
+        {
+          id: 'full-1',
+          name: 'Weekly Maintenance',
+          enabled: true,
+          frequency: 'weekly',
+          day: 0,
+          hour: 9,
+          minute: 0,
+          tasks: ['full-maintenance'],
+          autoApply: true,
+          lastRunAt: null,
+          lastRunStatus: 'never',
+          createdAt: '2025-01-01T00:00:00Z',
+        },
+      ],
+    }
+    expect(validateSettingsPartial(input)).toEqual(input)
+  })
+
   it('rejects schedules with invalid task types', () => {
     expect(
       validateSettingsPartial({

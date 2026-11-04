@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   protectRecycleBin: false,
+  showBrowserProtectionNotice: false,
   platform: 'win32',
   addEntry: vi.fn(),
   recompute: vi.fn(),
@@ -32,7 +33,14 @@ const store = {
 vi.mock('@/stores/scan-store', () => ({ useScanStore: () => store }))
 vi.mock('@/stores/settings-store', () => ({
   useSettingsStore: (sel: (s: unknown) => unknown) =>
-    sel({ settings: { cleaner: { protectRecycleBin: mocks.protectRecycleBin } } }),
+    sel({
+      settings: {
+        cleaner: {
+          protectRecycleBin: mocks.protectRecycleBin,
+          showBrowserProtectionNotice: mocks.showBrowserProtectionNotice,
+        },
+      },
+    }),
 }))
 vi.mock('@/stores/stats-store', () => ({
   useStatsStore: (sel: (s: unknown) => unknown) => sel({ recompute: mocks.recompute }),
@@ -87,6 +95,7 @@ beforeEach(() => {
   store.progress = null
   store.excludedSubcategories = new Set<string>()
   mocks.protectRecycleBin = false
+  mocks.showBrowserProtectionNotice = false
   mocks.confirmOnConfirm = null
   ;(window as unknown as { dinho: Record<string, unknown> }).dinho = {}
 })
@@ -436,5 +445,18 @@ describe('CleanerPage clean modes', () => {
 
     await waitFor(() => expect(systemClean).toHaveBeenCalled())
     expect(systemClean).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('browser data protection notice', () => {
+  it('is hidden by default', () => {
+    render(<CleanerPage />)
+    expect(screen.queryByTestId('browser-data-protection-notice')).toBeNull()
+  })
+
+  it('is shown when the setting is enabled', () => {
+    mocks.showBrowserProtectionNotice = true
+    render(<CleanerPage />)
+    expect(screen.getByTestId('browser-data-protection-notice').textContent).toContain('browserDataProtectionNotice')
   })
 })

@@ -2,6 +2,7 @@ import { ScanStatus } from '@shared/enums'
 import type { ScanResult } from '@shared/types'
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { runFullMaintenance } from '@/lib/full-maintenance'
 import { formatBytes, formatNumber } from '@/lib/utils'
 import { useHistoryStore } from '@/stores/history-store'
 import { useScanStore } from '@/stores/scan-store'
@@ -185,6 +186,25 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
           }
         } else if (found > 0) {
           categoryResults.Software = { found, cleaned: 0, size: 0 }
+        }
+      } catch {
+        status = 'partial'
+      }
+    }
+
+    // ── Full maintenance ──
+    if (payload.tasks.includes('full-maintenance')) {
+      try {
+        const result = await runFullMaintenance(payload.autoApply, protectRecycleBin)
+        if (result.status === 'partial') status = 'partial'
+        totalItems += result.totalFound
+        totalCleaned += result.totalCleaned
+        totalSpaceSaved += result.spaceRecovered
+        totalSize += result.spaceRecovered
+        categoryResults['Full Maintenance'] = {
+          found: result.totalFound,
+          cleaned: result.totalCleaned,
+          size: result.spaceRecovered,
         }
       } catch {
         status = 'partial'

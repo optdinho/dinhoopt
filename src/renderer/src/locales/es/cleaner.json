@@ -4,6 +4,7 @@
   "groupApps": "Aplicaciones",
   "groupMaintenance": "Mantenimiento",
   "pageDescription": "Optimice, limpie y mantenga su Windows con el máximo rendimiento",
+  "browserDataProtectionNotice": "La limpieza del navegador elimina solo la caché. Las cookies, los inicios de sesión y las contraseñas guardadas nunca se analizan ni se eliminan.",
   "scanButton": "Analizar",
   "quickCleanButton": "Limpieza rápida",
   "fullCleanButton": "Limpieza completa",

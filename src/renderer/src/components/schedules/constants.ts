@@ -1,6 +1,6 @@
 import type { ScheduleEntry, ScheduleTaskType } from '@shared/types'
 import type { TFunction } from 'i18next'
-import { AppWindow, Database, Download, Gamepad2, Globe, Monitor, Sparkles, Trash, Zap } from 'lucide-react'
+import { AppWindow, Database, Download, Gamepad2, Globe, Monitor, Sparkles, Trash, Wrench, Zap } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import { usePlatform } from '@/hooks/usePlatform'
@@ -41,6 +41,7 @@ const ALL_TASKS_BASE: Array<Omit<TaskDef, 'label'> & { labelKey: string }> = [
     requiresFeature: 'drivers',
   },
   { type: 'software-update', labelKey: 'tasks.softwareUpdates', icon: Sparkles, group: 'maintenance' },
+  { type: 'full-maintenance', labelKey: 'tasks.fullMaintenance', icon: Wrench, group: 'maintenance' },
 ]
 
 export const CLEANER_TASKS = ALL_TASKS_BASE.filter((t) => t.group === 'cleaner').map((t) => t.type)
@@ -63,7 +64,9 @@ export interface Preset {
 }
 
 export function buildPresets(availableTasks: TaskDef[], t: TFunction<'schedules'>): Preset[] {
-  const allTypes = availableTasks.map((task) => task.type)
+  // Full maintenance already covers every phase below it; keeping it out of
+  // this list stops the monthly preset from running the same work twice.
+  const allTypes = availableTasks.map((task) => task.type).filter((type) => type !== 'full-maintenance')
   return [
     {
       label: t('presets.weeklyFullCleanLabel'),

@@ -63,6 +63,7 @@ const defaultSettings = {
     secureDelete: false,
     closeBrowsersBeforeClean: false,
     protectRecycleBin: true,
+    showBrowserProtectionNotice: false,
   },
   exclusions: [] as string[],
   ignoredSoftwareUpdates: [] as string[],

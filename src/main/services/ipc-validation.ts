@@ -171,6 +171,7 @@ function validateSchedulesArray(obj: Record<string, unknown>): null | undefined 
       'registry',
       'drivers',
       'software-update',
+      'full-maintenance',
     ])
     const validFrequencies = new Set(['daily', 'weekly', 'monthly'])
     const validStatuses = new Set(['success', 'partial', 'failed', 'never'])
@@ -206,6 +207,7 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
       // cleaner ignores it: cookies are never deleted.
       'keepBrowserCookies',
       'protectRecycleBin',
+      'showBrowserProtectionNotice',
     ])
     for (const key of Object.keys(c)) {
       if (!allowedCleanerKeys.has(key)) return null

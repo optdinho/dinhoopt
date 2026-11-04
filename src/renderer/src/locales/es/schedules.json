@@ -69,7 +69,8 @@
     "databases": "Bases de datos",
     "registryFixes": "Correcciones del registro",
     "driverUpdates": "Actualizaciones de controladores",
-    "softwareUpdates": "Actualizaciones de software"
+    "softwareUpdates": "Actualizaciones de software",
+    "fullMaintenance": "Mantenimiento completo"
   },
   "dayNames": {
     "sunday": "Domingo",

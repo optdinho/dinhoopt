@@ -1,6 +1,16 @@
 import { CleanerType, ScanStatus } from '@shared/enums'
 import type { CleanResult, ScanResult } from '@shared/types'
-import { FileText, Layers, Loader2, Search, ShieldAlert, Sparkles, TriangleAlert, Wifi } from 'lucide-react'
+import {
+  FileText,
+  Layers,
+  Loader2,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  TriangleAlert,
+  Wifi,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CleanSummary } from '@/components/cleaner/CleanSummary'
@@ -30,6 +40,7 @@ export function CleanerPage() {
   const addEntry = useHistoryStore((s) => s.addEntry)
 
   const protectRecycleBin = useSettingsStore((s) => s.settings.cleaner.protectRecycleBin)
+  const showBrowserProtectionNotice = useSettingsStore((s) => s.settings.cleaner.showBrowserProtectionNotice)
   const visibleCategories = useMemo(
     () => (protectRecycleBin ? categories.filter((c) => c.type !== CleanerType.RecycleBin) : categories),
     [protectRecycleBin],
@@ -394,6 +405,19 @@ export function CleanerPage() {
           </div>
         }
       />
+
+      {showBrowserProtectionNotice && (
+        <div
+          className="mb-4 flex items-start gap-3 rounded-xl px-4 py-3"
+          style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
+          data-testid="browser-data-protection-notice"
+        >
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" strokeWidth={1.8} />
+          <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+            {t('browserDataProtectionNotice')}
+          </p>
+        </div>
+      )}
 
       <div className="flex gap-5">
         {/* Category sidebar */}
