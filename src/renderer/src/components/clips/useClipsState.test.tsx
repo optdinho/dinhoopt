@@ -650,4 +650,66 @@ describe('useClipsState', () => {
     unmount()
     expect(win.__clipsSaveClip).toBeUndefined()
   })
+
+  it('prunes the selection down to the clips the active filter shows', async () => {
+    localStorage.setItem('clips-favorites', JSON.stringify(['fav.mp4']))
+    useClipsStateStore.getState().reset()
+    makeDinho({
+      clipsList: vi.fn().mockResolvedValue([makeClip({ name: 'fav.mp4' }), makeClip({ name: 'other.mp4' })]),
+    })
+    const { result } = renderHook(() => useClipsState())
+    await waitFor(() => expect(result.current.clips).toHaveLength(2))
+
+    act(() => result.current.setSelectedClips(new Set(['fav.mp4', 'other.mp4'])))
+    expect(result.current.selectedClips.size).toBe(2)
+
+    act(() => result.current.setFilterTab('favorites'))
+
+    await waitFor(() => expect(result.current.selectedClips.size).toBe(1))
+    expect(result.current.selectedClips.has('fav.mp4')).toBe(true)
+    expect(result.current.selectedClips.has('other.mp4')).toBe(false)
+  })
+
+  it('prunes the selection down to the clips matching the search', async () => {
+    makeDinho({
+      clipsList: vi.fn().mockResolvedValue([makeClip({ name: 'alpha.mp4' }), makeClip({ name: 'beta.mp4' })]),
+    })
+    const { result } = renderHook(() => useClipsState())
+    await waitFor(() => expect(result.current.clips).toHaveLength(2))
+
+    act(() => result.current.setSelectedClips(new Set(['alpha.mp4', 'beta.mp4'])))
+    act(() => result.current.setSearchQuery('beta'))
+
+    await waitFor(() => expect([...result.current.selectedClips]).toEqual(['beta.mp4']))
+  })
+
+  it('keeps the same selection object while every selected clip is still visible', async () => {
+    makeDinho({
+      clipsList: vi.fn().mockResolvedValue([makeClip({ name: 'alpha.mp4' }), makeClip({ name: 'beta.mp4' })]),
+    })
+    const { result } = renderHook(() => useClipsState())
+    await waitFor(() => expect(result.current.clips).toHaveLength(2))
+
+    act(() => result.current.setSelectedClips(new Set(['alpha.mp4'])))
+    const before = result.current.selectedClips
+
+    act(() => result.current.setSearchQuery('alpha'))
+
+    expect(result.current.selectedClips).toBe(before)
+  })
+
+  it('defaults the sort to newest and persists changes across remounts', async () => {
+    makeDinho()
+    const first = renderHook(() => useClipsState())
+    await flushInitial()
+    expect(first.result.current.sortBy).toBe('recent')
+
+    act(() => first.result.current.setSortBy('largest'))
+    expect(first.result.current.sortBy).toBe('largest')
+    first.unmount()
+
+    const second = renderHook(() => useClipsState())
+    await flushInitial()
+    expect(second.result.current.sortBy).toBe('largest')
+  })
 })

@@ -63,3 +63,51 @@ describe('StickyActionBar', () => {
     expect(screen.getByTestId('sticky-action-bar').className).toContain('z-40')
   })
 })
+
+describe('StickyActionBar — multi-action API', () => {
+  const twoActions = () => [
+    { label: 'Combinar', onClick: vi.fn(), variant: 'accent' as const },
+    { label: 'Eliminar', onClick: vi.fn(), variant: 'danger' as const },
+  ]
+
+  it('renders every action in the given order', () => {
+    renderBar({ actions: twoActions() })
+    const buttons = screen.getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Combinar', 'Eliminar'])
+  })
+
+  it('runs the matching handler for each action', () => {
+    const actions = twoActions()
+    renderBar({ actions })
+    screen.getByRole('button', { name: 'Combinar' }).click()
+    expect(actions[0]!.onClick).toHaveBeenCalledTimes(1)
+    expect(actions[1]!.onClick).not.toHaveBeenCalled()
+
+    screen.getByRole('button', { name: 'Eliminar' }).click()
+    expect(actions[1]!.onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies the accent and danger variants', () => {
+    renderBar({ actions: twoActions() })
+    expect(screen.getByRole('button', { name: 'Combinar' }).style.background).toContain('rgb(245, 158, 11)')
+    expect(screen.getByRole('button', { name: 'Eliminar' }).style.background).toContain('rgb(239, 68, 68)')
+  })
+
+  it('takes precedence over the single-action props', () => {
+    const onAction = vi.fn()
+    renderBar({ onAction, actionLabel: 'Limpar', actions: twoActions() })
+    expect(screen.queryByRole('button', { name: 'Limpar' })).toBeNull()
+    expect(screen.getAllByRole('button')).toHaveLength(2)
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it('stays hidden when the action list is empty', () => {
+    renderBar({ actions: [], actionLabel: '' })
+    expect(screen.queryByTestId('sticky-action-bar')).toBeNull()
+  })
+
+  it('stays hidden with actions but no selection', () => {
+    renderBar({ actions: twoActions(), selectedCount: 0 })
+    expect(screen.queryByTestId('sticky-action-bar')).toBeNull()
+  })
+})

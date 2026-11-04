@@ -1,6 +1,6 @@
 import type { ClipInfo, ClipsConfig, ClipsEngineStatus } from '@shared/types'
 import { create } from 'zustand'
-import type { FilterTab } from '@/components/clips/clips-utils'
+import type { ClipsSortKey, FilterTab } from '@/components/clips/clips-utils'
 import logger from '@/lib/renderer-logger'
 
 /**
@@ -28,6 +28,9 @@ export interface ClipsStateStoreState {
   rebindingId: string | null
   filterTab: FilterTab
   searchQuery: string
+  /** Sort order for the grid — kept here so it survives leaving the page, like
+   * the filter tab and the search query do. */
+  sortBy: ClipsSortKey
   thumbnails: Record<string, string>
   refreshing: boolean
   selectedClips: Set<string>
@@ -50,6 +53,7 @@ export interface ClipsStateStoreState {
   setRebindingId: (id: string | null) => void
   setFilterTab: (tab: FilterTab) => void
   setSearchQuery: (query: string) => void
+  setSortBy: (sort: ClipsSortKey) => void
   setSelectedClips: React.Dispatch<React.SetStateAction<Set<string>>>
   setFavorites: React.Dispatch<React.SetStateAction<Set<string>>>
   setPublishingPath: (path: string | null) => void
@@ -102,6 +106,7 @@ export const useClipsStateStore = create<ClipsStateStoreState>((set) => ({
   rebindingId: null,
   filterTab: 'all',
   searchQuery: '',
+  sortBy: 'recent',
   thumbnails: {},
   refreshing: false,
   selectedClips: new Set<string>(),
@@ -132,6 +137,7 @@ export const useClipsStateStore = create<ClipsStateStoreState>((set) => ({
   setRebindingId: (rebindingId) => set({ rebindingId }),
   setFilterTab: (filterTab) => set({ filterTab }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setSortBy: (sortBy) => set({ sortBy }),
   setSelectedClips: (update) =>
     set((state) => ({
       selectedClips: typeof update === 'function' ? update(state.selectedClips) : update,
@@ -160,6 +166,7 @@ export const useClipsStateStore = create<ClipsStateStoreState>((set) => ({
       rebindingId: null,
       filterTab: 'all',
       searchQuery: '',
+      sortBy: 'recent',
       thumbnails: {},
       refreshing: false,
       selectedClips: new Set<string>(),

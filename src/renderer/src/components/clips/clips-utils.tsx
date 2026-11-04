@@ -6,6 +6,10 @@ import { useTranslation } from 'react-i18next'
 
 export type FilterTab = 'all' | 'today' | 'week' | 'favorites'
 
+/** Sort order for the clip grid. Lives beside `FilterTab` so the store and the
+ * grid share one definition instead of duplicating the union. */
+export type ClipsSortKey = 'recent' | 'oldest' | 'largest'
+
 export const VK_MAP: Record<number, string> = {
   5: 'Mouse4',
   6: 'Mouse5',

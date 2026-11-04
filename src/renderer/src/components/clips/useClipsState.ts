@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import logger from '@/lib/renderer-logger'
 import { useClipsStateStore } from '@/stores/clips-state-store'
 import { QUALITY_PRESETS, type QualityPresetKey } from './clips-quality-presets'
-import type { FilterTab } from './clips-utils'
+import type { ClipsSortKey, FilterTab } from './clips-utils'
 import { formatClipsDate, formatClipsSeconds, formatClipsSize, useClipsActions } from './useClipsActions'
 
 const DEFAULT_THUMB_RETRY_MS = 30_000
@@ -31,6 +31,8 @@ export interface ClipsState {
   setFilterTab: (tab: FilterTab) => void
   searchQuery: string
   setSearchQuery: (q: string) => void
+  sortBy: ClipsSortKey
+  setSortBy: (sort: ClipsSortKey) => void
   thumbnails: Record<string, string>
   refreshing: boolean
   showProcPicker: boolean
@@ -118,6 +120,8 @@ export function useClipsState(): ClipsState {
   const setFilterTab = useClipsStateStore((s) => s.setFilterTab)
   const searchQuery = useClipsStateStore((s) => s.searchQuery)
   const setSearchQuery = useClipsStateStore((s) => s.setSearchQuery)
+  const sortBy = useClipsStateStore((s) => s.sortBy)
+  const setSortBy = useClipsStateStore((s) => s.setSortBy)
   const thumbnails = useClipsStateStore((s) => s.thumbnails)
   const setThumbnails = useClipsStateStore((s) => s.setThumbnails)
   const refreshing = useClipsStateStore((s) => s.refreshing)
@@ -517,6 +521,24 @@ export function useClipsState(): ClipsState {
     }
   }, [clips, favorites])
 
+  // Prune the selection to what the current filter/search actually shows.
+  //
+  // Without this the bulk bar can claim "3 clips selected" while the grid is
+  // empty (e.g. the user selected clips under "All", then switched to
+  // "Favorites"): merge would receive an empty path list while delete would
+  // remove clips the user can no longer see. Keeping the selection ⊆ visible
+  // set makes the count, the merge paths and the delete targets agree.
+  useEffect(() => {
+    const visible = new Set(filteredClips.map((c) => c.name))
+    setSelectedClips((prev) => {
+      if (prev.size === 0) return prev
+      const next = new Set<string>()
+      for (const name of prev) if (visible.has(name)) next.add(name)
+      // Returning the previous set when nothing was dropped avoids a re-render.
+      return next.size === prev.size ? prev : next
+    })
+  }, [filteredClips, setSelectedClips])
+
   // Expose save trigger for E2E tests
   useEffect(() => {
     ;(window as unknown as Record<string, unknown>).__clipsSaveClip = actions.handleSaveClip
@@ -553,6 +575,8 @@ export function useClipsState(): ClipsState {
     setFilterTab,
     searchQuery,
     setSearchQuery,
+    sortBy,
+    setSortBy,
     thumbnails,
     refreshing,
     showProcPicker,

@@ -20,12 +20,11 @@ import { useMemo, useState } from 'react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
 import { StickyActionBar } from '@/components/shared/StickyActionBar'
-import { nativeSelectStyle, SegmentedControl } from './clips-utils'
+import { type ClipsSortKey, nativeSelectStyle, SegmentedControl } from './clips-utils'
 import type { ClipsState } from './useClipsState'
 
-type SortKey = 'recent' | 'oldest' | 'largest'
-
-function sortClips<T extends { createdAt: string; size: number }>(clips: T[], sortBy: SortKey): T[] {
+/** Sorts a copy of the list — never mutates the array coming from state. */
+export function sortClips<T extends { createdAt: string; size: number }>(clips: T[], sortBy: ClipsSortKey): T[] {
   const list = [...clips]
   if (sortBy === 'largest') {
     list.sort((a, b) => b.size - a.size)
@@ -48,6 +47,8 @@ export function ClipsGrid({
   filterCounts,
   searchQuery,
   setSearchQuery,
+  sortBy,
+  setSortBy,
   selectedClips,
   setSelectedClips,
   thumbnails,
@@ -73,7 +74,6 @@ export function ClipsGrid({
   filterTabs,
   t,
 }: ClipsState) {
-  const [sortBy, setSortBy] = useState<SortKey>('recent')
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
 
   const visibleClips = useMemo(() => sortClips(filteredClips, sortBy), [filteredClips, sortBy])
@@ -137,7 +137,7 @@ export function ClipsGrid({
             />
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              onChange={(e) => setSortBy(e.target.value as ClipsSortKey)}
               className="cursor-pointer rounded-lg py-1.5 pl-6 pr-2 text-[11px] outline-none focus:ring-2"
               style={{
                 ...nativeSelectStyle,
@@ -558,6 +558,10 @@ export function ClipsGrid({
           },
         ]}
       />
+
+      {/* The bulk bar is `position: fixed`; reserve its height so the last row
+          of cards can still be scrolled clear of it. */}
+      <div aria-hidden="true" data-testid="sticky-bar-spacer" className={selectedClips.size > 0 ? 'h-16' : undefined} />
     </div>
   )
 }
