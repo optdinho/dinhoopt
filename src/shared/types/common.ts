@@ -75,8 +75,6 @@ export interface DiNhoSettings {
     secureDelete: boolean
     closeBrowsersBeforeClean: boolean
     protectRecycleBin: boolean
-    /** Keep saved site cookies so users don't have to re-login (default: true). */
-    keepBrowserCookies: boolean
   }
   exclusions: string[]
   ignoredSoftwareUpdates: string[]

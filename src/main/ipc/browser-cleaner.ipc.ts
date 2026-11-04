@@ -1,19 +1,57 @@
-import { randomUUID } from 'node:crypto'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { IPC } from '@shared/channels'
 import { CleanerType } from '@shared/enums'
-import type { CleanResult, ScanItem, ScanResult } from '@shared/types'
+import type { CleanResult, ScanResult } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getPlatform } from '../platform'
 import { cleanItems, scanDirectory } from '../services/file-utils'
 import { validateStringArray } from '../services/ipc-validation'
 import { getLogger } from '../services/logger.service'
-import { cacheItems } from '../services/scan-cache'
+import { cacheItems, getCachedItem } from '../services/scan-cache'
 import { getSettings } from '../services/settings-store'
 import type { WindowGetter } from './index'
 import { validateSender } from './sender-validation'
+
+/**
+ * User data that browser cleaning must never delete, whatever a scan returns.
+ * This is a second line of defence on top of the cache-only scanner: if an id
+ * ever points at one of these files, the clean handler refuses it.
+ */
+const PROTECTED_BROWSER_FILES = new Set([
+  // Cookies
+  'cookies',
+  'cookies-journal',
+  'cookies.sqlite',
+  'cookies.sqlite-wal',
+  'cookies.sqlite-shm',
+  // Saved logins / passwords
+  'login data',
+  'login data-journal',
+  'logins.json',
+  'key3.db',
+  'key4.db',
+  'signons.sqlite',
+  // Autofill / payment data
+  'web data',
+  'web data-journal',
+  // History / bookmarks
+  'history',
+  'history-journal',
+  'places.sqlite',
+  'places.sqlite-wal',
+  'places.sqlite-shm',
+  'bookmarks',
+  'bookmarks.html',
+  'favicons',
+  'top sites',
+])
+
+export function isProtectedBrowserFile(filePath: string): boolean {
+  const base = filePath.split(/[\\/]/).pop()?.toLowerCase() ?? ''
+  return PROTECTED_BROWSER_FILES.has(base)
+}
 
 interface ChromiumBrowserDef {
   key: string
@@ -26,44 +64,12 @@ interface ChromiumBrowserDef {
   hasProfiles: boolean
 }
 
-const COOKIE_FILES = ['Cookies', 'Network/Cookies']
-const FIREFOX_COOKIE = 'cookies.sqlite'
-
-function scanCookieFiles(
-  basePath: string,
-  cookieFiles: string[],
-  _browserLabel: string,
-  _profile: string,
-  category: string,
-): ScanItem[] {
-  const items: ScanItem[] = []
-  for (const cookieFile of cookieFiles) {
-    const fullPath = join(basePath, cookieFile)
-    if (existsSync(fullPath)) {
-      try {
-        const size = statSync(fullPath).size
-        items.push({
-          id: randomUUID(),
-          path: fullPath,
-          size,
-          category,
-          subcategory: 'Cookies',
-          lastModified: 0,
-          selected: true,
-        })
-      } catch {
-        /* skip */
-      }
-    }
-  }
-  return items
-}
-
 export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
   ipcMain.handle(IPC.BROWSER_SCAN, async (event): Promise<ScanResult[]> => {
     if (!validateSender(event, getWindow())) return []
     getLogger().info('browser-cleaner', 'Starting browser scan...')
-    const keepBrowserCookies = getSettings().cleaner.keepBrowserCookies !== false
+    // Browser cleaning is cache-only by design. Cookies, saved logins, passwords,
+    // history and bookmarks are never scanned nor deleted.
     const results: ScanResult[] = []
     const category = CleanerType.Browser
     const browserPaths = getPlatform().paths.browserPaths()
@@ -108,22 +114,6 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
               }
             }
           }
-          // Cookies (skipped when keepBrowserCookies is enabled)
-          if (!keepBrowserCookies) {
-            const profilePath = join(browser.base, profile)
-            const cookieItems = scanCookieFiles(profilePath, COOKIE_FILES, browser.label, profile, category)
-            if (cookieItems.length > 0) {
-              cacheItems(cookieItems)
-              results.push({
-                category,
-                subcategory: 'Cookies',
-                group: browser.label,
-                items: cookieItems,
-                totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
-                itemCount: cookieItems.length,
-              })
-            }
-          }
         }
       } else {
         // Opera-style: cache dirs directly under base
@@ -141,21 +131,6 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
               cacheItems(result.items)
               results.push(result)
             }
-          }
-        }
-        // Cookies (skipped when keepBrowserCookies is enabled)
-        if (!keepBrowserCookies) {
-          const cookieItems = scanCookieFiles(browser.base, COOKIE_FILES, browser.label, 'Default', category)
-          if (cookieItems.length > 0) {
-            cacheItems(cookieItems)
-            results.push({
-              category,
-              subcategory: 'Cookies',
-              group: browser.label,
-              items: cookieItems,
-              totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
-              itemCount: cookieItems.length,
-            })
           }
         }
       }
@@ -181,36 +156,7 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
         getLogger().warning('browser-cleaner', 'Skipped inaccessible Firefox cache')
       }
     }
-    // Firefox cookies (in base profiles dir, not cache dir) — skipped when keepBrowserCookies is enabled
-    if (!keepBrowserCookies && browserPaths.firefox.base && existsSync(browserPaths.firefox.base)) {
-      try {
-        const profileDirs = await readdir(browserPaths.firefox.base, { withFileTypes: true })
-        for (const dir of profileDirs) {
-          if (dir.isDirectory()) {
-            const cookieItems = scanCookieFiles(
-              join(browserPaths.firefox.base, dir.name),
-              [FIREFOX_COOKIE],
-              'Firefox',
-              dir.name,
-              category,
-            )
-            if (cookieItems.length > 0) {
-              cacheItems(cookieItems)
-              results.push({
-                category,
-                subcategory: 'Cookies',
-                group: 'Firefox',
-                items: cookieItems,
-                totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
-                itemCount: cookieItems.length,
-              })
-            }
-          }
-        }
-      } catch {
-        getLogger().warning('browser-cleaner', 'Skipped inaccessible Firefox profiles')
-      }
-    }
+    // Firefox cookies are deliberately never scanned: cookies are user data.
 
     // Firefox forks — Zen is excluded here because it's already covered by the app scanner (zen-browser in apps.json)
     const firefoxForks = [
@@ -236,36 +182,6 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
         }
       } catch {
         getLogger().warning('browser-cleaner', `Skipped inaccessible ${fork.label} cache`)
-      }
-      // Fork cookies (skipped when keepBrowserCookies is enabled)
-      if (!keepBrowserCookies && fork.base && existsSync(fork.base)) {
-        try {
-          const profileDirs = await readdir(fork.base, { withFileTypes: true })
-          for (const dir of profileDirs) {
-            if (dir.isDirectory()) {
-              const cookieItems = scanCookieFiles(
-                join(fork.base, dir.name),
-                [FIREFOX_COOKIE],
-                fork.label,
-                dir.name,
-                category,
-              )
-              if (cookieItems.length > 0) {
-                cacheItems(cookieItems)
-                results.push({
-                  category,
-                  subcategory: 'Cookies',
-                  group: fork.label,
-                  items: cookieItems,
-                  totalSize: cookieItems.reduce((s, i) => s + i.size, 0),
-                  itemCount: cookieItems.length,
-                })
-              }
-            }
-          }
-        } catch {
-          getLogger().warning('browser-cleaner', `Skipped inaccessible ${fork.label} profiles`)
-        }
       }
     }
 
@@ -302,11 +218,21 @@ export function registerBrowserCleanerIpc(getWindow: WindowGetter): void {
       getLogger().warning('browser-cleaner', 'Invalid item IDs received for browser clean')
       return { totalCleaned: 0, filesDeleted: 0, filesSkipped: 0, errors: [], needsElevation: false }
     }
+    const safeIds = valid.filter((id) => {
+      const item = getCachedItem(id)
+      return !item || !isProtectedBrowserFile(item.path)
+    })
+    if (safeIds.length < valid.length) {
+      getLogger().warning(
+        'browser-cleaner',
+        `Refused to delete ${valid.length - safeIds.length} protected browser file(s) (cookies/logins/history)`,
+      )
+    }
     const settings = getSettings()
     if (settings.cleaner.closeBrowsersBeforeClean) {
       await getPlatform().browser.closeBrowsers()
     }
-    return cleanItems(valid, (processed, total, currentPath, cleanedSize) => {
+    return cleanItems(safeIds, (processed, total, currentPath, cleanedSize) => {
       const win = getWindow()
       if (win && !win.isDestroyed())
         win.webContents.send(IPC.SCAN_PROGRESS, {

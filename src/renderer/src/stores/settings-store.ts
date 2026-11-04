@@ -26,7 +26,6 @@ const defaultSettings: DiNhoSettings = {
     secureDelete: false,
     closeBrowsersBeforeClean: false,
     protectRecycleBin: true,
-    keepBrowserCookies: true,
   },
   exclusions: [],
   ignoredSoftwareUpdates: [],

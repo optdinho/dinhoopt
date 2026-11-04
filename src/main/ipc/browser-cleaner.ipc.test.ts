@@ -26,8 +26,10 @@ vi.mock('../services/file-utils', () => ({
 }))
 
 const mockCacheItems = vi.fn()
+const mockGetCachedItem = vi.fn()
 vi.mock('../services/scan-cache', () => ({
   cacheItems: (...args: unknown[]) => mockCacheItems(...args),
+  getCachedItem: (id: string) => mockGetCachedItem(id),
 }))
 
 const mockGetSettings = vi.fn()
@@ -53,7 +55,7 @@ vi.mock('../services/ipc-validation', () => ({
 }))
 
 import { join } from 'node:path'
-import { registerBrowserCleanerIpc } from './browser-cleaner.ipc'
+import { isProtectedBrowserFile, registerBrowserCleanerIpc } from './browser-cleaner.ipc'
 
 // ── Helpers ──
 
@@ -187,10 +189,12 @@ describe('BROWSER_SCAN handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockBrowserPaths.mockReturnValue(makeBrowserPaths())
-    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: true } })
   })
 
-  it('does not scan cookies when keepBrowserCookies is true', async () => {
+  it('never scans cookies or saved logins, even with a legacy keepBrowserCookies=false', async () => {
+    // Old settings files may still carry keepBrowserCookies: false. It is now
+    // ignored on purpose: cookies, logins and passwords are user data.
+    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
     mockStatSync.mockReturnValue({ size: 2048 })
     mockExistsSync.mockReturnValue(true)
     mockReaddir.mockResolvedValue([])
@@ -204,10 +208,14 @@ describe('BROWSER_SCAN handler', () => {
 
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
-    const results = (await handler()) as Array<{ subcategory: string }>
+    const results = (await handler()) as Array<{ subcategory: string; items: Array<{ path: string }> }>
 
-    const cookieResults = results.filter((r) => r.subcategory === 'Cookies')
-    expect(cookieResults).toHaveLength(0)
+    const sensitiveResults = results.filter(
+      (r) =>
+        r.subcategory === 'Cookies' ||
+        r.items.some((item) => /Cookies|Login Data|Web Data|places\.sqlite|logins\.json/i.test(item.path)),
+    )
+    expect(sensitiveResults).toHaveLength(0)
   })
 
   it('returns empty results when no browser directories exist', async () => {
@@ -360,33 +368,6 @@ describe('BROWSER_SCAN handler', () => {
     expect(Array.isArray(results)).toBe(true)
   })
 
-  it('creates cookie scan items when statSync succeeds', async () => {
-    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
-    const chromeBase = '/home/user/.config/google-chrome'
-    mockStatSync.mockReturnValue({ size: 2048 })
-    mockExistsSync.mockImplementation((p: string) => {
-      if (p === chromeBase) return true
-      if (p.startsWith(join(chromeBase, 'Default'))) return true
-      return false
-    })
-    mockReaddir.mockResolvedValue([])
-    mockScanDirectory.mockResolvedValue({
-      category: 'browser',
-      subcategory: 'test',
-      items: [{ id: '1', path: '/test', size: 100 }],
-      totalSize: 100,
-      itemCount: 1,
-    })
-    registerBrowserCleanerIpc(() => mockWindow() as any)
-    const handler = getHandler('cleaner:browser:scan')
-    await handler()
-
-    const cookieCacheCalls = mockCacheItems.mock.calls.filter(([items]) =>
-      items.some((i: { subcategory: string }) => i.subcategory === 'Cookies'),
-    )
-    expect(cookieCacheCalls.length).toBeGreaterThan(0)
-  })
-
   it('handles getChromiumProfiles readdir error gracefully', async () => {
     mockExistsSync.mockReturnValue(true)
     mockReaddir.mockRejectedValue(new Error('EACCES'))
@@ -404,65 +385,7 @@ describe('BROWSER_SCAN handler', () => {
     expect(Array.isArray(results)).toBe(true)
   })
 
-  it('scans Firefox base for cookie files', async () => {
-    mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
-    const firefoxBase = '/home/user/.mozilla/firefox'
-    mockBrowserPaths.mockReturnValue({
-      ...makeBrowserPaths(),
-      firefox: { cache: '/fake/firefox-cache', base: firefoxBase },
-    })
-    mockStatSync.mockReturnValue({ size: 512 })
-    mockExistsSync.mockImplementation((p: string) => {
-      if (p === '/fake/firefox-cache') return true
-      if (p === firefoxBase) return true
-      if (p.startsWith(firefoxBase)) return true
-      if (p.startsWith(join(firefoxBase, 'xyz456.default'))) return true
-      return false
-    })
-    mockReaddir.mockImplementation((p: string) => {
-      if (p === '/fake/firefox-cache') {
-        return Promise.resolve([{ isDirectory: () => true, name: 'abc123.default' }])
-      }
-      if (p === firefoxBase) {
-        return Promise.resolve([{ isDirectory: () => true, name: 'xyz456.default' }])
-      }
-      return Promise.resolve([])
-    })
-    mockScanDirectory.mockResolvedValue({
-      category: 'browser',
-      subcategory: 'test',
-      items: [{ id: '1', path: '/test', size: 100 }],
-      totalSize: 100,
-      itemCount: 1,
-    })
-    registerBrowserCleanerIpc(() => mockWindow() as any)
-    const handler = getHandler('cleaner:browser:scan')
-    const results = (await handler()) as Array<{ group: string; subcategory: string }>
-    const firefoxCookieResults = results.filter((r) => r.group === 'Firefox' && r.subcategory === 'Cookies')
-    expect(firefoxCookieResults.length).toBeGreaterThan(0)
-  })
-
-  it('handles Firefox base readdir error gracefully', async () => {
-    const firefoxBase = '/home/user/.mozilla/firefox'
-    mockBrowserPaths.mockReturnValue({
-      ...makeBrowserPaths(),
-      firefox: { cache: '/fake/firefox-cache', base: firefoxBase },
-    })
-    mockExistsSync.mockImplementation((p: string) => {
-      if (p === firefoxBase) return true
-      return false
-    })
-    mockReaddir.mockImplementation((p: string) => {
-      if (p === '/fake/firefox-cache') return Promise.resolve([])
-      return Promise.reject(new Error('EACCES'))
-    })
-    registerBrowserCleanerIpc(() => mockWindow() as any)
-    const handler = getHandler('cleaner:browser:scan')
-    const results = (await handler()) as Array<{ length: number }>
-    expect(Array.isArray(results)).toBe(true)
-  })
-
-  it('scans Firefox fork cache and cookies', async () => {
+  it('scans Firefox fork cache only, never cookies', async () => {
     mockGetSettings.mockReturnValue({ cleaner: { keepBrowserCookies: false } })
     mockBrowserPaths.mockReturnValue({
       ...makeBrowserPaths(),
@@ -483,9 +406,9 @@ describe('BROWSER_SCAN handler', () => {
     registerBrowserCleanerIpc(() => mockWindow() as any)
     const handler = getHandler('cleaner:browser:scan')
     const results = (await handler()) as Array<{ group: string; subcategory: string }>
-    // Cookie scan results always have group === fork.label
-    const librewolfCookieResults = results.filter((r) => r.subcategory === 'Cookies' && r.group === 'LibreWolf')
-    expect(librewolfCookieResults.length).toBeGreaterThan(0)
+
+    expect(results.length).toBeGreaterThan(0)
+    expect(results.filter((r) => r.subcategory === 'Cookies')).toHaveLength(0)
   })
 
   it('handles Firefox fork cache readdir error gracefully', async () => {
@@ -497,25 +420,6 @@ describe('BROWSER_SCAN handler', () => {
     })
     mockExistsSync.mockImplementation((p: string) => {
       if (p === '/fake/waterfox-cache') return true
-      return false
-    })
-    mockReaddir.mockRejectedValue(new Error('EACCES'))
-    registerBrowserCleanerIpc(() => mockWindow() as any)
-    const handler = getHandler('cleaner:browser:scan')
-    const results = (await handler()) as Array<{ length: number }>
-    expect(Array.isArray(results)).toBe(true)
-  })
-
-  it('handles Firefox fork base readdir error gracefully', async () => {
-    const forkBase = '/fake/librewolf-base'
-    mockBrowserPaths.mockReturnValue({
-      ...makeBrowserPaths(),
-      librewolf: { cache: '', base: forkBase },
-      waterfox: { cache: '' },
-      floorp: { cache: '' },
-    })
-    mockExistsSync.mockImplementation((p: string) => {
-      if (p === forkBase) return true
       return false
     })
     mockReaddir.mockRejectedValue(new Error('EACCES'))
@@ -637,6 +541,42 @@ describe('BROWSER_CLEAN handler', () => {
     expect(result).toEqual(expect.objectContaining({ totalCleaned: 500 }))
   })
 
+  it('refuses to delete cookies, saved logins, passwords and history even if an id points at them', async () => {
+    mockGetSettings.mockReturnValue({ cleaner: { closeBrowsersBeforeClean: false } })
+    const cached: Record<string, { id: string; path: string; size: number }> = {
+      cache: { id: 'cache', path: '/home/user/.cache/Chrome/Default/Cache/data_1', size: 10 },
+      cookies: { id: 'cookies', path: '/home/user/.config/google-chrome/Default/Cookies', size: 20 },
+      networkCookies: {
+        id: 'networkCookies',
+        path: '/home/user/.config/google-chrome/Default/Network/Cookies',
+        size: 25,
+      },
+      logins: { id: 'logins', path: '/home/user/.config/google-chrome/Default/Login Data', size: 30 },
+      history: { id: 'history', path: '/home/user/.config/google-chrome/Default/History', size: 40 },
+      firefoxCookies: {
+        id: 'firefoxCookies',
+        path: '/home/user/.mozilla/firefox/abc.default/cookies.sqlite',
+        size: 50,
+      },
+      firefoxLogins: { id: 'firefoxLogins', path: '/home/user/.mozilla/firefox/abc.default/logins.json', size: 60 },
+    }
+    mockGetCachedItem.mockImplementation((id: string) => cached[id])
+    mockCleanItems.mockResolvedValue({
+      totalCleaned: 10,
+      filesDeleted: 1,
+      filesSkipped: 0,
+      errors: [],
+      needsElevation: false,
+    })
+
+    registerBrowserCleanerIpc(() => null)
+    const handler = getHandler('cleaner:browser:clean')
+    await handler({}, Object.keys(cached))
+
+    expect(mockCleanItems).toHaveBeenCalledTimes(1)
+    expect(mockCleanItems.mock.calls[0]![0]).toEqual(['cache'])
+  })
+
   it('closes browsers before cleaning when setting is enabled', async () => {
     mockGetSettings.mockReturnValue({ cleaner: { closeBrowsersBeforeClean: true } })
     mockCloseBrowsers.mockResolvedValue(undefined)
@@ -718,3 +658,30 @@ describe('BROWSER_CLEAN handler', () => {
 })
 
 vi.mock('./sender-validation', () => ({ validateSender: () => true }))
+
+describe('isProtectedBrowserFile', () => {
+  it.each([
+    '/home/user/.config/google-chrome/Default/Cookies',
+    '/home/user/.config/google-chrome/Default/Network/Cookies',
+    '/home/user/.config/google-chrome/Default/Login Data',
+    '/home/user/.config/google-chrome/Default/Web Data',
+    '/home/user/.config/google-chrome/Default/History',
+    '/home/user/.mozilla/firefox/abc.default/cookies.sqlite',
+    '/home/user/.mozilla/firefox/abc.default/logins.json',
+    '/home/user/.mozilla/firefox/abc.default/key4.db',
+    '/home/user/.mozilla/firefox/abc.default/places.sqlite',
+    'C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data',
+    'C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\COOKIES',
+  ])('protects %s', (filePath) => {
+    expect(isProtectedBrowserFile(filePath)).toBe(true)
+  })
+
+  it.each([
+    '/home/user/.cache/Chrome/Default/Cache/data_1',
+    '/home/user/.cache/Chrome/Default/Code Cache/js/index',
+    '/home/user/.cache/Chrome/Default/GPUCache/data_0',
+    '/home/user/.mozilla/firefox/abc.default/cache2/entries/ABC',
+  ])('does not protect cache file %s', (filePath) => {
+    expect(isProtectedBrowserFile(filePath)).toBe(false)
+  })
+})

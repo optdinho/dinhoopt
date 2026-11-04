@@ -202,6 +202,8 @@ function validateCleanerSettings(obj: Record<string, unknown>): null | undefined
       'skipRecentMinutes',
       'secureDelete',
       'closeBrowsersBeforeClean',
+      // Legacy key kept only so old settings files still validate. The browser
+      // cleaner ignores it: cookies are never deleted.
       'keepBrowserCookies',
       'protectRecycleBin',
     ])

@@ -25,7 +25,6 @@ describe('settings-store', () => {
           secureDelete: false,
           closeBrowsersBeforeClean: false,
           protectRecycleBin: true,
-          keepBrowserCookies: true,
         },
         exclusions: [],
         ignoredSoftwareUpdates: [],
@@ -89,7 +88,6 @@ describe('settings-store', () => {
     // Other cleaner settings remain
     expect(cleaner.skipRecentMinutes).toBe(60)
     expect(cleaner.closeBrowsersBeforeClean).toBe(false)
-    expect(cleaner.keepBrowserCookies).toBe(true)
   })
 
   it('updateSettings deep-merges schedule settings', () => {
