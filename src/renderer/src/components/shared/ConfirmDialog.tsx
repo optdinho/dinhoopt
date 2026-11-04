@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { TriangleAlert } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -12,6 +13,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   variant?: 'default' | 'danger' | 'warning'
   details?: string
+  children?: ReactNode
 }
 
 export function ConfirmDialog({
@@ -23,6 +25,7 @@ export function ConfirmDialog({
   confirmLabel,
   variant = 'default',
   details,
+  children,
 }: ConfirmDialogProps) {
   const { t } = useTranslation('common')
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -137,6 +140,8 @@ export function ConfirmDialog({
                 )}
               </div>
             </div>
+
+            {children}
 
             <div className="flex justify-end gap-2.5">
               <button

@@ -73,11 +73,24 @@ vi.mock('@/components/dashboard/ResultBanner', () => ({
     result ? <div data-testid="result-banner">{JSON.stringify(result)}</div> : null,
 }))
 vi.mock('@/components/shared/ConfirmDialog', () => ({
-  ConfirmDialog: ({ open, onConfirm, confirmLabel }: { open: boolean; onConfirm: () => void; confirmLabel: string }) =>
+  ConfirmDialog: ({
+    open,
+    onConfirm,
+    confirmLabel,
+    children,
+  }: {
+    open: boolean
+    onConfirm: () => void
+    confirmLabel: string
+    children?: ReactNode
+  }) =>
     open ? (
-      <button type="button" onClick={onConfirm}>
-        {confirmLabel}
-      </button>
+      <div>
+        {children}
+        <button type="button" onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+      </div>
     ) : null,
 }))
 vi.mock('./dashboard/DashboardComponents', () => ({
@@ -228,6 +241,11 @@ async function runAutoMaintenance() {
   render(<DashboardPage />)
   fireEvent.click(screen.getByText('autoMaintenanceTitle'))
   fireEvent.click(screen.getByText('autoMaintenanceConfirmLabel'))
+}
+
+function openAutoMaintenanceDialog() {
+  render(<DashboardPage />)
+  fireEvent.click(screen.getByText('autoMaintenanceTitle'))
 }
 
 async function readAutoMaintenanceResult() {
@@ -530,5 +548,59 @@ describe('DashboardPage full system maintenance', () => {
 
     expect(dinho.driverUpdateScan).not.toHaveBeenCalled()
     expect(dinho.driverUpdateInstall).not.toHaveBeenCalled()
+  })
+
+  it('lists every phase in the confirmation dialog', () => {
+    useDinho()
+
+    openAutoMaintenanceDialog()
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(6)
+    expect(screen.getByText('autoMaintenanceOptionsHeading')).toBeTruthy()
+  })
+
+  it('skips the phases the user deselects', async () => {
+    const dinho = useDinho()
+
+    openAutoMaintenanceDialog()
+    fireEvent.click(screen.getByRole('checkbox', { name: /autoMaintenancePhaseSoftware/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /autoMaintenancePhasePerformance/ }))
+    fireEvent.click(screen.getByText('autoMaintenanceConfirmLabel'))
+    const result = await readAutoMaintenanceResult()
+
+    expect(dinho.diskRepairDism).toHaveBeenCalled()
+    expect(dinho.winSxSClean).toHaveBeenCalled()
+    expect(dinho.softwareUpdateCheck).not.toHaveBeenCalled()
+    expect(dinho.softwareUpdateRun).not.toHaveBeenCalled()
+    expect(dinho.diskTrimList).not.toHaveBeenCalled()
+    expect(dinho.powerPlansList).not.toHaveBeenCalled()
+    expect(dinho.networkScan).not.toHaveBeenCalled()
+    expect(dinho.memoryOptimize).not.toHaveBeenCalled()
+
+    expect(result.appsUpdated).toBe(0)
+    expect(result.trimDrives).toBe(0)
+    expect(result.networkCleaned).toBe(0)
+    expect(result.memoryFreed).toBe(0)
+    expect(result.powerPlanActivated).toBeUndefined()
+  })
+
+  it('refuses to start when every phase is deselected', () => {
+    const dinho = useDinho()
+
+    openAutoMaintenanceDialog()
+    for (let i = 0; i < 6; i++) {
+      const checked = screen.getAllByRole('checkbox').find((el) => el.getAttribute('aria-checked') === 'true')
+      if (!checked) break
+      fireEvent.click(checked)
+    }
+    fireEvent.click(screen.getByText('autoMaintenanceConfirmLabel'))
+
+    expect(mocks.toastError).toHaveBeenCalledWith('autoMaintenanceNoPhasesSelected')
+    expect(dinho.diskRepairDism).not.toHaveBeenCalled()
+    expect(dinho.winSxSClean).not.toHaveBeenCalled()
+    expect(dinho.softwareUpdateCheck).not.toHaveBeenCalled()
+    expect(dinho.diskTrimList).not.toHaveBeenCalled()
+    // The dialog stays open so the user can pick a phase again.
+    expect(screen.getByText('autoMaintenanceConfirmLabel')).toBeTruthy()
   })
 })

@@ -5,6 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ActionButtons } from '@/components/dashboard/ActionButtons'
+import { AutoMaintenancePhaseList } from '@/components/dashboard/AutoMaintenancePhaseList'
+import {
+  type AutoMaintenanceOptions,
+  type AutoMaintenancePhase,
+  countAutoMaintenanceSteps,
+  DEFAULT_AUTO_MAINTENANCE_OPTIONS,
+} from '@/components/dashboard/auto-maintenance'
 import { GameClipsCard } from '@/components/dashboard/GameClipsCard'
 import { GameModeCard } from '@/components/dashboard/GameModeCard'
 import { HealthCard } from '@/components/dashboard/HealthCard'
@@ -51,6 +58,9 @@ export function DashboardPage() {
   const [showQuickConfirm, setShowQuickConfirm] = useState(false)
   const [showFullConfirm, setShowFullConfirm] = useState(false)
   const [showAutoMaintenanceConfirm, setShowAutoMaintenanceConfirm] = useState(false)
+  const [autoMaintenanceOptions, setAutoMaintenanceOptions] = useState<AutoMaintenanceOptions>(
+    DEFAULT_AUTO_MAINTENANCE_OPTIONS,
+  )
   const [stepProgress, setStepProgress] = useState({ current: 0, total: 0 })
 
   const setDiskHealth = usePerfStore((s) => s.setDiskHealth)
@@ -596,152 +606,172 @@ export function DashboardPage() {
     t,
   ])
 
-  const handleAutoMaintenance = useCallback(async () => {
-    if (phase !== 'idle' && phase !== 'done') return
-    cleanStartRef.current = Date.now()
-    setPhase('scanning')
-    setResult(null)
-    const totalSteps = 9 + (features.registry ? 1 : 0) + (features.drivers ? 1 : 0)
-    let step = 0
-    setStepProgress({ current: step, total: totalSteps })
-    // Yield to let React render the scanning phase before the pipeline starts
-    await new Promise<void>((r) => setTimeout(r, 50))
+  const handleAutoMaintenance = useCallback(
+    async (options: AutoMaintenanceOptions) => {
+      if (phase !== 'idle' && phase !== 'done') return
+      const totalSteps = countAutoMaintenanceSteps(options, features.registry, features.drivers)
+      if (totalSteps === 0) return
+      cleanStartRef.current = Date.now()
+      setPhase('scanning')
+      setResult(null)
+      let step = 0
+      setStepProgress({ current: step, total: totalSteps })
+      // Yield to let React render the scanning phase before the pipeline starts
+      await new Promise<void>((r) => setTimeout(r, 50))
 
-    setPhase('cleaning')
+      setPhase('cleaning')
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const repair = await runWindowsRepair()
+      let repair = { status: '', reboot: false }
+      if (options.systemRepair) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        repair = await runWindowsRepair()
+      }
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const winsxs = await runWinSxSCleanup()
+      let winsxs = { space: 0, files: 0 }
+      let deepClean = { space: 0, files: 0 }
+      if (options.deepClean) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        winsxs = await runWinSxSCleanup()
+        setStepProgress({ current: ++step, total: totalSteps })
+        deepClean = await runCleaners()
+      }
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const deepClean = await runCleaners()
+      let regFixed = 0
+      if (options.registry && features.registry) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        regFixed = await runRegistry()
+      }
 
-    let regFixed = 0
-    if (features.registry) {
-      setStepProgress({ current: ++step, total: totalSteps })
-      regFixed = await runRegistry()
-    }
+      let software = { updated: 0, failed: 0 }
+      if (options.softwareUpdates) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        software = await runSoftwareUpdates()
+      }
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const software = await runSoftwareUpdates()
+      let driverUpdates = { updated: 0, failed: 0, reboot: false }
+      if (options.driverUpdates && features.drivers) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        driverUpdates = await runDriverUpdates()
+      }
 
-    let driverUpdates = { updated: 0, failed: 0, reboot: false }
-    if (features.drivers) {
-      setStepProgress({ current: ++step, total: totalSteps })
-      driverUpdates = await runDriverUpdates()
-    }
+      let trimDrives = 0
+      let powerPlanActivated = ''
+      let networkCleaned = 0
+      let memoryFreed = 0
+      if (options.performance) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        trimDrives = await runTrim()
+        setStepProgress({ current: ++step, total: totalSteps })
+        powerPlanActivated = await runHighPerformancePlan()
+        setStepProgress({ current: ++step, total: totalSteps })
+        networkCleaned = await runNetworkCleanup()
+        setStepProgress({ current: ++step, total: totalSteps })
+        memoryFreed = await runMemoryOptimize()
+      }
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const trimDrives = await runTrim()
+      const spaceRecovered = deepClean.space + winsxs.space
+      const filesCleaned = deepClean.files + winsxs.files
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const powerPlanActivated = await runHighPerformancePlan()
+      const oneClickResult: OneClickResult = {
+        spaceRecovered,
+        filesCleaned,
+        registryFixed: regFixed,
+        driversRemoved: 0,
+        threatsFound: 0,
+        threatsQuarantined: 0,
+        privacyScore: 0,
+        privacyIssues: 0,
+        startupHighImpact: 0,
+        // Failed updates are still available, so surface them as such.
+        updatesAvailable: software.failed,
+        networkCleaned,
+        vulnerabilitiesFound: 0,
+        memoryFreed,
+        ...(repair.status ? { systemRepairStatus: repair.status } : {}),
+        appsUpdated: software.updated,
+        driversUpdated: driverUpdates.updated,
+        trimDrives,
+        ...(powerPlanActivated ? { powerPlanActivated } : {}),
+        rebootRequired: repair.reboot || driverUpdates.reboot,
+      }
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const networkCleaned = await runNetworkCleanup()
+      const totalItems = filesCleaned + regFixed + networkCleaned + software.updated + driverUpdates.updated
+      if (totalItems > 0 || spaceRecovered > 0) {
+        await addEntry({
+          id: Date.now().toString(),
+          type: 'cleaner',
+          timestamp: new Date().toISOString(),
+          duration: Date.now() - cleanStartRef.current,
+          totalItemsFound: totalItems,
+          totalItemsCleaned: totalItems,
+          totalItemsSkipped: software.failed + driverUpdates.failed,
+          totalSpaceSaved: spaceRecovered,
+          categories: [
+            ...(filesCleaned > 0
+              ? [
+                  {
+                    name: t('historyAutoMaintenance'),
+                    itemsFound: filesCleaned,
+                    itemsCleaned: filesCleaned,
+                    spaceSaved: spaceRecovered,
+                  },
+                ]
+              : []),
+            ...(regFixed > 0
+              ? [{ name: t('historyRegistry'), itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }]
+              : []),
+            ...(software.updated > 0
+              ? [
+                  {
+                    name: t('historyAppsUpdated'),
+                    itemsFound: software.updated,
+                    itemsCleaned: software.updated,
+                    spaceSaved: 0,
+                  },
+                ]
+              : []),
+            ...(driverUpdates.updated > 0
+              ? [
+                  {
+                    name: t('historyDriversUpdated'),
+                    itemsFound: driverUpdates.updated,
+                    itemsCleaned: driverUpdates.updated,
+                    spaceSaved: 0,
+                  },
+                ]
+              : []),
+          ],
+          errorCount: software.failed + driverUpdates.failed,
+        })
+        recomputeStats()
+      }
 
-    setStepProgress({ current: ++step, total: totalSteps })
-    const memoryFreed = await runMemoryOptimize()
+      setResult(oneClickResult)
+      setPhase('done')
+      setPhaseLabel('')
+    },
+    [
+      phase,
+      runWindowsRepair,
+      runWinSxSCleanup,
+      runCleaners,
+      runRegistry,
+      runSoftwareUpdates,
+      runDriverUpdates,
+      runTrim,
+      runHighPerformancePlan,
+      runNetworkCleanup,
+      runMemoryOptimize,
+      addEntry,
+      recomputeStats,
+      features,
+      t,
+    ],
+  )
 
-    const spaceRecovered = deepClean.space + winsxs.space
-    const filesCleaned = deepClean.files + winsxs.files
-
-    const oneClickResult: OneClickResult = {
-      spaceRecovered,
-      filesCleaned,
-      registryFixed: regFixed,
-      driversRemoved: 0,
-      threatsFound: 0,
-      threatsQuarantined: 0,
-      privacyScore: 0,
-      privacyIssues: 0,
-      startupHighImpact: 0,
-      // Failed updates are still available, so surface them as such.
-      updatesAvailable: software.failed,
-      networkCleaned,
-      vulnerabilitiesFound: 0,
-      memoryFreed,
-      ...(repair.status ? { systemRepairStatus: repair.status } : {}),
-      appsUpdated: software.updated,
-      driversUpdated: driverUpdates.updated,
-      trimDrives,
-      ...(powerPlanActivated ? { powerPlanActivated } : {}),
-      rebootRequired: repair.reboot || driverUpdates.reboot,
-    }
-
-    const totalItems = filesCleaned + regFixed + networkCleaned + software.updated + driverUpdates.updated
-    if (totalItems > 0 || spaceRecovered > 0) {
-      await addEntry({
-        id: Date.now().toString(),
-        type: 'cleaner',
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - cleanStartRef.current,
-        totalItemsFound: totalItems,
-        totalItemsCleaned: totalItems,
-        totalItemsSkipped: software.failed + driverUpdates.failed,
-        totalSpaceSaved: spaceRecovered,
-        categories: [
-          ...(filesCleaned > 0
-            ? [
-                {
-                  name: t('historyAutoMaintenance'),
-                  itemsFound: filesCleaned,
-                  itemsCleaned: filesCleaned,
-                  spaceSaved: spaceRecovered,
-                },
-              ]
-            : []),
-          ...(regFixed > 0
-            ? [{ name: t('historyRegistry'), itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }]
-            : []),
-          ...(software.updated > 0
-            ? [
-                {
-                  name: t('historyAppsUpdated'),
-                  itemsFound: software.updated,
-                  itemsCleaned: software.updated,
-                  spaceSaved: 0,
-                },
-              ]
-            : []),
-          ...(driverUpdates.updated > 0
-            ? [
-                {
-                  name: t('historyDriversUpdated'),
-                  itemsFound: driverUpdates.updated,
-                  itemsCleaned: driverUpdates.updated,
-                  spaceSaved: 0,
-                },
-              ]
-            : []),
-        ],
-        errorCount: software.failed + driverUpdates.failed,
-      })
-      recomputeStats()
-    }
-
-    setResult(oneClickResult)
-    setPhase('done')
-    setPhaseLabel('')
-  }, [
-    phase,
-    runWindowsRepair,
-    runWinSxSCleanup,
-    runCleaners,
-    runRegistry,
-    runSoftwareUpdates,
-    runDriverUpdates,
-    runTrim,
-    runHighPerformancePlan,
-    runNetworkCleanup,
-    runMemoryOptimize,
-    addEntry,
-    recomputeStats,
-    features,
-    t,
-  ])
+  const toggleAutoMaintenancePhase = useCallback((target: AutoMaintenancePhase) => {
+    setAutoMaintenanceOptions((prev) => ({ ...prev, [target]: !prev[target] }))
+  }, [])
 
   const isRunning = phase === 'scanning' || phase === 'cleaning'
 
@@ -866,15 +896,26 @@ export function DashboardPage() {
       <ConfirmDialog
         open={showAutoMaintenanceConfirm}
         onConfirm={() => {
+          if (countAutoMaintenanceSteps(autoMaintenanceOptions, features.registry, features.drivers) === 0) {
+            toast.error(t('autoMaintenanceNoPhasesSelected'))
+            return
+          }
           setShowAutoMaintenanceConfirm(false)
-          handleAutoMaintenance()
+          handleAutoMaintenance(autoMaintenanceOptions)
         }}
         onCancel={() => setShowAutoMaintenanceConfirm(false)}
         title={t('autoMaintenanceConfirmTitle')}
         description={t('autoMaintenanceConfirmDescription')}
         confirmLabel={t('autoMaintenanceConfirmLabel')}
         variant="warning"
-      />
+      >
+        <AutoMaintenancePhaseList
+          options={autoMaintenanceOptions}
+          onChange={toggleAutoMaintenancePhase}
+          hasRegistry={features.registry}
+          hasDrivers={features.drivers}
+        />
+      </ConfirmDialog>
     </div>
   )
 }
