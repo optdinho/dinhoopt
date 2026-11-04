@@ -1,22 +1,24 @@
-import { Shield, Sparkles } from 'lucide-react'
+import { Shield, Sparkles, Wrench } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 export function ActionButtons({
   onQuickClean,
   onFullClean,
+  onAutoMaintenance,
   isRunning,
   hasRegistry,
 }: {
   onQuickClean: () => void
   onFullClean: () => void
+  onAutoMaintenance?: () => void
   isRunning: boolean
   hasRegistry: boolean
 }) {
   const { t } = useTranslation('dashboard')
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <button
         type="button"
         onClick={onQuickClean}
@@ -66,6 +68,33 @@ export function ActionButtons({
           </p>
         </div>
       </button>
+
+      {onAutoMaintenance && (
+        <button
+          type="button"
+          onClick={onAutoMaintenance}
+          disabled={isRunning}
+          className={cn(
+            'glass-card glass-card-hover glow-emerald depth-emphasis group relative flex items-center gap-4 rounded-2xl p-5 text-left transition-all disabled:opacity-60 sm:col-span-2 lg:col-span-1',
+          )}
+        >
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              boxShadow: '0 0 20px rgba(16,185,129,0.25)',
+            }}
+          >
+            <Wrench className="h-5 w-5 text-white" strokeWidth={2.2} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-zinc-200">{t('autoMaintenanceTitle')}</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {t('autoMaintenanceDescription')}
+            </p>
+          </div>
+        </button>
+      )}
     </div>
   )
 }

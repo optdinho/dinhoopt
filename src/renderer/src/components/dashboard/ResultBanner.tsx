@@ -191,6 +191,55 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
                     </p>
                   </StaggerItem>
                 )}
+                {result.systemRepairStatus && (
+                  <StaggerItem key="system-repair">
+                    <p className="text-[12px] font-medium" style={{ color: '#10b981' }}>
+                      ✓ {result.systemRepairStatus}
+                    </p>
+                  </StaggerItem>
+                )}
+                {Boolean(result.appsUpdated && result.appsUpdated > 0) && (
+                  <StaggerItem key="apps-updated">
+                    <p className="text-[12px] font-medium" style={{ color: '#06b6d4' }}>
+                      ✓{' '}
+                      {t(result.appsUpdated !== 1 ? 'resultAppsUpdatedPlural' : 'resultAppsUpdated', {
+                        count: result.appsUpdated,
+                      })}
+                    </p>
+                  </StaggerItem>
+                )}
+                {Boolean(result.driversUpdated && result.driversUpdated > 0) && (
+                  <StaggerItem key="drivers-updated">
+                    <p className="text-[12px] font-medium" style={{ color: '#a855f7' }}>
+                      ✓{' '}
+                      {t(result.driversUpdated !== 1 ? 'resultDriversUpdatedPlural' : 'resultDriversUpdated', {
+                        count: result.driversUpdated,
+                      })}
+                    </p>
+                  </StaggerItem>
+                )}
+                {Boolean(result.trimDrives && result.trimDrives > 0) && (
+                  <StaggerItem key="trim">
+                    <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                      ✓{' '}
+                      {t(result.trimDrives !== 1 ? 'resultTrimExecutedPlural' : 'resultTrimExecuted', {
+                        count: result.trimDrives,
+                      })}
+                    </p>
+                  </StaggerItem>
+                )}
+                {result.powerPlanActivated && (
+                  <StaggerItem key="power-plan">
+                    <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                      ✓ {t('resultPowerPlanActivated', { name: result.powerPlanActivated })}
+                    </p>
+                  </StaggerItem>
+                )}
+                {result.rebootRequired && (
+                  <StaggerItem key="reboot-req">
+                    <p className="text-[12px] font-semibold text-amber-400">⚠️ {t('resultRebootRequired')}</p>
+                  </StaggerItem>
+                )}
                 {result.spaceRecovered === 0 &&
                   result.filesCleaned === 0 &&
                   result.registryFixed === 0 &&
@@ -201,7 +250,13 @@ export function ResultBanner({ result }: { result: OneClickResult | null }) {
                   result.updatesAvailable === 0 &&
                   result.networkCleaned === 0 &&
                   result.vulnerabilitiesFound === 0 &&
-                  result.memoryFreed === 0 && (
+                  result.memoryFreed === 0 &&
+                  !result.systemRepairStatus &&
+                  !result.appsUpdated &&
+                  !result.driversUpdated &&
+                  !result.trimDrives &&
+                  !result.powerPlanActivated &&
+                  !result.rebootRequired && (
                     <StaggerItem key="clean">
                       <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
                         {t('resultSystemAlreadyClean')}

@@ -14,6 +14,12 @@ export interface OneClickResult {
   networkCleaned: number
   vulnerabilitiesFound: number
   memoryFreed: number
+  systemRepairStatus?: string
+  appsUpdated?: number
+  driversUpdated?: number
+  trimDrives?: number
+  powerPlanActivated?: string
+  rebootRequired?: boolean
 }
 
 export interface ToolCoverageItem {

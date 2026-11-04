@@ -50,6 +50,7 @@ export function DashboardPage() {
   const [result, setResult] = useState<OneClickResult | null>(null)
   const [showQuickConfirm, setShowQuickConfirm] = useState(false)
   const [showFullConfirm, setShowFullConfirm] = useState(false)
+  const [showAutoMaintenanceConfirm, setShowAutoMaintenanceConfirm] = useState(false)
   const [stepProgress, setStepProgress] = useState({ current: 0, total: 0 })
 
   const setDiskHealth = usePerfStore((s) => s.setDiskHealth)
@@ -296,6 +297,121 @@ export function DashboardPage() {
     }
   }, [t])
 
+  // ── Full system maintenance building blocks ────────────────
+
+  /**
+   * DISM restores the component store; SFC only runs when DISM reports repairs
+   * or fails, matching the documented order (DISM first, then SFC).
+   */
+  const runWindowsRepair = useCallback(async (): Promise<{ status: string; reboot: boolean }> => {
+    try {
+      setPhaseLabel(t('phaseLabelDismCheck'))
+      const dism = await window.dinho.diskRepairDism()
+      let reboot = dism.requiresReboot
+      let repaired = dism.summaryCode === 'dismRepaired'
+      let healthy = dism.success && !repaired
+
+      if (dism.needsAdmin) {
+        toast.error(t('toastWindowsRepairFailed'))
+        return { status: '', reboot }
+      }
+
+      if (!dism.success || repaired) {
+        setPhaseLabel(t('phaseLabelSfcRepair'))
+        const sfc = await window.dinho.diskRepairSfc('C')
+        reboot = reboot || sfc.requiresReboot
+        repaired = repaired || sfc.summaryCode === 'sfcRepaired'
+        healthy = healthy || (sfc.success && !repaired)
+      }
+
+      if (repaired) return { status: t('resultSystemRepaired'), reboot }
+      if (healthy) return { status: t('resultSystemHealthy'), reboot }
+      return { status: '', reboot }
+    } catch {
+      toast.error(t('toastWindowsRepairFailed'))
+      return { status: '', reboot: false }
+    }
+  }, [t])
+
+  const runWinSxSCleanup = useCallback(async (): Promise<{ space: number; files: number }> => {
+    try {
+      setPhaseLabel(t('phaseLabelWinsxsClean'))
+      const res = await window.dinho.winSxSClean()
+      return { space: res?.totalCleaned ?? 0, files: res?.filesDeleted ?? 0 }
+    } catch {
+      toast.error(t('toastWinsxsCleanFailed'))
+      return { space: 0, files: 0 }
+    }
+  }, [t])
+
+  const runSoftwareUpdates = useCallback(async (): Promise<{ updated: number; failed: number }> => {
+    try {
+      setPhaseLabel(t('phaseLabelCheckingSoftwareUpdates'))
+      const check = await window.dinho.softwareUpdateCheck()
+      if (check.failure || check.apps.length === 0) return { updated: 0, failed: 0 }
+      const ids = check.apps.filter((a) => a.selected).map((a) => a.id)
+      if (ids.length === 0) return { updated: 0, failed: 0 }
+      setPhaseLabel(t('phaseLabelUpdatingSoftware', { count: ids.length }))
+      const res = await window.dinho.softwareUpdateRun(ids)
+      return { updated: res.succeeded ?? 0, failed: res.failed ?? 0 }
+    } catch {
+      toast.error(t('toastSoftwareUpdateCheckFailed'))
+      return { updated: 0, failed: 0 }
+    }
+  }, [t])
+
+  const runDriverUpdates = useCallback(async (): Promise<{ updated: number; failed: number; reboot: boolean }> => {
+    try {
+      setPhaseLabel(t('phaseLabelScanningDrivers'))
+      const scan = await window.dinho.driverUpdateScan()
+      const updates = scan.updates.filter((u) => u.selected)
+      if (updates.length === 0) return { updated: 0, failed: 0, reboot: false }
+      setPhaseLabel(t('phaseLabelInstallingDrivers', { count: updates.length }))
+      const res = await window.dinho.driverUpdateInstall(updates.map((u) => u.updateId))
+      return {
+        updated: res.installed ?? 0,
+        failed: res.failed ?? 0,
+        reboot: Boolean(res.rebootRequired),
+      }
+    } catch {
+      toast.error(t('toastDriverUpdateFailed'))
+      return { updated: 0, failed: 0, reboot: false }
+    }
+  }, [t])
+
+  const runTrim = useCallback(async (): Promise<number> => {
+    try {
+      setPhaseLabel(t('phaseLabelRunningTrim'))
+      const drives = await window.dinho.diskTrimList()
+      const ids = drives
+        .filter(
+          (d) => !d.isRemovable && d.trimSupport === 'supported' && (d.mediaType === 'SSD' || d.mediaType === 'NVMe'),
+        )
+        .map((d) => d.id)
+      if (ids.length === 0) return 0
+      const results = await window.dinho.diskTrimRun(ids)
+      return results.filter((r) => r.success).length
+    } catch {
+      toast.error(t('toastTrimFailed'))
+      return 0
+    }
+  }, [t])
+
+  const runHighPerformancePlan = useCallback(async (): Promise<string> => {
+    try {
+      setPhaseLabel(t('phaseLabelActivatingPowerPlan'))
+      const plans = await window.dinho.powerPlansList()
+      const target = plans.find((p) => p.isUltimatePerformance) ?? plans.find((p) => p.isHighPerformance)
+      if (!target) return ''
+      if (target.isActive) return target.name
+      const res = await window.dinho.powerPlansActivate(target.guid)
+      return res.success ? target.name : ''
+    } catch {
+      toast.error(t('toastPowerPlanFailed'))
+      return ''
+    }
+  }, [t])
+
   const handleQuickClean = useCallback(async () => {
     if (phase !== 'idle' && phase !== 'done') return
     cleanStartRef.current = Date.now()
@@ -480,6 +596,153 @@ export function DashboardPage() {
     t,
   ])
 
+  const handleAutoMaintenance = useCallback(async () => {
+    if (phase !== 'idle' && phase !== 'done') return
+    cleanStartRef.current = Date.now()
+    setPhase('scanning')
+    setResult(null)
+    const totalSteps = 9 + (features.registry ? 1 : 0) + (features.drivers ? 1 : 0)
+    let step = 0
+    setStepProgress({ current: step, total: totalSteps })
+    // Yield to let React render the scanning phase before the pipeline starts
+    await new Promise<void>((r) => setTimeout(r, 50))
+
+    setPhase('cleaning')
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const repair = await runWindowsRepair()
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const winsxs = await runWinSxSCleanup()
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const deepClean = await runCleaners()
+
+    let regFixed = 0
+    if (features.registry) {
+      setStepProgress({ current: ++step, total: totalSteps })
+      regFixed = await runRegistry()
+    }
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const software = await runSoftwareUpdates()
+
+    let driverUpdates = { updated: 0, failed: 0, reboot: false }
+    if (features.drivers) {
+      setStepProgress({ current: ++step, total: totalSteps })
+      driverUpdates = await runDriverUpdates()
+    }
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const trimDrives = await runTrim()
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const powerPlanActivated = await runHighPerformancePlan()
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const networkCleaned = await runNetworkCleanup()
+
+    setStepProgress({ current: ++step, total: totalSteps })
+    const memoryFreed = await runMemoryOptimize()
+
+    const spaceRecovered = deepClean.space + winsxs.space
+    const filesCleaned = deepClean.files + winsxs.files
+
+    const oneClickResult: OneClickResult = {
+      spaceRecovered,
+      filesCleaned,
+      registryFixed: regFixed,
+      driversRemoved: 0,
+      threatsFound: 0,
+      threatsQuarantined: 0,
+      privacyScore: 0,
+      privacyIssues: 0,
+      startupHighImpact: 0,
+      // Failed updates are still available, so surface them as such.
+      updatesAvailable: software.failed,
+      networkCleaned,
+      vulnerabilitiesFound: 0,
+      memoryFreed,
+      ...(repair.status ? { systemRepairStatus: repair.status } : {}),
+      appsUpdated: software.updated,
+      driversUpdated: driverUpdates.updated,
+      trimDrives,
+      ...(powerPlanActivated ? { powerPlanActivated } : {}),
+      rebootRequired: repair.reboot || driverUpdates.reboot,
+    }
+
+    const totalItems = filesCleaned + regFixed + networkCleaned + software.updated + driverUpdates.updated
+    if (totalItems > 0 || spaceRecovered > 0) {
+      await addEntry({
+        id: Date.now().toString(),
+        type: 'cleaner',
+        timestamp: new Date().toISOString(),
+        duration: Date.now() - cleanStartRef.current,
+        totalItemsFound: totalItems,
+        totalItemsCleaned: totalItems,
+        totalItemsSkipped: software.failed + driverUpdates.failed,
+        totalSpaceSaved: spaceRecovered,
+        categories: [
+          ...(filesCleaned > 0
+            ? [
+                {
+                  name: t('historyAutoMaintenance'),
+                  itemsFound: filesCleaned,
+                  itemsCleaned: filesCleaned,
+                  spaceSaved: spaceRecovered,
+                },
+              ]
+            : []),
+          ...(regFixed > 0
+            ? [{ name: t('historyRegistry'), itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }]
+            : []),
+          ...(software.updated > 0
+            ? [
+                {
+                  name: t('historyAppsUpdated'),
+                  itemsFound: software.updated,
+                  itemsCleaned: software.updated,
+                  spaceSaved: 0,
+                },
+              ]
+            : []),
+          ...(driverUpdates.updated > 0
+            ? [
+                {
+                  name: t('historyDriversUpdated'),
+                  itemsFound: driverUpdates.updated,
+                  itemsCleaned: driverUpdates.updated,
+                  spaceSaved: 0,
+                },
+              ]
+            : []),
+        ],
+        errorCount: software.failed + driverUpdates.failed,
+      })
+      recomputeStats()
+    }
+
+    setResult(oneClickResult)
+    setPhase('done')
+    setPhaseLabel('')
+  }, [
+    phase,
+    runWindowsRepair,
+    runWinSxSCleanup,
+    runCleaners,
+    runRegistry,
+    runSoftwareUpdates,
+    runDriverUpdates,
+    runTrim,
+    runHighPerformancePlan,
+    runNetworkCleanup,
+    runMemoryOptimize,
+    addEntry,
+    recomputeStats,
+    features,
+    t,
+  ])
+
   const isRunning = phase === 'scanning' || phase === 'cleaning'
 
   // ── Helpers ────────────────────────────────────────────────
@@ -554,6 +817,7 @@ export function DashboardPage() {
           <ActionButtons
             onQuickClean={() => setShowQuickConfirm(true)}
             onFullClean={() => setShowFullConfirm(true)}
+            onAutoMaintenance={() => setShowAutoMaintenanceConfirm(true)}
             isRunning={isRunning}
             hasRegistry={features.registry}
           />
@@ -596,6 +860,19 @@ export function DashboardPage() {
             : t('fullCleanConfirmDescriptionWithoutRegistry')
         }
         confirmLabel={t('fullCleanConfirmLabel')}
+        variant="warning"
+      />
+
+      <ConfirmDialog
+        open={showAutoMaintenanceConfirm}
+        onConfirm={() => {
+          setShowAutoMaintenanceConfirm(false)
+          handleAutoMaintenance()
+        }}
+        onCancel={() => setShowAutoMaintenanceConfirm(false)}
+        title={t('autoMaintenanceConfirmTitle')}
+        description={t('autoMaintenanceConfirmDescription')}
+        confirmLabel={t('autoMaintenanceConfirmLabel')}
         variant="warning"
       />
     </div>
