@@ -102,6 +102,13 @@ otimizador de base de dados; gestores de **inicialização**, **serviços** (inc
 **drivers**; removedor de bloatware e do **menu de contexto**; **Ajustes do Windows**, **Planos
 de Energia**, **Tarefas Agendadas** e **Histórico**.
 
+O dashboard tem duas ações encadeadas. **Limpeza completa** corre todas as categorias do
+limpador, registo, drivers obsoletos, malware (com quarentena), privacidade, arranque,
+verificação de atualizações, rede, vulnerabilidades e RAM. **Manutenção Completa** acrescenta
+a reparação DISM/SFC, o WinSxS, a instalação de atualizações de apps e drivers e o desempenho
+(TRIM, plano de energia, DNS e RAM), com fases selecionáveis e possibilidade de agendamento
+como tarefa autónoma.
+
 ### 💾 Ferramentas de Disco — 7 módulos
 
 Analisador (TreeMap), buscador de duplicatas (SHA-256) e de ficheiros grandes, limpeza de

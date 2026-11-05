@@ -159,30 +159,34 @@ export function DashboardPage() {
 
   const protectRecycleBin = useSettingsStore((s) => s.settings.cleaner.protectRecycleBin)
 
-  const runCleaners = useCallback(async (): Promise<{ space: number; files: number }> => {
-    let totalSpace = 0
-    let totalFiles = 0
+  const runCleaners = useCallback(
+    async (skipTypes: readonly CleanerType[] = []): Promise<{ space: number; files: number }> => {
+      let totalSpace = 0
+      let totalFiles = 0
 
-    for (const { type, scan, clean } of CLEANER_SCAN_FNS) {
-      if (type === CleanerType.RecycleBin && protectRecycleBin) continue
-      try {
-        setPhaseLabel(t('phaseLabelScanningType', { type }))
-        const results = await scan()
-        const selectedIds = results
-          .filter((r) => !excludedSubcategories.has(`${r.category}:${r.subcategory}`))
-          .flatMap((r) => r.items.map((i) => i.id))
-        if (selectedIds.length > 0) {
-          setPhaseLabel(t('phaseLabelCleaningType', { type }))
-          const res = await clean(selectedIds)
-          totalSpace += res.totalCleaned || 0
-          totalFiles += res.filesDeleted || 0
+      for (const { type, scan, clean } of CLEANER_SCAN_FNS) {
+        if (skipTypes.includes(type)) continue
+        if (type === CleanerType.RecycleBin && protectRecycleBin) continue
+        try {
+          setPhaseLabel(t('phaseLabelScanningType', { type }))
+          const results = await scan()
+          const selectedIds = results
+            .filter((r) => !excludedSubcategories.has(`${r.category}:${r.subcategory}`))
+            .flatMap((r) => r.items.map((i) => i.id))
+          if (selectedIds.length > 0) {
+            setPhaseLabel(t('phaseLabelCleaningType', { type }))
+            const res = await clean(selectedIds)
+            totalSpace += res.totalCleaned || 0
+            totalFiles += res.filesDeleted || 0
+          }
+        } catch {
+          toast.error(t('toastFailedToCleanType', { type }))
         }
-      } catch {
-        toast.error(t('toastFailedToCleanType', { type }))
       }
-    }
-    return { space: totalSpace, files: totalFiles }
-  }, [excludedSubcategories, protectRecycleBin, t])
+      return { space: totalSpace, files: totalFiles }
+    },
+    [excludedSubcategories, protectRecycleBin, t],
+  )
 
   const runRegistry = useCallback(async (): Promise<number> => {
     try {
@@ -633,7 +637,9 @@ export function DashboardPage() {
         setStepProgress({ current: ++step, total: totalSteps })
         winsxs = await runWinSxSCleanup()
         setStepProgress({ current: ++step, total: totalSteps })
-        deepClean = await runCleaners()
+        // WinSxS was just cleaned above; skip it here so it is not analysed and
+        // cleaned a second time by the generic cleaner loop.
+        deepClean = await runCleaners([CleanerType.WinSxS])
       }
 
       let regFixed = 0

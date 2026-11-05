@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   excluded: new Set<string>(),
   systemScan: vi.fn(),
   systemClean: vi.fn(),
+  winSxSScan: vi.fn(),
+  winSxSClean: vi.fn(),
   registry: false,
   drivers: false,
   addEntry: vi.fn(),
@@ -94,7 +96,10 @@ vi.mock('@/components/shared/ConfirmDialog', () => ({
     ) : null,
 }))
 vi.mock('./dashboard/DashboardComponents', () => ({
-  CLEANER_SCAN_FNS: [{ type: 'system', scan: mocks.systemScan, clean: mocks.systemClean }],
+  CLEANER_SCAN_FNS: [
+    { type: 'system', scan: mocks.systemScan, clean: mocks.systemClean },
+    { type: 'winSxS', scan: mocks.winSxSScan, clean: mocks.winSxSClean },
+  ],
   MiniGaugeSkeleton: () => null,
 }))
 
@@ -134,6 +139,8 @@ describe('DashboardPage one-click clean — subcategory exclusions (M3)', () => 
     mocks.drivers = false
     mocks.systemScan.mockResolvedValue([])
     mocks.systemClean.mockResolvedValue(emptyClean)
+    mocks.winSxSScan.mockResolvedValue([])
+    mocks.winSxSClean.mockResolvedValue(emptyClean)
     mocks.addEntry.mockResolvedValue(undefined)
     ;(window as unknown as { dinho: Record<string, unknown> }).dinho = {
       perfQuickStats: vi.fn().mockResolvedValue(null),
@@ -271,6 +278,8 @@ describe('DashboardPage full system maintenance', () => {
     mocks.drivers = true
     mocks.systemScan.mockResolvedValue([])
     mocks.systemClean.mockResolvedValue(cleanResult(0, 0))
+    mocks.winSxSScan.mockResolvedValue([])
+    mocks.winSxSClean.mockResolvedValue(cleanResult(0, 0))
     mocks.addEntry.mockResolvedValue(undefined)
   })
 
@@ -598,6 +607,19 @@ describe('DashboardPage full system maintenance', () => {
     expect(dinho.driverUpdateInstall).not.toHaveBeenCalled()
     expect(dinho.driverScan).not.toHaveBeenCalled()
     expect(dinho.driverClean).not.toHaveBeenCalled()
+  })
+
+  it('cleans the component store once instead of twice', async () => {
+    const dinho = useDinho()
+    mocks.winSxSScan.mockResolvedValue([systemResult('winsxs', ['w1'])])
+
+    await runAutoMaintenance()
+    await readAutoMaintenanceResult()
+
+    // WinSxS has its own phase, so the generic cleaner loop must skip it.
+    expect(dinho.winSxSClean).toHaveBeenCalledTimes(1)
+    expect(mocks.winSxSScan).not.toHaveBeenCalled()
+    expect(mocks.winSxSClean).not.toHaveBeenCalled()
   })
 
   it('lists every phase in the confirmation dialog', () => {
