@@ -282,7 +282,9 @@ export function SegmentedControl<T extends string>({
                 transition={{ type: 'spring', stiffness: 500, damping: 38 }}
               />
             )}
-            <span className="relative z-10 flex flex-col items-center leading-tight">
+            <span
+              className={`relative z-10 flex items-center justify-center leading-tight ${opt.sub ? 'flex-col' : ''}`}
+            >
               <span>{opt.label}</span>
               {opt.sub && (
                 <span style={{ opacity: active ? 0.85 : 0.55, fontSize: '8px', fontWeight: 400 }}>{opt.sub}</span>

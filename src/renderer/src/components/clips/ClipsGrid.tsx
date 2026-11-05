@@ -106,10 +106,10 @@ export function ClipsGrid({
           options={filterTabs.map((tab) => ({
             value: tab.key,
             label: (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 whitespace-nowrap">
                 {t(tab.label)}
                 <span
-                  className="rounded-full px-1.5 text-[9px] font-semibold tabular-nums"
+                  className="shrink-0 rounded-full px-1.5 text-[9px] font-semibold tabular-nums"
                   style={{ background: 'rgba(113,113,122,0.18)' }}
                 >
                   {filterCounts[tab.key]}
@@ -404,9 +404,9 @@ export function ClipsGrid({
                     </button>
                   </div>
 
-                  {/* Bottom actions: icon-only buttons */}
+                  {/* Bottom actions: icon-only buttons, centered as one group */}
                   <div
-                    className="flex items-center gap-0.5 rounded-b-2xl border-t px-1.5 py-1"
+                    className="flex items-center justify-center gap-0.5 rounded-b-2xl border-t px-1.5 py-1"
                     style={{ borderColor: 'var(--border-subtle)' }}
                   >
                     <button
@@ -459,7 +459,7 @@ export function ClipsGrid({
                       onClick={() => setRenameTarget(clip.name)}
                       title={t('rename')}
                       aria-label={t('rename')}
-                      className="ml-auto rounded-md p-1.5 transition-colors hover:bg-[var(--bg-hover)]"
+                      className="rounded-md p-1.5 transition-colors hover:bg-[var(--bg-hover)]"
                       style={{ color: 'var(--text-dim)' }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
