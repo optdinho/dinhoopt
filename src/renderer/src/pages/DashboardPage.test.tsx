@@ -218,6 +218,13 @@ function makeDinho(overrides: Record<string, unknown> = {}) {
     softwareUpdateRun: vi.fn().mockResolvedValue({ succeeded: 0, failed: 0, errors: [] }),
     driverUpdateScan: vi.fn().mockResolvedValue({ updates: [], allDrivers: [], totalAvailable: 0, scanDuration: 0 }),
     driverUpdateInstall: vi.fn().mockResolvedValue({ installed: 0, failed: 0, rebootRequired: false, errors: [] }),
+    driverScan: vi.fn().mockResolvedValue({ packages: [] }),
+    driverClean: vi.fn().mockResolvedValue({ removed: 0, spaceRecovered: 0 }),
+    malwareScan: vi.fn().mockResolvedValue({ threats: [] }),
+    malwareQuarantine: vi.fn().mockResolvedValue({ succeeded: 0 }),
+    privacyScan: vi.fn().mockResolvedValue({ score: 0, total: 0, protected: 0 }),
+    startupList: vi.fn().mockResolvedValue([]),
+    vulnerabilityScan: vi.fn().mockResolvedValue({ vulnerable: 0 }),
     diskTrimList: vi.fn().mockResolvedValue([]),
     diskTrimRun: vi.fn().mockResolvedValue([]),
     powerPlansList: vi.fn().mockResolvedValue([]),
@@ -301,6 +308,27 @@ describe('DashboardPage full system maintenance', () => {
         scanDuration: 0,
       }),
       driverUpdateInstall: vi.fn().mockResolvedValue({ installed: 1, failed: 0, rebootRequired: true, errors: [] }),
+      driverScan: vi.fn().mockResolvedValue({
+        packages: [
+          { publishedName: 'oem1.inf', isCurrent: false, selected: true },
+          { publishedName: 'oem2.inf', isCurrent: true, selected: true },
+        ],
+      }),
+      driverClean: vi.fn().mockResolvedValue({ removed: 1, spaceRecovered: 512 }),
+      malwareScan: vi.fn().mockResolvedValue({
+        threats: [
+          { path: 'C:\\evil1', detectionName: 'EICAR', severity: 'high', source: 'signature', details: '' },
+          { path: 'C:\\evil2', detectionName: 'EICAR', severity: 'high', source: 'signature', details: '' },
+        ],
+      }),
+      malwareQuarantine: vi.fn().mockResolvedValue({ succeeded: 2 }),
+      privacyScan: vi.fn().mockResolvedValue({ score: 80, total: 10, protected: 7 }),
+      startupList: vi.fn().mockResolvedValue([
+        { enabled: true, impact: 'high' },
+        { enabled: true, impact: 'low' },
+        { enabled: false, impact: 'high' },
+      ]),
+      vulnerabilityScan: vi.fn().mockResolvedValue({ vulnerable: 4 }),
       diskTrimList: vi
         .fn()
         .mockResolvedValue([{ id: 'C', mediaType: 'NVMe', trimSupport: 'supported', isRemovable: false }]),
@@ -328,9 +356,16 @@ describe('DashboardPage full system maintenance', () => {
     const result = await readAutoMaintenanceResult()
 
     expect(result).toMatchObject({
-      spaceRecovered: 1024 + 2048,
+      spaceRecovered: 1024 + 2048 + 512,
       filesCleaned: 2 + 4,
       registryFixed: 3,
+      driversRemoved: 1,
+      threatsFound: 2,
+      threatsQuarantined: 2,
+      privacyScore: 80,
+      privacyIssues: 3,
+      startupHighImpact: 1,
+      vulnerabilitiesFound: 4,
       updatesAvailable: 0,
       networkCleaned: 2,
       memoryFreed: 4096,
@@ -345,6 +380,12 @@ describe('DashboardPage full system maintenance', () => {
     expect(dinho.diskRepairSfc).not.toHaveBeenCalled()
     expect(dinho.softwareUpdateRun).toHaveBeenCalledWith(['Google.Chrome'])
     expect(dinho.driverUpdateInstall).toHaveBeenCalledWith(['wu-1'])
+    expect(dinho.driverClean).toHaveBeenCalledWith(['oem1.inf'])
+    expect(dinho.malwareQuarantine).toHaveBeenCalledWith(
+      ['C:\\evil1', 'C:\\evil2'],
+      expect.arrayContaining([expect.objectContaining({ path: 'C:\\evil1', detectionName: 'EICAR' })]),
+    )
+    expect(dinho.vulnerabilityScan).toHaveBeenCalled()
     expect(dinho.diskTrimRun).toHaveBeenCalledWith(['C'])
     expect(dinho.powerPlansActivate).toHaveBeenCalledWith('hp')
 
@@ -353,8 +394,13 @@ describe('DashboardPage full system maintenance', () => {
       dinho.winSxSClean,
       mocks.systemScan,
       dinho.registryScan,
+      dinho.malwareScan,
+      dinho.privacyScan,
+      dinho.startupList,
       dinho.softwareUpdateCheck,
       dinho.driverUpdateScan,
+      dinho.driverScan,
+      dinho.vulnerabilityScan,
       dinho.diskTrimList,
       dinho.powerPlansList,
       dinho.networkScan,
@@ -364,12 +410,14 @@ describe('DashboardPage full system maintenance', () => {
 
     expect(mocks.addEntry).toHaveBeenCalledWith(
       expect.objectContaining({
-        totalSpaceSaved: 1024 + 2048,
-        totalItemsCleaned: 2 + 4 + 3 + 2 + 1 + 1,
+        totalSpaceSaved: 1024 + 2048 + 512,
+        totalItemsCleaned: 2 + 4 + 3 + 2 + 1 + 1 + 1 + 2,
         totalItemsSkipped: 0,
         categories: expect.arrayContaining([
           expect.objectContaining({ name: 'historyAutoMaintenance' }),
           expect.objectContaining({ name: 'historyRegistry' }),
+          expect.objectContaining({ name: 'historyMalware' }),
+          expect.objectContaining({ name: 'historyStaleDrivers' }),
           expect.objectContaining({ name: 'historyAppsUpdated' }),
           expect.objectContaining({ name: 'historyDriversUpdated' }),
         ]),
@@ -548,6 +596,8 @@ describe('DashboardPage full system maintenance', () => {
 
     expect(dinho.driverUpdateScan).not.toHaveBeenCalled()
     expect(dinho.driverUpdateInstall).not.toHaveBeenCalled()
+    expect(dinho.driverScan).not.toHaveBeenCalled()
+    expect(dinho.driverClean).not.toHaveBeenCalled()
   })
 
   it('lists every phase in the confirmation dialog', () => {
@@ -555,7 +605,7 @@ describe('DashboardPage full system maintenance', () => {
 
     openAutoMaintenanceDialog()
 
-    expect(screen.getAllByRole('checkbox')).toHaveLength(6)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(11)
     expect(screen.getByText('autoMaintenanceOptionsHeading')).toBeTruthy()
   })
 
@@ -588,7 +638,7 @@ describe('DashboardPage full system maintenance', () => {
     const dinho = useDinho()
 
     openAutoMaintenanceDialog()
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 11; i++) {
       const checked = screen.getAllByRole('checkbox').find((el) => el.getAttribute('aria-checked') === 'true')
       if (!checked) break
       fireEvent.click(checked)

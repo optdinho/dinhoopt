@@ -642,6 +642,24 @@ export function DashboardPage() {
         regFixed = await runRegistry()
       }
 
+      let malware = { found: 0, quarantined: 0 }
+      if (options.malware) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        malware = await runMalwareScan()
+      }
+
+      let privacy = { score: 0, issues: 0 }
+      if (options.privacy) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        privacy = await runPrivacyCheck()
+      }
+
+      let startupHighImpact = 0
+      if (options.startup) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        startupHighImpact = await runStartupCheck()
+      }
+
       let software = { updated: 0, failed: 0 }
       if (options.softwareUpdates) {
         setStepProgress({ current: ++step, total: totalSteps })
@@ -652,6 +670,18 @@ export function DashboardPage() {
       if (options.driverUpdates && features.drivers) {
         setStepProgress({ current: ++step, total: totalSteps })
         driverUpdates = await runDriverUpdates()
+      }
+
+      let staleDrivers = { removed: 0, space: 0 }
+      if (options.staleDrivers && features.drivers) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        staleDrivers = await runDrivers()
+      }
+
+      let vulnerabilitiesFound = 0
+      if (options.vulnerabilities) {
+        setStepProgress({ current: ++step, total: totalSteps })
+        vulnerabilitiesFound = await runVulnerabilityScan()
       }
 
       let trimDrives = 0
@@ -669,23 +699,23 @@ export function DashboardPage() {
         memoryFreed = await runMemoryOptimize()
       }
 
-      const spaceRecovered = deepClean.space + winsxs.space
+      const spaceRecovered = deepClean.space + winsxs.space + staleDrivers.space
       const filesCleaned = deepClean.files + winsxs.files
 
       const oneClickResult: OneClickResult = {
         spaceRecovered,
         filesCleaned,
         registryFixed: regFixed,
-        driversRemoved: 0,
-        threatsFound: 0,
-        threatsQuarantined: 0,
-        privacyScore: 0,
-        privacyIssues: 0,
-        startupHighImpact: 0,
+        driversRemoved: staleDrivers.removed,
+        threatsFound: malware.found,
+        threatsQuarantined: malware.quarantined,
+        privacyScore: privacy.score,
+        privacyIssues: privacy.issues,
+        startupHighImpact,
         // Failed updates are still available, so surface them as such.
         updatesAvailable: software.failed,
         networkCleaned,
-        vulnerabilitiesFound: 0,
+        vulnerabilitiesFound,
         memoryFreed,
         ...(repair.status ? { systemRepairStatus: repair.status } : {}),
         appsUpdated: software.updated,
@@ -695,14 +725,22 @@ export function DashboardPage() {
         rebootRequired: repair.reboot || driverUpdates.reboot,
       }
 
-      const totalItems = filesCleaned + regFixed + networkCleaned + software.updated + driverUpdates.updated
-      if (totalItems > 0 || spaceRecovered > 0) {
+      const totalItems =
+        filesCleaned +
+        regFixed +
+        networkCleaned +
+        software.updated +
+        driverUpdates.updated +
+        staleDrivers.removed +
+        malware.quarantined
+      const totalFound = totalItems + malware.found + vulnerabilitiesFound
+      if (totalFound > 0 || spaceRecovered > 0) {
         await addEntry({
           id: Date.now().toString(),
           type: 'cleaner',
           timestamp: new Date().toISOString(),
           duration: Date.now() - cleanStartRef.current,
-          totalItemsFound: totalItems,
+          totalItemsFound: totalFound,
           totalItemsCleaned: totalItems,
           totalItemsSkipped: software.failed + driverUpdates.failed,
           totalSpaceSaved: spaceRecovered,
@@ -719,6 +757,26 @@ export function DashboardPage() {
               : []),
             ...(regFixed > 0
               ? [{ name: t('historyRegistry'), itemsFound: regFixed, itemsCleaned: regFixed, spaceSaved: 0 }]
+              : []),
+            ...(malware.quarantined > 0
+              ? [
+                  {
+                    name: t('historyMalware'),
+                    itemsFound: malware.found,
+                    itemsCleaned: malware.quarantined,
+                    spaceSaved: 0,
+                  },
+                ]
+              : []),
+            ...(staleDrivers.removed > 0
+              ? [
+                  {
+                    name: t('historyStaleDrivers'),
+                    itemsFound: staleDrivers.removed,
+                    itemsCleaned: staleDrivers.removed,
+                    spaceSaved: staleDrivers.space,
+                  },
+                ]
               : []),
             ...(software.updated > 0
               ? [
@@ -756,8 +814,13 @@ export function DashboardPage() {
       runWinSxSCleanup,
       runCleaners,
       runRegistry,
+      runMalwareScan,
+      runPrivacyCheck,
+      runStartupCheck,
       runSoftwareUpdates,
       runDriverUpdates,
+      runDrivers,
+      runVulnerabilityScan,
       runTrim,
       runHighPerformancePlan,
       runNetworkCleanup,

@@ -2,8 +2,13 @@ export type AutoMaintenancePhase =
   | 'systemRepair'
   | 'deepClean'
   | 'registry'
+  | 'malware'
+  | 'privacy'
+  | 'startup'
   | 'softwareUpdates'
   | 'driverUpdates'
+  | 'staleDrivers'
+  | 'vulnerabilities'
   | 'performance'
 
 export type AutoMaintenanceOptions = Record<AutoMaintenancePhase, boolean>
@@ -12,8 +17,13 @@ export const DEFAULT_AUTO_MAINTENANCE_OPTIONS: AutoMaintenanceOptions = {
   systemRepair: true,
   deepClean: true,
   registry: true,
+  malware: true,
+  privacy: true,
+  startup: true,
   softwareUpdates: true,
   driverUpdates: true,
+  staleDrivers: true,
+  vulnerabilities: true,
   performance: true,
 }
 
@@ -30,8 +40,13 @@ export function countAutoMaintenanceSteps(
     (options.systemRepair ? 1 : 0) +
     (options.deepClean ? 2 : 0) +
     (options.registry && hasRegistry ? 1 : 0) +
+    (options.malware ? 1 : 0) +
+    (options.privacy ? 1 : 0) +
+    (options.startup ? 1 : 0) +
     (options.softwareUpdates ? 1 : 0) +
     (options.driverUpdates && hasDrivers ? 1 : 0) +
+    (options.staleDrivers && hasDrivers ? 1 : 0) +
+    (options.vulnerabilities ? 1 : 0) +
     (options.performance ? 4 : 0)
   )
 }

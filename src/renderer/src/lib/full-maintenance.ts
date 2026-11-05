@@ -15,12 +15,20 @@ export interface FullMaintenanceResult {
   totalFound: number
   totalCleaned: number
   spaceRecovered: number
+  threatsFound: number
+  threatsQuarantined: number
+  privacyScore: number
+  privacyIssues: number
+  startupHighImpact: number
   appsFound: number
   appsUpdated: number
   appsFailed: number
   driversFound: number
   driversUpdated: number
   driversFailed: number
+  staleDriversRemoved: number
+  staleDriversSpace: number
+  vulnerabilitiesFound: number
   trimDrives: number
   powerPlanActivated: string
   networkCleaned: number
@@ -38,12 +46,20 @@ export async function runFullMaintenance(
     totalFound: 0,
     totalCleaned: 0,
     spaceRecovered: 0,
+    threatsFound: 0,
+    threatsQuarantined: 0,
+    privacyScore: 0,
+    privacyIssues: 0,
+    startupHighImpact: 0,
     appsFound: 0,
     appsUpdated: 0,
     appsFailed: 0,
     driversFound: 0,
     driversUpdated: 0,
     driversFailed: 0,
+    staleDriversRemoved: 0,
+    staleDriversSpace: 0,
+    vulnerabilitiesFound: 0,
     trimDrives: 0,
     powerPlanActivated: '',
     networkCleaned: 0,
@@ -129,7 +145,46 @@ export async function runFullMaintenance(
     markPartial()
   }
 
-  // ── 4. Application updates ──
+  // ── 4. Malware scan + quarantine ──
+  try {
+    const scan = await window.dinho.malwareScan()
+    result.threatsFound = scan.threats.length
+    result.totalFound += result.threatsFound
+    if (autoApply && scan.threats.length > 0) {
+      const paths = scan.threats.map((threat) => threat.path)
+      const meta = scan.threats.map((threat) => ({
+        path: threat.path,
+        detectionName: threat.detectionName,
+        severity: threat.severity,
+        source: threat.source,
+        details: threat.details,
+      }))
+      const action = await window.dinho.malwareQuarantine(paths, meta)
+      result.threatsQuarantined = action.succeeded
+      result.totalCleaned += result.threatsQuarantined
+    }
+  } catch {
+    markPartial()
+  }
+
+  // ── 5. Privacy check (read-only) ──
+  try {
+    const state = await window.dinho.privacyScan()
+    result.privacyScore = state.score
+    result.privacyIssues = state.total - state.protected
+  } catch {
+    markPartial()
+  }
+
+  // ── 6. High-impact startup apps (read-only) ──
+  try {
+    const items = await window.dinho.startupList()
+    result.startupHighImpact = items.filter((item) => item.enabled && item.impact === 'high').length
+  } catch {
+    markPartial()
+  }
+
+  // ── 7. Application updates ──
   try {
     const check = await window.dinho.softwareUpdateCheck()
     if (!check.failure) {
@@ -150,7 +205,7 @@ export async function runFullMaintenance(
     markPartial()
   }
 
-  // ── 5. Driver updates ──
+  // ── 8. Driver updates ──
   try {
     const scan = await window.dinho.driverUpdateScan()
     const updates = scan.updates.filter((update) => update.selected !== false)
@@ -167,7 +222,32 @@ export async function runFullMaintenance(
     markPartial()
   }
 
-  // ── 6. Performance: TRIM, power plan, network, memory ──
+  // ── 9. Stale driver removal ──
+  try {
+    const scan = await window.dinho.driverScan()
+    const stale = scan.packages.filter((pkg) => !pkg.isCurrent && pkg.selected)
+    result.totalFound += stale.length
+    if (autoApply && stale.length > 0) {
+      const cleaned = await window.dinho.driverClean(stale.map((pkg) => pkg.publishedName))
+      result.staleDriversRemoved = cleaned.removed
+      result.staleDriversSpace = cleaned.spaceRecovered
+      result.totalCleaned += cleaned.removed
+      result.spaceRecovered += cleaned.spaceRecovered
+    }
+  } catch {
+    markPartial()
+  }
+
+  // ── 10. Vulnerability scan (read-only) ──
+  try {
+    const scan = await window.dinho.vulnerabilityScan()
+    result.vulnerabilitiesFound = scan.vulnerable
+    result.totalFound += result.vulnerabilitiesFound
+  } catch {
+    markPartial()
+  }
+
+  // ── 11. Performance: TRIM, power plan, network, memory ──
   if (autoApply) {
     try {
       const drives = await window.dinho.diskTrimList()

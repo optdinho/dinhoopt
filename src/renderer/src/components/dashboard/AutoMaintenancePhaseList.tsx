@@ -2,12 +2,17 @@ import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@/components/shared/Checkbox'
 import type { AutoMaintenanceOptions, AutoMaintenancePhase } from './auto-maintenance'
 
-const PHASES: { key: AutoMaintenancePhase; labelKey: string }[] = [
+const PHASES: { key: AutoMaintenancePhase; labelKey: string; requiresFeature?: 'registry' | 'drivers' }[] = [
   { key: 'systemRepair', labelKey: 'autoMaintenancePhaseSystemRepair' },
   { key: 'deepClean', labelKey: 'autoMaintenancePhaseDeepClean' },
-  { key: 'registry', labelKey: 'autoMaintenancePhaseRegistry' },
+  { key: 'registry', labelKey: 'autoMaintenancePhaseRegistry', requiresFeature: 'registry' },
+  { key: 'malware', labelKey: 'autoMaintenancePhaseMalware' },
+  { key: 'privacy', labelKey: 'autoMaintenancePhasePrivacy' },
+  { key: 'startup', labelKey: 'autoMaintenancePhaseStartup' },
   { key: 'softwareUpdates', labelKey: 'autoMaintenancePhaseSoftware' },
-  { key: 'driverUpdates', labelKey: 'autoMaintenancePhaseDrivers' },
+  { key: 'driverUpdates', labelKey: 'autoMaintenancePhaseDrivers', requiresFeature: 'drivers' },
+  { key: 'staleDrivers', labelKey: 'autoMaintenancePhaseStaleDrivers', requiresFeature: 'drivers' },
+  { key: 'vulnerabilities', labelKey: 'autoMaintenancePhaseVulnerabilities' },
   { key: 'performance', labelKey: 'autoMaintenancePhasePerformance' },
 ]
 
@@ -24,9 +29,10 @@ export function AutoMaintenancePhaseList({
 }) {
   const { t } = useTranslation('dashboard')
 
-  const visible = PHASES.filter(
-    (phase) => (phase.key !== 'registry' || hasRegistry) && (phase.key !== 'driverUpdates' || hasDrivers),
-  )
+  const visible = PHASES.filter((phase) => {
+    if (!phase.requiresFeature) return true
+    return phase.requiresFeature === 'registry' ? hasRegistry : hasDrivers
+  })
 
   return (
     <fieldset className="mt-4">

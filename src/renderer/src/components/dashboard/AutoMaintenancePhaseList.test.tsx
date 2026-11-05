@@ -25,16 +25,17 @@ describe('AutoMaintenancePhaseList', () => {
   it('renders every phase when registry and drivers are supported', () => {
     renderList()
 
-    expect(screen.getAllByRole('checkbox')).toHaveLength(6)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(11)
     expect(screen.getByText('autoMaintenanceOptionsHeading')).toBeTruthy()
   })
 
-  it('hides registry and drivers when the platform does not support them', () => {
+  it('hides registry and driver phases when the platform does not support them', () => {
     renderList({ hasRegistry: false, hasDrivers: false })
 
-    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(8)
     expect(screen.queryByText('autoMaintenancePhaseRegistry')).toBeNull()
     expect(screen.queryByText('autoMaintenancePhaseDrivers')).toBeNull()
+    expect(screen.queryByText('autoMaintenancePhaseStaleDrivers')).toBeNull()
   })
 
   it('reflects the selected state through aria-checked', () => {

@@ -90,6 +90,13 @@ function mockWindowDinho() {
     registryFix: vi.fn(),
     driverUpdateScan: vi.fn().mockResolvedValue({ updates: [] }),
     driverUpdateInstall: vi.fn(),
+    driverScan: vi.fn().mockResolvedValue({ packages: [] }),
+    driverClean: vi.fn(),
+    malwareScan: vi.fn().mockResolvedValue({ threats: [] }),
+    malwareQuarantine: vi.fn(),
+    privacyScan: vi.fn().mockResolvedValue({ score: 0, total: 0, protected: 0 }),
+    startupList: vi.fn().mockResolvedValue([]),
+    vulnerabilityScan: vi.fn().mockResolvedValue({ vulnerable: 0 }),
     softwareUpdateCheck: vi.fn().mockResolvedValue({ apps: [], packageManagerName: null }),
     softwareUpdateRun: vi.fn(),
     notifyScheduledScanComplete: vi.fn(),
@@ -839,6 +846,17 @@ describe('useScheduledScan', () => {
     window.dinho.softwareUpdateRun = vi.fn().mockResolvedValue({ succeeded: 1, failed: 0 })
     window.dinho.driverUpdateScan = vi.fn().mockResolvedValue({ updates: [{ updateId: 'drv1', selected: true }] })
     window.dinho.driverUpdateInstall = vi.fn().mockResolvedValue({ installed: 1, failed: 0, rebootRequired: false })
+    window.dinho.driverScan = vi.fn().mockResolvedValue({
+      packages: [{ publishedName: 'oem1.inf', isCurrent: false, selected: true }],
+    })
+    window.dinho.driverClean = vi.fn().mockResolvedValue({ removed: 1, spaceRecovered: 512 })
+    window.dinho.malwareScan = vi.fn().mockResolvedValue({
+      threats: [{ path: 'C:\\evil', detectionName: 'EICAR', severity: 'high', source: 'signature', details: '' }],
+    })
+    window.dinho.malwareQuarantine = vi.fn().mockResolvedValue({ succeeded: 1 })
+    window.dinho.privacyScan = vi.fn().mockResolvedValue({ score: 80, total: 10, protected: 7 })
+    window.dinho.startupList = vi.fn().mockResolvedValue([{ enabled: true, impact: 'high' }])
+    window.dinho.vulnerabilityScan = vi.fn().mockResolvedValue({ vulnerable: 2 })
 
     const payload = {
       scheduleId: 'sched-full',
@@ -863,6 +881,12 @@ describe('useScheduledScan', () => {
     expect(window.dinho.registryFix).toHaveBeenCalledWith(['reg1'])
     expect(window.dinho.softwareUpdateRun).toHaveBeenCalledWith(['app1'], 'winget')
     expect(window.dinho.driverUpdateInstall).toHaveBeenCalledWith(['drv1'])
+    expect(window.dinho.driverClean).toHaveBeenCalledWith(['oem1.inf'])
+    expect(window.dinho.malwareQuarantine).toHaveBeenCalledWith(
+      ['C:\\evil'],
+      expect.arrayContaining([expect.objectContaining({ path: 'C:\\evil', detectionName: 'EICAR' })]),
+    )
+    expect(window.dinho.vulnerabilityScan).toHaveBeenCalled()
     expect(window.dinho.scheduleRunComplete).toHaveBeenCalledWith('sched-full', 'success')
 
     const entry = mockHistoryStore.addEntry.mock.calls[0]![0]
@@ -871,9 +895,9 @@ describe('useScheduledScan', () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: 'Full Maintenance',
-          itemsFound: 4,
-          itemsCleaned: 4,
-          spaceSaved: 500,
+          itemsFound: 8,
+          itemsCleaned: 6,
+          spaceSaved: 1012,
         }),
       ]),
     )
@@ -904,6 +928,11 @@ describe('useScheduledScan', () => {
     expect(window.dinho.registryScan).toHaveBeenCalled()
     expect(window.dinho.softwareUpdateCheck).toHaveBeenCalled()
     expect(window.dinho.driverUpdateScan).toHaveBeenCalled()
+    expect(window.dinho.malwareScan).toHaveBeenCalled()
+    expect(window.dinho.privacyScan).toHaveBeenCalled()
+    expect(window.dinho.startupList).toHaveBeenCalled()
+    expect(window.dinho.vulnerabilityScan).toHaveBeenCalled()
+    expect(window.dinho.driverScan).toHaveBeenCalled()
 
     expect(window.dinho.diskRepairDism).not.toHaveBeenCalled()
     expect(window.dinho.winSxSClean).not.toHaveBeenCalled()
@@ -911,6 +940,8 @@ describe('useScheduledScan', () => {
     expect(window.dinho.registryFix).not.toHaveBeenCalled()
     expect(window.dinho.softwareUpdateRun).not.toHaveBeenCalled()
     expect(window.dinho.driverUpdateInstall).not.toHaveBeenCalled()
+    expect(window.dinho.malwareQuarantine).not.toHaveBeenCalled()
+    expect(window.dinho.driverClean).not.toHaveBeenCalled()
     expect(window.dinho.memoryOptimize).not.toHaveBeenCalled()
     expect(window.dinho.scheduleRunComplete).toHaveBeenCalledWith('sched-full-scan', 'success')
   })
