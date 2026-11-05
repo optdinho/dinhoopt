@@ -37,6 +37,31 @@ const DE_OUTPUT = [
   '    Aktueller Gleichstrom-Energieeinstellungsindex: 0x00000000',
 ].join('\r\n')
 
+const RANGE_PT_BR_OUTPUT = [
+  'GUID do Esquema de Energia: 0f25382e-e29e-4f06-8898-7998112419de  (Desempenho Máximo)',
+  '  GUID de Subgrupos: 54533251-82be-4824-96c1-47b60b740d00  (Gerenciamento de energia do processador)',
+  '    Alias GUID: SUB_PROCESSOR',
+  '    GUID de Configuração de Energia: 893dee8e-2bef-41e0-89c6-b55d0929964c  (Estado de desempenho mínimo)',
+  '      Alias GUID: PROCTHROTTLEMIN',
+  '      Configuração Mínima Possível: 0x00000000',
+  '      Configuração Máxima Possível: 0x00000064',
+  '      Incremento de Configurações Possíveis: 0x00000001',
+  '      Unidades de Configurações Possíveis: %',
+  '    Índice de Configurações de Correntes Alternadas Atuais: 0x00000064',
+  '    Índice de Configurações de Correntes Contínuas Atuais: 0x00000032',
+].join('\r\n')
+
+const RANGE_EN_OUTPUT = [
+  'Power Scheme GUID: 0f25382e-e29e-4f06-8898-7998112419de  (High performance)',
+  '  Subgroup GUID: 54533251-82be-4824-96c1-47b60b740d00  (Processor power management)',
+  '    Power Setting GUID: 893dee8e-2bef-41e0-89c6-b55d0929964c  (Minimum processor state)',
+  '      Possible Setting Range Minimum: 0x00000000',
+  '      Possible Setting Range Maximum: 0x00000064',
+  '      Possible Setting Range Increment: 0x00000001',
+  '    Current AC Power Setting Index: 0x00000064',
+  '    Current DC Power Setting Index: 0x00000032',
+].join('\r\n')
+
 describe('parsePowerCfgAcIndex', () => {
   it('reads the AC index from English output', () => {
     expect(parsePowerCfgAcIndex(EN_OUTPUT)).toBe(0)
@@ -87,6 +112,11 @@ describe('parsePowerCfgAcIndex', () => {
     ].join('\n')
     expect(parsePowerCfgAcIndex(mixed)).toBe(10)
   })
+
+  it('reads the AC index from range-based output with minimum and maximum hex values', () => {
+    expect(parsePowerCfgAcIndex(RANGE_PT_BR_OUTPUT)).toBe(100)
+    expect(parsePowerCfgAcIndex(RANGE_EN_OUTPUT)).toBe(100)
+  })
 })
 
 describe('parsePowerCfgIndices', () => {
@@ -100,6 +130,11 @@ describe('parsePowerCfgIndices', () => {
 
   it('reads both AC and DC indices from German output', () => {
     expect(parsePowerCfgIndices(DE_OUTPUT)).toEqual({ ac: 5, dc: 0 })
+  })
+
+  it('reads both AC and DC indices from range-based output ignoring range definitions', () => {
+    expect(parsePowerCfgIndices(RANGE_PT_BR_OUTPUT)).toEqual({ ac: 100, dc: 50 })
+    expect(parsePowerCfgIndices(RANGE_EN_OUTPUT)).toEqual({ ac: 100, dc: 50 })
   })
 
   it('returns null when only one index is present', () => {

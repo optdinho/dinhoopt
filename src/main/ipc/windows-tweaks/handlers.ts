@@ -74,7 +74,7 @@ async function queryPowerCfgIndices(
   setting: string,
 ): Promise<{ ac: number; dc: number } | null> {
   try {
-    const result = await execFileAsync('powercfg', ['-query', schemeGuid, subgroup, setting], {
+    const result = await execFileAsync('powercfg', ['-qh', schemeGuid, subgroup, setting], {
       timeout: 10000,
       windowsHide: true,
     })
@@ -166,7 +166,7 @@ async function checkPowerCfgTweak(tweakId: string, expectedValue: number): Promi
   for (const s of settings) {
     let stdout: string
     try {
-      const result = await execFileAsync('powercfg', ['-query', schemeGuid, s.subgroup, s.setting], {
+      const result = await execFileAsync('powercfg', ['-qh', schemeGuid, s.subgroup, s.setting], {
         timeout: 10000,
         windowsHide: true,
       })

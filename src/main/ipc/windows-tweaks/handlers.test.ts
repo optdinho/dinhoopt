@@ -147,6 +147,32 @@ vi.mock('./tweaks/performance', () => ({
       defaultValue: 5,
       optimizedValue: 100,
     },
+    {
+      id: 'perf-boost-mode',
+      name: 'Performance Boost Mode',
+      description: 'd',
+      category: 'energy',
+      level: 'medio',
+      hive: 'HKEY_LOCAL_MACHINE' as const,
+      path: 'SYSTEM\\CurrentControlSet\\Control\\Power',
+      key: 'PerfBoost',
+      kind: 'DWord' as const,
+      defaultValue: 2,
+      optimizedValue: 1,
+    },
+    {
+      id: 'perf-epp',
+      name: 'Energy Performance Preference',
+      description: 'd',
+      category: 'energy',
+      level: 'full',
+      hive: 'HKEY_LOCAL_MACHINE' as const,
+      path: 'SYSTEM\\CurrentControlSet\\Control\\Power',
+      key: 'PerfEpp',
+      kind: 'DWord' as const,
+      defaultValue: 50,
+      optimizedValue: 0,
+    },
   ],
 }))
 
@@ -758,7 +784,7 @@ describe('handlers.ts', () => {
         if (cmd === 'powercfg' && args[0] === '/GETACTIVESCHEME') {
           return Promise.resolve({ stdout: `Power Scheme GUID: ${VALID_GUID}`, stderr: '' })
         }
-        if (cmd === 'powercfg' && args[0] === '-query') {
+        if (cmd === 'powercfg' && (args[0] === '-qh' || args[0] === '-query')) {
           return Promise.resolve({ stdout: '    Current AC Power Setting Index: 0x0', stderr: '' })
         }
         if (cmd === 'powercfg' && args[0] === '/LIST') {
@@ -781,7 +807,7 @@ describe('handlers.ts', () => {
         if (cmd === 'powercfg' && args[0] === '/GETACTIVESCHEME') {
           return Promise.resolve({ stdout: `GUID do Esquema de Energia: ${VALID_GUID}`, stderr: '' })
         }
-        if (cmd === 'powercfg' && args[0] === '-query') {
+        if (cmd === 'powercfg' && (args[0] === '-qh' || args[0] === '-query')) {
           return Promise.resolve({
             stdout: [
               '    Índice de Configurações Possíveis: 000',
@@ -804,6 +830,83 @@ describe('handlers.ts', () => {
       const result = await listHandler()
       const aspmTweak = result.find((s: WindowsTweakState) => s.tweak.id === 'pcie-aspm-off')
       expect(aspmTweak?.applied).toBe(true)
+    })
+
+    it('detects processor-min-max as applied when powercfg -qh reports 100 with range metadata', async () => {
+      mockExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === 'powercfg' && args[0] === '/GETACTIVESCHEME') {
+          return Promise.resolve({ stdout: `GUID do Esquema de Energia: ${VALID_GUID}`, stderr: '' })
+        }
+        if (cmd === 'powercfg' && args[0] === '-qh') {
+          return Promise.resolve({
+            stdout: [
+              '      Configuração Mínima Possível: 0x00000000',
+              '      Configuração Máxima Possível: 0x00000064',
+              '      Incremento de Configurações Possíveis: 0x00000001',
+              '    Índice de Configurações de Correntes Alternadas Atuais: 0x00000064',
+              '    Índice de Configurações de Correntes Contínuas Atuais: 0x00000064',
+            ].join('\r\n'),
+            stderr: '',
+          })
+        }
+        if (cmd === 'powercfg' && args[0] === '/LIST') {
+          return Promise.resolve({ stdout: VALID_GUID, stderr: '' })
+        }
+        return Promise.reject(new Error('no'))
+      })
+
+      const { registerWindowsTweaksIpc } = await import('./handlers')
+      registerWindowsTweaksIpc(vi.fn())
+
+      const listHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:status')![1]
+      const result = await listHandler()
+      const procTweak = result.find((s: WindowsTweakState) => s.tweak.id === 'processor-min-max')
+      expect(procTweak?.applied).toBe(true)
+    })
+
+    it('detects perf-boost-mode and perf-epp as applied via powercfg -qh', async () => {
+      mockExecFileAsync.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === 'powercfg' && args[0] === '/GETACTIVESCHEME') {
+          return Promise.resolve({ stdout: `GUID do Esquema de Energia: ${VALID_GUID}`, stderr: '' })
+        }
+        if (cmd === 'powercfg' && args[0] === '-qh') {
+          const settingGuid = args[3]
+          if (settingGuid === 'be337238-0d82-4146-a960-4f3749d470c7') {
+            return Promise.resolve({
+              stdout: [
+                '    Índice de Configurações de Correntes Alternadas Atuais: 0x00000001',
+                '    Índice de Configurações de Correntes Contínuas Atuais: 0x00000001',
+              ].join('\r\n'),
+              stderr: '',
+            })
+          }
+          if (settingGuid === '36687f9e-e3a5-4dbf-b1dc-15eb381c6863') {
+            return Promise.resolve({
+              stdout: [
+                '      Configuração Mínima Possível: 0x00000000',
+                '      Configuração Máxima Possível: 0x00000064',
+                '    Índice de Configurações de Correntes Alternadas Atuais: 0x00000000',
+                '    Índice de Configurações de Correntes Contínuas Atuais: 0x00000000',
+              ].join('\r\n'),
+              stderr: '',
+            })
+          }
+        }
+        if (cmd === 'powercfg' && args[0] === '/LIST') {
+          return Promise.resolve({ stdout: VALID_GUID, stderr: '' })
+        }
+        return Promise.reject(new Error('no'))
+      })
+
+      const { registerWindowsTweaksIpc } = await import('./handlers')
+      registerWindowsTweaksIpc(vi.fn())
+
+      const listHandler = mockIpcMainHandle.mock.calls.find((c) => c[0] === 'windows-tweaks:status')![1]
+      const result = await listHandler()
+      const boostTweak = result.find((s: WindowsTweakState) => s.tweak.id === 'perf-boost-mode')
+      const eppTweak = result.find((s: WindowsTweakState) => s.tweak.id === 'perf-epp')
+      expect(boostTweak?.applied).toBe(true)
+      expect(eppTweak?.applied).toBe(true)
     })
 
     it('returns false when powercfg query fails and registry also fails', async () => {

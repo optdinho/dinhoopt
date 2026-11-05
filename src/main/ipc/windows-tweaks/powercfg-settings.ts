@@ -54,26 +54,26 @@ export const POWERCFG_SETTINGS: Record<string, PowerCfgSetting[]> = {
   ],
 }
 
-const HEX_VALUE_LINE = /:\s*(0x[0-9a-fA-F]+)\s*$/m
 const HEX_VALUE_LINES = /:\s*(0x[0-9a-fA-F]+)\s*$/gm
 
 export function parsePowerCfgAcIndex(stdout: string): number | null {
-  const match = HEX_VALUE_LINE.exec(String(stdout))
-  const hex = match?.[1]
+  const matches = [...String(stdout).matchAll(HEX_VALUE_LINES)]
+  if (matches.length === 0) return null
+  const hex = matches.length === 1 ? matches[0]?.[1] : matches[matches.length - 2]?.[1]
   if (hex === undefined) return null
   return Number.parseInt(hex, 16)
 }
 
 /**
- * Reads the current AC and DC indices from `powercfg /query`.
- * The output lists AC first and DC second; both lines end in a hex index in
- * every locale, so the language does not matter.
+ * Reads the current AC and DC indices from `powercfg -qh` (or `powercfg /query`).
+ * The output lists AC second to last and DC last whenever indices are present;
+ * any preceding hex values (e.g. range min/max/increment) are ignored.
  */
 export function parsePowerCfgIndices(stdout: string): { ac: number; dc: number } | null {
   const matches = [...String(stdout).matchAll(HEX_VALUE_LINES)]
   if (matches.length < 2) return null
-  const ac = matches[0]?.[1]
-  const dc = matches[1]?.[1]
+  const ac = matches[matches.length - 2]?.[1]
+  const dc = matches[matches.length - 1]?.[1]
   if (ac === undefined || dc === undefined) return null
   return { ac: Number.parseInt(ac, 16), dc: Number.parseInt(dc, 16) }
 }

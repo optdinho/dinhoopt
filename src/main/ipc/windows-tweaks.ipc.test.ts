@@ -417,14 +417,14 @@ describe('WINDOWS_TWEAKS_STATUS handler', () => {
     expect(result.every((r) => r.applied === false)).toBe(true)
   })
 
-  it('checks powercfg tweak applied via powercfg -query', async () => {
+  it('checks powercfg tweak applied via powercfg -qh', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
       const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       const allArgs = args[1] as string[]
       const cmdLine = allArgs.join(' ')
       if (cmdLine.includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
-      } else if (cmdLine.includes('-query')) {
+      } else if (cmdLine.includes('-qh') || cmdLine.includes('-query')) {
         // Saída real do powercfg em pt-BR (AC=0, que é o valor otimizado de pcie-aspm-off)
         callback(null, {
           stdout: [
@@ -453,7 +453,7 @@ describe('WINDOWS_TWEAKS_STATUS handler', () => {
       const cmdLine = allArgs.join(' ')
       if (cmdLine.includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
-      } else if (cmdLine.includes('-query')) {
+      } else if (cmdLine.includes('-qh') || cmdLine.includes('-query')) {
         // Value is 0x2 (default), not 0x0 (optimized)
         callback(null, { stdout: '...Current AC Power Setting Index: 0x2...' })
       } else {
@@ -1253,14 +1253,14 @@ describe('checkPowerCfgTweak failure modes', () => {
     expect(result.every((r) => r.applied === false)).toBe(true)
   })
 
-  it('returns false when powercfg -query has no matching AC Power Setting', async () => {
+  it('returns false when powercfg -qh has no matching AC Power Setting', async () => {
     mockExecFile.mockImplementation((...args: unknown[]) => {
       const callback = args[args.length - 1] as (...args: unknown[]) => unknown
       const allArgs = args[1] as string[]
       const cmdLine = allArgs.join(' ')
       if (cmdLine.includes('/GETACTIVESCHEME')) {
         callback(null, { stdout: '381b4222-f694-41f0-9685-ff5bb260df2f (Balanced)' })
-      } else if (cmdLine.includes('-query')) {
+      } else if (cmdLine.includes('-qh') || cmdLine.includes('-query')) {
         // No AC Power Setting match
         callback(null, { stdout: '...some other output...' })
       } else {
