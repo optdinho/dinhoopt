@@ -58,7 +58,6 @@ win:
   icon: resources/icon.ico
   requestedExecutionLevel: asInvoker
   # Strip unused Chromium locales (~10-15MB) — app ships its own i18n (en/pt/es).
-  
 # ffmpeg.exe (212MB) compresses well — smaller installer at cost of slower build.
 compression: maximum
 
@@ -129,5 +128,3 @@ nsis:
   runAfterFinish: true
   createStartMenuShortcut: true
   createDesktopShortcut: true
-
-

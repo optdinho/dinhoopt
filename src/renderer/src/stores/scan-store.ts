@@ -6,9 +6,24 @@ export type { CleanSummaryData }
 
 const EXCLUDED_KEY = 'kudu:excluded-subcategories'
 
+/**
+ * Resolve the Web Storage instance without touching Node's experimental global.
+ *
+ * Node 22+ exposes a `localStorage` global that only works with
+ * `--localstorage-file`; merely reading it prints an ExperimentalWarning. In the
+ * renderer (and jsdom tests) `window` exists, so the real implementation is used.
+ * Node-environment tests that need persistence install a plain data-property stub
+ * via `vi.stubGlobal`, which is detected here instead of invoking the getter.
+ */
+function getStorage(): Storage | null {
+  if (typeof window !== 'undefined') return localStorage
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  return descriptor && 'value' in descriptor ? (descriptor.value as Storage) : null
+}
+
 function loadExcluded(): Set<string> {
   try {
-    const raw = localStorage.getItem(EXCLUDED_KEY)
+    const raw = getStorage()?.getItem(EXCLUDED_KEY)
     if (raw) return new Set(JSON.parse(raw))
   } catch {
     /* ignore */
@@ -18,7 +33,7 @@ function loadExcluded(): Set<string> {
 
 function saveExcluded(excluded: Set<string>): void {
   try {
-    localStorage.setItem(EXCLUDED_KEY, JSON.stringify([...excluded]))
+    getStorage()?.setItem(EXCLUDED_KEY, JSON.stringify([...excluded]))
   } catch {
     /* ignore */
   }

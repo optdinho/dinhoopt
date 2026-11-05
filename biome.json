@@ -51,6 +51,7 @@
       "!**/.archive",
       "!**/.opencode",
       "!**/.kilo",
+      "!**/.tmp-fm-exp",
       "!**/gerador de key",
       "!**/scripts",
       "!node_modules",
