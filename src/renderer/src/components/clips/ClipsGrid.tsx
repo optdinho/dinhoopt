@@ -3,7 +3,6 @@ import {
   ArrowUpDown,
   Clapperboard,
   Combine,
-  EllipsisVertical,
   Film,
   FolderOpen,
   Link,
@@ -16,9 +15,8 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { OutsideClickHandler } from '@/components/shared/OutsideClickHandler'
 import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { type ClipsSortKey, nativeSelectStyle, SegmentedControl } from './clips-utils'
 import type { ClipsState } from './useClipsState'
@@ -74,8 +72,6 @@ export function ClipsGrid({
   filterTabs,
   t,
 }: ClipsState) {
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
-
   const visibleClips = useMemo(() => sortClips(filteredClips, sortBy), [filteredClips, sortBy])
   const filtering = searchQuery.length > 0 || filterTab !== 'all'
   const allSelected = visibleClips.length > 0 && visibleClips.every((c) => selectedClips.has(c.name))
@@ -268,7 +264,6 @@ export function ClipsGrid({
               const isSelected = selectedClips.has(clip.name)
               const isFavorite = favorites.has(clip.name)
               const isPublishing = publishingPath === clip.path
-              const isMenuOpen = menuOpen === clip.name
               return (
                 <motion.div
                   key={clip.name}
@@ -409,7 +404,7 @@ export function ClipsGrid({
                     </button>
                   </div>
 
-                  {/* Bottom actions: 3 primary + overflow menu */}
+                  {/* Bottom actions: icon-only buttons */}
                   <div
                     className="flex items-center gap-0.5 rounded-b-2xl border-t px-1.5 py-1"
                     style={{ borderColor: 'var(--border-subtle)' }}
@@ -459,74 +454,38 @@ export function ClipsGrid({
                       </button>
                     )}
 
-                    <OutsideClickHandler
-                      isOpen={isMenuOpen}
-                      onClose={() => setMenuOpen(null)}
-                      className="relative ml-auto"
+                    <button
+                      type="button"
+                      onClick={() => setRenameTarget(clip.name)}
+                      title={t('rename')}
+                      aria-label={t('rename')}
+                      className="ml-auto rounded-md p-1.5 transition-colors hover:bg-[var(--bg-hover)]"
+                      style={{ color: 'var(--text-dim)' }}
                     >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    {link && (
                       <button
                         type="button"
-                        onClick={() => setMenuOpen(isMenuOpen ? null : clip.name)}
-                        title={t('moreActions')}
-                        aria-label={t('moreActions')}
-                        aria-expanded={isMenuOpen}
+                        onClick={() => window.dinho?.clipsOpenExternal(link)}
+                        title={t('openLink')}
+                        aria-label={t('openLink')}
                         className="rounded-md p-1.5 transition-colors hover:bg-[var(--bg-hover)]"
-                        style={{ color: 'var(--text-dim)' }}
+                        style={{ color: '#06b6d4' }}
                       >
-                        <EllipsisVertical className="h-3.5 w-3.5" />
+                        <Link className="h-3.5 w-3.5" />
                       </button>
-                      <AnimatePresence>
-                        {isMenuOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 4, scale: 0.97 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 4, scale: 0.97 }}
-                            transition={{ duration: 0.12 }}
-                            className="absolute bottom-full right-0 z-20 mb-1 w-40 overflow-hidden rounded-xl border p-1 shadow-xl"
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--border-medium)' }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMenuOpen(null)
-                                setRenameTarget(clip.name)
-                              }}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
-                              style={{ color: 'var(--text-secondary)' }}
-                            >
-                              <Pencil className="h-3 w-3" />
-                              {t('rename')}
-                            </button>
-                            {link && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuOpen(null)
-                                  window.dinho?.clipsOpenExternal(link)
-                                }}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--bg-hover)]"
-                                style={{ color: '#06b6d4' }}
-                              >
-                                <Link className="h-3 w-3" />
-                                {t('openLink')}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMenuOpen(null)
-                                setDeleteTarget(clip.name)
-                              }}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-red-500/15"
-                              style={{ color: '#ef4444' }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              {t('delete')}
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </OutsideClickHandler>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(clip.name)}
+                      title={t('delete')}
+                      aria-label={t('delete')}
+                      className="rounded-md p-1.5 transition-colors hover:bg-red-500/15"
+                      style={{ color: '#ef4444' }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </motion.div>
               )

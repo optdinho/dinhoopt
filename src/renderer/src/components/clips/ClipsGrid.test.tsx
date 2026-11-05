@@ -269,17 +269,15 @@ describe('ClipsGrid — card actions', () => {
     expect(handlePublishClip).toHaveBeenCalledWith('newest.mp4', 'C:\\Clips\\newest.mp4')
   })
 
-  it('renames and deletes through the overflow menu', () => {
+  it('renames and deletes from the card icon buttons', () => {
     const setRenameTarget = vi.fn()
     const setDeleteTarget = vi.fn()
     renderGrid({ setRenameTarget, setDeleteTarget })
 
-    fireEvent.click(screen.getAllByLabelText('moreActions')[0]!)
-    fireEvent.click(screen.getByRole('button', { name: 'rename' }))
+    fireEvent.click(screen.getAllByLabelText('rename')[0]!)
     expect(setRenameTarget).toHaveBeenCalledWith('newest.mp4')
 
-    fireEvent.click(screen.getAllByLabelText('moreActions')[1]!)
-    fireEvent.click(screen.getByRole('button', { name: 'delete' }))
+    fireEvent.click(screen.getAllByLabelText('delete')[1]!)
     expect(setDeleteTarget).toHaveBeenCalledWith('middle.mp4')
   })
 
@@ -288,12 +286,9 @@ describe('ClipsGrid — card actions', () => {
     ;(window as unknown as { dinho: Record<string, unknown> }).dinho = { clipsOpenExternal: openExternal }
     renderGrid({ publishedLinks: { 'C:\\Clips\\newest.mp4': 'https://share/abc' } })
 
-    fireEvent.click(screen.getAllByLabelText('moreActions')[1]!)
-    expect(screen.queryByRole('button', { name: 'openLink' })).toBeNull()
-    fireEvent.click(screen.getAllByLabelText('moreActions')[1]!)
+    expect(screen.getAllByLabelText('openLink')).toHaveLength(1)
 
-    fireEvent.click(screen.getAllByLabelText('moreActions')[0]!)
-    fireEvent.click(screen.getByRole('button', { name: 'openLink' }))
+    fireEvent.click(screen.getAllByLabelText('openLink')[0]!)
     expect(openExternal).toHaveBeenCalledWith('https://share/abc')
   })
 
