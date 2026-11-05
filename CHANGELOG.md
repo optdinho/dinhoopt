@@ -1,3 +1,23 @@
+## [2.1.8]
+
+### Adicionado
+- **Manutenção Completa no dashboard**: pipeline único com 11 fases (DISM/SFC, limpeza profunda + WinSxS, registo, malware + quarentena, privacidade, startup, apps via winget, drivers, drivers obsoletos, vulnerabilidades e desempenho), com escolha das fases e confirmação antes de executar.
+- **Agendador**: "Manutenção completa" passa a ser uma tarefa selecionável, com `autoApply` para decidir entre scan e reparação; o histórico mostra o resultado por fase além do total.
+- **Licença**: botões "Atualizar estado" e "Renovar" no LicenseGate e na LicensePage.
+- **Clips**: ordenação persistida e seleção sincronizada com os filtros; mensagens para lista vazia/sem resultados e barra de ações fixa.
+
+### Alterado
+- **Limpeza de navegadores**: o limpador é agora **só de cache**. Cookies, logins e passwords nunca são apagados — a proteção não é desligável e `isProtectedBrowserFile()` bloqueia ficheiros de credenciais/sessão. O aviso visual (`cleaner.showBrowserProtectionNotice`) é opcional.
+- **GPU**: a aceleração de hardware deixa de ser desativada à partida; o fallback para software só corre se o processo GPU falhar mesmo (build empacotado).
+- **Uploads**: falhas 5xx/429 no gofile são repetidas até 3 tentativas (2s/5s), com logs de início/fim e duração.
+- **Logs**: builds de desenvolvimento passam a escrever em `logs/DiNho-Dev`, separados da app instalada.
+
+### Corrigido
+- **powercfg**: leitura de definições ocultas via `-qh` (necessário para `perf-boost-mode` e `perf-epp`) e o parser passa a ignorar os valores de intervalo (mínimo/máximo/incremento), lendo corretamente os índices AC/DC.
+- **Manutenção Completa**: o WinSxS é limpo uma única vez (antes corria na fase própria e outra vez em `runCleaners`).
+- **Clips**: seleção e ordenação mantêm-se ao mudar de filtro; correções de layout na grelha e na barra de estado.
+- **Qualidade**: Biome repo-wide sem erros/avisos (940 ficheiros) e removido o `ExperimentalWarning` de `localStorage` nos testes em Node.
+
 ## [2.1.7]
 
 ### Adicionado

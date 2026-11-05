@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2\.1\.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2\.1\.8-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.7-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.8-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -47,6 +47,23 @@
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
 
+### 2\.1\.8
+
+**🧹 Manutenção Completa.** O dashboard passa a executar o pipeline completo em 11 fases
+selecionáveis — DISM/SFC, limpeza profunda + WinSxS, registo, malware, privacidade, startup,
+apps, drivers, drivers obsoletos, vulnerabilidades e desempenho — com confirmação e resultado
+por fase. A mesma tarefa chega ao agendador, com histórico detalhado.
+
+**🔒 Navegadores protegidos.** A limpeza é só de cache: cookies, logins e passwords nunca são
+apagados. A proteção é permanente e não pode ser desligada.
+
+**🎬 Clips e GPU.** Ordenação persistida, seleção sincronizada com os filtros e retry automático
+nos uploads (5xx/429). A aceleração de hardware deixa de ser desativada à partida; o fallback
+para software só acontece se o processo GPU falhar.
+
+**🔧 powercfg.** Definições ocultas (`perf-boost-mode`, `perf-epp`) passam a ser lidas com
+`-qh`, e o parser ignora os valores de intervalo ao ler os índices AC/DC.
+
 ### 2\.1\.7
 
 **🎮 Game Mode mais completo.** O perfil ativo passa a guardar e reverter o esquema de energia
@@ -55,13 +72,6 @@ As exclusões do Microsoft Defender chegam à UI com validação rigorosa do cam
 
 **⬆️ Tecnologias.** Electron 45.2.1 (Chromium 156, Node 24.22.1), YARA-X 0.12, NAudio 3.3,
 CsWin32 0.3.367, Biome 2.6.4 e Vite 8.3.5; CI passa a `actions/checkout`/`setup-node` v7.
-
-### 2\.1\.6
-
-**🛑 STOPED.** `CDPSvc` e `SSDPSRV` entram no catálogo, e "Ativar/Desativar todos" passa a
-cobrir todos os serviços.
-
-**🔑 Licença.** Copiar o HWID volta a funcionar no LicensePage e no LicenseGate.
 
 ---
 
