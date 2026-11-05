@@ -206,6 +206,15 @@ async function runSchedule(payload: ScheduleRunPayload): Promise<void> {
           cleaned: result.totalCleaned,
           size: result.spaceRecovered,
         }
+        // Keep the per-phase breakdown so the history shows what each step found
+        // and cleaned instead of a single opaque total.
+        for (const category of result.categories) {
+          categoryResults[category.name] = {
+            found: category.found,
+            cleaned: category.cleaned,
+            size: category.size,
+          }
+        }
       } catch {
         status = 'partial'
       }

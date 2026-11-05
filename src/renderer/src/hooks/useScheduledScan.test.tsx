@@ -899,6 +899,12 @@ describe('useScheduledScan', () => {
           itemsCleaned: 6,
           spaceSaved: 1012,
         }),
+        expect.objectContaining({ name: 'Deep Clean', itemsFound: 1, itemsCleaned: 1, spaceSaved: 500 }),
+        expect.objectContaining({ name: 'Malware', itemsFound: 1, itemsCleaned: 1, spaceSaved: 0 }),
+        expect.objectContaining({ name: 'Privacy', itemsFound: 3, itemsCleaned: 0, spaceSaved: 0 }),
+        expect.objectContaining({ name: 'Startup', itemsFound: 1, itemsCleaned: 0, spaceSaved: 0 }),
+        expect.objectContaining({ name: 'Stale Drivers', itemsFound: 1, itemsCleaned: 1, spaceSaved: 512 }),
+        expect.objectContaining({ name: 'Vulnerabilities', itemsFound: 2, itemsCleaned: 0, spaceSaved: 0 }),
       ]),
     )
   })

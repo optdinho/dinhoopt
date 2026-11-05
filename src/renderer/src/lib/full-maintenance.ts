@@ -9,12 +9,20 @@ import { useDashboardStore } from '@/stores/dashboard-store'
  * `autoApply` mirrors the scheduler semantics: when false, only scans are
  * performed and nothing is repaired, cleaned, installed or optimised.
  */
+export interface FullMaintenanceCategory {
+  name: string
+  found: number
+  cleaned: number
+  size: number
+}
+
 export interface FullMaintenanceResult {
   status: 'success' | 'partial'
   systemRepairStatus: string
   totalFound: number
   totalCleaned: number
   spaceRecovered: number
+  categories: FullMaintenanceCategory[]
   threatsFound: number
   threatsQuarantined: number
   privacyScore: number
@@ -46,6 +54,7 @@ export async function runFullMaintenance(
     totalFound: 0,
     totalCleaned: 0,
     spaceRecovered: 0,
+    categories: [],
     threatsFound: 0,
     threatsQuarantined: 0,
     privacyScore: 0,
@@ -71,6 +80,11 @@ export async function runFullMaintenance(
     result.status = 'partial'
   }
 
+  const addCategory = (name: string, found: number, cleaned: number, size = 0) => {
+    if (found === 0 && cleaned === 0 && size === 0) return
+    result.categories.push({ name, found, cleaned, size })
+  }
+
   // ── 1. System repair (DISM, then SFC only when DISM found/fixed something) ──
   if (autoApply) {
     try {
@@ -88,14 +102,21 @@ export async function runFullMaintenance(
         healthy = healthy || (Boolean(sfc.success) && !repaired)
       }
 
-      if (repaired) result.systemRepairStatus = 'repaired'
-      else if (healthy) result.systemRepairStatus = 'healthy'
+      if (repaired) {
+        result.systemRepairStatus = 'repaired'
+        addCategory('System Repair', 0, 1)
+      } else if (healthy) {
+        result.systemRepairStatus = 'healthy'
+      }
     } catch {
       markPartial()
     }
   }
 
   // ── 2. Deep clean (WinSxS component store + every cleaner category) ──
+  let cleanFound = 0
+  let cleanCleaned = 0
+  let cleanSize = 0
   try {
     if (autoApply) {
       const winsxs = await window.dinho.winSxSClean()
@@ -104,6 +125,9 @@ export async function runFullMaintenance(
       result.totalFound += winsxsFiles
       result.totalCleaned += winsxsFiles
       result.spaceRecovered += winsxsSpace
+      cleanFound += winsxsFiles
+      cleanCleaned += winsxsFiles
+      cleanSize += winsxsSpace
     }
 
     const cleanerFns = useDashboardStore.getState().cleanerFns
@@ -118,13 +142,18 @@ export async function runFullMaintenance(
         const found = scans.reduce((sum, scan) => sum + scan.itemCount, 0)
         const size = scans.reduce((sum, scan) => sum + scan.totalSize, 0)
         result.totalFound += found
+        cleanFound += found
 
         if (!autoApply) continue
         const ids = scans.flatMap((scan) => scan.items.map((item) => item.id))
         if (ids.length === 0) continue
         const cleaned = await cleaner.clean(ids)
-        result.totalCleaned += cleaned.filesDeleted ?? found
-        result.spaceRecovered += cleaned.totalCleaned ?? size
+        const cleanedFiles = cleaned.filesDeleted ?? found
+        const cleanedSize = cleaned.totalCleaned ?? size
+        result.totalCleaned += cleanedFiles
+        result.spaceRecovered += cleanedSize
+        cleanCleaned += cleanedFiles
+        cleanSize += cleanedSize
       } catch {
         markPartial()
       }
@@ -132,18 +161,24 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Deep Clean', cleanFound, cleanCleaned, cleanSize)
 
   // ── 3. Registry ──
+  let regFound = 0
+  let regFixed = 0
   try {
     const entries = await window.dinho.registryScan()
-    result.totalFound += entries.length
+    regFound = entries.length
+    result.totalFound += regFound
     if (autoApply && entries.length > 0) {
       const fixed = await window.dinho.registryFix(entries.map((entry) => entry.id))
-      result.totalCleaned += fixed.fixed
+      regFixed = fixed.fixed
+      result.totalCleaned += regFixed
     }
   } catch {
     markPartial()
   }
+  addCategory('Registry', regFound, regFixed)
 
   // ── 4. Malware scan + quarantine ──
   try {
@@ -166,6 +201,7 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Malware', result.threatsFound, result.threatsQuarantined)
 
   // ── 5. Privacy check (read-only) ──
   try {
@@ -175,6 +211,7 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Privacy', result.privacyIssues, 0)
 
   // ── 6. High-impact startup apps (read-only) ──
   try {
@@ -183,6 +220,7 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Startup', result.startupHighImpact, 0)
 
   // ── 7. Application updates ──
   try {
@@ -204,6 +242,7 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Software', result.appsFound, result.appsUpdated)
 
   // ── 8. Driver updates ──
   try {
@@ -221,12 +260,15 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Drivers', result.driversFound, result.driversUpdated)
 
   // ── 9. Stale driver removal ──
+  let staleFound = 0
   try {
     const scan = await window.dinho.driverScan()
     const stale = scan.packages.filter((pkg) => !pkg.isCurrent && pkg.selected)
-    result.totalFound += stale.length
+    staleFound = stale.length
+    result.totalFound += staleFound
     if (autoApply && stale.length > 0) {
       const cleaned = await window.dinho.driverClean(stale.map((pkg) => pkg.publishedName))
       result.staleDriversRemoved = cleaned.removed
@@ -237,6 +279,7 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Stale Drivers', staleFound, result.staleDriversRemoved, result.staleDriversSpace)
 
   // ── 10. Vulnerability scan (read-only) ──
   try {
@@ -246,6 +289,7 @@ export async function runFullMaintenance(
   } catch {
     markPartial()
   }
+  addCategory('Vulnerabilities', result.vulnerabilitiesFound, 0)
 
   // ── 11. Performance: TRIM, power plan, network, memory ──
   if (autoApply) {
@@ -301,6 +345,8 @@ export async function runFullMaintenance(
     } catch {
       markPartial()
     }
+
+    addCategory('Performance', 0, result.trimDrives + result.networkCleaned)
   }
 
   return result

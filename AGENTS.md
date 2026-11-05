@@ -81,6 +81,15 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### Manutenção Completa + limpeza de navegadores (2026-11-04)
+
+**A "Manutenção Completa" passou de 6 para 11 fases selecionáveis** e ganhou as 5 fases que só existiam na "Limpeza completa": malware + quarentena, verificação de privacidade, startup de alto impacto, scan de vulnerabilidades e remoção de drivers obsoletos. Ordem do pipeline: DISM/SFC → limpeza profunda + WinSxS → registo → malware → privacidade → startup → apps (winget) → drivers → drivers obsoletos → vulnerabilidades → desempenho (TRIM, energia, DNS, RAM). `countAutoMaintenanceSteps` conta 15 passos com tudo ligado. Privacidade, startup e vulnerabilidades são **só de leitura** (relatório); malware e drivers obsoletos **agem** apenas com `autoApply` ligado.
+
+- **Agendador:** `full-maintenance` é uma tarefa selecionável (não um preset); com `autoApply: false` corre só os scans. O preset mensal exclui `full-maintenance` para não duplicar trabalho. O histórico passou a mostrar o **breakdown por fase** (Deep Clean, Registry, Malware, Privacy, Startup, Software, Drivers, Stale Drivers, Vulnerabilities, Performance) além do total agregado. Limitação conhecida: o agendamento vive no processo main + callback do renderer, logo **só corre com a app aberta** — não há integração com o Agendador de Tarefas do Windows.
+- **Limpeza de navegadores:** o limpador passou a ser **só de cache**. Cookies, logins e passwords nunca são apagados; `isProtectedBrowserFile()` bloqueia ficheiros de credenciais/sessão mesmo que apareçam num scan. A chave legada `keepBrowserCookies` é aceite mas ignorada. `cleaner.showBrowserProtectionNotice` (default `false`) apenas mostra/esconde o aviso — a proteção está sempre ativa e não é desligável.
+- **Defeito corrigido (`3b6c297`):** o WinSxS era limpo **duas vezes** no pipeline do dashboard (fase própria + `runCleaners`, que também inclui `CleanerType.WinSxS`). `runCleaners` passou a aceitar tipos a ignorar e a Manutenção Completa passa `[CleanerType.WinSxS]`; teste de regressão "cleans the component store once instead of twice". O `runFullMaintenance` agendado já evitava a duplicação.
+- **Gates desta sessão:** `tsc --noEmit` 0 · Vitest **8469/8469**, 334 ficheiros · `npm run build` exit 0 · Biome 0 nos ficheiros tocados.
+
 ### Auditoria à release 2.0.6 (2026-10-04) — packaging PASS, 3 defeitos de log corrigidos
 
 **A release entrega tudo o que promete.** Setup publicado byte-idêntico ao local (254 753 479 B, SHA-512 `D1EmyRz5LNEaBoAF…`, conferido por `node scripts/verify-release.js` contra o feed do electron-updater) · `resources/clips-engine` instalado == staging (296 ficheiros; o único extra é `games-update-check.json`, gerado em runtime) · ffmpeg embarcado **52/52** no gate · log de produção a executar `C:\Program Files\DiNho Optimizer\resources\clips-engine\DiNho.Capture.Poc.exe` com `av1_nvenc` + AAC e padding de frames activo. **Não é um problema de empacotamento.**
