@@ -1,3 +1,9 @@
+## [2.1.9]
+
+### Corrigido
+- **Clips — ações do card**: Abrir, Editar, Publicar, Renomear, Link e Excluir passam a ser **apenas ícones**, todos centrados e lado a lado. O menu de overflow (`⋮`) desapareceu; os diálogos de confirmação de renomear e excluir mantêm-se.
+- **Clips — filtros**: o contador deixa de quebrar o rótulo em duas linhas. `7 Dias` e o badge ficam sempre na mesma linha, com `whitespace-nowrap` no rótulo e `shrink-0` no badge; o `SegmentedControl` só empilha quando existe `sub` (ex.: modos do replay buffer).
+
 ## [2.1.8]
 
 ### Adicionado
