@@ -74,6 +74,7 @@ import { registerCleanerIpc } from './ipc'
 import { CLIP_VIDEO_SCHEME, handleClipVideoRequest } from './ipc/clip-video-protocol'
 
 import { stopEngineProcess } from './ipc/clips-engine-connection'
+import { refreshGameDetector } from './ipc/game-mode.ipc'
 import { ensureRulesLoaded } from './ipc/winapp2-rules-store'
 import { initAuditLog } from './services/audit-log'
 import { relaunchElevated } from './services/auto-elevate'
@@ -668,9 +669,10 @@ function initGui(): void {
     // Start the scheduled scan checker
     startScheduler(() => mainWindow)
 
-    // Start Game Mode detector globally at boot (autoDetect controlled by settings)
+    // Start Game Mode detector globally at boot (autoDetect controlled by settings).
+    // Import estático: o módulo já entra no chunk via `./ipc` → `game-mode.ipc`, por isso
+    // o `await import()` só acrescentava uma promessa sem alterar o carregamento.
     try {
-      const { refreshGameDetector } = await import('./ipc/game-mode/handlers')
       refreshGameDetector(() => mainWindow)
     } catch (err) {
       getLogger().error('app', `Failed to start game detector: ${err instanceof Error ? err.message : String(err)}`)

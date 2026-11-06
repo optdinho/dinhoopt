@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -43,8 +43,21 @@ beforeEach(() => {
   useGameModeStore.getState().setStatus('idle')
 })
 
+/**
+ * `GameModeDefenderExclusions` faz `await window.dinho?.defenderExclusionsStatus?.()`
+ * no mount. Sem `window.dinho` a promessa resolve numa microtask depois de o `render`
+ * do RTL sair do `act()`, e o `setLoading(false)` dispara o aviso
+ * "An update ... was not wrapped in act(...)". Drenar as microtasks dentro de `act`
+ * mantém a asserção síncrona e elimina o ruído.
+ */
+async function flushPendingEffects(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve()
+  })
+}
+
 describe('GameModePage progress label (B5)', () => {
-  it('shows the readable optimization label, never the raw id', () => {
+  it('shows the readable optimization label, never the raw id', async () => {
     useGameModeStore.getState().setStatus('activating')
     useGameModeStore.getState().setProgress({
       phase: 'activating',
@@ -54,6 +67,7 @@ describe('GameModePage progress label (B5)', () => {
     })
 
     const { container } = render(<GameModePage />)
+    await flushPendingEffects()
     const text = container.textContent ?? ''
 
     expect(text).not.toContain('svc-diagtrack')
@@ -63,7 +77,7 @@ describe('GameModePage progress label (B5)', () => {
     expect(text).toContain('applyingOptimization')
   })
 
-  it('uses the restoring string while deactivating', () => {
+  it('uses the restoring string while deactivating', async () => {
     useGameModeStore.getState().setStatus('deactivating')
     useGameModeStore.getState().setProgress({
       phase: 'deactivating',
@@ -73,6 +87,7 @@ describe('GameModePage progress label (B5)', () => {
     })
 
     const { container } = render(<GameModePage />)
+    await flushPendingEffects()
     const text = container.textContent ?? ''
 
     expect(text).not.toContain('net-disable-nagle')
@@ -80,7 +95,7 @@ describe('GameModePage progress label (B5)', () => {
     expect(text).toContain('restoringOptimization')
   })
 
-  it('falls back to the raw label when the id is unknown (never blank)', () => {
+  it('falls back to the raw label when the id is unknown (never blank)', async () => {
     useGameModeStore.getState().setStatus('activating')
     useGameModeStore.getState().setProgress({
       phase: 'activating',
@@ -90,6 +105,7 @@ describe('GameModePage progress label (B5)', () => {
     })
 
     const { container } = render(<GameModePage />)
+    await flushPendingEffects()
     const text = container.textContent ?? ''
     expect(text).toContain('custom-thing')
   })
