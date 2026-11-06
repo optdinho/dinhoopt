@@ -23,6 +23,12 @@
       },
       "performance": {
         "noDelete": "off"
+      },
+      "nursery": {
+        "noAwaitInPromiseMethods": "error",
+        "noLateEventControl": "error",
+        "noMissingThrow": "error",
+        "noMismatchedMapKey": "error"
       }
     }
   },

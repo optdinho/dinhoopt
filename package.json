@@ -21,6 +21,8 @@
     "verify:release": "node scripts/verify-release.js --skip-download",
     "verify:release:full": "node scripts/verify-release.js",
     "test": "vitest run",
+    "test:failed": "vitest run --lastFailed",
+    "test:changed": "vitest run --sinceLastRun",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.cjs",
