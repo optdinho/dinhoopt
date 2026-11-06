@@ -1,3 +1,20 @@
+## [2.1.10]
+
+### Alterado
+- **Tecnologias**: Electron 45.2.3 (backports de segurança e estabilidade de Chromium, V8, Skia, PDFium e ANGLE), framer-motion 14.9.1, Vite 8.3.6, i18next 26.7.2, react-i18next 17.1.13, Tailwind CSS 4.3.4, @vitejs/plugin-react 6.2.1 e lucide-react 1.69.0.
+- **Ferramentas de desenvolvimento**: Vitest 5.1, @vitest/coverage-v8 5.1, Playwright 1.65, Biome 2.6.5 e jsdom 31.
+- **Site**: a página `/download/` lê versão, data, tamanho e assets do `releases/latest` do GitHub em runtime — deixa de precisar de edição a cada release. O botão **BAIXAR** fica fixo no topo, incluindo em mobile.
+
+### Corrigido
+- **Diálogos e cards**: `AnimatePresence` (framer-motion 14.9.1) passa a concluir a animação de saída quando um filho monta já a sair e deixa de ficar preso ao trocar um card com `layoutId` aberto.
+- **Build**: eliminados os avisos `INEFFECTIVE_DYNAMIC_IMPORT`. O serviço de regras YARA personalizadas passa a ser carregado a pedido (chunk próprio de 3,6 kB) e o detetor de Game Mode é importado estaticamente onde já fazia parte do grafo.
+- **Testes**: eliminados os avisos de `act(...)` no `GameModePage.test.tsx`, drenando as microtasks do mount dentro de `act`.
+
+### Interno
+- Scripts `test:failed` (`--lastFailed`) e `test:changed` (`--sinceLastRun`) para iterar sem correr os 334 ficheiros.
+- Playwright: o relatório HTML guarda apenas falhas (`onlyFailures`) e há um reporter `failures`.
+- Biome: 4 regras `nursery` que caçam bugs reais (`noAwaitInPromiseMethods`, `noLateEventControl`, `noMissingThrow`, `noMismatchedMapKey`) ligadas como erro.
+
 ## [2.1.9]
 
 ### Corrigido

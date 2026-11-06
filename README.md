@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.9-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.10-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -46,6 +46,18 @@
 ## 📝 Novidades
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
+
+### 2\.1\.10
+
+**🔐 Base atualizada.** Electron 45.2.3 traz os backports de segurança e estabilidade mais
+recentes de Chromium, V8, Skia e PDFium. O framer-motion 14.9.1 corrige animações de saída
+que podiam ficar presas em diálogos e em cards com `layoutId`.
+
+**🧪 Qualidade.** Vitest 5.1, Playwright 1.65, Biome 2.6.5 e jsdom 31; build sem avisos de
+import dinâmico e testes sem avisos de `act(...)`.
+
+**🌐 Site.** A página de download passa a ler a versão e os assets diretamente do GitHub —
+não precisa de edição a cada release — e o botão **BAIXAR** fica fixo no topo, incluindo em mobile.
 
 ### 2\.1\.9
 
@@ -69,15 +81,6 @@ para software só acontece se o processo GPU falhar.
 
 **🔧 powercfg.** Definições ocultas (`perf-boost-mode`, `perf-epp`) passam a ser lidas com
 `-qh`, e o parser ignora os valores de intervalo ao ler os índices AC/DC.
-
-### 2\.1\.7
-
-**🎮 Game Mode mais completo.** O perfil ativo passa a guardar e reverter o esquema de energia
-(AC/DC), com tweaks de GPU/HAGS, purga de standby memory e prioridades CPU/IO por perfil.
-As exclusões do Microsoft Defender chegam à UI com validação rigorosa do caminho.
-
-**⬆️ Tecnologias.** Electron 45.2.1 (Chromium 156, Node 24.22.1), YARA-X 0.12, NAudio 3.3,
-CsWin32 0.3.367, Biome 2.6.4 e Vite 8.3.5; CI passa a `actions/checkout`/`setup-node` v7.
 
 ---
 
