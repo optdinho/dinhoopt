@@ -110,31 +110,32 @@ mesmo um visitante que recarregue a página várias vezes faz 1 pedido a cada 5 
 Se o tráfego crescer muito, o próximo passo é pôr um proxy com cache à frente
 (Cloudflare Worker ou Netlify Function com `Cache-Control: max-age=300`).
 
-## Adicionar o link no site
+## O que o script muda no site
 
-O `index.html` do site hoje **não tem nenhum link de download** — só os planos
-da Cakto. Para os visitantes chegarem em `/download/`, adicione uma entrada no
-menu do topo. No ficheiro do site, procure:
+O `index.html` do site original **não tem nenhum link de download** — só os
+planos da Cakto. O `build-deploy.js` acrescenta:
 
-```html
-    <a href="#faq" class="h-nav-links">FAQ</a>
+**1. Botão "Baixar" no menu do topo**, depois do `FAQ` e antes do Discord:
+
+```
+Benefícios · Planos · ⚡ Software · Como Funciona · FAQ · [BAIXAR] · 🎮
 ```
 
-e coloque a linha nova **antes** dela:
+É um botão com gradiente (roxo → laranja) e ícone de download, não um link de
+texto, para se destacar dos restantes itens. Detalhe importante: ele **não** usa
+a classe `h-nav-links`, porque essa classe é escondida no telemóvel
+(`max-width:900px`) — assim o download continua acessível aí (verificado a
+900/768/390/320 px).
+
+**2. Botão na secção de software**, abaixo do parágrafo de introdução:
 
 ```html
-    <a href="/download/" class="h-nav-links">Download</a>
+<a href="/download/" class="btn-s"><span>Baixar o app (grátis)</span></a>
 ```
 
-O resultado no menu fica: Benefícios · Planos · ⚡ Software · Download · FAQ.
+**3. Favicon**, para eliminar o 404 de `/favicon.ico`.
 
-Opcional — um botão no hero (o CTA atual só leva para a Cakto):
-
-```html
-        <a href="/download/" class="btn-s"><span>Baixar grátis</span></a>
-```
-
-dentro de `<div class="hero-ctas">`, ao lado de "COMPRAR OTIMIZAÇÃO COMPLETA".
+Tudo é idempotente: correr o script duas vezes não duplica nada.
 
 ## Verificação feita
 
@@ -149,6 +150,8 @@ Testado em Edge (Playwright) contra a API real:
 | Larguras 320/390/768/1024/1440 | 0 overflow horizontal, cards com altura igual |
 | API bloqueada | aviso visível + botões caem para `releases/latest` |
 | Cache | 2.ª carga = 0 pedidos à API; expira aos 5 min |
+| Botão "Baixar" no menu | 105×36 px, gradiente, texto branco, clicável → `/download/` |
+| Botão no telemóvel | visível a 900/768/390/320 px (os links de texto escondem-se, ele fica) |
 | Erros de JS | nenhum |
 
 ## Manutenção

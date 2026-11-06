@@ -49,13 +49,36 @@ const originalBytes = Buffer.byteLength(html, 'utf8')
 const applied = []
 
 const NAV_ANCHOR = '<a href="#faq" class="h-nav-links">FAQ</a>'
-if (!html.includes('href="/download/"')) {
+
+// Botão "Baixar" no menu do topo. Não usa a classe h-nav-links de propósito:
+// essa classe é escondida no telemóvel (max-width:900px), e o download tem de
+// continuar acessível aí.
+const NAV_BUTTON =
+  '<a href="/download/" class="h-nav-dl">' +
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>' +
+  '<span>Baixar</span></a>'
+
+// Remove o link discreto de versões anteriores do script, se existir.
+html = html.replace('<a href="/download/" class="h-nav-links">Download</a>\n    ', '')
+
+if (!html.includes('class="h-nav-dl"')) {
   if (!html.includes(NAV_ANCHOR)) {
     console.error('Âncora do menu não encontrada — o site mudou de estrutura?')
     process.exit(1)
   }
-  html = html.replace(NAV_ANCHOR, `<a href="/download/" class="h-nav-links">Download</a>\n    ${NAV_ANCHOR}`)
-  applied.push('link "Download" no menu do topo')
+  html = html.replace(NAV_ANCHOR, `${NAV_ANCHOR}\n    ${NAV_BUTTON}`)
+  applied.push('botão "Baixar" no menu do topo')
+}
+
+const NAV_CSS = `<style>
+.h-nav a.h-nav-dl{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,var(--purple),var(--orange));color:#fff;text-decoration:none;font-family:'Orbitron',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:9px 16px;border-radius:8px;box-shadow:0 4px 16px rgba(124,58,237,.35);transition:transform .2s,box-shadow .2s;white-space:nowrap}
+.h-nav a.h-nav-dl:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(249,115,22,.45);color:#fff}
+.h-nav a.h-nav-dl svg{width:14px;height:14px;flex-shrink:0}
+@media(max-width:900px){.h-nav a.h-nav-dl{font-size:10px;padding:8px 12px;gap:5px}}
+</style>`
+if (!html.includes('.h-nav a.h-nav-dl{')) {
+  html = html.replace('</style>', `</style>\n${NAV_CSS}`)
+  applied.push('estilo do botão "Baixar"')
 }
 
 const SUB_END = 'Limpa, acelera, protege e repara seu PC em um único app — sem anúncios.</p>'
