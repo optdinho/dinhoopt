@@ -7,8 +7,10 @@ quando uma versão nova é publicada.
 
 ```
 site/
-└── download/
-    └── index.html      # a página (autocontida: CSS, logo e JS inline)
+├── download/
+│   └── index.html      # a página (autocontida: CSS, logo e JS inline)
+├── build-deploy.js     # monta o pacote site/deploy/
+└── preview.js          # servidor local que imita o Netlify
 ```
 
 ## Deploy (Netlify)
@@ -47,6 +49,35 @@ sem barra redireciona sozinho para `/download/` — não é preciso `_redirects`
 
 > Se o site já for publicado por Git/CI, basta copiar `site/download/` para a
 > raiz do repositório do site. Não há passo de build.
+
+## Ver localmente
+
+**Não abra o `index.html` com duplo-clique.** Os links do site são absolutos
+(`/download/`, `/#planos`) — é o que o Netlify precisa — e por `file://` eles
+apontam para a raiz do disco (`C:\download\`), que não existe. Por isso o menu
+"Download" parece quebrado.
+
+Use o servidor de pré-visualização, que reproduz o Netlify:
+
+```powershell
+node site/preview.js            # http://127.0.0.1:8080/ (abre o browser)
+node site/preview.js --port 3000
+node site/preview.js --no-open
+```
+
+Ele faz o que o Netlify faz e o `file://` não faz:
+
+| Pedido | Resposta |
+|---|---|
+| `/` | `index.html` |
+| `/download` | `301` → `/download/` |
+| `/download/` | `download/index.html` |
+| `/favicon.png` | a imagem, com `image/png` |
+
+Se quiser ver **só** a página de download, sem servidor, pode abrir direto
+`site/deploy/download/index.html` — ela funciona por `file://` (preenche a
+versão). Só os links de volta ao site (`/`, `/#planos`) é que precisam do
+servidor.
 
 ## Como funciona
 
