@@ -86,6 +86,7 @@
   "pttHold": "Hold",
   "pttToggle": "Toggle",
   "pttKey": "Key",
+  "rebindHint": "Press a key or a mouse button (middle click included)",
   "gameDetection": "Game Detection",
   "gameAudioOnly": "Game + Mic Only",
   "noGameDetected": "No game detected",

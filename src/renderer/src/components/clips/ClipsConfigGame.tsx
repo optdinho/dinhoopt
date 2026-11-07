@@ -104,14 +104,25 @@ export function GameSection({
               style={{ background: 'rgba(113,113,122,0.06)', opacity: hk.enabled ? 1 : 0.4 }}
             >
               <div className="flex items-center gap-1.5">
+                {/*
+                 * Nunca usar `disabled` aqui: o Chromium suprime os eventos de rato
+                 * em controlos de formulário desativados, por isso um clique do meio
+                 * no próprio chip que iniciou o rebind (o gesto natural, o cursor já
+                 * lá está) não gerava `mousedown` nenhum e o atalho nunca era gravado.
+                 * O estado visual vem de `aria-disabled` + opacidade inline.
+                 */}
                 <button
                   type="button"
-                  onClick={() => setRebindingId(hk.id)}
-                  disabled={!!rebindingId}
-                  className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium transition-all disabled:opacity-60"
+                  onClick={() => {
+                    if (!rebindingId) setRebindingId(hk.id)
+                  }}
+                  aria-disabled={!!rebindingId}
+                  className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium transition-all"
                   style={{
                     borderColor: rebindingId === hk.id ? 'var(--accent)' : 'var(--border-medium)',
                     color: rebindingId === hk.id ? 'var(--accent)' : 'var(--text-primary)',
+                    opacity: rebindingId && rebindingId !== hk.id ? 0.6 : 1,
+                    cursor: rebindingId ? 'default' : undefined,
                   }}
                 >
                   {rebindingId === hk.id ? '...' : formatKey(hk.vk, hk.modifiers)}
@@ -172,6 +183,11 @@ export function GameSection({
               </p>
             </div>
           ))}
+          {rebindingId && (
+            <p className="px-0.5 pt-1 text-[10px] leading-tight" style={{ color: 'var(--accent)' }} role="status">
+              {t('rebindHint')}
+            </p>
+          )}
           <div className="flex items-center pt-1">
             <button
               type="button"

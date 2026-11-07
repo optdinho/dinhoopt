@@ -155,19 +155,31 @@ export function AudioSection({
                   </button>
                 </span>
               ))}
+              {/* Sem `disabled`: ver ClipsConfigGame.tsx — o Chromium engole os
+                  eventos de rato em controlos desativados, incluindo o clique do
+                  meio que se quer capturar para o rebind. */}
               <button
                 type="button"
-                disabled={!!rebindingId}
-                onClick={() => setRebindingId('hk-ptt')}
-                className="rounded-md border border-dashed px-1.5 py-0.5 font-mono text-[10px] font-medium transition-colors hover:bg-white/5 disabled:opacity-60"
+                aria-disabled={!!rebindingId}
+                onClick={() => {
+                  if (!rebindingId) setRebindingId('hk-ptt')
+                }}
+                className="rounded-md border border-dashed px-1.5 py-0.5 font-mono text-[10px] font-medium transition-colors hover:bg-white/5"
                 style={{
                   borderColor: rebindingId === 'hk-ptt' ? 'var(--accent)' : 'var(--border-medium)',
                   color: rebindingId === 'hk-ptt' ? 'var(--accent)' : 'var(--text-dim)',
+                  opacity: rebindingId && rebindingId !== 'hk-ptt' ? 0.6 : 1,
+                  cursor: rebindingId ? 'default' : undefined,
                 }}
               >
                 {rebindingId === 'hk-ptt' ? '...' : `+ ${t('pttKey')}`}
               </button>
             </div>
+          )}
+          {rebindingId === 'hk-ptt' && (
+            <p className="text-[10px] leading-tight" style={{ color: 'var(--accent)' }} role="status">
+              {t('rebindHint')}
+            </p>
           )}
         </div>
       </CollapsibleMini>

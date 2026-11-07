@@ -86,6 +86,7 @@
   "pttHold": "Mantener",
   "pttToggle": "Alternar",
   "pttKey": "Tecla",
+  "rebindHint": "Pulsa una tecla o un botón del ratón (incluido el clic central)",
   "gameDetection": "Detección de Juegos",
   "gameAudioOnly": "Solo Juego + Micrófono",
   "noGameDetected": "Ningún juego detectado",

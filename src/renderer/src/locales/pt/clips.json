@@ -86,6 +86,7 @@
   "pttHold": "Segurar",
   "pttToggle": "Alternar",
   "pttKey": "Tecla",
+  "rebindHint": "Prima uma tecla ou um botão do rato (inclui o clique do meio)",
   "gameDetection": "Detecção de Jogos",
   "gameAudioOnly": "Só Jogo + Microfone",
   "noGameDetected": "Nenhum jogo detectado",
