@@ -1042,6 +1042,28 @@ describe('useClipsActions', () => {
       cleanup()
     })
 
+    it('rebinds from the middle mouse button (scroll click)', async () => {
+      const dinho = mockDinho()
+      dinho.clipsSetConfig.mockResolvedValue({ success: true })
+      const hk: HotkeyBinding = {
+        id: 'hk-1',
+        vk: 0x50,
+        modifiers: [],
+        action: 'saveClip',
+        replayDurationSeconds: 60,
+        enabled: true,
+      }
+      const deps = getDeps(makeDeps({ config: makeConfig({ hotkeys: [hk] }) }))
+      const { result } = renderHook(() => useClipsActions(deps))
+      const cleanup = result.current.setupRebindingListeners('hk-1')
+
+      dispatchMouse(1)
+      const [patch] = dinho.clipsSetConfig.mock.calls[0]!
+      expect((patch as { hotkeys: HotkeyBinding[] }).hotkeys[0]!.vk).toBe(0x04)
+
+      cleanup()
+    })
+
     it('ignores non-mapped mouse buttons', async () => {
       const dinho = mockDinho()
       dinho.clipsSetConfig.mockResolvedValue({ success: true })

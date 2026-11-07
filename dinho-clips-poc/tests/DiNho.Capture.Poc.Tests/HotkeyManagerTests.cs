@@ -173,6 +173,73 @@ public sealed class HotkeyManagerTests : IDisposable
         Assert.Empty(_fired);
     }
 
+    // ── Botão do meio (scroll click, VK 0x04) via seam do hook de mouse ──
+
+    private const uint WM_MBUTTONDOWN = 0x0207;
+    private const uint WM_MBUTTONUP = 0x0208;
+    private const uint WM_NCMBUTTONDOWN = 0x00A7;
+    private const uint WM_NCMBUTTONUP = 0x00A8;
+    private const uint WM_XBUTTONDOWN = 0x020B;
+    private const uint WM_XBUTTONUP = 0x020C;
+
+    [Fact]
+    public void ProcessMouseEvent_MiddleButtonDown_Fires()
+    {
+        _hm.UpdateBindings([MakeBinding(0x04, "SaveClip")]);
+        _hm.ProcessMouseEvent(WM_MBUTTONDOWN, 0);
+        Assert.Single(_fired);
+        Assert.Equal(HotkeyAction.SaveClip, _fired[0].Action);
+    }
+
+    [Fact]
+    public void ProcessMouseEvent_MiddleButtonInNonClientArea_Fires()
+    {
+        _hm.UpdateBindings([MakeBinding(0x04, "Screenshot")]);
+        _hm.ProcessMouseEvent(WM_NCMBUTTONDOWN, 0);
+        Assert.Single(_fired);
+        Assert.Equal(HotkeyAction.Screenshot, _fired[0].Action);
+    }
+
+    [Fact]
+    public void ProcessMouseEvent_MiddleButtonHeld_FiresOnceUntilRelease()
+    {
+        _hm.UpdateBindings([MakeBinding(0x04, "SaveClip")]);
+
+        _hm.ProcessMouseEvent(WM_MBUTTONDOWN, 0);
+        _hm.ProcessMouseEvent(WM_MBUTTONDOWN, 0); // auto-repeat sem release
+        Assert.Single(_fired);
+
+        _hm.ProcessMouseEvent(WM_NCMBUTTONUP, 0); // release (NC ou cliente, mesmo VK)
+        _hm.ProcessMouseEvent(WM_MBUTTONDOWN, 0);
+        Assert.Equal(2, _fired.Count);
+    }
+
+    [Fact]
+    public void ProcessMouseEvent_MiddleButtonWithModifier_RequiresModifier()
+    {
+        _hm.UpdateBindings([MakeBinding(0x04, "ToggleMic", modifiers: [0x11])]);
+        _hm.ProcessMouseEvent(WM_MBUTTONDOWN, 0); // Ctrl não premido
+        _hm.ProcessMouseEvent(WM_MBUTTONUP, 0);
+        Assert.Empty(_fired);
+
+        _hm.SetKeyPressed(0x11, true); // Ctrl
+        _hm.ProcessMouseEvent(WM_MBUTTONDOWN, 0);
+        Assert.Single(_fired);
+    }
+
+    [Fact]
+    public void ProcessMouseEvent_XButtonStillMapsToVk05()
+    {
+        // Regressão do refactor: Mouse4 continua a sair do high word do mouseData.
+        _hm.UpdateBindings([MakeBinding(0x05, "SaveClip")]);
+        _hm.ProcessMouseEvent(WM_XBUTTONDOWN, 0x0001 << 16);
+        Assert.Single(_fired);
+
+        _hm.ProcessMouseEvent(WM_XBUTTONUP, 0x0001 << 16);
+        _hm.ProcessMouseEvent(WM_XBUTTONDOWN, 0x0001 << 16);
+        Assert.Equal(2, _fired.Count);
+    }
+
     [Fact]
     public void Dispose_DoesNotThrow_WhenNotStarted()
     {

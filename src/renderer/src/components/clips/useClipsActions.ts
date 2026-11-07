@@ -407,7 +407,8 @@ export function useClipsActions(deps: ClipsActionDeps) {
         commitRebind(e.keyCode, modifiersFromEvent(e))
       }
       const mouseHandler = (e: MouseEvent) => {
-        const vk = e.button === 3 ? 0x05 : e.button === 4 ? 0x06 : null
+        // 1 = botão do meio (scroll click, VK 0x04); 3/4 = Mouse4/Mouse5.
+        const vk = e.button === 1 ? 0x04 : e.button === 3 ? 0x05 : e.button === 4 ? 0x06 : null
         if (vk === null) return
         e.preventDefault()
         e.stopPropagation()

@@ -11,6 +11,7 @@ export type FilterTab = 'all' | 'today' | 'week' | 'favorites'
 export type ClipsSortKey = 'recent' | 'oldest' | 'largest'
 
 export const VK_MAP: Record<number, string> = {
+  4: 'Mouse3',
   5: 'Mouse4',
   6: 'Mouse5',
   8: 'Backspace',

@@ -56,8 +56,15 @@ public sealed class HotkeyManager : IDisposable
     private const int WM_XBUTTONUP = 0x020C;
     private const int WM_NCXBUTTONDOWN = 0x00AB;
     private const int WM_NCXBUTTONUP = 0x00AC;
+    // Botão do meio (scroll click). Ao contrário dos XBUTTONs, o VK não vem do
+    // mouseData — vem do próprio wMsg.
+    private const int WM_MBUTTONDOWN = 0x0207;
+    private const int WM_MBUTTONUP = 0x0208;
+    private const int WM_NCMBUTTONDOWN = 0x00A7;
+    private const int WM_NCMBUTTONUP = 0x00A8;
     private const int XBUTTON1 = 0x0001;
     private const int XBUTTON2 = 0x0002;
+    private const int VK_MBUTTON = 0x04;
     private const int VK_XBUTTON1 = 0x05;
     private const int VK_XBUTTON2 = 0x06;
 
@@ -197,34 +204,8 @@ public sealed class HotkeyManager : IDisposable
         {
             if (nCode < 0) return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
 
-            var wMsg = wParam.Value;
-            var isDown = wMsg == (uint)WM_XBUTTONDOWN || wMsg == (uint)WM_NCXBUTTONDOWN;
-            var isUp = wMsg == (uint)WM_XBUTTONUP || wMsg == (uint)WM_NCXBUTTONUP;
-            if (!isDown && !isUp) return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
-
             var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>((nint)lParam);
-            var xButton = (int)(hookStruct.mouseData >> 16);
-            int vkCode = xButton switch
-            {
-                XBUTTON1 => VK_XBUTTON1,
-                XBUTTON2 => VK_XBUTTON2,
-                _ => 0,
-            };
-            if (vkCode == 0) return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
-
-            if (isDown)
-            {
-                if (_keysDown.ContainsKey(vkCode))
-                    return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
-                _keysDown.TryAdd(vkCode, 0);
-                OnRawKeyEvent?.Invoke(vkCode, true);
-                MatchAndFireHotkey(vkCode);
-            }
-            else
-            {
-                _keysDown.TryRemove(vkCode, out _);
-                OnRawKeyEvent?.Invoke(vkCode, false);
-            }
+            ProcessMouseEvent(wParam.Value, hookStruct.mouseData);
         }
         catch (Exception ex)
         {
@@ -232,6 +213,55 @@ public sealed class HotkeyManager : IDisposable
         }
 
         return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Lógica comum/testável do hook de mouse. O botão do meio (VK 0x04) chega por
+    /// WM_MBUTTON*; Mouse4/Mouse5 chegam por WM_XBUTTON*, com o índice no high word
+    /// de <paramref name="mouseData"/>. Sempre não exclusivo: o hook continua a
+    /// chamar CallNextHookEx, logo o jogo também recebe o botão.
+    /// </summary>
+    internal void ProcessMouseEvent(nuint wMsg, uint mouseData)
+    {
+        if (_disposed) return;
+
+        var isMiddleDown = wMsg == WM_MBUTTONDOWN || wMsg == WM_NCMBUTTONDOWN;
+        var isMiddleUp = wMsg == WM_MBUTTONUP || wMsg == WM_NCMBUTTONUP;
+        var isXDown = wMsg == WM_XBUTTONDOWN || wMsg == WM_NCXBUTTONDOWN;
+        var isXUp = wMsg == WM_XBUTTONUP || wMsg == WM_NCXBUTTONUP;
+        var isDown = isMiddleDown || isXDown;
+        var isUp = isMiddleUp || isXUp;
+        if (!isDown && !isUp) return;
+
+        int vkCode;
+        if (isMiddleDown || isMiddleUp)
+        {
+            vkCode = VK_MBUTTON;
+        }
+        else
+        {
+            var xButton = (int)(mouseData >> 16);
+            vkCode = xButton switch
+            {
+                XBUTTON1 => VK_XBUTTON1,
+                XBUTTON2 => VK_XBUTTON2,
+                _ => 0,
+            };
+        }
+        if (vkCode == 0) return;
+
+        if (isDown)
+        {
+            if (_keysDown.ContainsKey(vkCode)) return;
+            _keysDown.TryAdd(vkCode, 0);
+            OnRawKeyEvent?.Invoke(vkCode, true);
+            MatchAndFireHotkey(vkCode);
+        }
+        else
+        {
+            _keysDown.TryRemove(vkCode, out _);
+            OnRawKeyEvent?.Invoke(vkCode, false);
+        }
     }
 
     internal void MatchAndFireHotkey(int vkCode)
@@ -316,6 +346,7 @@ public sealed class HotkeyManager : IDisposable
 
 public enum VirtualKey : int
 {
+    VK_MBUTTON = 0x04,
     VK_XBUTTON1 = 0x05,
     VK_XBUTTON2 = 0x06,
     VK_F1 = 0x70,
