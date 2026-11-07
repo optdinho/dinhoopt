@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   CircleCheck,
   CircleX,
   Copy,
@@ -11,10 +12,11 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getLicenseExpiry } from '../lib/license-validity'
 import { useLicenseStore } from '../stores/license-store'
 
 export function LicensePage() {
-  const { t } = useTranslation('license')
+  const { t, i18n } = useTranslation('license')
   const { hwid, isActivating, error, getHwid, activate, status, checkStatus } = useLicenseStore()
   const [key, setKey] = useState('')
   const [copied, setCopied] = useState(false)
@@ -87,6 +89,10 @@ export function LicensePage() {
   }
 
   const alreadyActivated = status?.valid
+  const expiry = alreadyActivated ? getLicenseExpiry(status?.expires_at) : null
+  const isLifetimeLicense = alreadyActivated && status?.expires_at === null
+  const expiryToneClass =
+    expiry?.tone === 'critical' ? 'text-red-300' : expiry?.tone === 'warning' ? 'text-amber-300' : 'text-emerald-300'
 
   return (
     <div className="flex flex-col h-full p-6 max-w-2xl mx-auto">
@@ -102,6 +108,31 @@ export function LicensePage() {
             <span className="text-emerald-300 font-semibold">{t('activeLicense')}</span>
           </div>
           <p className="text-gray-400 text-sm">{t('activeLicenseDescription')}</p>
+          {expiry && (
+            <div
+              data-testid="license-expiry"
+              data-tone={expiry.tone}
+              className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+            >
+              <CalendarClock className={`h-4 w-4 ${expiryToneClass}`} />
+              <span className={`font-semibold ${expiryToneClass}`}>
+                {expiry.daysLeft > 0
+                  ? t('daysRemaining', { count: expiry.daysLeft })
+                  : expiry.daysLeft === 0
+                    ? t('expiresToday')
+                    : t('licenseExpired')}
+              </span>
+              <span className="text-gray-400">
+                {t('expiresOn', { date: expiry.expiresAt.toLocaleDateString(i18n.language) })}
+              </span>
+            </div>
+          )}
+          {!expiry && isLifetimeLicense && (
+            <p data-testid="license-lifetime" className="mt-3 flex items-center gap-2 text-sm text-emerald-300">
+              <CalendarClock className="h-4 w-4" />
+              {t('lifetimeLicense')}
+            </p>
+          )}
         </div>
       )}
 
