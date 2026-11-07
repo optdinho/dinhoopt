@@ -1,3 +1,14 @@
+## [2.1.11]
+
+### Adicionado
+- **Clips — atalhos**: o **botão do meio do rato** (scroll click) passa a ser aceite como atalho de gravação, screenshot e push-to-talk. O rebind mostra-o como `Mouse3` e o engine dispara uma única vez por clique, com os modificadores que estiverem premidos (ex.: `Ctrl+Mouse3`).
+- **Licença**: o separador de ativação mostra os **dias restantes** e a data exata de expiração, com aviso de cor — verde acima de 7 dias, âmbar até 7, vermelho até 3/hoje/expirada. Licenças sem expiração mostram "Licença vitalícia".
+
+### Interno
+- **Clips**: a tradução do hook de mouse passou a `ProcessMouseEvent(wMsg, mouseData)` (seam testável) e cobre `WM_MBUTTON*` além de `WM_XBUTTON*`; 5 testes novos no engine e 1 no rebind do renderer.
+- **Licença**: `getLicenseExpiry` lê datas simples como calendário local (sem o desvio de um dia de `new Date('AAAA-MM-DD')`) e valida datas impossíveis; 9 testes no helper e 7 na página.
+- **Qualidade**: TS 8.486 testes em 336 ficheiros · C# 2.561 (Release) · `tsc` 0 · Biome 0.
+
 ## [2.1.10]
 
 ### Alterado

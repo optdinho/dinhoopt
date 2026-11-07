@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.10-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.11-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -46,6 +46,16 @@
 ## 📝 Novidades
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
+
+### 2\.1\.11
+
+**🖱️ Atalhos no rato.** O botão do meio (scroll click) passa a poder salvar clip, tirar
+screenshot ou controlar o microfone — sozinho ou com `Ctrl`/`Alt`/`Shift`, por exemplo
+`Ctrl+Mouse3`. Dispara uma vez por clique e o jogo continua a receber o botão.
+
+**📅 Licença sem surpresas.** O separador de ativação mostra quantos dias faltam e a data
+exacta de expiração, com aviso verde, âmbar ou vermelho. Licenças permanentes mostram
+"Licença vitalícia".
 
 ### 2\.1\.10
 
@@ -64,23 +74,6 @@ não precisa de edição a cada release — e o botão **BAIXAR** fica fixo no t
 **🎬 Clips mais limpos.** As ações do card passam a ser só ícones — Abrir, Editar, Publicar,
 Renomear, Link e Excluir — todos centrados e lado a lado, sem o menu `⋮`. Os contadores dos
 filtros deixam de partir o rótulo: `7 Dias` e o número ficam sempre na mesma linha.
-
-### 2\.1\.8
-
-**🧹 Manutenção Completa.** O dashboard passa a executar o pipeline completo em 11 fases
-selecionáveis — DISM/SFC, limpeza profunda + WinSxS, registo, malware, privacidade, startup,
-apps, drivers, drivers obsoletos, vulnerabilidades e desempenho — com confirmação e resultado
-por fase. A mesma tarefa chega ao agendador, com histórico detalhado.
-
-**🔒 Navegadores protegidos.** A limpeza é só de cache: cookies, logins e passwords nunca são
-apagados. A proteção é permanente e não pode ser desligada.
-
-**🎬 Clips e GPU.** Ordenação persistida, seleção sincronizada com os filtros e retry automático
-nos uploads (5xx/429). A aceleração de hardware deixa de ser desativada à partida; o fallback
-para software só acontece se o processo GPU falhar.
-
-**🔧 powercfg.** Definições ocultas (`perf-boost-mode`, `perf-epp`) passam a ser lidas com
-`-qh`, e o parser ignora os valores de intervalo ao ler os índices AC/DC.
 
 ---
 
@@ -240,8 +233,8 @@ npm run dev
 
 ```
 Cobertura: 95,8% linhas · 94,7% funções · 86,8% branches  (gate mínimo: 80%)
-TS:  8.199 testes em 318 ficheiros (Vitest) · Biome 0 · tsc 0
-C#:  2.552 testes (Release), 0 falhas, 0 ignorados
+TS:  8.486 testes em 336 ficheiros (Vitest) · Biome 0 · tsc 0
+C#:  2.561 testes (Release), 0 falhas, 0 ignorados
 ```
 
 A app eleva-se sozinha em desenvolvimento; para correr E2E sem elevação use `DINHO_E2E=1`.
