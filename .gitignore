@@ -10,10 +10,10 @@ skills/extracted/
 .env
 .env.local
 
-# License database (server-side only, should not be in repo)
-resources/licenses/*.db
-resources/licenses/*.db-wal
-resources/licenses/*.db-shm
+# License tooling artifacts — local only (server-side DB, keypair, exports).
+# scripts/license-generator writes the DB, private.pem/public.pem and
+# licenses-export-*.db here; none of it may ever be published.
+resources/licenses/
 
 # Backup directories
 .backup-security-audit/
