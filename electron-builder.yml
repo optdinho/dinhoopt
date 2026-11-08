@@ -65,13 +65,29 @@ compression: maximum
 # App runs elevated — hardening the binary matters. Verified safe:
 # no ELECTRON_RUN_AS_NODE / NODE_OPTIONS / --inspect usage; relaunch uses exe directly;
 # --cli/--daemon flags are unaffected by these fuses.
+#
+# Asar integrity (2026-11-08): os dois ultimos passaram a true. Sem eles,
+# `asar extract` -> editar -> `asar pack` produzia um app que arrancava, porque:
+#   - enableEmbeddedAsarIntegrityValidation=false: nada comparava o hash do
+#     app.asar com o gravado no exe;
+#   - onlyLoadAppFromAsar=false: se o app.asar faltasse (apagado/renomeado), o
+#     Electron caia para uma pasta `app/` ao lado do exe e corria-a. Medido em
+#     2026-11-08: com o fusivel off executou um app falso plantado em
+#     resources/app (`HIJACKED v9.9.9`); com ele on nao corre nada.
+# Com ambos a true, um app.asar alterado nao arranca.
+# Limites medidos: a validacao e por ficheiro/bloco (blockSize 4 MB) + hash do
+# header, portanto acrescentar bytes ao FIM do asar nao e detetado — mas tambem
+# nao altera nenhum ficheiro executado. NAO cobre app.asar.unpacked
+# (better-sqlite3), resources/clips-engine (motor C#) nem ffmpeg.exe, que ficam
+# fora do hash. E nao impede rebuild a partir do source; so trava a adulteracao
+# do binario instalado.
 electronFuses:
   runAsNode: false
   enableNodeOptionsEnvironmentVariable: false
   enableNodeCliInspectArguments: false
   enableCookieEncryption: true
-  enableEmbeddedAsarIntegrityValidation: false
-  onlyLoadAppFromAsar: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
   grantFileProtocolExtraPrivileges: false
   loadBrowserProcessSpecificV8Snapshot: false
 
