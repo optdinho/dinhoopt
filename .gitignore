@@ -4,7 +4,9 @@ out/
 .DS_Store
 *.log
 skills/extracted/
-.opencode/node_modules/
+# Ferramentas locais de agentes (nao fazem parte do produto)
+.opencode/
+.kilo/
 
 # Environment variables
 .env
