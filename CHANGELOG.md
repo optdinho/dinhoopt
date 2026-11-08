@@ -1,3 +1,13 @@
+## [2.1.12]
+
+### Corrigido
+- **Clips — rebind do botão do meio**: o clique do meio não era gravado quando era dado **no próprio chip** que iniciou o rebind (o gesto natural, porque o cursor já lá está). Os chips ficavam `disabled` durante a escuta e o Chromium suprime todos os eventos de rato em controlos de formulário desativados, portanto não chegava nenhum `mousedown` ao listener. A tecla funcionava porque o `keydown` é global. Os chips passam a usar `aria-disabled` (estado visual equivalente) e o clique só inicia o rebind se não houver outro em curso; o botão do meio continua a poder ser capturado em qualquer ponto da janela.
+- **Clips — dica de rebind**: enquanto se está a ouvir, aparece a indicação "Prima uma tecla ou um botão do rato (inclui o clique do meio)" (pt/en/es), tanto nos atalhos como no push-to-talk.
+
+### Interno
+- **Clips**: 6 testes de regressão (4 nos chips de atalho, 2 no chip de push-to-talk) garantem que o controlo não fica `disabled`, expõe `aria-disabled="true"`, mostra a dica e não reinicia o rebind a meio.
+- **Qualidade**: TS 8.492 testes em 337 ficheiros · C# 2.561 (Release) · `tsc` 0 · Biome 0.
+
 ## [2.1.11]
 
 ### Adicionado

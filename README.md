@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2\.1\.9-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2\.1\.12-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.11-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.12-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -46,6 +46,14 @@
 ## 📝 Novidades
 
 > Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
+
+### 2\.1\.12
+
+**🖱️ Botão do meio a funcionar sempre.** O clique do meio já era aceite como atalho, mas
+falhava no sítio onde é mais natural: em cima do próprio chip, logo depois de o clicar para
+rebitar. Os chips ficavam desativados durante a escuta e o Chromium não entrega eventos de
+rato a controlos desativados, por isso o clique não chegava a lado nenhum. Agora rebita em
+qualquer ponto da janela e mostra uma dica enquanto está à espera.
 
 ### 2\.1\.11
 
@@ -233,7 +241,7 @@ npm run dev
 
 ```
 Cobertura: 95,8% linhas · 94,7% funções · 86,8% branches  (gate mínimo: 80%)
-TS:  8.486 testes em 336 ficheiros (Vitest) · Biome 0 · tsc 0
+TS:  8.492 testes em 337 ficheiros (Vitest) · Biome 0 · tsc 0
 C#:  2.561 testes (Release), 0 falhas, 0 ignorados
 ```
 
