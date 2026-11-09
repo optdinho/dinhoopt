@@ -122,9 +122,14 @@ async function ensureRelease({ version, notes, token, request: doRequest, target
 
 /**
  * `target_commitish` e o commit onde a tag da release fica ancorada. So faz
- * sentido quando o repo de destino e o proprio repo onde o job corre: no repo
- * de releases (`dinhoopt-releases`) o SHA do repo de origem nao existe e o
- * `POST /releases` falha com "No commit found for the target_commitish".
+ * sentido quando o repo de destino e o proprio repo onde o job corre: caso
+ * contrario o SHA de origem nao existe la e o `POST /releases` falha com 422
+ * (`tag_name is not a valid tag` + `field: target_commitish` invalido).
+ *
+ * A comparacao e com o DESTINO (`OWNER/REPO`), nunca com o repo de origem: o
+ * workflow corre sempre em `optdinho/dinhoopt` e publica em
+ * `optdinho/dinhoopt-releases`, por isso comparar com a origem enviava o SHA
+ * errado e abortava o release (run 42541791781).
  *
  * Sem o campo, o GitHub usa o branch default do repo de releases (`main`), que
  * por isso tem de existir — repo vazio nao serve para publicar.
@@ -133,7 +138,7 @@ async function ensureRelease({ version, notes, token, request: doRequest, target
  * @returns {string | undefined}
  */
 function resolveTargetCommitish(env = process.env) {
-  if (env.GITHUB_REPOSITORY !== 'optdinho/dinhoopt') return undefined
+  if (env.GITHUB_REPOSITORY !== `${OWNER}/${REPO}`) return undefined
   return env.GITHUB_SHA || undefined
 }
 

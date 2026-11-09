@@ -108,11 +108,16 @@ produziriam sha512 diferentes e prendiam os antigos ao repo que fecha.
   release reenvia ~500 MB para um repo que ninguém lê). Usa `gh release create --verify-tag`
   (a tag já existe; sem `--verify-tag` o `gh` cria a ref e `release.yml` corre outra vez) e
   `gh api .../releases/tags/<tag>` antes, para o step ser idempotente num re-run.
-- **Defeito evitado:** `ensure-release.js` enviava sempre `target_commitish = GITHUB_SHA`;
-  esse commit não existe no repo de releases ⇒ `POST /releases` falharia com
-  `No commit found for the target_commitish`. Agora `resolveTargetCommitish()` só o envia
-  quando `GITHUB_REPOSITORY === 'optdinho/dinhoopt'` (3 testes novos); sem ele o GitHub usa
-  o `main` do repo de releases — que por isso **não pode nascer vazio**.
+- **Defeito evitado (e o primeiro run real apanhou-o):** `ensure-release.js` enviava sempre
+  `target_commitish = GITHUB_SHA`. A primeira versão do fix comparava com o repo de
+  **origem** (`GITHUB_REPOSITORY === 'optdinho/dinhoopt'`) — mas o job corre sempre na
+  origem e publica no repo de releases, por isso o campo continuava a ir e o run
+  **`42541791781`** morreu em `Stage ensure release` com `422`
+  (`tag_name is not a valid tag` + `target_commitish` inválido). Agora
+  `resolveTargetCommitish()` compara com o **destino** (`OWNER/REPO` = `dinhoopt-releases`)
+  e só envia o SHA quando o job corre lá; sem ele o GitHub usa o `main` do repo de
+  releases — que por isso **não pode nascer vazio**. Provado contra a API real antes de
+  re-taggar: `[ensure-release] release v2.1.13 created (id=438634082)`.
 - **`npm run verify:release` falha com `HTTP 404` até a primeira release existir em
   `dinhoopt-releases`.** É o esperado e é a prova de que o script já aponta ao feed novo.
 - **Fork apagado (2026-11-08):** `wendelmiranda001/dinhoopt` deixou de existir

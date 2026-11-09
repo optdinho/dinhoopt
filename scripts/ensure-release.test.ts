@@ -22,22 +22,24 @@ describe('buildReleasePayload', () => {
 })
 
 describe('resolveTargetCommitish', () => {
-  it('usa GITHUB_SHA quando a release e criada no proprio repo de origem', () => {
+  it('envia GITHUB_SHA quando o job corre no proprio repo de destino', () => {
     expect(
-      resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt', GITHUB_SHA: 'abc123' }),
+      resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt-releases', GITHUB_SHA: 'abc123' }),
     ).toBe('abc123')
   })
 
-  it('omite o commitish no repo de releases (o SHA de origem nao existe la)', () => {
-    // Sem isto o POST /releases falha com "No commit found for the
-    // target_commitish": o SHA vem do repo onde o job corre, nao daqui.
+  it('omite o commitish quando o job corre no repo de origem (caso real do release)', () => {
+    // O workflow corre em `optdinho/dinhoopt` e publica em `dinhoopt-releases`.
+    // Comparar a origem com a origem enviava o SHA da fonte para o repo de
+    // releases, que nao o tem, e o POST /releases devolvia 422
+    // (`tag_name is not a valid tag` + `target_commitish` invalido) — run 42541791781.
     expect(
-      resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt-releases', GITHUB_SHA: 'abc123' }),
+      resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt', GITHUB_SHA: 'abc123' }),
     ).toBeUndefined()
   })
 
   it('omite quando nao ha SHA ou nao estamos no CI', () => {
-    expect(resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt' })).toBeUndefined()
+    expect(resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt-releases' })).toBeUndefined()
     expect(resolveTargetCommitish({})).toBeUndefined()
   })
 })
