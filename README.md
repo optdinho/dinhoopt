@@ -211,31 +211,6 @@ Windows-only) que corre ao lado do app Electron e comunica por **named pipes**:
 - **Node.js** 24+ (LTS) e **npm** 10+
 - **Windows** com **Visual Studio Build Tools 2022** (motor de Clips em .NET 10)
 
-### Setup
-
-```bash
-git clone https://github.com/optdinho/dinhoopt.git
-cd dinhoopt
-npm install
-npm run dev
-```
-
-> O `npm run dev` **auto-eleva** (o app precisa de privilégios de administrador): aceita o
-> prompt UAC uma vez e a app abre elevada com o renderer em `localhost:5173`.
-
-### Scripts
-
-| Comando | Descrição |
-|---------|-----------|
-| `npm run dev` | Modo desenvolvimento (hot reload, auto-elevação) |
-| `npm run build` | Compila TypeScript + bundler |
-| `npm run package` | Gera o instalador NSIS em `dist/` |
-| `npm run publish` | Empacota e publica a release no GitHub Releases |
-| `npm test` | Testes unitários e de integração (Vitest) |
-| `npm run test:coverage` | Testes com relatório de cobertura |
-| `npm run test:e2e` | Journey E2E (Playwright) |
-| `npm run lint` / `lint:fix` | Verifica / corrige com Biome |
-| `npm run typecheck` | Verificação de tipos TypeScript |
 
 ### 🧪 Qualidade
 
@@ -247,15 +222,6 @@ C#:  2.561 testes (Release), 0 falhas, 0 ignorados
 
 A app eleva-se sozinha em desenvolvimento; para correr E2E sem elevação use `DINHO_E2E=1`.
 
----
-
-## 🤝 Contribuindo
-
-1. Fork do projeto e branch: `git checkout -b feat/nova-funcionalidade`
-2. Commit no padrão [Conventional Commits](https://www.conventionalcommits.org/) —
-   `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
-3. Garanta **80%+ de cobertura** para código novo e `npm run lint` a passar (TDD)
-4. Pull Request
 
 ---
 
