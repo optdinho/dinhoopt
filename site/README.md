@@ -81,7 +81,9 @@ servidor.
 
 ## Como funciona
 
-1. A página chama `https://api.github.com/repos/optdinho/dinhoopt/releases/latest`.
+1. A página chama `https://api.github.com/repos/optdinho/dinhoopt-releases/releases/latest`.
+   O repo `optdinho/dinhoopt` é a **fonte privada** (não serve binários e um GET
+   anónimo dá 404); `dinhoopt-releases` é público e só tem as releases.
 2. Escolhe os assets pelo padrão do nome (funciona com nome versionado **ou** fixo):
    - instalador: `DiNho-Optimizer-Setup*.exe`
    - portable: `DiNho-Optimizer-<qualquer>.exe` (exclui `Setup`)
@@ -93,7 +95,7 @@ Nada é gerado no build, nada depende de variável de ambiente e não há token.
 ### Fallback (importante)
 
 Os botões já nascem com `href` para
-`https://github.com/optdinho/dinhoopt/releases/latest`. Se a API falhar
+`https://github.com/optdinho/dinhoopt-releases/releases/latest`. Se a API falhar
 (rate limit, offline, bloqueio), a página:
 
 - mostra um aviso laranja;

@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { buildReleasePayload, ensureRelease } = require('./ensure-release.js')
+const { buildReleasePayload, ensureRelease, resolveTargetCommitish } = require('./ensure-release.js')
 
 describe('buildReleasePayload', () => {
   it('monta o payload com tag v-prefixada, name=version e nao-draft', () => {
@@ -18,6 +18,27 @@ describe('buildReleasePayload', () => {
   it('inclui target_commitish apenas quando fornecido', () => {
     expect(buildReleasePayload('2.0.9', 'N', 'abc123')).toHaveProperty('target_commitish', 'abc123')
     expect(buildReleasePayload('2.0.9', 'N')).not.toHaveProperty('target_commitish')
+  })
+})
+
+describe('resolveTargetCommitish', () => {
+  it('usa GITHUB_SHA quando a release e criada no proprio repo de origem', () => {
+    expect(
+      resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt', GITHUB_SHA: 'abc123' }),
+    ).toBe('abc123')
+  })
+
+  it('omite o commitish no repo de releases (o SHA de origem nao existe la)', () => {
+    // Sem isto o POST /releases falha com "No commit found for the
+    // target_commitish": o SHA vem do repo onde o job corre, nao daqui.
+    expect(
+      resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt-releases', GITHUB_SHA: 'abc123' }),
+    ).toBeUndefined()
+  })
+
+  it('omite quando nao ha SHA ou nao estamos no CI', () => {
+    expect(resolveTargetCommitish({ GITHUB_REPOSITORY: 'optdinho/dinhoopt' })).toBeUndefined()
+    expect(resolveTargetCommitish({})).toBeUndefined()
   })
 })
 

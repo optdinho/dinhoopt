@@ -28,7 +28,9 @@ const { join } = require('node:path')
 const https = require('node:https')
 
 const OWNER = 'optdinho'
-const REPO = 'dinhoopt'
+// As releases passam a ser publicadas em `dinhoopt-releases` (publico, so
+// binarios); `dinhoopt` fica privado com a fonte. Ver a migracao de 2026-11.
+const REPO = 'dinhoopt-releases'
 const PROJECT_ROOT = join(__dirname, '..')
 
 /**
@@ -118,6 +120,23 @@ async function ensureRelease({ version, notes, token, request: doRequest, target
   return { action: 'created', id: created.id }
 }
 
+/**
+ * `target_commitish` e o commit onde a tag da release fica ancorada. So faz
+ * sentido quando o repo de destino e o proprio repo onde o job corre: no repo
+ * de releases (`dinhoopt-releases`) o SHA do repo de origem nao existe e o
+ * `POST /releases` falha com "No commit found for the target_commitish".
+ *
+ * Sem o campo, o GitHub usa o branch default do repo de releases (`main`), que
+ * por isso tem de existir — repo vazio nao serve para publicar.
+ *
+ * @param {{ GITHUB_REPOSITORY?: string, GITHUB_SHA?: string }} [env]
+ * @returns {string | undefined}
+ */
+function resolveTargetCommitish(env = process.env) {
+  if (env.GITHUB_REPOSITORY !== 'optdinho/dinhoopt') return undefined
+  return env.GITHUB_SHA || undefined
+}
+
 async function main() {
   const token = process.env.GH_TOKEN
   if (!token) {
@@ -126,7 +145,7 @@ async function main() {
   }
   const version = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf-8')).version
   const notes = readFileSync(join(PROJECT_ROOT, 'release-notes.md'), 'utf-8').trim()
-  const targetCommitish = process.env.GITHUB_SHA || undefined
+  const targetCommitish = resolveTargetCommitish(process.env)
 
   const result = await ensureRelease({ version, notes, token, request, targetCommitish })
   console.log(`[ensure-release] release v${version} ${result.action} (id=${result.id})`)
@@ -139,4 +158,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { buildReleasePayload, ensureRelease }
+module.exports = { buildReleasePayload, ensureRelease, resolveTargetCommitish }

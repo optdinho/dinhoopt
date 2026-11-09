@@ -6,10 +6,12 @@ namespace DiNho.Capture.Poc.GameDetection;
 
 public sealed class GameDatabaseUpdater
 {
-    // Served from the repo's raw CDN (Fastly, ~5 min cache) while the custom
-    // cdn.dinho.app host does not resolve. cdn.dinho.app is the target once its
-    // static host + CNAME are actually published (the CSP already allows it).
-    public const string REMOTE_URL = "https://raw.githubusercontent.com/optdinho/dinhoopt/main/dinho-clips-poc/src/DiNho.Capture.Poc/games.json";
+    // Served from the raw CDN (Fastly, ~5 min cache) of `dinhoopt-releases`, the
+    // PUBLIC binaries repo: the source repo `dinhoopt` is private since 2026-11,
+    // so its raw URL would answer 404 to anonymous clients. cdn.dinho.app is the
+    // target once its static host + CNAME are actually published (the CSP
+    // already allows it).
+    public const string REMOTE_URL = "https://raw.githubusercontent.com/optdinho/dinhoopt-releases/main/games.json";
     public const int CHECK_INTERVAL_DAYS = 7;
     private const string STATE_FILE = "games-update-check.json";
     private const int MAX_ATTEMPTS = 2;

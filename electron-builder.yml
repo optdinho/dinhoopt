@@ -94,12 +94,15 @@ electronFuses:
 publish:
   provider: github
   owner: optdinho
-  repo: dinhoopt
-  # public: false (omitido) — optdinho/dinhoopt é repo PÚBLICO (verificado via
-  # API: private=false em 2026-09-29). Com `private: true` o electron-updater
-  # tentaria authenticate com GH_TOKEN no feed .atom, e em producao esse token
-  # nao existe (index.ts so carrega o .env quando !app.isPackaged), quebrando
-  # o auto-update. Repo publico = feed anonimo, sem token.
+  # `dinhoopt` (fonte) e PRIVADO desde a migracao de 2026-11; os binarios vivem
+  # em `dinhoopt-releases`, que e PUBLICO. O feed tem de continuar publico:
+  # `resources/app-update.yml` e gerado aqui e lido sem token em producao
+  # (index.ts so carrega o .env quando !app.isPackaged).
+  repo: dinhoopt-releases
+  # public: false (omitido) — optdinho/dinhoopt-releases é repo PÚBLICO. Com
+  # `private: true` o electron-updater tentaria authenticate com GH_TOKEN no
+  # feed .atom, e em producao esse token nao existe, quebrando o auto-update.
+  # Repo publico = feed anonimo, sem token.
   private: false
   # O electron-builder 26 usa `options.draft === false ? "release" : "draft"`
   # (electron-publish/out/gitHubPublisher.js:55), ou seja, SEM isto toda

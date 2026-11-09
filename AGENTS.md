@@ -81,6 +81,48 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### Migração para repo privado + releases públicas (2026-11-08)
+
+**Arquitetura:** `optdinho/dinhoopt` = fonte (a tornar **privada**; flip pendente) ·
+`optdinho/dinhoopt-releases` = **público**, só binários (`latest.yml`, `*.exe`, `*.blockmap`),
+release `assets` com o ffmpeg (217 823 104 B, sha256 `589e50b7…`) e `games.json` na raiz
+(idêntico ao local, sha256 `e1f9f713…`, 114 941 B). O `publish.private: false` mantém-se —
+o repo de releases é público, logo o feed continua anónimo.
+
+**A regra que não se pode violar:** a 2.1.13 tem de ser construída **uma única vez** com o
+feed novo e **espelhada** (mesmos bytes) no repo antigo. Todo cliente ≤2.1.12 tem
+`resources/app-update.yml → repo: dinhoopt`; no instante em que o repo fica privado, o
+`GET /releases/latest` anónimo passa a 404 e esses clientes **nunca mais atualizam**.
+O espelho dá-lhes a 2.1.13, que regrava o feed para `dinhoopt-releases`. Dois builds
+produziriam sha512 diferentes e prendiam os antigos ao repo que fecha.
+
+- **Fase 1 aplicada (12 sítios):** `electron-builder.yml` (`repo: dinhoopt-releases`),
+  `release.yml` (URL do ffmpeg + step de espelho), `ci.yml:77` (**estava fora do plano** — o
+  job `dotnet` também descarregava o ffmpeg do repo antigo), `scripts/verify-release.js`,
+  `scripts/ensure-release.js`, `site/download/index.html` (constante + 5 hrefs; o botão
+  "Código no GitHub" passou a "Repositório no GitHub" → repo de releases),
+  `site/README.md`, `GameDatabaseUpdater.cs` (`raw.githubusercontent.com/optdinho/dinhoopt-releases/main/games.json`)
+  e os links de download do `README.md`.
+- **Step de espelho** (`Mirror release to legacy repo (bridge)`), gateado por
+  `vars.BRIDGE_MIRROR == '1'` — ligar antes de taggar a 2.1.13, desligar depois (senão cada
+  release reenvia ~500 MB para um repo que ninguém lê). Usa `gh release create --verify-tag`
+  (a tag já existe; sem `--verify-tag` o `gh` cria a ref e `release.yml` corre outra vez) e
+  `gh api .../releases/tags/<tag>` antes, para o step ser idempotente num re-run.
+- **Defeito evitado:** `ensure-release.js` enviava sempre `target_commitish = GITHUB_SHA`;
+  esse commit não existe no repo de releases ⇒ `POST /releases` falharia com
+  `No commit found for the target_commitish`. Agora `resolveTargetCommitish()` só o envia
+  quando `GITHUB_REPOSITORY === 'optdinho/dinhoopt'` (3 testes novos); sem ele o GitHub usa
+  o `main` do repo de releases — que por isso **não pode nascer vazio**.
+- **`npm run verify:release` falha com `HTTP 404` até a primeira release existir em
+  `dinhoopt-releases`.** É o esperado e é a prova de que o script já aponta ao feed novo.
+- **Fork apagado (2026-11-08):** `wendelmiranda001/dinhoopt` deixou de existir
+  (API `404`, `forks_count: 0`). Repos privados não apagam forks, por isso isto tinha de ser
+  feito **antes** do flip — sem ele o source continuava clonável.
+- **Falta apenas:** push (feito a partir da estação de trabalho, o token do `.env` não serve),
+  `BRIDGE_MIRROR=1` nas variables do repo, tag `v2.1.13`, redeploy do site, e depois o flip.
+- **Plano completo:** `docs/plans/repo-privado-releases-publicas-2026-11-08.md` (não
+  versionado, `docs/` está no `.gitignore`).
+
 ### Manutenção Completa + limpeza de navegadores (2026-11-04)
 
 **A "Manutenção Completa" passou de 6 para 11 fases selecionáveis** e ganhou as 5 fases que só existiam na "Limpeza completa": malware + quarentena, verificação de privacidade, startup de alto impacto, scan de vulnerabilidades e remoção de drivers obsoletos. Ordem do pipeline: DISM/SFC → limpeza profunda + WinSxS → registo → malware → privacidade → startup → apps (winget) → drivers → drivers obsoletos → vulnerabilidades → desempenho (TRIM, energia, DNS, RAM). `countAutoMaintenanceSteps` conta 15 passos com tudo ligado. Privacidade, startup e vulnerabilidades são **só de leitura** (relatório); malware e drivers obsoletos **agem** apenas com `autoApply` ligado.

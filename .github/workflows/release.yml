@@ -22,11 +22,13 @@ jobs:
       # ffmpeg.exe (217MB) não vive no git (ignorado, acima do limite de 100MB).
       # O CI baixa do asset da release vazia 'assets' — criada apenas pra guardar
       # o binário. O copy-engine.js faz o gate do binário antes de publicar.
+      # O asset vive em `dinhoopt-releases` (público): `dinhoopt` (fonte) é
+      # privado e um download anónimo de lá daria 404.
       - name: Download ffmpeg.exe from assets release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path resources/ffmpeg-custom -Force | Out-Null
-          $url = "https://github.com/optdinho/dinhoopt/releases/download/assets/ffmpeg.exe"
+          $url = "https://github.com/optdinho/dinhoopt-releases/releases/download/assets/ffmpeg.exe"
           $out = "resources/ffmpeg-custom/ffmpeg.exe"
           Invoke-WebRequest -Uri $url -OutFile $out -TimeoutSec 300
           $size = (Get-Item $out).Length
@@ -74,6 +76,34 @@ jobs:
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      # PONTE PARA OS CLIENTES ANTIGOS (temporária — ligar com a variável de
+      # repositório BRIDGE_MIRROR=1 só durante a migração; desligar depois).
+      #
+      # Os clientes <= 2.1.12 têm o feed antigo gravado no exe
+      # (`repo: dinhoopt`). Quando `dinhoopt` ficar privado, o `GET` anónimo do
+      # `releases/latest` passa a 404 e eles nunca mais atualizam. Este step
+      # espelha os MESMOS bytes (mesmo `latest.yml`, mesmo sha512 — não há
+      # segundo build) para uma release no repo antigo, para que esses clientes
+      # apanhem esta versão e passem a consultar o feed novo.
+      #
+      # `--verify-tag` é obrigatório: a tag já existe (foi ela que disparou este
+      # run). Sem ele, o `gh` criaria a tag no repo antigo e o `release.yml`
+      # (`on: push: tags: v*`) dispararia um build completo duplicado.
+      - name: Mirror release to legacy repo (bridge)
+        if: success() && vars.BRIDGE_MIRROR == '1'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          "a espelhar $tag para optdinho/dinhoopt (ponte)"
+          gh api "repos/optdinho/dinhoopt/releases/tags/$tag" --silent 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo optdinho/dinhoopt --verify-tag --title $tag --notes-file release-notes.md
+          }
+          gh release upload $tag --repo optdinho/dinhoopt --clobber dist/latest.yml dist/*.exe dist/*.blockmap
 
       # O electron-builder publicar não é o mesmo que o auto-update estar a caminho:
       # pode uploading correr bem e o CDN continuar a servir um `latest.yml` antigo. Foi

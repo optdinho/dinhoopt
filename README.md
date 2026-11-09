@@ -29,7 +29,7 @@
 ## 📥 Download
 
 <p align="center">
-  <a href="https://github.com/optdinho/dinhoopt/releases/latest">
+  <a href="https://github.com/optdinho/dinhoopt-releases/releases/latest">
     <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.12-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
@@ -270,7 +270,7 @@ copiado, distribuído ou modificado sem autorização expressa.
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt">🏠 Home</a> •
-  <a href="https://github.com/optdinho/dinhoopt/releases">📦 Releases</a> •
+  <a href="https://github.com/optdinho/dinhoopt-releases/releases">📦 Releases</a> •
   <a href="https://github.com/optdinho/dinhoopt/issues">🐛 Reportar Bug</a>
 </p>
 

@@ -19,7 +19,9 @@
 const { createHash } = require('node:crypto')
 
 const OWNER = 'optdinho'
-const REPO = 'dinhoopt'
+// Os binarios vivem em `dinhoopt-releases` (publico). `dinhoopt` e a fonte,
+// privada desde 2026-11 — verificar o feed la daria 404 com anonimo.
+const REPO = 'dinhoopt-releases'
 const FEED_URL = `https://github.com/${OWNER}/${REPO}/releases/latest/download/latest.yml`
 const API_LATEST = `https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`
 

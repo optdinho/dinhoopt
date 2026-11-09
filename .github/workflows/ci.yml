@@ -74,7 +74,7 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP "ffmpeg"
           New-Item -ItemType Directory -Path $dir -Force | Out-Null
           $out = Join-Path $dir "ffmpeg.exe"
-          Invoke-WebRequest -Uri "https://github.com/optdinho/dinhoopt/releases/download/assets/ffmpeg.exe" -OutFile $out -TimeoutSec 300
+          Invoke-WebRequest -Uri "https://github.com/optdinho/dinhoopt-releases/releases/download/assets/ffmpeg.exe" -OutFile $out -TimeoutSec 300
           $size = (Get-Item $out).Length
           if ($size -lt 100MB) { throw "ffmpeg.exe baixado parece incompleto: $size bytes" }
           Add-Content -Path $env:GITHUB_PATH -Value $dir
