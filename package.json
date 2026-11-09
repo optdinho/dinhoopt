@@ -15,6 +15,7 @@
     "publish": "npm run copy-engine && npm run release:notes && electron-vite build && npm run release:ensure && electron-builder --win --publish always",
     "release:notes": "node scripts/gen-release-notes.js",
     "release:ensure": "node scripts/ensure-release.js",
+    "release:readme": "node scripts/sync-releases-readme.js",
     "copy-engine": "node scripts/copy-engine.js",
     "build:ffmpeg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-ffmpeg.ps1",
     "verify:ffmpeg": "node scripts/verify-ffmpeg.js --ffmpeg resources/clips-engine-staging/ffmpeg.exe",

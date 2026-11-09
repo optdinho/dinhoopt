@@ -148,6 +148,37 @@ produziriam sha512 diferentes e prendiam os antigos ao repo que fecha.
 - **Plano completo:** `docs/plans/repo-privado-releases-publicas-2026-11-08.md` (não
   versionado, `docs/` está no `.gitignore`).
 
+### README público sincronizado com o CHANGELOG (2026-11-08)
+
+O README de `optdinho/dinhoopt-releases` era mantido à mão e divergiu — badge ainda em
+**2.1.12** e sem entrada 2.1.13, com a 2.1.13 já publicada. Passa a ser sincronizado por
+`scripts/sync-releases-readme.js` (`npm run release:readme`), corrido pelo job `readme-sync`
+do `release.yml` **depois** do publish:
+
+- **Fonte das notas, por ordem:** `readme-notes/<versão>.md` (prosa escrita à mão, opcional) →
+  senão a secção da versão do `CHANGELOG.md` **sem** o bloco `### Interno` (notas técnicas não
+  pertencem a uma página pública). Sem nota em nenhuma das fontes → **exit 1**, nunca publica
+  uma secção vazia.
+- **O que edita:** só o interior de `<!-- novidades:start -->`/`<!-- novidades:end -->`
+  (marcadores inseridos no primeiro run), os **dois badges** (`versão-…` e
+  `Baixar-DiNho_Optimizer_…`) e o link do histórico — `CHANGELOG.md` → página
+  `/releases`, porque o CHANGELOG só existe no repo privado. Tudo o resto fica byte-idêntico.
+- **Política:** prepend da versão nova, dedupe por versão e no máximo **5** entradas; comando
+  idempotente (um re-run sem alterações não faz commit).
+- **Modos:** sem flags lê/escreve no GitHub (`GH_TOKEN` com write no `dinhoopt-releases`);
+  `--dry-run` mostra o que mudaria; `--file <path>` transforma um README local (é o que mantém
+  o `README.md` da fonte alinhado e o que os testes usam). `resolve()` no `--file`: `join()`
+  com um path absoluto produz `C:\proj\C:\...`.
+- **Job separado, não um step:** `needs: release` para uma falha a escrever o README não pintar
+  de vermelho uma release que publicou bem. Não corre `npm ci` (o script só usa builtins do
+  Node).
+- **Dois detalhes que os testes fixaram:** um `### Alterado` dentro da entrada **não** abre
+  entrada nova (senão o 2.º run duplicava as notas — a regex de entrada exige `### <versão>`),
+  e os pontos da versão são escapados (`### 2\.1\.13`) para o GitHub não os transformar em
+  links de issues.
+- **Bootstrap aplicado:** commit `ad155af` no repo de releases (11498 B) e o `README.md` da
+  fonte com a v2.1.13. Testes: `scripts/sync-releases-readme.test.ts` (23 verdes).
+
 ### Manutenção Completa + limpeza de navegadores (2026-11-04)
 
 **A "Manutenção Completa" passou de 6 para 11 fases selecionáveis** e ganhou as 5 fases que só existiam na "Limpeza completa": malware + quarentena, verificação de privacidade, startup de alto impacto, scan de vulnerabilidades e remoção de drivers obsoletos. Ordem do pipeline: DISM/SFC → limpeza profunda + WinSxS → registo → malware → privacidade → startup → apps (winget) → drivers → drivers obsoletos → vulnerabilidades → desempenho (TRIM, energia, DNS, RAM). `countAutoMaintenanceSteps` conta 15 passos com tudo ligado. Privacidade, startup e vulnerabilidades são **só de leitura** (relatório); malware e drivers obsoletos **agem** apenas com `autoApply` ligado.

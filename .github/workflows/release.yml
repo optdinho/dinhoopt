@@ -164,3 +164,28 @@ jobs:
           "--- env (sem segredos) ---"
           "GH_TOKEN definido: $([bool]$env:GH_TOKEN)"
           "NUGET_PACKAGES: $($env:NUGET_PACKAGES)"
+
+  # O README publico (`dinhoopt-releases`) e a primeira coisa que um utilizador ve:
+  # tem os badges de versao e a seccao "Novidades". Era escrito a mao e divergiu —
+  # em 2026-11-08 ainda dizia 2.1.12 e nao tinha a 2.1.13. Este job corre depois do
+  # publish e sincroniza-o com o CHANGELOG (ou com `readme-notes/<versao>.md`, se
+  # existir prosa escrita a mao). O script e idempotente: sem alteracoes, nao faz
+  # commit nenhum.
+  #
+  # Job separado e nao um step do `release`: uma falha a escrever o README nao deve
+  # pintar de vermelho uma release que publicou bem, e assim a causa aparece
+  # isolada no log. Nao corre `npm ci` — o script so usa builtins do Node.
+  readme-sync:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Sync Novidades and badges to dinhoopt-releases README
+        run: node scripts/sync-releases-readme.js
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}

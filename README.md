@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versão-2\.1\.12-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
+  <img src="https://img.shields.io/badge/versão-2\.1\.13-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Versão" />
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11-22c55e?style=for-the-badge&logo=windows11&logoColor=white" alt="Plataforma" />
   <img src="https://img.shields.io/badge/build-passing-22c55e?style=for-the-badge&logo=githubactions&logoColor=white" alt="Build" />
   <img src="https://img.shields.io/badge/coverage-95.8%25-22c55e?style=for-the-badge&logo=vitest&logoColor=white" alt="Coverage" />
@@ -30,7 +30,7 @@
 
 <p align="center">
   <a href="https://github.com/optdinho/dinhoopt-releases/releases/latest">
-    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.12-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+    <img src="https://img.shields.io/badge/Baixar-DiNho_Optimizer_2\.1\.13-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
 
@@ -45,7 +45,22 @@
 
 ## 📝 Novidades
 
-> Histórico completo das versões anteriores em **[CHANGELOG.md](CHANGELOG.md)**.
+> Histórico completo das versões anteriores em **[Todas as versões](https://github.com/optdinho/dinhoopt-releases/releases)**.
+
+<!-- novidades:start -->
+
+### 2\.1\.13
+
+**🔄 Atualizações sem interrupção.** Os binários passaram para um repositório público
+(`dinhoopt-releases`) e o código-fonte ficou privado. Quem está numa versão anterior recebe
+esta versão pelo feed antigo e, a partir daí, consulta o feed novo. A validação de licenças
+não depende do GitHub, por isso **nenhuma licença existente é afetada**.
+
+**🌐 Site.** A página `/download/` passa a ler a versão, a data e os tamanhos do feed novo, e
+"Ver todas as versões" aponta para o repositório de releases.
+
+**🎮 Base de jogos.** O motor lê o `games.json` do repositório público, para a lista de jogos
+continuar a atualizar sem depender do repositório privado.
 
 ### 2\.1\.12
 
@@ -82,6 +97,8 @@ não precisa de edição a cada release — e o botão **BAIXAR** fica fixo no t
 **🎬 Clips mais limpos.** As ações do card passam a ser só ícones — Abrir, Editar, Publicar,
 Renomear, Link e Excluir — todos centrados e lado a lado, sem o menu `⋮`. Os contadores dos
 filtros deixam de partir o rótulo: `7 Dias` e o número ficam sempre na mesma linha.
+
+<!-- novidades:end -->
 
 ---
 
