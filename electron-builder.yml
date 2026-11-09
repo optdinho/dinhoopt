@@ -147,3 +147,14 @@ nsis:
   runAfterFinish: true
   createStartMenuShortcut: true
   createDesktopShortcut: true
+
+portable:
+  # Nome sem espacos de proposito. O default seria `${productName}-${version}`
+  # ("DiNho Optimizer-2.1.13.exe"): o electron-builder sobe-o como
+  # "DiNho-Optimizer-2.1.13.exe" (troca o espaco por hifen), mas o step de
+  # espelho usa `gh release upload`, que troca o espaco por PONTO — o mesmo
+  # binario ficava com nome diferente em cada repo (visto na 2.1.13:
+  # `DiNho-Optimizer-2.1.13.exe` vs `DiNho.Optimizer.2.1.13.exe`). Os bytes
+  # eram identicos (sha256 igual); era so o nome. Fixar o nome aqui resolve-o
+  # na origem para as proximas releases.
+  artifactName: DiNho-Optimizer-${version}.${ext}

@@ -118,13 +118,33 @@ produziriam sha512 diferentes e prendiam os antigos ao repo que fecha.
   e só envia o SHA quando o job corre lá; sem ele o GitHub usa o `main` do repo de
   releases — que por isso **não pode nascer vazio**. Provado contra a API real antes de
   re-taggar: `[ensure-release] release v2.1.13 created (id=438634082)`.
-- **`npm run verify:release` falha com `HTTP 404` até a primeira release existir em
-  `dinhoopt-releases`.** É o esperado e é a prova de que o script já aponta ao feed novo.
+- **`npm run verify:release` dá `HTTP 404` até a primeira release existir em
+  `dinhoopt-releases`** — era o esperado antes da 2.1.13 e é o que prova que o script
+  aponta ao feed novo (foi ele que falhou, de propósito, nos dois runs abortados).
 - **Fork apagado (2026-11-08):** `wendelmiranda001/dinhoopt` deixou de existir
   (API `404`, `forks_count: 0`). Repos privados não apagam forks, por isso isto tinha de ser
   feito **antes** do flip — sem ele o source continuava clonável.
-- **Falta apenas:** push (feito a partir da estação de trabalho, o token do `.env` não serve),
-  `BRIDGE_MIRROR=1` nas variables do repo, tag `v2.1.13`, redeploy do site, e depois o flip.
+- **2.1.13 PUBLICADA (2026-11-09, run `42542518499`, todos os steps verdes).** Tag
+  `v2.1.13` → `8caafe9`. Os dois primeiros runs morreram no `Stage ensure release`
+  (`42541791781` e o cancelado `42542340568`) — ver o defeito do `target_commitish` acima.
+  Estado final medido: os **4 assets têm o mesmo `sha256` nos dois repos**
+  (`latest.yml` `b10e6bd3…`, Setup `39aa7cc0…`, blockmap `f814d0b5…`, portable
+  `01ee3c06…`) e o `latest.yml` é **byte-idêntico** nos dois lados.
+  `npm run verify:release -- --expect 2.1.13` → **PASS** (feed, tag, releaseDate e sha512
+  declarado). `latest` do repo novo = `v2.1.13`; `latest` do repo antigo também (é o que
+  os clientes ≤2.1.12 vão apanhar).
+- **Única divergência, cosmética:** o portable ficou com **nomes diferentes** —
+  `DiNho-Optimizer-2.1.13.exe` (repo novo, electron-builder troca o espaço por hífen) vs
+  `DiNho.Optimizer.2.1.13.exe` (repo antigo, o `gh release upload` troca o espaço por
+  ponto). Bytes iguais; o download do site só consulta o repo novo e o regex
+  `^DiNho-Optimizer-(?!Setup)` casa com o nome novo. Corrigido na origem para as próximas
+  releases com `portable.artifactName: DiNho-Optimizer-${version}.${ext}`
+  (`electron-builder.yml`). A 2.1.13 **não** foi reconstruída por isto — reconstruir
+  violaria a regra do build único por um nome de ficheiro.
+- **Falta apenas:** redeploy do site (pacote gerado por `site/build-deploy.js`; a cópia
+  pronta está em `C:\Users\Windows\Desktop\deploy` — arrastar ao Netlify, o CLI não está
+  instalado), a janela de ~4 semanas e depois o flip para privado +
+  apagar `BRIDGE_MIRROR` (senão cada release reenvia ~500 MB ao repo antigo legado).
 - **Plano completo:** `docs/plans/repo-privado-releases-publicas-2026-11-08.md` (não
   versionado, `docs/` está no `.gitignore`).
 
