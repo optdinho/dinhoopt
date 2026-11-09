@@ -99,11 +99,30 @@ jobs:
           $version = node -p "require('./package.json').version"
           $tag = "v$version"
           "a espelhar $tag para optdinho/dinhoopt (ponte)"
-          gh api "repos/optdinho/dinhoopt/releases/tags/$tag" --silent 2>$null
-          if ($LASTEXITCODE -ne 0) {
+
+          # Ficheiros resolvidos aqui, não por glob do `gh`: o resultado não
+          # depende de o CLI expandir wildcards, e falha cedo se o dist/ vier
+          # incompleto (espelhar meio release é pior do que falhar).
+          $files = @(
+            Get-ChildItem dist -File |
+              Where-Object { $_.Name -eq 'latest.yml' -or $_.Extension -in '.exe', '.blockmap' } |
+              ForEach-Object { $_.FullName }
+          )
+          if (-not ($files | Where-Object { $_ -like '*latest.yml' })) {
+            throw "dist/latest.yml ausente — o electron-builder não gerou o feed"
+          }
+          "  assets: $($files.Count)"
+
+          # Idempotente sem invocar um comando que falha: `gh api .../tags/<tag>`
+          # devolve 404 quando a release não existe e, com
+          # $ErrorActionPreference='stop' do runner, o stderr de um comando
+          # nativo pode abortar o step. A listagem devolve 0 e não ressuscita a
+          # ponte em re-runs (só evita o "already exists").
+          $tags = gh release list --repo optdinho/dinhoopt --limit 200 --json tagName --jq ".[].tagName"
+          if ($tags -notcontains $tag) {
             gh release create $tag --repo optdinho/dinhoopt --verify-tag --title $tag --notes-file release-notes.md
           }
-          gh release upload $tag --repo optdinho/dinhoopt --clobber dist/latest.yml dist/*.exe dist/*.blockmap
+          gh release upload $tag --repo optdinho/dinhoopt --clobber @files
 
       # O electron-builder publicar não é o mesmo que o auto-update estar a caminho:
       # pode uploading correr bem e o CDN continuar a servir um `latest.yml` antigo. Foi
