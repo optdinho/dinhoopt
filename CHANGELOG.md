@@ -1,3 +1,16 @@
+## [2.1.13]
+
+### Alterado
+- **Atualizações**: os binários passam a ser publicados no repositório público `dinhoopt-releases`; a fonte `dinhoopt` fica privada. Quem está numa versão anterior recebe esta versão pelo repositório antigo (ponte) e, a partir daí, consulta o feed novo. **As licenças existentes não são afetadas** (validação independente do GitHub).
+- **Site**: a página `/download/` lê versão, data e tamanhos do `dinhoopt-releases`; os botões de download e "Ver todas as versões" apontam para lá.
+- **Base de jogos**: o motor lê o `games.json` de `raw.githubusercontent.com/optdinho/dinhoopt-releases/main/games.json`.
+
+### Interno
+- **Integridade do binário**: ligados `enableEmbeddedAsarIntegrityValidation` e `onlyLoadAppFromAsar`. Um byte alterado dentro do `app.asar` produz `ASAR Integrity Violation` e a app não arranca; sem `app.asar`, deixa de correr uma pasta `app/` plantada ao lado do exe. Não cobre `app.asar.unpacked`, `resources/clips-engine` nem `ffmpeg.exe`, e não substitui assinatura de código.
+- **CI**: o ffmpeg passa a ser descarregado do `dinhoopt-releases` (release `assets`) nos dois workflows. `ensure-release.js` só envia `target_commitish` quando o job corre no repositório de origem — o SHA de lá não existe no repositório de releases.
+- **Release**: novo step de espelho para o repositório antigo, gateado por `BRIDGE_MIRROR=1`; sobe os **mesmos bytes** (`latest.yml`, `.exe`, `.blockmap`), sem segundo build, e usa `--verify-tag` para não criar a tag e disparar um build duplicado.
+- **Qualidade**: TS 8.495 testes em 337 ficheiros · C# 2.561 (Release) · `tsc` 0 · Biome 0.
+
 ## [2.1.12]
 
 ### Corrigido
