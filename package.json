@@ -104,7 +104,7 @@
   },
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/optdinho/dinhoopt/issues"
+    "url": "https://github.com/optdinho/dinhoopt-releases/issues"
   },
-  "homepage": "https://github.com/optdinho/dinhoopt#readme"
+  "homepage": "https://dinhooptimizer.netlify.app/"
 }

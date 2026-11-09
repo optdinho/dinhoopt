@@ -178,6 +178,11 @@ do `release.yml` **depois** do publish:
   links de issues.
 - **Bootstrap aplicado:** commit `ad155af` no repo de releases (11498 B) e o `README.md` da
   fonte com a v2.1.13. Testes: `scripts/sync-releases-readme.test.ts` (23 verdes).
+- **Assets e metadados do repo público:** o README referencia `resources/icon.png`, que não
+  existia lá (logo quebrado na página do repo) — enviado uma vez (`d819cc8`, 240 580 B);
+  **não** é sincronizado pelo script, porque muda com a marca e não com a versão. A descrição
+  e o homepage do `dinhoopt-releases` passaram a apontar para o site, e no `package.json` o
+  `homepage`/`bugs.url` deixaram de apontar para o repo que vai ficar privado.
 
 ### Manutenção Completa + limpeza de navegadores (2026-11-04)
 
