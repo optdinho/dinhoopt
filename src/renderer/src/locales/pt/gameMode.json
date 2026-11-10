@@ -74,7 +74,7 @@
   "gamePriorityTitle": "Prioridade Alta para o Jogo",
   "gamePriorityDesc": "Coloca o processo do jogo em prioridade Alta para reduzir travamentos e melhorar a fluidez.",
   "gamePriorityBadge": "RECOMENDADO",
-  "gamePriorityWarning": "Pode entrar em conflito com o software do seu rato (Razer Synapse, Logitech G HUB, etc.) e causar lag. Vale a pena testar — se notar lag, desative esta opção.",
+  "gamePriorityWarning": "Pode entrar em conflito com o software do seu mouse (Razer Synapse, Logitech G HUB, etc.) e causar lag. Vale a pena testar — se notar lag, desative esta opção.",
 
   "optNetFlushDns": "Limpar cache DNS",
   "optNetFlushDnsDesc": "Limpa a cache do resolvedor DNS para novas consultas",
