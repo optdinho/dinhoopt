@@ -4,7 +4,13 @@ import { getLogger } from '../../services/logger.service'
 import { activePowerBlockerId, resetActivePowerBlockerId } from './activate'
 import { restoreGamePriority, restoreRegistryTweaks } from './detection/library'
 import { deleteSnapshot, readSnapshot, writeSnapshot } from './snapshot'
-import { restoreFocusAssist, restoreNagle, restorePowerPlan, restoreService, restoreTimerResolution } from './tweaks'
+import {
+  restoreFocusAssist,
+  restoreNagle,
+  restoreOriginalPowerPlan,
+  restoreService,
+  restoreTimerResolution,
+} from './tweaks'
 
 export async function deactivateGameMode(onProgress: (p: GameModeProgress) => void): Promise<GameModeDeactivateResult> {
   getLogger().info('game-mode', 'Deactivating Game Mode')
@@ -42,9 +48,10 @@ export async function deactivateGameMode(onProgress: (p: GameModeProgress) => vo
   if (snapshot.originalPowerPlanGuid) {
     steps.push({
       id: 'sys-power-plan',
-      fn: () => restorePowerPlan(snapshot.originalPowerPlanGuid!),
+      fn: () => restoreOriginalPowerPlan(snapshot.originalPowerPlanGuid!, snapshot.appliedPowerPlanGuid),
       clear: () => {
         residual.originalPowerPlanGuid = null
+        residual.appliedPowerPlanGuid = null
       },
     })
   }

@@ -111,6 +111,17 @@ describe('GameModePage progress label (B5)', () => {
   })
 })
 
+describe('GameModePage game priority highlight', () => {
+  it('shows the high-priority card with the mouse-software warning', async () => {
+    const { container } = render(<GameModePage />)
+    await flushPendingEffects()
+    const text = container.textContent ?? ''
+
+    expect(text).toContain('gamePriorityTitle')
+    expect(text).toContain('gamePriorityWarning')
+  })
+})
+
 describe('GameModePage auto-start capture toggle (C4)', () => {
   function findCaptureToggle(container: HTMLElement): HTMLElement {
     const label = [...container.querySelectorAll('span')].find((s) => s.textContent === 'autoStartCapture')

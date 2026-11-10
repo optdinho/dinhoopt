@@ -8,12 +8,10 @@ export {
   restoreTimerResolution,
   setTimerResolution,
 } from './performance'
+export { applyMaxPerformancePowerPlan, restoreOriginalPowerPlan } from './power-plan'
 export {
   captureAndDisableService,
-  capturePowerPlan,
   enableFocusAssist,
   restoreFocusAssist,
-  restorePowerPlan,
   restoreService,
-  setHighPerformancePlan,
 } from './system'

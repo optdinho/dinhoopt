@@ -5,11 +5,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { CATEGORIES, formatElapsed, OPTIMIZATIONS } from '@/components/game-mode/constants'
-import { GameModeAudit } from '@/components/game-mode/GameModeAudit'
 import { GameModeAutoDetect } from '@/components/game-mode/GameModeAutoDetect'
 import { GameModeCategoryCard } from '@/components/game-mode/GameModeCategoryCard'
 import { GameModeDefenderExclusions } from '@/components/game-mode/GameModeDefenderExclusions'
 import { GameModeDirectStorage } from '@/components/game-mode/GameModeDirectStorage'
+import { GameModeGamePriorityCard } from '@/components/game-mode/GameModeGamePriorityCard'
 import { GameModeGpuTweaks } from '@/components/game-mode/GameModeGpuTweaks'
 import { GameModeHero } from '@/components/game-mode/GameModeHero'
 import { GameModeProfiles } from '@/components/game-mode/GameModeProfiles'
@@ -28,14 +28,11 @@ export function GameModePage() {
   const lastResult = useGameModeStore((s) => s.lastResult)
   const config = useGameModeStore((s) => s.config)
   const detectedGame = useGameModeStore((s) => s.detectedGame)
-  const auditReport = useGameModeStore((s) => s.auditReport)
-  const auditPhase = useGameModeStore((s) => s.auditPhase)
 
   const [elapsed, setElapsed] = useState(0)
   const [autoStartCapture, setAutoStartCapture] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [gameInput, setGameInput] = useState('')
-  const [showAuditModal, setShowAuditModal] = useState(false)
   const [editingProfile, setEditingProfile] = useState<string | null>(null)
   const [profileGameName, setProfileGameName] = useState('')
   const [profileProcessName, setProfileProcessName] = useState('')
@@ -207,11 +204,6 @@ export function GameModePage() {
     [config.customGameProcesses],
   )
 
-  const handleRunAudit = useCallback(async () => {
-    await store.getState().runAudit('pre-activation')
-    setShowAuditModal(true)
-  }, [])
-
   // B5 — `progress.currentLabel` chega do backend como o ID da optimizacao
   // (`activate.ts:68`). Traduzimo-lo para o rotulo humano pelo mapa que a
   // propria pagina ja' usa nas categorias; se o id for desconhecido, o id
@@ -245,6 +237,12 @@ export function GameModePage() {
           deactivateButtonLabel={t('deactivateButton')}
           onActivate={handleActivate}
           onDeactivate={handleDeactivate}
+        />
+
+        <GameModeGamePriorityCard
+          enabled={enabledSet.has('cpu-game-priority')}
+          active={active}
+          onToggle={() => store.getState().toggleOptimization('cpu-game-priority')}
         />
 
         <AnimatePresence>
@@ -403,15 +401,6 @@ export function GameModePage() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <GameModeAudit
-          auditReport={auditReport}
-          auditPhase={auditPhase}
-          showModal={showAuditModal}
-          onRunAudit={handleRunAudit}
-          onOpenModal={() => setShowAuditModal(true)}
-          onCloseModal={() => setShowAuditModal(false)}
-        />
 
         <GameModeAutoDetect
           autoDetect={config.autoDetect}

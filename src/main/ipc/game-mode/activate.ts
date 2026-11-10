@@ -27,14 +27,13 @@ import {
 } from './detection/process'
 import { SERVICE_MAP, writeSnapshot } from './snapshot'
 import {
+  applyMaxPerformancePowerPlan,
   applyTimerResolution,
   captureAndDisableService,
-  capturePowerPlan,
   clearStandbyMemory,
   disableNagle,
   emptyWorkingSetForBackground,
   enableFocusAssist,
-  setHighPerformancePlan,
 } from './tweaks'
 
 export let activePowerBlockerId: number | null = null
@@ -60,6 +59,7 @@ export async function activateGameMode(
     services: [],
     killedProcesses: [],
     originalPowerPlanGuid: null,
+    appliedPowerPlanGuid: null,
     originalFocusAssistState: null,
     powerSaveBlockerId: null,
     originalTimerResolution: null,
@@ -151,8 +151,7 @@ export async function activateGameMode(
         continue
       }
       if (id === 'sys-power-plan') {
-        await capturePowerPlan(snapshot)
-        await setHighPerformancePlan()
+        await applyMaxPerformancePowerPlan(snapshot)
         succeeded++
         writeSnapshot(snapshot)
         continue

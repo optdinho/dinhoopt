@@ -65,6 +65,11 @@ export function validateSnapshot(raw: unknown): GameModeSnapshot | null {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.originalPowerPlanGuid)) return null
   }
 
+  if (s.appliedPowerPlanGuid !== undefined && s.appliedPowerPlanGuid !== null) {
+    if (typeof s.appliedPowerPlanGuid !== 'string') return null
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.appliedPowerPlanGuid)) return null
+  }
+
   if (s.originalFocusAssistState !== null) {
     if (typeof s.originalFocusAssistState !== 'number') return null
     if (

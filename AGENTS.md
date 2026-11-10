@@ -81,6 +81,16 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### Modo de Jogo: plano de energia robusto + prioridade em destaque (2026-11-09)
+
+**Plano de energia (novo `src/main/ipc/game-mode/tweaks/power-plan.ts`).** O passo `sys-power-plan` deixou de forçar o GUID fixo de "Alto desempenho" (`8c5e7fda-…`) — que numa máquina já em "Desempenho Máximo" era um **downgrade**. Agora: captura o GUID ativo, escolhe o melhor plano instalado (`pickMaxPerformancePlan`: Ultimate/"Desempenho Máximo" > "Alto desempenho"; mantém o ativo se já for da categoria), e só cria um plano (`unlockUltimatePerformance` → `createPowerPlan('Desempenho Maximo')`) quando não existe nenhum. Se o GUID original **não** puder ser lido, o passo **falha sem mexer no plano** — sem estado capturado não há caminho de volta.
+
+**Restauro condicional.** `GameModeSnapshot.appliedPowerPlanGuid` (opcional; snapshots antigos continuam válidos) regista o plano aplicado. Ao desativar, só restaura se o plano ativo ainda for esse; se o utilizador mudou manualmente de plano entretanto, a escolha dele prevalece. **Se o plano ativo não puder ser lido e houver `appliedPowerPlanGuid`, o restauro não faz nada** — sem saber se o plano ainda é o nosso, mexer podia atropelar uma escolha manual. Snapshots antigos (sem `appliedPowerPlanGuid`) restauram incondicionalmente, como antes. Cobertura: `power-plan.test.ts` (24 testes), `game-mode.ipc.test.ts` atualizado (o teste antigo "handles power plan capture failure" esperava `succeeded: 1` e passou a esperar falha), `snapshot.test.ts` +4 casos.
+
+**UI.** Novo card destacado `GameModeGamePriorityCard` logo abaixo do hero: "Prioridade Alta para o Jogo" com badge RECOMENDADO e aviso de conflito com software de rato (Razer Synapse, Logitech G HUB, …) a causar lag, mas "vale a pena testar". Toggle ligado ao mesmo `cpu-game-priority` da store. Chaves novas nos 3 locales (`gamePriorityTitle/Desc/Badge/Warning`). O cartão de **Auditoria foi removido da página** (`GameModeAudit` deixou de ser renderizado; IPC, serviço, store e testes mantêm-se intactos para reversibilidade).
+
+**Gates:** `tsc --noEmit` 0 · Vitest **8549/8549**, 339 ficheiros · Biome **950 ficheiros, 0** · `npm run build` exit 0.
+
 ### Migração para repo privado + releases públicas (2026-11-08)
 
 **Arquitetura:** `optdinho/dinhoopt` = fonte (a tornar **privada**; flip pendente) ·

@@ -105,6 +105,9 @@ export interface GameModeSnapshot {
   services: Array<{ name: string; originalStartType: string; wasRunning: boolean }>
   killedProcesses: Array<{ pid: number; name: string }>
   originalPowerPlanGuid: string | null
+  /** Plan Game Mode actually switched to. Optional so pre-existing snapshots
+   * remain valid — those restore the original plan unconditionally. */
+  appliedPowerPlanGuid?: string | null
   originalFocusAssistState: number | null
   powerSaveBlockerId: number | null
   originalTimerResolution: number | null

@@ -78,6 +78,10 @@
 
   "optCpuGamePriority": "Game Process High Priority",
   "optCpuGamePriorityDesc": "Set the game process priority to High for reduced stuttering and smoother gameplay",
+  "gamePriorityTitle": "High Priority for the Game",
+  "gamePriorityDesc": "Raises the game process to High priority to reduce stuttering and improve responsiveness.",
+  "gamePriorityBadge": "RECOMMENDED",
+  "gamePriorityWarning": "It can conflict with your mouse software (Razer Synapse, Logitech G HUB, etc.) and cause lag. It is still worth testing — if you notice lag, turn this option off.",
 
   "optNetFlushDns": "Flush DNS Cache",
   "optNetFlushDnsDesc": "Clear the DNS resolver cache for fresh lookups",

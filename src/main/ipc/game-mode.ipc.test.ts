@@ -63,6 +63,19 @@ vi.mock('../services/exec-utf8', () => ({
   psEncodedArgs: (cmd: string) => ['-EncodedCommand', cmd],
 }))
 
+const mockActivatePowerPlan = vi.fn()
+const mockCreatePowerPlan = vi.fn()
+const mockGetActivePowerPlanGuid = vi.fn()
+const mockListPowerPlans = vi.fn()
+const mockUnlockUltimatePerformance = vi.fn()
+vi.mock('../services/power-plans', () => ({
+  activatePowerPlan: mockActivatePowerPlan,
+  createPowerPlan: mockCreatePowerPlan,
+  getActivePowerPlanGuid: mockGetActivePowerPlanGuid,
+  listPowerPlans: mockListPowerPlans,
+  unlockUltimatePerformance: mockUnlockUltimatePerformance,
+}))
+
 const mockGetDetectedGame = vi.fn()
 const mockIsDetectorRunning = vi.fn()
 const mockStartGameDetector = vi.fn()
@@ -192,6 +205,41 @@ function setDefaultMocks(): void {
     network: { flushDnsCache: vi.fn().mockResolvedValue(true) },
   })
   execFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })
+  let activePowerPlanGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
+  mockGetActivePowerPlanGuid.mockReset()
+  mockListPowerPlans.mockReset()
+  mockActivatePowerPlan.mockReset()
+  mockUnlockUltimatePerformance.mockReset()
+  mockCreatePowerPlan.mockReset()
+  mockGetActivePowerPlanGuid.mockImplementation(async () => activePowerPlanGuid)
+  mockListPowerPlans.mockResolvedValue([
+    {
+      guid: '381b4222-f694-41f0-9685-ff5bb260df2e',
+      name: 'Equilibrado',
+      description: 'Equilibrado',
+      isActive: true,
+      isHighPerformance: false,
+      isBalanced: true,
+      isPowerSaver: false,
+      isUltimatePerformance: false,
+    },
+    {
+      guid: '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
+      name: 'Alto desempenho',
+      description: 'Alto desempenho',
+      isActive: false,
+      isHighPerformance: true,
+      isBalanced: false,
+      isPowerSaver: false,
+      isUltimatePerformance: false,
+    },
+  ])
+  mockActivatePowerPlan.mockImplementation(async (guid: string) => {
+    activePowerPlanGuid = guid
+    return { success: true }
+  })
+  mockUnlockUltimatePerformance.mockResolvedValue({ success: false })
+  mockCreatePowerPlan.mockResolvedValue({ success: false })
   fsExistsSync.mockReturnValue(false)
   fsReadFileSync.mockReturnValue('')
   fsWriteFileSync.mockReset()
@@ -536,8 +584,10 @@ describe('activateGameMode', () => {
     expect(result.succeeded).toBe(1)
   })
 
-  it('captures and sets high performance power plan', async () => {
-    configurePsMock('powercfg /GETACTIVESCHEME', '381b4222-f694-41f0-9685-ff5bb260df2e')
+  it('captures the current plan and switches to the best max-performance plan', async () => {
+    mockGetActivePowerPlanGuid
+      .mockResolvedValueOnce('381b4222-f694-41f0-9685-ff5bb260df2e')
+      .mockResolvedValueOnce('8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c')
 
     const result = await activateGameMode(
       {
@@ -548,20 +598,14 @@ describe('activateGameMode', () => {
     )
 
     expect(result.succeeded).toBe(1)
+    expect(mockActivatePowerPlan).toHaveBeenCalledExactlyOnceWith('8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c')
+    expect(result.snapshot?.originalPowerPlanGuid).toBe('381b4222-f694-41f0-9685-ff5bb260df2e')
+    expect(result.snapshot?.appliedPowerPlanGuid).toBe('8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c')
     expect(fsWriteFileSync).toHaveBeenCalled()
   })
 
-  it('handles power plan capture failure', async () => {
-    execFileAsyncMock.mockImplementation((_cmd: unknown, args: unknown[]) => {
-      const full = (args as string[]).join(' ')
-      if (full.includes('powercfg /GETACTIVESCHEME')) {
-        return Promise.reject(new Error('powercfg not found'))
-      }
-      if (full.includes('powercfg')) {
-        return Promise.resolve({ stdout: '', stderr: '' })
-      }
-      return Promise.resolve({ stdout: '', stderr: '' })
-    })
+  it('leaves the power plan untouched when the active plan cannot be captured', async () => {
+    mockGetActivePowerPlanGuid.mockResolvedValue(null)
 
     const result = await activateGameMode(
       {
@@ -571,7 +615,10 @@ describe('activateGameMode', () => {
       onProgress,
     )
 
-    expect(result.succeeded).toBe(1)
+    expect(result.succeeded).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(result.errors[0]?.reason).toMatch(/power plan/i)
+    expect(mockActivatePowerPlan).not.toHaveBeenCalled()
   })
 
   it('prevents display sleep', async () => {
@@ -1041,6 +1088,36 @@ describe('deactivateGameMode', () => {
     const result = await deactivateGameMode(onProgress)
 
     expect(result.restored).toBeGreaterThan(0)
+    expect(mockActivatePowerPlan).not.toHaveBeenCalled()
+  })
+
+  it('restores the original power plan when the active plan is still the one Game Mode applied', async () => {
+    const snap = makeValidSnapshot()
+    snap.originalPowerPlanGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
+    snap.appliedPowerPlanGuid = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'
+    setMockSnapshot(snap)
+    mockGetActivePowerPlanGuid
+      .mockResolvedValueOnce('8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c')
+      .mockResolvedValueOnce('381b4222-f694-41f0-9685-ff5bb260df2e')
+
+    const result = await deactivateGameMode(onProgress)
+
+    expect(result.failed).toBe(0)
+    expect(mockActivatePowerPlan).toHaveBeenCalledExactlyOnceWith('381b4222-f694-41f0-9685-ff5bb260df2e')
+  })
+
+  it('keeps a plan the user changed manually', async () => {
+    const snap = makeValidSnapshot()
+    snap.originalPowerPlanGuid = '381b4222-f694-41f0-9685-ff5bb260df2e'
+    snap.appliedPowerPlanGuid = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'
+    setMockSnapshot(snap)
+    mockGetActivePowerPlanGuid.mockResolvedValue('0f25382e-e29e-4f06-8898-7998112419de')
+
+    const result = await deactivateGameMode(onProgress)
+
+    expect(result.failed).toBe(0)
+    expect(mockActivatePowerPlan).not.toHaveBeenCalled()
+    expect(fsUnlinkSync).toHaveBeenCalled()
   })
 
   it('does not try to restore focus assist when state is null', async () => {

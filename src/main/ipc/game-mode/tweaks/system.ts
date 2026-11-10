@@ -1,5 +1,4 @@
 import type { GameModeSnapshot } from '@shared/types'
-import { execFileAsync } from '../../../services/exec-utf8'
 import { ps } from '../utils'
 
 export async function captureAndDisableService(serviceName: string, snapshot: GameModeSnapshot): Promise<void> {
@@ -40,31 +39,6 @@ export async function restoreService(entry: {
   if (entry.wasRunning && targetType !== 'Disabled') {
     await ps(`Start-Service -Name '${entry.name}' -ErrorAction SilentlyContinue`)
   }
-}
-
-export async function capturePowerPlan(snapshot: GameModeSnapshot): Promise<void> {
-  try {
-    const out = await ps('powercfg /GETACTIVESCHEME')
-    const match = out.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
-    snapshot.originalPowerPlanGuid = match?.[1] ?? null
-  } catch {
-    snapshot.originalPowerPlanGuid = null
-  }
-}
-
-export async function setHighPerformancePlan(): Promise<void> {
-  await execFileAsync('powercfg', ['/SETACTIVE', '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'], {
-    timeout: 5000,
-    windowsHide: true,
-  })
-}
-
-export async function restorePowerPlan(guid: string): Promise<void> {
-  if (!guid) return
-  await execFileAsync('powercfg', ['/SETACTIVE', guid], {
-    timeout: 5000,
-    windowsHide: true,
-  })
 }
 
 export async function enableFocusAssist(snapshot: GameModeSnapshot): Promise<void> {

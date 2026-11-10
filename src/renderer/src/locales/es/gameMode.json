@@ -71,6 +71,10 @@
 
   "optCpuGamePriority": "Prioridad Alta para el Juego",
   "optCpuGamePriorityDesc": "Establece la prioridad del proceso del juego como Alta para reducir tartamudeos y mejorar la fluidez",
+  "gamePriorityTitle": "Prioridad Alta para el Juego",
+  "gamePriorityDesc": "Eleva el proceso del juego a prioridad Alta para reducir tirones y mejorar la fluidez.",
+  "gamePriorityBadge": "RECOMENDADO",
+  "gamePriorityWarning": "Puede entrar en conflicto con el software de tu ratón (Razer Synapse, Logitech G HUB, etc.) y causar lag. Vale la pena probarlo — si notas lag, desactiva esta opción.",
 
   "optNetFlushDns": "Vaciar caché de DNS",
   "optNetFlushDnsDesc": "Borra la caché del resolvedor DNS para realizar búsquedas nuevas",

@@ -168,6 +168,34 @@ describe('validateSnapshot', () => {
     })
   })
 
+  describe('appliedPowerPlanGuid', () => {
+    it('accepts snapshots written before the field existed', () => {
+      const raw = JSON.parse(JSON.stringify(validSnapshot()))
+      delete raw.appliedPowerPlanGuid
+      expect(validateSnapshot(raw)).not.toBeNull()
+    })
+
+    it('accepts null and a valid GUID', () => {
+      const raw = JSON.parse(JSON.stringify(validSnapshot()))
+      raw.appliedPowerPlanGuid = null
+      expect(validateSnapshot(raw)).not.toBeNull()
+      raw.appliedPowerPlanGuid = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'
+      expect(validateSnapshot(raw)).not.toBeNull()
+    })
+
+    it('returns null when not a string', () => {
+      const raw = JSON.parse(JSON.stringify(validSnapshot()))
+      raw.appliedPowerPlanGuid = 12345
+      expect(validateSnapshot(raw)).toBeNull()
+    })
+
+    it('returns null when not a valid GUID', () => {
+      const raw = JSON.parse(JSON.stringify(validSnapshot()))
+      raw.appliedPowerPlanGuid = 'not-a-guid'
+      expect(validateSnapshot(raw)).toBeNull()
+    })
+  })
+
   describe('originalFocusAssistState', () => {
     it('accepts null value', () => {
       const raw = JSON.parse(JSON.stringify(validSnapshot()))
