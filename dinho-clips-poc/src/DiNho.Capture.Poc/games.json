@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "games": [
     {
       "processName": "FiveM_GTAProcess",
@@ -5744,6 +5744,1363 @@
         "dxgi",
         "hybrid"
       ]
+    },
+    {
+      "processName": "RAGE2",
+      "windowClass": "",
+      "displayName": "RAGE 2",
+      "aliases": [
+        "RAGE2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "WolfensteinYoungblood",
+      "windowClass": "",
+      "displayName": "Wolfenstein: Youngblood",
+      "aliases": [
+        "Youngblood",
+        "Wolfenstein YB"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "DarkSoulsII",
+      "windowClass": "",
+      "displayName": "Dark Souls II",
+      "aliases": [
+        "DS2",
+        "Dark Souls 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "bg3_dx11",
+      "windowClass": "",
+      "displayName": "Baldur's Gate 3 (DX11)",
+      "aliases": [
+        "BG3 DX11"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "ACMirage",
+      "windowClass": "",
+      "displayName": "Assassin's Creed Mirage",
+      "aliases": [
+        "AC Mirage"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "RidersRepublic",
+      "windowClass": "",
+      "displayName": "Riders Republic",
+      "aliases": [
+        "Riders"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Steep",
+      "windowClass": "",
+      "displayName": "Steep",
+      "aliases": [
+        "Steep"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "battlefront2",
+      "windowClass": "",
+      "displayName": "Star Wars Battlefront II",
+      "aliases": [
+        "SWBF2",
+        "Battlefront 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "fallenorder",
+      "windowClass": "",
+      "displayName": "Star Wars Jedi: Fallen Order",
+      "aliases": [
+        "Fallen Order",
+        "JFO"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "FC24",
+      "windowClass": "",
+      "displayName": "EA SPORTS FC 24",
+      "aliases": [
+        "FC 24",
+        "FIFA 24"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PVZBattleForNeighborville",
+      "windowClass": "",
+      "displayName": "Plants vs. Zombies: Battle for Neighborville",
+      "aliases": [
+        "PvZ BFN"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "UFC5",
+      "windowClass": "",
+      "displayName": "EA SPORTS UFC 5",
+      "aliases": [
+        "UFC 5"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "NHL24",
+      "windowClass": "",
+      "displayName": "NHL 24",
+      "aliases": [
+        "NHL 24"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PGA2K23",
+      "windowClass": "",
+      "displayName": "PGA Tour 2K23",
+      "aliases": [
+        "PGA 2K23"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "GolfWithYourFriends",
+      "windowClass": "",
+      "displayName": "Golf With Your Friends",
+      "aliases": [
+        "GWYF"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PES2021",
+      "windowClass": "",
+      "displayName": "eFootball PES 2021",
+      "aliases": [
+        "PES 2021"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "eFootball",
+      "windowClass": "",
+      "displayName": "eFootball",
+      "aliases": [
+        "eFootball 2024"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "codmw2",
+      "windowClass": "",
+      "displayName": "Call of Duty: Modern Warfare II",
+      "aliases": [
+        "MW2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "codmw3",
+      "windowClass": "",
+      "displayName": "Call of Duty: Modern Warfare III",
+      "aliases": [
+        "MW3"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "ModernWarfare",
+      "windowClass": "",
+      "displayName": "Call of Duty: Modern Warfare (2019)",
+      "aliases": [
+        "MW 2019"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "BlackOpsColdWar",
+      "windowClass": "",
+      "displayName": "Call of Duty: Black Ops Cold War",
+      "aliases": [
+        "BOCW"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "TowerOfFantasy",
+      "windowClass": "",
+      "displayName": "Tower of Fantasy",
+      "aliases": [
+        "ToF"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "IntoTheBreach",
+      "windowClass": "",
+      "displayName": "Into the Breach",
+      "aliases": [
+        "ITB"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Undertale",
+      "windowClass": "",
+      "displayName": "Undertale",
+      "aliases": [
+        "Undertale"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "Deltarune",
+      "windowClass": "",
+      "displayName": "Deltarune",
+      "aliases": [
+        "Deltarune"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "HotlineMiami",
+      "windowClass": "",
+      "displayName": "Hotline Miami",
+      "aliases": [
+        "Hotline Miami"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "Inscryption",
+      "windowClass": "",
+      "displayName": "Inscryption",
+      "aliases": [
+        "Inscryption"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "ObraDinn",
+      "windowClass": "",
+      "displayName": "Return of the Obra Dinn",
+      "aliases": [
+        "Obra Dinn"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "OriBlindForest",
+      "windowClass": "",
+      "displayName": "Ori and the Blind Forest",
+      "aliases": [
+        "Ori 1"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "INSIDE",
+      "windowClass": "",
+      "displayName": "INSIDE",
+      "aliases": [
+        "Inside"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Limbo",
+      "windowClass": "",
+      "displayName": "Limbo",
+      "aliases": [
+        "Limbo"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "SuperMeatBoy",
+      "windowClass": "",
+      "displayName": "Super Meat Boy",
+      "aliases": [
+        "SMB"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "NineSols",
+      "windowClass": "",
+      "displayName": "Nine Sols",
+      "aliases": [
+        "Nine Sols"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Blasphemous2",
+      "windowClass": "",
+      "displayName": "Blasphemous 2",
+      "aliases": [
+        "Blasphemous 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Buckshot Roulette",
+      "windowClass": "",
+      "displayName": "Buckshot Roulette",
+      "aliases": [
+        "Buckshot"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PlateUp",
+      "windowClass": "",
+      "displayName": "PlateUp!",
+      "aliases": [
+        "PlateUp"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "DaveTheDiver",
+      "windowClass": "",
+      "displayName": "Dave the Diver",
+      "aliases": [
+        "Dave"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Noita",
+      "windowClass": "",
+      "displayName": "Noita",
+      "aliases": [
+        "Noita"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Splitgate",
+      "windowClass": "",
+      "displayName": "Splitgate",
+      "aliases": [
+        "Splitgate"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "SpectreDivide",
+      "windowClass": "",
+      "displayName": "Spectre Divide",
+      "aliases": [
+        "Spectre"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "FragPunk",
+      "windowClass": "",
+      "displayName": "FragPunk",
+      "aliases": [
+        "FragPunk-Win64-Shipping"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "GrayZoneWarfare",
+      "windowClass": "",
+      "displayName": "Gray Zone Warfare",
+      "aliases": [
+        "GZW"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "TinyTinasWonderlands",
+      "windowClass": "",
+      "displayName": "Tiny Tina's Wonderlands",
+      "aliases": [
+        "Wonderlands"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "RemnantFromTheAshes",
+      "windowClass": "",
+      "displayName": "Remnant: From the Ashes",
+      "aliases": [
+        "Remnant 1"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "QuakeChampions",
+      "windowClass": "",
+      "displayName": "Quake Champions",
+      "aliases": [
+        "QC"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Back4Blood",
+      "windowClass": "",
+      "displayName": "Back 4 Blood",
+      "aliases": [
+        "B4B"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "GTFO",
+      "windowClass": "",
+      "displayName": "GTFO",
+      "aliases": [
+        "GTFO"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "WWZRetail",
+      "windowClass": "",
+      "displayName": "World War Z",
+      "aliases": [
+        "WWZ",
+        "World War Z"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "BattleBit",
+      "windowClass": "",
+      "displayName": "BattleBit Remastered",
+      "aliases": [
+        "BattleBit"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "SixDaysinFallujah",
+      "windowClass": "",
+      "displayName": "Six Days in Fallujah",
+      "aliases": [
+        "Six Days"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Supervive",
+      "windowClass": "",
+      "displayName": "Supervive",
+      "aliases": [
+        "Supervive"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Smite2",
+      "windowClass": "",
+      "displayName": "SMITE 2",
+      "aliases": [
+        "Smite 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "TheFirstDescendant",
+      "windowClass": "",
+      "displayName": "The First Descendant",
+      "aliases": [
+        "TFD",
+        "M1-Win64-Shipping"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "FFXV",
+      "windowClass": "",
+      "displayName": "Final Fantasy XV",
+      "aliases": [
+        "FF15"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "ScarletNexus",
+      "windowClass": "",
+      "displayName": "Scarlet Nexus",
+      "aliases": [
+        "Scarlet Nexus"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Automobilista2",
+      "windowClass": "",
+      "displayName": "Automobilista 2",
+      "aliases": [
+        "AMS2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "RuneScape",
+      "windowClass": "",
+      "displayName": "RuneScape",
+      "aliases": [
+        "RS3"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "osclient",
+      "windowClass": "",
+      "displayName": "Old School RuneScape",
+      "aliases": [
+        "OSRS"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Dofus",
+      "windowClass": "",
+      "displayName": "Dofus",
+      "aliases": [
+        "Dofus"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "StarWarsTheOldRepublic",
+      "windowClass": "",
+      "displayName": "Star Wars: The Old Republic",
+      "aliases": [
+        "SWTOR"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "DCUO",
+      "windowClass": "",
+      "displayName": "DC Universe Online",
+      "aliases": [
+        "DCUO"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Overcooked2",
+      "windowClass": "",
+      "displayName": "Overcooked! 2",
+      "aliases": [
+        "Overcooked 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "HumanFallFlat",
+      "windowClass": "",
+      "displayName": "Human: Fall Flat",
+      "aliases": [
+        "HFF"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "GangBeasts",
+      "windowClass": "",
+      "displayName": "Gang Beasts",
+      "aliases": [
+        "Gang Beasts"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PummelParty",
+      "windowClass": "",
+      "displayName": "Pummel Party",
+      "aliases": [
+        "Pummel Party"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "RingOfElysium",
+      "windowClass": "",
+      "displayName": "Ring of Elysium",
+      "aliases": [
+        "RoE"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Spellbreak",
+      "windowClass": "",
+      "displayName": "Spellbreak",
+      "aliases": [
+        "Spellbreak"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "ChainedTogether-Win64-Shipping",
+      "windowClass": "",
+      "displayName": "Chained Together",
+      "aliases": [
+        "ChainedTogether",
+        "Chained"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "FlightSimulator2024",
+      "windowClass": "",
+      "displayName": "Microsoft Flight Simulator 2024",
+      "aliases": [
+        "MSFS 2024"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "TrainSimWorld4",
+      "windowClass": "",
+      "displayName": "Train Sim World 4",
+      "aliases": [
+        "TSW4"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "FarmingSimulator25",
+      "windowClass": "",
+      "displayName": "Farming Simulator 25",
+      "aliases": [
+        "FS25"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "HouseFlipper2",
+      "windowClass": "",
+      "displayName": "House Flipper 2",
+      "aliases": [
+        "House Flipper 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PowerWashSimulator",
+      "windowClass": "",
+      "displayName": "PowerWash Simulator",
+      "aliases": [
+        "PowerWash"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "CarMechanicSimulator2021",
+      "windowClass": "",
+      "displayName": "Car Mechanic Simulator 2021",
+      "aliases": [
+        "CMS21"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PCBuildingSimulator2",
+      "windowClass": "",
+      "displayName": "PC Building Simulator 2",
+      "aliases": [
+        "PCBS2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "TransportFever2",
+      "windowClass": "",
+      "displayName": "Transport Fever 2",
+      "aliases": [
+        "TF2 Transport"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Workers & Resources Soviet Republic",
+      "windowClass": "",
+      "displayName": "Workers & Resources: Soviet Republic",
+      "aliases": [
+        "WRSR"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Stationeers",
+      "windowClass": "",
+      "displayName": "Stationeers",
+      "aliases": [
+        "Stationeers"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Empyrion",
+      "windowClass": "",
+      "displayName": "Empyrion: Galactic Survival",
+      "aliases": [
+        "Empyrion"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "MedievalDynasty-Win64-Shipping",
+      "windowClass": "",
+      "displayName": "Medieval Dynasty",
+      "aliases": [
+        "MedievalDynasty",
+        "Medieval Dynasty"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Sins2",
+      "windowClass": "",
+      "displayName": "Sins of a Solar Empire II",
+      "aliases": [
+        "Sins 2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Homeworld3",
+      "windowClass": "",
+      "displayName": "Homeworld 3",
+      "aliases": [
+        "HW3"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Two Point Museum",
+      "windowClass": "",
+      "displayName": "Two Point Museum",
+      "aliases": [
+        "TPM"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Farthest Frontier",
+      "windowClass": "",
+      "displayName": "Farthest Frontier",
+      "aliases": [
+        "Farthest Frontier"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Wuchang-Win64-Shipping",
+      "windowClass": "",
+      "displayName": "Wuchang: Fallen Feathers",
+      "aliases": [
+        "Wuchang"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "SuicideSquadKTJL",
+      "windowClass": "",
+      "displayName": "Suicide Squad: Kill the Justice League",
+      "aliases": [
+        "SSKJL"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "GoWR",
+      "windowClass": "",
+      "displayName": "God of War Ragnarök",
+      "aliases": [
+        "GoW Ragnarok",
+        "God of War Ragnarok"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "HorizonForbiddenWest",
+      "windowClass": "",
+      "displayName": "Horizon Forbidden West",
+      "aliases": [
+        "HFW"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "MarvelsSpider-Man2",
+      "windowClass": "",
+      "displayName": "Marvel's Spider-Man 2",
+      "aliases": [
+        "Spider-Man 2",
+        "SM2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "tlou-ii",
+      "windowClass": "",
+      "displayName": "The Last of Us Part II Remastered",
+      "aliases": [
+        "TLOU Part II",
+        "TLOU2"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "DaysGone",
+      "windowClass": "",
+      "displayName": "Days Gone",
+      "aliases": [
+        "Days Gone"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Returnal",
+      "windowClass": "",
+      "displayName": "Returnal",
+      "aliases": [
+        "Returnal"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "DetroitBecomeHuman",
+      "windowClass": "",
+      "displayName": "Detroit: Become Human",
+      "aliases": [
+        "Detroit"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Sifu-Win64-Shipping",
+      "windowClass": "",
+      "displayName": "Sifu",
+      "aliases": [
+        "Sifu"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "Nightingale-Win64-Shipping",
+      "windowClass": "",
+      "displayName": "Nightingale",
+      "aliases": [
+        "Nightingale"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "retroarch",
+      "windowClass": "",
+      "displayName": "RetroArch",
+      "aliases": [
+        "RetroArch"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "PPSSPPWindows64",
+      "windowClass": "",
+      "displayName": "PPSSPP",
+      "aliases": [
+        "PPSSPP",
+        "PSP"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "snes9x",
+      "windowClass": "",
+      "displayName": "Snes9x",
+      "aliases": [
+        "Snes9x"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "mame64",
+      "windowClass": "",
+      "displayName": "MAME",
+      "aliases": [
+        "MAME"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi"
+      ]
+    },
+    {
+      "processName": "flycast",
+      "windowClass": "",
+      "displayName": "Flycast",
+      "aliases": [
+        "Flycast"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "xemu",
+      "windowClass": "",
+      "displayName": "xemu",
+      "aliases": [
+        "xemu"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "xenia_canary",
+      "windowClass": "",
+      "displayName": "Xenia Canary",
+      "aliases": [
+        "Xenia"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "shadPS4",
+      "windowClass": "",
+      "displayName": "shadPS4",
+      "aliases": [
+        "shadPS4"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
+    },
+    {
+      "processName": "vita3k",
+      "windowClass": "",
+      "displayName": "Vita3K",
+      "aliases": [
+        "Vita3K"
+      ],
+      "backends": [
+        "wgc",
+        "dxgi",
+        "hybrid"
+      ]
     }
   ],
   "nonGames": [
@@ -6081,6 +7438,114 @@
     "parsec",
     "Moonlight",
     "Sunshine",
-    "remoting_host"
+    "remoting_host",
+    "Outplayed",
+    "Overwolf",
+    "OverwolfBrowser",
+    "OverwolfHelper",
+    "OverwolfBrowserHelper",
+    "OverwolfUpdater",
+    "TwitchStudio",
+    "StreamlabsDesktop",
+    "Restream",
+    "obs-browser",
+    "XSplit.Core",
+    "Action",
+    "RivaTuner Statistics Server",
+    "NVIDIA Overlay",
+    "NVDisplay.Container",
+    "RadeonSettings",
+    "amdow",
+    "NZXT CAM",
+    "NZXTCAM",
+    "SignalRgb",
+    "OpenRGB",
+    "ThrottleStop",
+    "ProcessLasso",
+    "XTU",
+    "IntelXTU",
+    "MemTest86",
+    "SamsungMagician",
+    "RazerSynapse",
+    "CPUID HWMonitor",
+    "Wallpaper Engine",
+    "Lively",
+    "livelywpf",
+    "Snipaste",
+    "RockstarLauncher",
+    "BethesdaNetLauncher",
+    "EAConnect_microsoft",
+    "AmazonGames",
+    "AmazonGamesUI",
+    "Playnite.FullscreenApp",
+    "CurseForge",
+    "Modrinth",
+    "PrismLauncher",
+    "MultiMC",
+    "ATLauncher",
+    "TechnicLauncher",
+    "GDLauncher",
+    "MinecraftLauncher",
+    "Battle.net",
+    "RiotClientUxRender",
+    "itchio",
+    "WeGame",
+    "NexonLauncher",
+    "NCLauncher",
+    "Glyph",
+    "Vesktop",
+    "ArmCord",
+    "ts3client_win64",
+    "ts3client",
+    "Guilded",
+    "Revolt",
+    "DiscordHelper",
+    "EasyAntiCheat_EOS",
+    "BattlEye",
+    "vgc",
+    "vgtray",
+    "faceitclient",
+    "FACEIT AC",
+    "ESEADriver2",
+    "Zen Browser",
+    "operagx",
+    "Code - Insiders",
+    "rustrover64",
+    "ConEmu64",
+    "wezterm-gui",
+    "mpc-hc64",
+    "Premiere Pro",
+    "Adobe Premiere Pro",
+    "gimp-2.10",
+    "DaVinci Resolve",
+    "Fusion",
+    "Ableton Live 12",
+    "Cubase12",
+    "Bitwig Studio",
+    "FoxitPDFReader",
+    "Miro",
+    "Canva",
+    "Affinity",
+    "RevoUninstaller",
+    "Microsoft.PowerToys",
+    "QuickLook",
+    "Flow Launcher",
+    "ueli",
+    "Listary",
+    "AutoHotkeyU64",
+    "AutoHotkey32",
+    "Ditto",
+    "ClipboardFusion",
+    "WinZip32",
+    "Bandizip",
+    "PeaZip",
+    "Rufus",
+    "balenaEtcher",
+    "Ventoy",
+    "Duplicati",
+    "scrcpy",
+    "DDU",
+    "DisplayDriverUninstaller",
+    "NVCleanstall"
   ]
 }

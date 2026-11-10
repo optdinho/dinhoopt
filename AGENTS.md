@@ -91,12 +91,21 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 **Gates:** `tsc --noEmit` 0 · Vitest **8549/8549**, 339 ficheiros · Biome **950 ficheiros, 0** · `npm run build` exit 0.
 
+### Catálogo de jogos expandido — games.json v5 (2026-11-09)
+
+`dinho-clips-poc/src/DiNho.Capture.Poc/games.json`: **v4 → v5**, **452 → 556 jogos** (+104) e **335 → 443 nonGames** (+108). Formato preservado (JSON 2 espaços + newline final). 2 jogos e 177 nonGames propostos já estavam cobertos (catálogo ou literal `NonGameProcesses`) e foram ignorados.
+
+**O que ficou de fora, e porquê:** `GhostReconWildlands` (duplicava `GRW`, "Tom Clancy's Ghost Recon Wildlands"); o nonGame `wt` (colidia com o alias `WT` do War Thunder — `WindowsTerminal` já está bloqueado); e **9 emuladores que o engine fixa em `NonGameProcesses`** — `dolphin`, `pcsx2`, `rpcs3`, `cemu`, `yuzu`, `ryujinx`, `duckstation`, `melonDS`, `desmume` (o literal diz "emuladores de jogos retro SÃO utilitários, não jogos alvo", logo a deteção nunca dispararia). Ficaram emuladores cujo nome o literal não bloqueia: RetroArch, PPSSPP (`PPSSPPWindows64`), Snes9x, MAME, Flycast, xemu, Xenia Canary (`xenia_canary`), shadPS4 e Vita3K. O literal tem duas grafias desatualizadas (`xenia-canary`, `ppssppwindows`) que nunca casam com os processos reais — inconsistência pré-existente, não corrigida aqui.
+
+**Validação:** C# **2561/2561** em Release (0 falhas, 0 ignorados) com o ficheiro novo copiado para o output dos testes; JSON parseia, 556 processNames únicos. **Pendente:** enviar os mesmos bytes para `optdinho/dinhoopt-releases/main/games.json` — sem isso, clientes já instalados com v4 não recebem a expansão (o updater só aceita `remote.Version > localVersion`; nunca faz downgrade).
+
 ### Migração para repo privado + releases públicas (2026-11-08)
 
 **Arquitetura:** `optdinho/dinhoopt` = fonte (a tornar **privada**; flip pendente) ·
 `optdinho/dinhoopt-releases` = **público**, só binários (`latest.yml`, `*.exe`, `*.blockmap`),
 release `assets` com o ffmpeg (217 823 104 B, sha256 `589e50b7…`) e `games.json` na raiz
-(idêntico ao local, sha256 `e1f9f713…`, 114 941 B). O `publish.private: false` mantém-se —
+(idêntico ao local na altura, sha256 `e1f9f713…`, 114 941 B — desatualizado desde o v5; ver
+a entrada de 2026-11-09). O `publish.private: false` mantém-se —
 o repo de releases é público, logo o feed continua anónimo.
 
 **A regra que não se pode violar:** a 2.1.13 tem de ser construída **uma única vez** com o
