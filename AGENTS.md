@@ -97,15 +97,18 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 **O que ficou de fora, e porquê:** `GhostReconWildlands` (duplicava `GRW`, "Tom Clancy's Ghost Recon Wildlands"); o nonGame `wt` (colidia com o alias `WT` do War Thunder — `WindowsTerminal` já está bloqueado); e **9 emuladores que o engine fixa em `NonGameProcesses`** — `dolphin`, `pcsx2`, `rpcs3`, `cemu`, `yuzu`, `ryujinx`, `duckstation`, `melonDS`, `desmume` (o literal diz "emuladores de jogos retro SÃO utilitários, não jogos alvo", logo a deteção nunca dispararia). Ficaram emuladores cujo nome o literal não bloqueia: RetroArch, PPSSPP (`PPSSPPWindows64`), Snes9x, MAME, Flycast, xemu, Xenia Canary (`xenia_canary`), shadPS4 e Vita3K. O literal tem duas grafias desatualizadas (`xenia-canary`, `ppssppwindows`) que nunca casam com os processos reais — inconsistência pré-existente, não corrigida aqui.
 
-**Validação:** C# **2561/2561** em Release (0 falhas, 0 ignorados) com o ficheiro novo copiado para o output dos testes; JSON parseia, 556 processNames únicos. **Pendente:** enviar os mesmos bytes para `optdinho/dinhoopt-releases/main/games.json` — sem isso, clientes já instalados com v4 não recebem a expansão (o updater só aceita `remote.Version > localVersion`; nunca faz downgrade).
+**Validação:** C# **2561/2561** em Release (0 falhas, 0 ignorados) com o ficheiro novo copiado para o output dos testes; JSON parseia, 556 processNames únicos.
+
+**Publicado (2026-11-09):** os mesmos bytes estão em `optdinho/dinhoopt-releases/main/games.json` — commit `9333631` (`d819cc8..9333631`), **141 916 B**, sha256 `a23082d2b88cf1fc605ceb3d8ddedff400442f952ec5fde80cb42a2a17a6026c`, conferido contra o blob do commit **e** contra o que o CDN serve em `raw.githubusercontent.com/.../main/games.json` (status 200, sha256 idêntico, `version: 5`). Sem isto os clientes com v4 nunca recebiam a expansão (o updater só aceita `remote.Version > localVersion`; nunca faz downgrade). Nota: não havia `GH_TOKEN` no `.env` (vazio) nem `gh` instalado; a publicação foi por **git num clone raso** com a credencial guardada do Windows (user `optdinho`, PAT de 40 chars) — o push criou o commit `9333631`. O `games.json` remoto em v4 tinha **121 027 B** (formatação diferente do local), por isso o diff é reescrita do ficheiro inteiro, não uma alteração pontual.
 
 ### Migração para repo privado + releases públicas (2026-11-08)
 
 **Arquitetura:** `optdinho/dinhoopt` = fonte (a tornar **privada**; flip pendente) ·
 `optdinho/dinhoopt-releases` = **público**, só binários (`latest.yml`, `*.exe`, `*.blockmap`),
 release `assets` com o ffmpeg (217 823 104 B, sha256 `589e50b7…`) e `games.json` na raiz
-(idêntico ao local na altura, sha256 `e1f9f713…`, 114 941 B — desatualizado desde o v5; ver
-a entrada de 2026-11-09). O `publish.private: false` mantém-se —
+(**v5 desde 2026-11-09**, sha256 `a23082d2…`, 141 916 B — ver a entrada do catálogo; antes
+disso era v4, sha256 `e1f9f713…`, 114 941 B na fonte / 121 027 B com a formatação antiga no
+remoto). O `publish.private: false` mantém-se —
 o repo de releases é público, logo o feed continua anónimo.
 
 **A regra que não se pode violar:** a 2.1.13 tem de ser construída **uma única vez** com o
