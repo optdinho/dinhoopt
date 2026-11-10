@@ -62,7 +62,7 @@ function computeRebindPatch(
   return { hotkeys: config.hotkeys.map((h) => (h.id === rebindingId ? { ...h, vk, modifiers } : h)) }
 }
 
-/** Modificadores premissados (Ctrl/Shift/Alt) de um evento de teclado ou rato. */
+/** Modificadores premissados (Ctrl/Shift/Alt) de um evento de teclado ou mouse. */
 function modifiersFromEvent(e: { ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): HotkeyBinding['modifiers'] {
   const modifiers: HotkeyBinding['modifiers'] = []
   if (e.ctrlKey) modifiers.push('Ctrl')

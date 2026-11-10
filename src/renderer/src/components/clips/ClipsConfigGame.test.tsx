@@ -90,7 +90,7 @@ describe('GameSection — action select options', () => {
 
 /**
  * Regressão: os chips de atalho eram `disabled` durante o rebind. O Chromium
- * suprime os eventos de rato em controlos desativados, portanto o clique do
+ * suprime os eventos de mouse em controlos desativados, portanto o clique do
  * meio dado no próprio chip (o gesto natural) não produzia `mousedown` e o
  * atalho nunca era gravado. O chip tem de continuar a receber eventos.
  */

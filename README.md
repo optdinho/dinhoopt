@@ -67,12 +67,12 @@ continuar a atualizar sem depender do repositório privado.
 **🖱️ Botão do meio a funcionar sempre.** O clique do meio já era aceite como atalho, mas
 falhava no sítio onde é mais natural: em cima do próprio chip, logo depois de o clicar para
 rebitar. Os chips ficavam desativados durante a escuta e o Chromium não entrega eventos de
-rato a controlos desativados, por isso o clique não chegava a lado nenhum. Agora rebita em
+mouse a controlos desativados, por isso o clique não chegava a lado nenhum. Agora rebita em
 qualquer ponto da janela e mostra uma dica enquanto está à espera.
 
 ### 2\.1\.11
 
-**🖱️ Atalhos no rato.** O botão do meio (scroll click) passa a poder salvar clip, tirar
+**🖱️ Atalhos no mouse.** O botão do meio (scroll click) passa a poder salvar clip, tirar
 screenshot ou controlar o microfone — sozinho ou com `Ctrl`/`Alt`/`Shift`, por exemplo
 `Ctrl+Mouse3`. Dispara uma vez por clique e o jogo continua a receber o botão.
 

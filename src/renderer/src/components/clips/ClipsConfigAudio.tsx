@@ -156,7 +156,7 @@ export function AudioSection({
                 </span>
               ))}
               {/* Sem `disabled`: ver ClipsConfigGame.tsx — o Chromium engole os
-                  eventos de rato em controlos desativados, incluindo o clique do
+                  eventos de mouse em controlos desativados, incluindo o clique do
                   meio que se quer capturar para o rebind. */}
               <button
                 type="button"

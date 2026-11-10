@@ -105,7 +105,7 @@ export function GameSection({
             >
               <div className="flex items-center gap-1.5">
                 {/*
-                 * Nunca usar `disabled` aqui: o Chromium suprime os eventos de rato
+                 * Nunca usar `disabled` aqui: o Chromium suprime os eventos de mouse
                  * em controlos de formulário desativados, por isso um clique do meio
                  * no próprio chip que iniciou o rebind (o gesto natural, o cursor já
                  * lá está) não gerava `mousedown` nenhum e o atalho nunca era gravado.
