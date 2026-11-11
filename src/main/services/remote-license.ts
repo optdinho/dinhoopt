@@ -277,7 +277,7 @@ export function validateLicenseOffline(): RemoteLicenseResult {
 
 export async function validateLicense(key: string, hwid: string): Promise<RemoteLicenseResult> {
   try {
-    const data = await callApi({ action: 'validate', key, hwid })
+    const data = await callApi({ action: 'validate', key, hwid, version: app.getVersion() })
     if (data?.valid) {
       const result: RemoteLicenseResult = {
         valid: true,

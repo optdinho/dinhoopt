@@ -132,6 +132,7 @@ vi.mock('electron', () => {
     app: {
       getPath: (n: string) => (n === 'userData' ? mockVars.getTestRoot() : p.join(os.tmpdir(), n)),
       getAppPath: () => mockVars.getTestRoot(),
+      getVersion: () => '2.1.13',
       isPackaged: false,
     },
     net: {
@@ -446,7 +447,7 @@ describe('remote-license', () => {
 
   // ── Payload sent to API ──────────────────────────────────────────
   describe('API payload', () => {
-    it('sends key, hwid and action in the request body', async () => {
+    it('sends key, hwid, action and app version in the request body', async () => {
       mockNet.setResponse({ valid: true, type: 'lifetime' })
 
       await activateLicense('MY-KEY')
@@ -456,6 +457,7 @@ describe('remote-license', () => {
       expect(payload.action).toBe('validate')
       expect(payload.key).toBe('MY-KEY')
       expect(payload.hwid).toBe('test-hwid-12345')
+      expect(payload.version).toBe('2.1.13')
     })
   })
 
