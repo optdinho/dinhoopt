@@ -572,4 +572,129 @@ public sealed class WgcCaptureSourceTests
     {
         Assert.False(WgcCaptureSource.IsSessionLevelFailure(new InvalidOperationException("qualquer")));
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Diagnóstico do latch (2026-11-10)
+    //  O latch existia desde 2026-10-08 mas ENGOLIA a causa: o log de
+    //  campo só dizia "WGC indisponível", sem HRESULT nem build do
+    //  Windows. Sem isso não se distingue serviço desligado de build
+    //  antigo, de driver, de sessão remota — e o lag fica sem resposta.
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void GetWgcAvailabilityDiagnostics_BeforeEvaluation_IsNotEvaluated()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+
+        var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+
+        Assert.False(diag.Evaluated);
+        Assert.False(diag.Available);
+        Assert.Null(diag.Reason);
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_GateThrows_RecordsHresultAsReason()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(
+                () => throw new COMException("serviço de captura desligado", unchecked((int)0x80070422))));
+
+            var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+
+            Assert.True(diag.Evaluated);
+            Assert.False(diag.Available);
+            Assert.NotNull(diag.Reason);
+            Assert.Contains("IsSupported", diag.Reason);
+            Assert.Contains("0x80070422", diag.Reason);
+            Assert.Contains("ERROR_SERVICE_DISABLED", diag.Reason);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_GateReturnsFalse_RecordsCapabilityReason()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => false));
+
+            var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+
+            Assert.Contains("IsSupported()", diag.Reason);
+            Assert.Contains("false", diag.Reason);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_Available_HasNoReason()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+
+            var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+
+            Assert.True(diag.Evaluated);
+            Assert.True(diag.Available);
+            Assert.Null(diag.Reason);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_Latch_KeepsReasonFromFirstEvaluation()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => false));
+            var first = WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason;
+
+            // Segunda chamada não reavalia: o motivo tem de ser o mesmo, não lixo novo.
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+            Assert.Equal(first, WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void MarkWgcUnavailableForSession_KeepsContextAndHresult()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            // Caminho real: IsSupported()==true mas CreateForMonitor falhou com
+            // ERROR_NOT_SUPPORTED — é ESTA a linha que o suporte precisa de ver.
+            WgcCaptureSource.MarkWgcUnavailableForSession(
+                new COMException("CreateForMonitor falhou", unchecked((int)0x80070032)),
+                "CreateForMonitor");
+
+            var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+
+            Assert.False(diag.Available);
+            Assert.Contains("CreateForMonitor", diag.Reason);
+            Assert.Contains("0x80070032", diag.Reason);
+            Assert.Contains("ERROR_NOT_SUPPORTED", diag.Reason);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void ResetWgcAvailabilityForTests_ClearsReason()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        WgcCaptureSource.MarkWgcUnavailableForSession(new InvalidOperationException("x"), "contexto");
+        Assert.NotNull(WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason);
+
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+
+        Assert.Null(WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason);
+        Assert.False(WgcCaptureSource.GetWgcAvailabilityDiagnostics().Evaluated);
+    }
 }

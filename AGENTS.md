@@ -113,15 +113,33 @@ Ou seja: a sessão estava **saudável** e o log fazia parecer uma crise. É por 
 **2 766 ms em 51 min** (≈0,09 %). `av1_nvenc` a falhar é **esperado** — a RTX 3060 é Ampere e só
 codifica AV1 a partir de Ada (série 40), logo o fallback para `h264_nvenc` está correto.
 
-**Suspeito principal do lag (NÃO corrigido, por decidir).** O motor caiu para **DXGI Desktop
-Duplication** (`Captura: DXGI Desktop Duplication`, `capture=DxgiCaptureSource`,
+**Suspeito principal do lag (diagnóstico instrumentado, causa por confirmar).** O motor caiu para
+**DXGI Desktop Duplication** (`Captura: DXGI Desktop Duplication`, `capture=DxgiCaptureSource`,
 `DuplicateOutput1` → `DXGI_ERROR_UNSUPPORTED` ⇒ DDA 1.0). O DDA força o desktop a sair do caminho de
 composição otimizado (independent flip/MPO) e é o candidato clássico a lag **fora** da app (cursor e
-outras janelas), ao contrário do WGC. `IsWgcAvailableForSession()`
-(`Capture\WgcCaptureSource.cs:81`) faz latch em `GraphicsCaptureSession.IsSupported()` e **engole a
-causa** (catch → `false`), por isso o log do cliente não diz *porque* o WGC está indisponível — só que
-está. Ganhos possíveis: registar o motivo (exceção) no latch; mostrar/forçar backend. O
-`ClipsStatusBar` já expõe `captureBackend`, portanto o utilizador consegue confirmar "DXGI" na UI.
+outras janelas), ao contrário do WGC. `IsWgcAvailableForSession()` fazia latch em
+`GraphicsCaptureSession.IsSupported()` e **engolia a causa** (catch → `false`), por isso o log do
+cliente não dizia *porque* o WGC estava indisponível — só que estava.
+
+**Diagnóstico implementado (motor, 2026-11-10).** `Capture/CaptureDiagnostics.cs` novo: `DescribeHResult`
+(ERROR_SERVICE_DISABLED, E_ACCESSDENIED, ERROR_NOT_SUPPORTED, E_NOINTERFACE, ERROR_NOT_FOUND, …;
+desconhecido fica **desconhecido** — inventar causa foi o defeito do gate AV1), `DescribeFailure`
+(Exception → tipo + HRESULT hex/nome + mensagem, seguindo `InnerException` até 3 níveis, porque o WinRT
+embrulha o `COMException` e é no HRESULT que está a informação útil), `DescribeEnvironment` (build do
+Windows + `sessão remota (RDP)` vs `local`) e `DescribeDesktopDuplicationLevel` (11→1.1, 10→1.0).
+`WgcCaptureSource` guarda `_wgcUnavailableReason` (gate devolveu false, gate lançou, ou
+`MarkWgcUnavailableForSession(ex, contexto)` nos catchs de `CreateForWindow`/`CreateForMonitor`) e expõe
+`GetWgcAvailabilityDiagnostics()`. `DxgiCaptureSource` regista `DuplicationLevel` (11/10) e
+`_duplicationFallbackReason` (a causa do `DuplicateOutput1` falhar), expõe `BackendLabel`
+(`"DXGI (DDA 1.0)"`) e `DescribeBackend()`. O coordinator escreve uma linha por arranque —
+`[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente. motivo=… | Windows 10.0.19045 · sessão local`
+— e o log do DXGI passa a `Captura: DXGI Desktop Duplication 1.0 — DuplicateOutput1 falhou: …`. O
+`ClipsStatusBar` mostra o `captureBackend` livre, portanto o utilizador confirma **"DXGI (DDA 1.0)"** na UI
+(só é display; nenhum código TS compara a string). **O que isto responde no próximo log:** porque é que
+`IsSupported()` era falso (ou porque é que o `DuplicateOutput1` caiu para DDA 1.0), com HRESULT e build.
+**Só chega ao cliente numa versão nova** (2.1.14+), nunca na 2.1.13 — o motor vai dentro de
+`resources/clips-engine`. C# **2606/2606**, 0 falhas, 0 ignorados, build **0 avisos** (novos
+`CaptureDiagnosticsTests.cs`, `DxgiCaptureSourceTests.cs` e +7 casos em `WgcCaptureSourceTests.cs`).
 
 **Gate AV1 corrigido (motor) — a RTX 3060 nunca devia ter tentado AV1.** `SupportsAv1Hardware(0x10DE)`
 chamava `DetectNvidiaGeneration()`, que perguntava ao **binário do ffmpeg** (`CheckFfmpegEncoder("av1_nvenc") ? 89 : 75`)

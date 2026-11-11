@@ -10,6 +10,27 @@ namespace DiNho.Capture.Poc;
 
 public sealed partial class EngineCoordinator
 {
+    /// <summary>
+    /// Uma linha por arranque: o WGC está disponível? Se não, PORQUÊ? O latch de
+    /// 2026-10-08 dizia só "indisponível" e a causa morria ali — no log do cliente de
+    /// 2026-11-10 (RTX 3060) não havia forma de saber se era serviço desligado, build
+    /// antigo do Windows, driver ou sessão remota. Com motivo + ambiente + nível do
+    /// DDA, o próximo log responde à pergunta que interessa: porque é que o motor
+    /// ficou no caminho de captura que provoca lag fora da app.
+    /// </summary>
+    private static void LogWgcAvailability()
+    {
+        var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+        var env = CaptureDiagnostics.DescribeEnvironment();
+
+        if (diag.Available)
+            Log.I("EngineCoordinator", $"[WGC-DIAG] WGC disponível | {env}");
+        else
+            Log.W("EngineCoordinator",
+                $"[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente. " +
+                $"motivo={diag.Reason ?? "não registado"} | {env}");
+    }
+
     private void SelectCaptureSource()
     {
         var game = _captureTargetGame;
@@ -20,8 +41,7 @@ public sealed partial class EngineCoordinator
         // secções WGC inteiras e vamos diretos para DXGI — eliminando os retries
         // inúteis (3× per-window + desktop) observados em cada arranque/reinit.
         var wgcAvailable = WgcCaptureSource.IsWgcAvailableForSession();
-        if (!wgcAvailable)
-            Log.W("EngineCoordinator", "[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente.");
+        LogWgcAvailability();
 
         // Salva o HWND original para usar como fallback em reinit
         // (quando o jogo está minimizado, MainWindowHandle pode ser Zero)
@@ -135,8 +155,8 @@ public sealed partial class EngineCoordinator
             dxgi.Initialize(_sharedDevice, gameHwnd);
             _capture = dxgi;
             _watchdog.ReportApiSwitch();
-            _status.Update(s => s.CaptureBackend = "DXGI");
-            Log.I("EngineCoordinator", "Captura: DXGI Desktop Duplication");
+            _status.Update(s => s.CaptureBackend = DxgiCaptureSource.BackendLabel);
+            Log.I("EngineCoordinator", $"Captura: {DxgiCaptureSource.DescribeBackend()}");
             goto multiMonitor;
         }
         catch (Exception dxgiEx)
@@ -177,8 +197,7 @@ public sealed partial class EngineCoordinator
 
         // Mesmo latch de sessão que o sync — ver SelectCaptureSource().
         var wgcAvailable = WgcCaptureSource.IsWgcAvailableForSession();
-        if (!wgcAvailable)
-            Log.W("EngineCoordinator", "[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente.");
+        LogWgcAvailability();
 
         // Save hwnd fallback
         if (gameHwnd != IntPtr.Zero)
@@ -279,8 +298,8 @@ public sealed partial class EngineCoordinator
             dxgi.Initialize(_sharedDevice, gameHwnd);
             _capture = dxgi;
             _watchdog.ReportApiSwitch();
-            _status.Update(s => s.CaptureBackend = "DXGI");
-            Log.I("EngineCoordinator", "Captura: DXGI Desktop Duplication");
+            _status.Update(s => s.CaptureBackend = DxgiCaptureSource.BackendLabel);
+            Log.I("EngineCoordinator", $"Captura: {DxgiCaptureSource.DescribeBackend()}");
             return;
         }
         catch (Exception dxgiEx)

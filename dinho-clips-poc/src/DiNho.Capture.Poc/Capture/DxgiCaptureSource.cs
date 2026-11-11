@@ -28,11 +28,45 @@ public sealed class DxgiCaptureSource : ICaptureSource
 
     public bool CheckDeviceLost() => _device?.DeviceRemovedReason is { Failure: true };
 
+    // ── Diagnóstico do fallback DDA 1.1 → 1.0 ────────────────────────────
+    // O fallback era invisível: um Log.D "DuplicateOutput1 not supported" e nada
+    // mais. Na máquina do cliente (2026-11-10) o DuplicateOutput1 falhou com
+    // DXGI_ERROR_UNSUPPORTED e o motor ficou em DDA 1.0 — que FORÇA o desktop a sair
+    // do caminho de composição otimizado (independent flip/MPO), o suspeito clássico
+    // de lag no cursor e noutras janelas. Agora o nível e a causa vão para o log e
+    // para a barra de estado ("DXGI (DDA 1.0)").
+    private static int _duplicationLevel; // 11 = DuplicateOutput1, 10 = DuplicateOutput, 0 = não criado
+    private static volatile string? _duplicationFallbackReason;
+
+    /// <summary>Nível efetivamente usado na última inicialização (11, 10 ou 0).</summary>
+    public static int DuplicationLevel => Volatile.Read(ref _duplicationLevel);
+
+    /// <summary>Rótulo para a UI: "DXGI (DDA 1.0)". "DXGI" quando o nível é desconhecido.</summary>
+    public static string BackendLabel => FormatBackendLabel(DuplicationLevel);
+
+    internal static string FormatBackendLabel(int level) => level == 0
+        ? "DXGI"
+        : $"DXGI (DDA {CaptureDiagnostics.DescribeDesktopDuplicationLevel(level)})";
+
+    /// <summary>Linha de log: nível efetivo + causa do fallback quando houve um.</summary>
+    public static string DescribeBackend() =>
+        DescribeDxgiBackend(DuplicationLevel, _duplicationFallbackReason);
+
+    internal static string DescribeDxgiBackend(int level, string? fallbackReason)
+    {
+        var text = $"DXGI Desktop Duplication {CaptureDiagnostics.DescribeDesktopDuplicationLevel(level)}";
+        return fallbackReason is null ? text : $"{text} — DuplicateOutput1 falhou: {fallbackReason}";
+    }
+
     public void Initialize(ID3D11Device? sharedDevice = null) =>
         Initialize(sharedDevice, IntPtr.Zero);
 
     public void Initialize(ID3D11Device? sharedDevice, IntPtr targetHwnd)
     {
+        // Reinit: o diagnóstico pertence a ESTA tentativa, não à anterior.
+        _duplicationLevel = 0;
+        _duplicationFallbackReason = null;
+
         if (sharedDevice != null)
         {
             _device = sharedDevice;
@@ -106,6 +140,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
                                 _duplication?.Dispose();
                                 selectedDesc = desc;
                                 _duplication = duplication;
+                                _duplicationLevel = 11;
                                 _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
                                 _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
                                 _texturePool = new TexturePool(_device, poolSize: 3);
@@ -118,6 +153,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
                                 selectedOutput = output5;
                                 selectedDesc = desc;
                                 _duplication = duplication;
+                                _duplicationLevel = 11;
                             }
                             else
                             {
@@ -128,7 +164,11 @@ public sealed class DxgiCaptureSource : ICaptureSource
                         }
                         catch (Exception ex)
                         {
-                            Log.D("DxgiCaptureSource", $"DuplicateOutput1 not supported on output {i}: {ex.Message}");
+                            // A causa do fallback para DDA 1.0 fica guardada: é a
+                            // diferença entre "o cliente tem lag" e "o cliente tem lag
+                            // porque o DuplicateOutput1 falhou com X".
+                            _duplicationFallbackReason = CaptureDiagnostics.DescribeFailure(ex);
+                            Log.D("DxgiCaptureSource", $"DuplicateOutput1 not supported on output {i}: {_duplicationFallbackReason}");
                         }
                         output5.Dispose();
                     }
@@ -151,6 +191,7 @@ public sealed class DxgiCaptureSource : ICaptureSource
                     _duplication?.Dispose();
                     selectedDesc = desc1;
                     _duplication = output1.DuplicateOutput(_device);
+                    _duplicationLevel = 10;
                     _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
                     _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
                     output1.Dispose();
@@ -176,7 +217,11 @@ public sealed class DxgiCaptureSource : ICaptureSource
 
         _outputWidth = selectedDesc.DesktopCoordinates.Right - selectedDesc.DesktopCoordinates.Left;
         _outputHeight = selectedDesc.DesktopCoordinates.Bottom - selectedDesc.DesktopCoordinates.Top;
-        _duplication ??= selectedOutput.DuplicateOutput(_device);
+        if (_duplication is null)
+        {
+            _duplication = selectedOutput.DuplicateOutput(_device);
+            _duplicationLevel = 10;
+        }
         selectedOutput.Dispose();
         _texturePool = new TexturePool(_device, poolSize: 3);
     }

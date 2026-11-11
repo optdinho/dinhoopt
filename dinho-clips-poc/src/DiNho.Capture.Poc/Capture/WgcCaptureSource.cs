@@ -65,11 +65,26 @@ public sealed class WgcCaptureSource : ICaptureSource
     private static int _wgcAvailabilityCheckState; // 0 = não avaliado, 1 = avaliado
     private static bool _wgcAvailable;
 
+    /// <summary>Motivo do latch (null enquanto o WGC está disponível ou ainda não avaliado).
+    /// Existe para o log responder "PORQUÊ" — o latch sozinho dizia só "indisponível"
+    /// (cliente 2026-11-10: WGC fora, DXGI dentro, causa perdida).</summary>
+    private static volatile string? _wgcUnavailableReason;
+
+    /// <summary>Diagnóstico do latch, para o coordinator escrever uma linha útil.</summary>
+    public readonly record struct WgcAvailabilityDiagnostics(bool Evaluated, bool Available, string? Reason);
+
+    /// <summary>Estado atual do latch + motivo. Não avalia o gate.</summary>
+    public static WgcAvailabilityDiagnostics GetWgcAvailabilityDiagnostics() => new(
+        Volatile.Read(ref _wgcAvailabilityCheckState) == 1,
+        _wgcAvailable,
+        _wgcUnavailableReason);
+
     /// <summary>Limpa o latch (estático process-wide) para os testes.</summary>
     internal static void ResetWgcAvailabilityForTests()
     {
         _wgcAvailabilityCheckState = 0;
         _wgcAvailable = false;
+        _wgcUnavailableReason = null;
     }
 
     /// <summary>
@@ -87,10 +102,13 @@ public sealed class WgcCaptureSource : ICaptureSource
         try
         {
             available = gate?.Invoke() ?? GraphicsCaptureSession.IsSupported();
+            if (!available)
+                _wgcUnavailableReason ??= "GraphicsCaptureSession.IsSupported() == false";
         }
-        catch
+        catch (Exception ex)
         {
             available = false;
+            _wgcUnavailableReason ??= $"IsSupported() lançou {CaptureDiagnostics.DescribeFailure(ex)}";
         }
 
         _wgcAvailable = available;
@@ -98,9 +116,14 @@ public sealed class WgcCaptureSource : ICaptureSource
         return available;
     }
 
-    /// <summary>Fixa o latch em indisponível (usado nos catchs dos CreateFor*).</summary>
-    internal static void MarkWgcUnavailableForSession()
+    /// <summary>Fixa o latch em indisponível (usado nos catchs dos CreateFor*), guardando
+    /// o motivo: sem ele, "WGC indisponível" era indistinguível de qualquer causa.</summary>
+    internal static void MarkWgcUnavailableForSession(Exception? failure = null, string? context = null)
     {
+        var reason = context ?? "latch manual";
+        if (failure is not null)
+            reason += $": {CaptureDiagnostics.DescribeFailure(failure)}";
+        _wgcUnavailableReason = reason;
         _wgcAvailable = false;
         Volatile.Write(ref _wgcAvailabilityCheckState, 1);
     }
@@ -306,7 +329,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             {
                 Log.E("WGC-DIAG", $"CreateForWindow falhou: {ex.GetType().Name}: {ex.Message}");
                 if (IsSessionLevelFailure(ex))
-                    MarkWgcUnavailableForSession();
+                    MarkWgcUnavailableForSession(ex, "CreateForWindow");
                 throw;
             }
             if (item is null)
@@ -327,7 +350,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             {
                 Log.E("WGC-DIAG", $"CreateForMonitor falhou: {ex.GetType().Name}: {ex.Message}");
                 if (IsSessionLevelFailure(ex))
-                    MarkWgcUnavailableForSession();
+                    MarkWgcUnavailableForSession(ex, "CreateForMonitor");
                 throw;
             }
             if (item is null)
