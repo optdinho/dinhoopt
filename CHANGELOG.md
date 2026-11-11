@@ -1,3 +1,19 @@
+## [2.1.14]
+
+### Corrigido
+- **Gravador — qualidade e FPS a meio da gravação**: mudar a qualidade (CQ, bitrate, preset) ou o FPS nas configurações passa a ter efeito **na hora**, com a gravação a correr. Antes só valia depois de parar e voltar a gravar. A captura e o buffer de replay não são interrompidos (reinicia apenas o codificador) e a linha temporal do clipe mantém-se contínua. A **resolução** e o **codec** continuam a entrar apenas na gravação seguinte — o clipe é guardado sem re-encode e um ficheiro com dois formatos sairia corrompido. A UI mostra esta regra por baixo da resolução/FPS.
+- **Captura — WGC**: o Windows Graphics Capture deixa de ficar bloqueado para o resto da sessão por causa de **uma** janela protegida/de outro utilizador (`E_ACCESSDENIED` já não tranca o processo inteiro) nem por uma falha transitória de driver/TDR (passa a haver nova tentativa ao fim de 5 minutos). Em Windows 10 1809–1909 o WGC volta a ser usado em vez de ser descartado à nascença. Na prática, menos sessões a caírem para a duplicação de ecrã do DXGI — o caminho que obriga o desktop a sair do modo de composição otimizado e que é o suspeito conhecido de lag no cursor e noutras janelas. **A causa do lag reportado continua por confirmar**: esta versão instrumenta-a.
+- **Captura — diagnóstico**: quando o WGC não está disponível, o log passa a dizer **porquê** (HRESULT com nome, build do Windows, sessão local vs remota, HAGS, serviço Frame Server) em vez de só "indisponível". O mesmo para o DXGI: indica se está em DDA 1.0 ou 1.1 e porque motivo o `DuplicateOutput1` falhou. A barra de estado dos clipes mostra o backend em uso (`DXGI (DDA 1.0)`, por exemplo).
+- **Gravador — escolha de codificador NVIDIA**: GPUs sem AV1 por hardware (série RTX 30 e anteriores) deixam de tentar `av1_nvenc` a cada arranque. A decisão passa a usar a compute capability real da GPU em vez da lista de codificadores do ffmpeg (que os tem todos compilados). Elimina ~0,5 s de arranque perdidos e o aviso `probe FAILED (av1_nvenc)` que parecia um defeito grave no log.
+
+### Interno
+- **Log do motor**: o leitor do Electron reenviava 92% das linhas já emitidas (o mesmo `Initialized` repetido minutos a fio, 95 MB por sessão). Corrigido o limite do buffer pendente: cada linha é registada uma única vez e o ficheiro fica ~8 MB por sessão. Todos os contadores de eventos anteriores estavam inflacionados 17–35× por este defeito — a sessão de referência estava saudável (60,00 fps, `speed=1.00x`, `convert` p50 1,4 ms).
+- **Reaplicação a quente**: novo `PipelineConfigSnapshot` + `EngineCoordinator.LiveConfig` (coalescing de rajadas, retry de 2 s até 15 tentativas quando o watchdog está a reiniciar, desistência registada). O reinício do watchdog passou a usar o **formato aplicado** e não a configuração — uma troca de codec/resolução pendente já não pode entrar a meio do buffer.
+- **WGC**: latch passou a distinguir falha de sessão (`ERROR_SERVICE_DISABLED`) de falha de janela, com cooldown de 5 min para o primeiro caso; gate por build do Windows (`< 17763` sem WGC, `17763..19040` disponível, `≥ 19041` consulta `IsSupported()`).
+- **AV1**: `nvidia-smi --query-gpu=compute_cap` (cacheado por processo), com fallback para o probe de encode real quando a capability não é legível — nunca a lista `-encoders`.
+- **Teste**: a limpeza de `process.env.HOME` no teste do triturador deixava a string `"undefined"` (truthy) quando a variável não existia; passa a apagar a chave. Era a única falha da suite em PowerShell.
+- **Qualidade**: TS 8.551 testes em 339 ficheiros · C# 2.656 (Release) · `tsc` 0 · Biome 0.
+
 ## [2.1.13]
 
 ### Alterado
