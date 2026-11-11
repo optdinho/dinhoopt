@@ -107,4 +107,44 @@ public sealed class CaptureDiagnosticsTests
     {
         Assert.Equal(expected, CaptureDiagnostics.DescribeDesktopDuplicationLevel(level));
     }
+
+    // ── Estado gráfico no log (HAGS / Frame Server) ─────────────────
+    // Nenhum decide a disponibilidade do WGC — ficam no log para a próxima
+    // discussão "será que era o HAGS?" ter dados.
+
+    [Theory]
+    [InlineData(2, "HAGS=ligado")]
+    [InlineData(1, "HAGS=desligado")]
+    [InlineData(null, "HAGS=desconhecido")]
+    [InlineData(0, "HAGS=desconhecido")]
+    public void DescribeHagsMode_MapsRegistryValue(int? mode, string expected)
+    {
+        Assert.Equal(expected, CaptureDiagnostics.DescribeHagsMode(mode));
+    }
+
+    [Theory]
+    [InlineData(4, "FrameServer=desligado")]
+    [InlineData(3, "FrameServer=manual")]
+    [InlineData(2, "FrameServer=automático")]
+    [InlineData(null, "FrameServer=desconhecido")]
+    public void DescribeFrameServerStart_MapsStartMode(int? startMode, string expected)
+    {
+        Assert.Equal(expected, CaptureDiagnostics.DescribeFrameServerStart(startMode));
+    }
+
+    [Fact]
+    public void ReadDword_MissingKeyOrValue_ReturnsNull()
+    {
+        // Diagnóstico nunca pode lançar: chave inexistente = "desconhecido" no log.
+        Assert.Null(CaptureDiagnostics.ReadDword(@"SOFTWARE\DiNho\NaoExiste", "Nada"));
+    }
+
+    [Fact]
+    public void DescribeGraphicsSettings_AlwaysReturnsBothFields()
+    {
+        var text = CaptureDiagnostics.DescribeGraphicsSettings();
+
+        Assert.Contains("HAGS=", text);
+        Assert.Contains("FrameServer=", text);
+    }
 }

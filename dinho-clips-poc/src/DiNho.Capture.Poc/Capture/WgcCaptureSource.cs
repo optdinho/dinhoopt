@@ -54,14 +54,17 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     // ── Latch de disponibilidade WGC por sessão ──────────────────────────
     // O Windows.Graphics.Capture pode ficar indisponível para a SESSÃO inteira
-    // (serviço de captura desligado — ERROR_SERVICE_DISABLED 0x80070422 — ou sem
-    // consentimento — E_ACCESSDENIED 0x80070005). Medido 2026-10-06: 17 falhas
-    // WGC + 4 reinícios de pipeline, todas 0x80070422. Em vez de re-tentar WGC a
-    // cada reinício (3× per-window + desktop) e só depois cair para DXGI, avaliamos
-    // UMA vez por sessão e o coordinator salta direto para DXGI.
+    // (serviço de captura desligado — ERROR_SERVICE_DISABLED 0x80070422). Medido
+    // 2026-10-06: 17 falhas WGC + 4 reinícios de pipeline, todas 0x80070422. Em vez
+    // de re-tentar WGC a cada reinício (3× per-window + desktop) e só depois cair
+    // para DXGI, avaliamos uma vez e o coordinator salta direto para DXGI.
     // ⚠️ GraphicsCaptureSession.IsSupported() pode devolver TRUE no mesmo cenário
     // (consulta estática de capacidade, não o estado do serviço no momento) → o
     // latch também dispara dos catchs dos CreateFor*, via MarkWgcUnavailableForSession().
+    // Correções de 2026-11-10: o latch de falhas de sessão EXPIRA (cooldown) para um
+    // TDR/lock/unlock não custar o WGC até reiniciar, o gate é por build (IsSupported
+    // não existe abaixo da 2004 e o veto antigo matava o WGC em 1809-1909) e
+    // E_ACCESSDENIED deixou de latchear a sessão (é falha de UMA janela → desktop WGC).
     private static int _wgcAvailabilityCheckState; // 0 = não avaliado, 1 = avaliado
     private static bool _wgcAvailable;
 
@@ -70,14 +73,40 @@ public sealed class WgcCaptureSource : ICaptureSource
     /// (cliente 2026-11-10: WGC fora, DXGI dentro, causa perdida).</summary>
     private static volatile string? _wgcUnavailableReason;
 
-    /// <summary>Diagnóstico do latch, para o coordinator escrever uma linha útil.</summary>
-    public readonly record struct WgcAvailabilityDiagnostics(bool Evaluated, bool Available, string? Reason);
+    /// <summary>Quando reavaliar (TickCount64). <see cref="NeverRetry"/> = nunca (build sem
+    /// a API); 0 = disponível.</summary>
+    private static long _wgcRetryAtMs;
 
-    /// <summary>Estado atual do latch + motivo. Não avalia o gate.</summary>
-    public static WgcAvailabilityDiagnostics GetWgcAvailabilityDiagnostics() => new(
-        Volatile.Read(ref _wgcAvailabilityCheckState) == 1,
-        _wgcAvailable,
-        _wgcUnavailableReason);
+    /// <summary>Build mínimo com Windows.Graphics.Capture per-window: Windows 10 1809.</summary>
+    internal const int MinimumWgcBuild = 17763;
+
+    /// <summary>Build a partir do qual existe <c>GraphicsCaptureSession.IsSupported()</c> (2004).</summary>
+    internal const int IsSupportedApiBuild = 19041;
+
+    private const long NeverRetry = long.MaxValue;
+    private const int DefaultUnavailableCooldownMs = 300_000; // 5 min
+
+    /// <summary>Espera antes de voltar a tentar o WGC depois de uma falha de sessão.
+    /// 0 = reavalia no próximo arranque de captura.</summary>
+    internal static int UnavailableCooldownMs { get; set; } = DefaultUnavailableCooldownMs;
+
+    /// <summary>Relógio injectável (ms) para o cooldown — os testes avançam-no sem dormir.</summary>
+    internal static Func<long> Clock { get; set; } = static () => Environment.TickCount64;
+
+    /// <summary>Diagnóstico do latch, para o coordinator escrever uma linha útil.</summary>
+    public readonly record struct WgcAvailabilityDiagnostics(
+        bool Evaluated, bool Available, string? Reason, long? RetryInMs);
+
+    /// <summary>Estado atual do latch + motivo e, se houver cooldown a correr, quanto falta.
+    /// Não avalia o gate.</summary>
+    public static WgcAvailabilityDiagnostics GetWgcAvailabilityDiagnostics()
+    {
+        var evaluated = Volatile.Read(ref _wgcAvailabilityCheckState) == 1;
+        long? retryInMs = null;
+        if (evaluated && !_wgcAvailable && _wgcRetryAtMs != NeverRetry)
+            retryInMs = Math.Max(0, _wgcRetryAtMs - Clock());
+        return new(evaluated, _wgcAvailable, _wgcUnavailableReason, retryInMs);
+    }
 
     /// <summary>Limpa o latch (estático process-wide) para os testes.</summary>
     internal static void ResetWgcAvailabilityForTests()
@@ -85,60 +114,112 @@ public sealed class WgcCaptureSource : ICaptureSource
         _wgcAvailabilityCheckState = 0;
         _wgcAvailable = false;
         _wgcUnavailableReason = null;
+        _wgcRetryAtMs = 0;
+        UnavailableCooldownMs = DefaultUnavailableCooldownMs;
+        Clock = static () => Environment.TickCount64;
     }
 
     /// <summary>
-    /// Indica se WGC está disponível para a SESSÃO atual. Avalia o gate uma única
-    /// vez e faz latch — chamadas seguintes devolvem o valor em cache. O gate
-    /// default é <see cref="GraphicsCaptureSession.IsSupported"/> (estático, sem
-    /// WinRT); nos testes, é substituído por injecção <see cref="Func{T}"/>.
+    /// Decide a disponibilidade por BUILD do Windows. O gate anterior usava só
+    /// <c>GraphicsCaptureSession.IsSupported()</c> — que **não existe** abaixo da 2004
+    /// (19041). Em Windows 10 1809-1909 o WGC per-window funciona, mas a chamada lançava,
+    /// o catch latchetava o WGC para a sessão inteira e a máquina ficava em DXGI para
+    /// sempre. Agora: build &lt; 17763 → sem WGC (permanente); 17763..19040 → disponível
+    /// (a API de capacidade não existe, o <c>CreateForWindow</c> é o teste real);
+    /// ≥ 19041 → o resultado de IsSupported decide.
     /// </summary>
-    internal static bool IsWgcAvailableForSession(Func<bool>? gate = null)
+    internal static bool EvaluateWgcGate(int build, Func<bool> isSupported, out string? reason, out bool permanent)
+    {
+        permanent = false;
+        reason = null;
+
+        if (build < MinimumWgcBuild)
+        {
+            permanent = true;
+            reason = $"Windows build {build} < {MinimumWgcBuild} — Windows Graphics Capture indisponível";
+            return false;
+        }
+
+        if (build < IsSupportedApiBuild)
+            return true;
+
+        var available = isSupported();
+        if (!available)
+            reason = "GraphicsCaptureSession.IsSupported() == false";
+        return available;
+    }
+
+    /// <summary>
+    /// Indica se WGC está disponível para a SESSÃO atual. Avalia o gate uma única vez e
+    /// faz latch; o latch de falhas de sessão **expira** (ver
+    /// <see cref="UnavailableCooldownMs"/>) para um TDR/lock/unlock não custar o WGC até
+    /// reiniciar a app. O gate default é por build (ver <see cref="EvaluateWgcGate"/>);
+    /// nos testes, é substituído por injecção <see cref="Func{T}"/> e/ou um build fixo.
+    /// </summary>
+    internal static bool IsWgcAvailableForSession(Func<bool>? gate = null, int? build = null)
     {
         if (Volatile.Read(ref _wgcAvailabilityCheckState) == 1)
-            return _wgcAvailable;
+        {
+            if (_wgcAvailable) return true;
+            if (Clock() < _wgcRetryAtMs) return false; // cooldown ainda a correr
+            // Cooldown expirou: reavalia (o motivo é substituído pelo novo resultado).
+            Volatile.Write(ref _wgcAvailabilityCheckState, 0);
+        }
 
-        var available = false;
+        var targetBuild = build ?? Environment.OSVersion.Version.Build;
+        bool available;
+        string? reason;
+        var permanent = false;
         try
         {
-            available = gate?.Invoke() ?? GraphicsCaptureSession.IsSupported();
-            if (!available)
-                _wgcUnavailableReason ??= "GraphicsCaptureSession.IsSupported() == false";
+            available = EvaluateWgcGate(
+                targetBuild,
+                gate ?? GraphicsCaptureSession.IsSupported,
+                out reason,
+                out permanent);
         }
         catch (Exception ex)
         {
             available = false;
-            _wgcUnavailableReason ??= $"IsSupported() lançou {CaptureDiagnostics.DescribeFailure(ex)}";
+            reason = $"IsSupported() lançou {CaptureDiagnostics.DescribeFailure(ex)}";
         }
 
         _wgcAvailable = available;
+        _wgcUnavailableReason = available ? null : reason ?? "motivo não registado";
+        _wgcRetryAtMs = available
+            ? 0
+            : permanent ? NeverRetry : Clock() + Math.Max(0, UnavailableCooldownMs);
         Volatile.Write(ref _wgcAvailabilityCheckState, 1);
         return available;
     }
 
     /// <summary>Fixa o latch em indisponível (usado nos catchs dos CreateFor*), guardando
     /// o motivo: sem ele, "WGC indisponível" era indistinguível de qualquer causa.</summary>
-    internal static void MarkWgcUnavailableForSession(Exception? failure = null, string? context = null)
+    internal static void MarkWgcUnavailableForSession(
+        Exception? failure = null, string? context = null, bool permanent = false)
     {
         var reason = context ?? "latch manual";
         if (failure is not null)
             reason += $": {CaptureDiagnostics.DescribeFailure(failure)}";
         _wgcUnavailableReason = reason;
         _wgcAvailable = false;
+        _wgcRetryAtMs = permanent ? NeverRetry : Clock() + Math.Max(0, UnavailableCooldownMs);
         Volatile.Write(ref _wgcAvailabilityCheckState, 1);
     }
 
     /// <summary>
-    /// Classifica um HRESULT como falha de nível de SESSÃO (serviço de captura
-    /// desligado / sem consentimento) vs transitória (janela inválida, etc.).
-    /// Só as de sessão disparam o latch — uma janela que sumiu não pode derrubar
-    /// o WGC para as chamadas seguintes.
+    /// Classifica um HRESULT como falha de nível de SESSÃO vs falha daquela janela.
+    /// Só <c>ERROR_SERVICE_DISABLED</c> (0x80070422 — serviço de captura mesmo desligado)
+    /// é de sessão. <c>E_ACCESSDENIED</c> (0x80070005) fica de fora **de propósito**: é o
+    /// que uma janela protegida/de outro utilizador devolve, e latchear a sessão por causa
+    /// dela custava o WGC a todos os jogos até reiniciar a app (bug latente até 2026-11-10).
+    /// Nesse caso cai-se para WGC desktop, que não tem a restrição da janela.
     /// </summary>
     internal static bool IsSessionLevelFailure(Exception ex)
     {
         if (ex is not COMException com)
             return false;
-        return unchecked((uint)com.HResult) is 0x80070422U or 0x80070005U;
+        return unchecked((uint)com.HResult) is 0x80070422U;
     }
 
     /// <summary>

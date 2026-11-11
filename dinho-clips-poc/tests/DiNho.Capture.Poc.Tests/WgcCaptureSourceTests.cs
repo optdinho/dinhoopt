@@ -486,7 +486,7 @@ public sealed class WgcCaptureSourceTests
                 return true;
             }
 
-            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(gate, WgcCaptureSource.IsSupportedApiBuild));
             Assert.Equal(1, called);
         }
         finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
@@ -505,8 +505,8 @@ public sealed class WgcCaptureSourceTests
                 return false;
             }
 
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate, WgcCaptureSource.IsSupportedApiBuild));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate, WgcCaptureSource.IsSupportedApiBuild));
             // O latch garante que o gate (WinRT caro/real) só corre UMA vez por sessão.
             Assert.Equal(1, called);
         }
@@ -526,8 +526,8 @@ public sealed class WgcCaptureSourceTests
                 throw new InvalidOperationException("serviço de captura indisponível");
             }
 
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate, WgcCaptureSource.IsSupportedApiBuild));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(gate, WgcCaptureSource.IsSupportedApiBuild));
             Assert.Equal(1, called);
         }
         finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
@@ -542,7 +542,7 @@ public sealed class WgcCaptureSourceTests
             // Caminho do catch dos CreateFor*: o IsSupported devolveu true mas o
             // CreateFor* falhou com 0x80070422 — o latch tem de disparar à mesma.
             WgcCaptureSource.MarkWgcUnavailableForSession();
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => true, WgcCaptureSource.IsSupportedApiBuild));
         }
         finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
     }
@@ -553,18 +553,28 @@ public sealed class WgcCaptureSourceTests
         WgcCaptureSource.ResetWgcAvailabilityForTests();
         WgcCaptureSource.MarkWgcUnavailableForSession();
         WgcCaptureSource.ResetWgcAvailabilityForTests();
-        Assert.True(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+        Assert.True(WgcCaptureSource.IsWgcAvailableForSession(() => true, WgcCaptureSource.IsSupportedApiBuild));
         WgcCaptureSource.ResetWgcAvailabilityForTests();
     }
 
     [Theory]
-    [InlineData(unchecked((int)0x80070422), true)] // ERROR_SERVICE_DISABLED — serviço de captura desligado
-    [InlineData(unchecked((int)0x80070005), true)] // E_ACCESSDENIED — sem consentimento/conta de serviço
-    [InlineData(unchecked((int)0x80070057), false)] // E_INVALIDARG — janela inválida/transitório, NÃO é sessão
+    [InlineData(unchecked((int)0x80070422), true)] // ERROR_SERVICE_DISABLED — serviço mesmo desligado
+    [InlineData(unchecked((int)0x80070005), false)] // E_ACCESSDENIED — falha da JANELA, não da sessão
+    [InlineData(unchecked((int)0x80070057), false)] // E_INVALIDARG — janela inválida/transitório
     public void IsSessionLevelFailure_ClassifiesByHResult(int hr, bool expected)
     {
         var ex = new COMException("falha", hr);
         Assert.Equal(expected, WgcCaptureSource.IsSessionLevelFailure(ex));
+    }
+
+    [Fact]
+    public void IsSessionLevelFailure_AccessDenied_DoesNotLatchWholeSession()
+    {
+        // Bug latente até 2026-11-10: uma janela protegida devolvia E_ACCESSDENIED e
+        // latchetava o WGC para o processo inteiro — todos os jogos caíam em DXGI até
+        // reiniciar a app. Só o serviço desligado é que é falha de sessão.
+        Assert.False(WgcCaptureSource.IsSessionLevelFailure(
+            new COMException("janela protegida", unchecked((int)0x80070005))));
     }
 
     [Fact]
@@ -620,7 +630,7 @@ public sealed class WgcCaptureSourceTests
         WgcCaptureSource.ResetWgcAvailabilityForTests();
         try
         {
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => false));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => false, WgcCaptureSource.IsSupportedApiBuild));
 
             var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
 
@@ -636,7 +646,7 @@ public sealed class WgcCaptureSourceTests
         WgcCaptureSource.ResetWgcAvailabilityForTests();
         try
         {
-            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(() => true, WgcCaptureSource.IsSupportedApiBuild));
 
             var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
 
@@ -653,11 +663,11 @@ public sealed class WgcCaptureSourceTests
         WgcCaptureSource.ResetWgcAvailabilityForTests();
         try
         {
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => false));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => false, WgcCaptureSource.IsSupportedApiBuild));
             var first = WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason;
 
             // Segunda chamada não reavalia: o motivo tem de ser o mesmo, não lixo novo.
-            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => true));
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(() => true, WgcCaptureSource.IsSupportedApiBuild));
             Assert.Equal(first, WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason);
         }
         finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
@@ -696,5 +706,153 @@ public sealed class WgcCaptureSourceTests
 
         Assert.Null(WgcCaptureSource.GetWgcAvailabilityDiagnostics().Reason);
         Assert.False(WgcCaptureSource.GetWgcAvailabilityDiagnostics().Evaluated);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Gate por build + cooldown do latch (2026-11-10)
+    //  O veto antigo era GraphicsCaptureSession.IsSupported(), API que só
+    //  existe a partir da 2004 (19041). Em Windows 10 1809-1909 o WGC
+    //  per-window funciona e a máquina ia para DXGI para sempre.
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void EvaluateWgcGate_BuildBelow1809_IsPermanentlyUnavailable()
+    {
+        var isSupportedCalled = false;
+
+        var available = WgcCaptureSource.EvaluateWgcGate(
+            WgcCaptureSource.MinimumWgcBuild - 1,
+            () => { isSupportedCalled = true; return true; },
+            out var reason,
+            out var permanent);
+
+        Assert.False(available);
+        Assert.True(permanent);
+        Assert.False(isSupportedCalled); // nem vale a pena perguntar
+        Assert.Contains("17763", reason);
+    }
+
+    [Theory]
+    [InlineData(17763)] // 1809 — primeiro build com WGC per-window
+    [InlineData(18362)] // 1903
+    [InlineData(18363)] // 1909
+    public void EvaluateWgcGate_1809To1909_IsAvailableAndDoesNotCallIsSupported(int build)
+    {
+        var isSupportedCalled = false;
+
+        var available = WgcCaptureSource.EvaluateWgcGate(
+            build,
+            () => { isSupportedCalled = true; return false; },
+            out var reason,
+            out var permanent);
+
+        Assert.True(available);
+        Assert.False(permanent);
+        Assert.Null(reason);
+        // O ponto do fix: abaixo da 2004 o método não existe no runtime — chamá-lo
+        // lançava MissingMethodException e matava o WGC.
+        Assert.False(isSupportedCalled);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EvaluateWgcGate_From2004_UsesIsSupported(bool isSupported)
+    {
+        var available = WgcCaptureSource.EvaluateWgcGate(
+            WgcCaptureSource.IsSupportedApiBuild,
+            () => isSupported,
+            out var reason,
+            out var permanent);
+
+        Assert.Equal(isSupported, available);
+        Assert.False(permanent);
+        if (isSupported)
+            Assert.Null(reason);
+        else
+            Assert.Contains("IsSupported()", reason);
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_SessionFailure_RetriesAfterCooldown()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            var now = 1_000L;
+            WgcCaptureSource.Clock = () => now;
+            WgcCaptureSource.UnavailableCooldownMs = 500;
+
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(
+                () => false, WgcCaptureSource.IsSupportedApiBuild));
+            Assert.Equal<long?>(500, WgcCaptureSource.GetWgcAvailabilityDiagnostics().RetryInMs);
+
+            var calls = 0;
+            now += 499;
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(
+                () => { calls++; return true; }, WgcCaptureSource.IsSupportedApiBuild));
+            Assert.Equal(0, calls); // dentro do cooldown nem se tenta
+
+            now += 1;
+            Assert.True(WgcCaptureSource.IsWgcAvailableForSession(
+                () => { calls++; return true; }, WgcCaptureSource.IsSupportedApiBuild));
+            Assert.Equal(1, calls);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void IsWgcAvailableForSession_BuildTooOld_IsNeverRetried()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            var now = 0L;
+            WgcCaptureSource.Clock = () => now;
+            WgcCaptureSource.UnavailableCooldownMs = 1;
+
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(
+                () => true, WgcCaptureSource.MinimumWgcBuild - 1));
+
+            now += 1_000_000;
+            Assert.False(WgcCaptureSource.IsWgcAvailableForSession(
+                () => true, WgcCaptureSource.MinimumWgcBuild - 1));
+
+            var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
+            Assert.Contains("17763", diag.Reason);
+            Assert.Null(diag.RetryInMs); // permanente: sem nova tentativa
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void MarkWgcUnavailableForSession_IsRetryableByDefault()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            WgcCaptureSource.UnavailableCooldownMs = 7_000;
+            WgcCaptureSource.Clock = () => 42_000L;
+
+            WgcCaptureSource.MarkWgcUnavailableForSession(
+                new COMException("serviço desligado", unchecked((int)0x80070422)),
+                "CreateForMonitor");
+
+            Assert.Equal<long?>(7_000, WgcCaptureSource.GetWgcAvailabilityDiagnostics().RetryInMs);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
+    }
+
+    [Fact]
+    public void MarkWgcUnavailableForSession_Permanent_HasNoRetry()
+    {
+        WgcCaptureSource.ResetWgcAvailabilityForTests();
+        try
+        {
+            WgcCaptureSource.MarkWgcUnavailableForSession(permanent: true);
+
+            Assert.Null(WgcCaptureSource.GetWgcAvailabilityDiagnostics().RetryInMs);
+        }
+        finally { WgcCaptureSource.ResetWgcAvailabilityForTests(); }
     }
 }

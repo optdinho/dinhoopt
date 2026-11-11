@@ -141,6 +141,33 @@ Windows + `sessão remota (RDP)` vs `local`) e `DescribeDesktopDuplicationLevel`
 `resources/clips-engine`. C# **2606/2606**, 0 falhas, 0 ignorados, build **0 avisos** (novos
 `CaptureDiagnosticsTests.cs`, `DxgiCaptureSourceTests.cs` e +7 casos em `WgcCaptureSourceTests.cs`).
 
+**Reforço do WGC — três defeitos do latch corrigidos (2026-11-10b).** O latch de 2026-10-08 tinha três
+falhas de desenho: (1) **`E_ACCESSDENIED` (0x80070005) era classificado como falha de SESSÃO** — mas é o
+que **uma janela** protegida/de outro utilizador devolve; uma só janela problemática latchetava o WGC para
+o **processo inteiro** e todos os jogos caíam em DXGI até reiniciar a app. Agora `IsSessionLevelFailure`
+só aceita `ERROR_SERVICE_DISABLED` (0x80070422) e E_ACCESSDENIED cai para **WGC desktop**, que não tem a
+restrição da janela. (2) **O gate era `GraphicsCaptureSession.IsSupported()`** — API que só existe a partir
+da **2004 (19041)**. Em Windows 10 **1809-1909 o WGC per-window funciona**, mas a chamada lançava
+(`MissingMethodException`), o catch → `false` latchetava e a máquina ficava em DXGI **para sempre**; é o
+perfil de quem usa LTSC/"otimizadores". Agora `EvaluateWgcGate(build, …)`: `< 17763` = sem WGC
+(**permanente**, sem retry); `17763..19040` = disponível sem consultar a API (o `CreateForWindow` é o teste
+real); `≥ 19041` = `IsSupported()` decide. (3) **O latch nunca expirava** — um TDR/driver reset, lock/unlock
+ou falha transitória no arranque custava o WGC até reiniciar. Agora falhas de sessão têm **cooldown de 5
+min** (`UnavailableCooldownMs`, relógio injectável `Clock`), reavaliado no arranque seguinte da captura;
+`RetryInMs` sai no diagnóstico e no log (`nova tentativa em 300s` / `sem nova tentativa`). **Log:** a linha
+`[WGC-DIAG]` passa a levar também **HAGS** e **Frame Server** —
+`… | Windows 10.0.19045 · sessão local · HAGS=ligado · FrameServer=manual` (lidos de `HwSchMode` e
+`Services\FrameServer\Start`). **HAGS não interfere com o WGC** (verify 2026-11-10: caminhos distintos —
+DWM/WGC e duplicação de saída vs. escalonamento de submissão na GPU); `FrameServer=desligado` (`Start=4`) é
+o que produz o `0x80070422` e o **único** reforço externo real (o DiNho não toca no serviço: 0 ocorrências
+no repo). C# **2627/2627**, 0 falhas, 0 ignorados, build **0 avisos** (+21 testes, incluindo
+`EvaluateWgcGate` 17762/17763/18362/18363/19041, cooldown com relógio falso e `E_ACCESSDENIED` sem latch).
+
+**Nota sobre o HAGS para o futuro:** o toggle (`HwSchMode` 2/1, `src/main/ipc/windows-tweaks/tweaks/gaming.ts`)
+está correto; só o texto é datado — *"pode melhorar a compatibilidade com capturas/encoders (OBS)"* vem das
+capturas por hook de 2020, não se aplica a WGC/DXGI. E `getHagsStatus()` devolve `enabled: true` quando o
+valor **não existe** (típico em Windows 10 nunca configurado), o que mostra "ligado" sem ser verdade.
+
 **Gate AV1 corrigido (motor) — a RTX 3060 nunca devia ter tentado AV1.** `SupportsAv1Hardware(0x10DE)`
 chamava `DetectNvidiaGeneration()`, que perguntava ao **binário do ffmpeg** (`CheckFfmpegEncoder("av1_nvenc") ? 89 : 75`)
 em vez de à GPU. Como o ffmpeg embarcado é sempre compilado com `av1_nvenc`, **qualquer** NVIDIA era

@@ -71,6 +71,51 @@ internal static class CaptureDiagnostics
         return $"Windows {version.Major}.{version.Minor}.{version.Build} · {session}";
     }
 
+    // ── Estado gráfico que acompanha o latch do WGC ──────────────────────
+    // Nenhum destes valores decide a disponibilidade do WGC (HAGS não interfere,
+    // Frame Server é só a dependência). Ficam no log para a próxima discussão
+    // "será que era o HAGS / o serviço?" ter dados em vez de opinião.
+
+    /// <summary><c>HwSchMode</c>: 2 = ligado, 1 = desligado, ausente/outro = desconhecido.</summary>
+    public static string DescribeHagsMode(int? hwSchMode) => hwSchMode switch
+    {
+        2 => "HAGS=ligado",
+        1 => "HAGS=desligado",
+        _ => "HAGS=desconhecido",
+    };
+
+    /// <summary>Modo de arranque do serviço Frame Server (<c>Start</c>): 2 = automático,
+    /// 3 = manual, 4 = desligado — 4 é o que produz <c>0x80070422</c> no WGC.</summary>
+    public static string DescribeFrameServerStart(int? startMode) => startMode switch
+    {
+        2 => "FrameServer=automático",
+        3 => "FrameServer=manual",
+        4 => "FrameServer=desligado",
+        0 or 1 => "FrameServer=boot",
+        _ => "FrameServer=desconhecido",
+    };
+
+    /// <summary>HAGS + Frame Server numa linha (duas leituras de registo por arranque).</summary>
+    public static string DescribeGraphicsSettings() =>
+        $"{DescribeHagsMode(ReadDword(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode"))} · " +
+        DescribeFrameServerStart(ReadDword(@"SYSTEM\CurrentControlSet\Services\FrameServer", "Start"));
+
+    /// <summary>Lê um REG_DWORD do HKLM; null quando ausente ou ilegível.</summary>
+    internal static int? ReadDword(string subKey, string valueName)
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(subKey);
+            return key?.GetValue(valueName) is int value ? value : null;
+        }
+        catch
+        {
+            // Diagnóstico não pode derrubar o arranque da captura: ilegível = "desconhecido",
+            // que é visível na linha do log.
+            return null;
+        }
+    }
+
     /// <summary>11 = IDXGIOutput5.DuplicateOutput1 (Win10 1703+), 10 = fallback
     /// IDXGIOutput1.DuplicateOutput (Win8+), 0 = ainda não criado.</summary>
     public static string DescribeDesktopDuplicationLevel(int level) => level switch

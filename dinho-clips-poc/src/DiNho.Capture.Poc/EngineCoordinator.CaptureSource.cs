@@ -21,14 +21,18 @@ public sealed partial class EngineCoordinator
     private static void LogWgcAvailability()
     {
         var diag = WgcCaptureSource.GetWgcAvailabilityDiagnostics();
-        var env = CaptureDiagnostics.DescribeEnvironment();
+        var env = $"{CaptureDiagnostics.DescribeEnvironment()} · {CaptureDiagnostics.DescribeGraphicsSettings()}";
 
         if (diag.Available)
+        {
             Log.I("EngineCoordinator", $"[WGC-DIAG] WGC disponível | {env}");
-        else
-            Log.W("EngineCoordinator",
-                $"[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente. " +
-                $"motivo={diag.Reason ?? "não registado"} | {env}");
+            return;
+        }
+
+        var retry = diag.RetryInMs is { } ms ? $" | nova tentativa em {ms / 1000}s" : " | sem nova tentativa";
+        Log.W("EngineCoordinator",
+            $"[WGC-DIAG] WGC indisponível nesta sessão — usando DXGI directamente. " +
+            $"motivo={diag.Reason ?? "não registado"}{retry} | {env}");
     }
 
     private void SelectCaptureSource()
