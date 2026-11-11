@@ -95,6 +95,39 @@ describe('createEngineLogReader', () => {
     ])
   })
 
+  // Regressão do log de 2026-11-10: uma sessão de 51 min produziu 446 238 linhas
+  // para 36 279 mensagens distintas — 409 959 linhas repetidas (92%). O motor do
+  // defeito era este: quando o chunk acabava exactamente numa fronteira de linha,
+  // `pending` nunca era limpo e cada `push` voltava a emitir tudo o que já tinha
+  // saído. Com o tecto de 64 KB, o efeito real era re-emitir ~64 KB de log antigo
+  // a cada chunk — no log do cliente via-se a mesma linha com o mesmo timestamp
+  // interno a repetir-se durante minutos.
+  it('does not re-emit lines that were already emitted when a chunk ends on a separator', () => {
+    const reader = createEngineLogReader('error')
+
+    expect(reader.push('00:00:00.000 [Info   ] [A] one\n00:00:00.001 [Info   ] [A] two\n')).toEqual([
+      { level: 'info', text: '00:00:00.000 [Info   ] [A] one' },
+      { level: 'info', text: '00:00:00.001 [Info   ] [A] two' },
+    ])
+
+    expect(reader.push('00:00:00.002 [Info   ] [A] three\n')).toEqual([
+      { level: 'info', text: '00:00:00.002 [Info   ] [A] three' },
+    ])
+  })
+
+  it('emits each line exactly once across many separator-aligned chunks', () => {
+    const reader = createEngineLogReader('error')
+    const seen: string[] = []
+
+    for (let i = 0; i < 50; i++) {
+      // Cada chunk acaba em \n — era o caso que re-emitia o buffer inteiro.
+      seen.push(...reader.push(`00:00:00.${String(i).padStart(3, '0')} [Debug  ] [X] line ${i}\n`).map((l) => l.text))
+    }
+
+    expect(seen).toHaveLength(50)
+    expect(new Set(seen).size).toBe(50)
+  })
+
   it('handles a multi-byte char split across chunks', () => {
     const reader = createEngineLogReader('error')
     const full = Buffer.from('00:00:00.000 [Info   ] [X] ação\n', 'utf8')

@@ -26,6 +26,15 @@
 // As duas metades da mesma linha estão no ficheiro como entradas separadas, portanto a linha
 // real nunca foi registada: uma linha partida virava dois registos, um deles falso erro. Este
 // reader retém a cauda incompleta e só emite linhas montadas.
+//
+// ⚠️ Terceiro defeito, encontrado no log de 2026-11-10 (sessão de 51 min, 95 MB): 446 238
+// linhas para 36 279 mensagens distintas — 409 959 repetidas (92%). A causa era o `take()`
+// não limpar `pending` quando o chunk acabava exactamente numa fronteira de linha: as linhas
+// já emitidas ficavam retidas e voltavam a sair no push seguinte. O tecto de 64 KB limitava o
+// crescimento (descartava a frente) — por isso o efeito estabilizou em re-emitir ~64 KB de log
+// antigo a cada chunk, em vez de crescer sem fim — e no ficheiro via-se a mesma linha, com o
+// mesmo timestamp interno, repetida durante minutos (ex.: `10:56:36.718 [FfmpegAacEncoder]
+// Initialized`). O teste "does not re-emit lines…" fixa o comportamento.
 
 export type EngineLogLevel = 'debug' | 'info' | 'warning' | 'error'
 
@@ -97,9 +106,14 @@ export function createEngineLogReader(fallback: EngineLogLevel, opts?: { maxPend
 
   const take = (): EngineLogLine[] => {
     const parts = pending.split(LINE_SEPARATOR_RE)
-    // Se o texto Terminou com separador o último elemento é '' e nada fica pendente.
-    if (TRAILING_SEPARATOR_RE.test(pending)) parts.pop()
-    else pending = parts.pop() ?? ''
+    // Se o texto terminou com separador o último elemento é '' e nada fica pendente —
+    // `pending` TEM de ser limpo, senão o próximo push volta a emitir tudo o que já saiu.
+    if (TRAILING_SEPARATOR_RE.test(pending)) {
+      parts.pop()
+      pending = ''
+    } else {
+      pending = parts.pop() ?? ''
+    }
     return classifyEngineLines(parts.join('\n'), fallback)
   }
 

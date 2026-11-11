@@ -81,6 +81,52 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### "Lag no mouse" durante a gravação: defeito de log corrigido + suspeito DXGI (2026-11-10)
+
+**Pedido.** Cliente relatou lag no mouse e noutras apps enquanto grava. Analisado o `2026-11-10.jsonl`
+da máquina dele (95 MB, 447 984 linhas, sessão do motor 10:56→11:47 = **51 min**, 182 632 frames,
+RTX 3060 + FiveM). Análise read-only; **nenhuma alteração no motor**.
+
+**Defeito real encontrado e corrigido — o leitor de log re-emitia tudo.** `engine-log-reader.ts`:
+446 238 linhas do motor para **36 279 mensagens distintas** ⇒ **409 959 repetidas (92%)**. Causa: em
+`take()` o ramo do separador final fazia `parts.pop()` mas **nunca limpava `pending`**, logo cada `push`
+voltava a emitir o que já tinha saído; o tecto de 64 KB só impedia o crescimento (descartava a frente) e
+o efeito estabilizou em re-emitir ~64 KB a cada chunk. Introduzido em `0cd3b59` (2026-10-04), quando o
+retain da cauda foi acrescentado. No ficheiro vê-se a mesma linha, com o mesmo timestamp interno,
+repetida minutos a fio (`10:56:36.718 [FfmpegAacEncoder] Initialized` em 10:56:36→10:57:27…). Fix:
+`pending = ''` no ramo do separador + nota no cabeçalho do módulo; 2 testes novos
+("does not re-emit lines…", "emits each line exactly once across many separator-aligned chunks" — davam
+**1275 linhas para 50**, 25×).
+
+**Consequência para o diagnóstico — todos os contadores de eventos estavam inflacionados 17–35×.** Os
+números reais da sessão (distintos) são: **1** `[WGC-DIAG] WGC indisponível`, **2**
+`DuplicateOutput1 not supported`, **1** `probe FAILED (av1_nvenc)`, **2** `Captura recuperada`
+(10:56:33.077 e 10:56:37.221), **1** `ffmpeg exited code=-1` (10:56:36.574) — **tudo entre 10:56:30 e
+10:56:37**, nada depois. Ritmo real: p50 **649 linhas/min**, p90 1 008, máx 1 346 (não 7 414/min).
+Ou seja: a sessão estava **saudável** e o log fazia parecer uma crise. É por isto que o fix importa
+(95 MB → ~8 MB por sessão) mais do que por carga de I/O.
+
+**Pipeline limpo (sem sinal de starvation).** 182 601 frames / 50:43 = **60,00 fps**; `speed=1.00x`;
+`wait` p50 **0,1 ms**; `copy` 0,0; `convert` p50 **1,4 ms**; `total` 1,5 ms; `over`/`dup`/`skip` ≈ 0;
+`feedLag` 0 %/s; `outLag` 0 s; `h264_nvenc`; RAM 110→272 MB, `pinned=0`, `gcPause` cumulativo
+**2 766 ms em 51 min** (≈0,09 %). `av1_nvenc` a falhar é **esperado** — a RTX 3060 é Ampere e só
+codifica AV1 a partir de Ada (série 40), logo o fallback para `h264_nvenc` está correto.
+
+**Suspeito principal do lag (NÃO corrigido, por decidir).** O motor caiu para **DXGI Desktop
+Duplication** (`Captura: DXGI Desktop Duplication`, `capture=DxgiCaptureSource`,
+`DuplicateOutput1` → `DXGI_ERROR_UNSUPPORTED` ⇒ DDA 1.0). O DDA força o desktop a sair do caminho de
+composição otimizado (independent flip/MPO) e é o candidato clássico a lag **fora** da app (cursor e
+outras janelas), ao contrário do WGC. `IsWgcAvailableForSession()`
+(`Capture\WgcCaptureSource.cs:81`) faz latch em `GraphicsCaptureSession.IsSupported()` e **engole a
+causa** (catch → `false`), por isso o log do cliente não diz *porque* o WGC está indisponível — só que
+está. Ganhos possíveis: registar o motivo (exceção) no latch; mostrar/forçar backend. O
+`ClipsStatusBar` já expõe `captureBackend`, portanto o utilizador consegue confirmar "DXGI" na UI.
+
+**Higiene:** `ConsoleLogger` não tem filtro de nível (tudo vai a stderr) e **78 % das linhas são
+Debug**; baixar o nível em produção é a maior redução restante depois do fix (não feito — mexe em
+comportamento de suporte). Gates: `tsc --noEmit` 0 · Vitest **8551/8551**, 339 ficheiros · Biome
+**950 ficheiros, 0**.
+
 ### Versão do cliente + Discord ID + data de validade no backend de licenças (2026-11-10)
 
 **Cliente (este repo).** `validateLicense` (`src/main/services/remote-license.ts:280`) passou a enviar `version: app.getVersion()` no POST `validate` que **já existia** — `checkLicense()` agenda uma revalidação em background a cada arranque mesmo com o cache de 24 h válido, por isso não há pedido novo. Teste do payload atualizado (`remote-license.test.ts`, mock de `app.getVersion`), **51/51**.
