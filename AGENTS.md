@@ -81,6 +81,73 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### Qualidade e fps passam a valer a meio da gravação (2026-11-10c)
+
+**Pedido.** Alterar qualidade/fps nas configurações tinha **zero efeito** enquanto se gravava: o motor
+lia `Fps`/`Cq`/preset **só** dentro do `StartCapture`. Decisão do utilizador: **"Só qualidade e fps"** —
+resolução e codec continuam a entrar apenas no arranque seguinte.
+
+**Contrato (o que pode e não pode entrar a quente).** `Config/PipelineConfigSnapshot.cs` guarda o retrato
+dos campos que o pipeline lê uma vez, no arranque, e `DiffTo` classifica a alteração em três baldes:
+- `EncoderParams` (**aplica já**): `Cq`, `MaxrateKbps`, `BufsizeKbps`, `Bframes`, `Lookahead`,
+  `Multipass`, `StretchToFit`, `EncoderPreset`, `AmfUsage`.
+- `FrameRate` (**aplica já**): `Fps`.
+- `OutputFormat` (**fica pendente**): `Width`, `Height`, `Codec`, `ForceSoftware` **e
+  `AdaptiveQualityEnabled`** — este último entra aqui de propósito porque troca o perfil de RAM, que
+  impõe cap de resolução de saída; mexer nisso a quente podia reduzir a resolução escolhida na UI
+  (invariante "resolução é sagrada").
+
+**Implementação.** `EngineCoordinator.LiveConfig.cs`: `HandleConfig` tira um snapshot **antes** do
+`_config.Update(...)` e chama `TryScheduleLiveConfigApply(before.DiffTo(after))` no fim. O aplicador
+(`ScheduleLiveConfigApply`/`ApplyLiveConfigAsync`) faz coalescing por flags (`Interlocked`/`Volatile`,
+porque os testes constroem o coordinator com `GetUninitializedObject` e os inicializadores de campo não
+correm): rajadas de slider colapsam numa aplicação que lê sempre a config mais recente, retry de 2 s até
+15 tentativas quando outro reinício (watchdog) está a caminho, e desiste com aviso — os valores entram no
+próximo arranque. A operação é a **mesma dança do `ReinitializePipelineAsync`** (cancelar fora do lock,
+guardar CTS/task em locais, relançar), mas **sem tocar na fonte de captura**: só o encoder é recriado, o
+buffer de replay fica. `MasterClock` é por processo, logo o PTS mantém-se absoluto/monotónico e a timeline
+não reinicia nem fura. Em WGC há também `SetCaptureFrameRate(target.Fps)` — sem isso 60→30 ficava preso no
+cap antigo do DWM (`HybridCaptureSource` não tem este método; só o WGC é capped).
+
+**Invariante que o desenho protege.** O pipeline em curso carrega `_appliedPipelineConfig` e **o formato
+usado vem sempre dele, nunca de `_config.Config`** — nem no restart a quente nem no reinit do watchdog.
+Sem isso, uma troca de codec/resolução pendente entrava a meio do buffer e o save (`ClipExporter` com
+`-c:v copy`) sairia corrompido (mistura de formatos no mesmo ficheiro). Depois de aplicar qualidade com
+resolução pendente, o snapshot faz `KeepOutputFormatOf(_appliedPipelineConfig)` para que a alteração
+**continue pendente** em vez de ser marcada como aplicada. O reinit do watchdog passou a adotar
+`_appliedPipelineConfig with { Fps = _config.Config.Fps }`: ele relê o fps, mas **não** relê qualidade,
+logo a qualidade pendente continua pendente para o aplicador (e não se faz um restart extra só para
+reaplicar o fps já aplicado).
+
+**Refactor de suporte.** `ResolveActiveProfileFromConfig(bool? adaptiveQualityOverride = null)` extraído
+do `StartCapture` (mesmo corpo, verbo a verbo) para a reaplicação a quente usar exactamente o mesmo
+caminho — incluindo recriar o `RamManager` (guarda dimensões e valores no construtor). O override existe
+porque o `AdaptiveQualityEnabled` é diferido: a quente resolve-se com o valor **aplicado**.
+
+**UI.** Nota `liveApplyHint` por baixo da grelha Resolução/FPS em `ClipsConfigQuality.tsx` (chaves nos 3
+locales): "Qualidade e FPS passam a valer na hora, mesmo a gravar. A resolução entra na próxima gravação."
+
+**Limitações conhecidas (por desenho, não defeito).** (1) `ReplaySeconds` não está no snapshot — mudar a
+duração do buffer a meio continua a valer só no próximo arranque, e não é anunciado na UI (a nota fala só
+de qualidade/fps e resolução). (2) Uma alteração de **só** formato devolve `false` e regista o diferimento:
+nada muda agora e o log diz porquê. (3) O comando `config` responde sempre `ok` — o agendamento é
+best-effort e nunca lança.
+
+**Higiene apanhada no caminho — teste que só falhava no PowerShell.** `file-shredder.ipc.test.ts` fazia
+`process.env.HOME = origHome` no `finally`; com `HOME` inexistente, `origHome` é `undefined` e o Node
+converte-o na string `"undefined"` (truthy), que ficava a poluir o teste seguinte — `blocks user profile
+root dirs` lia `"undefined/Desktop"`, não reconhecia o perfil e falhava (1 de 8551). Passa a `delete`
+quando a variável não existia. Isto explica porque o número de referência da AGENTS (suite verde) era
+medido num shell com `HOME` definido (Git Bash) e não no PowerShell.
+
+**Gates desta sessão:** C# **2656/2656**, 0 falhas, 0 ignorados, build **0 avisos** (Release) · Vitest
+**8551/8551**, 339 ficheiros · `tsc --noEmit` 0 · Biome **950 ficheiros, 0** · `npm run build` exit 0 ·
+`node scripts/copy-engine.js` → staging 213 ficheiros, gate ffmpeg **52/52**. Testes novos:
+`PipelineConfigSnapshotTests.cs` (21 casos) + 8 casos em `EngineCoordinatorCaptureTests.cs`.
+Commits: `af30bfe` (motor), `35fac89` (hint UI), `3b8ab3e` (higiene do teste).
+
+**Só chega ao cliente numa versão nova** (2.1.14+) — o motor vai dentro de `resources/clips-engine`.
+
 ### "Lag no mouse" durante a gravação: defeito de log corrigido + suspeito DXGI (2026-11-10)
 
 **Pedido.** Cliente relatou lag no mouse e noutras apps enquanto grava. Analisado o `2026-11-10.jsonl`
