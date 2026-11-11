@@ -85,7 +85,8 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 **Pedido.** Cliente relatou lag no mouse e noutras apps enquanto grava. Analisado o `2026-11-10.jsonl`
 da máquina dele (95 MB, 447 984 linhas, sessão do motor 10:56→11:47 = **51 min**, 182 632 frames,
-RTX 3060 + FiveM). Análise read-only; **nenhuma alteração no motor**.
+RTX 3060 + FiveM). Análise **read-only**; a única alteração de motor que saiu desta sessão é o gate
+AV1 (parágrafo próprio, mais abaixo).
 
 **Defeito real encontrado e corrigido — o leitor de log re-emitia tudo.** `engine-log-reader.ts`:
 446 238 linhas do motor para **36 279 mensagens distintas** ⇒ **409 959 repetidas (92%)**. Causa: em
@@ -122,10 +123,28 @@ causa** (catch → `false`), por isso o log do cliente não diz *porque* o WGC e
 está. Ganhos possíveis: registar o motivo (exceção) no latch; mostrar/forçar backend. O
 `ClipsStatusBar` já expõe `captureBackend`, portanto o utilizador consegue confirmar "DXGI" na UI.
 
+**Gate AV1 corrigido (motor) — a RTX 3060 nunca devia ter tentado AV1.** `SupportsAv1Hardware(0x10DE)`
+chamava `DetectNvidiaGeneration()`, que perguntava ao **binário do ffmpeg** (`CheckFfmpegEncoder("av1_nvenc") ? 89 : 75`)
+em vez de à GPU. Como o ffmpeg embarcado é sempre compilado com `av1_nvenc`, **qualquer** NVIDIA era
+classificada como "Ada 8.9" — incluindo uma GTX 1650. Efeito em produção: `BuildFallbackChain` inseria
+`av1Primary` + 3 entradas `av1_*` mortas, o probe falhava e caía em `h264_nvenc` (~540 ms desperdiçados e
+o aviso `probe FAILED (av1_nvenc)` que, lido no log, parece um defeito grave). Agora lê o **compute
+capability real** (`nvidia-smi --query-gpu=compute_cap`, mesmo padrão do `GetNvencSessionInfo` que já
+existia): 7.5 Turing e 8.6 Ampere → `false`; 8.9 Ada e 12.0 Blackwell → `true`. Sem capability legível
+(driver antigo, sem `nvidia-smi`, saída ilegível) decide o **probe de encode real** — nunca a lista
+`-encoders`. Capability cacheada por processo (a GPU não muda a meio da sessão). Só chega ao cliente numa
+**versão nova** (o motor vai dentro de `resources/clips-engine`), não na 2.1.13.
+
+**Testes do gate:** 15 casos novos — mapeamento 7.5/8.6/8.9/9.0/12.0, fallback para probe com capability
+desconhecida e 9 casos de `ParseComputeCapability` (vírgula decimal, `N/A`, duas GPUs → fica a maior) — a
+substituir o `SupportsAv1Hardware_Nvidia_ChecksFfmpeg` que era **vacuoso** (`Assert.IsType<bool>`: a
+resposta podia ser true ou false, nunca falhava). C# **2576/2576**, 0 falhas, 0 ignorados, build
+**0 avisos**.
+
 **Higiene:** `ConsoleLogger` não tem filtro de nível (tudo vai a stderr) e **78 % das linhas são
 Debug**; baixar o nível em produção é a maior redução restante depois do fix (não feito — mexe em
 comportamento de suporte). Gates: `tsc --noEmit` 0 · Vitest **8551/8551**, 339 ficheiros · Biome
-**950 ficheiros, 0**.
+**950 ficheiros, 0** · C# **2576/2576** (Release, 0 ignorados).
 
 ### Versão do cliente + Discord ID + data de validade no backend de licenças (2026-11-10)
 

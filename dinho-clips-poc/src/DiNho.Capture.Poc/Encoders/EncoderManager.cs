@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using DiNho.Capture.Poc.Logging;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -1363,51 +1364,116 @@ public sealed class EncoderManager : IDisposable
     /// <summary>Seam para testes — troque para evitar probe real do ffmpeg (-encoders).</summary>
     internal static Func<int, bool> Av1HwProbe = SupportsAv1Hardware;
 
+    /// <summary>Seam para testes — compute capability da GPU NVIDIA (null = desconhecido).</summary>
+    internal static Func<double?> NvidiaComputeCapProbe = ReadNvidiaComputeCap;
+
     /// <summary>Check if a given GPU vendor supports AV1 hardware encoding.
     /// RTX 40+, RDNA3+, Arc Alchemist+.
     /// O gate AMD usa PROBE REAL, não a lista `-encoders`: o ffmpeg é compilado com
     /// av1_amf (lista estática) mesmo em GPUs sem bloco AV1 — RX 5700 XT (RDNA1/VCN 1.0)
-    /// lista av1_amf mas o encode real falha (CreateComponent(AMFVideoEncoderHW_AV1)).</summary>
+    /// lista av1_amf mas o encode real falha (CreateComponent(AMFVideoEncoderHW_AV1)).
+    /// O gate NVIDIA era o MESMO erro disfarçado: `CheckFfmpegEncoder("av1_nvenc")` pergunta
+    /// ao binário do ffmpeg, não à GPU — e o ffmpeg embarcado é sempre compilado com
+    /// av1_nvenc, logo QUALQUER NVIDIA (até uma GTX 1650) era classificada como "Ada 8.9".
+    /// Numa RTX 3060 (Ampere, sem bloco AV1) isso punha 3 entradas av1_* mortas na cadeia e
+    /// custava ~540 ms de probe falhado em cada arranque (log de 2026-11-10). Agora lê o
+    /// compute capability real via nvidia-smi (8.6 Ampere → false, 8.9 Ada → true) e, quando
+    /// ele não é legível, cai para o probe de encode real — a única resposta definitiva.
+    /// </summary>
     public static bool SupportsAv1Hardware(int vendorId)
     {
         return vendorId switch
         {
-            0x10DE => DetectNvidiaGeneration() >= 89, // Ada Lovelace = compute capability 8.9 (RTX 40+)
+            0x10DE => NvidiaSupportsAv1(), // Ada Lovelace = compute capability 8.9 (RTX 40+)
             0x1002 => ProbeEncoderProbe("av1_amf").Success, // RDNA3+ real; RDNA1 RDNA2 caem fora
             0x8086 => CheckFfmpegEncoder("av1_qsv"),  // Arc Alchemist+ tem av1_qsv; HD/UHD antiga não
             _ => false,
         };
     }
 
-    private static int DetectNvidiaGeneration()
+    /// <summary>AV1 por NVIDIA: capability ≥ 8.9 (Ada/Blackwell). Sem capability legível,
+    /// pergunta ao encoder (probe real) em vez de assumir — assumir era o defeito.</summary>
+    private static bool NvidiaSupportsAv1()
     {
+        var capability = NvidiaComputeCapProbe();
+        if (capability.HasValue) return capability.Value >= 8.9;
+        return ProbeEncoderProbe("av1_nvenc").Success;
+    }
+
+    private static double? _nvidiaCapability;
+    private static bool _nvidiaCapabilityRead;
+
+    /// <summary>
+    /// Lê o compute capability da melhor GPU NVIDIA via nvidia-smi
+    /// (<c>--query-gpu=compute_cap</c>, driver 511+). Ampere = 8.6, Ada = 8.9, Blackwell = 12.0.
+    /// Cacheado por processo — a GPU não muda a meio da sessão. <c>null</c> = indisponível
+    /// (driver antigo, sem nvidia-smi, saída ilegível), e aí quem decide é o probe real.
+    /// </summary>
+    private static double? ReadNvidiaComputeCap()
+    {
+        if (_nvidiaCapabilityRead) return _nvidiaCapability;
+
+        double? capability = null;
         try
         {
-            using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            using var process = new Process
             {
-                using (adapter)
+                StartInfo = new ProcessStartInfo("nvidia-smi")
                 {
-                    var desc = adapter.Description1;
-                    if (desc.VendorId == 0x10DE)
-                    {
-                        // Adapter LUID → CUDA device → compute capability
-                        // Simplified: use VRAM as proxy. 8GB+ = likely RTX 20+ (Turing, sm_75)
-                        // 12GB+ = likely RTX 30+ (Ampere, sm_86)
-                        // 16GB+ = likely RTX 40+ (Ada, sm_89) — but 4060 has 8GB
-                        // Better: just check if av1_nvenc encoder exists in ffmpeg
-                        return CheckFfmpegEncoder("av1_nvenc") ? 89 : 75;
-                    }
+                    Arguments = "--query-gpu=compute_cap --format=csv,noheader",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
                 }
+            };
+            process.Start();
+            // Leitura concorrente — stderr redirecionado não pode poluir o console do app.
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(2000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                process.WaitForExit(2000);
             }
+            var output = outputTask.Result;
+            _ = errTask.Result;
+            if (process.ExitCode == 0) capability = ParseComputeCapability(output);
         }
-        catch (Exception ex)
+        catch
         {
-            // Item 19: sem este log, falhar aqui era indistinguível de "sem GPU NVIDIA"
-            // (return 0 → gate AV1 por VRAM). Só visibilidade; o fallback continua.
-            Log.D("EncoderManager", $"DetectNvidiaGeneration falhou (assume 0): {ex.Message}");
+            // nvidia-smi ausente ou driver antigo sem compute_cap — cai para o probe real.
+            capability = null;
         }
-        return 0;
+
+        _nvidiaCapability = capability;
+        _nvidiaCapabilityRead = true;
+        return capability;
+    }
+
+    /// <summary>
+    /// Parser puro da saída de <c>--query-gpu=compute_cap</c> (uma linha por GPU — fica a
+    /// MAIOR, porque se uma delas tem bloco AV1 o encoder existe). Aceita vírgula decimal e
+    /// devolve null quando nenhuma linha é um número válido.
+    /// </summary>
+    internal static double? ParseComputeCapability(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+
+        double? best = null;
+        foreach (var raw in output.Split('\n'))
+        {
+            var token = raw.Trim();
+            if (token.Length == 0) continue;
+            if (!double.TryParse(
+                    token.Replace(',', '.'),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var value))
+                continue;
+            if (best is null || value > best.Value) best = value;
+        }
+        return best;
     }
 
     // ── Cascading fallback chain builder ─────────────────────────────

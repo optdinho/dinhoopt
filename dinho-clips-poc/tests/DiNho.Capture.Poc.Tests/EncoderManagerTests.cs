@@ -504,13 +504,67 @@ public sealed class EncoderManagerTests
 
     // ── SupportsAv1Hardware ─────────────────────────────────────────
 
-    [Fact]
-    public void SupportsAv1Hardware_Nvidia_ChecksFfmpeg()
+    // Regressão do log de 2026-11-10: numa RTX 3060 (Ampere, compute capability 8.6) o gate
+    // dizia "Ada" e montava 3 entradas av1_* na cadeia, gastando ~540 ms num probe que sabia
+    // que ia falhar. A causa era `DetectNvidiaGeneration()` perguntar ao BINÁRIO do ffmpeg
+    // (`-encoders`) em vez de à GPU — o ffmpeg embarcado é sempre compilado com av1_nvenc.
+    [Theory]
+    [InlineData(7.5, false)]  // Turing (GTX 16xx/RTX 20) — sem bloco AV1
+    [InlineData(8.6, false)]  // Ampere (RTX 30) — AV1 só por descodificação
+    [InlineData(8.9, true)]   // Ada (RTX 40)
+    [InlineData(9.0, true)]   // Ada (L40/L4, mesmo major)
+    [InlineData(12.0, true)]  // Blackwell (RTX 50)
+    public void SupportsAv1Hardware_Nvidia_UsesComputeCapability(double capability, bool expected)
     {
-        // On RTX 5050, av1_nvenc should be available
-        var result = EncoderManager.SupportsAv1Hardware(0x10DE);
-        // We can't assert true/false without knowing the GPU — just ensure no exception
-        Assert.IsType<bool>(result);
+        var original = EncoderManager.NvidiaComputeCapProbe;
+        EncoderManager.NvidiaComputeCapProbe = () => capability;
+        try
+        {
+            Assert.Equal(expected, EncoderManager.SupportsAv1Hardware(0x10DE));
+        }
+        finally { EncoderManager.NvidiaComputeCapProbe = original; }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SupportsAv1Hardware_Nvidia_UnknownCapabilityFallsBackToRealProbe(bool av1ProbeOk)
+    {
+        var originalCap = EncoderManager.NvidiaComputeCapProbe;
+        var originalProbe = EncoderManager.ProbeEncoderProbe;
+        EncoderManager.NvidiaComputeCapProbe = () => null; // nvidia-smi sem compute_cap
+        EncoderManager.ProbeEncoderProbe = codec => new EncoderManager.ProbeResult
+        {
+            Codec = codec,
+            Success = codec == "av1_nvenc" && av1ProbeOk,
+            OutputBytes = av1ProbeOk ? 2048 : 0,
+            Error = av1ProbeOk ? null : "No capable devices found",
+        };
+        try
+        {
+            // Sem capability legível, quem decide é o encode real — nunca a lista `-encoders`.
+            Assert.Equal(av1ProbeOk, EncoderManager.SupportsAv1Hardware(0x10DE));
+        }
+        finally
+        {
+            EncoderManager.NvidiaComputeCapProbe = originalCap;
+            EncoderManager.ProbeEncoderProbe = originalProbe;
+        }
+    }
+
+    [Theory]
+    [InlineData("8.6", 8.6)]
+    [InlineData("8.9\n", 8.9)]
+    [InlineData("12.0", 12.0)]
+    [InlineData("8,6", 8.6)]          // locale com vírgula decimal
+    [InlineData("8.6\n12.0\n", 12.0)] // duas GPUs → fica a maior
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("[N/A]", null)]
+    [InlineData("N/A\n", null)]
+    public void ParseComputeCapability_ParsesNvidiaSmiOutput(string output, double? expected)
+    {
+        Assert.Equal(expected, EncoderManager.ParseComputeCapability(output));
     }
 
     [Fact]
