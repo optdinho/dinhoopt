@@ -111,6 +111,9 @@ public sealed partial class EngineCoordinator
             {
                 var oldGameDetection = _config.Config.GameDetection;
                 var oldPttMode = PttModeHelper.Normalize(_config.Config.PttMode);
+                // Referência para o diff que decide o que dá para reaplicar a quente
+                // (2026-11-10). Tem de ser tirado ANTES do Update.
+                var pipelineBefore = PipelineConfigSnapshot.From(_config.Config);
 
                 _config.Update(c =>
                 {
@@ -217,6 +220,12 @@ public sealed partial class EngineCoordinator
 
                 // Propaga ElectronPid para o GameDetector (filtro de falsos foreground)
                 _gameDetector.SetElectronPid(_config.Config.ElectronPid);
+
+                // Qualidade e fps valem já, com a gravação a correr (reinicia só o
+                // encoder). Resolução/codec ficam para o próximo início — o pipeline em
+                // curso guarda o formato que está mesmo a usar.
+                TryScheduleLiveConfigApply(
+                    pipelineBefore.DiffTo(PipelineConfigSnapshot.From(_config.Config)));
 
                 Log.I("EngineCoordinator", "Config atualizada via pipe");
             }

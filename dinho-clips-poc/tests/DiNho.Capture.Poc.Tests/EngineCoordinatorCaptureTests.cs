@@ -1236,6 +1236,160 @@ public sealed class EngineCoordinatorCaptureTests : IDisposable
 
     #endregion
 
+    #region Live config apply (2026-11-10)
+
+    [Fact]
+    public void TryScheduleLiveConfigApply_NotCapturing_ReturnsFalse()
+    {
+        var coord = CreateWithMinimalDeps();
+        SetField(coord, "_captureActive", false);
+
+        var applied = coord.TryScheduleLiveConfigApply(new LiveConfigChange(
+            EncoderParams: true, FrameRate: false, OutputFormat: false));
+
+        Assert.False(applied);
+    }
+
+    [Fact]
+    public void TryScheduleLiveConfigApply_EmptyChange_ReturnsFalse()
+    {
+        var coord = CreateWithMinimalDeps();
+        SetField(coord, "_captureActive", true);
+
+        Assert.False(coord.TryScheduleLiveConfigApply(LiveConfigChange.None));
+    }
+
+    [Fact]
+    public void TryScheduleLiveConfigApply_QualityChange_WhileCapturing_ReturnsTrue()
+    {
+        var coord = CreateWithMinimalDeps();
+        SetField(coord, "_captureActive", true);
+        // O aplicador sai de imediato sem tocar no pipeline real: só se verifica
+        // que a alteração foi aceite (o restart do encoder tem teste próprio).
+        SetField(coord, "_recording", false);
+
+        var applied = coord.TryScheduleLiveConfigApply(new LiveConfigChange(
+            EncoderParams: true, FrameRate: false, OutputFormat: false));
+
+        Assert.True(applied);
+    }
+
+    [Fact]
+    public void TryScheduleLiveConfigApply_FrameRateChange_WhileCapturing_ReturnsTrue()
+    {
+        var coord = CreateWithMinimalDeps();
+        SetField(coord, "_captureActive", true);
+        SetField(coord, "_recording", false);
+
+        var applied = coord.TryScheduleLiveConfigApply(new LiveConfigChange(
+            EncoderParams: false, FrameRate: true, OutputFormat: false));
+
+        Assert.True(applied);
+    }
+
+    [Fact]
+    public void TryScheduleLiveConfigApply_OutputFormatOnly_ReturnsFalseAndLogsDeferral()
+    {
+        var coord = CreateWithMinimalDeps();
+        SetField(coord, "_captureActive", true);
+        SetField(coord, "_recording", false);
+        var logger = new RecordingLogger();
+        var original = InstallLogger(logger);
+        try
+        {
+            var applied = coord.TryScheduleLiveConfigApply(new LiveConfigChange(
+                EncoderParams: false, FrameRate: false, OutputFormat: true));
+
+            Assert.False(applied);
+            Assert.Contains(logger.Entries, e =>
+                e.Level == LogLevel.Info &&
+                e.Source == "EngineCoordinator" &&
+                e.Message.Contains("próximo início"));
+        }
+        finally
+        {
+            Log.Instance = original;
+        }
+    }
+
+    [Fact]
+    public void TryScheduleLiveConfigApply_QualityPlusFormat_AppliesNowAndLogsDeferral()
+    {
+        var coord = CreateWithMinimalDeps();
+        SetField(coord, "_captureActive", true);
+        SetField(coord, "_recording", false);
+        var logger = new RecordingLogger();
+        var original = InstallLogger(logger);
+        try
+        {
+            var applied = coord.TryScheduleLiveConfigApply(new LiveConfigChange(
+                EncoderParams: true, FrameRate: false, OutputFormat: true));
+
+            Assert.True(applied);
+            Assert.Contains(logger.Entries, e =>
+                e.Level == LogLevel.Info &&
+                e.Message.Contains("resolução/codec"));
+        }
+        finally
+        {
+            Log.Instance = original;
+        }
+    }
+
+    [Fact]
+    public void ResolveActiveProfileFromConfig_WithoutAdaptiveQuality_UsesUserValues()
+    {
+        var coord = CreateWithMinimalDeps(c =>
+        {
+            c.AdaptiveQualityEnabled = false;
+            c.Cq = 16;
+            c.MaxrateKbps = 30000;
+            c.BufsizeKbps = 60000;
+            c.Bframes = 3;
+            c.Lookahead = 8;
+        });
+        SetField(coord, "_captureWidth", 1920);
+        SetField(coord, "_captureHeight", 1080);
+
+        var method = CoordinatorType.GetMethod("ResolveActiveProfileFromConfig",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        method.Invoke(coord, [null]);
+
+        var profile = (CaptureProfile)GetField(coord, "_activeProfile")!;
+        Assert.Equal(16, profile.Cq);
+        Assert.Equal(30000, profile.MaxrateKbps);
+        Assert.Equal(60000, profile.BufsizeKbps);
+        // B-frames são sempre 0 por desenho: EmitPacket() assume PTS FIFO estrito.
+        Assert.Equal(0, profile.Bframes);
+        Assert.Equal(8, profile.Lookahead);
+    }
+
+    [Fact]
+    public void ResolveActiveProfileFromConfig_AdaptiveOverrideFalse_KeepsRamManagerOff()
+    {
+        // Uma alteração de AdaptiveQuality é diferida para o próximo arranque; a
+        // reaplicação a quente tem de usar o valor APLICADO, senão ligar/desligar o
+        // toggle a meio mudava o perfil (e o watchdog de RAM) imediatamente.
+        var coord = CreateWithMinimalDeps(c =>
+        {
+            c.AdaptiveQualityEnabled = true;
+            c.Cq = 16;
+        });
+        SetField(coord, "_captureWidth", 1920);
+        SetField(coord, "_captureHeight", 1080);
+
+        var method = CoordinatorType.GetMethod("ResolveActiveProfileFromConfig",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        method.Invoke(coord, [false]);
+
+        Assert.Null(GetField(coord, "_ramManager"));
+        var profile = (CaptureProfile)GetField(coord, "_activeProfile")!;
+        Assert.Equal(16, profile.Cq);
+        Assert.Equal(RamProfileLevel.Full, profile.Level);
+    }
+
+    #endregion
+
     #region ReinitializePipelineAsync
 
     [Fact]

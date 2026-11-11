@@ -1,5 +1,6 @@
 using DiNho.Capture.Poc.Audio;
 using DiNho.Capture.Poc.Capture;
+using DiNho.Capture.Poc.Config;
 using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.GameDetection;
 using DiNho.Capture.Poc.Graphics;
@@ -270,64 +271,9 @@ public sealed partial class EngineCoordinator
                 // chegue ao encoder já no primeiro start. Antes, o encoder era criado
                 // com o perfil default (Cq=20/Lookahead=4) e só o reinit do watchdog
                 // usava os valores reais — a qualidade "Muito Alta" nunca era aplicada.
-                if (_config.Config.AdaptiveQualityEnabled)
-                {
-                    // Recria o RamManager a cada sessão: ele armazena as dimensões e valores de
-                    // config no construtor — reutilizar (??=) manteria valores obsoletos se o
-                    // usuário mudasse a qualidade ou a resolução do jogo entre capturas.
-                    _ramManager?.Dispose();
-                    _ramManager = new RamManager(
-                        _captureWidth, _captureHeight,
-                        _config.Config.EffectiveReplaySeconds,
-                        _config.Config.Cq,
-                        _config.Config.MaxrateKbps,
-                        _config.Config.BufsizeKbps,
-                        _config.Config.Bframes,
-                        _config.Config.Lookahead);
-                    // Watchdog wiring: repassa a pressão de RAM ao pipe (broadcast) e reduz
-                    // o replay buffer em RAM crítica, restaurando quando volta ao normal.
-                    // Estes callbacks foram perdidos na refatoração para partial classes
-                    // (08e8761) — sem eles o watchdog media mas nunca agia.
-                    _ramManager.OnBroadcast = msg => _pipeServer.BroadcastRaw(msg);
-                    _ramManager.OnReduceReplay = reducedReplay =>
-                    {
-                        // Callbacks são async (thread do watchdog) — _buffer/_activeProfile
-                        // podem estar nulos se o stop for simultâneo. Guard defensivo.
-                        if (_buffer != null && _buffer.MaxDuration > TimeSpan.FromSeconds(reducedReplay))
-                        {
-                            _buffer.MaxDuration = TimeSpan.FromSeconds(reducedReplay);
-                            Log.W("EngineCoordinator", $"RAM crítica — replay buffer reduzido para {reducedReplay}s");
-                        }
-                    };
-                    _ramManager.OnNormal = () =>
-                    {
-                        if (_buffer != null && _activeProfile != null)
-                        {
-                            _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
-                            Log.I("EngineCoordinator", $"RAM normal — replay buffer restaurado para {_activeProfile.ReplaySeconds}s");
-                        }
-                    };
-                    _ramManager.OnIncreaseReplay = increasedReplay =>
-                    {
-                        if (_buffer != null)
-                        {
-                            _buffer.MaxDuration = TimeSpan.FromSeconds(increasedReplay);
-                            Log.I("EngineCoordinator", $"RAM estável — replay buffer restaurado parcialmente para {increasedReplay}s");
-                        }
-                    };
-                    _ramManager.StartWatchdog();
-                    _activeProfile = _ramManager.ResolveProfile();
-                }
-                else
-                {
-                    _ramManager?.StopWatchdog();
-                    _activeProfile = RamManager.BuildSettings(
-                        RamProfileLevel.Full, _captureWidth, _captureHeight,
-                        _config.Config.Cq, _config.Config.EffectiveReplaySeconds,
-                        _config.Config.MaxrateKbps, _config.Config.BufsizeKbps,
-                        _config.Config.Bframes, _config.Config.Lookahead);
-                    Log.I("EngineCoordinator", "AdaptiveQuality DISABLED — usando config do usuário sem ajuste RAM");
-                }
+                // (Extraído para ResolveActiveProfileFromConfig em 2026-11-10: o pipeline
+                // em curso reaplica qualidade a quente com o mesmo código.)
+                ResolveActiveProfileFromConfig();
 
                 // Resolução de saída do usuário: nunca faz upscale (limita à captura nativa) e
                 // respeita o cap de resolução do perfil RAM (LowMemory ≤1280×720, Balanced height ≤1080).
@@ -369,6 +315,15 @@ public sealed partial class EngineCoordinator
                 fe.SetRemoveBlackBars(_config.Config.StretchToFit);
                 }
                 _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
+
+                // Config que este pipeline está realmente a usar. É a referência do diff
+                // que o HandleConfig faz para decidir o que reaplicar a quente (2026-11-10).
+                _appliedPipelineConfig = PipelineConfigSnapshot.From(_config.Config);
+                // Um aplicador a quente pendente de uma sessão anterior não deve agir
+                // sobre esta captura recém-nascida (a config já foi lida do zero).
+                Volatile.Write(ref _liveConfigApplyDirty, 0);
+                Volatile.Write(ref _liveConfigApplyRunning, 0);
+
                 _status.Update(s =>
                 {
                     s.Recording = true;
@@ -717,6 +672,80 @@ public sealed partial class EngineCoordinator
             Log.I("Pipeline", $"Captura recuperada após {_consecutiveDrops} drops consecutivos (total {_droppedFrames} na sessão).");
         }
         _consecutiveDrops = 0;
+    }
+
+    /// <summary>
+    /// Resolve o perfil de RAM/qualidade a partir da config ATUAL e publica-o em
+    /// <c>_activeProfile</c>. Extraído do <c>StartCapture</c> (2026-11-10) para que a
+    /// reaplicação a quente use exactamente o mesmo caminho — inclusive a recriação do
+    /// <c>RamManager</c> (ele guarda dimensões e valores de config no construtor, logo
+    /// reutilizá-lo manteria valores obsoletos depois de o utilizador mudar a qualidade).
+    /// Usa <c>_captureWidth/_captureHeight</c>: numa reaplicação a quente são as dimensões
+    /// reais da fonte, não uma resolução nova que ainda não entrou em vigor.
+    /// <paramref name="adaptiveQualityOverride"/> permite reaplicar com o valor que está
+    /// REALMENTE em uso (a alteração de AdaptiveQuality é diferida para o próximo arranque).
+    /// </summary>
+    private void ResolveActiveProfileFromConfig(bool? adaptiveQualityOverride = null)
+    {
+        var adaptiveQuality = adaptiveQualityOverride ?? _config.Config.AdaptiveQualityEnabled;
+        if (adaptiveQuality)
+        {
+            // Recria o RamManager a cada sessão: ele armazena as dimensões e valores de
+            // config no construtor — reutilizar (??=) manteria valores obsoletos se o
+            // usuário mudasse a qualidade ou a resolução do jogo entre capturas.
+            _ramManager?.Dispose();
+            _ramManager = new RamManager(
+                _captureWidth, _captureHeight,
+                _config.Config.EffectiveReplaySeconds,
+                _config.Config.Cq,
+                _config.Config.MaxrateKbps,
+                _config.Config.BufsizeKbps,
+                _config.Config.Bframes,
+                _config.Config.Lookahead);
+            // Watchdog wiring: repassa a pressão de RAM ao pipe (broadcast) e reduz
+            // o replay buffer em RAM crítica, restaurando quando volta ao normal.
+            // Estes callbacks foram perdidos na refatoração para partial classes
+            // (08e8761) — sem eles o watchdog media mas nunca agia.
+            _ramManager.OnBroadcast = msg => _pipeServer.BroadcastRaw(msg);
+            _ramManager.OnReduceReplay = reducedReplay =>
+            {
+                // Callbacks são async (thread do watchdog) — _buffer/_activeProfile
+                // podem estar nulos se o stop for simultâneo. Guard defensivo.
+                if (_buffer != null && _buffer.MaxDuration > TimeSpan.FromSeconds(reducedReplay))
+                {
+                    _buffer.MaxDuration = TimeSpan.FromSeconds(reducedReplay);
+                    Log.W("EngineCoordinator", $"RAM crítica — replay buffer reduzido para {reducedReplay}s");
+                }
+            };
+            _ramManager.OnNormal = () =>
+            {
+                if (_buffer != null && _activeProfile != null)
+                {
+                    _buffer.MaxDuration = TimeSpan.FromSeconds(_activeProfile.ReplaySeconds);
+                    Log.I("EngineCoordinator", $"RAM normal — replay buffer restaurado para {_activeProfile.ReplaySeconds}s");
+                }
+            };
+            _ramManager.OnIncreaseReplay = increasedReplay =>
+            {
+                if (_buffer != null)
+                {
+                    _buffer.MaxDuration = TimeSpan.FromSeconds(increasedReplay);
+                    Log.I("EngineCoordinator", $"RAM estável — replay buffer restaurado parcialmente para {increasedReplay}s");
+                }
+            };
+            _ramManager.StartWatchdog();
+            _activeProfile = _ramManager.ResolveProfile();
+        }
+        else
+        {
+            _ramManager?.StopWatchdog();
+            _activeProfile = RamManager.BuildSettings(
+                RamProfileLevel.Full, _captureWidth, _captureHeight,
+                _config.Config.Cq, _config.Config.EffectiveReplaySeconds,
+                _config.Config.MaxrateKbps, _config.Config.BufsizeKbps,
+                _config.Config.Bframes, _config.Config.Lookahead);
+            Log.I("EngineCoordinator", "AdaptiveQuality DISABLED — usando config do usuário sem ajuste RAM");
+        }
     }
 
     private async Task PipelineLoop(CancellationToken ct)
@@ -1528,7 +1557,11 @@ public sealed partial class EngineCoordinator
             // ponto nunca rodava. O probe e cacheado por codec|res|fps, entao o restart paga
             // no maximo uma vez por sessao.
             _encoder?.Dispose();
-            _encoder = EncoderManager.CreateBestEncoder(_config.Config.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
+            // Formato vem do snapshot APLICADO (2026-11-10): uma troca de codec/
+            // ForceSoftware feita a meio da gravação não entra por aqui — fica para o
+            // próximo StartCapture, como a resolução (o buffer em curso não pode passar a
+            // ter pacotes de outro codec; o save usa `-c:v copy`).
+            _encoder = EncoderManager.CreateBestEncoder(_appliedPipelineConfig.ForceSoftware, _sharedDevice, _activeProfile.MaxrateKbps);
             if (_encoder is FfmpegEncoder fe)
             {
                 fe.SetQualityParams(
@@ -1538,12 +1571,17 @@ public sealed partial class EngineCoordinator
                     bframes: _activeProfile.Bframes,
                     lookahead: _activeProfile.Lookahead,
                     preset: _config.Config.EncoderPreset,
-                        codec: _config.Config.Codec,
+                        codec: _appliedPipelineConfig.Codec,
                         multipass: _config.Config.Multipass,
                         amfUsage: _config.Config.AmfUsage);
                 fe.SetOutputResolution(_outputWidth, _outputHeight);
             }
             _encoder.Initialize(_captureWidth, _captureHeight, _config.Config.Fps, _activeProfile.MaxrateKbps);
+            // O que este restart deixou MESMO em vigor: o fps vem da config (foi passado
+            // ao encoder acima) e o formato continua o aplicado. A qualidade (Cq/bitrate/
+            // preset) NÃO é relida aqui, logo continua pendente para o aplicador a quente
+            // — sem esta linha ele repetia o restart só para reaplicar o fps já aplicado.
+            _appliedPipelineConfig = _appliedPipelineConfig with { Fps = _config.Config.Fps };
             // O restart pode trocar o codec (a escada do item 5 roda de novo), então o status
             // precisa ser reescrito junto — senão o editor re-encodaria com o codec antigo.
             _status.Update(s =>
