@@ -1049,8 +1049,13 @@ describe('isProtectedPath USERPROFILE fallback', () => {
       }
       expect(result.errors.some((e) => e.reason.includes('Protected'))).toBe(true)
     } finally {
-      process.env.HOME = origHome
-      process.env.USERPROFILE = origUserProfile
+      // `process.env.X = undefined` NÃO apaga a variável: o Node converte-a na
+      // string "undefined", que é truthy. Num shell sem HOME (PowerShell), isso
+      // deixava HOME="undefined" a poluir os testes seguintes deste ficheiro.
+      if (origHome === undefined) delete process.env.HOME
+      else process.env.HOME = origHome
+      if (origUserProfile === undefined) delete process.env.USERPROFILE
+      else process.env.USERPROFILE = origUserProfile
     }
   })
 })
