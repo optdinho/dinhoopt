@@ -105,6 +105,9 @@ soak-out/
 # Ferramenta local de geracao de keys (nunca versionar)
 gerador de key/
 
+# Backend/painel de licencas (Apps Script + Cloudflare): contem FALLBACK_TOKEN
+site de autent/
+
 .tmp-fm-exp/
 *.bak
 AGENTS.moved.tmp

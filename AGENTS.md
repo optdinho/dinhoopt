@@ -81,6 +81,20 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### Versão do cliente + Discord ID + data de validade no backend de licenças (2026-11-10)
+
+**Cliente (este repo).** `validateLicense` (`src/main/services/remote-license.ts:280`) passou a enviar `version: app.getVersion()` no POST `validate` que **já existia** — `checkLicense()` agenda uma revalidação em background a cada arranque mesmo com o cache de 24 h válido, por isso não há pedido novo. Teste do payload atualizado (`remote-license.test.ts`, mock de `app.getVersion`), **51/51**.
+
+**Backend = Google Apps Script (`site de autent/code.gs.txt`) v2.5**, porque o worker (`worker.js.txt`) é só um proxy para o `/exec` do GAS. Colunas novas: `client_version` (11) e `discord_id` (12); `migrateSheet` foi generalizado para acrescentar **todas** as colunas em falta (antes só inseria a 10ª), e `getSheet` usa agora o array `HEADERS`. `validate` grava `client_version` **só quando muda** (1 escrita por atualização, não por arranque) e aceita `version` em POST e GET. Rotas novas `set_discord` e `set_expiry` (ISO ou `AAAA-MM-DD` → 23:59:59 UTC; vazio = permanente; ajusta `expired`/`active` e nunca reativa `revoked`). `generate`/`generate_batch` aceitam `discord_id` e `expires_at` (substitui o tipo). `list`/`search`/`export` incluem ambos; `search` procura também no Discord. `stats` ganhou `withDiscord`, `active24h`, `active7d`, `byVersion`, `byVersion7d` — contados por **máquina** (`hwid`, ou `key` quando não há), não por key, porque uma pessoa pode ter várias.
+
+**Painel (`site de autent/index (4).html`).** Campos Discord e data opcional na geração (individual e lote); coluna **Discord** na tabela; modal 👤 edita nome **e** Discord (só escreve o que mudou); modal 📅 altera a validade direto, com opção "sem validade"; CSV (geradas, selecionadas, export completo) inclui `discord`; dashboard ganhou cartões **Ativos 24h/7d**, **Com Discord** e **Por Versão (ativos 7d)**.
+
+**Deploy é manual:** colar `code.gs.txt` em script.google.com → **Implementar → Gerir implementações → editar a implementação existente → Nova versão** (criar uma implementação nova mudaria o `/exec` e o worker aponta para o antigo). O worker **não muda**. Só validações **futuras** preenchem `client_version`/`discord_id` — as linhas antigas ficam vazias e aparecem como `(sem versão)` no gráfico.
+
+**Higiene:** `site de autent/` entrou no `.gitignore` — o `code.gs` tem `FALLBACK_TOKEN` hardcoded e a pasta estava untracked (nunca fazer `git add -A`). O painel guarda o token no `localStorage`, não no ficheiro.
+
+**Medição de adoção sem telemetria (2026-11-10 01:09 UTC, ~24 h após a 2.1.13):** feed novo `latest.yml` 13 / Setup 1 / portable 0; feed antigo `latest.yml` 10 / Setup 8 / blockmap 8 / portable 1. Download ≠ instalação e `latest.yml` é recontado a cada verificação (arranque + 24 h) e pelo `verify:release` do CI — ordem de grandeza: **~uma dúzia** de instalações, não centenas. Para números por versão é que existe agora o `client_version`.
+
 ### Modo de Jogo: plano de energia robusto + prioridade em destaque (2026-11-09)
 
 **Plano de energia (novo `src/main/ipc/game-mode/tweaks/power-plan.ts`).** O passo `sys-power-plan` deixou de forçar o GUID fixo de "Alto desempenho" (`8c5e7fda-…`) — que numa máquina já em "Desempenho Máximo" era um **downgrade**. Agora: captura o GUID ativo, escolhe o melhor plano instalado (`pickMaxPerformancePlan`: Ultimate/"Desempenho Máximo" > "Alto desempenho"; mantém o ativo se já for da categoria), e só cria um plano (`unlockUltimatePerformance` → `createPowerPlan('Desempenho Maximo')`) quando não existe nenhum. Se o GUID original **não** puder ser lido, o passo **falha sem mexer no plano** — sem estado capturado não há caminho de volta.
