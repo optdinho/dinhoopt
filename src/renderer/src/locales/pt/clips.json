@@ -53,6 +53,7 @@
   "video": "Vídeo",
   "fps": "FPS",
   "resolution": "Resolução",
+  "liveApplyHint": "Qualidade e FPS passam a valer na hora, mesmo a gravar. A resolução entra na próxima gravação.",
   "audio": "Áudio",
   "micEnabled": "Microfone Ativado",
   "audioLoopback": "Capturar Áudio do Sistema",

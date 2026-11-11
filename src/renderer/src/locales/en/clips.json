@@ -53,6 +53,7 @@
   "video": "Video",
   "fps": "FPS",
   "resolution": "Resolution",
+  "liveApplyHint": "Quality and FPS apply immediately, even while recording. Resolution applies on the next recording.",
   "audio": "Audio",
   "micEnabled": "Microphone Enabled",
   "audioLoopback": "System Audio Capture",

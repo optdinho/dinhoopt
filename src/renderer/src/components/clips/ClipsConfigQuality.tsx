@@ -277,6 +277,10 @@ export function QualitySection({
         </div>
       </div>
 
+      <p className="text-[11px] leading-snug" style={{ color: 'var(--text-dim)', opacity: 0.75 }}>
+        {t('liveApplyHint')}
+      </p>
+
       {/* Stretch to fit (remove black bars) */}
       <ToggleRow
         title={t('stretchToFit')}
