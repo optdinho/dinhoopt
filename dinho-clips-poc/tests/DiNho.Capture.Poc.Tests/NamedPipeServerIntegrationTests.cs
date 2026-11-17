@@ -15,11 +15,34 @@ public sealed class NamedPipeServerIntegrationTests
 {
     private static string NewPipeName() => $"dinho-test-{Guid.NewGuid():N}";
 
-    private static NamedPipeClientStream ConnectClient(string pipeName, int timeoutMs = 5000)
+    private static NamedPipeClientStream ConnectClient(string pipeName, int timeoutMs = 20000)
     {
-        var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-        client.Connect(timeoutMs);
-        return client;
+        // O accept loop do servidor arranca numa thread do pool (`Task.Run` em
+        // `Start()`). Num runner de CI com o pool saturado pelos outros 2 655 testes,
+        // a primeira iteração pode demorar vários segundos e um único `Connect(5000)`
+        // expira — foi a única falha do run 42949805275 (2655/2656 verdes, aqui).
+        // Tentativas limitadas com um orçamento TOTAL: sem servidor a aceitar,
+        // continua a falhar — só que ao fim de `timeoutMs`, não da 1.ª tentativa.
+        var deadline = Environment.TickCount64 + timeoutMs;
+        Exception? last = null;
+        while (true)
+        {
+            var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+            try
+            {
+                client.Connect(1000);
+                return client;
+            }
+            catch (Exception ex) when (ex is TimeoutException or IOException)
+            {
+                // TimeoutException = pipe existe mas sem instância livre;
+                // IOException = a instância ainda não foi criada pelo accept loop.
+                client.Dispose();
+                last = ex;
+                if (Environment.TickCount64 >= deadline)
+                    throw new TimeoutException($"Pipe '{pipeName}' nao aceitou ligacao em {timeoutMs} ms.", last);
+            }
+        }
     }
 
     private static void Send(NamedPipeClientStream c, string cmd, string? reqId = null)
