@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DiNho.Capture.Poc.Logging;
 using Vortice.Direct3D11;
@@ -52,6 +53,23 @@ internal partial class FfmpegEncoder
             }
         }
     }
+
+    /// <summary>
+    /// Sub-fases do convert GPU, acumuladas entre leituras. Em 2026-11-16 o <c>convert</c>
+    /// total custou 23,7–36,5 ms contra 16,7 ms de orçamento e o log não dizia qual fase
+    /// pagava a conta — logo não havia como escolher a correção (não bloquear no Map vs.
+    /// aliviar a GPU). Lido uma vez por resumo do feed.
+    /// </summary>
+    private readonly ConvertPhaseStats _convertPhases = new();
+
+    /// <summary>
+    /// Média por sub-fase desde a última leitura; <c>null</c> quando não houve nenhuma
+    /// conversão completa (CPU fallback, busy drop, erro) — nunca 0 para "sem medição".
+    /// </summary>
+    internal ConvertPhaseStats.Average? TakeConvertBreakdown() => _convertPhases.Take();
+
+    /// <summary>Ticks do Stopwatch → ms.</summary>
+    private static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
 
     private ID3D11Texture2D? _cpuStaging;
     private int _cpuStagingW, _cpuStagingH;
@@ -239,6 +257,13 @@ internal partial class FfmpegEncoder
 
         try
         {
+            // Instrumentação em 4 sub-fases (2026-11-16). Importante para ler o
+            // resultado: `blit` e `copy` medem SUBMISSÃO de CPU — o D3D enfileira o
+            // trabalho e retorna. O custo real de GPU aparece onde a thread espera:
+            // `map` (DoNotWait + retry bloqueante) e `pack` (leitura da memória
+            // mapeada, que só acontece depois de a GPU terminar).
+            var tBlit = Stopwatch.GetTimestamp();
+
             // O2: textura ShaderResource (WGC) é lida direto pelo VideoProcessor — sem cópia.
             // BindFlags.None (PrintWindow/Hybrid) precisa da cópia _inputCopy (SR|RT).
             var source = texture;
@@ -250,8 +275,11 @@ internal partial class FfmpegEncoder
             }
 
             var nv12Tex = _gpuConverter.Convert(source);
+            var tCopy = Stopwatch.GetTimestamp();
+
             EnsureStaging(device);
             ctx.CopyResource(_nv12Staging, nv12Tex);
+            var tMap = Stopwatch.GetTimestamp();
 
             // Map() com DoNotWait: devolve DXGI_ERROR_WAS_STILL_DRAWING quando a GPU ainda
             // desenha o frame anterior, em vez de bloquear a thread de captura 0.5-4ms.
@@ -272,10 +300,19 @@ internal partial class FfmpegEncoder
                 Log.D("FfmpegEncoder", "GPU busy (0x887A000A) — fast DoNotWait + blocking retry failed, frame dropped");
                 return null;
             }
+            var tPack = Stopwatch.GetTimestamp();
             _gpuConvertFails = 0;
             try
             {
-                return PackNv12(map, dst);
+                var packed = PackNv12(map, dst);
+                // Só frames COMPLETOS entram na média: um drop no Map não diz nada
+                // sobre o custo das quatro fases.
+                _convertPhases.Record(
+                    TicksToMs(tCopy - tBlit),
+                    TicksToMs(tMap - tCopy),
+                    TicksToMs(tPack - tMap),
+                    TicksToMs(Stopwatch.GetTimestamp() - tPack));
+                return packed;
             }
             finally { ctx.Unmap(_nv12Staging, 0); }
         }

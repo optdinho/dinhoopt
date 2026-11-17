@@ -1,4 +1,5 @@
 using System.Globalization;
+using DiNho.Capture.Poc.Encoders;
 using DiNho.Capture.Poc.Watchdog;
 
 namespace DiNho.Capture.Poc.Tests;
@@ -205,5 +206,39 @@ public sealed class FeedLogLineTests
         var dupIdx = line.IndexOf("dup=", StringComparison.Ordinal);
         var dupMaxIdx = line.IndexOf("dupMax=", StringComparison.Ordinal);
         Assert.True(overIdx > 0 && dupIdx > overIdx && dupMaxIdx > dupIdx, $"ordem inesperada: {line}");
+    }
+
+    // =============================================================
+    // Sub-fases do convert GPU (2026-11-16). Em 2026-11-16 o `convert` total
+    // custou 23,7–36,5 ms contra 16,7 ms de orçamento e o log não dizia QUAL fase
+    // pagava — sem isso não se escolhe entre "não bloquear no Map" e "aliviar a GPU".
+    // =============================================================
+
+    private static readonly ConvertPhaseStats.Average GpuBreakdown =
+        new(BlitMs: 4.2, CopyMs: 0.6, MapMs: 15.3, PackMs: 4.1, Frames: 300);
+
+    [Fact]
+    public void Build_ComBreakdownDoConvert_ExpoeAsQuatroFases()
+    {
+        var line = FeedLogLine.Build(Summary, "av1_nvenc", 1, 0.64, 5, 60, GpuBreakdown);
+
+        Assert.Contains("gpu=blit 4.2ms copy 0.6ms map 15.3ms pack 4.1ms (300f)", line);
+        // Fica no bloco do feed, imediatamente depois do `convert`/`total` que decompõe.
+        var convertIdx = line.IndexOf("convert=", StringComparison.Ordinal);
+        var totalIdx = line.IndexOf("total=", StringComparison.Ordinal);
+        var gpuIdx = line.IndexOf("gpu=", StringComparison.Ordinal);
+        Assert.True(convertIdx > 0 && totalIdx > convertIdx && gpuIdx > totalIdx,
+            $"ordem inesperada: {line}");
+        Assert.DoesNotContain("  ", line);
+    }
+
+    // Sem conversão completa na janela (CPU fallback, drop no Map) não há média —
+    // imprimir zeros faria parecer que a GPU está livre, a conclusão oposta.
+    [Fact]
+    public void Build_SemBreakdown_NaoImprimeBlocoGpu()
+    {
+        var line = FeedLogLine.Build(Summary, "av1_nvenc", 1, 0.64, 5, 60);
+        Assert.DoesNotContain("gpu=", line);
+        Assert.DoesNotContain("  ", line);
     }
 }

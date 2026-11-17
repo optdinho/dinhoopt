@@ -25,16 +25,28 @@ internal static class FeedLogLine
         int scaleDivisor,
         double speedX,
         double outputLagSeconds,
-        double nominalFps)
+        double nominalFps,
+        ConvertPhaseStats.Average? gpu = null)
     {
         var feedLag = CapacityGuardMath.FeedLagSeconds(summary.FeedFps, nominalFps);
         var scale = scaleDivisor > 1 ? $"1/{scaleDivisor}" : "full";
 
         var i = CultureInfo.InvariantCulture;
+
+        // Sub-fases do convert GPU. Só aparece quando houve conversão completa na
+        // janela: imprimir zeros quando o caminho foi CPU faria parecer que a GPU
+        // está livre, que é exatamente a conclusão errada.
+        var gpuBlock = gpu is { } g
+            ? string.Concat(
+                $"gpu=blit {g.BlitMs.ToString("F1", i)}ms copy {g.CopyMs.ToString("F1", i)}ms ",
+                $"map {g.MapMs.ToString("F1", i)}ms pack {g.PackMs.ToString("F1", i)}ms ({g.Frames}f) ")
+            : "";
+
         return string.Concat(
             $"fps={summary.FeedFps.ToString("F1", i)} good={summary.GoodFrames} fail={summary.FailFrames} enqNull={summary.EncodeNulls} | ",
             $"wait={summary.WaitMs.ToString("F1", i)}ms copy={summary.CopyMs.ToString("F1", i)}ms ",
             $"convert={summary.ConvertMs.ToString("F1", i)}ms total={summary.TotalMs.ToString("F1", i)}ms ",
+            gpuBlock,
             $"clean={summary.CleanFrames}/{summary.GoodFrames} totalAll={summary.TotalMsAll.ToString("F1", i)}ms ",
             $"diag={summary.DiagnosticsMs.ToString("F1", i)}ms ",
             // Bloco CFR: o pico e as contagens da grelha. Fica aqui, e não no fim da linha,

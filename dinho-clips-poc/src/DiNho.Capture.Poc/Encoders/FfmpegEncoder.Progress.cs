@@ -47,6 +47,22 @@ internal sealed partial class FfmpegEncoder
     private long _lastCapacityPromoteTicks;
 
     /// <summary>
+    /// Último tick em que se logou "degradação inútil (alvo de resolução explícito)".
+    /// O no-op não consome o cooldown de degradação (o estado não avança), por isso
+    /// precisa do seu próprio gate — sem ele a mensagem sairia 2×/s.
+    /// </summary>
+    private long _lastCapacityNoOpTicks;
+
+    /// <summary>
+    /// Médias por estágio da última janela do feed, injetadas pela telemetria. Servem só
+    /// para ATRIBUIR o gargalo na mensagem do guard: <c>FeedFps</c> mede frames que
+    /// entraram no ffmpeg (taxa do loop), logo dizer "a fonte está devendo frames" com
+    /// base nele é circular.
+    /// </summary>
+    private double _lastFeedWaitMs;
+    private double _lastFeedConvertMs;
+
+    /// <summary>
     /// O que o GUARD aplicou por último. A promoção só desfaz exatamente este par
     /// (codec + divisor): se o cascading fallback trocou o codec, ou se o divisor veio
     /// da própria cadeia, a escala pertence ao fallback e não é do guard.
@@ -132,6 +148,17 @@ internal sealed partial class FfmpegEncoder
     }
 
     /// <summary>
+    /// A telemetria do feed entrega as médias por estágio da janela para o guard
+    /// conseguir atribuir o gargalo. Sem isto a única medida disponível era
+    /// <see cref="FeedFps"/> — que é a taxa do próprio loop.
+    /// </summary>
+    internal void SetFeedStageTimings(double waitMs, double convertMs)
+    {
+        _lastFeedWaitMs = waitMs;
+        _lastFeedConvertMs = convertMs;
+    }
+
+    /// <summary>
     /// Guard proativo de capacidade: degrada a escala do encoder (mesmo codec) quando ele
     /// está sustentadamente atrás do realtime, reiniciando o ffmpeg com a nova resolução.
     /// Retorna false (sem efeito) quando: não inicializado, processo em falha, lag abaixo
@@ -164,10 +191,20 @@ internal sealed partial class FfmpegEncoder
             if (outputLag >= CapacityLagThresholdSeconds && feed != FeedState.Healthy)
             {
                 var deficit = CapacityGuardMath.FeedLagSeconds(feedFps, _frameRate);
-                var why = feed == FeedState.Unknown
-                    ? "feed sem medição (janela de 3s não fechou) — degradação exige prova de gargalo"
-                    : $"feed entrega {feedFps:F1}fps (alvo {_frameRate}, déficit {deficit:P0}/s) " +
-                      "e o encoder não é o gargalo";
+                var budget = Watchdog.FeedBottleneck.SlotBudgetMs(_frameRate);
+                var why = Watchdog.FeedBottleneck.Classify(
+                        feedFps, _frameRate, _lastFeedWaitMs, _lastFeedConvertMs) switch
+                {
+                    // O guard só olhava para o FeedFps e concluía "a fonte é que está
+                    // devendo frames" — exatamente quando o atraso vinha do convert.
+                    Watchdog.FeedBottleneckVerdict.ConvertBound =>
+                        $"gargalo na conversão GPU (convert={_lastFeedConvertMs:F1}ms / orçamento {budget:F1}ms, wait={_lastFeedWaitMs:F1}ms)",
+                    Watchdog.FeedBottleneckVerdict.SourceBound =>
+                        $"feed entrega {feedFps:F1}fps (alvo {_frameRate}, déficit {deficit:P0}/s) — a fonte é o gargalo",
+                    _ when feed == FeedState.Unknown =>
+                        "feed sem medição (janela de 3s não fechou) — degradação exige prova de gargalo",
+                    _ => $"feed entrega {feedFps:F1}fps (alvo {_frameRate}, déficit {deficit:P0}/s) e o encoder não é o gargalo",
+                };
                 Logging.Log.I("FfmpegEncoder",
                     $"capacity guard: ignorado - {why} (lag de saída {outputLag:F0}s, speed {speedX:F2}x)");
             }
@@ -189,7 +226,20 @@ internal sealed partial class FfmpegEncoder
         // PTS sem mudar um byte dos argumentos. Ver CapacityStepChangesResolution.
         if (!CapacityStepChangesResolution(
                 _width, _height, _outputWidth, _outputHeight, _scaleDivisor, next.ScaleDivisor))
+        {
+            // Silêncio aqui foi o que escondeu, em 2026-11-16, que o guard NUNCA pode
+            // agir nas condições reais do produto: com alvo de resolução explícito não
+            // existe degrau que mude a resolução, logo a "degradação" seria só um
+            // restart. Uma linha por cooldown — o caminho é avaliado 2×/s.
+            if (now - _lastCapacityNoOpTicks >= CapacityDegradeCooldownSec * Stopwatch.Frequency)
+            {
+                _lastCapacityNoOpTicks = now;
+                Logging.Log.I("FfmpegEncoder",
+                    $"capacity guard: degradação inútil (alvo de resolução explícito) — sem ação " +
+                    $"(speed={speedX:F2}x lag={outputLag:F0}s, convert={_lastFeedConvertMs:F1}ms, wait={_lastFeedWaitMs:F1}ms)");
+            }
             return false;
+        }
 
         var oldCodec = _codec;
         int oldDivisor = _scaleDivisor;

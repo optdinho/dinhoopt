@@ -87,4 +87,32 @@ public sealed class ClipExporterMuxOffsetTests
         Assert.Contains("-map 0:v:0 ", args);
         Assert.Contains("-c:v copy ", args);
     }
+
+    // Regressão "clip acelerado" (2026-11-16): a flag garante que nenhuma cadência é
+    // imposta por cima dos timestamps reais. MEDIÇÃO: com `-c:v copy` o ffmpeg já
+    // preserva buracos de PTS com `auto`/`passthrough`/`cfr` — a aceleração vinha de
+    // ReTimestampToContiguous (limiar de 50 ms), não do mux. A flag é explicitação,
+    // não a correção; se um dia entrar `-r`/filtro de vídeo na linha, ela passa a ser
+    // a única coisa que impede o muxer de recomprimir a timeline.
+    [Fact]
+    public void BuildMuxArgs_WithAudio_PassesTimestampsThrough()
+    {
+        var args = ClipExporter.BuildMuxArgs(
+            "out.mp4", "v.mkv", hasAudio: true, TimeSpan.FromMilliseconds(675), "a.adts");
+
+        Assert.Contains("-fps_mode passthrough", args);
+        Assert.Contains("-c:v copy -c:a copy", args);
+        Assert.Contains("-max_muxing_queue_size 4096", args);
+        Assert.Contains("-movflags +faststart", args);
+    }
+
+    [Fact]
+    public void BuildMuxArgs_NoAudio_PassesTimestampsThrough()
+    {
+        var args = ClipExporter.BuildMuxArgs(
+            "out.mp4", "v.mkv", hasAudio: false, TimeSpan.Zero, null);
+
+        Assert.Contains("-fps_mode passthrough", args);
+        Assert.Contains("-c:v copy ", args);
+    }
 }

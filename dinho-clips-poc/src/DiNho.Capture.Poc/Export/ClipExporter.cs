@@ -154,7 +154,7 @@ public sealed partial class ClipExporter : IDisposable
                         Log.I("PTS", $"AlignAudio: re-anchoring audio by {alignShift.TotalMilliseconds:F0}ms to video timeline");
 
                     int origAudioCount = audioPackets.Count;
-                    var intervals = GetVideoIntervals(videoPackets, TimeSpan.FromMilliseconds(50));
+                    var intervals = GetVideoIntervals(videoPackets, GapCollapseThreshold);
                     audioPackets = FilterAudioByIntervals(audioPackets, intervals);
                     gapsRemoved = origAudioCount - audioPackets.Count;
                     // Note: gapsRemoved is number of audio packets removed = original - filtered.
@@ -248,6 +248,12 @@ public sealed partial class ClipExporter : IDisposable
                     var expectedDuration = (videoPackets[^1].Pts - videoPackets[0].Pts).TotalSeconds + videoPackets[^1].Duration.TotalSeconds;
                     var durDiff = expectedDuration - activeDurationSec;
                     Log.I("PTS", $"Post-sync — expectedDuration={expectedDuration:F2}s activeDuration={activeDurationSec:F2}s diff={durDiff:F3}s gapsRemoved={gapsRemoved} audioFrames={audioPackets.Count} startTrimmed={startTrimCount}");
+
+                    // O clip acelerado de 2026-11-16 saiu sem aviso. Se a timeline perdeu
+                    // tempo de verdade, isto tem de aparecer como WARN — é o único sinal
+                    // que o utilizador/suporte vê sem abrir uma análise de PTS.
+                    if (DescribeCollapsedTimeline(expectedDuration, activeDurationSec) is { } collapsed)
+                        Log.W("PTS", collapsed);
 
                     Log.D("PTS", $"Post-sync — Video: trueDuration={trueVidDuration:F2}s activeDuration={activeDurationSec:F2}s fps={activeFps:F1} frames={videoPackets.Count}  Audio: packets={audioPackets.Count} gapsRemoved={gapsRemoved} startTrimmed={startTrimCount}");
 
@@ -676,10 +682,19 @@ public sealed partial class ClipExporter : IDisposable
         string maps = hasAudio ? "-map 0:v:0 -map 1:a:0 " : "-map 0:v:0 ";
         string codecs = hasAudio ? "-c:v copy -c:a copy " : "-c:v copy ";
 
+        // Regressão "clip acelerado" (2026-11-16). Medido com o ffmpeg embarcado
+        // (`testsrc` a 60 fps com buraco de 100 ms em MKV): `auto`, `passthrough` e `cfr`
+        // PRESERVAM o buraco quando o mux é `-c:v copy` — o muxer não era o culpado, o
+        // colapso acontecia antes, em ReTimestampToContiguous. A flag fica como
+        // explicitação: se algum dia entrar `-r`/filtro de vídeo na linha, é ela que
+        // impede a cadência de ser imposta por cima dos timestamps reais.
+        const string fpsMode = "-fps_mode passthrough ";
+
         return $"-y -loglevel warning " +
                $"-f matroska -i \"{videoPath}\" " +
                audioIn +
                $"-max_muxing_queue_size 4096 " +
+               fpsMode +
                maps +
                codecs +
                $"-metadata title=\"DiNho Clip\" -metadata comment=\"Recorded with DiNho Clips\" " +

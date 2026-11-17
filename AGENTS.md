@@ -162,6 +162,82 @@ vermelhos: `dotnet` em 1 min 35 s e `e2e` em 21 min 25 s. Commits: `ceccfa3` (sp
 `a078987` (retry do pipe) e `edca326` (esta nota). Gates locais no mesmo commit: E2E **40/40**
 (11,0 min), C# **2656/2656** Release (0 ignorados), `tsc --noEmit` 0, Biome **0** (950 ficheiros).
 
+### "Clip acelerado": o export colapsava os buracos de frames (2026-11-16)
+
+**Sintoma.** Clips exportados a tocar até **1,64×** mais rápido (9 clips, 2 dias, 2 máquinas). O
+`[PTS] Post-sync` mostrava a diferença sem alarme: 244,66 s esperados vs 195,48 s ativos (20:32:03),
+630+178 resyncs e buracos de 4–39 slots (67–650 ms). Áudio **truncado**, não acelerado; `PTS-DRIFT`
+±10 ms. Nenhum aviso, nenhum erro.
+
+**Mecanismo.** `GetVideoIntervals` tratava como "interrupção" qualquer distância > **50 ms**; o loop
+estava a perder frames por contenção de GPU, logo cada perda virava um intervalo novo, e
+`ReTimestampToContiguous` remapeava os intervalos para uma timeline contígua — o tempo entre eles
+desaparecia. A velocidade final é `expectedDuration / activeDuration`. A causa da perda de frames é
+outra (abaixo), mas o defeito do export é este: ele apagou tempo que existiu.
+
+**Correção (A).** `GapCollapseThreshold = 2 s` (era 50 ms no único call site de produção) e
+`AudioRateScaleTolerance = 5 ms` (o áudio deixou de ser reamostrado por diferença de 1 tick). 2 s é
+3× a maior perda observada (650 ms); alt-tabs reais (≥ 2 s) continuam a ser colapsados. **Medição que
+corrigiu a narrativa:** com o ffmpeg embarcado, um MKV `testsrc` com buraco sintético de 100 ms foi
+remuxado com `-c:v copy` em três variantes (`auto`, `passthrough`, `cfr`) — **as três preservaram o
+buraco** (300 frames, span 5,083 s, maxGap 117 ms). O muxer não era o culpado; `-fps_mode passthrough`
+fica como explicitação contra um futuro `-r`/filtro, **não** como o fix. A justificação "o muxer
+reimpõe cadência" está **refutada**.
+
+**Aviso (A2).** `DescribeCollapsedTimeline(expected, active)` + `Log.W("PTS", …)` depois do
+`Post-sync`, quando a diferença passa `max(1 s, 2 %)` — com fator e segundos. Antes, 49 s de 244 s
+saíam em silêncio.
+
+**Atribuição honesta do gargalo (B).** `Watchdog/FeedBottleneck.cs` classifica a janela do feed em
+`Sustained` / `ConvertBound` / `SourceBound` / `Unknown` a partir de `feedFps`, `wait` e `convert` —
+`FeedFps` sozinho é a taxa do **loop**, logo culpava a fonte sempre. Usado em três sítios: a mensagem
+`capacity guard: ignorado` (que dizia "o encoder não é o gargalo"), uma linha nova
+`capacity guard: degradação inútil (alvo de resolução explícito)` 1×/cooldown (o ramo era silencioso —
+114 linhas de `ignorado`, zero de "não há nada a fazer") e um `Log.W("Feed", …)` quando
+`ConvertBound` **e** `skip ≥ 10 %` dos slots (throttle 30 s).
+
+**Os limiares iniciais estavam errados e foram recalibrados com o log.** 559 janelas de 11-16: 70 com
+`skip ≥ 10 %`, com o fps a cair em degraus de 6 (30/36/42/48/54), enquanto as 489 sem perda estão
+todas a 60,0 com `convert` máximo de **14,6 ms**. Com `SustainedRatio = 0,9`, o degrau de 54 fps
+(13 % dos slots perdidos) era declarado saudável; com `ConvertBoundRatio = 1,2` (20 ms), 28 janelas
+com `convert` 16–20 ms e `wait` < 1,2 ms ficavam `Unknown`. Passaram a **0,9×** (15 ms) e **95 %**
+(57 fps): `(48, 60, 0,6, 16,9)` e `(54, 60, 0,6, 18,4)` dão `ConvertBound`, a pior janela saudável
+`(60, 60, 0,8, 14,6)` continua `Sustained`.
+
+**Instrumentação para decidir a correção da perda (C, só dados).** `ConvertPhaseStats` +
+`gpu=blit Xms copy Yms map Zms pack Wms (Nf)` na linha do feed (parâmetro opcional de
+`FeedLogLine.Build`; ausente quando não houve conversão completa — zeros dariam a conclusão oposta).
+**Leitura correta:** `blit`/`copy` medem **submissão de CPU** (o D3D enfileira e retorna); o custo real
+de GPU aparece em `map` (DoNotWait + retry bloqueante) e `pack` (leitura da memória mapeada). É essa
+distinção que escolhe entre "não bloquear no Map" e "aliviar a GPU / baixar o fps".
+
+**Fora de âmbito.** Pill âmbar de frames perdidos na UI (B2) ficou para depois. A Fase 4.2 (agir sobre
+o `convert`) só entra com `gpu=` medido numa sessão real — `map` dominante ⇒ não bloquear; `blit`/
+`copy` dominantes ⇒ GPU saturada (aí sim medir `-usage` da AMF, validando por `convert`/`skip`, nunca
+por `speed`). 30 fps **não precisou de código**: já é selecionável em `ClipsConfigQuality.tsx` e aplica
+a quente. Aviso honesto: 30 fps é mitigação, não garantia — o pior `convert` medido (36,5 ms) ainda
+excede o orçamento de 33 ms.
+
+**Gates.** C# **2692/2692** em Release (0 falhas, 0 ignorados; baseline 2656 + **36** testes novos),
+build **0 avisos** · `tsc --noEmit` 0 · Biome **950 ficheiros, 0** · Vitest **8551/8551** (339
+ficheiros) · `npm run build` exit 0 · `copy-engine` **213 ficheiros** + gate ffmpeg **52/52**.
+Ficheiros novos de teste: `ClipExporterTimelineTests` (6), `ClipExporterTimelineWarningTests` (8),
+`FeedBottleneckTests` (13), `ConvertPhaseStatsTests` (5) + 2 em `ClipExporterMuxOffsetTests` e 2 em
+`FeedLogLineTests`.
+
+**Armadilhas desta sessão.** (1) Um buraco de **N slots perdidos** produz **(N+1) períodos** entre
+frames consecutivos (5 slots = 6 × 16,667 = 100 ms) — o primeiro teste esperava N e falhou. (2) xUnit
+v3 **não** tem `Assert.Equal(TimeSpan, TimeSpan, tolerance)`; usar
+`Assert.Equal(esperadoMs, actual.TotalMilliseconds, tol)`. (3) `-vf setpts` **não** convive com
+`-c:v copy` ("Filtering and streamcopy cannot be used together") — para gerar um MKV com buraco é
+preciso `setpts` **na codificação** e `-fps_mode passthrough` no *encode*, senão o libx264 normaliza a
+cadência e o buraco não existe. (4) Para ffmpeg lançado de shell elevada, manter `-nostdin`.
+
+**Limites.** O motor vai dentro de `resources/clips-engine` ⇒ **só chega ao cliente numa versão nova**;
+os 9 clips já exportados são irrecuperáveis (os frames não existem). O que a correção garante: com
+buracos < 2 s, `activeDuration = expectedDuration` e o clip mantém a duração real (imagem congelada no
+salto). O que **não** resolve: a perda de frames em si — é a Fase 4.2.
+
 ### Qualidade e fps passam a valer a meio da gravação (2026-11-10c)
 
 **Pedido.** Alterar qualidade/fps nas configurações tinha **zero efeito** enquanto se gravava: o motor

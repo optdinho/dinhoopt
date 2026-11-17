@@ -1288,9 +1288,61 @@ public sealed partial class EngineCoordinator
             (speedX, outputLag) = ff.LastProgress;
         }
 
-        Log.I("FeedTelemetry", FeedLogLine.Build(s, codec, scaleDivisor, speedX, outputLag, _config.Config.Fps));
+        // As médias wait/convert têm de chegar ao guard ANTES do tick dele: é com elas
+        // que a mensagem "ignorado" deixa de culpar a fonte por um atraso da conversão.
+        var enc = _encoder as FfmpegEncoder;
+        enc?.SetFeedStageTimings(s.WaitMs, s.ConvertMs);
+
+        // TakeConvertBreakdown() fecha a janela das sub-fases: uma leitura por resumo,
+        // no mesmo ritmo com que o `convert` total é impresso.
+        Log.I("FeedTelemetry", FeedLogLine.Build(
+            s, codec, scaleDivisor, speedX, outputLag, _config.Config.Fps,
+            enc?.TakeConvertBreakdown()));
         LogWgcHandoff(s.GoodFrames);
+
+        WarnIfFeedLosingFrames(s);
         MaybeDegradeEncoderForCapacity();
+    }
+
+    /// <summary>Rácio de slots perdidos a partir do qual o feed avisa (achado de 2026-11-16: 44%).</summary>
+    private const double FeedLossWarnSkipRatio = 0.10;
+
+    /// <summary>Intervalo mínimo entre avisos de perda de frames (o tick do feed é ~2×/s).</summary>
+    private const double FeedLossWarnIntervalSec = 30;
+
+    private long _lastFeedLossWarnTicks;
+
+    /// <summary>
+    /// Avisa que o gravador está a perder frames — a causa dos clips acelerados de
+    /// 2026-11-16 (o export colapsava os buracos e ninguém era avisado).
+    ///
+    /// <para>
+    /// Só para <see cref="FeedBottleneckVerdict.ConvertBound"/>: é o único caso em que o
+    /// produto tem os números que provam onde está o gargalo. Um skip alto com a fonte a
+    /// entregar (SourceBound) é outro problema e não se resolve aqui.
+    /// </para>
+    /// </summary>
+    private void WarnIfFeedLosingFrames(FeedSummary s)
+    {
+        var nominal = _config.Config.Fps;
+        if (FeedBottleneck.Classify(s.FeedFps, nominal, s.WaitMs, s.ConvertMs)
+            != FeedBottleneckVerdict.ConvertBound)
+            return;
+
+        int totalSlots = s.SkippedFrames + s.PacingCount;
+        if (totalSlots <= 0) return;
+        double skipRatio = (double)s.SkippedFrames / totalSlots;
+        if (skipRatio < FeedLossWarnSkipRatio) return;
+
+        var now = Stopwatch.GetTimestamp();
+        if (now - _lastFeedLossWarnTicks < FeedLossWarnIntervalSec * Stopwatch.Frequency) return;
+        _lastFeedLossWarnTicks = now;
+
+        var budget = FeedBottleneck.SlotBudgetMs(nominal);
+        Log.W("Feed",
+            $"gravador não sustenta {nominal:F0} fps: {s.SkippedFrames}/{totalSlots} slots perdidos ({skipRatio:P0}) — " +
+            $"convert={s.ConvertMs:F1}ms / orçamento {budget:F1}ms, wait={s.WaitMs:F1}ms; " +
+            "o clip terá frames a menos (imagem congelada nos saltos)");
     }
 
     /// <summary>

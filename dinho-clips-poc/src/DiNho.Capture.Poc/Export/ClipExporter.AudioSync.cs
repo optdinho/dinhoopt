@@ -1,5 +1,6 @@
 using DiNho.Capture.Poc.Logging;
 using DiNho.Capture.Poc.Encoders;
+using System.Globalization;
 
 namespace DiNho.Capture.Poc.Export;
 
@@ -46,6 +47,58 @@ public sealed partial class ClipExporter
             frames.Add(new EncodedPacket(data, MediaType.Audio, pts, dur, false));
         }
         return frames;
+    }
+
+    /// <summary>
+    /// Distância mínima entre o fim de um pacote e o início do seguinte para o export
+    /// tratar o buraco como uma INTERRUPÇÃO real (alt-tab, oclusão, jogo fechado) e
+    /// colapsá-lo da timeline.
+    ///
+    /// <para>
+    /// Era 50 ms — qualquer frame perdido pelo gravador virava "gap". Em 2026-11-16 o
+    /// loop perdeu frames durante contenção de GPU (buracos de 4 a 39 slots, 67–650 ms),
+    /// o export fechou todos e o clip saiu até 1,64× mais rápido (9 clips, 2 máquinas).
+    /// Com 2 s, as perdas de frames do gravador SOBREVIVEM ao MP4 (o clip mantém a
+    /// duração real, com imagem congelada no buraco) e só as interrupções continuam a
+    /// ser colapsadas.
+    /// </para>
+    /// </summary>
+    internal static readonly TimeSpan GapCollapseThreshold = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Diferença máxima entre o fim do áudio e o fim do vídeo que ainda é ruído de
+    /// arredondamento de PTS (AAC de 1024 amostras não divide 1/60 s). Acima disto o
+    /// áudio é reamostrado para casar com o vídeo; abaixo, fica intacto.
+    /// </summary>
+    internal static readonly TimeSpan AudioRateScaleTolerance = TimeSpan.FromMilliseconds(5);
+
+    /// <summary>
+    /// Explica, para o log, um export em que a timeline perdeu tempo de verdade.
+    ///
+    /// <para>
+    /// <c>expectedDuration</c> é o span real dos pacotes de vídeo; <c>activeDuration</c> é a
+    /// soma dos intervalos que sobreviveram. Uma diferença grande significa que o export
+    /// colapsou buracos — o clip vai tocar mais rápido que o real. O caso de 2026-11-16
+    /// saiu sem aviso nenhum: 49,17 s de 244,66 s (×1,25).
+    /// </para>
+    /// <para>
+    /// Devolve <c>null</c> quando a diferença é ruído (≤ max(1 s, 2% do esperado)) — abaixo
+    /// disso não há nada que o utilizador note. Texto em cultura invariante para o teste
+    /// ser determinístico independente do locale da máquina.
+    /// </para>
+    /// </summary>
+    internal static string? DescribeCollapsedTimeline(double expectedSec, double activeSec)
+    {
+        if (expectedSec <= 0 || activeSec <= 0) return null;
+
+        var lostSec = expectedSec - activeSec;
+        if (lostSec <= Math.Max(1.0, expectedSec * 0.02)) return null;
+
+        var factor = expectedSec / activeSec;
+        return string.Format(CultureInfo.InvariantCulture,
+            "timeline colapsada — {0:F2}s de {1:F2}s removidos (x{2:F2}); "
+            + "buracos de frames do gravador foram fechados no export e o clip toca mais rápido que o real",
+            lostSec, expectedSec, factor);
     }
 
     internal static List<(TimeSpan start, TimeSpan end)> GetVideoIntervals(List<EncodedPacket> videoPackets, TimeSpan gapThreshold)
@@ -591,7 +644,10 @@ if (shift > TimeSpan.Zero && shift.TotalSeconds <= 2.0)
         {
             var aNow = audioPackets[^1].Pts + audioPackets[^1].Duration;
             var vNow = videoPackets[^1].Pts + videoPackets[^1].Duration;
-            if (aNow != vNow)
+            // Tolerância de 5 ms: abaixo disto a diferença é arredondamento de PTS e
+            // reamostrar mudaria a duração de todos os pacotes de áudio sem motivo.
+            // Num clip sem buracos (1 intervalo) não há nada a corrigir no áudio.
+            if ((aNow - vNow).Duration() > AudioRateScaleTolerance)
             {
                 var audioStart = audioPackets[0].Pts;
                 var audioSpan = aNow - audioStart;
