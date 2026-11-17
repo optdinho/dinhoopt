@@ -156,6 +156,12 @@ a **tentar em ciclo** (`TimeoutException` ou `IOException`) com orçamento **tot
 tentativas de 1 s: um servidor que nunca aceita continua a falhar, só que ao fim do orçamento. Sem
 alterações no `NamedPipeServer` de produção.
 
+**Fecho: CI do `main` verde outra vez.** Run `43987019118` (push do `edca326`) terminou
+**`completed/success` em 27,8 min**, com os **7 jobs verdes** — incluindo os dois que estavam
+vermelhos: `dotnet` em 1 min 35 s e `e2e` em 21 min 25 s. Commits: `ceccfa3` (specs E2E),
+`a078987` (retry do pipe) e `edca326` (esta nota). Gates locais no mesmo commit: E2E **40/40**
+(11,0 min), C# **2656/2656** Release (0 ignorados), `tsc --noEmit` 0, Biome **0** (950 ficheiros).
+
 ### Qualidade e fps passam a valer a meio da gravação (2026-11-10c)
 
 **Pedido.** Alterar qualidade/fps nas configurações tinha **zero efeito** enquanto se gravava: o motor
