@@ -81,6 +81,81 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ## Current Status (consolidado — 2026-10-04)
 
+### 2.1.14 PUBLICADA (2026-11-11) — as correções de captura/log chegam ao cliente
+
+**Conteúdo.** Leitor de log (re-emissão de 92% das linhas, 95 MB → ~8 MB por sessão), gate AV1 pela
+compute capability real, WGC (latch por build + cooldown de 5 min + `E_ACCESSDENIED` sem trancar a
+sessão) e o **diagnóstico** de captura (`[WGC-DIAG]` com HRESULT/build/sessão/HAGS/FrameServer e
+`DXGI (DDA 1.0|1.1)` com o motivo do `DuplicateOutput1`), mais qualidade/FPS a quente. É a primeira
+release em que o `client_version` do backend de licenças passa a ser preenchido (só por validações
+**futuras**).
+
+**Publicação (run `42949836201`, todos os steps verdes, 14 min 33 s).** Tag `v2.1.14` → commit
+`01835cb` (`52af7f4..01835cb` no `main`). Assets **idênticos nos dois repositórios**:
+
+| Asset | Bytes |
+|---|---|
+| `DiNho-Optimizer-2.1.14.exe` (portable) | 219 487 038 |
+| `DiNho-Optimizer-Setup-2.1.14.exe` | 241 733 140 |
+| `DiNho-Optimizer-Setup-2.1.14.exe.blockmap` | 252 535 |
+| `latest.yml` | 4 152 |
+
+O `latest.yml` é **byte-idêntico** nos dois lados: sha256 `a0be64f4268c3349f670e0b08ef3474d32e43f6d404eec5aba9238e5d5c61ee0`
+(4 152 B), conferido por download de ambos. O nome do portable já sai com hífenes nos dois repos — o
+`portable.artifactName` corrigido na 2.1.13 pegou, portanto a divergência cosmética dessa release não
+existe nesta.
+
+**`npm run verify:release -- --expect 2.1.14` → PASS:** feed serve 2.1.14, tag `v2.1.14`, releaseDate
+`2026-11-11T03:14:13.283Z`, `latest.yml` anexado, sha512 declarado batendo certo com o download do
+Setup (231 MB, 241 733 140 B). Body da release **3 612 chars** (o `release:notes` a partir do
+CHANGELOG) — sem repetir o problema de body vazio da 2.0.6.
+
+**`readme-sync` (job separado) correu depois do publish:** os dois badges (`versão-2.1.14`,
+`Baixar-DiNho_Optimizer_2.1.14`) e o bloco `<!-- novidades -->` do README de `dinhoopt-releases`
+passaram a 2.1.14, com as notas de `readme-notes/2.1.14.md` — **sem** `### Interno` (confirmado no
+texto servido pelo `raw.githubusercontent.com`).
+
+**`BRIDGE_MIRROR` continua LIGADO** — o step "Mirror release to legacy repo (bridge)" correu e passou.
+É o esperado: a ponte só é desligada depois do **flip** do repo para privado (~2026-12-06), senão os
+clientes ≤2.1.12 que ainda não atualizaram perdem o feed antigo. Custo: ~500 MB reenviados por
+release enquanto estiver ligado.
+
+**Gates antes de taggar (todos locais, no commit `01835cb`):** `tsc --noEmit` 0 · Biome **950
+ficheiros, 0** · Vitest **8551/8551**, 339 ficheiros · C# **2656/2656** (Release, 0 ignorados) ·
+`copy-engine` 213 ficheiros + gate ffmpeg **52/52** · `electron-vite build` exit 0.
+
+**Falta:** acompanhar o log do cliente já em 2.1.14 para confirmar/matar a hipótese do DDA no lag do
+mouse; redeploy do site (o `deploy/` antigo desapareceu — regenerar com `node site/build-deploy.js` e
+arrastar ao Netlify); flip para privado + desligar `BRIDGE_MIRROR`.
+
+### CI do `main` vermelho depois da 2.1.14 — duas causas, nenhuma no produto (2026-11-16)
+
+O run `42949805275` (push do `01835cb`) falhou em **2 de 7 jobs**: `dotnet` (1 de 2656) e `e2e`
+(2 de 40). Os dois são defeitos de **teste**, não do binário — a release `42949836201` correu verde
+no mesmo commit.
+
+**1. E2E — specs obsoletas da remoção do cartão de Auditoria (2026-11-09).** `e2e/game-mode.test.ts`
+ainda procurava o botão "Executar Auditoria", que deixou de ser renderizado em `160bc20`. O teste
+**seguinte** (estatísticas da sessão) falhava em cascata: **o Playwright reinicia o worker depois de
+um teste falhar**, o `beforeAll` volta a correr (app nova) e a página regressa à rota inicial — logo o
+`window.__GAME_MODE_STORE__` já não existia e `setActive` era um no-op silencioso via optional
+chaining. Provado com instrumentação (`page.on('close')` dispara e o URL passa a
+`app://bundle/index.html` sem hash). Correções: (a) o teste de auditoria passou a **guardar a remoção**
+(cartão de Prioridade Alta presente, botão de Auditoria ausente — o IPC/serviço/store continuam
+intactos); (b) novo helper `openGameModePage()` navega para `#/game-mode` e espera pelo
+`__GAME_MODE_STORE__`, usado pelos testes que dependem do conteúdo da página — deixam de herdar a
+navegação de um teste anterior. Correr `npm run test:e2e` (é ele que injeta `DINHO_E2E_KEY` no build;
+`node scripts/run-e2e.cjs` directo **não** encontra `electron-vite` no PATH, e um `electron-vite build`
+sem a chave deixa o bypass de licença desligado e a página mostra o gate).
+
+**2. C# — `NamedPipeServerIntegrationTests.ConnectClient` com um único `Connect(5000)`.** O accept
+loop arranca numa thread do pool (`Task.Run` em `NamedPipeServer.Start`); num runner de CI saturado
+pelos restantes 2 655 testes, a primeira iteração pode demorar mais que os 5 s e o cliente expira
+(`TimeoutException` em `NamedPipeServerIntegrationTests.cs:21`, 5 s 011 ms de teste). O helper passou
+a **tentar em ciclo** (`TimeoutException` ou `IOException`) com orçamento **total de 20 s** e
+tentativas de 1 s: um servidor que nunca aceita continua a falhar, só que ao fim do orçamento. Sem
+alterações no `NamedPipeServer` de produção.
+
 ### Qualidade e fps passam a valer a meio da gravação (2026-11-10c)
 
 **Pedido.** Alterar qualidade/fps nas configurações tinha **zero efeito** enquanto se gravava: o motor
