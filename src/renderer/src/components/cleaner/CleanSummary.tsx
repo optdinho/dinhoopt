@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter'
-import { formatBytes, formatDuration, formatNumber } from '@/lib/utils'
+import { formatBytes, formatDuration, formatNumber, toSimpleTranslator } from '@/lib/utils'
 import type { CleanSummaryData } from '@/stores/scan-store'
 
 const categoryIcons: Record<string, LucideIcon> = {
@@ -138,6 +138,7 @@ function CategoryBar({
 
 export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSummaryProps) {
   const { t } = useTranslation('cleaner')
+  const translate = toSimpleTranslator(t)
   const cleanedCategories = summary.categories.filter((c) => c.cleaned > 0)
   const maxCategorySpace = Math.max(...cleanedCategories.map((c) => c.space), 0)
 
@@ -181,7 +182,7 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
             style={{ background: 'var(--bg-subtle)', color: 'var(--text-muted)' }}
           >
             {t('summaryDuration', {
-              duration: formatDuration(summary.duration, t as (key: string, opts?: Record<string, unknown>) => string),
+              duration: formatDuration(summary.duration, translate),
             })}
           </motion.span>
         </div>
@@ -208,10 +209,7 @@ export function CleanSummary({ summary, onRelaunchAsAdmin, platform }: CleanSumm
           <MetricCard
             icon={Clock}
             value={0}
-            displayValue={formatDuration(
-              summary.duration,
-              t as (key: string, opts?: Record<string, unknown>) => string,
-            )}
+            displayValue={formatDuration(summary.duration, translate)}
             label={t('summaryDurationLabel')}
             color="var(--text-muted)"
             iconBg="var(--bg-hover)"

@@ -1,9 +1,17 @@
 import { type ClassValue, clsx } from 'clsx'
-import i18next from 'i18next'
+import i18next, { type TFunction } from 'i18next'
 import { twMerge } from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+/** Signature simples usada pelos helpers de formatação que não precisam de chaves tipadas. */
+export type SimpleTranslator = (key: string, options?: Record<string, unknown>) => string
+
+/** Adapta o `TFunction` do i18next à assinatura simples, sem casts. */
+export function toSimpleTranslator(t: TFunction): SimpleTranslator {
+  return (key, options) => (options === undefined ? t(key) : t(key, options))
 }
 
 export function formatBytes(bytes: number, decimals = 2): string {

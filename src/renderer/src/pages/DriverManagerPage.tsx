@@ -24,7 +24,7 @@ import { useIpcAction } from '@/hooks/useIpcAction'
 import { useIpcScan } from '@/hooks/useIpcScan'
 import { useProgressListener } from '@/hooks/useProgressListener'
 import logger from '@/lib/renderer-logger'
-import { formatBytes } from '@/lib/utils'
+import { formatBytes, toSimpleTranslator } from '@/lib/utils'
 import { useDriverStore } from '@/stores/driver-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useStatsStore } from '@/stores/stats-store'
@@ -33,6 +33,7 @@ import { InstalledDriverRow, StaleItemRow, UpdateItemRow } from './driver-manage
 
 export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation('updates')
+  const translate = toSimpleTranslator(t)
   const {
     packages,
     scanning,
@@ -569,12 +570,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
 
           <div className="grid grid-cols-1 gap-2">
             {updates.map((upd) => (
-              <UpdateItemRow
-                key={upd.id}
-                upd={upd}
-                t={t as (key: string, options?: Record<string, unknown>) => string}
-                onToggle={handleToggleUpdateItem}
-              />
+              <UpdateItemRow key={upd.id} upd={upd} t={translate} onToggle={handleToggleUpdateItem} />
             ))}
           </div>
         </div>
@@ -638,11 +634,7 @@ export function DriverManagerPage({ embedded }: { embedded?: boolean }) {
           {showUpToDateDrivers && (
             <div className="grid grid-cols-1 gap-1.5">
               {allDrivers.map((drv) => (
-                <InstalledDriverRow
-                  key={drv.id}
-                  drv={drv}
-                  t={t as (key: string, options?: Record<string, unknown>) => string}
-                />
+                <InstalledDriverRow key={drv.id} drv={drv} t={translate} />
               ))}
             </div>
           )}
