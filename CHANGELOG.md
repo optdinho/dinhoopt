@@ -1,3 +1,25 @@
+## [2.1.15]
+
+### Adicionado
+- **Privacidade — borda amarela de captura**: novo interruptor no Escudo de Privacidade permite autorizar ou negar a captura sem borda do Windows, incluindo o gravador de clips do DiNho. A permissão é **global** e desativa um indicador de privacidade do Windows para todas as aplicações; a interface avisa disso e a alteração é revertida se alguma escrita falhar. Pode ser necessário iniciar uma nova gravação para que a alteração se aplique.
+- **Clips — frames perdidos**: enquanto grava, a barra de estado mostra uma pílula âmbar com o número de frames perdidos. O indicador só aparece durante a captura (um valor antigo de uma sessão terminada não engana) e o tooltip explica que o clip exportado mantém a duração real.
+
+### Corrigido
+- **Exportação de clips — velocidade**: os buracos curtos de frames deixaram de ser apagados da linha temporal. O limite que separa "perda de frames" de "interrupção" passou de 50 ms para 2 s; assim, quedas por contenção de GPU mantêm o tempo decorrido (com imagem congelada no salto) em vez de fazer o clip tocar até **1,64×** mais rápido e o áudio ficar truncado. Quando a diferença entre duração esperada e duração ativa ultrapassa `max(1 s, 2%)`, o log passa a avisar com o fator e os segundos envolvidos.
+- **Modo de Jogo — HAGS**: o estado deixou de ser mostrado como "ligado" quando a chave do registo não existe ou não pode ser lida (caso típico de Windows 10 nunca configurado); passa a aparecer **"Estado desconhecido"**. O primeiro clique a partir desse estado continua a ativar o HAGS. Foi também removida a nota que dizia que o HAGS melhorava a compatibilidade com capturas/encoders (OBS) — o HAGS não interfere com o WGC nem com o DXGI.
+- **Gargalo do feed**: a mensagem "encoder não é o gargalo" deixou de ser dada quando a leitura era inconclusiva; a janela passa a ser classificada como sustentada, limitada pela conversão, limitada pela fonte ou desconhecida a partir de `fps`, espera e conversão. Os limiares foram calibrados com 559 janelas reais, em vez de retas arbitrárias.
+
+### Alterado
+- **Atualização tecnológica**: Electron 45.5, Vite 8.3, TypeScript 7.0, React 19.3, Biome 2.6.9, i18next 27 + react-i18next 18, YARA-X 0.13, NAudio 3.3, CsWin32 0.3.371 e xunit.v3 4.0.3 (runner Microsoft.Testing.Platform), além das restantes dependências npm e NuGet. O **ffmpeg embarcado passa para a versão 9.1** e continua a ser o *full build* — a decisão de não o reduzir mantém-se.
+- **Log do motor**: por omissão só são escritas mensagens de nível Info ou superior. As linhas Debug (cerca de 78% do log de uma sessão) deixam de aparecer, sem alterar avisos, erros ou o caminho crítico de flush. Para diagnóstico, a variável `DINHO_CLIPS_LOG_LEVEL` permite escolher outro nível sem recompilar.
+
+### Interno
+- **Exportação**: `-fps_mode passthrough` fica como explicitação contra um futuro `-r`/filtro, não como a correção. Com o ffmpeg 9.1, um MKV com buraco de 100 ms remuxado com `-c:v copy` preservou o buraco nos três modos testados (`auto`, `passthrough`, `cfr`) — o muxer não era o culpado.
+- **Instrumentação**: `FeedTelemetry` passa a incluir `gpu=blit/copy/map/pack` medidos na conversão; a distinção entre submissão de CPU e custo real de GPU (`map`/`pack`) é o que vai decidir a Fase 4.2 com dados de uma sessão real, sem adivinhar.
+- **Avisos e segurança**: eliminado o `DEP0190` do runner E2E (spawn direto dos binários locais via `process.execPath`, sem `shell: true`) e levado o `npm audit` a **0** com overrides seletivos de `minimatch` nas duas instâncias da cadeia de desenvolvimento — sem downgrade do `electron-builder` e sem tocar nos consumidores legados.
+- **Estabilidade do CI**: specs do Modo de Jogo adaptadas à remoção do cartão de Auditoria e à navegação entre testes; a ligação ao pipe named do motor passa a tentar num orçamento total de 20 s, porque no CI saturado a primeira iteração do accept loop podia exceder o prazo único de 5 s.
+- **Qualidade**: TS **8581/8581** (342 ficheiros) · C# **2709/2709** em Release, 0 ignorados · `tsc --noEmit` 0 · Biome **955 ficheiros, 0** · `npm run build` exit 0 · `copy-engine` 213 ficheiros + gate ffmpeg **52/52** · E2E **40/40** · `npm run verify:release -- --expect 2.1.14` PASS · `npm audit` 0.
+
 ## [2.1.14]
 
 ### Corrigido
