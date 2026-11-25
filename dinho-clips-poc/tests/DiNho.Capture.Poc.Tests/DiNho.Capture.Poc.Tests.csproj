@@ -14,7 +14,7 @@
   <ItemGroup>
     <!-- coverlet.collector removido em 2026-10-06: declarado mas nunca
          invocado (nenhum script de teste usa collector nem CollectCoverage) -->
-    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="xunit.v3" Version="4.0.3" />
     <!-- Microsoft.NET.Test.Sdk + xunit.runner.visualstudio (VSTest) removidos em 2026-10-19:
          em .NET 10 o "dotnet test" usa exclusivamente Microsoft.Testing.Platform (opt-in no
          global.json) e misturar VSTest com MTP nao e suportado. Ver plano da migracao. -->
