@@ -79,7 +79,19 @@ Commit format: `<type>: <description>` — Types: feat, fix, refactor, docs, tes
 
 ---
 
-## Current Status (consolidado — 2026-10-04)
+## Current Status (consolidado — 2026-11-25)
+
+### 2.1.15 PUBLICADA (2026-11-25) — atualização tecnológica + correções visíveis ao cliente
+
+**Conteúdo.** Atualização tecnológica de 2026-11-24 (Electron 45.5.0, Vite 8.3.8, TypeScript 7.0.2, React 19.3.1, Biome 2.6.9, Vitest 5.1.1, i18next 27 + react-i18next 18, YARA-X 0.13.0, better-sqlite3 13.2.0, xunit.v3 4.0.3/MTP, CsWin32 0.3.371, NAudio 3.3.0) e **ffmpeg 9.1 full build** (o item 8 foi descartado: continua full build; o asset `assets` já estava trocado). Entram também: pill âmbar de frames perdidos só enquanto grava (item 5), `getHagsStatus()` tri-estado `on/off/unknown` com a nota WGC/DXGI corrigida (item 6), `ConsoleLogger` com nível mínimo Info e override `DINHO_CLIPS_LOG_LEVEL` (item 7), a correção do "clip acelerado" (limite de buraco 50 ms → 2 s, aviso PTS, `FeedBottleneck` calibrado, `gpu=` na telemetria), o toggle de borda de captura em Privacidade e a limpeza de warnings (`DEP0190` no runner E2E + overrides seletivos de `minimatch` → `npm audit` 0, sem downgrade do `electron-builder`).
+
+**Publicação (run `45539966985`, todos os steps verdes, 13,9 min).** Tag `v2.1.15` → commit `e808b91` (`f62a778..e808b91`); jobs `release` e `readme-sync` verdes. Assets idênticos nos dois repos, com os mesmos nomes e tamanhos: Setup 246 640 299 B, portable 223 720 180 B, blockmap 257 426 B, `latest.yml` 4 833 B. `latest.yml` byte-idêntico (sha256 `0143901431f9ef3ad43690ce23fd84e6bc861e73a369478f9182302571f7984f`), portable byte-idêntico (sha256 `5dad47173b4e5dac706274d6d6b7693c252baa23f6d2a93fb4bc7e3d648ef8f5`) e o Setup do repo antigo bate o sha512 declarado no feed (`5JY6h+QNZM22WJn4…`). `npm run verify:release -- --expect 2.1.15` → **PASS** (releaseDate `2026-11-25T03:39:25.555Z`); `verify:release:full` descarregou o Setup e conferiu sha512 + tamanho. Body da release **4 266 chars**, gerado do CHANGELOG. O `readme-sync` atualizou os dois badges e o bloco `<!-- novidades -->` para 2.1.15 sem `### Interno` (conferido no raw do `dinhoopt-releases`; 5 entradas: 2.1.15 → 2.1.11).
+
+**`BRIDGE_MIRROR` continua LIGADO** — o step de espelho correu e passou. Só se desliga depois do flip do repo para privado (~2026-12-06), senão os clientes ≤2.1.12 perdem o feed antigo; custo de ~500 MB reenviados por release enquanto estiver ligado.
+
+**Gates locais no commit `e808b91`:** `tsc --noEmit` 0 · Biome **955 ficheiros, 0** · Vitest **8 581/8 581** (342 ficheiros) · C# **2 709/2 709** em Release, 0 ignorados · `npm run build` exit 0 · `copy-engine` 213 ficheiros + gate ffmpeg **52/52** · E2E **40/40** (21,7 min, sem `DeprecationWarning`) · `npm audit` **0** · `verify:release --expect 2.1.14` PASS antes do bump.
+
+**Falta (itens 1–4, próxima sessão):** flip do repo para privado + desligar `BRIDGE_MIRROR`; redeploy do site (`node site/build-deploy.js` e arrastar a pasta ao Netlify); acompanhar o log do cliente já em 2.1.15 (DDA vs WGC, HAGS, feed) e decidir a Fase 4.2 com `gpu=` medido.
 
 ### 2.1.14 PUBLICADA (2026-11-11) — as correções de captura/log chegam ao cliente
 
