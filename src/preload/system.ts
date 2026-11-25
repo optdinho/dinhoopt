@@ -404,7 +404,8 @@ export const systemMethods = {
   gamingVbsGet: (): Promise<{ enabled: boolean }> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_VBS_GET),
   gamingVbsSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_VBS_SET, enabled),
-  gamingHagsGet: (): Promise<{ enabled: boolean }> => ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET),
+  gamingHagsGet: (): Promise<{ enabled: boolean; state: 'on' | 'off' | 'unknown' }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET),
   gamingHagsSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET, enabled),
 

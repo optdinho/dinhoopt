@@ -1406,7 +1406,7 @@ describe('windows-tweaks sender validation', () => {
       success: false,
       error: 'Invalid sender',
     })
-    expect(await getHandler('windows-tweaks:gaming-hags-get')({})).toEqual({ enabled: true })
+    expect(await getHandler('windows-tweaks:gaming-hags-get')({})).toEqual({ enabled: false, state: 'unknown' })
     expect(await getHandler('windows-tweaks:gaming-hags-set')({}, true)).toEqual({
       success: false,
       error: 'Invalid sender',

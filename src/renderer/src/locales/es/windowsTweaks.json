@@ -183,7 +183,7 @@
     },
     "hags-off": {
       "name": "Planificacion GPU por Hardware - OFF",
-      "description": "Desactiva la planificacion por hardware de la GPU (compatibilidad con captura/encoders)"
+      "description": "Desactiva la planificacion por hardware de la GPU (no afecta a WGC/DXGI)"
     },
     "mpo-overlay-minfps": {
       "name": "MPO Overlay Min FPS — 0",

@@ -73,7 +73,7 @@ export const MOUSE_GPU_TWEAKS: WindowsTweakDef[] = [
   {
     id: 'hags-off',
     name: 'Hardware GPU Scheduling - OFF',
-    description: 'Desativa agendamento por hardware da GPU (compatibilidade com captura/encoders)',
+    description: 'Desativa agendamento por hardware da GPU (não afeta WGC/DXGI)',
     category: 'gpu',
     level: 'medio',
     hive: 'HKEY_LOCAL_MACHINE',

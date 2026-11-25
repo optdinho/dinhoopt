@@ -389,22 +389,33 @@ describe('HAGS_GET', () => {
   it('reports enabled when HwSchMode is 0x2', async () => {
     registerGamingTweaks(() => null)
     hagsOut = 'HwSchMode  REG_DWORD  0x2'
-    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()) as { enabled: boolean }
-    expect(res.enabled).toBe(true)
+    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()) as { enabled: boolean; state: string }
+    expect(res).toEqual({ enabled: true, state: 'on' })
   })
 
-  it('reports disabled for other values, missing match, and query failure', async () => {
+  it('reports disabled when HwSchMode is 0x1', async () => {
     registerGamingTweaks(() => null)
     hagsOut = 'HwSchMode  REG_DWORD  0x1'
-    expect(((await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()) as { enabled: boolean }).enabled).toBe(false)
+    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()) as { enabled: boolean; state: string }
+    expect(res).toEqual({ enabled: false, state: 'off' })
+  })
+
+  it('does not fabricate "on" when the value is absent or unparsable', async () => {
+    registerGamingTweaks(() => null)
 
     hagsOut = 'unrelated'
-    expect(((await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()) as { enabled: boolean }).enabled).toBe(true)
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()).toEqual({ enabled: false, state: 'unknown' })
 
+    hagsOut = 'HwSchMode  REG_DWORD  0x0'
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()).toEqual({ enabled: false, state: 'unknown' })
+  })
+
+  it('reports unknown when the query fails', async () => {
+    registerGamingTweaks(() => null)
     failArgs.add(
       key('reg.exe', ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', '/v', 'HwSchMode']),
     )
-    expect(((await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()) as { enabled: boolean }).enabled).toBe(true)
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)()).toEqual({ enabled: false, state: 'unknown' })
   })
 })
 
@@ -477,7 +488,7 @@ describe('invalid sender', () => {
       success: false,
       error: 'Invalid sender',
     })
-    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)(null)).toEqual({ enabled: true })
+    expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)(null)).toEqual({ enabled: false, state: 'unknown' })
     expect(await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET)(null, true)).toEqual({
       success: false,
       error: 'Invalid sender',
@@ -510,8 +521,8 @@ describe('status probes log failures (W16)', () => {
     failArgs.add(
       key('reg.exe', ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', '/v', 'HwSchMode']),
     )
-    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)(null)) as { enabled: boolean }
-    expect(res).toEqual({ enabled: true })
+    const res = (await getHandler(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET)(null)) as { enabled: boolean; state: string }
+    expect(res).toEqual({ enabled: false, state: 'unknown' })
     expect(mockLogger.warning).toHaveBeenCalledWith('windows-tweaks', expect.stringContaining('getHagsStatus failed'))
   })
 })

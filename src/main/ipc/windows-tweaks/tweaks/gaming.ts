@@ -199,19 +199,31 @@ async function setVbsEnabled(enabled: boolean): Promise<{ success: boolean; erro
 
 // ─── HAGS (Hardware-Accelerated GPU Scheduling) ─────────────────
 
-async function getHagsStatus(): Promise<{ enabled: boolean }> {
+export type HagsState = 'on' | 'off' | 'unknown'
+export type HagsStatus = { enabled: boolean; state: HagsState }
+
+const HAGS_UNKNOWN: HagsStatus = { enabled: false, state: 'unknown' }
+
+function parseHagsState(stdout: string): HagsStatus {
+  const match = stdout.match(/HwSchMode\s+REG_DWORD\s+0x([0-9a-fA-F]+)/i)
+  if (!match) return HAGS_UNKNOWN
+  const value = Number.parseInt(match[1] ?? '', 16)
+  if (value === 2) return { enabled: true, state: 'on' }
+  if (value === 1) return { enabled: false, state: 'off' }
+  return HAGS_UNKNOWN
+}
+
+async function getHagsStatus(): Promise<HagsStatus> {
   try {
     const { stdout } = await execFileAsync(
       'reg.exe',
       ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers', '/v', 'HwSchMode'],
       { timeout: 10000, windowsHide: true },
     )
-    const match = String(stdout).match(/HwSchMode\s+REG_DWORD\s+0x([0-9a-fA-F]+)/i)
-    const enabled = match ? Number.parseInt(match[1] ?? '0', 16) === 2 : true
-    return { enabled }
+    return parseHagsState(String(stdout))
   } catch (err) {
     getLogger().warning('windows-tweaks', `getHagsStatus failed: ${err}`)
-    return { enabled: true }
+    return HAGS_UNKNOWN
   }
 }
 
@@ -334,8 +346,8 @@ export function registerGamingTweaks(getWindow: WindowGetter): void {
     },
   )
 
-  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET, async (event): Promise<{ enabled: boolean }> => {
-    if (!validateSender(event, getWindow())) return { enabled: true }
+  ipcMain.handle(IPC.WINDOWS_TWEAKS_GAMING_HAGS_GET, async (event): Promise<HagsStatus> => {
+    if (!validateSender(event, getWindow())) return HAGS_UNKNOWN
     getLogger().info('windows-tweaks', 'HAGS status requested')
     return getHagsStatus()
   })

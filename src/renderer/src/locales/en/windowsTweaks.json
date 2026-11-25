@@ -183,7 +183,7 @@
     },
     "hags-off": {
       "name": "Hardware GPU Scheduling - OFF",
-      "description": "Disables GPU hardware scheduling (compatibility with capture/encoders)"
+      "description": "Disables GPU hardware scheduling (does not affect WGC/DXGI capture)"
     },
     "mpo-overlay-minfps": {
       "name": "MPO Overlay Min FPS — 0",

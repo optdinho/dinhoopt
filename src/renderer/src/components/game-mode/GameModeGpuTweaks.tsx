@@ -7,7 +7,8 @@ import { toast } from 'sonner'
 export function GameModeGpuTweaks() {
   const { t } = useTranslation('gameMode')
   const [vbsEnabled, setVbsEnabled] = useState(true)
-  const [hagsEnabled, setHagsEnabled] = useState(true)
+  const [hagsEnabled, setHagsEnabled] = useState(false)
+  const [hagsState, setHagsState] = useState<'on' | 'off' | 'unknown'>('unknown')
   const [vbsLoading, setVbsLoading] = useState(true)
   const [hagsLoading, setHagsLoading] = useState(true)
 
@@ -19,7 +20,10 @@ export function GameModeGpuTweaks() {
       .finally(() => setVbsLoading(false))
     window.dinho
       ?.gamingHagsGet?.()
-      .then((r) => setHagsEnabled(r.enabled))
+      .then((r) => {
+        setHagsState(r.state)
+        setHagsEnabled(r.enabled)
+      })
       .catch((e: unknown) => console.error('[GpuTweaks] hags status failed:', e))
       .finally(() => setHagsLoading(false))
   }, [])
@@ -118,7 +122,17 @@ export function GameModeGpuTweaks() {
             <Gauge className="h-4 w-4" style={{ color: '#8b5cf6' }} strokeWidth={1.8} />
           </div>
           <div className="flex-1">
-            <span className="text-[13px] font-medium text-zinc-300">{t('hagsLabel')}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-medium text-zinc-300">{t('hagsLabel')}</span>
+              {!hagsLoading && hagsState === 'unknown' && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide"
+                  style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
+                >
+                  {t('hagsUnknownBadge')}
+                </span>
+              )}
+            </div>
             <p className="mt-0.5 text-[11px] text-zinc-500">{t('hagsDesc')}</p>
             <p className="mt-1 text-[10px] text-zinc-600">{t('hagsNote')}</p>
           </div>

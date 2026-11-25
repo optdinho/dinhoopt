@@ -165,7 +165,8 @@
   "vbsWarningBadge": "Security risk",
   "hagsLabel": "Hardware-Accelerated GPU Scheduling (HAGS)",
   "hagsDesc": "Allow the GPU to manage its own video memory scheduling for lower latency",
-  "hagsNote": "Turning HAGS off disables DLSS Frame Generation and may improve compatibility with capture/encoders (OBS). Restart after changing.",
+  "hagsNote": "HAGS does not affect the WGC/DXGI capture used by DiNho. Turning it off disables DLSS Frame Generation. Restart the PC after changing.",
+  "hagsUnknownBadge": "Unknown state",
   "hagsRestartRequired": "Restart your PC to apply the HAGS change",
 
   "defenderTitle": "Windows Defender exclusions",

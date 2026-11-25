@@ -73,3 +73,20 @@ describe('gameMode plural keys resolve with the real i18next (B6)', () => {
     }
   })
 })
+
+describe('HAGS note is accurate for WGC/DXGI captures (2026-11-24)', () => {
+  it('no longer claims capture/encoder compatibility or mentions OBS', () => {
+    for (const [lang, bundle] of Object.entries(BUNDLES)) {
+      expect(bundle.hagsNote, `${lang}: OBS`).not.toMatch(/\bOBS\b/i)
+      expect(bundle.hagsNote, `${lang}: compatibilidade`).not.toMatch(/compatib/i)
+    }
+  })
+
+  it('keeps the DLSS and restart facts and defines the unknown-state badge', () => {
+    for (const [lang, bundle] of Object.entries(BUNDLES)) {
+      expect(bundle.hagsNote, `${lang}: DLSS`).toMatch(/DLSS/i)
+      expect(bundle.hagsNote, `${lang}: restart`).toMatch(/restart|reinici/i)
+      expect(bundle.hagsUnknownBadge, `${lang}: badge`).toBeTruthy()
+    }
+  })
+})

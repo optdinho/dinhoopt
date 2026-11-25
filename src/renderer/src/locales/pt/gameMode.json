@@ -155,7 +155,8 @@
   "vbsWarningBadge": "Risco de segurança",
   "hagsLabel": "Agendamento GPU Acelerado por Hardware (HAGS)",
   "hagsDesc": "Permite que a GPU gere o seu próprio agendamento de memória de vídeo para latência mais baixa",
-  "hagsNote": "Desligar o HAGS desativa o Frame Generation do DLSS e pode melhorar a compatibilidade com capturas/encoders (OBS). Reinicie apos alterar.",
+  "hagsNote": "O HAGS não interfere com o WGC/DXGI usado pelo DiNho. Desligar desativa o Frame Generation do DLSS. Reinicie o PC após alterar.",
+  "hagsUnknownBadge": "Estado desconhecido",
   "hagsRestartRequired": "Reinicie o PC para aplicar a alteracao do HAGS",
 
   "defenderTitle": "Exclusoes do Windows Defender",
