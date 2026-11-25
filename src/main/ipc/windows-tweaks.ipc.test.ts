@@ -314,7 +314,7 @@ describe('registerWindowsTweaksIpc', () => {
     vi.clearAllMocks()
   })
 
-  it('registers all 16 IPC handlers', () => {
+  it('registers all 18 IPC handlers', () => {
     registerWindowsTweaksIpc(() => null)
     const channels = mockHandle.mock.calls.map((c) => c[0])
     expect(channels).toContain('windows-tweaks:apply')
@@ -333,8 +333,10 @@ describe('registerWindowsTweaksIpc', () => {
     expect(channels).toContain('windows-tweaks:current-dns')
     expect(channels).toContain('windows-tweaks:gaming-hags-get')
     expect(channels).toContain('windows-tweaks:gaming-hags-set')
+    expect(channels).toContain('windows-tweaks:capture-border-get')
+    expect(channels).toContain('windows-tweaks:capture-border-set')
     expect(channels).not.toContain('windows-tweaks:list')
-    expect(channels.length).toBe(16)
+    expect(channels.length).toBe(18)
   })
 })
 
