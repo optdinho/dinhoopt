@@ -187,6 +187,103 @@ public class ConsoleLoggerTests
         finally { Log.Instance = prev; }
     }
 
+    // ── Filtro de nível (2026-11-24) ─────────────────────────────────
+    // ~78% das linhas do engine eram Debug. O default Info reduz esse volume
+    // sem tocar em Warning/Error nem no flush imediato das linhas CRITICAL.
+
+    [Fact]
+    public void Debug_IsNotWritten_AtDefaultLevel()
+    {
+        var writer = new FakeTextWriter();
+        using var logger = new ConsoleLogger(writer, writeTimestamps: false);
+
+        logger.Debug("src", "a");
+        logger.Debug("src", "b");
+        logger.Dispose();
+
+        Assert.Empty(writer.Lines);
+        Assert.Equal(0, writer.FlushCount);
+    }
+
+    [Fact]
+    public void InfoWarningError_AreWritten_WithStablePrefixes()
+    {
+        var writer = new FakeTextWriter();
+        using var logger = new ConsoleLogger(writer, writeTimestamps: false);
+
+        logger.Info("src", "a");
+        logger.Warning("src", "b");
+        logger.Error("src", "c");
+        logger.Dispose();
+
+        Assert.Equal(3, writer.Lines.Count);
+        // O leitor de log do Electron depende destes prefixos de 7 chars.
+        Assert.StartsWith("[Info   ]", writer.Lines[0]);
+        Assert.StartsWith("[Warning]", writer.Lines[1]);
+        Assert.StartsWith("[Error  ]", writer.Lines[2]);
+    }
+
+    [Fact]
+    public void MinLevelDebug_WritesDebugLines()
+    {
+        var writer = new FakeTextWriter();
+        using var logger = new ConsoleLogger(writer, writeTimestamps: false, minLevel: LogLevel.Debug);
+
+        logger.Debug("src", "visible");
+        logger.Dispose();
+
+        Assert.Single(writer.Lines);
+        Assert.Contains("[Debug  ]", writer.Lines[0]);
+    }
+
+    [Fact]
+    public void MinLevelWarning_DropsDebugAndInfo()
+    {
+        var writer = new FakeTextWriter();
+        using var logger = new ConsoleLogger(writer, writeTimestamps: false, minLevel: LogLevel.Warning);
+
+        logger.Debug("src", "d");
+        logger.Info("src", "i");
+        logger.Warning("src", "w");
+        logger.Error("src", "e");
+        logger.Dispose();
+
+        Assert.Equal(2, writer.Lines.Count);
+        Assert.Contains("[Warning]", writer.Lines[0]);
+        Assert.Contains("[Error  ]", writer.Lines[1]);
+    }
+
+    [Fact]
+    public void Critical_BypassesMinLevelFilter_AndFlushesImmediately()
+    {
+        var writer = new FakeTextWriter();
+        using var logger = new ConsoleLogger(writer, writeTimestamps: false, minLevel: LogLevel.Error);
+
+        logger.Critical("EngineCoordinator", "SAVE START");
+
+        Assert.Equal(1, writer.FlushCount);
+        Assert.Single(writer.Lines);
+        Assert.Contains("[CRITICAL]", writer.Lines[0]);
+    }
+
+    [Fact]
+    public void FilteredDebugLines_DoNotAdvanceTheBatchThreshold()
+    {
+        var writer = new FakeTextWriter();
+        using var logger = new ConsoleLogger(writer, writeTimestamps: false);
+
+        for (var i = 0; i < 100; i++)
+            logger.Debug("src", $"dropped-{i}");
+        Assert.Equal(0, writer.FlushCount);
+
+        for (var i = 0; i < 64; i++)
+            logger.Info("src", $"kept-{i}");
+
+        Assert.Equal(1, writer.FlushCount);
+        Assert.Equal(64, writer.Lines.Count);
+        Assert.DoesNotContain(writer.Lines, line => line.Contains("dropped-"));
+    }
+
     private sealed class CriticalRecordingLogger : ILogger, ICriticalLogger
     {
         public int CriticalCalls;

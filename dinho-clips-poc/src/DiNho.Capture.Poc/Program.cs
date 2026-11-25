@@ -27,6 +27,11 @@ internal static class Program
 
     private static async Task Main(string[] args)
     {
+        // Antes do primeiro log: o nível vem do ambiente (DINHO_CLIPS_LOG_LEVEL)
+        // para o suporte pedir Debug sem recompilar. O Electron herda process.env
+        // no spawn do engine, logo nao ha mudanca no lado TS.
+        Log.Instance = new ConsoleLogger(minLevel: LogLevelConfig.FromEnvironment());
+
         _forceSoftware = args.Contains("--force-software");
         _benchJson = args.Contains("--bench-json");
         var durationIdx = Array.IndexOf(args, "--duration");

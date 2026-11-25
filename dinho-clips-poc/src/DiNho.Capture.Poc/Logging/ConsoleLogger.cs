@@ -7,14 +7,19 @@ public sealed class ConsoleLogger : ILogger, ICriticalLogger, IDisposable
     private readonly TextWriter _writer;
     private readonly Lock _lock = new();
     private readonly bool _writeTimestamps;
+    private readonly LogLevel _minLevel;
     private readonly List<string> _buffer = new();
     private const int FlushThreshold = 64;
     private bool _disposed;
 
-    public ConsoleLogger(TextWriter? writer = null, bool writeTimestamps = true)
+    public ConsoleLogger(
+        TextWriter? writer = null,
+        bool writeTimestamps = true,
+        LogLevel minLevel = LogLevel.Info)
     {
         _writer = writer ?? Console.Error;
         _writeTimestamps = writeTimestamps;
+        _minLevel = minLevel;
     }
 
     public void Debug(string source, string message) => Log(LogLevel.Debug, source, message);
@@ -24,7 +29,7 @@ public sealed class ConsoleLogger : ILogger, ICriticalLogger, IDisposable
 
     public void Log(LogLevel level, string source, string message)
     {
-        if (_disposed) return;
+        if (_disposed || level < _minLevel) return;
         var ts = _writeTimestamps ? $"{DateTime.Now:HH:mm:ss.fff} " : "";
         var line = $"{ts}[{level,-7}] [{source}] {message}";
         lock (_lock)
@@ -38,7 +43,8 @@ public sealed class ConsoleLogger : ILogger, ICriticalLogger, IDisposable
 
     /// <summary>
     /// Linha crítica (SAVE START/OK, EXPORT FAILED): vai para disco na hora, sem
-    /// esperar as 64 do lote. Ver <see cref="ICriticalLogger"/>.
+    /// esperar as 64 do lote e **sem respeitar o filtro de nível** — mesmo com
+    /// minLevel=Error esta linha continua a ser escrita. Ver <see cref="ICriticalLogger"/>.
     /// </summary>
     public void Critical(string source, string message)
     {
