@@ -67,6 +67,8 @@
   "addHotkey": "Novo Atalho",
   "lowDisk": "Pouco Espaço em Disco",
   "crashRecovered": "Motor recuperado de falha",
+  "framesLost": "Frames perdidos: {{count}}",
+  "framesLostDesc": "O motor perdeu {{count}} frames desde o início desta gravação. O clip exportado mantém a duração real (a imagem congela nos saltos).",
   "audioFallbackWarning": "Áudio do Sistema Inteiro",
   "audioFallbackDesc": "Não foi possível capturar o áudio do jogo individualmente. Todo o áudio do sistema está sendo gravado. Feche programas desnecessários para evitar ruídos.",
   "memoryMB": "Memória",

@@ -665,7 +665,7 @@ describe('ClipsPage', () => {
     expect(screen.getByText('1080p')).toBeTruthy()
   })
 
-  it('does not show a dropped frames badge even when drop counters are non-zero', async () => {
+  it('shows the dropped frames pill while recording with non-zero counters', async () => {
     mockGetStatus.mockResolvedValue({
       running: true,
       capturing: true,
@@ -677,7 +677,7 @@ describe('ClipsPage', () => {
     })
     render(<ClipsPage />)
     expect(await screen.findByText('recording')).toBeTruthy()
-    expect(screen.queryByText(/droppedFrames/)).toBeNull()
+    expect(screen.getByTitle('framesLostDesc').textContent).toContain('framesLost')
     expect(screen.queryByText(/GPU: 3/)).toBeNull()
   })
 

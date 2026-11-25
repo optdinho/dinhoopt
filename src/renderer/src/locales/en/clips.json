@@ -67,6 +67,8 @@
   "addHotkey": "New Shortcut",
   "lowDisk": "Low Disk Space",
   "crashRecovered": "Engine recovered from crash",
+  "framesLost": "Dropped frames: {{count}}",
+  "framesLostDesc": "The engine dropped {{count}} frames since this recording started. The exported clip keeps the real duration (the image freezes at the gaps).",
   "audioFallbackWarning": "Full System Audio",
   "audioFallbackDesc": "Could not capture the game's audio individually. All system audio is being recorded. Close unnecessary programs to avoid background noise.",
   "memoryMB": "Memory",

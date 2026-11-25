@@ -256,8 +256,14 @@ export function ClipsStatusBar({
           {(status.lastCrashRecovered ||
             status.audioFallback ||
             status.diskSpaceOk === false ||
-            (status.running && status.watchdogOk === false)) && (
+            (status.running && status.watchdogOk === false) ||
+            (recording && (status.droppedFrames ?? 0) > 0)) && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {recording && (status.droppedFrames ?? 0) > 0 && (
+                <Chip icon={TriangleAlert} tone="amber" title={t('framesLostDesc', { count: status.droppedFrames })}>
+                  {t('framesLost', { count: status.droppedFrames })}
+                </Chip>
+              )}
               {status.lastCrashRecovered && (
                 <Chip icon={Microscope} tone="amber">
                   {t('crashRecovered')}

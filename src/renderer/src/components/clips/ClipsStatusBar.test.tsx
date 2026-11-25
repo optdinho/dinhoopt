@@ -170,3 +170,33 @@ describe('ClipsStatusBar — alerts', () => {
     expect(screen.queryByText('lowDisk')).toBeNull()
   })
 })
+
+describe('ClipsStatusBar — dropped frames alert', () => {
+  it('shows an amber pill with the count while recording', () => {
+    renderBar({ status: { ...baseStatus, capturing: true, droppedFrames: 7 } })
+
+    const pill = screen.getByTitle('framesLostDesc')
+    expect(pill.textContent).toContain('framesLost')
+    expect(pill.style.background).toContain('234, 179, 8')
+  })
+
+  it('explains the count in the pill tooltip', () => {
+    renderBar({ status: { ...baseStatus, capturing: true, droppedFrames: 7 } })
+    expect(screen.getByTitle('framesLostDesc')).toBeTruthy()
+  })
+
+  it('hides the pill when no frames were dropped', () => {
+    renderBar({ status: { ...baseStatus, capturing: true, droppedFrames: 0 } })
+    expect(screen.queryByText('framesLost')).toBeNull()
+  })
+
+  it('hides the pill when the engine is stopped, even with stale counters', () => {
+    renderBar({ status: { ...baseStatus, running: false, capturing: true, droppedFrames: 7 } })
+    expect(screen.queryByText('framesLost')).toBeNull()
+  })
+
+  it('hides the pill while the engine is idle, even with stale counters', () => {
+    renderBar({ status: { ...baseStatus, running: true, capturing: false, droppedFrames: 7 } })
+    expect(screen.queryByText('framesLost')).toBeNull()
+  })
+})
