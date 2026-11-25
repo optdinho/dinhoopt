@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ElevationBanner } from '@/components/cleaner/ElevationBanner'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { CaptureBorderPermissionCard } from '@/components/privacy/CaptureBorderPermissionCard'
 import { PrivacyApplyResultBanner } from '@/components/privacy/PrivacyApplyResultBanner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useIpcScan } from '@/hooks/useIpcScan'
@@ -491,6 +492,10 @@ export function PrivacyShieldPage({ embedded }: { embedded?: boolean }) {
         status={status}
         onDismiss={() => usePrivacyStore.getState().setApplyResult(null)}
       />
+
+      <div className="mb-5">
+        <CaptureBorderPermissionCard />
+      </div>
 
       {/* Empty state */}
       {!state && !isScanning && (

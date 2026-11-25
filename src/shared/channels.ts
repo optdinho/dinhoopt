@@ -301,6 +301,10 @@ export const IPC = {
   WINDOWS_TWEAKS_GAMING_HAGS_GET: 'windows-tweaks:gaming-hags-get',
   WINDOWS_TWEAKS_GAMING_HAGS_SET: 'windows-tweaks:gaming-hags-set',
 
+  // Windows 11 "Bordas de captura de tela" (consentimento graphicsCaptureWithoutBorder)
+  WINDOWS_TWEAKS_CAPTURE_BORDER_GET: 'windows-tweaks:capture-border-get',
+  WINDOWS_TWEAKS_CAPTURE_BORDER_SET: 'windows-tweaks:capture-border-set',
+
   // Windows Defender exclusions (opt-in)
   DEFENDER_EXCLUSIONS_STATUS: 'defender-exclusions:status',
   DEFENDER_EXCLUSIONS_ADD: 'defender-exclusions:add',

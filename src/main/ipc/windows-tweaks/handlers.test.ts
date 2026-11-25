@@ -199,6 +199,10 @@ vi.mock('./tweaks/gaming', () => ({
   registerGamingTweaks: vi.fn(),
 }))
 
+vi.mock('./tweaks/capture-border', () => ({
+  registerCaptureBorderTweaks: vi.fn(),
+}))
+
 describe('handlers.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -261,11 +265,13 @@ describe('handlers.ts', () => {
       const network = await import('./tweaks/network')
       const sec = await import('./tweaks/security')
       const gam = await import('./tweaks/gaming')
+      const border = await import('./tweaks/capture-border')
       registerWindowsTweaksIpc(vi.fn())
       expect(visual.registerVisualTweaks).toHaveBeenCalled()
       expect(network.registerNetworkTweaks).toHaveBeenCalled()
       expect(sec.registerSecurityTweaks).toHaveBeenCalled()
       expect(gam.registerGamingTweaks).toHaveBeenCalled()
+      expect(border.registerCaptureBorderTweaks).toHaveBeenCalled()
     })
 
     it('rejects an invalid sender on every handler', async () => {

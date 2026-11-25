@@ -13,6 +13,11 @@
   "privacy": {
     "pageTitle": "Escudo de privacidad",
     "pageDescription": "Controle la telemetría, los anuncios, el seguimiento y la recopilación de datos en todo el sistema",
+    "captureBorderTitle": "Bordes de captura de pantalla",
+    "captureBorderDesc": "Permite que las aplicaciones desactiven el borde amarillo de captura de Windows, incluido el grabador de clips de DiNho.",
+    "captureBorderWarning": "El permiso es global y afecta a todas las aplicaciones: desactiva un indicador de privacidad de Windows. Otras aplicaciones pueden volver a mostrar el borde. Puede ser necesario iniciar una nueva grabación.",
+    "captureBorderApplied": "Permiso de captura sin borde activado",
+    "captureBorderApplyFailed": "No se pudo cambiar el permiso de captura sin borde",
     "scanButton": "Analizar",
     "protectAllButton": "Proteger todo ({{count}})",
     "privacyScore": "Puntuación de privacidad",

@@ -14,6 +14,7 @@ import {
 import type { WindowGetter } from '../index'
 import { validateSender } from '../sender-validation'
 import { POWERCFG_SETTINGS, parsePowerCfgAcIndex, parsePowerCfgIndices } from './powercfg-settings'
+import { registerCaptureBorderTweaks } from './tweaks/capture-border'
 import { registerGamingTweaks } from './tweaks/gaming'
 import { NETWORK_TWEAKS, registerNetworkTweaks } from './tweaks/network'
 import { PERFORMANCE_TWEAKS } from './tweaks/performance'
@@ -520,4 +521,5 @@ export function registerWindowsTweaksIpc(getWindow: WindowGetter): void {
   registerNetworkTweaks(getWindow)
   registerSecurityTweaks(getWindow)
   registerGamingTweaks(getWindow)
+  registerCaptureBorderTweaks(getWindow)
 }

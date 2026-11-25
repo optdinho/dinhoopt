@@ -13,6 +13,11 @@
   "privacy": {
     "pageTitle": "Escudo de Privacidade",
     "pageDescription": "Controle a telemetria, os anúncios, o rastreamento e a recolha de dados em todo o seu sistema",
+    "captureBorderTitle": "Bordas de captura de tela",
+    "captureBorderDesc": "Permite que os aplicativos desativem a borda amarela de captura do Windows, incluindo o gravador de clips do DiNho.",
+    "captureBorderWarning": "A permissão é global e afeta todos os aplicativos: desativa um indicador de privacidade do Windows. Outros aplicativos podem voltar a mostrar a borda. Pode ser necessário iniciar uma nova gravação.",
+    "captureBorderApplied": "Permissão de captura sem borda ativada",
+    "captureBorderApplyFailed": "Não foi possível alterar a permissão de captura sem borda",
     "scanButton": "Analisar",
     "protectAllButton": "Proteger Tudo ({{count}})",
     "privacyScore": "Pontuação de Privacidade",

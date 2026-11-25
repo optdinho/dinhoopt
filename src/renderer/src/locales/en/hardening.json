@@ -13,6 +13,11 @@
   "privacy": {
     "pageTitle": "Privacy Shield",
     "pageDescription": "Control telemetry, ads, tracking, and data collection across your system",
+    "captureBorderTitle": "Screen capture borders",
+    "captureBorderDesc": "Allow apps to turn off the Windows yellow capture border, including the DiNho clip recorder.",
+    "captureBorderWarning": "This is a global permission that affects every app: it turns off a Windows privacy indicator. Other apps may still show the border. You may need to start a new recording for the change to take effect.",
+    "captureBorderApplied": "Borderless capture permission enabled",
+    "captureBorderApplyFailed": "Could not change the borderless capture permission",
     "scanButton": "Scan",
     "protectAllButton": "Protect All ({{count}})",
     "privacyScore": "Privacy Score",

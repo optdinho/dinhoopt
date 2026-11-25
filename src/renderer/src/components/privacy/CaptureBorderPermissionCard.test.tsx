@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { toast } from 'sonner'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CaptureBorderPermissionCard } from './CaptureBorderPermissionCard'
 
 const { ipc } = vi.hoisted(() => ({
@@ -42,7 +42,9 @@ describe('CaptureBorderPermissionCard', () => {
     render(<CaptureBorderPermissionCard />)
     await waitFor(() => expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true'))
 
-    fireEvent.click(screen.getByRole('switch'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch'))
+    })
 
     expect(ipc.set).toHaveBeenCalledWith(false)
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false')
@@ -53,7 +55,9 @@ describe('CaptureBorderPermissionCard', () => {
     render(<CaptureBorderPermissionCard />)
     await waitFor(() => expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true'))
 
-    fireEvent.click(screen.getByRole('switch'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch'))
+    })
 
     await waitFor(() => expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true'))
     expect(toast.error).toHaveBeenCalled()

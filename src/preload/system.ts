@@ -408,6 +408,11 @@ export const systemMethods = {
   gamingHagsSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_GAMING_HAGS_SET, enabled),
 
+  captureBorderGet: (): Promise<{ enabled: boolean; global: boolean; desktopApps: boolean }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_CAPTURE_BORDER_GET),
+  captureBorderSet: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.WINDOWS_TWEAKS_CAPTURE_BORDER_SET, enabled),
+
   defenderExclusionsStatus: (): Promise<DefenderExclusionStatus> => ipcRenderer.invoke(IPC.DEFENDER_EXCLUSIONS_STATUS),
   defenderExclusionsAdd: (path: string): Promise<DefenderExclusionResult> =>
     ipcRenderer.invoke(IPC.DEFENDER_EXCLUSIONS_ADD, path),
