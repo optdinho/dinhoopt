@@ -106,5 +106,9 @@
   "bugs": {
     "url": "https://github.com/optdinho/dinhoopt-releases/issues"
   },
-  "homepage": "https://dinhooptimizer.netlify.app/"
+  "homepage": "https://dinhooptimizer.netlify.app/",
+  "overrides": {
+    "minimatch@^9.0.3": "^11.0.9",
+    "minimatch@^10.2.5": "^11.0.9"
+  }
 }

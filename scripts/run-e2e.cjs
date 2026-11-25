@@ -8,10 +8,18 @@ const { resolve } = require('node:path')
 
 process.env.DINHO_E2E_KEY ??= 'diNho-e2e-dev-key'
 
-function run(cmd, args) {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' })
+// Node 26 emits DEP0190 when `shell: true` is combined with an args array:
+// the arguments are concatenated into a command string and are not escaped.
+// Spawning the local bins through `process.execPath` avoids the shell
+// entirely, works when the script is called directly (no npm PATH), and
+// keeps the child on the same Node runtime as this runner.
+function run(bin, args) {
+  const r = spawnSync(process.execPath, [bin, ...args], { stdio: 'inherit' })
   if (r.status !== 0) process.exit(r.status ?? 1)
 }
 
-run('electron-vite', ['build'])
-run('playwright', ['test', '--config', resolve(__dirname, '../e2e/playwright.config.ts')])
+run(resolve(__dirname, '../node_modules/electron-vite/bin/electron-vite.js'), ['build'])
+run(
+  resolve(__dirname, '../node_modules/@playwright/test/cli.js'),
+  ['test', '--config', resolve(__dirname, '../e2e/playwright.config.ts')],
+)
